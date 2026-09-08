@@ -40,7 +40,7 @@ final class RoomPoiEvidence {
         if (components.stream().anyMatch(candidate -> candidate.containsColumn(x, z))) return false;
         FloorGeometry.Cell perimeter = new FloorGeometry.Cell(
                 new BlockPos(x, sourceCell.feet().getY(), z),
-                sourceCell.surfaceY(), sourceCell.ceilingY());
+                sourceCell.ceilingY());
         return component.equals(RoomPartitioner.owner(RoomPartitioner.adjacent(perimeter, components)));
     }
 

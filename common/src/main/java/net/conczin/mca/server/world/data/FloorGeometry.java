@@ -15,9 +15,6 @@ import java.util.stream.Collectors;
 
 /** Exact physical geometry for one semantic Floor. */
 final class FloorGeometry {
-    /** Matches Minecraft 1.21.1 WalkNodeEvaluator.DEFAULT_MOB_JUMP_HEIGHT. */
-    static final double MAX_STEP_HEIGHT = 1.125D;
-
     private final Set<Cell> cells;
     private final Map<BlockPos, FloorConnector.Type> connectorTypesByCell;
     private final Map<Long, List<Cell>> cellsByColumn;
@@ -59,7 +56,7 @@ final class FloorGeometry {
             }
         }
         return new FloorGeometry(cells.stream()
-                .map(pos -> new Cell(pos, pos.getY(), ceilingY))
+                .map(pos -> new Cell(pos, ceilingY))
                 .toList(), connectors);
     }
 
@@ -149,10 +146,6 @@ final class FloorGeometry {
                 .toList();
     }
 
-    static boolean canStep(double fromSurfaceY, double toSurfaceY) {
-        return Math.abs(toSurfaceY - fromSurfaceY) <= MAX_STEP_HEIGHT;
-    }
-
     static long columnKey(int x, int z) {
         return ((long) x << 32) ^ (z & 0xffffffffL);
     }
@@ -169,17 +162,11 @@ final class FloorGeometry {
         return Map.copyOf(indexed);
     }
 
-    record Cell(BlockPos feet, double surfaceY, int ceilingY) {
+    record Cell(BlockPos feet, int ceilingY) {
         Cell {
             Objects.requireNonNull(feet, "feet");
-            if (!Double.isFinite(surfaceY)) {
-                throw new IllegalArgumentException("FloorGeometry cell surface must be finite");
-            }
             if (ceilingY <= feet.getY()) {
                 throw new IllegalArgumentException("FloorGeometry cell ceiling must be above feet");
-            }
-            if (surfaceY < feet.getY() - 1.0D || surfaceY >= ceilingY) {
-                throw new IllegalArgumentException("FloorGeometry cell surface must be within its physical height");
             }
             feet = feet.immutable();
         }

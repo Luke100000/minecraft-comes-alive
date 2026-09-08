@@ -57,7 +57,7 @@ class StructureExpansionPolicyTest {
                 cell(4, 89, 0), cell(5, 90, 0), cell(6, 91, 0)), Map.of());
 
         assertEquals(room, StructureExpansionPolicy.registeredRoomForFreshComponent(
-                target, fresh, topStair, List.of(room)).orElseThrow());
+                target, fresh, transitions(fresh), topStair, List.of(room)).orElseThrow());
     }
 
     @Test
@@ -77,7 +77,7 @@ class StructureExpansionPolicyTest {
                 Map.of(doorCell, FloorConnector.Type.DOOR));
 
         assertTrue(StructureExpansionPolicy.registeredRoomForFreshComponent(
-                target, fresh, newRoomCell, List.of(existing)).isEmpty());
+                target, fresh, transitions(fresh), newRoomCell, List.of(existing)).isEmpty());
     }
 
     @Test
@@ -98,7 +98,7 @@ class StructureExpansionPolicyTest {
                 Map.of(doorCell, FloorConnector.Type.DOOR));
 
         assertTrue(StructureExpansionPolicy.registeredRoomForFreshComponent(
-                target, fresh, newRoomCell, List.of(existing)).isEmpty());
+                target, fresh, transitions(fresh), newRoomCell, List.of(existing)).isEmpty());
     }
 
     private static Structure structure(int id, int logicalBuildingId, StructureFloor floor) {
@@ -117,7 +117,7 @@ class StructureExpansionPolicyTest {
 
     private static FloorGeometry scannedFloor(int anchorY, int ceilingY, int minX, int maxX) {
         Set<FloorGeometry.Cell> cells = java.util.stream.IntStream.rangeClosed(minX, maxX)
-                .mapToObj(x -> new FloorGeometry.Cell(new BlockPos(x, anchorY, 0), anchorY, ceilingY))
+                .mapToObj(x -> new FloorGeometry.Cell(new BlockPos(x, anchorY, 0), ceilingY))
                 .collect(java.util.stream.Collectors.toSet());
         return new FloorGeometry(cells, Map.of());
     }
@@ -138,6 +138,20 @@ class StructureExpansionPolicyTest {
     }
 
     private static FloorGeometry.Cell cell(int x, int y, int z) {
-        return new FloorGeometry.Cell(new BlockPos(x, y, z), y, y + 4);
+        return new FloorGeometry.Cell(new BlockPos(x, y, z), y + 4);
+    }
+
+    private static Set<SelectedFloorScanner.Transition> transitions(FloorGeometry geometry) {
+        java.util.LinkedHashSet<SelectedFloorScanner.Transition> transitions = new java.util.LinkedHashSet<>();
+        for (FloorGeometry.Cell first : geometry.cells()) {
+            for (FloorGeometry.Cell second : geometry.cells()) {
+                int horizontal = Math.abs(first.feet().getX() - second.feet().getX())
+                        + Math.abs(first.feet().getZ() - second.feet().getZ());
+                if (horizontal == 1 && Math.abs(first.feet().getY() - second.feet().getY()) <= 1) {
+                    transitions.add(new SelectedFloorScanner.Transition(first.feet(), second.feet()));
+                }
+            }
+        }
+        return Set.copyOf(transitions);
     }
 }

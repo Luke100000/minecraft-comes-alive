@@ -64,7 +64,7 @@ class StructureConnectorTest {
         BlockPos connector = new BlockPos(0, 67, 0);
         BlockPos upperFeet = new BlockPos(1, 69, 0);
         FloorGeometry upper = new FloorGeometry(Set.of(
-                new FloorGeometry.Cell(upperFeet, 69, 73)), java.util.Map.of());
+                new FloorGeometry.Cell(upperFeet, 73)), java.util.Map.of());
 
         Set<BlockPos> membership = StructureConnector.floorMembershipCells(connector, upper);
 
@@ -86,8 +86,8 @@ class StructureConnectorTest {
         BlockPos right = new BlockPos(2, 64, 0);
         BlockPos connector = new BlockPos(1, 64, 0);
         FloorGeometry geometry = new FloorGeometry(Set.of(
-                new FloorGeometry.Cell(left, 64, 68),
-                new FloorGeometry.Cell(right, 64, 68)), java.util.Map.of());
+                new FloorGeometry.Cell(left, 68),
+                new FloorGeometry.Cell(right, 68)), java.util.Map.of());
 
         Set<BlockPos> membership = StructureConnector.floorMembershipCells(
                 connector, geometry);
@@ -96,20 +96,19 @@ class StructureConnectorTest {
     }
 
     @Test
-    void connectorAssociationsMaterializeBoundaryCellBeforeGeometryValidation() {
+    void connectorAssociationsDoNotManufactureMissingFloorCells() {
         BlockPos left = new BlockPos(0, 64, 0);
         BlockPos right = new BlockPos(2, 64, 0);
         BlockPos connector = new BlockPos(1, 64, 0);
         FloorGeometry geometry = new FloorGeometry(Set.of(
-                new FloorGeometry.Cell(left, 64, 68),
-                new FloorGeometry.Cell(right, 64, 68)), java.util.Map.of());
+                new FloorGeometry.Cell(left, 68),
+                new FloorGeometry.Cell(right, 68)), java.util.Map.of());
 
         FloorGeometry augmented = StructureConnector.withConnectorAssociations(
                 geometry, java.util.Map.of(connector, FloorConnector.Type.DOOR));
 
-        assertTrue(augmented.cellAt(connector).isPresent());
-        assertEquals(FloorConnector.Type.DOOR,
-                augmented.connectorTypesByCell().get(connector));
+        assertTrue(augmented.cellAt(connector).isEmpty());
+        assertFalse(augmented.connectorTypesByCell().containsKey(connector));
     }
 
     private static StructureFloor floor(int anchorY, int ceilingY) {

@@ -13,11 +13,26 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RoomPartitionerTest {
     @Test
+    void partitionUsesOnlyAcceptedFreshTransitions() {
+        FloorGeometry geometry = geometry(Set.of(
+                cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0)), Map.of());
+        Set<SelectedFloorScanner.Transition> transitions = Set.of(
+                new SelectedFloorScanner.Transition(
+                        new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));
+
+        List<RoomPartitioner.Component> parts = RoomPartitioner.partition(geometry, transitions);
+
+        assertEquals(2, parts.size());
+        assertTrue(parts.stream().anyMatch(part -> part.area() == 2));
+        assertTrue(parts.stream().anyMatch(part -> part.area() == 1));
+    }
+
+    @Test
     void gradualUnevenSurfaceRemainsOneComponentWithoutFlattening() {
         FloorGeometry geometry = geometry(Set.of(
                 cell(0, 64, 0), cell(1, 64, 0), cell(2, 65, 0), cell(3, 66, 0)), Map.of());
 
-        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry);
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry, transitions(geometry));
 
         assertEquals(1, components.size());
         assertEquals(Set.of(64, 65, 66), components.getFirst().cells().stream()
@@ -31,7 +46,7 @@ class RoomPartitionerTest {
         FloorGeometry.Cell step = cell(1, 91, 0);
         FloorGeometry geometry = geometry(Set.of(start, tooLow, step), Map.of());
 
-        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry);
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry, transitions(geometry));
 
         RoomPartitioner.Component startComponent = components.stream()
                 .filter(component -> component.contains(start.feet())).findFirst().orElseThrow();
@@ -44,8 +59,8 @@ class RoomPartitionerTest {
         FloorGeometry.Cell lower = cell(0, 88, 0);
         FloorGeometry.Cell upper = cell(0, 91, 0);
 
-        assertEquals(2, RoomPartitioner.partition(
-                geometry(Set.of(lower, upper), Map.of())).size());
+        FloorGeometry geometry = geometry(Set.of(lower, upper), Map.of());
+        assertEquals(2, RoomPartitioner.partition(geometry, transitions(geometry)).size());
     }
 
     @Test
@@ -53,7 +68,7 @@ class RoomPartitionerTest {
         FloorGeometry.Cell lower = cell(0, 88, 0);
         FloorGeometry.Cell upper = cell(0, 91, 0);
         FloorGeometry geometry = geometry(Set.of(lower, upper), Map.of());
-        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry);
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry, transitions(geometry));
 
         assertTrue(RoomPartitioner.select(new BlockPos(0, 91, 0), geometry, components)
                 .contains(upper.feet()));
@@ -65,8 +80,11 @@ class RoomPartitionerTest {
         FloorGeometry geometry = geometry(Set.of(
                 cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0)),
                 Map.of(connectorCell, FloorConnector.Type.DOOR));
+        Set<SelectedFloorScanner.Transition> transitions = Set.of(
+                new SelectedFloorScanner.Transition(new BlockPos(0, 64, 0), connectorCell),
+                new SelectedFloorScanner.Transition(connectorCell, new BlockPos(2, 64, 0)));
 
-        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry);
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry, transitions);
 
         assertEquals(2, components.size());
         assertEquals(1, components.stream().filter(component -> component.contains(connectorCell)).count());
@@ -87,6 +105,20 @@ class RoomPartitionerTest {
     }
 
     private static FloorGeometry.Cell cell(int x, int y, int z) {
-        return new FloorGeometry.Cell(new BlockPos(x, y, z), y, y + 4);
+        return new FloorGeometry.Cell(new BlockPos(x, y, z), y + 4);
+    }
+
+    private static Set<SelectedFloorScanner.Transition> transitions(FloorGeometry geometry) {
+        java.util.LinkedHashSet<SelectedFloorScanner.Transition> transitions = new java.util.LinkedHashSet<>();
+        for (FloorGeometry.Cell first : geometry.cells()) {
+            for (FloorGeometry.Cell second : geometry.cells()) {
+                int horizontal = Math.abs(first.feet().getX() - second.feet().getX())
+                        + Math.abs(first.feet().getZ() - second.feet().getZ());
+                if (horizontal == 1 && Math.abs(first.feet().getY() - second.feet().getY()) <= 1) {
+                    transitions.add(new SelectedFloorScanner.Transition(first.feet(), second.feet()));
+                }
+            }
+        }
+        return Set.copyOf(transitions);
     }
 }

@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class Village implements Iterable<Building> {
-    static final int BUILDING_DATA_VERSION = 1;
+    static final int BUILDING_DATA_VERSION = 2;
     public static final int PLAYER_BORDER_MARGIN = 32;
     public static final int BORDER_MARGIN = 48;
     public static final int MERGE_MARGIN = 64;

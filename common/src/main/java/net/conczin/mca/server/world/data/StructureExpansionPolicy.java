@@ -108,10 +108,11 @@ final class StructureExpansionPolicy {
 
     static Optional<Building> registeredRoomForFreshComponent(FloorTarget target,
                                                                FloorGeometry floor,
+                                                               Collection<SelectedFloorScanner.Transition> transitions,
                                                                BlockPos source,
                                                                Collection<Building> rooms) {
         if (target == null || floor == null || source == null || rooms == null) return Optional.empty();
-        List<RoomPartitioner.Component> components = RoomPartitioner.partition(floor);
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(floor, transitions);
         RoomPartitioner.Component selected = RoomPartitioner.select(source, floor, components);
         if (selected == null) return Optional.empty();
 

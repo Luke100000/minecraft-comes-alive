@@ -20,11 +20,12 @@ final class BuildingRoomScanner {
                        Set<BlockPos> blocked,
                        int maxSize,
                        int floorId,
-                       FloorGeometry floor) {
+                       FloorGeometry floor,
+                       Collection<SelectedFloorScanner.Transition> transitions) {
         if (floor == null || floor.cells().isEmpty()) {
             return Result.failure(Building.validationResult.TOO_SMALL, source);
         }
-        List<RoomPartitioner.Component> components = RoomPartitioner.partition(floor);
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(floor, transitions);
         RoomPartitioner.Component selected = RoomPartitioner.select(source, floor, components);
         return selected == null
                 ? Result.failure(Building.validationResult.TOO_SMALL, source)
@@ -37,9 +38,10 @@ final class BuildingRoomScanner {
                                   BlockPos source,
                                   int maxSize,
                                   int floorId,
-                                  FloorGeometry floor) {
+                                  FloorGeometry floor,
+                                  Collection<SelectedFloorScanner.Transition> transitions) {
         if (floor == null || floor.cells().isEmpty()) return List.of();
-        List<RoomPartitioner.Component> components = RoomPartitioner.partition(floor);
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(floor, transitions);
         return components.stream()
                 .map(component -> materializeComponent(
                         world, source, Set.of(), maxSize, floorId, floor, components, component))

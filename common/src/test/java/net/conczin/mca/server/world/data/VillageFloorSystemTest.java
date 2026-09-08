@@ -737,7 +737,7 @@ class VillageFloorSystemTest {
 
     private static FloorGeometry scannedFloor(BuildingFloorRegion region) {
         Set<FloorGeometry.Cell> cells = region.cells().stream()
-                .map(pos -> new FloorGeometry.Cell(pos, pos.getY(), pos.getY() + 4))
+                .map(pos -> new FloorGeometry.Cell(pos, pos.getY() + 4))
                 .collect(java.util.stream.Collectors.toSet());
         return new FloorGeometry(cells, Map.of());
     }

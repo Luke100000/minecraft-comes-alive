@@ -50,7 +50,8 @@ public final class RoomWorkflow {
         Structure candidate = structureScan.toStructure(-1);
         StructureFloor floor = candidate.getFloors().getFirst();
         return scanResolvedRoom(village, candidate, structureScan.source(), -1,
-                floor, structureScan.scannedFloor(), Set.of()).withPendingStructure(candidate);
+                floor, structureScan.scannedFloor(), structureScan.transitions(), Set.of())
+                .withPendingStructure(candidate);
     }
 
     BuildingScanResult analyzeRoom(BlockPos source) {
@@ -85,7 +86,7 @@ public final class RoomWorkflow {
             return failedRoom(Building.validationResult.OVERLAP, source, village);
         }
         return scanResolvedRoom(village, refreshed, source, -1, refreshedFloor, fresh.scannedFloor(),
-                registeredRoomCells(village, structure.getId(), floor.id(), -1))
+                fresh.transitions(), registeredRoomCells(village, structure.getId(), floor.id(), -1))
                 .withSource(source)
                 .withPendingStructure(refreshed);
     }
@@ -139,7 +140,7 @@ public final class RoomWorkflow {
 
         candidate.setLogicalBuildingId(plan.targetBuildingId());
         return scanResolvedRoom(village, candidate, plan.scanSeed(), -1,
-                attachmentFloor, structureScan.scannedFloor(), Set.of())
+                attachmentFloor, structureScan.scannedFloor(), structureScan.transitions(), Set.of())
                 .withSource(source)
                 .withPendingStructure(candidate);
     }
@@ -189,7 +190,7 @@ public final class RoomWorkflow {
 
         List<Building> freshComponents = BuildingRoomScanner.partition(
                         world, source, Config.getInstance().maxBuildingSize,
-                        persistedFloor.id(), fresh.scannedFloor()).stream()
+                        persistedFloor.id(), fresh.scannedFloor(), fresh.transitions()).stream()
                 .map(geometry -> roomResultFromGeometry(
                         village, structure, persistedFloor, geometry, -1))
                 .filter(scan -> scan.result() == Building.validationResult.SUCCESS)
@@ -256,12 +257,14 @@ public final class RoomWorkflow {
     private BuildingScanResult scanResolvedRoom(Village village,
                                                 Structure structure,
                                                 BlockPos source,
-                                                int existingRoomId,
-                                                StructureFloor floor,
-                                                FloorGeometry scannedFloor,
-                                                Set<BlockPos> blocked) {
+                                                 int existingRoomId,
+                                                 StructureFloor floor,
+                                                 FloorGeometry scannedFloor,
+                                                 Collection<SelectedFloorScanner.Transition> transitions,
+                                                 Set<BlockPos> blocked) {
         BuildingRoomScanner.Result geometry = BuildingRoomScanner.scan(
-                world, source, blocked, Config.getInstance().maxBuildingSize, floor.id(), scannedFloor);
+                world, source, blocked, Config.getInstance().maxBuildingSize,
+                floor.id(), scannedFloor, transitions);
         return roomResultFromGeometry(village, structure, floor, geometry, existingRoomId);
     }
 

@@ -163,7 +163,6 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
     private static CompoundTag saveCell(FloorGeometry.Cell cell) {
         CompoundTag tag = new CompoundTag();
         tag.put("pos", NbtHelper.encodeBlockPos(cell.feet()));
-        tag.putDouble("surfaceY", cell.surfaceY());
         tag.putInt("ceilingY", cell.ceilingY());
         return tag;
     }
@@ -171,13 +170,10 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
     private static FloorGeometry.Cell loadCell(CompoundTag tag) {
         BlockPos pos = NbtHelper.decodeBlockPos(tag.get("pos"));
         if (pos == null) throw new IllegalArgumentException("FloorGeometry cell is missing pos");
-        if (!tag.contains("surfaceY", Tag.TAG_DOUBLE)) {
-            throw new IllegalArgumentException("FloorGeometry cell is missing surfaceY");
-        }
         if (!tag.contains("ceilingY", Tag.TAG_INT)) {
             throw new IllegalArgumentException("FloorGeometry cell is missing ceilingY");
         }
-        return new FloorGeometry.Cell(pos, tag.getDouble("surfaceY"), tag.getInt("ceilingY"));
+        return new FloorGeometry.Cell(pos, tag.getInt("ceilingY"));
     }
 
     private static Map<BlockPos, FloorConnector.Type> connectorMap(CompoundTag tag,

@@ -80,53 +80,21 @@ final class StructureConnector {
         return Set.copyOf(cells);
     }
 
-    /**
-     * Materializes connector boundary cells from the exact handoff cells that admitted them.
-     * FloorGeometry itself deliberately refuses to manufacture missing connector cells, so the
-     * scanner must make the connector cell explicit before attaching connector metadata.
-     */
+    /** Attaches connector metadata only to exact Floor cells already discovered by the scanner. */
     static FloorGeometry withConnectorAssociations(
             FloorGeometry geometry,
             Map<BlockPos, FloorConnector.Type> connectorTypesByCell) {
         Objects.requireNonNull(geometry, "geometry");
         if (connectorTypesByCell == null || connectorTypesByCell.isEmpty()) return geometry;
 
-        LinkedHashMap<BlockPos, FloorGeometry.Cell> cells = new LinkedHashMap<>();
-        geometry.cells().forEach(cell -> cells.put(cell.feet(), cell));
         LinkedHashMap<BlockPos, FloorConnector.Type> connectors =
                 new LinkedHashMap<>(geometry.connectorTypesByCell());
 
         for (Map.Entry<BlockPos, FloorConnector.Type> entry : connectorTypesByCell.entrySet()) {
             BlockPos floorCell = entry.getKey().immutable();
-            if (!cells.containsKey(floorCell)) {
-                FloorGeometry.Cell materialized = connectorBoundaryCell(floorCell, geometry);
-                if (materialized == null) {
-                    throw new IllegalArgumentException(
-                            "Connector association has no exact FloorGeometry handoff at " + floorCell);
-                }
-                cells.put(floorCell, materialized);
-            }
-            connectors.putIfAbsent(floorCell, entry.getValue());
+            if (geometry.cellAt(floorCell).isPresent()) connectors.putIfAbsent(floorCell, entry.getValue());
         }
-        return new FloorGeometry(cells.values(), connectors);
-    }
-
-    private static FloorGeometry.Cell connectorBoundaryCell(BlockPos floorCell, FloorGeometry geometry) {
-        return Arrays.stream(HORIZONTAL)
-                .flatMap(direction -> geometry.cellsAtColumn(
-                        floorCell.getX() + direction.getStepX(),
-                        floorCell.getZ() + direction.getStepZ()).stream())
-                .filter(reference -> reference.feet().getY() == floorCell.getY())
-                .min(Comparator
-                        .comparingDouble((FloorGeometry.Cell reference) ->
-                                Math.abs(reference.surfaceY() - floorCell.getY()))
-                        .thenComparingDouble(FloorGeometry.Cell::surfaceY)
-                        .thenComparingInt(FloorGeometry.Cell::ceilingY)
-                        .thenComparingInt(reference -> reference.feet().getX())
-                        .thenComparingInt(reference -> reference.feet().getZ()))
-                .map(reference -> new FloorGeometry.Cell(
-                        floorCell, reference.surfaceY(), reference.ceilingY()))
-                .orElse(null);
+        return new FloorGeometry(geometry.cells(), connectors);
     }
 
     /** Returns the vertical connector column for an occupied connector or its immediate open top-exit cell. */
@@ -328,7 +296,8 @@ final class StructureConnector {
             if (scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) continue;
 
             if (selected == null) {
-                selected = new FloorHandoff(candidate.immutable(), scan.floor(), scan.connectedFloors());
+                selected = new FloorHandoff(
+                        candidate.immutable(), scan.floor(), scan.transitions(), scan.connectedFloors());
                 selectedFloor = scan.floor();
                 selectedDistance = distance;
                 selectedY = candidate.getY();
@@ -341,9 +310,11 @@ final class StructureConnector {
 
     record FloorHandoff(BlockPos seed,
                         FloorGeometry floor,
+                        Set<SelectedFloorScanner.Transition> transitions,
                         List<FloorGeometry> connectedFloors) {
         FloorHandoff {
             seed = seed.immutable();
+            transitions = transitions == null ? Set.of() : Set.copyOf(transitions);
             connectedFloors = connectedFloors == null ? List.of() : List.copyOf(connectedFloors);
         }
     }

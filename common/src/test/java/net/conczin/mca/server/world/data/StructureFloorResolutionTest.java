@@ -58,8 +58,8 @@ class StructureFloorResolutionTest {
         BlockPos lowerCell = new BlockPos(2, 88, 3);
         BlockPos upperCell = new BlockPos(2, 91, 3);
         FloorGeometry geometry = new FloorGeometry(Set.of(
-                new FloorGeometry.Cell(lowerCell, 88, 90),
-                new FloorGeometry.Cell(upperCell, 91, 93)), Map.of());
+                new FloorGeometry.Cell(lowerCell, 90),
+                new FloorGeometry.Cell(upperCell, 93)), Map.of());
         StructureFloor floor = new StructureFloor(0, 0, geometry);
         Structure structure = new Structure(10, lowerCell, List.of(floor));
         Building lower = room(100, 10, 0, Set.of(lowerCell));
@@ -122,7 +122,7 @@ class StructureFloorResolutionTest {
                 geometryCell(0, 64, 0), geometryCell(1, 64, 0), geometryCell(2, 64, 0),
                 geometryCell(3, 64, 0), geometryCell(4, 64, 0)),
                 Map.of(connector, FloorConnector.Type.DOOR));
-        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry);
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry, transitions(geometry));
         RoomPartitioner.Component owner = components.stream()
                 .filter(component -> component.contains(connector))
                 .findFirst().orElseThrow();
@@ -220,11 +220,11 @@ class StructureFloorResolutionTest {
     @Test
     void exactTransitionCellResolvesLowerFloorUnlessUpperFloorOwnsSameColumn() {
         StructureFloor lower = new StructureFloor(0, 0, new FloorGeometry(Set.of(
-                new FloorGeometry.Cell(new BlockPos(0, 88, 0), 88, 91),
-                new FloorGeometry.Cell(new BlockPos(1, 88, 0), 88, 91),
-                new FloorGeometry.Cell(new BlockPos(1, 91, 0), 91, 93)), Map.of()));
+                new FloorGeometry.Cell(new BlockPos(0, 88, 0), 91),
+                new FloorGeometry.Cell(new BlockPos(1, 88, 0), 91),
+                new FloorGeometry.Cell(new BlockPos(1, 91, 0), 93)), Map.of()));
         StructureFloor upper = new StructureFloor(1, 1, new FloorGeometry(Set.of(
-                new FloorGeometry.Cell(new BlockPos(0, 91, 0), 91, 94)), Map.of()));
+                new FloorGeometry.Cell(new BlockPos(0, 91, 0), 94)), Map.of()));
         Structure structure = structure(lower, upper);
 
         assertEquals(lower, structure.physicalFloorAt(new BlockPos(1, 91, 0)).orElseThrow());
@@ -242,7 +242,21 @@ class StructureFloorResolutionTest {
     }
 
     private static FloorGeometry.Cell geometryCell(int x, int y, int z) {
-        return new FloorGeometry.Cell(new BlockPos(x, y, z), y, y + 4);
+        return new FloorGeometry.Cell(new BlockPos(x, y, z), y + 4);
+    }
+
+    private static Set<SelectedFloorScanner.Transition> transitions(FloorGeometry geometry) {
+        java.util.LinkedHashSet<SelectedFloorScanner.Transition> transitions = new java.util.LinkedHashSet<>();
+        for (FloorGeometry.Cell first : geometry.cells()) {
+            for (FloorGeometry.Cell second : geometry.cells()) {
+                int horizontal = Math.abs(first.feet().getX() - second.feet().getX())
+                        + Math.abs(first.feet().getZ() - second.feet().getZ());
+                if (horizontal == 1 && Math.abs(first.feet().getY() - second.feet().getY()) <= 1) {
+                    transitions.add(new SelectedFloorScanner.Transition(first.feet(), second.feet()));
+                }
+            }
+        }
+        return Set.copyOf(transitions);
     }
 
     private static Building room(int id, int structureId, int floorId, Set<BlockPos> footprint) {

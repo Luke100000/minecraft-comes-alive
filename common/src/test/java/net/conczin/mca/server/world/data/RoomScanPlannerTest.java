@@ -102,7 +102,8 @@ class RoomScanPlannerTest {
     private static StructureScanner.FloorObservation observation(BlockPos source,
                                                                    FloorGeometry floor,
                                                                    List<FloorGeometry> connected) {
-        return new StructureScanner.FloorObservation(source, floor, connected, List.of());
+        return new StructureScanner.FloorObservation(
+                source, floor, transitions(floor), connected, List.of());
     }
 
     private static Structure structure(int id, int logicalBuildingId, StructureFloor floor) {
@@ -121,13 +122,27 @@ class RoomScanPlannerTest {
 
     private static FloorGeometry scannedFloor(int anchorY, int ceilingY, int minX, int maxX) {
         Set<FloorGeometry.Cell> cells = java.util.stream.IntStream.rangeClosed(minX, maxX)
-                .mapToObj(x -> new FloorGeometry.Cell(new BlockPos(x, anchorY, 0), anchorY, ceilingY))
+                .mapToObj(x -> new FloorGeometry.Cell(new BlockPos(x, anchorY, 0), ceilingY))
                 .collect(java.util.stream.Collectors.toSet());
         return new FloorGeometry(cells, Map.of());
     }
 
     private static FloorGeometry.Cell cell(int x, int y) {
-        return new FloorGeometry.Cell(new BlockPos(x, y, 0), y, y + 4);
+        return new FloorGeometry.Cell(new BlockPos(x, y, 0), y + 4);
+    }
+
+    private static Set<SelectedFloorScanner.Transition> transitions(FloorGeometry geometry) {
+        java.util.LinkedHashSet<SelectedFloorScanner.Transition> transitions = new java.util.LinkedHashSet<>();
+        for (FloorGeometry.Cell first : geometry.cells()) {
+            for (FloorGeometry.Cell second : geometry.cells()) {
+                int horizontal = Math.abs(first.feet().getX() - second.feet().getX())
+                        + Math.abs(first.feet().getZ() - second.feet().getZ());
+                if (horizontal == 1 && Math.abs(first.feet().getY() - second.feet().getY()) <= 1) {
+                    transitions.add(new SelectedFloorScanner.Transition(first.feet(), second.feet()));
+                }
+            }
+        }
+        return Set.copyOf(transitions);
     }
 
     private static Building room(int id, int structureId, int floorId, Set<BlockPos> cells) {

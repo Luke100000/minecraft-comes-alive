@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RoomPoiEvidenceTest {
     @Test
     void perimeterIncludesWallColumnWithoutAddingItToRoomFootprint() {
-        FloorGeometry.Cell interior = new FloorGeometry.Cell(new BlockPos(1, 64, 1), 64.0D, 68);
+        FloorGeometry.Cell interior = new FloorGeometry.Cell(new BlockPos(1, 64, 1), 68);
         FloorGeometry geometry = new FloorGeometry(Set.of(interior), Map.of());
         var component = new RoomPartitioner.Component(Set.of(interior));
 
@@ -26,9 +26,9 @@ class RoomPoiEvidenceTest {
 
     @Test
     void unevenWalkableRoomKeepsPoiEvidenceThroughFloorCeiling() {
-        FloorGeometry.Cell low = new FloorGeometry.Cell(new BlockPos(0, 64, 0), 64.0D, 68);
-        FloorGeometry.Cell middle = new FloorGeometry.Cell(new BlockPos(1, 65, 0), 65.0D, 70);
-        FloorGeometry.Cell high = new FloorGeometry.Cell(new BlockPos(2, 66, 0), 66.0D, 72);
+        FloorGeometry.Cell low = new FloorGeometry.Cell(new BlockPos(0, 64, 0), 68);
+        FloorGeometry.Cell middle = new FloorGeometry.Cell(new BlockPos(1, 65, 0), 70);
+        FloorGeometry.Cell high = new FloorGeometry.Cell(new BlockPos(2, 66, 0), 72);
         var geometry = new FloorGeometry(Set.of(low, middle, high), Map.of());
         var component = new RoomPartitioner.Component(Set.of(low, middle, high));
 
@@ -39,8 +39,8 @@ class RoomPoiEvidenceTest {
 
     @Test
     void raisedWalkableSurfaceUsesItsOwnPhysicalPoiInterval() {
-        FloorGeometry.Cell floorAnchor = new FloorGeometry.Cell(new BlockPos(10, 64, 10), 64.0D, 68);
-        FloorGeometry.Cell raised = new FloorGeometry.Cell(new BlockPos(1, 66, 1), 66.0D, 72);
+        FloorGeometry.Cell floorAnchor = new FloorGeometry.Cell(new BlockPos(10, 64, 10), 68);
+        FloorGeometry.Cell raised = new FloorGeometry.Cell(new BlockPos(1, 66, 1), 72);
         var geometry = new FloorGeometry(Set.of(floorAnchor, raised), Map.of());
         var component = new RoomPartitioner.Component(Set.of(raised));
 
@@ -53,8 +53,8 @@ class RoomPoiEvidenceTest {
 
     @Test
     void sharedPerimeterColumnBelongsToOneDeterministicRoom() {
-        FloorGeometry.Cell left = new FloorGeometry.Cell(new BlockPos(0, 64, 0), 64.0D, 68);
-        FloorGeometry.Cell right = new FloorGeometry.Cell(new BlockPos(2, 64, 0), 64.0D, 68);
+        FloorGeometry.Cell left = new FloorGeometry.Cell(new BlockPos(0, 64, 0), 68);
+        FloorGeometry.Cell right = new FloorGeometry.Cell(new BlockPos(2, 64, 0), 68);
         var geometry = new FloorGeometry(Set.of(left, right), Map.of());
         var leftRoom = new RoomPartitioner.Component(Set.of(left));
         var rightRoom = new RoomPartitioner.Component(Set.of(right));

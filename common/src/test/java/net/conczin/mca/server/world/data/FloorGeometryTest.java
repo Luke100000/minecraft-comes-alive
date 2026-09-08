@@ -3,6 +3,7 @@ package net.conczin.mca.server.world.data;
 import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -15,16 +16,24 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FloorGeometryTest {
 
     @Test
+    void canonicalCellContainsOnlyMembershipAndCeilingMetadata() {
+        assertEquals(List.of("feet", "ceilingY"),
+                Arrays.stream(FloorGeometry.Cell.class.getRecordComponents())
+                        .map(component -> component.getName())
+                        .toList());
+    }
+
+    @Test
     void footprintComparisonIgnoresCellHeightButPreservesColumns() {
         FloorGeometry lower = new FloorGeometry(Set.of(
-                new FloorGeometry.Cell(new BlockPos(0, 64, 0), 63.5D, 67),
-                new FloorGeometry.Cell(new BlockPos(1, 64, 0), 64.0D, 67)), Map.of());
+                new FloorGeometry.Cell(new BlockPos(0, 64, 0), 67),
+                new FloorGeometry.Cell(new BlockPos(1, 64, 0), 67)), Map.of());
         FloorGeometry upper = new FloorGeometry(Set.of(
-                new FloorGeometry.Cell(new BlockPos(0, 70, 0), 69.5D, 73),
-                new FloorGeometry.Cell(new BlockPos(1, 70, 0), 70.0D, 73)), Map.of());
+                new FloorGeometry.Cell(new BlockPos(0, 70, 0), 73),
+                new FloorGeometry.Cell(new BlockPos(1, 70, 0), 73)), Map.of());
         FloorGeometry partial = new FloorGeometry(Set.of(
-                new FloorGeometry.Cell(new BlockPos(1, 80, 0), 80.0D, 83),
-                new FloorGeometry.Cell(new BlockPos(2, 80, 0), 80.0D, 83)), Map.of());
+                new FloorGeometry.Cell(new BlockPos(1, 80, 0), 83),
+                new FloorGeometry.Cell(new BlockPos(2, 80, 0), 83)), Map.of());
 
         assertTrue(lower.sameFootprint(upper));
         assertEquals(1, lower.footprintIntersectionArea(partial));
@@ -89,6 +98,6 @@ class FloorGeometryTest {
     }
 
     private static FloorGeometry.Cell cell(int x, int y, int z) {
-        return new FloorGeometry.Cell(new BlockPos(x, y, z), y, y + 4);
+        return new FloorGeometry.Cell(new BlockPos(x, y, z), y + 4);
     }
 }

@@ -93,8 +93,8 @@ class StructureFloorTest {
 
     @Test
     void stackedExactCellsRoundTripWithoutCeilingBoundarySideChannel() {
-        FloorGeometry.Cell lower = new FloorGeometry.Cell(new BlockPos(1, 88, 0), 88, 90);
-        FloorGeometry.Cell upperTransition = new FloorGeometry.Cell(new BlockPos(1, 91, 0), 91, 93);
+        FloorGeometry.Cell lower = new FloorGeometry.Cell(new BlockPos(1, 88, 0), 90);
+        FloorGeometry.Cell upperTransition = new FloorGeometry.Cell(new BlockPos(1, 91, 0), 93);
         StructureFloor floor = new StructureFloor(0, 0,
                 new FloorGeometry(Set.of(lower, upperTransition), java.util.Map.of()));
 
@@ -108,9 +108,9 @@ class StructureFloorTest {
     @Test
     void structureDerivesNonTopSemanticCeilingFromNextFloorAnchor() {
         StructureFloor lower = new StructureFloor(0, 0, new FloorGeometry(Set.of(
-                new FloorGeometry.Cell(new BlockPos(0, 88, 0), 88, 94)), java.util.Map.of()));
+                new FloorGeometry.Cell(new BlockPos(0, 88, 0), 94)), java.util.Map.of()));
         StructureFloor upper = new StructureFloor(1, 1, new FloorGeometry(Set.of(
-                new FloorGeometry.Cell(new BlockPos(0, 91, 0), 91, 95)), java.util.Map.of()));
+                new FloorGeometry.Cell(new BlockPos(0, 91, 0), 95)), java.util.Map.of()));
         Structure structure = new Structure(10, BlockPos.ZERO, List.of(lower, upper));
 
         assertEquals(91, structure.semanticCeilingY(lower));

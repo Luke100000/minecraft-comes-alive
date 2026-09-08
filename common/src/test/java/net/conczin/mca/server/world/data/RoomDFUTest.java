@@ -197,10 +197,15 @@ class RoomDFUTest {
     }
 
     @Test
-    void canonicalVillageSaveUsesVersionOne() {
-        Village village = new Village(1, null);
+    void canonicalVillageSaveUsesVersionTwoWithoutSurfaceHeight() {
+        Village village = canonicalVillage();
+        CompoundTag saved = village.save();
 
-        assertEquals(1, village.save().getInt("buildingDataVersion"));
+        assertEquals(2, saved.getInt("buildingDataVersion"));
+        CompoundTag cell = firstCanonicalFloorCell(saved);
+        assertTrue(cell.contains("pos"));
+        assertTrue(cell.contains("ceilingY", net.minecraft.nbt.Tag.TAG_INT));
+        assertFalse(cell.contains("surfaceY"));
     }
 
     @Test
@@ -220,7 +225,7 @@ class RoomDFUTest {
     void unsupportedCanonicalVersionIsRejectedInsteadOfMigrated() {
         Village village = new Village(1, null);
         CompoundTag unsupported = village.save();
-        unsupported.putInt("buildingDataVersion", 2);
+        unsupported.putInt("buildingDataVersion", 3);
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(unsupported));
     }
@@ -290,8 +295,8 @@ class RoomDFUTest {
     }
 
     @Test
-    void canonicalFloorCellMissingSurfaceYIsRejectedAtDfuBoundary() {
-        CompoundTag malformed = canonicalVillage().save();
+    void canonicalV1FloorCellMissingSurfaceYIsRejectedAtDfuBoundary() {
+        CompoundTag malformed = canonicalV1Village();
         firstCanonicalFloorCell(malformed).remove("surfaceY");
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
@@ -306,35 +311,52 @@ class RoomDFUTest {
     }
 
     @Test
-    void canonicalFloorCellRejectsNonFiniteSurface() {
-        CompoundTag malformed = canonicalVillage().save();
+    void canonicalV1FloorCellRejectsNonFiniteSurface() {
+        CompoundTag malformed = canonicalV1Village();
         firstCanonicalFloorCell(malformed).putDouble("surfaceY", Double.NaN);
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
     }
 
     @Test
-    void canonicalFloorCellAcceptsSurfaceOnPartialSupportBelowFeet() {
-        CompoundTag serialized = canonicalVillage().save();
+    void canonicalV1FractionalSurfaceMigratesWithoutSurvivingV2Persistence() {
+        CompoundTag serialized = canonicalV1Village();
         firstCanonicalFloorCell(serialized).putDouble("surfaceY", 63.5D);
 
         RoomDFU.Result loaded = RoomDFU.load(serialized);
+        FloorGeometry.Cell migrated = loaded.structures().get(20).getFloor(0).orElseThrow()
+                .geometry().cellAt(new BlockPos(0, 64, 0)).orElseThrow();
 
-        assertTrue(loaded.structures().get(20).getFloor(0).orElseThrow().geometry().cells().stream()
-                .anyMatch(cell -> cell.surfaceY() == 63.5D));
+        assertEquals(68, migrated.ceilingY());
+        assertFalse(loaded.structures().get(20).save().getList("floors", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .getCompound(0).getList("cells", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .getCompound(0).contains("surfaceY"));
     }
 
     @Test
-    void canonicalFloorCellRejectsSurfaceBelowSupportingBlock() {
-        CompoundTag malformed = canonicalVillage().save();
+    void canonicalV1ExternalBuildingWithoutRoomOwnershipFieldsMigrates() {
+        CompoundTag serialized = canonicalV1Village();
+        serialized.put("externalBuildings", list(originBuilding(30, "graveyard")));
+
+        ExternalBuilding external = RoomDFU.load(serialized).externalBuildings().get(30);
+
+        assertEquals(Set.of(), external.getFloorCells());
+        assertEquals(-1, external.getStructureId());
+        assertEquals(-1, external.getFloorId());
+        assertTrue(external.contributesToMain());
+    }
+
+    @Test
+    void canonicalV1FloorCellRejectsSurfaceBelowSupportingBlock() {
+        CompoundTag malformed = canonicalV1Village();
         firstCanonicalFloorCell(malformed).putDouble("surfaceY", 62.999D);
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
     }
 
     @Test
-    void canonicalFloorCellRejectsSurfaceAtOrAboveCeiling() {
-        CompoundTag malformed = canonicalVillage().save();
+    void canonicalV1FloorCellRejectsSurfaceAtOrAboveCeiling() {
+        CompoundTag malformed = canonicalV1Village();
         firstCanonicalFloorCell(malformed).putDouble("surfaceY", 68.0D);
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
@@ -424,6 +446,23 @@ class RoomDFUTest {
         room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 0),
                 Set.of(new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));
         village.registerStructure(structure, room);
+        return village;
+    }
+
+    private static CompoundTag canonicalV1Village() {
+        CompoundTag village = canonicalVillage().save();
+        village.putInt("buildingDataVersion", 1);
+        for (net.minecraft.nbt.Tag structureValue : village.getList("structures", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+            CompoundTag structure = (CompoundTag) structureValue;
+            for (net.minecraft.nbt.Tag floorValue : structure.getList("floors", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+                CompoundTag floor = (CompoundTag) floorValue;
+                for (net.minecraft.nbt.Tag cellValue : floor.getList("cells", net.minecraft.nbt.Tag.TAG_COMPOUND)) {
+                    CompoundTag cell = (CompoundTag) cellValue;
+                    BlockPos pos = NbtHelper.decodeBlockPos(cell.get("pos"));
+                    cell.putDouble("surfaceY", pos == null ? 0.0D : pos.getY());
+                }
+            }
+        }
         return village;
     }
 

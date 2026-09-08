@@ -13,8 +13,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class SelectedFloorScannerTest {
     @Test
     void stepDecisionUsesVanillaJumpThreshold() {
-        assertTrue(FloorGeometry.canStep(64.0D, 65.0D));
-        assertFalse(FloorGeometry.canStep(64.0D, 65.25D));
+        assertTrue(SelectedFloorScanner.canStep(64.0D, 65.0D));
+        assertFalse(SelectedFloorScanner.canStep(64.0D, 65.25D));
+    }
+
+    @Test
+    void acceptedTransitionIsUndirectedForRoomConnectivity() {
+        BlockPos a = new BlockPos(0, 64, 0);
+        BlockPos b = new BlockPos(1, 64, 0);
+        SelectedFloorScanner.Transition edge = new SelectedFloorScanner.Transition(a, b);
+
+        assertTrue(edge.connects(a, b));
+        assertTrue(edge.connects(b, a));
     }
 
     @Test
@@ -25,7 +35,7 @@ class SelectedFloorScannerTest {
 
     @Test
     void floorBandSelectionSplitsThreeBlockStoreysAcrossWalkableStairs() {
-        Set<FloorGeometry.Cell> cells = Set.of(
+        Set<SelectedFloorScanner.SurfaceCell> cells = Set.of(
                 cell(0, 88, 0), cell(1, 88, 0), cell(2, 88, 0), cell(3, 88, 0),
                 cell(3, 89, 1),
                 cell(3, 90, 2),
@@ -44,7 +54,7 @@ class SelectedFloorScannerTest {
 
     @Test
     void floorSelectionReturnsExactSelectedBandWithoutEmbeddingSemanticCeiling() {
-        Set<FloorGeometry.Cell> cells = Set.of(
+        Set<SelectedFloorScanner.SurfaceCell> cells = Set.of(
                 cell(0, 88, 0), cell(1, 88, 0), cell(2, 88, 0), cell(3, 88, 0),
                 cell(3, 89, 1),
                 cell(3, 90, 2),
@@ -58,7 +68,7 @@ class SelectedFloorScannerTest {
 
     @Test
     void connectedBandsRetainWalkableStoreyEvidenceForAttachments() {
-        Set<FloorGeometry.Cell> cells = Set.of(
+        Set<SelectedFloorScanner.SurfaceCell> cells = Set.of(
                 cell(0, 88, 0), cell(1, 88, 0), cell(2, 88, 0), cell(3, 88, 0),
                 cell(3, 89, 1),
                 cell(3, 90, 2),
@@ -76,7 +86,7 @@ class SelectedFloorScannerTest {
     void topStairAtNextStoreyHeightStaysWithLowerBandAcrossDoorGap() {
         BlockPos topStair = new BlockPos(6, 91, 0);
         BlockPos upperRoom = new BlockPos(8, 91, 0);
-        Set<FloorGeometry.Cell> cells = Set.of(
+        Set<SelectedFloorScanner.SurfaceCell> cells = Set.of(
                 cell(0, 88, 0), cell(1, 88, 0), cell(2, 88, 0), cell(3, 88, 0),
                 cell(4, 89, 0),
                 cell(5, 90, 0),
@@ -101,20 +111,21 @@ class SelectedFloorScannerTest {
 
     @Test
     void floorBandSelectionKeepsLegitimateTwoBlockSurfaceVariationTogether() {
-        Set<FloorGeometry.Cell> cells = Set.of(
+        Set<SelectedFloorScanner.SurfaceCell> cells = Set.of(
                 cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0), cell(3, 64, 0),
                 cell(3, 65, 1),
                 cell(3, 66, 2));
 
-        assertEquals(cells, SelectedFloorScanner
-                .floorSelection(cells, new BlockPos(3, 65, 1)).selected().cells());
+        assertEquals(cells.stream().map(SelectedFloorScanner.SurfaceCell::canonical)
+                        .collect(java.util.stream.Collectors.toSet()),
+                SelectedFloorScanner.floorSelection(cells, new BlockPos(3, 65, 1)).selected().cells());
     }
 
     @Test
     void stackedTopStairColumnStaysOnLowerFloorWithoutLosingUpperRoom() {
         BlockPos stackedColumn = new BlockPos(6, 91, 0);
         BlockPos upperRoom = new BlockPos(8, 91, 0);
-        Set<FloorGeometry.Cell> cells = Set.of(
+        Set<SelectedFloorScanner.SurfaceCell> cells = Set.of(
                 cell(0, 88, 0), cell(1, 88, 0), cell(2, 88, 0), cell(3, 88, 0),
                 cell(6, 88, 0),
                 cell(4, 89, 0),
@@ -132,7 +143,7 @@ class SelectedFloorScannerTest {
         assertTrue(upper.cellAt(stackedColumn).isEmpty());
     }
 
-    private static FloorGeometry.Cell cell(int x, int y, int z) {
-        return new FloorGeometry.Cell(new BlockPos(x, y, z), y, y + 4);
+    private static SelectedFloorScanner.SurfaceCell cell(int x, int y, int z) {
+        return new SelectedFloorScanner.SurfaceCell(new BlockPos(x, y, z), y, y + 4);
     }
 }

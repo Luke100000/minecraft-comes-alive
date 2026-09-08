@@ -51,7 +51,8 @@ final class RoomScanPlanner {
                 village.getStructures().values(), observation.floor()).orElse(null);
         if (expansion != null && validExpansion(village, observation, expansion)) {
             Building existingRoom = StructureExpansionPolicy.registeredRoomForFreshComponent(
-                    expansion, observation.floor(), source, village.getRooms().toList()).orElse(null);
+                    expansion, observation.floor(), observation.transitions(), source,
+                    village.getRooms().toList()).orElse(null);
             return existingRoom != null
                     ? RoomScanPlan.updateRoom(existingRoom, source)
                     : RoomScanPlan.addRoom(expansion.structureId(), expansion.floorId(), source);

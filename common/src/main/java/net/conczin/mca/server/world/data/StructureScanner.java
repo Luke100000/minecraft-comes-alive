@@ -11,6 +11,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /** Orchestrates one selected physical Floor scan. It never discovers other storeys implicitly. */
 final class StructureScanner {
@@ -85,14 +86,15 @@ final class StructureScanner {
         SelectedFloorScanner.Result exact = SelectedFloorScanner.scan(
                 world, source, config.maxBuildingSize, config.maxBuildingRadius);
         if (exact.result() == Building.validationResult.SUCCESS && exact.floor() != null) {
-            return Optional.of(new AttachmentSeed(source, exact.floor(), exact.connectedFloors()));
+            return Optional.of(new AttachmentSeed(
+                    source, exact.floor(), exact.transitions(), exact.connectedFloors()));
         }
 
         Optional<StructureConnector.FloorHandoff> vertical =
                 StructureConnector.resolveVerticalFloorHandoff(world, source, config);
         if (vertical.isPresent()) {
             return Optional.of(new AttachmentSeed(vertical.get().seed(), vertical.get().floor(),
-                    vertical.get().connectedFloors()));
+                    vertical.get().transitions(), vertical.get().connectedFloors()));
         }
 
         BlockPos standingSeed = resolveStandingSurfaceSeed(world, source).orElse(null);
@@ -100,7 +102,8 @@ final class StructureScanner {
             SelectedFloorScanner.Result standing = SelectedFloorScanner.scan(
                     world, standingSeed, config.maxBuildingSize, config.maxBuildingRadius);
             if (standing.result() == Building.validationResult.SUCCESS && standing.floor() != null) {
-                return Optional.of(new AttachmentSeed(standingSeed, standing.floor(), standing.connectedFloors()));
+                return Optional.of(new AttachmentSeed(
+                        standingSeed, standing.floor(), standing.transitions(), standing.connectedFloors()));
             }
         }
 
@@ -113,7 +116,8 @@ final class StructureScanner {
             SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(
                     world, candidate, config.maxBuildingSize, config.maxBuildingRadius);
             if (scan.result() == Building.validationResult.SUCCESS && scan.floor() != null) {
-                candidates.add(new AttachmentSeed(candidate, scan.floor(), scan.connectedFloors()));
+                candidates.add(new AttachmentSeed(
+                        candidate, scan.floor(), scan.transitions(), scan.connectedFloors()));
             }
         }
         return candidates.size() == 1 ? Optional.of(candidates.getFirst()) : Optional.empty();
@@ -127,7 +131,7 @@ final class StructureScanner {
         if (seed == null) return Optional.empty();
         StructureFloor candidate = new StructureFloor(0, 0, seed.floor());
         return Optional.of(new FloorObservation(
-                seed.seed(), seed.floor(), seed.connectedFloors(),
+                seed.seed(), seed.floor(), seed.transitions(), seed.connectedFloors(),
                 StructureConnector.verticalConnections(world, candidate, existing)));
     }
 
@@ -181,7 +185,7 @@ final class StructureScanner {
                 candidate, floor, existing, ignoredStructureId, attachmentBuildingId);
         if (validation != Building.validationResult.SUCCESS) return Result.failure(validation, interactionSource);
         return new Result(Building.validationResult.SUCCESS, scanSeed.immutable(),
-                selected.min(), selected.max(), scannedFloor, selected.connectedFloors());
+                selected.min(), selected.max(), scannedFloor, selected.transitions(), selected.connectedFloors());
     }
 
     private static Building.validationResult validateCandidate(Structure candidate,
@@ -230,19 +234,23 @@ final class StructureScanner {
 
     record AttachmentSeed(BlockPos seed,
                           FloorGeometry floor,
+                          Set<SelectedFloorScanner.Transition> transitions,
                           List<FloorGeometry> connectedFloors) {
         AttachmentSeed {
             seed = seed.immutable();
+            transitions = transitions == null ? Set.of() : Set.copyOf(transitions);
             connectedFloors = connectedFloors == null ? List.of() : List.copyOf(connectedFloors);
         }
     }
 
     record FloorObservation(BlockPos seed,
                             FloorGeometry floor,
+                            Set<SelectedFloorScanner.Transition> transitions,
                             List<FloorGeometry> connectedFloors,
                             List<StructureConnector.VerticalConnection> verticalConnections) {
         FloorObservation {
             seed = seed.immutable();
+            transitions = transitions == null ? Set.of() : Set.copyOf(transitions);
             connectedFloors = connectedFloors == null ? List.of() : List.copyOf(connectedFloors);
             verticalConnections = verticalConnections == null ? List.of() : List.copyOf(verticalConnections);
         }
@@ -253,13 +261,15 @@ final class StructureScanner {
                   BlockPos min,
                   BlockPos max,
                   FloorGeometry scannedFloor,
+                  Set<SelectedFloorScanner.Transition> transitions,
                   List<FloorGeometry> connectedFloors) {
         Result {
+            transitions = transitions == null ? Set.of() : Set.copyOf(transitions);
             connectedFloors = connectedFloors == null ? List.of() : List.copyOf(connectedFloors);
         }
 
         static Result failure(Building.validationResult result, BlockPos source) {
-            return new Result(result, source, source, source, null, List.of());
+            return new Result(result, source, source, source, null, Set.of(), List.of());
         }
 
         StructureFloor floor() {

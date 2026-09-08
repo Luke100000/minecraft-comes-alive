@@ -25,7 +25,7 @@ class StructureScannerAttachmentBoundaryTest {
     private static FloorGeometry surfaceAt(int y, Set<BlockPos> positions) {
         LinkedHashSet<FloorGeometry.Cell> cells = new LinkedHashSet<>();
         for (BlockPos pos : positions) {
-            cells.add(new FloorGeometry.Cell(pos, pos.getY(), pos.getY() + 4));
+            cells.add(new FloorGeometry.Cell(pos, pos.getY() + 4));
         }
         return new FloorGeometry(cells, Map.of());
     }

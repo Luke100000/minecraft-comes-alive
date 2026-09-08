@@ -27,10 +27,12 @@ final class RoomDFU {
         Objects.requireNonNull(villageTag, "villageTag");
         if (villageTag.contains("buildingDataVersion")) {
             int version = villageTag.getInt("buildingDataVersion");
-            if (version != Village.BUILDING_DATA_VERSION) {
-                throw new IllegalArgumentException("Unsupported MCA buildingDataVersion: " + version);
-            }
-            return loadCurrent(villageTag);
+            return switch (version) {
+                case 1 -> loadCurrent(migrateCanonicalV1(villageTag));
+                case Village.BUILDING_DATA_VERSION -> loadCurrent(villageTag);
+                default -> throw new IllegalArgumentException(
+                        "Unsupported MCA buildingDataVersion: " + version);
+            };
         }
         return villageTag.contains("structures", Tag.TAG_LIST)
                 ? migrateUpstreamFloorCleanSquash(villageTag)
@@ -71,6 +73,57 @@ final class RoomDFU {
             putUnique(logicalBuildings, logical.id(), logical, "Logical building");
         }
         return new Result(rooms, external, structures, logicalBuildings);
+    }
+
+    private static CompoundTag migrateCanonicalV1(CompoundTag villageTag) {
+        CompoundTag migrated = villageTag.copy();
+        for (Tag externalValue : migrated.getList("externalBuildings", Tag.TAG_COMPOUND)) {
+            normalizeCanonicalV1ExternalBuilding((CompoundTag) externalValue);
+        }
+        for (Tag structureValue : migrated.getList("structures", Tag.TAG_COMPOUND)) {
+            CompoundTag structure = (CompoundTag) structureValue;
+            for (Tag floorValue : structure.getList("floors", Tag.TAG_COMPOUND)) {
+                CompoundTag floor = (CompoundTag) floorValue;
+                if (!floor.contains("cells", Tag.TAG_LIST)) {
+                    throw new IllegalArgumentException("StructureFloor is missing required geometry");
+                }
+                for (Tag cellValue : floor.getList("cells", Tag.TAG_COMPOUND)) {
+                    CompoundTag cell = (CompoundTag) cellValue;
+                    BlockPos pos = NbtHelper.decodeBlockPos(cell.get("pos"));
+                    if (pos == null) {
+                        throw new IllegalArgumentException("FloorGeometry cell is missing pos");
+                    }
+                    if (!cell.contains("surfaceY", Tag.TAG_DOUBLE)) {
+                        throw new IllegalArgumentException("FloorGeometry cell is missing surfaceY");
+                    }
+                    if (!cell.contains("ceilingY", Tag.TAG_INT)) {
+                        throw new IllegalArgumentException("FloorGeometry cell is missing ceilingY");
+                    }
+                    double surfaceY = cell.getDouble("surfaceY");
+                    int ceilingY = cell.getInt("ceilingY");
+                    if (!Double.isFinite(surfaceY)) {
+                        throw new IllegalArgumentException("FloorGeometry cell surface must be finite");
+                    }
+                    if (ceilingY <= pos.getY()) {
+                        throw new IllegalArgumentException("FloorGeometry cell ceiling must be above feet");
+                    }
+                    if (surfaceY < pos.getY() - 1.0D || surfaceY >= ceilingY) {
+                        throw new IllegalArgumentException(
+                                "FloorGeometry cell surface must be within its physical height");
+                    }
+                    cell.remove("surfaceY");
+                }
+            }
+        }
+        migrated.putInt("buildingDataVersion", Village.BUILDING_DATA_VERSION);
+        return migrated;
+    }
+
+    private static void normalizeCanonicalV1ExternalBuilding(CompoundTag building) {
+        if (!building.contains("floorCells")) building.put("floorCells", new ListTag());
+        if (!building.contains("contributesToMain")) building.putBoolean("contributesToMain", true);
+        if (!building.contains("structureId")) building.putInt("structureId", -1);
+        if (!building.contains("floorId")) building.putInt("floorId", -1);
     }
 
     private static <T> void putUnique(Map<Integer, T> target, int id, T value, String kind) {
@@ -148,7 +201,7 @@ final class RoomDFU {
         int ceilingY = oldFloor.getInt("ceilingY");
         List<FloorGeometry.Cell> cells = region.cells().stream()
                 .map(pos -> new FloorGeometry.Cell(
-                        pos, pos.getY(), Math.max(pos.getY() + 1, ceilingY)))
+                        pos, Math.max(pos.getY() + 1, ceilingY)))
                 .toList();
         Set<BlockPos> cellPositions = cells.stream().map(FloorGeometry.Cell::feet)
                 .collect(Collectors.toSet());
@@ -258,7 +311,7 @@ final class RoomDFU {
             Building room = new Building(canonicalBuildingTag(old, floorCells, id, 0, true));
             int ceilingY = Math.max(anchorY + 1, old.getInt("pos1Y") + 1);
             FloorGeometry geometry = new FloorGeometry(floorCells.stream()
-                    .map(pos -> new FloorGeometry.Cell(pos, pos.getY(), ceilingY))
+                    .map(pos -> new FloorGeometry.Cell(pos, ceilingY))
                     .toList(), Map.of());
             Structure structure = new Structure(id, room.getSourceBlock(), List.of(
                     new StructureFloor(0, 0, geometry)));
