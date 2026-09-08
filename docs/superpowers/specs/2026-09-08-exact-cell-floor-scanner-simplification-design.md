@@ -111,9 +111,15 @@ There is no second spatial truth between world discovery and `FloorGeometry`.
 Both may belong to one semantic Floor, and both may coexist in the same X/Z
 column.
 
-`surfaceY` describes the physical walkable surface. `ceilingY` describes the
-physical vertical interval above that cell. Neither field is a substitute for
-semantic Floor identity.
+The domain rule is deliberately simple: a Floor is a set of integer floor
+cells with valid structural support. `surfaceY` is support/traversal metadata
+for that cell, not another cell identity. A lower slab can therefore produce a
+cell at `(x, 64, z)` with a physical support surface at `63.5`; flooring that
+value to `63` would identify the support block and lose movement information.
+
+`surfaceY` describes the physical walkable/support surface. `ceilingY`
+describes the physical vertical interval above that cell. Neither field is a
+substitute for semantic Floor identity.
 
 ### Projection is only a view
 
@@ -165,6 +171,37 @@ It may use collision shapes, `WalkNodeEvaluator`, and a small bounded landing
 probe. It must not decide Room type, POI ownership, persisted Room identity, or
 global height bands.
 
+Physical neighbor discovery is independent of persistence. Persisted
+`StructureFloor` state may later help classify an already-discovered physical
+transition as belonging to this storey or another one, but persistence must not
+change whether the Minecraft adapter considers a local surface physically
+valid/reachable in the first place.
+
+### Structural support versus occupancy
+
+Room/Floor topology represents structural floor ownership, not a requirement
+that the logical feet block be empty at scan time. Low interior occupancy such
+as a bed or carpet must therefore be able to leave the supported structural
+floor cell intact.
+
+This must not become another broad heuristic. In particular, a generic rule
+equivalent to `collisionShape.max(Y) <= 1.0` is insufficient because an ordinary
+full cube also has a maximum collision height of `1.0`. A full-height solid
+block must not become topology-neutral merely because the block above it is
+open.
+
+The Minecraft adapter must distinguish these cases from physical facts:
+
+- valid structural support below the logical cell;
+- actual occupied collision height/shape in the logical cell;
+- available headroom;
+- the shared Minecraft step/traversal rule.
+
+The intended behavior is not a `BedBlock` special case. It is the older useful
+invariant restored in physical terms: sufficiently low interior occupancy can
+exist inside a Room without erasing the structural floor underneath, while a
+full solid obstruction is not automatically treated the same way.
+
 ### Storey boundary policy
 
 The scan is one traversal with an explicit selected-storey boundary policy.
@@ -194,6 +231,10 @@ use existing persisted neighboring Floor identity and the existing semantic
 height tolerance as boundary evidence, but scanner correctness must not depend
 on `MIN_MEANINGFUL_HEIGHT_SLICE_AREA`, connected components of equal-Y slices,
 or a whole-building `semanticBands(...)` pass.
+
+Persisted identity is evidence for semantic classification only. It must not be
+implemented as a second persistence-aware physical flood fill or as a hidden
+`PersistedFloorBoundary`-style world-discovery rule.
 
 ### Ambiguous geometry
 
@@ -334,6 +375,12 @@ Wall blocks can therefore be POI evidence without entering the Room's floor
 cell set. A bookshelf embedded in a constructed wall or a cave wall is handled
 the same way.
 
+If one perimeter/wall POI candidate borders more than one Room component, it
+must have one deterministic owner rather than being counted by every adjacent
+Room. Reuse the existing stable Room-owner ordering used elsewhere in Room
+partitioning/reconciliation unless a focused regression proves a narrower rule
+is required.
+
 Low furniture such as beds may occupy the interior while the structural floor
 underneath remains the Room cell. Furniture neither creates nor deletes Floor
 geometry solely because it is a POI.
@@ -410,11 +457,15 @@ Use GameTests for facts that depend on real collision/block behavior:
 
 1. beds/furniture do not change the room floor footprint;
 2. scanning from the top of a bed resolves the structural floor underneath;
-3. stairs/slabs produce the expected exact `surfaceY` and step connectivity;
-4. uneven cave terrain scans without flat-floor assumptions;
-5. interior and exterior doors do not manufacture Floor cells;
-6. wall POIs are counted without wall blocks entering the Room footprint;
-7. ladders/trapdoors produce attachment evidence without cross-floor Room
+3. a full-height solid block is not treated as topology-neutral merely because
+   its collision shape reaches exactly `1.0` and the block above is open;
+4. carpet/representative low furniture preserves structural Room ownership
+   without introducing a raised canonical floor identity;
+5. stairs/slabs produce the expected exact `surfaceY` and step connectivity;
+6. uneven cave terrain scans without flat-floor assumptions;
+7. interior and exterior doors do not manufacture Floor cells;
+8. wall POIs are counted once without wall blocks entering the Room footprint;
+9. ladders/trapdoors produce attachment evidence without cross-floor Room
    merging.
 
 ### Existing behavioral regressions
@@ -486,6 +537,12 @@ duplication this branch has been removing.
 This spec approves a scanner simplification only. The implementation plan must
 be test-driven and should start by locking the acceptance scenarios above
 before deleting semantic-band code.
+
+Prefer moving behavior into the existing owners (`FloorGeometry`,
+`SelectedFloorScanner`, `RoomPartitioner`, connector/POI helpers) and private
+helpers over adding new top-level classes. A new class is justified only when a
+responsibility is genuinely reusable/independent and keeping it inside an
+existing owner would make that owner less clear.
 
 The intended end state is deliberately small:
 
