@@ -61,10 +61,21 @@ final class StructureConnector {
             BlockState state = world.getBlockState(connector);
             FloorConnector.Type type = FloorConnector.Type.fromBlockState(state);
             if (type == null) continue;
-            floorMembershipCells(connector, geometry)
+            (type.vertical() ? verticalFloorMembershipCells(connector, geometry)
+                    : floorMembershipCells(connector, geometry))
                     .forEach(floorCell -> result.putIfAbsent(floorCell, type));
         }
         return Map.copyOf(result);
+    }
+
+    private static Set<BlockPos> verticalFloorMembershipCells(BlockPos connector, FloorGeometry geometry) {
+        LinkedHashSet<BlockPos> cells = new LinkedHashSet<>();
+        for (BlockPos handoff : handoffs(connector)) {
+            geometry.interactionCellAt(handoff.getX(), handoff.getY(), handoff.getZ())
+                    .map(FloorGeometry.Cell::feet)
+                    .ifPresent(cells::add);
+        }
+        return Set.copyOf(cells);
     }
 
     static Set<BlockPos> floorMembershipCells(BlockPos connector, FloorGeometry geometry) {
@@ -239,6 +250,10 @@ final class StructureConnector {
         for (BlockPos probe : verticalProbePositions(floor, floorCell)) {
             List<BlockPos> column = verticalColumnFromConnector(world, probe);
             if (!column.isEmpty()) return column;
+            for (Direction direction : HORIZONTAL) {
+                column = verticalColumnFromConnector(world, probe.relative(direction));
+                if (!column.isEmpty()) return column;
+            }
         }
         return List.of();
     }
