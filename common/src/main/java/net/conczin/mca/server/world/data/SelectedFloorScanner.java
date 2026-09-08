@@ -415,8 +415,11 @@ final class SelectedFloorScanner {
         }
 
         boolean connects(BlockPos a, BlockPos b) {
-            return (first.equals(a) && second.equals(b))
-                    || (first.equals(b) && second.equals(a));
+            return b.equals(other(a));
+        }
+
+        BlockPos other(BlockPos pos) {
+            return first.equals(pos) ? second : second.equals(pos) ? first : null;
         }
     }
 

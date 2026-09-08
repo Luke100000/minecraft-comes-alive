@@ -296,7 +296,6 @@ final class StructureConnector {
                 .toList();
 
         FloorHandoff selected = null;
-        FloorGeometry selectedFloor = null;
         int selectedDistance = Integer.MAX_VALUE;
         int selectedY = Integer.MAX_VALUE;
         for (BlockPos candidate : candidates) {
@@ -311,12 +310,10 @@ final class StructureConnector {
             if (scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) continue;
 
             if (selected == null) {
-                selected = new FloorHandoff(
-                        candidate.immutable(), scan.floor(), scan.transitions(), scan.connectedFloors());
-                selectedFloor = scan.floor();
+                selected = new FloorHandoff(candidate, scan);
                 selectedDistance = distance;
                 selectedY = candidate.getY();
-            } else if (!selectedFloor.sameFootprint(scan.floor())) {
+            } else if (!selected.scan().floor().sameFootprint(scan.floor())) {
                 return Optional.empty();
             }
         }
@@ -324,13 +321,9 @@ final class StructureConnector {
     }
 
     record FloorHandoff(BlockPos seed,
-                        FloorGeometry floor,
-                        Set<SelectedFloorScanner.Transition> transitions,
-                        List<FloorGeometry> connectedFloors) {
+                        SelectedFloorScanner.Result scan) {
         FloorHandoff {
             seed = seed.immutable();
-            transitions = transitions == null ? Set.of() : Set.copyOf(transitions);
-            connectedFloors = connectedFloors == null ? List.of() : List.copyOf(connectedFloors);
         }
     }
 

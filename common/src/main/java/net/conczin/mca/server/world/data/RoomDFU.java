@@ -84,30 +84,17 @@ final class RoomDFU {
             CompoundTag structure = (CompoundTag) structureValue;
             for (Tag floorValue : structure.getList("floors", Tag.TAG_COMPOUND)) {
                 CompoundTag floor = (CompoundTag) floorValue;
-                if (!floor.contains("cells", Tag.TAG_LIST)) {
-                    throw new IllegalArgumentException("StructureFloor is missing required geometry");
-                }
+                StructureFloor.load(floor);
                 for (Tag cellValue : floor.getList("cells", Tag.TAG_COMPOUND)) {
                     CompoundTag cell = (CompoundTag) cellValue;
-                    BlockPos pos = NbtHelper.decodeBlockPos(cell.get("pos"));
-                    if (pos == null) {
-                        throw new IllegalArgumentException("FloorGeometry cell is missing pos");
-                    }
                     if (!cell.contains("surfaceY", Tag.TAG_DOUBLE)) {
                         throw new IllegalArgumentException("FloorGeometry cell is missing surfaceY");
                     }
-                    if (!cell.contains("ceilingY", Tag.TAG_INT)) {
-                        throw new IllegalArgumentException("FloorGeometry cell is missing ceilingY");
-                    }
                     double surfaceY = cell.getDouble("surfaceY");
-                    int ceilingY = cell.getInt("ceilingY");
-                    if (!Double.isFinite(surfaceY)) {
-                        throw new IllegalArgumentException("FloorGeometry cell surface must be finite");
-                    }
-                    if (ceilingY <= pos.getY()) {
-                        throw new IllegalArgumentException("FloorGeometry cell ceiling must be above feet");
-                    }
-                    if (surfaceY < pos.getY() - 1.0D || surfaceY >= ceilingY) {
+                    BlockPos pos = NbtHelper.decodeBlockPos(cell.get("pos"));
+                    if (!Double.isFinite(surfaceY)
+                            || surfaceY < pos.getY() - 1.0D
+                            || surfaceY >= cell.getInt("ceilingY")) {
                         throw new IllegalArgumentException(
                                 "FloorGeometry cell surface must be within its physical height");
                     }

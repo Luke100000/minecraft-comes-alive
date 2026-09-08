@@ -1,8 +1,6 @@
 package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -18,9 +16,6 @@ import java.util.stream.Collectors;
 
 /** Pure Room topology over one exact FloorGeometry. */
 final class RoomPartitioner {
-    private static final Direction[] HORIZONTAL = {
-            Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
-    };
     private static final Comparator<Component> OWNER_ORDER =
             Comparator.comparingInt(Component::area).reversed()
                     .thenComparingInt(Component::minX)
@@ -128,27 +123,14 @@ final class RoomPartitioner {
         while (!queue.isEmpty()) {
             FloorGeometry.Cell current = queue.removeFirst();
             component.add(current);
-            for (Direction direction : HORIZONTAL) {
-                int x = current.feet().getX() + direction.getStepX();
-                int z = current.feet().getZ() + direction.getStepZ();
-                for (FloorGeometry.Cell next : geometry.cellsAtColumn(x, z)) {
-                    if (!included.test(next)
-                            || visited.contains(next.feet())
-                            || !connected(current.feet(), next.feet(), transitions)) {
-                        continue;
-                    }
-                    visited.add(next.feet());
-                    queue.addLast(next);
-                }
+            for (SelectedFloorScanner.Transition edge : transitions) {
+                BlockPos nextPos = edge.other(current.feet());
+                FloorGeometry.Cell next = nextPos == null ? null : geometry.cellAt(nextPos).orElse(null);
+                if (next == null || !included.test(next) || !visited.add(next.feet())) continue;
+                queue.addLast(next);
             }
         }
         return Set.copyOf(component);
-    }
-
-    private static boolean connected(BlockPos first,
-                                     BlockPos second,
-                                     Collection<SelectedFloorScanner.Transition> transitions) {
-        return transitions.stream().anyMatch(edge -> edge.connects(first, second));
     }
 
     static Component owner(Collection<Component> adjacent) {
@@ -156,36 +138,21 @@ final class RoomPartitioner {
     }
 
     static List<Component> adjacent(FloorGeometry.Cell floorCell, Collection<Component> components) {
-        List<Component> result = new ArrayList<>();
-        for (Component component : components) {
-            boolean touches = false;
-            for (Direction direction : HORIZONTAL) {
-                int x = floorCell.feet().getX() + direction.getStepX();
-                int z = floorCell.feet().getZ() + direction.getStepZ();
-                if (component.cells().stream().anyMatch(candidate ->
-                        candidate.feet().getX() == x
-                                && candidate.feet().getZ() == z
-                                && Math.abs(candidate.feet().getY() - floorCell.feet().getY()) <= 1)) {
-                    touches = true;
-                    break;
-                }
-            }
-            if (touches) result.add(component);
-        }
-        return List.copyOf(result);
+        return components.stream().filter(component -> component.cells().stream().anyMatch(candidate ->
+                        Math.abs(candidate.feet().getX() - floorCell.feet().getX())
+                                + Math.abs(candidate.feet().getZ() - floorCell.feet().getZ()) == 1
+                                && Math.abs(candidate.feet().getY() - floorCell.feet().getY()) <= 1))
+                .toList();
     }
 
     private static List<Component> adjacent(
             FloorGeometry.Cell floorCell,
             Collection<Component> components,
             Collection<SelectedFloorScanner.Transition> transitions) {
-        List<Component> result = new ArrayList<>();
-        for (Component component : components) {
-            boolean touches = component.cells().stream().anyMatch(candidate ->
-                    connected(floorCell.feet(), candidate.feet(), transitions));
-            if (touches) result.add(component);
-        }
-        return List.copyOf(result);
+        return components.stream().filter(component -> transitions.stream()
+                        .map(edge -> edge.other(floorCell.feet()))
+                        .anyMatch(component::contains))
+                .toList();
     }
 
     static Component select(BlockPos source, FloorGeometry geometry, List<Component> components) {

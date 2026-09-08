@@ -43,7 +43,7 @@
   - Live support/collision probing, transient surface height, accepted neighbour transitions, selected-storey traversal, exterior probing, alternate-storey evidence.
   - Owns nested transient `SurfaceCell` and `Transition` records.
 - `common/src/main/java/net/conczin/mca/server/world/data/StructureScanner.java`
-  - Propagates fresh Floor plus transient transition evidence through existing `AttachmentSeed`, `FloorObservation`, and `Result` records.
+  - Propagates the existing immutable `SelectedFloorScanner.Result` evidence bundle through `FloorObservation` and scan `Result`; attachment handoffs reuse `StructureConnector.FloorHandoff` rather than duplicating floor/transition state.
 - `common/src/main/java/net/conczin/mca/server/world/data/RoomPartitioner.java`
   - Connected components over canonical Floor cells using accepted fresh transitions only; Room-boundary cells are withheld from ordinary flood-fill and then assigned to one deterministic adjacent component.
 - `common/src/main/java/net/conczin/mca/server/world/data/BuildingRoomScanner.java`
@@ -326,7 +326,7 @@ git commit -m "refactor: keep floor surface height transient"
 **Interfaces:**
 - Produces `RoomPartitioner.partition(FloorGeometry, Collection<SelectedFloorScanner.Transition>)`.
 - `BuildingRoomScanner.scan(Level, BlockPos, Set<BlockPos>, int, int, FloorGeometry, Collection<SelectedFloorScanner.Transition>)` and `BuildingRoomScanner.partition(Level, BlockPos, int, int, FloorGeometry, Collection<SelectedFloorScanner.Transition>)` receive the same transition collection as the Floor they materialize.
-- Existing `SelectedFloorScanner.Result`, `StructureScanner.AttachmentSeed`, `FloorObservation`, and `StructureScanner.Result` propagate immutable transition sets.
+- `SelectedFloorScanner.Result` is the single immutable fresh-scan evidence bundle. `StructureConnector.FloorHandoff` and `StructureScanner.FloorObservation` carry that result rather than duplicating its Floor, transitions, and connected-Floor evidence; `StructureScanner.Result` continues to expose the selected scan to Room workflows.
 - `FloorGeometry.connectorTypesByCell()` remains keyed to exact cells. Raw connector evidence may exist outside `FloorGeometry`, but persisted Room-boundary markers never create their own cell.
 
 - [ ] **Step 1: Write RoomPartitioner RED for explicit transition connectivity**
@@ -363,18 +363,14 @@ private static boolean connected(BlockPos a, BlockPos b,
 
 Do not add a persistent edge map. If later measurement shows repeated linear lookup is material, add an ephemeral endpoint index inside `RoomPartitioner.partition` without changing the domain model.
 
-- [ ] **Step 3: Propagate transition evidence through existing result records**
+- [ ] **Step 3: Propagate one immutable fresh-scan evidence bundle**
 
-Add immutable `Set<SelectedFloorScanner.Transition> transitions` fields to:
-
-```text
-SelectedFloorScanner.Result
-StructureScanner.AttachmentSeed
-StructureScanner.FloorObservation
-StructureScanner.Result
-```
-
-Every constructor uses `Set.copyOf(transitions)`; failure results use `Set.of()`.
+Keep `Set<SelectedFloorScanner.Transition> transitions` immutable inside
+`SelectedFloorScanner.Result`. Reuse that result through attachment and planning
+handoffs instead of copying `floor + transitions + connectedFloors` into parallel
+records. `StructureConnector.FloorHandoff` carries `seed + scan result`, and
+`StructureScanner.FloorObservation` carries `seed + scan result + vertical
+connections`. Failure scan results still use `Set.of()`.
 
 - [ ] **Step 4: Pass transitions into every fresh Room partition site**
 

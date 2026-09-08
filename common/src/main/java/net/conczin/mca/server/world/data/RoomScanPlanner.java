@@ -22,7 +22,7 @@ final class RoomScanPlanner {
                 StructureScanner.FloorObservation fresh = StructureScanner.observeFloor(
                         level, source, village.getStructures().values()).orElse(null);
                 if (fresh != null) {
-                    StructureFloor freshFloor = new StructureFloor(0, 0, fresh.floor());
+                    StructureFloor freshFloor = new StructureFloor(0, 0, fresh.scan().floor());
                     if (!StructureFloor.sameSemanticBand(
                             freshFloor.anchorY(), resolved.position().floor().anchorY())) {
                         return attachmentPlan(village, source, fresh)
@@ -48,10 +48,10 @@ final class RoomScanPlanner {
         if (village == null || observation == null) return RoomScanPlan.addBuilding(source);
 
         StructureExpansionPolicy.FloorTarget expansion = StructureExpansionPolicy.selectSameStoreyTarget(
-                village.getStructures().values(), observation.floor()).orElse(null);
+                village.getStructures().values(), observation.scan().floor()).orElse(null);
         if (expansion != null && validExpansion(village, observation, expansion)) {
             Building existingRoom = StructureExpansionPolicy.registeredRoomForFreshComponent(
-                    expansion, observation.floor(), observation.transitions(), source,
+                    expansion, observation.scan().floor(), observation.scan().transitions(), source,
                     village.getRooms().toList()).orElse(null);
             return existingRoom != null
                     ? RoomScanPlan.updateRoom(existingRoom, source)
@@ -66,9 +66,9 @@ final class RoomScanPlanner {
                                                  BlockPos source,
                                                  StructureScanner.FloorObservation observation) {
         if (village == null || observation == null) return Optional.empty();
-        StructureFloor candidateFloor = new StructureFloor(0, 0, observation.floor());
+        StructureFloor candidateFloor = new StructureFloor(0, 0, observation.scan().floor());
         Village.AttachmentTarget target = village.selectAttachmentTarget(
-                candidateFloor, observation.verticalConnections(), observation.connectedFloors()).orElse(null);
+                candidateFloor, observation.verticalConnections(), observation.scan().connectedFloors()).orElse(null);
         if (target == null) return Optional.empty();
 
         Structure candidate = new Structure(-1, observation.seed(), List.of(candidateFloor));
