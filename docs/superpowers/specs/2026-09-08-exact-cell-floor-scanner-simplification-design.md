@@ -101,7 +101,9 @@ There is no second spatial truth between world discovery and `FloorGeometry`.
   values as architectural categories.
 - Do not reintroduce one-cell-per-X/Z assumptions.
 - Do not make doors or wall blocks part of Floor geometry merely to make POI or
-  Blueprint behavior convenient.
+  Blueprint behavior convenient. A doorway cell belongs to Floor geometry only
+  when ordinary support/occupancy discovery independently proves that exact
+  integer cell is valid.
 - Do not redesign `RoomIdentityPolicy`, Main Room selection, inheritance, or
   logical-building identity.
 - Change `RoomDFU` only as required to migrate the previous canonical exact-cell
@@ -156,7 +158,10 @@ rediscover which storey its cells belong to.
 `RoomPartitioner` consumes one `FloorGeometry` plus the accepted physical
 neighbour transitions from the same fresh observation. Its nodes are integer
 cells. It must not recreate movement by reading persisted fractional heights.
-Room-boundary connector positions are gaps/metadata, not manufactured nodes.
+Room-boundary connector metadata never manufactures nodes. When the connector
+position is already an independently discovered canonical Floor cell, that cell
+remains part of the Floor but acts as a Room boundary rather than an ordinary
+bridge between both sides.
 
 Room topology must not contain a second storey classifier.
 
@@ -316,16 +321,24 @@ cave is meaningful.
 ## Doors and horizontal connectors
 
 Doors and other Room-boundary connectors affect traversal/partition metadata;
-they do not manufacture Floor cells. The door/gate position is a gap between
-owned cells on its valid sides.
+they do not manufacture Floor cells. If ordinary world discovery proves that a
+doorway/gate position is valid occupiable space with valid support, that exact
+integer position remains a canonical Floor cell. Connector metadata alone is
+never sufficient to create it.
 
-`RoomPartitioner` partitions only owned cells and omits connector-gap
-transitions. A door block therefore belongs to neither Room floor-cell set.
-Metadata may still associate that connector position with one deterministic
-Room for POI/interaction purposes when needed.
+`RoomPartitioner` first partitions the non-boundary cells using the accepted
+fresh transitions while treating Room-boundary connector cells as blocked for
+ordinary flood-fill. It then assigns each already-present boundary cell to at
+most one deterministic adjacent Room. Reuse the existing owner ordering:
+prefer the largest adjacent component, then stable bounds/coordinate ordering
+as the tie-breaker. This preserves disjoint Room footprints and keeps an
+interior doorway with the intended enclosed Room instead of a tiny exterior
+apron.
 
-An interior door and an exterior door use the same rule. There is no owned-door
-cell or separate "outer door" geometry path.
+If a connector position was not independently discovered as a Floor cell, it
+remains connector/attachment evidence only; no synthetic replacement cell is
+created. Interior and exterior doors use the same rule, with no separate
+"outer door" geometry path.
 
 ## Vertical connectors
 
@@ -369,7 +382,9 @@ It should:
 - connect nodes only through accepted neighbour transitions from the fresh
   scanner observation;
 - keep same-column cells distinct;
-- omit Room-boundary connector-gap transitions;
+- exclude Room-boundary connector cells from ordinary component flood-fill,
+  then attach each independently discovered boundary cell to at most one
+  deterministic adjacent component;
 - resolve the source against an exact cell rather than a flattened footprint.
 
 It should **not** gain semantic-storey logic removed from
@@ -477,8 +492,9 @@ Required cases:
    selected Floor/Room without same-height area thresholds.
 5. **Slab transition:** live collision height controls whether the transition
    is accepted, but both canonical cells remain integer positions.
-6. **Room door:** a boundary connector prevents Room merging without creating
-   or owning a door floor cell.
+6. **Room door:** a doorway independently discovered as a valid integer Floor
+   cell remains in the Floor, prevents Room merging, and belongs to exactly one
+   deterministic adjacent Room.
 7. **Vertical connector:** ladder/trapdoor attachment relates Floors but does
    not merge their Rooms.
 
@@ -494,7 +510,8 @@ Use GameTests for facts that depend on real collision/block behavior:
 5. stairs/slabs produce the expected integer cells and accepted physical
    transitions without persisting fractional surface height;
 6. uneven cave terrain scans without flat-floor assumptions;
-7. interior and exterior doors do not manufacture Floor cells;
+7. interior and exterior doors do not manufacture Floor cells, while genuinely
+   discovered doorway cells remain canonical and get exactly one Room owner;
 8. wall POIs are counted once without wall blocks entering the Room footprint;
 9. ladders/trapdoors produce attachment evidence without cross-floor Room
    merging.
@@ -526,7 +543,8 @@ The simplification is complete only when all of these hold:
 5. **Beds:** placing/removing a bed does not change the structural Room
    footprint; scanning from bed top finds the same Room.
 6. **Doors:** interior/exterior doors remain boundaries/metadata and do not
-   invent floor geometry.
+   invent floor geometry; an independently discovered doorway cell remains
+   canonical and has at most one deterministic Room owner.
 7. **Wall POI:** a valid wall POI is counted while the wall remains outside the
    Room's exact floor-cell set.
 8. **Vertical connectors:** ladder/trapdoor relationships attach semantic Floors

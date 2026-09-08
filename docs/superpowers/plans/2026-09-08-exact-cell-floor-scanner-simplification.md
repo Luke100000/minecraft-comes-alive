@@ -21,7 +21,9 @@
 - Projection remains derived-only and must not drive discovery, storey ownership, Room partitioning, or exact lookup.
 - Do not restore `MIN_MEANINGFUL_HEIGHT_SLICE_AREA`, equal-Y slice reconstruction, or a flattened floor model under another name.
 - Preserve semantic Floors: stairs may physically connect two storeys without merging them into one Floor.
-- Doors/gates are connector gaps/metadata and never canonical Floor cells.
+- Doors/gates are Room-boundary metadata. A doorway position is a canonical
+  Floor cell when ordinary support/occupancy discovery independently finds that
+  exact cell; connector metadata must never manufacture a missing cell.
 - Ladders/trapdoors attach semantic Floors but never merge Room components.
 - POI relevance never manufactures Floor cells. Beds/carpet/low furniture may occupy an already valid interior membership cell; full cubes remain obstructions.
 - Physical world discovery is independent of persisted Floor identity. Persistence may classify an already-discovered transition semantically; it must never decide whether Minecraft considers the transition physically valid.
@@ -36,14 +38,14 @@
 
 - `common/src/main/java/net/conczin/mca/server/world/data/FloorGeometry.java`
   - Canonical exact integer membership cells, per-cell `ceilingY`, column index, derived projection, connector marker metadata.
-  - No `surfaceY`, no physical step calculation, no requirement that connector positions are cells.
+  - No `surfaceY` and no physical step calculation. Persisted connector markers remain keyed to independently discovered exact cells.
 - `common/src/main/java/net/conczin/mca/server/world/data/SelectedFloorScanner.java`
   - Live support/collision probing, transient surface height, accepted neighbour transitions, selected-storey traversal, exterior probing, alternate-storey evidence.
   - Owns nested transient `SurfaceCell` and `Transition` records.
 - `common/src/main/java/net/conczin/mca/server/world/data/StructureScanner.java`
   - Propagates fresh Floor plus transient transition evidence through existing `AttachmentSeed`, `FloorObservation`, and `Result` records.
 - `common/src/main/java/net/conczin/mca/server/world/data/RoomPartitioner.java`
-  - Connected components over canonical Floor cells using accepted fresh transitions only.
+  - Connected components over canonical Floor cells using accepted fresh transitions only; Room-boundary cells are withheld from ordinary flood-fill and then assigned to one deterministic adjacent component.
 - `common/src/main/java/net/conczin/mca/server/world/data/BuildingRoomScanner.java`
   - Materializes Room geometry from one fresh Floor and its accepted transitions.
 - `common/src/main/java/net/conczin/mca/server/world/data/RoomScanPlanner.java`
@@ -53,9 +55,9 @@
 - `common/src/main/java/net/conczin/mca/server/world/data/StructureExpansionPolicy.java`
   - Matches persisted Rooms against components partitioned from the fresh observation; does not reconstruct physical adjacency from persisted geometry.
 - `common/src/main/java/net/conczin/mca/server/world/data/StructureConnector.java`
-  - Connector classification/normalization and attachment evidence; marker-only for doors/gates.
+  - Connector classification/normalization and association with already-discovered exact cells; never materializes missing Floor geometry.
 - `common/src/main/java/net/conczin/mca/server/world/data/StructureFloor.java`
-  - Version-2 canonical exact cell persistence: `pos` plus `ceilingY`; connector markers may live outside cells.
+  - Version-2 canonical exact cell persistence: `pos` plus `ceilingY`; persisted connector markers reference existing exact cells.
 - `common/src/main/java/net/conczin/mca/server/world/data/RoomDFU.java`
   - Sole compatibility boundary, including canonical v1 -> v2 migration.
 - `common/src/main/java/net/conczin/mca/server/world/data/Village.java`
@@ -303,7 +305,7 @@ git commit -m "refactor: keep floor surface height transient"
 
 ---
 
-### Task 3: Partition Rooms from fresh transitions and make connectors gaps
+### Task 3: Partition Rooms from fresh transitions and preserve doorway cells
 
 **Files:**
 - Modify: `common/src/main/java/net/conczin/mca/server/world/data/FloorGeometry.java`
@@ -325,7 +327,7 @@ git commit -m "refactor: keep floor surface height transient"
 - Produces `RoomPartitioner.partition(FloorGeometry, Collection<SelectedFloorScanner.Transition>)`.
 - `BuildingRoomScanner.scan(Level, BlockPos, Set<BlockPos>, int, int, FloorGeometry, Collection<SelectedFloorScanner.Transition>)` and `BuildingRoomScanner.partition(Level, BlockPos, int, int, FloorGeometry, Collection<SelectedFloorScanner.Transition>)` receive the same transition collection as the Floor they materialize.
 - Existing `SelectedFloorScanner.Result`, `StructureScanner.AttachmentSeed`, `FloorObservation`, and `StructureScanner.Result` propagate immutable transition sets.
-- Connector markers are stored by physical position; marker positions need not be Floor cells.
+- `FloorGeometry.connectorTypesByCell()` remains keyed to exact cells. Raw connector evidence may exist outside `FloorGeometry`, but persisted Room-boundary markers never create their own cell.
 
 - [ ] **Step 1: Write RoomPartitioner RED for explicit transition connectivity**
 
@@ -388,50 +390,62 @@ RoomScanPlanner.planFresh
 
 No fresh-observation path may call `RoomPartitioner.partition(freshFloor)` without the transitions produced by that same observation.
 
-- [ ] **Step 5: Write connector-gap RED**
+- [ ] **Step 5: Lock doorway-cell ownership without Room bridging**
 
 ```java
 @Test
-void doorMarkerDoesNotRequireOrOwnFloorCell() {
+void doorCellBelongsToOneRoomWithoutConnectingBothRooms() {
     BlockPos door = new BlockPos(1, 64, 0);
     FloorGeometry geometry = new FloorGeometry(
-            Set.of(cell(0, 64, 0), cell(2, 64, 0)),
+            Set.of(cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0)),
             Map.of(door, FloorConnector.Type.DOOR));
+    Set<SelectedFloorScanner.Transition> transitions = Set.of(
+            new SelectedFloorScanner.Transition(new BlockPos(0, 64, 0), door),
+            new SelectedFloorScanner.Transition(door, new BlockPos(2, 64, 0)));
 
-    assertTrue(geometry.cellAt(door).isEmpty());
-    assertEquals(FloorConnector.Type.DOOR,
-            geometry.connectorTypesByPosition().get(door));
-    assertEquals(2, RoomPartitioner.partition(geometry, Set.of()).size());
+    List<RoomPartitioner.Component> components =
+            RoomPartitioner.partition(geometry, transitions);
+
+    assertEquals(2, components.size());
+    assertEquals(1, components.stream()
+            .filter(component -> component.contains(door)).count());
+    assertEquals(3, components.stream()
+            .mapToInt(RoomPartitioner.Component::area).sum());
 }
 ```
 
-Expected before connector changes: constructor/accessor or membership validation fails because connectors currently assume cell ownership.
+Keep `FloorGeometryTest.connectorMustReferenceExistingExactCell()` as a hard invariant: a connector marker with no independently discovered exact cell is rejected rather than manufacturing geometry. Keep `connectorOwnerUsesLargestComponentThenStableBounds()` and add/retain an enclosed-interior-vs-tiny-exterior regression so the larger enclosed component owns the doorway cell.
 
-- [ ] **Step 6: Remove connector-cell materialization**
+- [ ] **Step 6: Remove connector-cell synthesis while preserving valid connector cells**
 
-In `FloorGeometry`, rename connector storage/access to `connectorTypesByPosition` and remove the constructor requirement that marker keys are cell keys. In `FloorGeometry.flat` and `StructureFloor.load`, retain valid markers without filtering them through cell membership.
+Keep `FloorGeometry.connectorTypesByCell()` and its constructor invariant that every persisted connector marker references an existing exact cell. Keep `StructureFloor` load/save filtering connector metadata through canonical cell membership.
 
-Replace connector materialization with marker-only merge:
+Simplify `StructureConnector.withConnectorAssociations(...)` so it only attaches metadata to exact cells already present in `geometry`; delete `connectorBoundaryCell(...)` and any code that copies a neighbour's `surfaceY`/`ceilingY` to synthesize a missing connector cell. `floorMembershipCells(...)` may remain as a lookup helper, but it must return only positions that already exist in `geometry`.
+
+The merge is therefore equivalent to:
 
 ```java
-static FloorGeometry withConnectorMarkers(
-        FloorGeometry geometry, Collection<FloorConnector.Marker> markers) {
+static FloorGeometry withConnectorAssociations(
+        FloorGeometry geometry,
+        Map<BlockPos, FloorConnector.Type> associations) {
     LinkedHashMap<BlockPos, FloorConnector.Type> merged =
-            new LinkedHashMap<>(geometry.connectorTypesByPosition());
-    if (markers != null) {
-        for (FloorConnector.Marker marker : markers) {
-            merged.putIfAbsent(marker.pos(), marker.type());
+            new LinkedHashMap<>(geometry.connectorTypesByCell());
+    for (Map.Entry<BlockPos, FloorConnector.Type> entry : associations.entrySet()) {
+        if (geometry.cellAt(entry.getKey()).isPresent()) {
+            merged.putIfAbsent(entry.getKey(), entry.getValue());
         }
     }
     return new FloorGeometry(geometry.cells(), merged);
 }
 ```
 
-Door/gate transitions are omitted from the accepted transition set. Do not synthesize a replacement door cell.
+Ordinary world discovery is responsible for discovering a doorway cell. Connector association only annotates that existing cell; it never repairs missing geometry after the fact.
 
-- [ ] **Step 7: Preserve deterministic connector/POI ownership as metadata only**
+- [ ] **Step 7: Preserve deterministic one-Room ownership for boundary cells**
 
-Keep `RoomPartitioner.owner` or the existing stable owner comparator for shared perimeter/connector POI evidence. Delete only boundary-cell ownership code whose purpose was to insert the connector position into a Room floor-cell set.
+Retain the current `RoomPartitioner` shape: remove Room-boundary cells before ordinary component flood-fill, form components from non-boundary cells using only the accepted transitions from this fresh observation, then attach each boundary cluster to `RoomPartitioner.owner(adjacent)`. Keep the existing owner ordering: largest component first, then stable bounds/coordinate ordering. If a boundary cluster has no adjacent component, retain its existing deterministic standalone-component behavior.
+
+Do not let transitions through a door/gate make the two adjacent components one Room. Source selection from a doorway must resolve to the component that owns that doorway cell after assignment.
 
 - [ ] **Step 8: Run focused tests and GameTests**
 
@@ -440,7 +454,7 @@ Keep `RoomPartitioner.owner` or the existing stable owner comparator for shared 
 .\gradlew.bat :neoforge:runGameTestServer --rerun-tasks
 ```
 
-Expected: Room components follow supplied transitions, connector positions remain outside cell sets, attachment tests remain green.
+Expected: Room components follow supplied transitions, valid doorway cells remain in exactly one Room without bridging both sides, missing connector cells are never synthesized, and attachment tests remain green.
 
 - [ ] **Step 9: Commit Task 3**
 
@@ -656,7 +670,9 @@ Traversal rules:
 - `OWNED`: add `candidate.canonical()`, add the accepted `Transition`, enqueue.
 - `EDGE`: add `candidate.canonical()`, add the accepted `Transition`, do not enqueue; inspect its next physical neighbours only to collect alternate-storey seeds.
 - `OTHER`: do not add canonical membership; collect it as alternate-storey evidence when appropriate.
-- Connector positions are metadata only and are never canonicalized.
+- A connector position is never canonicalized *because it is a connector*.
+  If ordinary `SurfaceCell` discovery independently accepts that same integer
+  position as `OWNED`/`EDGE`, keep the canonical cell and annotate it later.
 
 - [ ] **Step 5: Make `scan(Level, BlockPos, int, int)` return the direct storey and its transitions**
 
@@ -664,8 +680,11 @@ Target flow:
 
 ```java
 StoreyScan selected = scanStorey(world, seedCell, maxSize, maxRadius, ceilings);
-FloorGeometry floor = StructureConnector.withConnectorMarkers(
-        selected.floor(), StructureConnector.markers(world, selected.connectors()));
+Map<BlockPos, FloorConnector.Type> connectorCells =
+        StructureConnector.associatedFloorCells(
+                world, selected.connectors(), selected.floor());
+FloorGeometry floor = StructureConnector.withConnectorAssociations(
+        selected.floor(), connectorCells);
 List<FloorGeometry> connectedFloors = connectedStoreyEvidence(
         world, floor, selected.alternateSeeds(), maxSize, maxRadius, ceilings);
 return success(seed, floor, selected.transitions(), connectedFloors);
@@ -788,7 +807,7 @@ Build one roofed cave Room whose membership spans at least three integer feet-Y 
 
 - [ ] **Step 7: Keep wall POI ownership deterministic**
 
-Run `RoomPoiEvidenceTest.sharedPerimeterColumnBelongsToOneDeterministicRoom()`. If it already proves one-owner behavior after connector-gap changes, make no `RoomPoiEvidence` production edit. Otherwise add a focused runtime fixture asserting a wall POI is counted once while its block position is absent from `FloorGeometry.cells()`.
+Run `RoomPoiEvidenceTest.sharedPerimeterColumnBelongsToOneDeterministicRoom()`. If it already proves one-owner behavior after the boundary-cell changes, make no `RoomPoiEvidence` production edit. Otherwise add a focused runtime fixture asserting a wall POI is counted once while its block position is absent from `FloorGeometry.cells()`.
 
 - [ ] **Step 8: Verify derived projection with stacked cells**
 
@@ -832,7 +851,7 @@ If `RoomPoiEvidence.java` or `RoomPoiEvidenceTest.java` changed, stage those exa
 - [ ] **Step 1: Prove stale surface/connector/reconstruction APIs are gone**
 
 ```powershell
-rg -n "MIN_MEANINGFUL_HEIGHT_SLICE_AREA|SemanticBands|HeightBand|floorSelection\(|semanticBands\(|heightBands\(|meaningfulHeightSlice|sliceComponentsByHeight|withConnectorAssociations|connectorBoundaryCell|floorMembershipCells|connectorTypesByCell" common/src/main/java common/src/test/java
+rg -n "MIN_MEANINGFUL_HEIGHT_SLICE_AREA|SemanticBands|HeightBand|floorSelection\(|semanticBands\(|heightBands\(|meaningfulHeightSlice|sliceComponentsByHeight|connectorBoundaryCell" common/src/main/java common/src/test/java
 ```
 
 Expected: no live production mechanism with those meanings.
@@ -882,7 +901,7 @@ full cube is not an owned interior cell
 slab/stair traversal works without persisted surfaceY
 lower/upper staircase storeys remain distinct
 stacked same-X/Z cells survive
-door/gate positions are not Floor cells
+door/gate cells are canonical only when independently discovered and belong to exactly one Room
 uneven cave spans multiple integer Y values
 lower-storey exterior check does not climb into upper storey
 ladder/trapdoor attaches Floors without merging Rooms
@@ -938,7 +957,7 @@ Do not create an empty commit.
 | Full cubes remain obstructions | Task 1 |
 | Physical slab/stair collision controls fresh transitions | Tasks 2, 6 |
 | Room partitioning consumes accepted fresh transitions | Task 3 |
-| Doors/gates do not manufacture/own cells | Task 3 |
+| Doors/gates do not manufacture cells; discovered doorway cells have one Room owner | Task 3 |
 | Lower/upper stairs stay distinct | Task 5 |
 | Sparse top transition may remain lower-owned | Task 5 |
 | Uneven cave spans several Y without slice thresholds | Tasks 5, 6 |
