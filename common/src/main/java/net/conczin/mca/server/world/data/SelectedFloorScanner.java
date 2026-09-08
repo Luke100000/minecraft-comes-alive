@@ -34,9 +34,10 @@ final class SelectedFloorScanner {
 
     static Result scan(Level world, BlockPos seed, int maxSize, int maxRadius) {
         FloorCeilingResolver ceilings = new FloorCeilingResolver(world);
-        FloorGeometry.Cell seedCell = inspectSurfaceCell(world, seed, ceilings).orElse(null);
+        FloorGeometry.Cell seedCell = resolveSeedCell(world, seed, ceilings).orElse(null);
         if (seedCell == null) return Result.failure(Building.validationResult.NOT_IN_BUILDING, seed);
-        if (reachesExterior(world, seedCell, seed.getY(), ceilings, maxRadius, null)) {
+        BlockPos floorSeed = seedCell.feet();
+        if (reachesExterior(world, seedCell, floorSeed.getY(), ceilings, maxRadius, null)) {
             return Result.failure(Building.validationResult.NOT_IN_BUILDING, seed);
         }
 
@@ -49,14 +50,14 @@ final class SelectedFloorScanner {
 
         while (!queue.isEmpty()) {
             FloorGeometry.Cell current = queue.removeFirst();
-            if (horizontalDistance(current.feet(), seed) >= maxRadius) {
+            if (horizontalDistance(current.feet(), floorSeed) >= maxRadius) {
                 return Result.failure(Building.validationResult.SIZE_LIMIT, seed);
             }
             cells.put(current.feet(), current);
-            collectVerticalConnectors(world, seed.getY(), current.feet(), connectors);
+            collectVerticalConnectors(world, floorSeed.getY(), current.feet(), connectors);
 
             for (Direction direction : HORIZONTAL) {
-                enqueueHorizontalLanding(world, seed, current, direction, maxRadius,
+                enqueueHorizontalLanding(world, floorSeed, current, direction, maxRadius,
                         visited, queue, connectors, ceilings);
             }
 
@@ -82,6 +83,16 @@ final class SelectedFloorScanner {
             connectedFloors.add(connected == selection.selected() ? floor : connected);
         }
         return success(seed, floor, connectedFloors);
+    }
+
+    private static Optional<FloorGeometry.Cell> resolveSeedCell(
+            Level world, BlockPos seed, FloorCeilingResolver ceilings) {
+        BlockPos below = seed.below();
+        if (isLowObstacle(world, below)) {
+            Optional<FloorGeometry.Cell> underlying = inspectSurfaceCell(world, below, ceilings);
+            if (underlying.isPresent()) return underlying;
+        }
+        return inspectSurfaceCell(world, seed, ceilings);
     }
 
     static FloorSelection floorSelection(Collection<FloorGeometry.Cell> discovered, BlockPos seed) {
@@ -376,7 +387,9 @@ final class SelectedFloorScanner {
     }
 
     private static OptionalDouble supportedSurfaceY(Level world, BlockPos feet) {
-        if (!isOpen(world, feet) || !isOpen(world, feet.above())) return OptionalDouble.empty();
+        if (!isFloorTopologyPassable(world, feet) || !isOpen(world, feet.above())) {
+            return OptionalDouble.empty();
+        }
         BlockPos support = feet.below();
         var shape = world.getBlockState(support).getCollisionShape(world, support);
         if (shape.isEmpty()) return OptionalDouble.empty();
@@ -384,6 +397,21 @@ final class SelectedFloorScanner {
         double depth = shape.max(Direction.Axis.Z) - shape.min(Direction.Axis.Z);
         if (width * depth < 0.25D) return OptionalDouble.empty();
         return OptionalDouble.of(WalkNodeEvaluator.getFloorLevel(world, feet));
+    }
+
+    /** Low furniture occupies the room without redefining the structural floor underneath it. */
+    private static boolean isFloorTopologyPassable(Level world, BlockPos pos) {
+        BlockState state = world.getBlockState(pos);
+        if (!state.getFluidState().isEmpty()) return false;
+        var shape = state.getCollisionShape(world, pos);
+        return shape.isEmpty() || shape.max(Direction.Axis.Y) <= 1.0D;
+    }
+
+    private static boolean isLowObstacle(Level world, BlockPos pos) {
+        BlockState state = world.getBlockState(pos);
+        if (!state.getFluidState().isEmpty()) return false;
+        var shape = state.getCollisionShape(world, pos);
+        return !shape.isEmpty() && shape.max(Direction.Axis.Y) <= 1.0D;
     }
 
     private static boolean isOpen(Level world, BlockPos pos) {
