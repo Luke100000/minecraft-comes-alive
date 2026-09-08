@@ -1,5 +1,10 @@
 # Floor Scanner Simplification
 
+> **Spatial model superseded:** use
+> `2026-09-08-exact-cell-floor-scanner-simplification-design.md` as the
+> canonical Floor/Room spatial contract. Older door-cell ownership and scanner
+> topology rules below are retained only as historical design context.
+
 Date: 2026-08-30
 
 Status: Superseded by `2026-08-30-floor-scanner-simplification-spec.md`

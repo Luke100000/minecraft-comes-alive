@@ -1,5 +1,10 @@
 # Floor Scanner Simplification Specification
 
+> **Spatial model superseded:** use
+> `2026-09-08-exact-cell-floor-scanner-simplification-design.md` as the
+> canonical Floor/Room spatial contract. Older transient-surface and owned-door
+> rules below are historical requirements, not current implementation guidance.
+
 Date: 2026-08-30
 
 Status: Approved implementation specification

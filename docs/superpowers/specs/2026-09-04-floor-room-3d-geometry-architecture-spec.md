@@ -5,6 +5,15 @@
 Proposed replacement for the current floor/room geometry model on
 `feature/1.21.1-floor-clean-squash`.
 
+> **Spatial semantics superseded 2026-09-08:**
+> `2026-09-08-exact-cell-floor-scanner-simplification-design.md` is now the
+> canonical source of truth for Floor/Room cell identity, traversal evidence,
+> connector gaps, and canonical cell persistence. In particular, persisted
+> `surfaceY` and owned door cells described below are historical. This document
+> remains authoritative for the exact-3D ownership direction, identity model,
+> atomic workflow, and compatibility architecture where the 2026-09-08 spec
+> does not override it.
+
 This spec supersedes the spatial parts of
 `2026-09-03-floor-room-single-source-simplification.md`, in particular the old
 rule that Room ownership is X/Z column ownership. The real staircase regression

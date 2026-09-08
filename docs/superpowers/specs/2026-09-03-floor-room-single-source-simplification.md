@@ -1,5 +1,11 @@
 # Floor / Room Single-Source Simplification
 
+> **Spatial model superseded:** use
+> `2026-09-08-exact-cell-floor-scanner-simplification-design.md` as the
+> canonical source for Floor/Room membership cells, traversal, connectors, and
+> persistence. This file remains historical context for the single-source and
+> identity direction only.
+
 ## Canonical model
 
 The floor system has one spatial rule and one building-identity rule:

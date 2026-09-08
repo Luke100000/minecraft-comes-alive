@@ -2,12 +2,18 @@
 
 Date: 2026-09-08
 
-Status: Proposed simplification of the scanner built on top of the exact 3D
-Floor/Room model from `2026-09-04-floor-room-3d-geometry-architecture-spec.md`.
+Status: Canonical source of truth for Floor/Room spatial semantics on this
+branch.
 
-This document does **not** replace the exact-geometry model. It simplifies the
-remaining world-scanning logic that still reconstructs semantic floors after
-discovery using height slices, slice-area thresholds, and global height bands.
+This document supersedes the spatial cell identity, traversal, connector, and
+cell-persistence details in the older Floor/Room scanner and exact-geometry
+specs. `2026-09-04-floor-room-3d-geometry-architecture-spec.md` remains the
+historical foundation for exact 3D ownership, identity, atomic workflow, and
+compatibility boundaries where this document does not override it.
+
+The purpose of this revision is deliberately small: a Room/Floor is ultimately
+made from integer 3D membership cells. Fractional collision heights are useful
+while reading Minecraft, but they are not canonical Room state.
 
 The historical fixes `fix: keep staircase scans within one floor` and
 `fix: preserve stacked floor cells during scanning` remain regression contracts,
@@ -20,9 +26,9 @@ The core model is now simpler than the scanner feeding it:
 
 - `FloorGeometry` already stores exact 3D cells and permits multiple cells in
   the same X/Z column;
-- `RoomPartitioner` already treats those exact cells as graph nodes and checks
-  every step-compatible candidate in an adjacent column;
 - Room ownership is already exact-cell ownership;
+- the scanner already has the live Minecraft collision information needed to
+  decide whether one candidate can be reached from another;
 - X/Z projection is already derived presentation data.
 
 `SelectedFloorScanner`, however, still discovers a broad connected surface and
@@ -42,16 +48,17 @@ That is the remaining architectural mismatch. Exact cells are discovered first,
 but their semantic ownership is then inferred by flattening them back into Y
 slices.
 
-The scanner should instead decide whether a newly reached exact cell belongs to
-the selected storey while traversing the exact-cell graph. It should not flood a
-whole building and then invent storeys afterward.
+The scanner should instead decide whether a newly reached integer cell belongs
+to the selected storey while traversing the world. It should retain the accepted
+neighbour transitions only for that fresh observation, then discard fractional
+surface heights rather than persisting them in `FloorGeometry`.
 
 ## Design principle
 
 The canonical mental model is:
 
-> A Room is a connected set of exact 3D floor cells inside one selected semantic
-> Floor, after Room-boundary connectors are applied.
+> A Floor is a set of integer 3D membership cells. A Room is a connected subset
+> of those cells inside one semantic Floor, after Room boundaries are applied.
 
 Everything else is either discovery input, semantic metadata, or a derived
 view.
@@ -59,9 +66,10 @@ view.
 ```text
 Minecraft world
     -> resolve exact source cell
-    -> traverse exact cells for the selected storey
+    -> sample local collision + accepted neighbour transitions
+    -> traverse integer cells for the selected storey
     -> FloorGeometry
-    -> RoomPartitioner
+    -> RoomPartitioner using the fresh accepted transitions
     -> exact-cell Rooms
     -> POI evidence / projection / persistence views
 ```
@@ -72,7 +80,8 @@ There is no second spatial truth between world discovery and `FloorGeometry`.
 
 1. Make one selected-storey graph traversal the source of fresh Floor geometry.
 2. Remove post-hoc Y-slice / area-based semantic reconstruction.
-3. Preserve exact stacked cells, stairs, slabs, uneven terrain, and caves.
+3. Preserve exact stacked cells, stairs, slabs, uneven terrain, and caves while
+   keeping fractional collision height transient.
 4. Preserve the distinction between semantic storeys; a staircase must not make
    two storeys one Floor merely because a player can walk between them.
 5. Keep Room partitioning simple: connected exact cells minus Room boundaries.
@@ -80,8 +89,9 @@ There is no second spatial truth between world discovery and `FloorGeometry`.
    manufacturing alternate floor geometry.
 7. Use Minecraft movement/collision semantics at the world adapter boundary,
    not block-class special cases in topology.
-8. Keep persistence and Room identity rules unchanged unless implementation
-   proves a change is required.
+8. Remove `surfaceY` from canonical Floor persistence with one explicit,
+   deterministic compatibility migration rather than supporting two shapes
+   under the same data version.
 
 ## Non-goals
 
@@ -92,8 +102,10 @@ There is no second spatial truth between world discovery and `FloorGeometry`.
 - Do not reintroduce one-cell-per-X/Z assumptions.
 - Do not make doors or wall blocks part of Floor geometry merely to make POI or
   Blueprint behavior convenient.
-- Do not redesign `RoomIdentityPolicy`, Main Room selection, inheritance,
-  logical-building identity, or `RoomDFU` in this change.
+- Do not redesign `RoomIdentityPolicy`, Main Room selection, inheritance, or
+  logical-building identity.
+- Change `RoomDFU` only as required to migrate the previous canonical exact-cell
+  save shape to the new surface-height-free shape.
 - Do not add another persisted or long-lived scan DTO beside `FloorGeometry`.
 - Do not use unrestricted vanilla pathfinding as the Floor definition. A
   walkable route can legitimately cross semantic storeys.
@@ -102,7 +114,8 @@ There is no second spatial truth between world discovery and `FloorGeometry`.
 
 ### Exact cells are spatial truth
 
-`FloorGeometry.Cell.feet` remains the physical identity of a floor cell.
+`FloorGeometry.Cell.feet` is the canonical identity of a floor cell: the
+integer `BlockPos` whose grid cell is considered part of that Floor/Room.
 
 ```text
 (x, y, z) != (x, y + 3, z)
@@ -111,15 +124,19 @@ There is no second spatial truth between world discovery and `FloorGeometry`.
 Both may belong to one semantic Floor, and both may coexist in the same X/Z
 column.
 
-The domain rule is deliberately simple: a Floor is a set of integer floor
-cells with valid structural support. `surfaceY` is support/traversal metadata
-for that cell, not another cell identity. A lower slab can therefore produce a
-cell at `(x, 64, z)` with a physical support surface at `63.5`; flooring that
-value to `63` would identify the support block and lose movement information.
+The domain rule is deliberately simple: a Floor is a set of supported integer
+membership cells. A slab, stair, carpet, bed, or other partial collision shape
+does not create a fractional or support-block identity for the Room.
 
-`surfaceY` describes the physical walkable/support surface. `ceilingY`
-describes the physical vertical interval above that cell. Neither field is a
-substitute for semantic Floor identity.
+`surfaceY` is not a `FloorGeometry.Cell` field and is not persisted. Minecraft
+surface height may be sampled transiently while deciding whether a candidate is
+supported and whether a specific neighbour transition is physically valid.
+After that transition has been classified, the numeric surface height is thrown
+away.
+
+`ceilingY` may remain attached to the cell as physical vertical-interval
+metadata because position lookup, POI evidence, and bounds consume it. It does
+not participate in cell identity or Room connectivity.
 
 ### Projection is only a view
 
@@ -136,10 +153,10 @@ rediscover which storey its cells belong to.
 
 ### Rooms are graph components of one Floor
 
-`RoomPartitioner` consumes one `FloorGeometry`. Its ordinary nodes are exact
-cells. Its ordinary edges are cardinal neighboring-column transitions allowed
-by the shared Minecraft step rule. Room-boundary connectors remove/own boundary
-cells according to the existing deterministic policy.
+`RoomPartitioner` consumes one `FloorGeometry` plus the accepted physical
+neighbour transitions from the same fresh observation. Its nodes are integer
+cells. It must not recreate movement by reading persisted fractional heights.
+Room-boundary connector positions are gaps/metadata, not manufactured nodes.
 
 Room topology must not contain a second storey classifier.
 
@@ -149,10 +166,10 @@ Room topology must not contain a second storey classifier.
 
 The interaction source first resolves to one exact physical cell.
 
-Resolution must account for low furniture such as beds: interacting on top of a
-low obstacle resolves to the structural floor cell underneath when that floor
-cell is physically valid. This is source resolution only; furniture does not
-become topology.
+Resolution must account for low furniture such as beds: interacting on or above
+the furniture resolves to the integer interior cell that the Room owns when
+that cell has valid support and enclosure. The support block below is evidence,
+not the canonical cell.
 
 The resolved cell becomes the selected-storey seed.
 
@@ -160,8 +177,8 @@ The resolved cell becomes the selected-storey seed.
 
 The Minecraft-facing adapter answers only local physical questions:
 
-- does this exact candidate have a supported walkable surface?
-- what is its `surfaceY`?
+- can this integer candidate be an interior Floor membership cell?
+- what is the temporary standing/support surface height for this probe?
 - what is its physical `ceilingY`?
 - can the player-sized traversal move between these two neighboring surfaces
   under the shared step rule?
@@ -179,10 +196,10 @@ valid/reachable in the first place.
 
 ### Structural support versus occupancy
 
-Room/Floor topology represents structural floor ownership, not a requirement
-that the logical feet block be empty at scan time. Low interior occupancy such
-as a bed or carpet must therefore be able to leave the supported structural
-floor cell intact.
+Room/Floor topology represents ownership of interior integer cells, not a
+requirement that the cell be literal air at scan time. Low interior occupancy
+such as a bed or carpet may occupy an owned cell without deleting that cell
+from the Room.
 
 This must not become another broad heuristic. In particular, a generic rule
 equivalent to `collisionShape.max(Y) <= 1.0` is insufficient because an ordinary
@@ -190,17 +207,22 @@ full cube also has a maximum collision height of `1.0`. A full-height solid
 block must not become topology-neutral merely because the block above it is
 open.
 
-The Minecraft adapter must distinguish these cases from physical facts:
+The Minecraft adapter must distinguish ownership from traversability. A
+candidate can be owned while being inconvenient or temporarily impossible to
+walk through. The local checks use physical facts:
 
 - valid structural support below the logical cell;
 - actual occupied collision height/shape in the logical cell;
 - available headroom;
-- the shared Minecraft step/traversal rule.
+- whether collision fills/touches the whole logical cell versus remaining a
+  genuinely sub-full interior obstacle;
+- the shared Minecraft step/traversal rule for each neighbour transition.
 
-The intended behavior is not a `BedBlock` special case. It is the older useful
-invariant restored in physical terms: sufficiently low interior occupancy can
-exist inside a Room without erasing the structural floor underneath, while a
-full solid obstruction is not automatically treated the same way.
+The intended behavior is not "every POI is a floor cell" and not a `BedBlock`
+special case. POI relevance alone never manufactures topology. The useful
+invariant is: a supported enclosed interior cell can stay owned when occupied
+by genuinely sub-full furniture, while a full solid obstruction remains a
+separator/obstruction.
 
 ### Storey boundary policy
 
@@ -213,10 +235,10 @@ queue exact selected-storey cells
 
 while queue not empty:
     inspect each cardinal neighboring column
-    enumerate every physically valid step-compatible exact candidate
+    sample every physically valid candidate and neighbour transition
     ask selected-storey policy whether candidate is:
-        OWNED      -> retain and continue traversal
-        EDGE       -> retain as selected-storey transition/boundary cell,
+        OWNED      -> retain cell + accepted transition, continue traversal
+        EDGE       -> retain cell + accepted transition as selected-storey edge,
                       but do not let it flood another storey
         OTHER      -> do not add to selected Floor
 ```
@@ -276,9 +298,10 @@ all candidates against the current cell and the storey boundary policy.
 
 ### Slabs and partial-height surfaces
 
-Slabs and similar geometry are represented by their physical `surfaceY`.
-Connectivity follows the same step rule as any other supported surface. There
-is no slab topology category.
+Slabs and similar geometry still use their real Minecraft collision surface
+while the scanner evaluates a neighbour transition. The resulting canonical
+cell remains an integer `BlockPos`; the fractional height is not stored in
+`FloorGeometry` and is not written to NBT. There is no slab topology category.
 
 ### Uneven caves
 
@@ -293,20 +316,16 @@ cave is meaningful.
 ## Doors and horizontal connectors
 
 Doors and other Room-boundary connectors affect traversal/partition metadata;
-they do not manufacture a parallel Floor footprint.
+they do not manufacture Floor cells. The door/gate position is a gap between
+owned cells on its valid sides.
 
-The selected-storey scan discovers the real floor cell on each valid side from
-world collision semantics. Connector association then attaches boundary
-metadata to exact Floor cells that already exist.
+`RoomPartitioner` partitions only owned cells and omits connector-gap
+transitions. A door block therefore belongs to neither Room floor-cell set.
+Metadata may still associate that connector position with one deterministic
+Room for POI/interaction purposes when needed.
 
-`RoomPartitioner` remains responsible for:
-
-1. partitioning ordinary exact cells without crossing Room-boundary cells;
-2. clustering boundary cells;
-3. assigning each boundary cluster to one deterministic adjacent Room owner.
-
-An interior door and an exterior door use the same rule. There is no need for
-an "outer door" geometry path.
+An interior door and an exterior door use the same rule. There is no owned-door
+cell or separate "outer door" geometry path.
 
 ## Vertical connectors
 
@@ -344,14 +363,13 @@ this selected storey?"
 
 `RoomPartitioner` is already close to the target and should remain small.
 
-It should continue to:
+It should:
 
 - use exact `FloorGeometry.Cell` nodes;
-- inspect every candidate in neighboring X/Z columns;
-- connect candidates only when `FloorGeometry.canStep(...)` succeeds;
+- connect nodes only through accepted neighbour transitions from the fresh
+  scanner observation;
 - keep same-column cells distinct;
-- treat Room-boundary connector cells as boundaries;
-- assign boundary cells deterministically after open components are formed;
+- omit Room-boundary connector-gap transitions;
 - resolve the source against an exact cell rather than a flattened footprint.
 
 It should **not** gain semantic-storey logic removed from
@@ -381,13 +399,11 @@ Room. Reuse the existing stable Room-owner ordering used elsewhere in Room
 partitioning/reconciliation unless a focused regression proves a narrower rule
 is required.
 
-Low furniture such as beds may occupy the interior while the structural floor
-underneath remains the Room cell. Furniture neither creates nor deletes Floor
-geometry solely because it is a POI.
+Low furniture such as beds may occupy an owned interior cell. Furniture neither
+creates nor deletes Floor geometry solely because it is a POI, and a wall POI
+does not become an owned cell merely because it is relevant.
 
 ## Persistence and identity
-
-This simplification does not introduce a new persistence format.
 
 Keep the exact-geometry ownership established by the 2026-09-04 architecture:
 
@@ -399,8 +415,23 @@ Keep the exact-geometry ownership established by the 2026-09-04 architecture:
 - Floor + Room refresh remains atomic;
 - `RoomDFU` remains the compatibility boundary for historical formats.
 
-Any persistence change discovered during implementation requires a separate
-explicit design decision; it is not implied by scanner cleanup.
+This revision intentionally changes the canonical cell encoding because
+`surfaceY` is no longer domain state:
+
+```text
+buildingDataVersion = 2
+
+StructureFloor cell:
+  pos       exact integer membership key
+  ceilingY  retained vertical-interval metadata
+  # no surfaceY
+```
+
+`RoomDFU` must migrate `buildingDataVersion == 1` by preserving each cell's
+`pos` and `ceilingY` and discarding its persisted `surfaceY`. The released
+`origin/1.21.1` and upstream unversioned floor-clean-squash migrations remain
+supported. Version 2 is the only direct canonical load shape after this change;
+do not make version 1 accept both encodings.
 
 ## Expected simplifications
 
@@ -431,8 +462,8 @@ candidates. It is not semantic Floor ownership.
 ### Pure exact-graph tests
 
 Most scanner semantics should be testable without a fake Minecraft `Level` by
-feeding exact cells and connector metadata to the selected-storey policy and
-Room partitioner.
+feeding exact cells, accepted transient transitions, and connector metadata to
+the selected-storey policy and Room partitioner.
 
 Required cases:
 
@@ -444,10 +475,10 @@ Required cases:
    Floor while the broad upper room at the same Y belongs to the upper Floor.
 4. **Uneven cave:** a connected cave Room spanning several Y values remains one
    selected Floor/Room without same-height area thresholds.
-5. **Slab transition:** physical `surfaceY`, not block type or feet Y alone,
-   controls walkability.
-6. **Room door:** a boundary connector prevents Room merging and has one
-   deterministic Room owner without creating new geometry.
+5. **Slab transition:** live collision height controls whether the transition
+   is accepted, but both canonical cells remain integer positions.
+6. **Room door:** a boundary connector prevents Room merging without creating
+   or owning a door floor cell.
 7. **Vertical connector:** ladder/trapdoor attachment relates Floors but does
    not merge their Rooms.
 
@@ -456,12 +487,12 @@ Required cases:
 Use GameTests for facts that depend on real collision/block behavior:
 
 1. beds/furniture do not change the room floor footprint;
-2. scanning from the top of a bed resolves the structural floor underneath;
+2. scanning from the top of a bed resolves the same owned integer Room cell;
 3. a full-height solid block is not treated as topology-neutral merely because
    its collision shape reaches exactly `1.0` and the block above is open;
-4. carpet/representative low furniture preserves structural Room ownership
-   without introducing a raised canonical floor identity;
-5. stairs/slabs produce the expected exact `surfaceY` and step connectivity;
+4. carpet/representative low furniture preserves integer Room membership;
+5. stairs/slabs produce the expected integer cells and accepted physical
+   transitions without persisting fractional surface height;
 6. uneven cave terrain scans without flat-floor assumptions;
 7. interior and exterior doors do not manufacture Floor cells;
 8. wall POIs are counted once without wall blocks entering the Room footprint;
@@ -502,8 +533,9 @@ The simplification is complete only when all of these hold:
    without merging Room components.
 9. **Projection:** Blueprint/coarse X/Z views remain derived from exact cells and
    do not affect scan results.
-10. **Persistence:** save/reload keeps the same exact Floor/Room ownership and
-    identity behavior as before this scanner-only simplification.
+10. **Persistence:** version-2 saves contain exact membership cells without
+    `surfaceY`; version-1 canonical saves migrate to the same Floor/Room
+    ownership and identity.
 
 ## Alternatives rejected
 
@@ -528,9 +560,11 @@ physical collision/surface information needed to describe movement without a
 
 ### Add another intermediate floor model
 
-`FloorGeometry` is already the correct exact representation. A second
-`ScannedFloor`, `FloorSurface`, heightmap, or band model would recreate the
-duplication this branch has been removing.
+`FloorGeometry` is already the correct long-lived membership representation. A
+second persisted `ScannedFloor`, `FloorSurface`, heightmap, or band model would
+recreate the duplication this branch has been removing. A bounded transient set
+of accepted neighbour transitions in the existing scan result is discovery
+evidence, not another canonical geometry model.
 
 ## Implementation boundary
 
