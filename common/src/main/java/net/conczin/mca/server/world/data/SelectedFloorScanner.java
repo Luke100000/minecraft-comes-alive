@@ -387,7 +387,7 @@ final class SelectedFloorScanner {
     }
 
     private static OptionalDouble supportedSurfaceY(Level world, BlockPos feet) {
-        if (!isFloorTopologyPassable(world, feet) || !isOpen(world, feet.above())) {
+        if (!isInteriorOccupancyAllowed(world, feet) || !isOpen(world, feet.above())) {
             return OptionalDouble.empty();
         }
         BlockPos support = feet.below();
@@ -400,18 +400,15 @@ final class SelectedFloorScanner {
     }
 
     /** Low furniture occupies the room without redefining the structural floor underneath it. */
-    private static boolean isFloorTopologyPassable(Level world, BlockPos pos) {
+    private static boolean isInteriorOccupancyAllowed(Level world, BlockPos pos) {
         BlockState state = world.getBlockState(pos);
         if (!state.getFluidState().isEmpty()) return false;
         var shape = state.getCollisionShape(world, pos);
-        return shape.isEmpty() || shape.max(Direction.Axis.Y) <= 1.0D;
+        return shape.isEmpty() || shape.max(Direction.Axis.Y) < 1.0D;
     }
 
     private static boolean isLowObstacle(Level world, BlockPos pos) {
-        BlockState state = world.getBlockState(pos);
-        if (!state.getFluidState().isEmpty()) return false;
-        var shape = state.getCollisionShape(world, pos);
-        return !shape.isEmpty() && shape.max(Direction.Axis.Y) <= 1.0D;
+        return isInteriorOccupancyAllowed(world, pos) && !isOpen(world, pos);
     }
 
     private static boolean isOpen(Level world, BlockPos pos) {
