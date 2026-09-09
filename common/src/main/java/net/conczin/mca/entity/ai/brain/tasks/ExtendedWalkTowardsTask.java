@@ -1,10 +1,12 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.ai.behavior.OneShot;
+import net.minecraft.world.entity.ai.behavior.PositionTracker;
 import net.minecraft.world.entity.ai.behavior.declarative.BehaviorBuilder;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
@@ -24,6 +26,11 @@ public final class ExtendedWalkTowardsTask {
         Optional<BlockPos> resolve(ServerLevel world, VillagerEntityMCA entity, GlobalPos destination);
     }
 
+    @FunctionalInterface
+    public interface PositionTrackerResolver {
+        Optional<? extends PositionTracker> resolve(ServerLevel world, VillagerEntityMCA entity, GlobalPos destination);
+    }
+
     private ExtendedWalkTowardsTask() {
     }
 
@@ -40,6 +47,14 @@ public final class ExtendedWalkTowardsTask {
     }
 
     public static OneShot<VillagerEntityMCA> create(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxDistance, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, WalkTargetResolver walkTargetResolver, Predicate<VillagerEntityMCA> shouldWalk) {
+        return createInternal(destination, speed, completionRange, maxDistance, maxRunTime, canGiveUp, onGiveUp, walkTargetResolver, (world, entity, globalPos) -> Optional.empty(), shouldWalk);
+    }
+
+    public static OneShot<VillagerEntityMCA> createWithFinalTarget(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxDistance, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, PositionTrackerResolver finalTargetResolver) {
+        return createInternal(destination, speed, completionRange, maxDistance, maxRunTime, canGiveUp, onGiveUp, (world, entity, globalPos) -> Optional.empty(), finalTargetResolver, entity -> true);
+    }
+
+    private static OneShot<VillagerEntityMCA> createInternal(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxDistance, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, WalkTargetResolver walkTargetResolver, PositionTrackerResolver finalTargetResolver, Predicate<VillagerEntityMCA> shouldWalk) {
         return BehaviorBuilder.create((context) -> {
             return context.group(
                     context.registered(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
@@ -83,8 +98,19 @@ public final class ExtendedWalkTowardsTask {
                                     }
 
                                     walkTarget.set(new WalkTarget(vec3d, speed, completionRange));
-                                } else if (targetPos.distManhattan(entity.blockPosition()) > targetCompletionRange) {
-                                    walkTarget.set(new WalkTarget(targetPos, speed, targetCompletionRange));
+                                } else {
+                                    Optional<? extends PositionTracker> finalTarget = finalTargetResolver.resolve(world, entity, globalPos);
+                                    if (finalTarget.isEmpty()) {
+                                        if (targetPos.distManhattan(entity.blockPosition()) > targetCompletionRange) {
+                                            walkTarget.set(new WalkTarget(targetPos, speed, targetCompletionRange));
+                                        }
+                                    } else {
+                                        PositionTracker tracker = finalTarget.orElseThrow();
+                                        if (!(tracker instanceof MultiTargetPositionTracker multiTarget)
+                                                || !multiTarget.isReached(entity, 0)) {
+                                            walkTarget.set(new WalkTarget(tracker, speed, 0));
+                                        }
+                                    }
                                 }
                             } else {
                                 if (canGiveUp.test(entity)) {

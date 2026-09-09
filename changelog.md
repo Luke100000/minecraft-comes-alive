@@ -3,6 +3,13 @@
 * Fixed duplicate villager residency, villagers should actually occupy one bed now.
 * Golden dandelion doesn't reset back to Baby Age
 * Internal Changes: MCA Age is now calculated using GameTime instead of syncing every tick.
+* Improved villager bed pathfinding and sleeping reliability.
+* Improved ladder climbing and ladder-to-floor transitions.
+* Fixed workplace assignment and job POI ownership.
+* Fixed duplicate villager residency and bed ownership.
+* Improved HOME POI validation and repaired invalid resident-home assignments.
+* Fixed residents being assigned to the wrong building.
+* Fixed villager age scaling at growth-stage boundaries.
 
 # 8.1.11
 

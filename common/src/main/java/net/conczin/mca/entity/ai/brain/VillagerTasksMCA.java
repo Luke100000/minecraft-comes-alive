@@ -18,6 +18,7 @@ import net.conczin.mca.entity.ai.brain.tasks.chore.ChoppingTask;
 import net.conczin.mca.entity.ai.brain.tasks.chore.FishingTask;
 import net.conczin.mca.entity.ai.brain.tasks.chore.HarvestingTask;
 import net.conczin.mca.entity.ai.brain.tasks.chore.HuntingTask;
+import net.conczin.mca.entity.ai.navigation.BedApproachTarget;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ProfessionsMCA;
@@ -219,8 +220,8 @@ public class VillagerTasksMCA {
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getImportantCorePackage(float speedModifier) {
         return ImmutableList.of(
                 Pair.of(0, new Swim(0.8F)),
-                Config.getInstance().useSmarterDoorAI ? Pair.of(0, new SmarterOpenDoorsTask()) : Pair.of(0, InteractWithDoor.create()),
-                Pair.of(0, new ConditionalTask<>(new LookAtTargetSink(45, 90), villager -> !isInDanger(villager))),
+                Pair.of(0, new SmarterOpenDoorsTask()),
+                Pair.of(0, new LookAtTargetSink(45, 90)),
                 Pair.of(0, WakeUp.create()),
                 Pair.of(0, new DeliverMessageTask()),
                 Pair.of(1, new WanderOrTeleportToTargetTask()),
@@ -510,7 +511,7 @@ public class VillagerTasksMCA {
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getRestPackage(float speed) {
         return ImmutableList.of(
                 // try to reach the bed, and if not a set home, forget if out of range
-                Pair.of(2, ExtendedWalkTowardsTask.create(MemoryModuleType.HOME, speed, 1, Config.getInstance().getVillagerPathfindingDistance(), 1200, (v) -> {
+                Pair.of(2, ExtendedWalkTowardsTask.createWithFinalTarget(MemoryModuleType.HOME, speed, 1, Config.getInstance().getVillagerPathfindingDistance(), 1200, (v) -> {
                     Optional<Boolean> memory = v.getBrain().getMemoryInternal(MemoryModuleTypeMCA.FORCED_HOME);
                     boolean forced = memory != null && memory.isPresent();
                     if (forced) {
@@ -519,7 +520,9 @@ public class VillagerTasksMCA {
                     return !forced;
                 }, v -> {
                     v.getResidency().seekHome();
-                })),
+                }, (world, villager, home) -> villager.isSleeping()
+                        ? Optional.empty()
+                        : BedApproachTarget.create(world, home.pos()))),
                 //verify the bed, occupancies state and similar
                 Pair.of(3, new ConditionalTask<>(ValidateNearbyPoi.create(
                         registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME), (v) -> {
