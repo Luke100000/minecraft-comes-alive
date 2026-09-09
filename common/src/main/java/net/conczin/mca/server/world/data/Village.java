@@ -702,7 +702,7 @@ public class Village implements Iterable<Building> {
         } else {
             for (Structure structure : structures.values()) {
                 for (StructureFloor floor : structure.getFloors()) {
-                    if (!candidate.geometry().touchesFootprint(floor.geometry())) continue;
+                    if (candidate.geometry().footprintIntersectionArea(floor.geometry()) == 0) continue;
                     int gap = candidate.attachmentGapTo(floor);
                     if (gap > MAX_FLOOR_ATTACHMENT_GAP) continue;
                     addAttachmentTarget(nearestByBuilding, structure, floor, gap);

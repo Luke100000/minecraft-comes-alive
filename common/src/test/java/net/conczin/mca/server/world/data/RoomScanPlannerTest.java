@@ -120,7 +120,7 @@ class RoomScanPlannerTest {
     }
 
     @Test
-    void touchingDifferentStoreyWithoutConnectorEvidenceUsesAttachmentFallback() {
+    void overlappingDifferentStoreyWithoutConnectorEvidenceUsesAttachmentFallback() {
         Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
         Building room = room(100, 20, 0, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
@@ -134,6 +134,22 @@ class RoomScanPlannerTest {
         assertEquals(Village.RoomScanMode.ADD_FLOOR, plan.mode());
         assertEquals(20, plan.targetBuildingId());
         assertEquals(1, plan.prospectiveFloorNumber());
+    }
+
+    @Test
+    void adjacentDifferentStoreyWithoutConnectorEvidenceRemainsAddBuilding() {
+        Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
+        Building room = room(100, 20, 0, Set.of(
+                new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
+                new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
+        Village village = village(persisted, room);
+        BlockPos source = new BlockPos(4, 68, 0);
+
+        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
+                observation(source, scannedFloor(68, 72, 4, 7), List.of()));
+
+        assertEquals(Village.RoomScanMode.ADD_BUILDING, plan.mode());
+        assertEquals(-1, plan.targetBuildingId());
     }
 
     @Test

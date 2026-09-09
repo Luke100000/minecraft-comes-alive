@@ -321,15 +321,14 @@ class VillageFloorSystemTest {
     }
 
     @Test
-    void floorAttachmentAllowsDirectFootprintTouchWithoutConnectorEvidence() {
+    void floorAttachmentRejectsDirectFootprintTouchWithoutConnectorEvidence() {
         Village village = new Village(1, null);
         StructureFloor existingFloor = TestStructureFloors.create(0, 64, 68, 0, region(64));
         registerStructure(village, structure(10, 10, existingFloor), room(100, 10, 0, true));
 
         StructureFloor touchingBasement = TestStructureFloors.create(1, 60, 64, 0, region(60, 2, 0));
 
-        assertEquals(10, village.selectAttachmentTarget(touchingBasement, List.of())
-                .orElseThrow().buildingId());
+        assertTrue(village.selectAttachmentTarget(touchingBasement, List.of()).isEmpty());
     }
 
     @Test
