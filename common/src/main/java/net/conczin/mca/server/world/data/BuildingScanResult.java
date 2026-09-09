@@ -11,19 +11,21 @@ public record BuildingScanResult(
         List<String> matchingTypes,
         Village village,
         Structure pendingStructure,
-        List<Building> pendingFloorRooms
+        PendingFloorRefresh pendingFloorRefresh
 ) {
     public BuildingScanResult(Building.validationResult result,
                               BlockPos source,
                               Building building,
                               List<String> matchingTypes,
                               Village village) {
-        this(result, source, building, matchingTypes, village, null, List.of());
+        this(result, source, building, matchingTypes, village, null, null);
     }
 
     public BuildingScanResult {
         matchingTypes = matchingTypes == null ? List.of() : List.copyOf(matchingTypes);
-        pendingFloorRooms = pendingFloorRooms == null ? List.of() : List.copyOf(pendingFloorRooms);
+        if (pendingStructure != null && pendingFloorRefresh != null) {
+            throw new IllegalArgumentException("Scan cannot carry two pending structure mutations");
+        }
     }
 
     public boolean isAmbiguous() {
@@ -36,25 +38,29 @@ public record BuildingScanResult(
 
     BuildingScanResult withPendingStructure(Structure structure) {
         return new BuildingScanResult(result, source, building, matchingTypes,
-                village, structure, pendingFloorRooms);
+                village, structure, null);
     }
 
-    BuildingScanResult withPendingFloorRooms(List<Building> rooms) {
+    BuildingScanResult withPendingFloorRefresh(Structure structure, List<Building> rooms) {
         return new BuildingScanResult(result, source, building, matchingTypes,
-                village, pendingStructure, rooms);
-    }
-
-    boolean hasPendingFloorRefresh() {
-        return !pendingFloorRooms.isEmpty();
+                village, null, new PendingFloorRefresh(structure, rooms));
     }
 
     BuildingScanResult withSource(BlockPos source) {
         return new BuildingScanResult(result, source, building, matchingTypes,
-                village, pendingStructure, pendingFloorRooms);
+                village, pendingStructure, pendingFloorRefresh);
     }
 
     public int targetBuildingId() {
-        if (pendingStructure == null || pendingStructure.getLogicalBuildingId() == pendingStructure.getId()) return -1;
-        return pendingStructure.getLogicalBuildingId();
+        Structure structure = pendingFloorRefresh == null ? pendingStructure : pendingFloorRefresh.structure();
+        if (structure == null || structure.getLogicalBuildingId() == structure.getId()) return -1;
+        return structure.getLogicalBuildingId();
+    }
+
+    public record PendingFloorRefresh(Structure structure, List<Building> existingRooms) {
+        public PendingFloorRefresh {
+            if (structure == null) throw new IllegalArgumentException("Pending Floor refresh requires a Structure");
+            existingRooms = existingRooms == null ? List.of() : List.copyOf(existingRooms);
+        }
     }
 }

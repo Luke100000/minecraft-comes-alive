@@ -251,9 +251,12 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 ? Building.validationResult.TOO_SMALL : scan.result();
         if (forcedType != null && !scan.matchesType(forcedType)) return Building.validationResult.INVALID_TYPE;
         if (forcedType == null && scan.isAmbiguous()) return Building.validationResult.INVALID_TYPE;
-        if (scan.pendingStructure() != null) {
+        BuildingScanResult.PendingFloorRefresh floorRefresh = scan.pendingFloorRefresh();
+        if (floorRefresh != null) return commitExpandedRoom(scan, forcedType);
+
+        Structure pending = scan.pendingStructure();
+        if (pending != null) {
             Village village = scan.village();
-            Structure pending = scan.pendingStructure();
             if (village != null && pending.getId() >= 0 && village.getStructure(pending.getId()).isPresent()) {
                 return commitExpandedRoom(scan, forcedType);
             }
@@ -278,7 +281,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     private Building.validationResult commitExpandedRoom(BuildingScanResult scan, String forcedType) {
         Village village = scan.village();
-        Structure refreshed = scan.pendingStructure();
+        BuildingScanResult.PendingFloorRefresh floorRefresh = scan.pendingFloorRefresh();
+        Structure refreshed = floorRefresh == null ? scan.pendingStructure() : floorRefresh.structure();
         Building room = scan.building();
         if (village == null || refreshed == null || room == null) {
             return Building.validationResult.NOT_IN_BUILDING;
@@ -301,10 +305,10 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         committed.setType(category);
         committed.setTypeForced(forcedType != null);
         boolean published;
-        if (!scan.hasPendingFloorRefresh()) {
+        if (floorRefresh == null) {
             published = village.replaceStructureAndRegisterRoom(refreshed, committed);
         } else {
-            List<Building> replacementRooms = new ArrayList<>(scan.pendingFloorRooms());
+            List<Building> replacementRooms = new ArrayList<>(floorRefresh.existingRooms());
             replacementRooms.add(committed);
             published = village.publishFloorRefresh(refreshed, committed.getFloorId(), replacementRooms);
         }

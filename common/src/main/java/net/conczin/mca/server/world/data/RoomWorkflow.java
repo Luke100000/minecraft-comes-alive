@@ -111,8 +111,7 @@ public final class RoomWorkflow {
         return RegisteredRoomReconciler.reconcileAddition(
                         previousRooms, freshRooms, addition.building(), fresh.scannedFloor())
                 .map(existingReplacements -> addition.withSource(source)
-                        .withPendingStructure(refreshed)
-                        .withPendingFloorRooms(existingReplacements))
+                        .withPendingFloorRefresh(refreshed, existingReplacements))
                 .orElseGet(() -> failedRoom(Building.validationResult.OVERLAP, source, village));
     }
 

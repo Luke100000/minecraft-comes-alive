@@ -11,6 +11,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VillageManagerExpandedRoomCommitTest {
@@ -77,6 +78,29 @@ class VillageManagerExpandedRoomCommitTest {
         assertEquals(oldGeometry, village.getStructure(10).orElseThrow()
                 .getFloor(0).orElseThrow().geometry().cells());
         assertEquals(oldRoomCells, village.getBuilding(100).orElseThrow().getFloorCells());
+    }
+
+    @Test
+    void stalePendingFloorRefreshFailsWithoutRegisteringANewStructure() {
+        Village village = new Village(1, null);
+        Structure refreshed = new Structure(10, BlockPos.ZERO, List.of(
+                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 3))));
+        Building added = room(-1, 10, 0, region(64, 2, 3));
+        BuildingScanResult scan = new BuildingScanResult(
+                Building.validationResult.SUCCESS,
+                new BlockPos(2, 64, 0),
+                added,
+                List.of("building"),
+                village).withPendingFloorRefresh(refreshed, List.of());
+        VillageManager manager = new VillageManager(null);
+
+        Building.validationResult result = assertDoesNotThrow(
+                () -> manager.commitRoomAddition(scan, "building"),
+                "stale Floor refresh must fail as validation, not throw");
+
+        assertEquals(Building.validationResult.NOT_IN_BUILDING, result);
+        assertEquals(0, village.getStructures().size());
+        assertEquals(0, village.getRooms().count());
     }
 
     private static BuildingFloorRegion region(int y, int minX, int maxX) {
