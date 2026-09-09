@@ -33,6 +33,7 @@ public class Village implements Iterable<Building> {
     public static final int PLAYER_BORDER_MARGIN = 32;
     public static final int BORDER_MARGIN = 48;
     public static final int MERGE_MARGIN = 64;
+    private static final int MAX_FLOOR_ATTACHMENT_GAP = 4;
     private static final int MOVE_IN_COOLDOWN = 1200;
     private static final long BED_SYNC_TIME = 200;
     private static final Comparator<AttachmentTarget> ATTACHMENT_TARGET_ORDER = Comparator
@@ -692,16 +693,21 @@ public class Village implements Iterable<Building> {
         if (hasUnprovenAttachmentOverlap(candidate, connections)) return Optional.empty();
 
         Map<Integer, AttachmentTarget> nearestByBuilding = new HashMap<>();
-        for (StructureConnector.VerticalConnection connection : connections) {
-            Structure structure = connection.structure();
-            StructureFloor floor = connection.floor();
-            if (structures.get(structure.getId()) != structure) continue;
-            int gap = candidate.attachmentGapTo(floor);
-            if (gap < 0) continue;
-            AttachmentTarget target = new AttachmentTarget(
-                    structure.getLogicalBuildingId(), structure.getId(), floor.id(), gap);
-            nearestByBuilding.merge(target.buildingId(), target,
-                    (first, second) -> ATTACHMENT_TARGET_ORDER.compare(first, second) <= 0 ? first : second);
+        if (!connections.isEmpty()) {
+            for (StructureConnector.VerticalConnection connection : connections) {
+                Structure structure = connection.structure();
+                StructureFloor floor = connection.floor();
+                addAttachmentTarget(nearestByBuilding, structure, floor, candidate.attachmentGapTo(floor));
+            }
+        } else {
+            for (Structure structure : structures.values()) {
+                for (StructureFloor floor : structure.getFloors()) {
+                    if (!candidate.geometry().touchesFootprint(floor.geometry())) continue;
+                    int gap = candidate.attachmentGapTo(floor);
+                    if (gap > MAX_FLOOR_ATTACHMENT_GAP) continue;
+                    addAttachmentTarget(nearestByBuilding, structure, floor, gap);
+                }
+            }
         }
 
         AttachmentTarget nearest = nearestByBuilding.values().stream()
@@ -711,6 +717,18 @@ public class Village implements Iterable<Building> {
                 .anyMatch(target -> target.buildingId() != nearest.buildingId()
                         && target.gap() == nearest.gap())
                 ? Optional.empty() : Optional.of(nearest);
+    }
+
+    private void addAttachmentTarget(Map<Integer, AttachmentTarget> nearestByBuilding,
+                                     Structure structure,
+                                     StructureFloor floor,
+                                     int gap) {
+        if (structures.get(structure.getId()) != structure) return;
+        if (gap < 0) return;
+        AttachmentTarget target = new AttachmentTarget(
+                structure.getLogicalBuildingId(), structure.getId(), floor.id(), gap);
+        nearestByBuilding.merge(target.buildingId(), target,
+                (first, second) -> ATTACHMENT_TARGET_ORDER.compare(first, second) <= 0 ? first : second);
     }
 
     private Set<StructureConnector.VerticalConnection> attachmentConnections(

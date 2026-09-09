@@ -292,7 +292,7 @@ class VillageFloorSystemTest {
     }
 
     @Test
-    void floorAttachmentRequiresProvenVerticalConnectionInsteadOfArbitraryHeightGap() {
+    void floorAttachmentAcceptsExplicitVerticalConnectionBeyondFallbackGap() {
         Village village = new Village(1, null);
         StructureFloor existingFloor = TestStructureFloors.create(0, 64, 68, 0, region(64), List.of(
                 new FloorConnector.Marker(new BlockPos(0, 64, 0), FloorConnector.Type.LADDER)));
@@ -301,13 +301,88 @@ class VillageFloorSystemTest {
 
         StructureFloor connectedHighFloor = TestStructureFloors.create(1, 76, 80, 0, region(76), List.of(
                 new FloorConnector.Marker(new BlockPos(0, 76, 0), FloorConnector.Type.LADDER)));
-        StructureFloor nearbyButDisconnected = TestStructureFloors.create(2, 70, 74, 0, region(70));
         StructureConnector.VerticalConnection connection = new StructureConnector.VerticalConnection(
                 structure, existingFloor);
 
         assertEquals(10, village.selectAttachmentTarget(connectedHighFloor, List.of(connection))
                 .orElseThrow().buildingId());
-        assertTrue(village.selectAttachmentTarget(nearbyButDisconnected, List.of()).isEmpty());
+    }
+
+    @Test
+    void externalBasementCanAttachByOverlappingFootprintWithoutConnectorEvidence() {
+        Village village = new Village(1, null);
+        StructureFloor existingFloor = TestStructureFloors.create(0, 64, 68, 0, region(64));
+        registerStructure(village, structure(10, 10, existingFloor), room(100, 10, 0, true));
+
+        StructureFloor externalBasement = TestStructureFloors.create(1, 60, 64, 0, region(60));
+
+        assertEquals(10, village.selectAttachmentTarget(externalBasement, List.of())
+                .orElseThrow().buildingId());
+    }
+
+    @Test
+    void floorAttachmentAllowsDirectFootprintTouchWithoutConnectorEvidence() {
+        Village village = new Village(1, null);
+        StructureFloor existingFloor = TestStructureFloors.create(0, 64, 68, 0, region(64));
+        registerStructure(village, structure(10, 10, existingFloor), room(100, 10, 0, true));
+
+        StructureFloor touchingBasement = TestStructureFloors.create(1, 60, 64, 0, region(60, 2, 0));
+
+        assertEquals(10, village.selectAttachmentTarget(touchingBasement, List.of())
+                .orElseThrow().buildingId());
+    }
+
+    @Test
+    void floorAttachmentRejectsDetachedNearbyFloorWithoutConnectorEvidence() {
+        Village village = new Village(1, null);
+        StructureFloor existingFloor = TestStructureFloors.create(0, 64, 68, 0, region(64));
+        registerStructure(village, structure(10, 10, existingFloor), room(100, 10, 0, true));
+
+        StructureFloor detachedBasement = TestStructureFloors.create(1, 60, 64, 0, region(60, 3, 0));
+
+        assertTrue(village.selectAttachmentTarget(detachedBasement, List.of()).isEmpty());
+    }
+
+    @Test
+    void floorAttachmentRejectsPhysicalContactBeyondLegacyVerticalGap() {
+        Village village = new Village(1, null);
+        StructureFloor existingFloor = TestStructureFloors.create(0, 64, 68, 0, region(64));
+        registerStructure(village, structure(10, 10, existingFloor), room(100, 10, 0, true));
+
+        StructureFloor deepBasement = TestStructureFloors.create(1, 55, 59, 0, region(55));
+
+        assertTrue(village.selectAttachmentTarget(deepBasement, List.of()).isEmpty());
+    }
+
+    @Test
+    void floorAttachmentRejectsAmbiguousPhysicalContactAcrossBuildings() {
+        Village village = new Village(1, null);
+        StructureFloor leftFloor = TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 0));
+        StructureFloor rightFloor = TestStructureFloors.create(0, 64, 68, 0, region(64, 4, 0));
+        registerStructure(village, structure(10, 10, leftFloor), room(100, 10, 0, true));
+        registerStructure(village, structure(20, 20, rightFloor), room(200, 20, 0, true));
+
+        StructureFloor basement = TestStructureFloors.create(1, 60, 64, 0, region(60, 2, 0));
+
+        assertTrue(village.selectAttachmentTarget(basement, List.of()).isEmpty());
+    }
+
+    @Test
+    void explicitConnectorEvidenceWinsOverPhysicalContactFallback() {
+        Village village = new Village(1, null);
+        StructureFloor touchingFloor = TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 0));
+        StructureFloor connectedFloor = TestStructureFloors.create(0, 64, 68, 0, region(64, 10, 0));
+        Structure touchingStructure = structure(10, 10, touchingFloor);
+        Structure connectedStructure = structure(20, 20, connectedFloor);
+        registerStructure(village, touchingStructure, room(100, 10, 0, true));
+        registerStructure(village, connectedStructure, room(200, 20, 0, true));
+
+        StructureFloor basement = TestStructureFloors.create(1, 60, 64, 0, region(60, 2, 0));
+        StructureConnector.VerticalConnection connection = new StructureConnector.VerticalConnection(
+                connectedStructure, connectedFloor);
+
+        assertEquals(20, village.selectAttachmentTarget(basement, List.of(connection))
+                .orElseThrow().buildingId());
     }
 
     @Test
@@ -730,9 +805,13 @@ class VillageFloorSystemTest {
     }
 
     private static BuildingFloorRegion region(int y) {
+        return region(y, 0, 0);
+    }
+
+    private static BuildingFloorRegion region(int y, int x, int z) {
         return BuildingFloorRegion.fromFootprint(y, Set.of(
-                new BlockPos(0, y, 0), new BlockPos(1, y, 0),
-                new BlockPos(0, y, 1), new BlockPos(1, y, 1)));
+                new BlockPos(x, y, z), new BlockPos(x + 1, y, z),
+                new BlockPos(x, y, z + 1), new BlockPos(x + 1, y, z + 1)));
     }
 
     private static FloorGeometry scannedFloor(BuildingFloorRegion region) {

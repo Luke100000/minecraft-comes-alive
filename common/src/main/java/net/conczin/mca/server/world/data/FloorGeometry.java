@@ -117,6 +117,22 @@ final class FloorGeometry {
         return intersection;
     }
 
+    boolean touchesFootprint(FloorGeometry other) {
+        if (other == null || cellsByColumn.isEmpty() || other.cellsByColumn.isEmpty()) return false;
+        for (Cell cell : cells) {
+            int x = cell.feet().getX();
+            int z = cell.feet().getZ();
+            if (other.cellsByColumn.containsKey(columnKey(x, z))
+                    || other.cellsByColumn.containsKey(columnKey(x + 1, z))
+                    || other.cellsByColumn.containsKey(columnKey(x - 1, z))
+                    || other.cellsByColumn.containsKey(columnKey(x, z + 1))
+                    || other.cellsByColumn.containsKey(columnKey(x, z - 1))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     List<FloorConnector.Marker> connectorMarkers() {
         return connectorTypesByCell.entrySet().stream()
                 .map(entry -> new FloorConnector.Marker(entry.getKey(), entry.getValue()))

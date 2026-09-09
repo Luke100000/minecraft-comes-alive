@@ -6,14 +6,17 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.Set;
 import java.util.HashSet;
+import java.util.List;
 import java.util.stream.Collectors;
 
 @GameTestHolder("minecraft")
@@ -224,6 +227,51 @@ public final class FloorScannerGameTests {
         helper.assertTrue(RoomPartitioner.partition(new FloorGeometry(combinedCells, java.util.Map.of()),
                         combinedTransitions).size() == 2,
                 "vertical connector merged lower and upper Room components");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_external_basement", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void externalBasementDoorAttachesToOverlappingBuilding(GameTestHelper helper) {
+        BlockPos basementMin = helper.absolutePos(new BlockPos(6, 2, 6));
+        BlockPos groundMin = basementMin.above(4);
+        buildClosedRoom(helper, basementMin, 4, 4);
+        buildClosedRoom(helper, groundMin, 4, 4);
+
+        BlockPos door = basementMin.west().offset(0, 0, 1);
+        BlockState lowerDoor = Blocks.OAK_DOOR.defaultBlockState()
+                .setValue(DoorBlock.FACING, Direction.WEST)
+                .setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER);
+        helper.getLevel().setBlock(door, lowerDoor, 3);
+        helper.getLevel().setBlock(door.above(), lowerDoor.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER), 3);
+
+        BlockPos source = door.west();
+        helper.getLevel().setBlock(source.below(), Blocks.STONE.defaultBlockState(), 3);
+
+        BlockPos groundSeed = groundMin.offset(1, 0, 1);
+        SelectedFloorScanner.Result groundScan = SelectedFloorScanner.scan(
+                helper.getLevel(), groundSeed, 256, 16);
+        helper.assertTrue(groundScan.result() == Building.validationResult.SUCCESS,
+                "ground floor scan failed: " + groundScan.result());
+
+        StructureFloor groundFloor = new StructureFloor(0, 0, groundScan.floor());
+        Structure groundStructure = new Structure(10, groundSeed, List.of(groundFloor));
+        Building groundRoom = new Building(groundSeed);
+        groundRoom.setId(100);
+        groundRoom.setStructureId(10);
+        groundRoom.setFloorId(0);
+        groundRoom.setGeometry(groundSeed, groundSeed, Set.of(groundSeed));
+
+        Village village = new Village(1, helper.getLevel());
+        village.registerStructure(groundStructure, groundRoom);
+
+        RoomScanPlan plan = village.getRoomScanPlan(helper.getLevel(), source);
+        helper.assertTrue(plan.mode() == Village.RoomScanMode.ADD_BASEMENT,
+                "external basement planned as " + plan.mode());
+        helper.assertTrue(plan.targetBuildingId() == 10,
+                "external basement targeted building " + plan.targetBuildingId());
+        helper.assertTrue(plan.prospectiveFloorNumber() == -1,
+                "external basement floor number was " + plan.prospectiveFloorNumber());
         helper.succeed();
     }
 
