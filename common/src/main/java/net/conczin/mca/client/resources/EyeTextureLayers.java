@@ -6,11 +6,11 @@ import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
 import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.animal.Sheep;
+import net.minecraft.world.item.DyeColor;
 
 public final class EyeTextureLayers {
-    private static final int SCLERA_MIN_CHANNEL = 160;
-    private static final int SCLERA_MAX_CHANNEL_SPREAD = 32;
-    private static final int IRIS_MIN_CHANNEL = 32;
     private static final int NATURAL_DYE = 0xFFFFFFFF;
 
     private static final int ALBINISM_EYE_COLOR = 0xFFE8A0A0;
@@ -18,8 +18,6 @@ public final class EyeTextureLayers {
     private static final int GREEN_EYE_COLOR = 0xFF4CB346;
     private static final int HAZEL_EYE_COLOR = 0xFFC29B35;
     private static final int BROWN_EYE_COLOR = 0xFF7C4825;
-    public static final int DETAILS_TINT = 0xFF808080;
-
     private EyeTextureLayers() {
     }
 
@@ -29,12 +27,32 @@ public final class EyeTextureLayers {
         return dye != NATURAL_DYE ? dye : getGeneticEyeColor(villager, left && heterochromia);
     }
 
+    public static int getBaseEyeColor(VillagerLike<?> villager, boolean left, float tickDelta) {
+        if (!villager.getTraits().hasTrait(Traits.RAINBOW_EYES)) {
+            return getStaticEyeColor(villager, left);
+        }
+
+        int colorCount = DyeColor.values().length;
+        int offset = left && villager.getTraits().hasTrait(Traits.HETEROCHROMIA)
+                ? (25 * colorCount) / 2
+                : 0;
+        Entity entity = villager.asEntity();
+        int ticks = Math.abs(entity.tickCount) + offset;
+        int first = (ticks / 25 + entity.getId()) % colorCount;
+        float mix = ((float)(ticks % 25) + tickDelta) / 25.0F;
+        return FastColor.ARGB32.lerp(
+                mix,
+                Sheep.getColor(DyeColor.byId(first)),
+                Sheep.getColor(DyeColor.byId((first + 1) % colorCount))
+        );
+    }
+
     private static int getGeneticEyeColor(VillagerLike<?> villager, boolean shifted) {
         if (villager.getTraits().hasTrait(Traits.ALBINISM)) {
             return ALBINISM_EYE_COLOR;
         }
 
-        float eyeColor = Mth.frac(villager.getGenetics().getGene(Genetics.FACE) + (shifted ? 0.43F : 0.0F));
+        float eyeColor = Mth.frac(villager.getGenetics().getGene(Genetics.EYE_COLOR) + (shifted ? 0.43F : 0.0F));
         if (eyeColor < 0.35F) {
             return FastColor.ARGB32.lerp(eyeColor / 0.35F, BLUE_EYE_COLOR, GREEN_EYE_COLOR);
         }
@@ -44,17 +62,16 @@ public final class EyeTextureLayers {
         return FastColor.ARGB32.lerp((eyeColor - 0.70F) / 0.30F, HAZEL_EYE_COLOR, BROWN_EYE_COLOR);
     }
 
-    public static int applyBrightness(int argb, float brightness) {
-        float factor = 0.5F + Mth.clamp(brightness, 0.0F, 1.0F);
-        int alpha = (argb >>> 24) & 0xFF;
-        int red = scaleChannel((argb >>> 16) & 0xFF, factor);
-        int green = scaleChannel((argb >>> 8) & 0xFF, factor);
-        int blue = scaleChannel(argb & 0xFF, factor);
-        return (alpha << 24) | (red << 16) | (green << 8) | blue;
-    }
-
-    private static int scaleChannel(int channel, float factor) {
-        return Mth.clamp(Math.round(channel * factor), 0, 255);
+    public static DecodedPixel decodePixel(int pixel) {
+        int alpha = FastColor.ABGR32.alpha(pixel);
+        if (alpha == 0) {
+            return null;
+        }
+        if (EyeTintPixel.isIrisMarker(alpha)) {
+            EyeTintPixel.Mask mask = EyeTintPixel.decodeMarkedMask(pixel);
+            return DecodedPixel.tint(mask.tone(), EyeToneRendering.neutralMaskPixel(mask));
+        }
+        return DecodedPixel.fixed(pixel);
     }
 
     public static Bounds findBounds(NativeImage image) {
@@ -66,7 +83,7 @@ public final class EyeTextureLayers {
         for (int x = 0; x < image.getWidth(); x++) {
             for (int y = 0; y < image.getHeight(); y++) {
                 int pixel = image.getPixelRGBA(x, y);
-                int alpha = (pixel >> 24) & 0xFF;
+                int alpha = FastColor.ABGR32.alpha(pixel);
                 if (alpha == 0) {
                     continue;
                 }
@@ -83,51 +100,25 @@ public final class EyeTextureLayers {
         return new Bounds(minX, minY, maxX, maxY);
     }
 
-    public static boolean isInSide(int x, int splitX, Side side) {
-        return switch (side) {
-            case FULL -> true;
-            case LEFT -> x >= splitX;
-            case RIGHT -> x < splitX;
-        };
-    }
-
-    public static boolean isScleraPixel(int alpha, int red, int green, int blue) {
-        if (alpha == 1) {
-            return true;
-        }
-        if (alpha != 255) {
-            return false;
-        }
-
-        int min = Math.min(red, Math.min(green, blue));
-        int max = Math.max(red, Math.max(green, blue));
-        return min >= SCLERA_MIN_CHANNEL && max - min <= SCLERA_MAX_CHANNEL_SPREAD;
-    }
-
-    public static boolean isPixelForLayer(Layer layer, int alpha, int red, int green, int blue) {
-        if (alpha == 0) {
-            return false;
-        }
-
-        boolean sclera = isScleraPixel(alpha, red, green, blue);
-        int max = Math.max(red, Math.max(green, blue));
-        return switch (layer) {
-            case SCLERA -> sclera;
-            case IRIS -> !sclera && max >= IRIS_MIN_CHANNEL;
-            case DETAILS -> !sclera && max < IRIS_MIN_CHANNEL;
-        };
-    }
-
     public enum Side {
         FULL,
         LEFT,
         RIGHT
     }
 
-    public enum Layer {
-        SCLERA,
-        IRIS,
-        DETAILS
+    public enum PixelKind {
+        FIXED,
+        TINT
+    }
+
+    public record DecodedPixel(PixelKind kind, EyeTintPixel.Tone tone, int pixel) {
+        private static DecodedPixel fixed(int pixel) {
+            return new DecodedPixel(PixelKind.FIXED, null, pixel);
+        }
+
+        private static DecodedPixel tint(EyeTintPixel.Tone tone, int pixel) {
+            return new DecodedPixel(PixelKind.TINT, tone, pixel);
+        }
     }
 
     public record Bounds(int minX, int minY, int maxX, int maxY) {

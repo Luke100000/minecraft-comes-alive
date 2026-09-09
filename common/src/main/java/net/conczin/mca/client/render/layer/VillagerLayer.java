@@ -29,8 +29,7 @@ public abstract class VillagerLayer<T extends LivingEntity, M extends HumanoidMo
     private static final Map<ResourceLocation, Boolean> TEXTURE_EXIST_CACHE = Maps.newHashMap();
 
     static {
-        // the temp image is used for temporary canvases and definitely exists
-        TEXTURE_EXIST_CACHE.put(MCA.locate("temp"), true);
+        resetTextureExistenceCache();
     }
 
     public final M model;
@@ -121,6 +120,16 @@ public abstract class VillagerLayer<T extends LivingEntity, M extends HumanoidMo
             }
             return texture != null && Minecraft.getInstance().getResourceManager().getResource(texture).isPresent();
         });
+    }
+
+    public static void clearTextureExistenceCache() {
+        resetTextureExistenceCache();
+    }
+
+    private static void resetTextureExistenceCache() {
+        TEXTURE_EXIST_CACHE.clear();
+        // The temp image is used for temporary canvases and definitely exists.
+        TEXTURE_EXIST_CACHE.put(MCA.locate("temp"), true);
     }
 
     @Nullable

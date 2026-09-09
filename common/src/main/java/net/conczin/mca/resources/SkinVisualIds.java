@@ -8,6 +8,7 @@ import net.minecraft.resources.ResourceLocation;
 public final class SkinVisualIds {
     private static final String LEGACY_HAIR_NAMESPACE = "mca";
     private static final String LEGACY_HAIR_PATH_PREFIX = "skins/hair/";
+    private static final String EYE_TEXTURE_PATH_PREFIX = "skins/face/";
 
     private SkinVisualIds() {
     }
@@ -21,6 +22,18 @@ public final class SkinVisualIds {
         BodySkinList list = BodySkinList.getInstance();
         BodySkin skin = list == null ? null : list.get(identifier);
         return skin != null && SkinSelection.matchesGender(skin, gender);
+    }
+
+    public static boolean isEyeTexture(String identifier) {
+        ResourceLocation id = ResourceLocation.tryParse(identifier);
+        EyeCatalog list = EyeCatalog.getInstance();
+        return isEyeTexturePath(id) && list != null && list.contains(id);
+    }
+
+    public static boolean isEyeTexturePath(ResourceLocation id) {
+        return id != null
+                && id.getPath().startsWith(EYE_TEXTURE_PATH_PREFIX)
+                && id.getPath().endsWith(".png");
     }
 
     public static boolean isClothing(String identifier) {
