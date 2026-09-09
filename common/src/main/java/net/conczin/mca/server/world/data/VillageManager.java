@@ -300,7 +300,15 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         committed.setId(lastBuildingId);
         committed.setType(category);
         committed.setTypeForced(forcedType != null);
-        if (!village.replaceStructureAndRegisterRoom(refreshed, committed)) {
+        boolean published;
+        if (!scan.hasPendingFloorRefresh()) {
+            published = village.replaceStructureAndRegisterRoom(refreshed, committed);
+        } else {
+            List<Building> replacementRooms = new ArrayList<>(scan.pendingFloorRooms());
+            replacementRooms.add(committed);
+            published = village.publishFloorRefresh(refreshed, committed.getFloorId(), replacementRooms);
+        }
+        if (!published) {
             return Building.validationResult.OVERLAP;
         }
         lastBuildingId++;
@@ -470,9 +478,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             component.setStructureId(update.structureId());
             component.setFloorId(update.floorId());
             if (previous != null) {
-                component.setType(previous.getType());
-                component.setTypeForced(previous.isTypeForced());
-                component.setContributesToMain(previous.contributesToMain());
+                RegisteredRoomReconciler.preserveIdentity(component, previous);
             } else {
                 component.setContributesToMain(playerRoom.contributesToMain());
             }

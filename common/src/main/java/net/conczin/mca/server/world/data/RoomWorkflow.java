@@ -85,10 +85,35 @@ public final class RoomWorkflow {
         if (refreshedFloor == null) {
             return failedRoom(Building.validationResult.OVERLAP, source, village);
         }
-        return scanResolvedRoom(village, refreshed, source, -1, refreshedFloor, fresh.scannedFloor(),
-                fresh.transitions(), registeredRoomCells(village, structure.getId(), floor.id(), -1))
-                .withSource(source)
-                .withPendingStructure(refreshed);
+        BuildingScanResult addition = scanResolvedRoom(
+                village, refreshed, source, -1, refreshedFloor, fresh.scannedFloor(),
+                fresh.transitions(), registeredRoomIdentityCells(
+                        village, structure.getId(), floor.id(), fresh.scannedFloor(), -1));
+        if (addition.result() != Building.validationResult.SUCCESS) {
+            return addition.withSource(source);
+        }
+
+        List<Building> freshRooms = new ArrayList<>();
+        for (BuildingRoomScanner.Result component : BuildingRoomScanner.partition(
+                world, source, Config.getInstance().maxBuildingSize,
+                floor.id(), fresh.scannedFloor(), fresh.transitions())) {
+            BuildingScanResult componentScan = roomResultFromGeometry(
+                    village, refreshed, refreshedFloor, component, -1);
+            if (componentScan.result() != Building.validationResult.SUCCESS) {
+                return failedRoom(Building.validationResult.OVERLAP, source, village);
+            }
+            freshRooms.add(componentScan.building());
+        }
+        List<Building> previousRooms = village.getRooms()
+                .filter(room -> room.getStructureId() == structure.getId())
+                .filter(room -> room.getFloorId() == floor.id())
+                .toList();
+        return RegisteredRoomReconciler.reconcileAddition(
+                        previousRooms, freshRooms, addition.building(), fresh.scannedFloor())
+                .map(existingReplacements -> addition.withSource(source)
+                        .withPendingStructure(refreshed)
+                        .withPendingFloorRooms(existingReplacements))
+                .orElseGet(() -> failedRoom(Building.validationResult.OVERLAP, source, village));
     }
 
     BuildingScanResult analyzeAttachedRoom(BlockPos source,
@@ -241,16 +266,21 @@ public final class RoomWorkflow {
         return refreshed.replaceFloorGeometry(floorId, floor) ? refreshed : null;
     }
 
-    private static Set<BlockPos> registeredRoomCells(Village village,
-                                                     int structureId,
-                                                     int floorId,
-                                                     int excludedRoomId) {
-        if (village == null) return Set.of();
+    private static Set<BlockPos> registeredRoomIdentityCells(Village village,
+                                                             int structureId,
+                                                             int floorId,
+                                                             FloorGeometry floor,
+                                                             int excludedRoomId) {
+        if (village == null || floor == null) return Set.of();
         return village.getRooms()
                 .filter(room -> room.getId() != excludedRoomId)
                 .filter(room -> room.getStructureId() == structureId)
                 .filter(room -> room.getFloorId() == floorId)
                 .flatMap(room -> room.getFloorCells().stream())
+                .filter(cell -> {
+                    FloorConnector.Type connector = floor.connectorTypesByCell().get(cell);
+                    return connector == null || !connector.roomBoundary();
+                })
                 .collect(java.util.stream.Collectors.toSet());
     }
 

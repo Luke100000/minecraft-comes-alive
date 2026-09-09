@@ -5,9 +5,11 @@ import net.minecraft.core.BlockPos;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /** Matches a caller-provided Room lineage back to stable Room identities. */
 final class RegisteredRoomReconciler {
@@ -82,6 +84,69 @@ final class RegisteredRoomReconciler {
             }
         }
         return Optional.of(lineage);
+    }
+
+    /**
+     * Reconciles a complete fresh Floor partition for Add Room. Boundary connector cells are
+     * deliberately excluded from persistence identity because their deterministic Room owner may
+     * change when the adjacent Room sizes change.
+     */
+    static Optional<List<Building>> reconcileAddition(Collection<Building> previousRooms,
+                                                       Collection<Building> scannedComponents,
+                                                       Building addedRoom,
+                                                       FloorGeometry floor) {
+        if (previousRooms == null || scannedComponents == null || addedRoom == null || floor == null) {
+            return Optional.empty();
+        }
+        List<Building> previous = previousRooms.stream()
+                .sorted(Comparator.comparingInt(Building::getId))
+                .toList();
+        List<Building> components = scannedComponents.stream()
+                .sorted(COMPONENT_ORDER)
+                .toList();
+        Set<BlockPos> boundaryCells = floor.connectorTypesByCell().entrySet().stream()
+                .filter(entry -> entry.getValue().roomBoundary())
+                .map(Map.Entry::getKey)
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+
+        List<Building> replacements = new ArrayList<>(previous.size());
+        Set<Integer> matchedRoomIds = new HashSet<>();
+        boolean matchedAddedRoom = false;
+        for (Building component : components) {
+            List<Building> matches = previous.stream()
+                    .filter(room -> hasIdentityOverlap(component, room, boundaryCells))
+                    .toList();
+            if (matches.size() > 1) return Optional.empty();
+            if (matches.isEmpty()) {
+                if (matchedAddedRoom || !component.getFloorCells().equals(addedRoom.getFloorCells())) {
+                    return Optional.empty();
+                }
+                matchedAddedRoom = true;
+                continue;
+            }
+
+            Building previousRoom = matches.getFirst();
+            if (!matchedRoomIds.add(previousRoom.getId())) return Optional.empty();
+            preserveIdentity(component, previousRoom);
+            replacements.add(component);
+        }
+        if (!matchedAddedRoom || matchedRoomIds.size() != previous.size()) return Optional.empty();
+        return Optional.of(List.copyOf(replacements));
+    }
+
+    static void preserveIdentity(Building component, Building previous) {
+        component.setId(previous.getId());
+        component.setType(previous.getType());
+        component.setTypeForced(previous.isTypeForced());
+        component.setContributesToMain(previous.contributesToMain());
+    }
+
+    private static boolean hasIdentityOverlap(Building component,
+                                              Building previous,
+                                              Set<BlockPos> boundaryCells) {
+        return component.getFloorCells().stream()
+                .filter(cell -> !boundaryCells.contains(cell))
+                .anyMatch(previous.getFloorCells()::contains);
     }
 
     private static final Comparator<Building> COMPONENT_ORDER = Comparator

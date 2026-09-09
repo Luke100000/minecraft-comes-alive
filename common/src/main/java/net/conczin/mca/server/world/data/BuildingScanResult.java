@@ -10,18 +10,20 @@ public record BuildingScanResult(
         Building building,
         List<String> matchingTypes,
         Village village,
-        Structure pendingStructure
+        Structure pendingStructure,
+        List<Building> pendingFloorRooms
 ) {
     public BuildingScanResult(Building.validationResult result,
                               BlockPos source,
                               Building building,
                               List<String> matchingTypes,
                               Village village) {
-        this(result, source, building, matchingTypes, village, null);
+        this(result, source, building, matchingTypes, village, null, List.of());
     }
 
     public BuildingScanResult {
         matchingTypes = matchingTypes == null ? List.of() : List.copyOf(matchingTypes);
+        pendingFloorRooms = pendingFloorRooms == null ? List.of() : List.copyOf(pendingFloorRooms);
     }
 
     public boolean isAmbiguous() {
@@ -34,12 +36,21 @@ public record BuildingScanResult(
 
     BuildingScanResult withPendingStructure(Structure structure) {
         return new BuildingScanResult(result, source, building, matchingTypes,
-                village, structure);
+                village, structure, pendingFloorRooms);
+    }
+
+    BuildingScanResult withPendingFloorRooms(List<Building> rooms) {
+        return new BuildingScanResult(result, source, building, matchingTypes,
+                village, pendingStructure, rooms);
+    }
+
+    boolean hasPendingFloorRefresh() {
+        return !pendingFloorRooms.isEmpty();
     }
 
     BuildingScanResult withSource(BlockPos source) {
         return new BuildingScanResult(result, source, building, matchingTypes,
-                village, pendingStructure);
+                village, pendingStructure, pendingFloorRooms);
     }
 
     public int targetBuildingId() {
