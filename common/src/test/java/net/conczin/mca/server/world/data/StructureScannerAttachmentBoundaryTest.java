@@ -16,7 +16,7 @@ class StructureScannerAttachmentBoundaryTest {
                 new BlockPos(0, 74, 0), new BlockPos(1, 74, 0),
                 new BlockPos(0, 74, 1), new BlockPos(1, 74, 1)));
 
-        StructureFloor floor = new StructureFloor(0, 0, surface);
+        StructureFloor floor = TestStructureFloors.create(0, 0, surface);
 
         assertEquals(74, floor.anchorY());
         assertEquals(4, floor.area());

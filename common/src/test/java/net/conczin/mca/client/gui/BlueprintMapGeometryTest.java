@@ -208,7 +208,7 @@ class BlueprintMapGeometryTest {
         Structure structure = new Structure(
                 id,
                 new BlockPos(0, y, 0),
-                List.of(new StructureFloor(0, y, y + 3, floorNumber,
+                List.of(net.conczin.mca.server.world.data.TestStructureFloors.create(0, y, y + 3, floorNumber,
                         region(y, connectors),
                         List.of(connectors))));
         Method setter = Structure.class.getDeclaredMethod("setLogicalBuildingId", int.class);

@@ -26,21 +26,6 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
         }
     }
 
-    /** Source-compatible flat constructor; canonical code should pass exact {@link FloorGeometry}. */
-    public StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
-                          BuildingFloorRegion region) {
-        this(id, floorNumber, FloorGeometry.flat(region, ceilingY, List.of()));
-    }
-
-    public StructureFloor(int id, int anchorY, int ceilingY, int floorNumber,
-                          BuildingFloorRegion region, List<FloorConnector.Marker> connectors) {
-        this(id, floorNumber, FloorGeometry.flat(region, ceilingY, connectors));
-    }
-
-    public StructureFloor(int id, int anchorY, int ceilingY, BuildingFloorRegion region) {
-        this(id, anchorY, ceilingY, 0, region);
-    }
-
     public int anchorY() {
         return geometry.anchorY();
     }

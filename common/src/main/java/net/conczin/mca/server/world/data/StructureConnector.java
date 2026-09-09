@@ -1,6 +1,5 @@
 package net.conczin.mca.server.world.data;
 
-import net.conczin.mca.Config;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
@@ -146,10 +145,20 @@ final class StructureConnector {
         return type != null && type.vertical();
     }
 
-    private static List<BlockPos> verticalHandoffCandidates(Level world, BlockPos source) {
+    static List<BlockPos> verticalHandoffCandidates(Level world, BlockPos source) {
         return verticalColumn(world, source).stream()
                 .flatMap(connector -> handoffs(connector).stream())
                 .distinct()
+                .toList();
+    }
+
+    static List<BlockPos> horizontalHandoffCandidates(Level world, BlockPos source) {
+        BlockState sourceState = world.getBlockState(source);
+        if (!isHorizontalBoundary(sourceState)) return List.of();
+
+        BlockPos connector = normalize(source, sourceState);
+        return Arrays.stream(HORIZONTAL)
+                .map(connector::relative)
                 .toList();
     }
 
@@ -256,75 +265,6 @@ final class StructureConnector {
             }
         }
         return List.of();
-    }
-
-    static Optional<FloorHandoff> resolveVerticalFloorHandoff(
-            Level world, BlockPos source, Config config) {
-        List<BlockPos> candidates = verticalHandoffCandidates(world, source).stream()
-                .sorted(Comparator
-                        .comparingInt((BlockPos candidate) -> Math.abs(candidate.getY() - source.getY()))
-                        .thenComparingInt(BlockPos::getY)
-                        .thenComparingInt(BlockPos::getX)
-                        .thenComparingInt(BlockPos::getZ))
-                .toList();
-
-        return resolveFloorHandoff(world, source, candidates, config);
-    }
-
-    static Optional<FloorHandoff> resolveHorizontalFloorHandoff(
-            Level world, BlockPos source, Config config) {
-        BlockState sourceState = world.getBlockState(source);
-        if (!isHorizontalBoundary(sourceState)) return Optional.empty();
-
-        BlockPos connector = normalize(source, sourceState);
-        List<BlockPos> candidates = Arrays.stream(HORIZONTAL)
-                .map(connector::relative)
-                .sorted(Comparator
-                        .comparingInt((BlockPos candidate) -> candidate.getY())
-                        .thenComparingInt(BlockPos::getX)
-                        .thenComparingInt(BlockPos::getZ))
-                .toList();
-
-        return resolveFloorHandoff(world, source, candidates, config);
-    }
-
-    private static Optional<FloorHandoff> resolveFloorHandoff(
-            Level world, BlockPos source, List<BlockPos> rawCandidates, Config config) {
-        FloorCeilingResolver ceilings = new FloorCeilingResolver(world);
-        List<BlockPos> candidates = rawCandidates.stream()
-                .filter(candidate -> SelectedFloorScanner.inspectSurfaceCell(world, candidate, ceilings).isPresent())
-                .toList();
-
-        FloorHandoff selected = null;
-        int selectedDistance = Integer.MAX_VALUE;
-        int selectedY = Integer.MAX_VALUE;
-        for (BlockPos candidate : candidates) {
-            int distance = Math.abs(candidate.getY() - source.getY());
-            if (selected != null && (distance > selectedDistance
-                    || distance == selectedDistance && candidate.getY() > selectedY)) {
-                break;
-            }
-
-            SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(
-                    world, candidate, config.maxBuildingSize, config.maxBuildingRadius);
-            if (scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) continue;
-
-            if (selected == null) {
-                selected = new FloorHandoff(candidate, scan);
-                selectedDistance = distance;
-                selectedY = candidate.getY();
-            } else if (!selected.scan().floor().sameFootprint(scan.floor())) {
-                return Optional.empty();
-            }
-        }
-        return Optional.ofNullable(selected);
-    }
-
-    record FloorHandoff(BlockPos seed,
-                        SelectedFloorScanner.Result scan) {
-        FloorHandoff {
-            seed = seed.immutable();
-        }
     }
 
     record VerticalConnection(Structure structure, StructureFloor floor) {

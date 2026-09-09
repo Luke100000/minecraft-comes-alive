@@ -581,7 +581,7 @@ class BlueprintScreenMapInteractionTest {
         int structureId = 10;
         int roomId = 1;
         for (BlockPos cell : cells) {
-            StructureFloor floor = new StructureFloor(0, cell.getY(), cell.getY() + 4, 0,
+            StructureFloor floor = net.conczin.mca.server.world.data.TestStructureFloors.create(0, cell.getY(), cell.getY() + 4, 0,
                     region(cell));
             Structure structure = new Structure(structureId, cell, List.of(floor));
             Building room = new Building(cell);
@@ -598,7 +598,7 @@ class BlueprintScreenMapInteractionTest {
     }
 
     private static StructureFloor floor(int id, int anchorY, int ceilingY, int floorNumber) throws Exception {
-        return new StructureFloor(id, anchorY, ceilingY, floorNumber,
+        return net.conczin.mca.server.world.data.TestStructureFloors.create(id, anchorY, ceilingY, floorNumber,
                 region(anchorY));
     }
 

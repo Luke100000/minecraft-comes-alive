@@ -171,7 +171,7 @@ class RoomDFUTest {
         BuildingFloorRegion footprint = BuildingFloorRegion.fromFootprint(64, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
                 new BlockPos(0, 64, 1), new BlockPos(1, 64, 1)));
-        StructureFloor floor = new StructureFloor(0, 64, 70, 0, footprint);
+        StructureFloor floor = TestStructureFloors.create(0, 64, 70, 0, footprint);
         Structure structure = new Structure(20, new BlockPos(0, 64, 0), List.of(floor));
         structure.setLogicalBuildingId(77);
 
@@ -432,7 +432,7 @@ class RoomDFUTest {
     private static StructureFloor floor(int id, int anchorY, int ceilingY, int number) {
         BuildingFloorRegion region = BuildingFloorRegion.fromFootprint(
                 anchorY, List.of(new BlockPos(0, anchorY, 0), new BlockPos(1, anchorY, 0)));
-        return new StructureFloor(id, anchorY, ceilingY, number, region);
+        return TestStructureFloors.create(id, anchorY, ceilingY, number, region);
     }
 
     private static Village canonicalVillage() {

@@ -23,7 +23,7 @@ class StructureFloorResolutionTest {
 
     @Test
     void structureBoundsAreDerivedFromFloorGeometryAndNotPersistedSeparately() {
-        StructureFloor floor = new StructureFloor(0, 64, 70, 0,
+        StructureFloor floor = TestStructureFloors.create(0, 64, 70, 0,
                 BuildingFloorRegion.fromFootprint(64, Set.of(
                         new BlockPos(2, 64, 3), new BlockPos(5, 64, 7))));
         Structure structure = new Structure(10, new BlockPos(2, 64, 3), List.of(floor));
@@ -60,7 +60,7 @@ class StructureFloorResolutionTest {
         FloorGeometry geometry = new FloorGeometry(Set.of(
                 new FloorGeometry.Cell(lowerCell, 90),
                 new FloorGeometry.Cell(upperCell, 93)), Map.of());
-        StructureFloor floor = new StructureFloor(0, 0, geometry);
+        StructureFloor floor = TestStructureFloors.create(0, 0, geometry);
         Structure structure = new Structure(10, lowerCell, List.of(floor));
         Building lower = room(100, 10, 0, Set.of(lowerCell));
         Building upper = room(101, 10, 0, Set.of(upperCell));
@@ -89,11 +89,11 @@ class StructureFloorResolutionTest {
     @Test
     void verticalConnectorBlockImmediatelyBelowGroundFloorResolvesToGroundFloor() {
         BlockPos connectorColumn = new BlockPos(0, 88, 0);
-        StructureFloor basementFloor = new StructureFloor(0, 84, 87, -1,
+        StructureFloor basementFloor = TestStructureFloors.create(0, 84, 87, -1,
                 BuildingFloorRegion.fromFootprint(84, Set.of(new BlockPos(0, 84, 0))),
                 List.of(new FloorConnector.Marker(
                         new BlockPos(0, 84, 0), FloorConnector.Type.TRAPDOOR)));
-        StructureFloor groundFloor = new StructureFloor(0, 88, 92, 0,
+        StructureFloor groundFloor = TestStructureFloors.create(0, 88, 92, 0,
                 BuildingFloorRegion.fromFootprint(88, Set.of(connectorColumn)),
                 List.of(new FloorConnector.Marker(
                         connectorColumn, FloorConnector.Type.TRAPDOOR)));
@@ -128,7 +128,7 @@ class StructureFloorResolutionTest {
                 .findFirst().orElseThrow();
         Set<BlockPos> roomFootprint = owner.floorCells();
 
-        StructureFloor persistedFloor = new StructureFloor(0, 0, geometry);
+        StructureFloor persistedFloor = TestStructureFloors.create(0, 0, geometry);
         Structure structure = new Structure(10, new BlockPos(1, 64, 0), List.of(persistedFloor));
         Building room = new Building(new BlockPos(1, 64, 0));
         room.setId(100);
@@ -157,8 +157,8 @@ class StructureFloorResolutionTest {
         FloorGeometry upperGeometry = new FloorGeometry(Set.of(
                 geometryCell(0, 91, 3), geometryCell(1, 91, 3),
                 geometryCell(2, 91, 3), geometryCell(3, 91, 3)), Map.of());
-        StructureFloor lower = new StructureFloor(0, 0, lowerGeometry);
-        StructureFloor upper = new StructureFloor(1, 1, upperGeometry);
+        StructureFloor lower = TestStructureFloors.create(0, 0, lowerGeometry);
+        StructureFloor upper = TestStructureFloors.create(1, 1, upperGeometry);
         Structure structure = structure(lower, upper);
 
         assertEquals(94, lower.maxPhysicalCeilingY());
@@ -168,7 +168,7 @@ class StructureFloorResolutionTest {
     @Test
     void reloadingCurrentRoomFootprintDoesNotAssignUnownedConnectorToRoom() {
         BlockPos connector = new BlockPos(1, 64, 0);
-        StructureFloor floor = new StructureFloor(0, 64, 68, 0,
+        StructureFloor floor = TestStructureFloors.create(0, 64, 68, 0,
                 BuildingFloorRegion.fromFootprint(64, Set.of(
                         new BlockPos(0, 64, 0), connector, new BlockPos(2, 64, 0),
                         new BlockPos(3, 64, 0), new BlockPos(4, 64, 0))),
@@ -195,7 +195,7 @@ class StructureFloorResolutionTest {
     @Test
     void reloadingCurrentSharedConnectorDoesNotInventRoomOwnership() {
         BlockPos connector = new BlockPos(2, 64, 0);
-        StructureFloor floor = new StructureFloor(0, 64, 68, 0,
+        StructureFloor floor = TestStructureFloors.create(0, 64, 68, 0,
                 BuildingFloorRegion.fromFootprint(64, Set.of(
                         new BlockPos(0, 64, 0), new BlockPos(1, 64, 0), connector,
                         new BlockPos(3, 64, 0), new BlockPos(4, 64, 0), new BlockPos(5, 64, 0))),
@@ -219,11 +219,11 @@ class StructureFloorResolutionTest {
 
     @Test
     void exactTransitionCellResolvesLowerFloorUnlessUpperFloorOwnsSameColumn() {
-        StructureFloor lower = new StructureFloor(0, 0, new FloorGeometry(Set.of(
+        StructureFloor lower = TestStructureFloors.create(0, 0, new FloorGeometry(Set.of(
                 new FloorGeometry.Cell(new BlockPos(0, 88, 0), 91),
                 new FloorGeometry.Cell(new BlockPos(1, 88, 0), 91),
                 new FloorGeometry.Cell(new BlockPos(1, 91, 0), 93)), Map.of()));
-        StructureFloor upper = new StructureFloor(1, 1, new FloorGeometry(Set.of(
+        StructureFloor upper = TestStructureFloors.create(1, 1, new FloorGeometry(Set.of(
                 new FloorGeometry.Cell(new BlockPos(0, 91, 0), 94)), Map.of()));
         Structure structure = structure(lower, upper);
 
@@ -238,7 +238,7 @@ class StructureFloorResolutionTest {
     private static StructureFloor floor(int id, int anchorY, int ceilingY) {
         BuildingFloorRegion region = BuildingFloorRegion.fromFootprint(
                 anchorY, Set.of(new BlockPos(0, anchorY, 0)));
-        return new StructureFloor(id, anchorY, ceilingY, id, region);
+        return TestStructureFloors.create(id, anchorY, ceilingY, id, region);
     }
 
     private static FloorGeometry.Cell geometryCell(int x, int y, int z) {

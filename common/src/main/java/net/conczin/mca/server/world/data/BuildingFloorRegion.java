@@ -6,10 +6,13 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /** Compact derived X/Z projection for one semantic Floor band. */
-public record BuildingFloorRegion(int anchorY, int area, List<Component> components) {
+public record BuildingFloorRegion(int anchorY, List<Component> components) {
     public BuildingFloorRegion {
         components = List.copyOf(components);
-        area = components.stream().mapToInt(Component::area).sum();
+    }
+
+    public int area() {
+        return components.stream().mapToInt(Component::area).sum();
     }
 
     public boolean containsHorizontally(int x, int z) {
@@ -24,13 +27,13 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
 
     static BuildingFloorRegion fromFootprint(int anchorY, Collection<BlockPos> footprintCells) {
         if (footprintCells == null || footprintCells.isEmpty()) {
-            return new BuildingFloorRegion(anchorY, 0, List.of());
+            return new BuildingFloorRegion(anchorY, List.of());
         }
         Set<Cell> cells = footprintCells.stream()
                 .map(pos -> new Cell(pos.getX(), pos.getZ()))
                 .collect(Collectors.toCollection(LinkedHashSet::new));
         List<Component> components = splitComponents(cells);
-        return new BuildingFloorRegion(anchorY, 0, components);
+        return new BuildingFloorRegion(anchorY, components);
     }
 
     private static List<Component> splitComponents(Set<Cell> cells) {
@@ -91,22 +94,31 @@ public record BuildingFloorRegion(int anchorY, int area, List<Component> compone
     private record Cell(int x, int z) {
     }
 
-    public record Component(int minX, int minZ, int maxX, int maxZ, int area, List<Span> spans) {
+    public record Component(List<Span> spans) {
         public Component {
             spans = spans == null ? List.of() : spans.stream()
                     .sorted(Comparator.comparingInt(Span::z).thenComparingInt(Span::minX))
                     .toList();
-            if (!spans.isEmpty()) {
-                minX = spans.stream().mapToInt(Span::minX).min().orElse(0);
-                minZ = spans.stream().mapToInt(Span::z).min().orElse(0);
-                maxX = spans.stream().mapToInt(Span::maxX).max().orElse(0);
-                maxZ = spans.stream().mapToInt(Span::z).max().orElse(0);
-                area = spans.stream().mapToInt(span -> span.maxX() - span.minX() + 1).sum();
-            }
         }
 
-        private Component(List<Span> spans) {
-            this(0, 0, 0, 0, 0, spans);
+        public int minX() {
+            return spans.stream().mapToInt(Span::minX).min().orElse(0);
+        }
+
+        public int minZ() {
+            return spans.stream().mapToInt(Span::z).min().orElse(0);
+        }
+
+        public int maxX() {
+            return spans.stream().mapToInt(Span::maxX).max().orElse(0);
+        }
+
+        public int maxZ() {
+            return spans.stream().mapToInt(Span::z).max().orElse(0);
+        }
+
+        public int area() {
+            return spans.stream().mapToInt(span -> span.maxX() - span.minX() + 1).sum();
         }
 
         public boolean containsHorizontally(int x, int z) {

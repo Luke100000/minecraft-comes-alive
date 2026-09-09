@@ -23,7 +23,7 @@ class VillageBuildingStateSnapshotTest {
     @Test
     void restoreReturnsRoomsStructuresAndLogicalMetadataToSnapshotState() throws Exception {
         Village village = new Village(1, null);
-        StructureFloor floor = new StructureFloor(
+        StructureFloor floor = TestStructureFloors.create(
                 0, 8, 12, 0,
                 BuildingFloorRegion.fromFootprint(8, List.of(
                         new BlockPos(0, 8, 0),

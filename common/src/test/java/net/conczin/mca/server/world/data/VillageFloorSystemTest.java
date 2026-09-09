@@ -239,9 +239,9 @@ class VillageFloorSystemTest {
     void changingMainRoomAlsoMakesItsFloorTheGroundFloor() {
         Village village = new Village(1, null);
         Structure structure = structure(10, 10,
-                new StructureFloor(0, 64, 68, -1, region(64)),
-                new StructureFloor(1, 72, 76, 0, region(72)),
-                new StructureFloor(2, 80, 84, 1, region(80)));
+                TestStructureFloors.create(0, 64, 68, -1, region(64)),
+                TestStructureFloors.create(1, 72, 76, 0, region(72)),
+                TestStructureFloors.create(2, 80, 84, 1, region(80)));
         Building originalMain = room(100, 10, 1, true);
         Building upperRoom = room(101, 10, 2, true);
         registerStructure(village, structure, originalMain);
@@ -280,7 +280,7 @@ class VillageFloorSystemTest {
     void logicalBuildingWithoutRoomsIsDeletedWithItsPersistedStructures() {
         Village village = new Village(1, null);
         Structure structure = structure(10, 10,
-                new StructureFloor(0, 64, 68, 0, region(64)));
+                TestStructureFloors.create(0, 64, 68, 0, region(64)));
         Building main = room(100, 10, 0, true);
         registerStructure(village, structure, main);
 
@@ -294,14 +294,14 @@ class VillageFloorSystemTest {
     @Test
     void floorAttachmentRequiresProvenVerticalConnectionInsteadOfArbitraryHeightGap() {
         Village village = new Village(1, null);
-        StructureFloor existingFloor = new StructureFloor(0, 64, 68, 0, region(64), List.of(
+        StructureFloor existingFloor = TestStructureFloors.create(0, 64, 68, 0, region(64), List.of(
                 new FloorConnector.Marker(new BlockPos(0, 64, 0), FloorConnector.Type.LADDER)));
         Structure structure = structure(10, 10, existingFloor);
         registerStructure(village, structure, room(100, 10, 0, true));
 
-        StructureFloor connectedHighFloor = new StructureFloor(1, 76, 80, 0, region(76), List.of(
+        StructureFloor connectedHighFloor = TestStructureFloors.create(1, 76, 80, 0, region(76), List.of(
                 new FloorConnector.Marker(new BlockPos(0, 76, 0), FloorConnector.Type.LADDER)));
-        StructureFloor nearbyButDisconnected = new StructureFloor(2, 70, 74, 0, region(70));
+        StructureFloor nearbyButDisconnected = TestStructureFloors.create(2, 70, 74, 0, region(70));
         StructureConnector.VerticalConnection connection = new StructureConnector.VerticalConnection(
                 structure, existingFloor);
 
@@ -313,12 +313,12 @@ class VillageFloorSystemTest {
     @Test
     void floorAttachmentRejectsAnOverlappingCopyOfTheRegisteredFloor() {
         Village village = new Village(1, null);
-        StructureFloor existingFloor = new StructureFloor(0, 64, 68, 0, region(64), List.of(
+        StructureFloor existingFloor = TestStructureFloors.create(0, 64, 68, 0, region(64), List.of(
                 new FloorConnector.Marker(new BlockPos(0, 64, 0), FloorConnector.Type.LADDER)));
         Structure structure = structure(10, 10, existingFloor);
         registerStructure(village, structure, room(100, 10, 0, true));
 
-        StructureFloor rescannedSameFloor = new StructureFloor(1, 64, 68, 0, region(64), List.of(
+        StructureFloor rescannedSameFloor = TestStructureFloors.create(1, 64, 68, 0, region(64), List.of(
                 new FloorConnector.Marker(new BlockPos(0, 64, 0), FloorConnector.Type.LADDER)));
 
         StructureConnector.VerticalConnection falseConnection = new StructureConnector.VerticalConnection(
@@ -331,12 +331,12 @@ class VillageFloorSystemTest {
     @Test
     void floorAttachmentAcceptsDistinctBandWhenLegacyCeilingOverlaps() {
         Village village = new Village(1, null);
-        StructureFloor staleLower = new StructureFloor(0, 88, 93, 0, region(88), List.of(
+        StructureFloor staleLower = TestStructureFloors.create(0, 88, 93, 0, region(88), List.of(
                 new FloorConnector.Marker(new BlockPos(0, 88, 0), FloorConnector.Type.LADDER)));
         Structure structure = structure(10, 10, staleLower);
         registerStructure(village, structure, room(100, 10, 0, true));
 
-        StructureFloor upper = new StructureFloor(1, 91, 94, 0, region(91), List.of(
+        StructureFloor upper = TestStructureFloors.create(1, 91, 94, 0, region(91), List.of(
                 new FloorConnector.Marker(new BlockPos(0, 91, 0), FloorConnector.Type.LADDER)));
         StructureConnector.VerticalConnection connection = new StructureConnector.VerticalConnection(
                 structure, staleLower);
@@ -348,10 +348,10 @@ class VillageFloorSystemTest {
     @Test
     void walkableStoreyEvidenceCanProveStairFloorAttachment() {
         Village village = new Village(1, null);
-        StructureFloor lower = new StructureFloor(0, 88, 91, 0, region(88));
+        StructureFloor lower = TestStructureFloors.create(0, 88, 91, 0, region(88));
         registerStructure(village, structure(10, 10, lower), room(100, 10, 0, true));
 
-        StructureFloor upper = new StructureFloor(1, 91, 94, 0, region(91));
+        StructureFloor upper = TestStructureFloors.create(1, 91, 94, 0, region(91));
         List<FloorGeometry> connectedFloors = List.of(
                 scannedFloor(region(88)),
                 scannedFloor(region(91)));
@@ -364,9 +364,9 @@ class VillageFloorSystemTest {
     void logicalRefreshDoesNotRewritePhysicalCeilingsAcrossSeparateStructures() {
         Village village = new Village(1, null);
         Structure lower = structure(10, 10,
-                new StructureFloor(0, 88, 93, 0, region(88)));
+                TestStructureFloors.create(0, 88, 93, 0, region(88)));
         Structure upper = structure(11, 10,
-                new StructureFloor(0, 91, 94, 0, region(91)));
+                TestStructureFloors.create(0, 91, 94, 0, region(91)));
         registerStructure(village, lower, room(100, 10, 0, true));
         registerStructure(village, upper, room(101, 11, 0, true));
 
@@ -384,13 +384,13 @@ class VillageFloorSystemTest {
     void duplicateCheckUsesSemanticBandInsteadOfLegacyCeilingVolume() {
         Village village = new Village(1, null);
         Structure staleLower = structure(10, 10,
-                new StructureFloor(0, 88, 93, 0, region(88)));
+                TestStructureFloors.create(0, 88, 93, 0, region(88)));
         registerStructure(village, staleLower, room(100, 10, 0, true));
 
         Structure upper = structure(-1, 10,
-                new StructureFloor(0, 91, 94, 0, region(91)));
+                TestStructureFloors.create(0, 91, 94, 0, region(91)));
         Structure sameBand = structure(-1, 10,
-                new StructureFloor(0, 90, 94, 0, region(90)));
+                TestStructureFloors.create(0, 90, 94, 0, region(90)));
 
         assertFalse(village.hasRegisteredFloorOverlap(upper));
         assertTrue(village.hasRegisteredFloorOverlap(sameBand));
@@ -399,15 +399,15 @@ class VillageFloorSystemTest {
     @Test
     void floorAttachmentRejectsExistingGroundFloorEvenWhenBasementWouldAcceptIt() {
         Village village = new Village(1, null);
-        StructureFloor groundFloor = new StructureFloor(0, 64, 68, 0, region(64), List.of(
+        StructureFloor groundFloor = TestStructureFloors.create(0, 64, 68, 0, region(64), List.of(
                 new FloorConnector.Marker(new BlockPos(0, 64, 0), FloorConnector.Type.LADDER)));
-        StructureFloor basementFloor = new StructureFloor(0, 60, 64, -1, region(60), List.of(
+        StructureFloor basementFloor = TestStructureFloors.create(0, 60, 64, -1, region(60), List.of(
                 new FloorConnector.Marker(new BlockPos(0, 60, 0), FloorConnector.Type.LADDER)));
         registerStructure(village, structure(10, 10, groundFloor), room(100, 10, 0, true));
         registerStructure(village, structure(11, 10, basementFloor), room(101, 11, 0, true));
         village.refreshLogicalBuildings();
 
-        StructureFloor rescannedGroundFloor = new StructureFloor(1, 64, 68, 0, region(64), List.of(
+        StructureFloor rescannedGroundFloor = TestStructureFloors.create(1, 64, 68, 0, region(64), List.of(
                 new FloorConnector.Marker(new BlockPos(0, 64, 0), FloorConnector.Type.LADDER)));
 
         StructureConnector.VerticalConnection falseConnection = new StructureConnector.VerticalConnection(
@@ -423,7 +423,7 @@ class VillageFloorSystemTest {
         BuildingFloorRegion legacyRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
                 new BlockPos(10, 64, 10)));
         Structure structure = structure(10, 10,
-                new StructureFloor(0, 64, 68, 0, legacyRegion));
+                TestStructureFloors.create(0, 64, 68, 0, legacyRegion));
         Building room = room(100, 10, 0, true);
         room.setGeometry(new BlockPos(10, 64, 10), new BlockPos(10, 67, 10), legacyRegion);
         registerStructure(village, structure, room);
@@ -434,7 +434,7 @@ class VillageFloorSystemTest {
     @Test
     void physicalRoomLookupDoesNotUseInteractionSupportBand() {
         Village village = new Village(1, null);
-        StructureFloor floor = new StructureFloor(0, 64, 68, 0, region(64));
+        StructureFloor floor = TestStructureFloors.create(0, 64, 68, 0, region(64));
         Structure structure = structure(10, 10, floor);
         Building room = room(100, 10, 0, true);
         room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 1), region(64));
@@ -468,13 +468,13 @@ class VillageFloorSystemTest {
     void replacingOneFloorGeometryDoesNotRenumberNeighboringFloors() {
         Village village = new Village(1, null);
         Structure structure = structure(10, 77,
-                new StructureFloor(3, 64, 70, -1, region(64)),
-                new StructureFloor(7, 74, 80, 0, region(74)),
-                new StructureFloor(9, 84, 90, 1, region(84)));
+                TestStructureFloors.create(3, 64, 70, -1, region(64)),
+                TestStructureFloors.create(7, 74, 80, 0, region(74)),
+                TestStructureFloors.create(9, 84, 90, 1, region(84)));
         registerStructure(village, structure, room(100, 10, 7, true));
 
         assertTrue(structure.replaceFloorGeometry(7,
-                new StructureFloor(0, 75, 82, region(75))));
+                TestStructureFloors.create(0, 75, 82, region(75))));
 
         assertEquals(-1, structure.getFloor(3).orElseThrow().floorNumber());
         assertEquals(0, structure.getFloor(7).orElseThrow().floorNumber());
@@ -486,11 +486,11 @@ class VillageFloorSystemTest {
     void onlyOutermostEmptyUpperAndBasementFloorsAreRemovable() {
         Village village = new Village(1, null);
         Structure structure = structure(10, 10,
-                new StructureFloor(1, 64, 68, -2, region(64)),
-                new StructureFloor(2, 68, 72, -1, region(68)),
-                new StructureFloor(3, 72, 76, 0, region(72)),
-                new StructureFloor(4, 76, 80, 1, region(76)),
-                new StructureFloor(5, 80, 84, 2, region(80)));
+                TestStructureFloors.create(1, 64, 68, -2, region(64)),
+                TestStructureFloors.create(2, 68, 72, -1, region(68)),
+                TestStructureFloors.create(3, 72, 76, 0, region(72)),
+                TestStructureFloors.create(4, 76, 80, 1, region(76)),
+                TestStructureFloors.create(5, 80, 84, 2, region(80)));
         Building main = room(100, 10, 3, true);
         registerStructure(village, structure, main);
         village.refreshLogicalBuildings();
@@ -516,11 +516,11 @@ class VillageFloorSystemTest {
     void removingFloorRemovesEveryStructureSliceInTheLogicalFloor() {
         Village village = new Village(1, null);
         Structure first = structure(10, 10,
-                new StructureFloor(0, 60, 64, -1, region(60)),
-                new StructureFloor(1, 64, 68, 0, region(64)));
+                TestStructureFloors.create(0, 60, 64, -1, region(60)),
+                TestStructureFloors.create(1, 64, 68, 0, region(64)));
         Structure second = structure(11, 10,
-                new StructureFloor(0, 60, 64, -1, region(60)),
-                new StructureFloor(1, 64, 68, 0, region(64)));
+                TestStructureFloors.create(0, 60, 64, -1, region(60)),
+                TestStructureFloors.create(1, 64, 68, 0, region(64)));
         registerStructure(village, first, room(100, 10, 1, true));
         registerStructure(village, second, room(101, 11, 1, true));
         village.refreshLogicalBuildings();
@@ -538,11 +538,11 @@ class VillageFloorSystemTest {
     void removingSelectedOrdinalOnlyAffectsPlayersLogicalBuilding() {
         Village village = new Village(1, null);
         Structure first = structure(10, 10,
-                new StructureFloor(0, 64, 68, 0, region(64)),
-                new StructureFloor(1, 72, 76, 1, region(72)));
+                TestStructureFloors.create(0, 64, 68, 0, region(64)),
+                TestStructureFloors.create(1, 72, 76, 1, region(72)));
         Structure second = structure(20, 20,
-                new StructureFloor(0, 64, 68, 0, region(64)),
-                new StructureFloor(1, 72, 76, 1, region(72)));
+                TestStructureFloors.create(0, 64, 68, 0, region(64)),
+                TestStructureFloors.create(1, 72, 76, 1, region(72)));
         registerStructure(village, first, room(100, 10, 0, true));
         registerStructure(village, second, room(200, 20, 0, true));
         village.refreshLogicalBuildings();
@@ -557,8 +557,8 @@ class VillageFloorSystemTest {
     void removingLastRoomFromTerminalFloorKeepsFloorAvailableForExplicitRemoval() {
         Village village = new Village(1, null);
         Structure structure = structure(10, 10,
-                new StructureFloor(0, 64, 68, 0, region(64)),
-                new StructureFloor(1, 72, 76, 1, region(72)));
+                TestStructureFloors.create(0, 64, 68, 0, region(64)),
+                TestStructureFloors.create(1, 72, 76, 1, region(72)));
         Building main = room(100, 10, 0, true);
         Building upperRoom = room(101, 10, 1, true);
         registerStructure(village, structure, main);
@@ -578,9 +578,9 @@ class VillageFloorSystemTest {
     void removingLastRoomFromMiddleFloorKeepsTheFloor() {
         Village village = new Village(1, null);
         Structure structure = structure(10, 10,
-                new StructureFloor(0, 64, 68, 0, region(64)),
-                new StructureFloor(1, 72, 76, 1, region(72)),
-                new StructureFloor(2, 80, 84, 2, region(80)));
+                TestStructureFloors.create(0, 64, 68, 0, region(64)),
+                TestStructureFloors.create(1, 72, 76, 1, region(72)),
+                TestStructureFloors.create(2, 80, 84, 2, region(80)));
         Building main = room(100, 10, 0, true);
         Building middleRoom = room(101, 10, 1, true);
         registerStructure(village, structure, main);
@@ -607,7 +607,7 @@ class VillageFloorSystemTest {
         Village village = new Village(1, null);
         BuildingFloorRegion oldRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));
-        StructureFloor oldFloor = new StructureFloor(0, 64, 68, 0, oldRegion);
+        StructureFloor oldFloor = TestStructureFloors.create(0, 64, 68, 0, oldRegion);
         Structure current = structure(10, 10, oldFloor);
         Building main = room(100, 10, 0, true);
         main.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 0), oldRegion);
@@ -618,7 +618,7 @@ class VillageFloorSystemTest {
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
         Structure refreshed = current.copy();
         assertTrue(refreshed.replaceFloorGeometry(0,
-                new StructureFloor(0, 64, 68, 0, freshRegion)));
+                TestStructureFloors.create(0, 64, 68, 0, freshRegion)));
 
         Building added = room(101, 10, 0, true);
         BuildingFloorRegion addedRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
@@ -636,7 +636,7 @@ class VillageFloorSystemTest {
         ThrowOnceCalculateVillage village = new ThrowOnceCalculateVillage();
         BuildingFloorRegion oldRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));
-        Structure current = structure(10, 10, new StructureFloor(0, 64, 68, 0, oldRegion));
+        Structure current = structure(10, 10, TestStructureFloors.create(0, 64, 68, 0, oldRegion));
         Building main = room(100, 10, 0, true);
         main.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 0), oldRegion);
         registerStructure(village, current, main);
@@ -646,7 +646,7 @@ class VillageFloorSystemTest {
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
         Structure refreshed = current.copy();
         assertTrue(refreshed.replaceFloorGeometry(0,
-                new StructureFloor(0, 64, 68, 0, freshRegion)));
+                TestStructureFloors.create(0, 64, 68, 0, freshRegion)));
         Building added = room(101, 10, 0, true);
         BuildingFloorRegion addedRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
@@ -726,7 +726,7 @@ class VillageFloorSystemTest {
     }
 
     private static StructureFloor floor(int id, int y) {
-        return new StructureFloor(id, y, y + 4, region(y));
+        return TestStructureFloors.create(id, y, y + 4, region(y));
     }
 
     private static BuildingFloorRegion region(int y) {

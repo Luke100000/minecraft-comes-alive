@@ -3,8 +3,10 @@ package net.conczin.mca.server.world.data;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /** Pure planning over one already-observed fresh Floor. */
 final class RoomScanPlanner {
@@ -47,12 +49,11 @@ final class RoomScanPlanner {
                                   StructureScanner.FloorObservation observation) {
         if (village == null || observation == null) return RoomScanPlan.addBuilding(source);
 
-        StructureExpansionPolicy.FloorTarget expansion = StructureExpansionPolicy.selectSameStoreyTarget(
-                village.getStructures().values(), observation.scan().floor()).orElse(null);
+        FloorTarget expansion = selectSameStoreyTarget(village, observation.scan().floor()).orElse(null);
         if (expansion != null && validExpansion(village, observation, expansion)) {
-            Building existingRoom = StructureExpansionPolicy.registeredRoomForFreshComponent(
-                    expansion, observation.scan().floor(), observation.scan().transitions(), source,
-                    village.getRooms().toList()).orElse(null);
+            Building existingRoom = registeredRoomForFreshComponent(
+                    village, expansion, observation.scan().floor(), observation.scan().transitions(), source)
+                    .orElse(null);
             return existingRoom != null
                     ? RoomScanPlan.updateRoom(existingRoom, source)
                     : RoomScanPlan.addRoom(expansion.structureId(), expansion.floorId(), source);
@@ -80,9 +81,53 @@ final class RoomScanPlanner {
 
     private static boolean validExpansion(Village village,
                                           StructureScanner.FloorObservation observation,
-                                          StructureExpansionPolicy.FloorTarget target) {
+                                          FloorTarget target) {
         return StructureScanner.validateObservation(
                 observation, village.getStructures().values(), target.structureId(), -1)
                 == Building.validationResult.SUCCESS;
+    }
+
+    private static Optional<FloorTarget> selectSameStoreyTarget(Village village, FloorGeometry freshFloor) {
+        if (village == null || freshFloor == null) return Optional.empty();
+        List<FloorTarget> matches = village.getStructures().values().stream()
+                .flatMap(structure -> structure.getFloors().stream()
+                        .filter(floor -> StructureFloor.sameSemanticBand(freshFloor.anchorY(), floor.anchorY()))
+                        .filter(floor -> freshFloor.footprintIntersectionArea(floor.geometry()) > 0)
+                        .map(floor -> new FloorTarget(structure.getId(), floor.id())))
+                .limit(2)
+                .toList();
+        return matches.size() == 1 ? Optional.of(matches.getFirst()) : Optional.empty();
+    }
+
+    private static Optional<Building> registeredRoomForFreshComponent(
+            Village village,
+            FloorTarget target,
+            FloorGeometry floor,
+            Collection<SelectedFloorScanner.Transition> transitions,
+            BlockPos source) {
+        if (village == null || target == null || floor == null || source == null) return Optional.empty();
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(floor, transitions);
+        RoomPartitioner.Component selected = RoomPartitioner.select(source, floor, components);
+        if (selected == null) return Optional.empty();
+
+        Set<BlockPos> identityCells = selected.floorCells().stream()
+                .filter(cell -> {
+                    FloorConnector.Type connector = floor.connectorTypesByCell().get(cell);
+                    return connector == null || !connector.roomBoundary();
+                })
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        if (identityCells.isEmpty()) return Optional.empty();
+
+        List<Building> matches = village.getRooms()
+                .filter(Building::isFunctionalRoom)
+                .filter(room -> room.getStructureId() == target.structureId())
+                .filter(room -> room.getFloorId() == target.floorId())
+                .filter(room -> identityCells.stream().anyMatch(room.getFloorCells()::contains))
+                .limit(2)
+                .toList();
+        return matches.size() == 1 ? Optional.of(matches.getFirst()) : Optional.empty();
+    }
+
+    private record FloorTarget(int structureId, int floorId) {
     }
 }

@@ -140,7 +140,7 @@ class RoomTypeResolverTest {
     }
 
     private static StructureFloor floor(int anchorY, int ceilingY) {
-        return new StructureFloor(0, anchorY, ceilingY,
+        return TestStructureFloors.create(0, anchorY, ceilingY,
                 BuildingFloorRegion.fromFootprint(anchorY, Set.of(new BlockPos(0, anchorY, 0))));
     }
 

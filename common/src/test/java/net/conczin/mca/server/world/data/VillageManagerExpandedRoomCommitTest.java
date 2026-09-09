@@ -25,14 +25,14 @@ class VillageManagerExpandedRoomCommitTest {
         Village village = new Village(1, null);
         BuildingFloorRegion oldRegion = region(64, 0, 1);
         Structure current = new Structure(10, BlockPos.ZERO, List.of(
-                new StructureFloor(0, 64, 68, 0, oldRegion)));
+                TestStructureFloors.create(0, 64, 68, 0, oldRegion)));
         Building main = room(100, 10, 0, oldRegion);
         village.registerStructure(current, main);
 
         BuildingFloorRegion freshRegion = region(64, 0, 3);
         Structure refreshed = current.copy();
         assertTrue(refreshed.replaceFloorGeometry(0,
-                new StructureFloor(0, 64, 68, 0, freshRegion)));
+                TestStructureFloors.create(0, 64, 68, 0, freshRegion)));
 
         BuildingFloorRegion newRoomRegion = region(64, 2, 3);
         Building added = room(-1, 10, 0, newRoomRegion);
@@ -58,7 +58,7 @@ class VillageManagerExpandedRoomCommitTest {
         Village village = new Village(1, null);
         BuildingFloorRegion oldRegion = region(64, 0, 1);
         Structure current = new Structure(10, BlockPos.ZERO, List.of(
-                new StructureFloor(0, 64, 68, 0, oldRegion)));
+                TestStructureFloors.create(0, 64, 68, 0, oldRegion)));
         Building main = room(100, 10, 0, oldRegion);
         village.registerStructure(current, main);
 
@@ -68,7 +68,7 @@ class VillageManagerExpandedRoomCommitTest {
 
         Structure refreshed = current.copy();
         assertTrue(refreshed.replaceFloorGeometry(0,
-                new StructureFloor(0, 64, 68, 0, region(64, 0, 3))));
+                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 3))));
         Building invalidReplacement = room(100, 10, 0,
                 BuildingFloorRegion.fromFootprint(64, Set.of(
                         new BlockPos(0, 64, 0), new BlockPos(4, 64, 0))));

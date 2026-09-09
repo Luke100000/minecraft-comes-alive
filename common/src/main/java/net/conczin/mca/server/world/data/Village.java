@@ -35,6 +35,11 @@ public class Village implements Iterable<Building> {
     public static final int MERGE_MARGIN = 64;
     private static final int MOVE_IN_COOLDOWN = 1200;
     private static final long BED_SYNC_TIME = 200;
+    private static final Comparator<AttachmentTarget> ATTACHMENT_TARGET_ORDER = Comparator
+            .comparingInt(AttachmentTarget::gap)
+            .thenComparingInt(AttachmentTarget::buildingId)
+            .thenComparingInt(AttachmentTarget::structureId)
+            .thenComparingInt(AttachmentTarget::floorId);
     public final List<ItemStack> storageBuffer = new LinkedList<>();
 
     private final ServerLevel world;
@@ -666,23 +671,83 @@ public class Village implements Iterable<Building> {
             Level level,
             StructureFloor candidate,
             Collection<FloorGeometry> connectedFloors) {
-        return StructureExpansionPolicy.selectAttachmentTarget(candidate,
+        return selectAttachmentTarget(candidate,
                 StructureConnector.verticalConnections(level, candidate, structures.values()),
-                connectedFloors, structures);
+                connectedFloors);
     }
 
     Optional<AttachmentTarget> selectAttachmentTarget(
             StructureFloor candidate,
             Collection<StructureConnector.VerticalConnection> connections) {
-        return StructureExpansionPolicy.selectAttachmentTarget(candidate, connections, List.of(), structures);
+        return selectAttachmentTarget(candidate, connections, List.of());
     }
 
     Optional<AttachmentTarget> selectAttachmentTarget(
             StructureFloor candidate,
             Collection<StructureConnector.VerticalConnection> verticalConnections,
             Collection<FloorGeometry> connectedFloors) {
-        return StructureExpansionPolicy.selectAttachmentTarget(
-                candidate, verticalConnections, connectedFloors, structures);
+        if (candidate == null) return Optional.empty();
+        Set<StructureConnector.VerticalConnection> connections = attachmentConnections(
+                candidate, verticalConnections, connectedFloors);
+        if (hasUnprovenAttachmentOverlap(candidate, connections)) return Optional.empty();
+
+        Map<Integer, AttachmentTarget> nearestByBuilding = new HashMap<>();
+        for (StructureConnector.VerticalConnection connection : connections) {
+            Structure structure = connection.structure();
+            StructureFloor floor = connection.floor();
+            if (structures.get(structure.getId()) != structure) continue;
+            int gap = candidate.attachmentGapTo(floor);
+            if (gap < 0) continue;
+            AttachmentTarget target = new AttachmentTarget(
+                    structure.getLogicalBuildingId(), structure.getId(), floor.id(), gap);
+            nearestByBuilding.merge(target.buildingId(), target,
+                    (first, second) -> ATTACHMENT_TARGET_ORDER.compare(first, second) <= 0 ? first : second);
+        }
+
+        AttachmentTarget nearest = nearestByBuilding.values().stream()
+                .min(ATTACHMENT_TARGET_ORDER).orElse(null);
+        if (nearest == null) return Optional.empty();
+        return nearestByBuilding.values().stream()
+                .anyMatch(target -> target.buildingId() != nearest.buildingId()
+                        && target.gap() == nearest.gap())
+                ? Optional.empty() : Optional.of(nearest);
+    }
+
+    private Set<StructureConnector.VerticalConnection> attachmentConnections(
+            StructureFloor candidate,
+            Collection<StructureConnector.VerticalConnection> verticalConnections,
+            Collection<FloorGeometry> connectedFloors) {
+        LinkedHashSet<StructureConnector.VerticalConnection> connections = new LinkedHashSet<>();
+        if (verticalConnections != null) connections.addAll(verticalConnections);
+        if (connectedFloors == null) return Set.copyOf(connections);
+
+        for (FloorGeometry connected : connectedFloors) {
+            if (StructureFloor.sameSemanticBand(candidate.anchorY(), connected.anchorY())) continue;
+            for (Structure structure : structures.values()) {
+                for (StructureFloor floor : structure.getFloors()) {
+                    if (StructureFloor.sameSemanticBand(connected.anchorY(), floor.anchorY())
+                            && connected.footprintIntersectionArea(floor.geometry()) > 0) {
+                        connections.add(new StructureConnector.VerticalConnection(structure, floor));
+                    }
+                }
+            }
+        }
+        return Set.copyOf(connections);
+    }
+
+    private boolean hasUnprovenAttachmentOverlap(
+            StructureFloor candidate,
+            Set<StructureConnector.VerticalConnection> connections) {
+        for (Structure structure : structures.values()) {
+            for (StructureFloor floor : structure.getFloors()) {
+                if (!candidate.overlapsFootprint(floor) || candidate.verticalGapTo(floor) >= 0) continue;
+                if (candidate.sameSemanticBand(floor)
+                        || !connections.contains(new StructureConnector.VerticalConnection(structure, floor))) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     Optional<Structure> getInteractionStructureAt(BlockPos pos) {

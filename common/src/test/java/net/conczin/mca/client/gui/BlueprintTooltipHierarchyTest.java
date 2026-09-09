@@ -216,7 +216,7 @@ class BlueprintTooltipHierarchyTest {
     }
 
     private static StructureFloor floor(int id, int anchorY, int ceilingY, int floorNumber) throws Exception {
-        return new StructureFloor(id, anchorY, ceilingY, floorNumber,
+        return net.conczin.mca.server.world.data.TestStructureFloors.create(id, anchorY, ceilingY, floorNumber,
                 region(anchorY));
     }
 

@@ -17,7 +17,7 @@ class StructureFloorTest {
     void connectorMarkersRoundTripAndRemainOptionalForOldSaves() {
         FloorConnector.Marker marker = new FloorConnector.Marker(
                 new BlockPos(4, 64, 7), FloorConnector.Type.TRAPDOOR);
-        StructureFloor floor = new StructureFloor(3, 64, 70, 0,
+        StructureFloor floor = TestStructureFloors.create(3, 64, 70, 0,
                 BuildingFloorRegion.fromFootprint(64, Set.of(new BlockPos(4, 64, 7))), List.of(marker));
 
         CompoundTag saved = floor.save();
@@ -32,7 +32,7 @@ class StructureFloorTest {
         BlockPos connector = new BlockPos(1, 64, 0);
         FloorConnector.Marker marker = new FloorConnector.Marker(
                 connector, FloorConnector.Type.DOOR);
-        StructureFloor legacy = new StructureFloor(3, 64, 70, 0,
+        StructureFloor legacy = TestStructureFloors.create(3, 64, 70, 0,
                 BuildingFloorRegion.fromFootprint(64, Set.of(
                         new BlockPos(0, 64, 0), new BlockPos(2, 64, 0))));
         CompoundTag saved = legacy.save();
@@ -48,7 +48,7 @@ class StructureFloorTest {
 
     @Test
     void loadedFloorNumberIsDerivedRatherThanRestoredFromPersistence() {
-        StructureFloor floor = new StructureFloor(3, 64, 70, 0,
+        StructureFloor floor = TestStructureFloors.create(3, 64, 70, 0,
                 BuildingFloorRegion.fromFootprint(64, Set.of(new BlockPos(0, 64, 0))));
         CompoundTag saved = floor.save();
         saved.putInt("floorNumber", 7);
@@ -59,13 +59,13 @@ class StructureFloorTest {
     @Test
     void canonicalFloorRequiresGeometry() {
         assertThrows(NullPointerException.class,
-                () -> new StructureFloor(3, 0, null));
+                () -> TestStructureFloors.create(3, 0, null));
     }
 
     @Test
     void canonicalFloorRequiresNonEmptyGeometry() {
         assertThrows(IllegalArgumentException.class,
-                () -> new StructureFloor(3, 0, new FloorGeometry(Set.of(), java.util.Map.of())));
+                () -> TestStructureFloors.create(3, 0, new FloorGeometry(Set.of(), java.util.Map.of())));
     }
 
     @Test
@@ -82,9 +82,9 @@ class StructureFloorTest {
                 88, Set.of(new BlockPos(0, 88, 0)));
         BuildingFloorRegion upperRegion = BuildingFloorRegion.fromFootprint(
                 91, Set.of(new BlockPos(0, 91, 0)));
-        StructureFloor staleLower = new StructureFloor(0, 88, 93, 0, lowerRegion);
-        StructureFloor upper = new StructureFloor(0, 91, 94, 1, upperRegion);
-        StructureFloor sameBand = new StructureFloor(0, 90, 94, 0,
+        StructureFloor staleLower = TestStructureFloors.create(0, 88, 93, 0, lowerRegion);
+        StructureFloor upper = TestStructureFloors.create(0, 91, 94, 1, upperRegion);
+        StructureFloor sameBand = TestStructureFloors.create(0, 90, 94, 0,
                 BuildingFloorRegion.fromFootprint(90, Set.of(new BlockPos(0, 90, 0))));
 
         assertEquals(0, upper.attachmentGapTo(staleLower));
@@ -95,7 +95,7 @@ class StructureFloorTest {
     void stackedExactCellsRoundTripWithoutCeilingBoundarySideChannel() {
         FloorGeometry.Cell lower = new FloorGeometry.Cell(new BlockPos(1, 88, 0), 90);
         FloorGeometry.Cell upperTransition = new FloorGeometry.Cell(new BlockPos(1, 91, 0), 93);
-        StructureFloor floor = new StructureFloor(0, 0,
+        StructureFloor floor = TestStructureFloors.create(0, 0,
                 new FloorGeometry(Set.of(lower, upperTransition), java.util.Map.of()));
 
         CompoundTag saved = floor.save();
@@ -107,9 +107,9 @@ class StructureFloorTest {
 
     @Test
     void structureDerivesNonTopSemanticCeilingFromNextFloorAnchor() {
-        StructureFloor lower = new StructureFloor(0, 0, new FloorGeometry(Set.of(
+        StructureFloor lower = TestStructureFloors.create(0, 0, new FloorGeometry(Set.of(
                 new FloorGeometry.Cell(new BlockPos(0, 88, 0), 94)), java.util.Map.of()));
-        StructureFloor upper = new StructureFloor(1, 1, new FloorGeometry(Set.of(
+        StructureFloor upper = TestStructureFloors.create(1, 1, new FloorGeometry(Set.of(
                 new FloorGeometry.Cell(new BlockPos(0, 91, 0), 95)), java.util.Map.of()));
         Structure structure = new Structure(10, BlockPos.ZERO, List.of(lower, upper));
 
