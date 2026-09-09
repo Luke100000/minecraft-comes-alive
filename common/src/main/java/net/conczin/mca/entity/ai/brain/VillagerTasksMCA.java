@@ -221,7 +221,7 @@ public class VillagerTasksMCA {
         return ImmutableList.of(
                 Pair.of(0, new Swim(0.8F)),
                 Pair.of(0, new SmarterOpenDoorsTask()),
-                Pair.of(0, new LookAtTargetSink(45, 90)),
+                Pair.of(0, new ConditionalTask<>(new LookAtTargetSink(45, 90), villager -> !isInDanger(villager))),
                 Pair.of(0, WakeUp.create()),
                 Pair.of(0, new DeliverMessageTask()),
                 Pair.of(1, new WanderOrTeleportToTargetTask()),
