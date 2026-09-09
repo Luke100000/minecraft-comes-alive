@@ -93,7 +93,7 @@ public class Genetics implements Iterable<Genetics.Gene> {
         }
 
         EyeCatalog eyes = EyeCatalog.getInstance();
-        entity.setEyeTexture(eyes == null ? EyeStyles.DEFAULT : eyes.pick(EyeStyles.DEFAULT_VARIANT, getGender()));
+        entity.setEyeTexture(eyes == null ? EyeStyles.DEFAULT : eyes.pick(getGender()));
 
         // size is more centered
         setGene(SIZE, centeredRandom());

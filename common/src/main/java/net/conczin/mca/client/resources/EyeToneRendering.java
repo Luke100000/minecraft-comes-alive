@@ -16,14 +16,6 @@ public final class EyeToneRendering {
         );
     }
 
-    public static int legacyColor(int selectedArgb, float brightness) {
-        return applyBrightness(selectedArgb, brightness);
-    }
-
-    public static int modernMaskPixel(EyeTintPixel.Mask mask, int toneArgb) {
-        return multiplyPixel(neutralMaskPixel(mask), toneArgb);
-    }
-
     public static int neutralMaskPixel(EyeTintPixel.Mask mask) {
         int alpha = 255;
         int intensity = mask.intensity();

@@ -5,7 +5,6 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.resources.ClientAppearanceCatalog;
-import net.conczin.mca.client.resources.EyeTintPixel;
 import net.conczin.mca.client.resources.EyeTextureLayers;
 import net.conczin.mca.client.resources.EyeToneRendering;
 import net.conczin.mca.entity.VillagerLike;
@@ -34,11 +33,9 @@ import java.util.stream.Stream;
 public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> extends VillagerLayer<T, M> {
     private static final int OPAQUE_WHITE = 0xFFFFFFFF;
     private static final Map<ResourceLocation, EyeLayerTextures> EYE_TEXTURE_CACHE = new ConcurrentHashMap<>();
-    private final String variant;
 
-    public FaceLayer(RenderLayerParent<T, M> renderer, M model, String variant) {
+    public FaceLayer(RenderLayerParent<T, M> renderer, M model) {
         super(renderer, model);
-        this.variant = variant;
     }
 
     @Override
@@ -68,11 +65,7 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
         if (canUse(skin)) {
             EyeDefinition definition = ClientAppearanceCatalog.eyeDefinition(skin);
             EyeLayerTextures layers = getOrGenerateEyeLayers(skin, definition);
-            if (layers.modern()) {
-                renderModern(transform, provider, light, villager, tickDelta, visible, glowing, overlay, definition, layers);
-            } else {
-                renderLegacy(transform, provider, light, villager, tickDelta, visible, glowing, overlay, layers);
-            }
+            renderEyes(transform, provider, light, villager, tickDelta, visible, glowing, overlay, definition, layers);
         }
 
         ResourceLocation extraOverlay = getOverlay(villager);
@@ -81,19 +74,7 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
         }
     }
 
-    private void renderLegacy(PoseStack transform, MultiBufferSource provider, int light, T villager, float tickDelta, boolean visible, boolean glowing, int overlay, EyeLayerTextures layers) {
-        renderEyeModel(transform, provider, light, OPAQUE_WHITE, layers.fixed(), overlay, visible, glowing);
-        renderEyeModel(transform, provider, light, EyeTextureLayers.DETAILS_TINT, layers.details(), overlay, visible, glowing);
-        boolean heterochromia = getVillager(villager).getTraits().hasTrait(Traits.HETEROCHROMIA);
-        if (heterochromia) {
-            renderEyeModel(transform, provider, light, legacyEyeColor(villager, tickDelta, true), layers.primary(EyeTextureLayers.Side.LEFT), overlay, visible, glowing);
-            renderEyeModel(transform, provider, light, legacyEyeColor(villager, tickDelta, false), layers.primary(EyeTextureLayers.Side.RIGHT), overlay, visible, glowing);
-        } else {
-            renderEyeModel(transform, provider, light, legacyEyeColor(villager, tickDelta, false), layers.primary(EyeTextureLayers.Side.FULL), overlay, visible, glowing);
-        }
-    }
-
-    private void renderModern(PoseStack transform, MultiBufferSource provider, int light, T villager, float tickDelta, boolean visible, boolean glowing, int overlay, EyeDefinition definition, EyeLayerTextures layers) {
+    private void renderEyes(PoseStack transform, MultiBufferSource provider, int light, T villager, float tickDelta, boolean visible, boolean glowing, int overlay, EyeDefinition definition, EyeLayerTextures layers) {
         boolean heterochromia = getVillager(villager).getTraits().hasTrait(Traits.HETEROCHROMIA);
         if (heterochromia) {
             renderTones(transform, provider, light, visible, glowing, overlay, layers, tones(villager, tickDelta, true, definition), EyeTextureLayers.Side.LEFT);
@@ -119,7 +100,7 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
     @Override
     public ResourceLocation getSkin(T villager) {
         VillagerLike<?> villagerLike = getVillager(villager);
-        return ClientAppearanceCatalog.resolveEye(variant, villagerLike.getEyeTexture());
+        return ClientAppearanceCatalog.resolveEye(villagerLike.getEyeTexture());
     }
 
     private ResourceLocation getBlinkSkin() {
@@ -158,66 +139,38 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
         var resource = Minecraft.getInstance().getResourceManager().getResource(id).orElseThrow(() -> new IllegalStateException("Missing eye texture " + id));
         try (InputStream stream = resource.open(); NativeImage image = NativeImage.read(stream)) {
             EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(image);
-            return definition.fixedColor() || EyeTextureLayers.hasExplicitTintMarker(image)
-                    ? generateModern(id, image, bounds, definition.fixedColor())
-                    : generateLegacy(id, image, bounds);
+            return generateLayers(id, image, bounds);
         }
     }
 
-    private EyeLayerTextures generateModern(ResourceLocation id, NativeImage mask, EyeTextureLayers.Bounds bounds, boolean fixedColor) {
+    private EyeLayerTextures generateLayers(ResourceLocation id, NativeImage source, EyeTextureLayers.Bounds bounds) {
         List<NativeImage> images = new ArrayList<>();
         List<ResourceLocation> registered = new ArrayList<>();
         try {
-            int width = mask.getWidth(), height = mask.getHeight(), splitX = bounds.minX() + bounds.width() / 2;
+            int width = source.getWidth(), height = source.getHeight(), splitX = bounds.minX() + bounds.width() / 2;
             NativeImage fixed = image(images, width, height);
             NativeImage[] full = {image(images, width, height), image(images, width, height), image(images, width, height)};
             NativeImage[] left = {image(images, width, height), image(images, width, height), image(images, width, height)};
             NativeImage[] right = {image(images, width, height), image(images, width, height), image(images, width, height)};
             for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
-                int pixel = mask.getPixelRGBA(x, y), alpha = FastColor.ABGR32.alpha(pixel);
-                if (alpha == 0) {
+                EyeTextureLayers.DecodedPixel decoded = EyeTextureLayers.decodePixel(source.getPixelRGBA(x, y));
+                if (decoded == null) {
                     continue;
                 }
-                if (fixedColor || !EyeTintPixel.isIrisMarker(alpha)) {
-                    fixed.setPixelRGBA(x, y, pixel);
+                if (decoded.kind() == EyeTextureLayers.PixelKind.FIXED) {
+                    fixed.setPixelRGBA(x, y, decoded.pixel());
                     continue;
                 }
-                EyeTintPixel.Mask decoded = EyeTintPixel.decodeMarkedMask(pixel);
-                int tone = decoded.tone().ordinal(), neutral = EyeToneRendering.neutralMaskPixel(decoded);
-                full[tone].setPixelRGBA(x, y, neutral);
-                (x >= splitX ? left[tone] : right[tone]).setPixelRGBA(x, y, neutral);
+                int tone = decoded.tone().ordinal();
+                full[tone].setPixelRGBA(x, y, decoded.pixel());
+                (x >= splitX ? left[tone] : right[tone]).setPixelRGBA(x, y, decoded.pixel());
             }
             ResourceLocation fixedId = registerIfVisible(id, "fixed", EyeTextureLayers.Side.FULL, fixed, images, registered);
-            return new EyeLayerTextures(true,
+            return new EyeLayerTextures(
                     fixedId,
                     registerIfVisible(id, "shadow", EyeTextureLayers.Side.FULL, full[0], images, registered), registerIfVisible(id, "primary", EyeTextureLayers.Side.FULL, full[1], images, registered), registerIfVisible(id, "highlight", EyeTextureLayers.Side.FULL, full[2], images, registered),
                     registerIfVisible(id, "shadow", EyeTextureLayers.Side.LEFT, left[0], images, registered), registerIfVisible(id, "primary", EyeTextureLayers.Side.LEFT, left[1], images, registered), registerIfVisible(id, "highlight", EyeTextureLayers.Side.LEFT, left[2], images, registered),
-                    registerIfVisible(id, "shadow", EyeTextureLayers.Side.RIGHT, right[0], images, registered), registerIfVisible(id, "primary", EyeTextureLayers.Side.RIGHT, right[1], images, registered), registerIfVisible(id, "highlight", EyeTextureLayers.Side.RIGHT, right[2], images, registered), null, null, null, null);
-        } catch (RuntimeException exception) {
-            registered.forEach(Minecraft.getInstance().getTextureManager()::release);
-            throw exception;
-        } finally {
-            images.forEach(NativeImage::close);
-        }
-    }
-
-    private EyeLayerTextures generateLegacy(ResourceLocation id, NativeImage image, EyeTextureLayers.Bounds bounds) {
-        List<NativeImage> images = new ArrayList<>();
-        List<ResourceLocation> registered = new ArrayList<>();
-        try {
-            int width = image.getWidth(), height = image.getHeight(), splitX = bounds.minX() + bounds.width() / 2;
-            NativeImage sclera = image(images, width, height), details = image(images, width, height), full = image(images, width, height), left = image(images, width, height), right = image(images, width, height);
-            for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
-                int pixel = image.getPixelRGBA(x, y); EyeTextureLayers.Layer layer = EyeTextureLayers.layerForPixel(pixel);
-                if (layer == null) continue;
-                switch (layer) {
-                    case SCLERA -> sclera.setPixelRGBA(x, y, pixel);
-                    case DETAILS -> details.setPixelRGBA(x, y, pixel);
-                    case IRIS -> { full.setPixelRGBA(x, y, pixel); (x >= splitX ? left : right).setPixelRGBA(x, y, pixel); }
-                }
-            }
-            return new EyeLayerTextures(false, registerIfVisible(id, "sclera", EyeTextureLayers.Side.FULL, sclera, images, registered), null, null, null, null, null, null, null, null, null,
-                    registerIfVisible(id, "details", EyeTextureLayers.Side.FULL, details, images, registered), registerIfVisible(id, "iris", EyeTextureLayers.Side.FULL, full, images, registered), registerIfVisible(id, "iris", EyeTextureLayers.Side.LEFT, left, images, registered), registerIfVisible(id, "iris", EyeTextureLayers.Side.RIGHT, right, images, registered));
+                    registerIfVisible(id, "shadow", EyeTextureLayers.Side.RIGHT, right[0], images, registered), registerIfVisible(id, "primary", EyeTextureLayers.Side.RIGHT, right[1], images, registered), registerIfVisible(id, "highlight", EyeTextureLayers.Side.RIGHT, right[2], images, registered));
         } catch (RuntimeException exception) {
             registered.forEach(Minecraft.getInstance().getTextureManager()::release);
             throw exception;
@@ -255,10 +208,6 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
         return EyeTextureLayers.getBaseEyeColor(getVillager(villager), left, tickDelta);
     }
 
-    private int legacyEyeColor(T villager, float tickDelta, boolean left) {
-        return EyeToneRendering.legacyColor(baseEyeColor(villager, tickDelta, left), getVillager(villager).getGenetics().getGene(Genetics.EYE_BRIGHTNESS));
-    }
-
     private EyeDefinition.Tones tones(T villager, float tickDelta, boolean left, EyeDefinition definition) {
         return EyeToneRendering.resolve(definition, baseEyeColor(villager, tickDelta, left), getVillager(villager).getGenetics().getGene(Genetics.EYE_BRIGHTNESS));
     }
@@ -272,7 +221,7 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
         return CommonVillagerModel.getVillager(villager);
     }
 
-    private record EyeLayerTextures(boolean modern, ResourceLocation fixed, ResourceLocation shadowFull, ResourceLocation primaryFull, ResourceLocation highlightFull, ResourceLocation shadowLeft, ResourceLocation primaryLeft, ResourceLocation highlightLeft, ResourceLocation shadowRight, ResourceLocation primaryRight, ResourceLocation highlightRight, ResourceLocation details, ResourceLocation irisFull, ResourceLocation irisLeft, ResourceLocation irisRight) {
+    private record EyeLayerTextures(ResourceLocation fixed, ResourceLocation shadowFull, ResourceLocation primaryFull, ResourceLocation highlightFull, ResourceLocation shadowLeft, ResourceLocation primaryLeft, ResourceLocation highlightLeft, ResourceLocation shadowRight, ResourceLocation primaryRight, ResourceLocation highlightRight) {
         ResourceLocation shadow(EyeTextureLayers.Side side) {
             return side(side, shadowFull, shadowLeft, shadowRight);
         }
@@ -286,11 +235,11 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
         }
 
         Stream<ResourceLocation> ids() {
-            return Stream.of(fixed, shadowFull, primaryFull, highlightFull, shadowLeft, primaryLeft, highlightLeft, shadowRight, primaryRight, highlightRight, details, irisFull, irisLeft, irisRight).filter(Objects::nonNull);
+            return Stream.of(fixed, shadowFull, primaryFull, highlightFull, shadowLeft, primaryLeft, highlightLeft, shadowRight, primaryRight, highlightRight).filter(Objects::nonNull);
         }
 
         static EyeLayerTextures invalid() {
-            return new EyeLayerTextures(true, null, null, null, null, null, null, null, null, null, null, null, null, null, null);
+            return new EyeLayerTextures(null, null, null, null, null, null, null, null, null, null);
         }
 
         private static ResourceLocation side(EyeTextureLayers.Side side, ResourceLocation full, ResourceLocation left, ResourceLocation right) {

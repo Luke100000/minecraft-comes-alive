@@ -21,7 +21,7 @@ public class EyeCatalog extends SimplePreparableReloadListener<Map<ResourceLocat
     private static EyeCatalog INSTANCE;
     private final Map<ResourceLocation, EyeDefinition> definitions = new HashMap<>();
     private final Map<ResourceLocation, EyeDefinition> activeDefinitions = new HashMap<>();
-    private final Map<String, List<EyeDefinition>> activeByVariant = new HashMap<>();
+    private List<EyeDefinition> active = List.of();
 
     public EyeCatalog() {
         INSTANCE = this;
@@ -56,66 +56,49 @@ public class EyeCatalog extends SimplePreparableReloadListener<Map<ResourceLocat
             }
         }
 
-        Map<String, List<EyeDefinition>> grouped = new HashMap<>();
-        definitions.values().forEach(definition -> grouped
-                .computeIfAbsent(key(definition.variant()), ignored -> new ArrayList<>())
-                .add(definition));
-        grouped.values().forEach(entries -> entries.sort((a, b) -> SkinListEntry.compareIdentifiers(
-                a.id().toString(),
-                b.id().toString()
-        )));
+        List<EyeDefinition> entries = definitions.values().stream()
+                .sorted((a, b) -> SkinListEntry.compareIdentifiers(a.id().toString(), b.id().toString()))
+                .toList();
+        List<EyeDefinition> enabled = entries.stream()
+                .filter(entry -> !disabled.contains(entry.id()))
+                .toList();
+        active = enabled.isEmpty() ? entries : enabled;
 
-        activeDefinitions.clear();
-        activeByVariant.clear();
-        grouped.forEach((variant, entries) -> {
-            List<EyeDefinition> enabled = entries.stream()
-                    .filter(entry -> !disabled.contains(entry.id()))
-                    .toList();
-            List<EyeDefinition> active = enabled.isEmpty() ? List.copyOf(entries) : enabled;
-            activeByVariant.put(variant, active);
-            active.forEach(definition -> activeDefinitions.put(definition.id(), definition));
-        });
-
-        if (activeByVariant.getOrDefault(EyeStyles.DEFAULT_VARIANT, List.of()).isEmpty()) {
+        if (active.isEmpty()) {
             EyeDefinition fallback = new EyeDefinition(
                     EyeStyles.DEFAULT,
-                    EyeStyles.DEFAULT_VARIANT,
                     Gender.NEUTRAL,
                     1.0F,
-                    false,
                     Map.of()
             );
-            activeByVariant.put(EyeStyles.DEFAULT_VARIANT, List.of(fallback));
-            activeDefinitions.put(fallback.id(), fallback);
-            MCA.LOGGER.warn("No usable {} eye definitions were loaded; using {}", EyeStyles.DEFAULT_VARIANT, EyeStyles.DEFAULT);
+            active = List.of(fallback);
+            MCA.LOGGER.warn("No usable eye definitions were loaded; using {}", EyeStyles.DEFAULT);
         }
+
+        activeDefinitions.clear();
+        active.forEach(definition -> activeDefinitions.put(definition.id(), definition));
     }
 
-    public ResourceLocation resolve(String variant, ResourceLocation eye) {
-        String variantKey = key(variant);
-        List<EyeDefinition> entries = activeByVariant.get(variantKey);
-        if (entries == null || entries.isEmpty()) {
+    public ResourceLocation resolve(ResourceLocation eye) {
+        if (active.isEmpty()) {
             return EyeStyles.DEFAULT;
         }
-
-        EyeDefinition current = activeDefinitions.get(eye);
-        if (current != null && current.variant().equals(variantKey)) {
+        if (activeDefinitions.containsKey(eye)) {
             return eye;
         }
-        return entries.get(Math.floorMod(eye.hashCode(), entries.size())).id();
+        return active.get(Math.floorMod(eye.hashCode(), active.size())).id();
     }
 
-    public ResourceLocation pick(String variant, Gender gender) {
-        List<EyeDefinition> entries = activeByVariant.get(key(variant));
-        if (entries == null || entries.isEmpty()) {
+    public ResourceLocation pick(Gender gender) {
+        if (active.isEmpty()) {
             return EyeStyles.DEFAULT;
         }
 
-        List<EyeDefinition> candidates = entries.stream()
+        List<EyeDefinition> candidates = active.stream()
                 .filter(entry -> SkinSelection.matchesGender(entry.gender(), gender))
                 .toList();
         if (candidates.isEmpty()) {
-            candidates = entries;
+            candidates = active;
         }
 
         WeightedPool.Mutable<ResourceLocation> pool = new WeightedPool.Mutable<>(EyeStyles.DEFAULT);
@@ -133,7 +116,7 @@ public class EyeCatalog extends SimplePreparableReloadListener<Map<ResourceLocat
 
     public void repair(VillagerLike<?> villager) {
         ResourceLocation stored = villager.getEyeTexture();
-        ResourceLocation resolved = resolve(EyeStyles.DEFAULT_VARIANT, stored);
+        ResourceLocation resolved = resolve(stored);
         if (!stored.equals(resolved)) {
             MCA.LOGGER.info("Villager eye texture {} does not exist; replacing it with {}", stored, resolved);
             villager.setEyeTexture(resolved);
@@ -150,7 +133,4 @@ public class EyeCatalog extends SimplePreparableReloadListener<Map<ResourceLocat
         }
     }
 
-    private static String key(String variant) {
-        return variant.toLowerCase(Locale.ROOT);
-    }
 }

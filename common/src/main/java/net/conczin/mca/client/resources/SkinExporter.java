@@ -105,7 +105,7 @@ public class SkinExporter {
     }
 
     public static ResourceLocation getFace(VillagerLike<?> villager) {
-        return ClientAppearanceCatalog.resolveEye(EyeStyles.DEFAULT_VARIANT, villager.getEyeTexture());
+        return ClientAppearanceCatalog.resolveEye(villager.getEyeTexture());
     }
 
     public static ResourceLocation getClothes(VillagerLike<?> villager) {
@@ -235,75 +235,29 @@ public class SkinExporter {
         }
 
         try {
-            if (definition.fixedColor() || EyeTextureLayers.hasExplicitTintMarker(face)) {
-                compositeMarkedFace(base, face, definition, villager);
-            } else {
-                compositeLegacyFace(base, face, villager);
+            EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(face);
+            int splitX = bounds.minX() + bounds.width() / 2;
+            boolean heterochromia = villager.getTraits().hasTrait(Traits.HETEROCHROMIA);
+            EyeDefinition.Tones rightTones = getEyeTones(villager, false, definition);
+            EyeDefinition.Tones leftTones = heterochromia ? getEyeTones(villager, true, definition) : rightTones;
+            int width = Math.min(base.getWidth(), face.getWidth());
+            int height = Math.min(base.getHeight(), face.getHeight());
+
+            for (int x = 0; x < width; x++) {
+                EyeDefinition.Tones tones = heterochromia && x >= splitX ? leftTones : rightTones;
+                for (int y = 0; y < height; y++) {
+                    EyeTextureLayers.DecodedPixel decoded = EyeTextureLayers.decodePixel(face.getPixelRGBA(x, y));
+                    if (decoded == null) {
+                        continue;
+                    }
+                    int tint = decoded.kind() == EyeTextureLayers.PixelKind.FIXED
+                            ? 0xFFFFFFFF
+                            : toneColor(tones, decoded.tone());
+                    compositePixel(base, x, y, decoded.pixel(), tint);
+                }
             }
         } finally {
             face.close();
-        }
-    }
-
-    private static void compositeMarkedFace(NativeImage base, NativeImage face, EyeDefinition definition, VillagerLike<?> villager) {
-        EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(face);
-        if (!definition.fixedColor()) {
-            compositeModernMask(base, face, definition, villager, bounds);
-        }
-
-        int width = Math.min(base.getWidth(), face.getWidth());
-        int height = Math.min(base.getHeight(), face.getHeight());
-        for (int x = 0; x < width; x++) {
-            for (int y = 0; y < height; y++) {
-                int pixel = face.getPixelRGBA(x, y);
-                int alpha = FastColor.ABGR32.alpha(pixel);
-                if (alpha != 0 && (definition.fixedColor() || !EyeTintPixel.isIrisMarker(alpha))) {
-                    compositePixel(base, x, y, pixel, 0xFFFFFFFF);
-                }
-            }
-        }
-    }
-
-    private static void compositeModernMask(
-            NativeImage base,
-            NativeImage maskImage,
-            EyeDefinition definition,
-            VillagerLike<?> villager,
-            EyeTextureLayers.Bounds bounds
-    ) {
-        int splitX = bounds.minX() + bounds.width() / 2;
-        boolean heterochromia = villager.getTraits().hasTrait(Traits.HETEROCHROMIA);
-        EyeDefinition.Tones rightTones = getEyeTones(villager, false, definition);
-        EyeDefinition.Tones leftTones = heterochromia ? getEyeTones(villager, true, definition) : rightTones;
-        int width = Math.min(base.getWidth(), maskImage.getWidth());
-        int height = Math.min(base.getHeight(), maskImage.getHeight());
-
-        for (int x = 0; x < width; x++) {
-            EyeDefinition.Tones tones = heterochromia && x >= splitX ? leftTones : rightTones;
-            for (int y = 0; y < height; y++) {
-                int pixel = maskImage.getPixelRGBA(x, y);
-                int alpha = FastColor.ABGR32.alpha(pixel);
-                if (!EyeTintPixel.isIrisMarker(alpha)) {
-                    continue;
-                }
-                EyeTintPixel.Mask mask = EyeTintPixel.decodeMarkedMask(pixel);
-                int toneColor = toneColor(tones, mask.tone());
-                int tintedPixel = EyeToneRendering.modernMaskPixel(mask, toneColor);
-                compositePixel(base, x, y, tintedPixel, 0xFFFFFFFF);
-            }
-        }
-    }
-
-    private static void compositeLegacyFace(NativeImage base, NativeImage face, VillagerLike<?> villager) {
-        EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(face);
-        int splitX = bounds.minX() + bounds.width() / 2;
-        compositeEyeLayer(base, face, EyeTextureLayers.Layer.SCLERA, EyeTextureLayers.Side.FULL, splitX, 0xFFFFFFFF);
-        compositeEyeLayer(base, face, EyeTextureLayers.Layer.DETAILS, EyeTextureLayers.Side.FULL, splitX, EyeTextureLayers.DETAILS_TINT);
-        if (villager.getTraits().hasTrait(Traits.HETEROCHROMIA)) {
-            compositeEyeLayer(base, face, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.LEFT, splitX, getEyeColor(villager, true));
-            compositeEyeLayer(base, face, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.RIGHT, splitX, getEyeColor(villager, false));
-        } else {
-            compositeEyeLayer(base, face, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.FULL, splitX, getEyeColor(villager, false));
         }
     }
 
@@ -313,30 +267,6 @@ public class SkinExporter {
             case PRIMARY -> tones.primary();
             case HIGHLIGHT -> tones.highlight();
         };
-    }
-
-    public static void compositeEyeLayer(NativeImage base, NativeImage face, EyeTextureLayers.Layer layer, EyeTextureLayers.Side side, int splitX, int tintColor) {
-        int width = Math.min(base.getWidth(), face.getWidth());
-        int height = Math.min(base.getHeight(), face.getHeight());
-        for (int x = 0; x < width; x++) {
-            if (!EyeTextureLayers.isInSide(x, splitX, side)) {
-                continue;
-            }
-            for (int y = 0; y < height; y++) {
-                int pixel = face.getPixelRGBA(x, y); // ABGR
-                if (!EyeTextureLayers.isPixelForLayer(layer, pixel)) {
-                    continue;
-                }
-                compositePixel(base, x, y, pixel, tintColor);
-            }
-        }
-    }
-
-    public static int getEyeColor(VillagerLike<?> villager, boolean left) {
-        return EyeToneRendering.legacyColor(
-                getBaseEyeColor(villager, left),
-                villager.getGenetics().getGene(Genetics.EYE_BRIGHTNESS)
-        );
     }
 
     private static EyeDefinition.Tones getEyeTones(VillagerLike<?> villager, boolean left, EyeDefinition definition) {

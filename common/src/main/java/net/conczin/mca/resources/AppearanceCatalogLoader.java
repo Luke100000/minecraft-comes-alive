@@ -15,7 +15,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.GsonHelper;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 /** Shared JSON-to-catalog conversion for bundled and datapack skin resources. */
@@ -71,7 +70,7 @@ final class AppearanceCatalogLoader {
     }
 
     static void addEyes(Map<ResourceLocation, EyeDefinition> eyes, ResourceLocation id, List<SkinListJson.Entry> entries) {
-        EyeFile file = eyeFile(id);
+        Gender fileGender = eyeGender(id);
         for (SkinListJson.Entry entry : entries) {
             ResourceLocation texture;
             try {
@@ -87,14 +86,12 @@ final class AppearanceCatalogLoader {
 
             Gender gender = entry.metadata().has("gender")
                     ? SkinListJson.resolveGender(null, entry)
-                    : file.gender() != Gender.UNASSIGNED
-                    ? file.gender()
-                    : SkinListJson.resolveGender(null, entry);
+                    : fileGender;
             if (gender == Gender.UNASSIGNED) {
                 gender = Gender.NEUTRAL;
             }
             try {
-                EyeDefinition definition = EyeDefinition.parse(texture, file.variant(), gender, entry.metadata());
+                EyeDefinition definition = EyeDefinition.parse(texture, gender, entry.metadata());
                 eyes.put(texture, definition);
             } catch (IllegalArgumentException exception) {
                 MCA.LOGGER.warn("Invalid eye definition {}", texture, exception);
@@ -102,24 +99,11 @@ final class AppearanceCatalogLoader {
         }
     }
 
-    private static EyeFile eyeFile(ResourceLocation id) {
-        String path = id.getPath().toLowerCase(Locale.ROOT);
-        Gender topLevelGender = Gender.byName(path);
-        if (topLevelGender == Gender.MALE || topLevelGender == Gender.FEMALE) {
-            return new EyeFile(EyeStyles.DEFAULT_VARIANT, topLevelGender);
-        }
-
+    private static Gender eyeGender(ResourceLocation id) {
+        String path = id.getPath();
         int separator = path.lastIndexOf('/');
-        if (separator >= 0) {
-            Gender gender = Gender.byName(path.substring(separator + 1));
-            if (gender != Gender.UNASSIGNED) {
-                return new EyeFile(path.substring(0, separator), gender);
-            }
-        }
-        return new EyeFile(path, Gender.UNASSIGNED);
-    }
-
-    private record EyeFile(String variant, Gender gender) {
+        Gender gender = Gender.byName(separator >= 0 ? path.substring(separator + 1) : path);
+        return gender == Gender.UNASSIGNED ? Gender.NEUTRAL : gender;
     }
 
     static void addLayeredHair(Map<String, LayeredHair> layeredHair, ResourceLocation id, List<String> textures) {

@@ -78,9 +78,9 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
     private final ColorSelector color = new ColorSelector();
     protected String page;
     protected CompoundTag villagerData;
+    ButtonWidget widgetAll;
     ButtonWidget widgetMasculine;
     ButtonWidget widgetFeminine;
-    ButtonWidget widgetNeutral;
     private int villagerBreedingAge;
     private int traitPage = 0;
     private EditBox villagerNameField;
@@ -1040,7 +1040,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
 
     private int addEyeTextureChanger(int y) {
         int bw = 22;
-        List<ResourceLocation> catalog = ClientAppearanceCatalog.eyeIds(EyeStyles.DEFAULT_VARIANT);
+        List<ResourceLocation> catalog = ClientAppearanceCatalog.eyeIds(villager.getGenetics().getGender());
         if (catalog.isEmpty()) {
             addRenderableWidget(new ButtonWidget(
                     width / 2,
@@ -1054,7 +1054,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
             return y + 22;
         }
 
-        ResourceLocation selected = ClientAppearanceCatalog.resolveEye(EyeStyles.DEFAULT_VARIANT, villager.getEyeTexture());
+        ResourceLocation selected = ClientAppearanceCatalog.resolveEye(villager.getEyeTexture());
         int currentIndex = Math.max(0, catalog.indexOf(selected));
 
         addRenderableWidget(new ButtonWidget(width / 2, y, bw, 20, Component.literal("<"), b -> {
@@ -1403,7 +1403,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
 
     private void filter() {
         if (Objects.equals(page, "eyes_catalog")) {
-            filteredEyes = ClientAppearanceCatalog.eyeIdsForEditor(EyeStyles.DEFAULT_VARIANT, filterGender).stream()
+            filteredEyes = ClientAppearanceCatalog.eyeIds(filterGender).stream()
                     .filter(id -> MCA.isBlankString(searchString) || id.toString().contains(searchString))
                     .toList();
 
@@ -1429,7 +1429,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
 
     private <T extends SkinListEntry> List<String> filter(Map<String, T> map) {
         List<String> filtered = map.entrySet().stream()
-                .filter(v -> filterGender == v.getValue().getGender() || v.getValue().getGender() == Gender.NEUTRAL)
+                .filter(v -> SkinSelection.matchesGender(v.getValue().getGender(), filterGender))
                 .filter(v -> {
                     if (v.getValue() instanceof Clothing c) {
                         return !c.exclude;
@@ -1452,51 +1452,15 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
     }
 
     private void addSelectionGenderFilterWidgets(int y) {
-        boolean showNeutral = selectionSupportsNeutralGender();
-        if (filterGender == Gender.UNASSIGNED) {
-            filterGender = showNeutral ? Gender.NEUTRAL : Gender.MALE;
-        } else if (!showNeutral && filterGender == Gender.NEUTRAL) {
-            filterGender = Gender.MALE;
-        }
-        int buttonWidth = showNeutral ? 60 : 64;
-        int buttonCount = showNeutral ? 3 : 2;
-        int x = width / 2 - 64 - buttonWidth * buttonCount;
-        widgetMasculine = addRenderableWidget(new ButtonWidget(x, y, buttonWidth, 20, Component.translatable("gui.villager_editor.masculine"), b -> setSelectionFilterGender(Gender.MALE)));
-        widgetFeminine = addRenderableWidget(new ButtonWidget(x + buttonWidth, y, buttonWidth, 20, Component.translatable("gui.villager_editor.feminine"), b -> setSelectionFilterGender(Gender.FEMALE)));
-        widgetNeutral = showNeutral
-                ? addRenderableWidget(new ButtonWidget(x + buttonWidth * 2, y, buttonWidth, 20, Component.translatable("gui.villager_editor.neutral"), b -> setSelectionFilterGender(Gender.NEUTRAL)))
-                : null;
+        int buttonWidth = 60;
+        int x = width / 2 - 64 - buttonWidth * 3;
+        widgetAll = addRenderableWidget(new ButtonWidget(x, y, buttonWidth, 20, Component.translatable("gui.villager_editor.all"), b -> setSelectionGenderFilter(Gender.NEUTRAL)));
+        widgetMasculine = addRenderableWidget(new ButtonWidget(x + buttonWidth, y, buttonWidth, 20, Component.translatable("gui.villager_editor.masculine"), b -> setSelectionGenderFilter(Gender.MALE)));
+        widgetFeminine = addRenderableWidget(new ButtonWidget(x + buttonWidth * 2, y, buttonWidth, 20, Component.translatable("gui.villager_editor.feminine"), b -> setSelectionGenderFilter(Gender.FEMALE)));
         updateSelectionGenderFilterWidgets();
     }
 
-    private boolean selectionSupportsNeutralGender() {
-        if (page.equals("eyes_catalog")) {
-            return ClientAppearanceCatalog.hasEyeGender(EyeStyles.DEFAULT_VARIANT, Gender.NEUTRAL);
-        }
-
-        if (page.equals("clothing")) {
-            return ClientAppearanceCatalog.clothing().values().stream()
-                    .anyMatch(entry -> entry.getGender() == Gender.NEUTRAL && !entry.exclude);
-        }
-        if (page.equals("hair")) {
-            return hasNeutralEntries(ClientAppearanceCatalog.hairStyles().values());
-        }
-        if (page.equals("skin")) {
-            return hasNeutralEntries(ClientAppearanceCatalog.bodySkins().values());
-        }
-        if (isLayeredHairPage()) {
-            LayeredHair.Category category = getLayeredHairCategory();
-            return ClientAppearanceCatalog.layeredHair().values().stream()
-                    .anyMatch(entry -> entry.getCategory() == category && entry.getGender() == Gender.NEUTRAL);
-        }
-        return false;
-    }
-
-    private static boolean hasNeutralEntries(Collection<? extends SkinListEntry> entries) {
-        return entries.stream().anyMatch(entry -> entry.getGender() == Gender.NEUTRAL);
-    }
-
-    private void setSelectionFilterGender(Gender gender) {
+    private void setSelectionGenderFilter(Gender gender) {
         filterGender = gender;
         clothingPage = 0;
         filter();
@@ -1504,14 +1468,14 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
     }
 
     private void updateSelectionGenderFilterWidgets() {
+        if (widgetAll != null) {
+            widgetAll.active = filterGender != Gender.NEUTRAL;
+        }
         if (widgetMasculine != null) {
             widgetMasculine.active = filterGender != Gender.MALE;
         }
         if (widgetFeminine != null) {
             widgetFeminine.active = filterGender != Gender.FEMALE;
-        }
-        if (widgetNeutral != null) {
-            widgetNeutral.active = filterGender != Gender.NEUTRAL;
         }
     }
 

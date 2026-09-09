@@ -9,7 +9,6 @@ import net.minecraft.util.Mth;
  * Stable eye-style identifiers used for fallbacks and 1.21.1 save migration.
  */
 public final class EyeStyles {
-    public static final String DEFAULT_VARIANT = "normal";
     public static final ResourceLocation DEFAULT = MCA.locate("skins/face/normal/0.png");
 
     private static final int LEGACY_FACE_COUNT = 22;

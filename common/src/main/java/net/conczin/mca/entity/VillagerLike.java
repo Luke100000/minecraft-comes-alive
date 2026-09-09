@@ -107,6 +107,10 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     EntityCommandHandler<?> getInteractions();
 
     default void initialize(MobSpawnType spawnReason) {
+        if (getGenetics().getGender() == Gender.UNASSIGNED) {
+            getGenetics().setGender(Gender.getRandom());
+        }
+
         if (spawnReason != MobSpawnType.CONVERSION) {
             if (spawnReason != MobSpawnType.BREEDING) {
                 getGenetics().randomize();
@@ -115,10 +119,6 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
             initializeSkin(false);
             getVillagerBrain().randomize();
-        }
-
-        if (getGenetics().getGender() == Gender.UNASSIGNED) {
-            getGenetics().setGender(Gender.getRandom());
         }
 
         if (asEntity().getCustomName() == null) {
