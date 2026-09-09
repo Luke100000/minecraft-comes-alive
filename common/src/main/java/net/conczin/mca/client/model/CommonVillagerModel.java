@@ -29,14 +29,6 @@ public interface CommonVillagerModel<T extends LivingEntity> {
     }
 
 
-    static int multiplyColor(int first, int second) {
-        int alpha = ((first >>> 24) * (second >>> 24) / 255) << 24;
-        int red = (((first >>> 16) & 0xFF) * ((second >>> 16) & 0xFF) / 255) << 16;
-        int green = (((first >>> 8) & 0xFF) * ((second >>> 8) & 0xFF) / 255) << 8;
-        int blue = (first & 0xFF) * (second & 0xFF) / 255;
-        return alpha | red | green | blue;
-    }
-
     ModelPart getMorphologyHead();
 
     ModelPart getMorphologyHat();

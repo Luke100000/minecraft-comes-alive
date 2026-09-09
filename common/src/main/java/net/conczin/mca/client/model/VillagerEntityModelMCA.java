@@ -14,6 +14,7 @@ import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.CubeListBuilder;
 import net.minecraft.client.model.geom.builders.MeshDefinition;
 import net.minecraft.client.model.geom.builders.PartDefinition;
+import net.minecraft.util.FastColor;
 import net.minecraft.world.entity.LivingEntity;
 import org.jetbrains.annotations.Nullable;
 
@@ -112,7 +113,7 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
             animationBridge.apply(this, matrices, light, overlay);
             applyVillagerDimensions(currentVillager);
             syncWearParts();
-            color = CommonVillagerModel.multiplyColor(color, skinColor);
+            color = FastColor.ARGB32.multiply(color, skinColor);
         }
         super.renderToBuffer(matrices, vertices, light, overlay, color);
     }

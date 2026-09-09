@@ -9,6 +9,7 @@ import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartNames;
+import net.minecraft.util.FastColor;
 import net.minecraft.world.entity.LivingEntity;
 import org.jetbrains.annotations.Nullable;
 
@@ -130,7 +131,7 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
             applyVillagerDimensions(CommonVillagerModel.getVillager(currentEntity));
             syncWearParts();
             hideWearsInternal();
-            color = CommonVillagerModel.multiplyColor(color, skinColor);
+            color = FastColor.ARGB32.multiply(color, skinColor);
         }
 
         breastsWear.visible = !wearsHidden && jacket.visible && breastTransform.visible;
