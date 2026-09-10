@@ -62,9 +62,18 @@ public interface CommonVillagerModel<T extends LivingEntity> {
         setScale(getMorphologyHead(), headScale, headScale, headScale);
         setScale(getMorphologyHat(), headScale, headScale, headScale);
 
+        applyBreastDimensions(villager, getBreastTransform(), getBreastPart(), getBreastParts());
+    }
+
+    static void applyBreastDimensions(
+            VillagerLike<?> villager,
+            ModelPart transform,
+            ModelPart breastPart,
+            Iterable<ModelPart> breastParts
+    ) {
+        var dimensions = villager.getVillagerDimensions();
         float rawBreastSize = villager.getGenetics().getBreastSize();
         float scaledBreastSize = rawBreastSize * dimensions.getBreasts();
-        ModelPart transform = getBreastTransform();
         transform.visible = villager.getGenetics().getGender() == Gender.FEMALE && scaledBreastSize > 0.0F;
         setScale(
                 transform,
@@ -73,10 +82,10 @@ public interface CommonVillagerModel<T extends LivingEntity> {
                 scaledBreastSize * 0.75F + 0.75F
         );
 
-        getBreastPart().visible = villager.getGenetics().getGender() == Gender.FEMALE;
+        breastPart.visible = villager.getGenetics().getGender() == Gender.FEMALE;
         float breastY = (float) (5.0F - Math.pow(rawBreastSize, 0.5) * 2.5F);
         float breastZ = -1.5F + rawBreastSize * 0.25F;
-        for (ModelPart part : getBreastParts()) {
+        for (ModelPart part : breastParts) {
             part.setRotation((float) Math.PI * 0.3F, 0.0F, 0.0F);
             part.setPos(0.25F, breastY, breastZ);
         }

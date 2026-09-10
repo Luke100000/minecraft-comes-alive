@@ -1,22 +1,24 @@
 package net.conczin.mca.mixin.client;
 
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.model.MCAModelLayers;
-import net.conczin.mca.client.model.PlayerAnimationBridge;
 import net.conczin.mca.client.model.PlayerEntityExtendedModel;
 import net.conczin.mca.client.render.layer.ClothingLayer;
 import net.conczin.mca.client.render.layer.FaceLayer;
 import net.conczin.mca.client.render.layer.HairLayer;
+import net.conczin.mca.client.render.layer.PlayerMorphologyLayer;
 import net.conczin.mca.client.render.layer.VillagerLayer;
 import net.conczin.mca.client.resources.SkinExporter;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelLayerLocation;
-import net.minecraft.client.model.geom.ModelLayers;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -26,21 +28,15 @@ import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.player.PlayerRenderer;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.LivingEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(PlayerRenderer.class)
 public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> {
-    @Unique
-    private PlayerEntityExtendedModel<AbstractClientPlayer> mca$villagerModel;
-    @Unique
-    private PlayerEntityExtendedModel<AbstractClientPlayer> mca$playerModel;
-    @Unique
-    private PlayerModel<AbstractClientPlayer> mca$vanillaModel;
     @Unique
     private ClothingLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> mca$clothingLayer;
 
@@ -56,47 +52,11 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
         return new PlayerEntityExtendedModel<>(ctx.bakeLayer(layer));
     }
 
-    @Unique
-    private void mca$selectModel(AbstractClientPlayer player) {
-        if (!MCAClient.isPlayerRendererAllowed()) {
-            if (mca$vanillaModel != null) {
-                model = mca$vanillaModel;
-            }
-            return;
-        }
-
-        VillagerLike.PlayerModel selectedModel = MCAClient.getPlayerData(player.getUUID())
-                .map(VillagerLike::getPlayerModel)
-                .orElse(VillagerLike.PlayerModel.VANILLA);
-        model = switch (selectedModel) {
-            case VILLAGER -> mca$villagerModel;
-            case PLAYER -> mca$playerModel;
-            case VANILLA -> mca$vanillaModel;
-        };
-    }
-
     @Inject(method = "<init>(Lnet/minecraft/client/renderer/entity/EntityRendererProvider$Context;Z)V", at = @At("TAIL"))
     private void mca$injectInit(EntityRendererProvider.Context ctx, boolean slim, CallbackInfo ci) {
         if (!MCAClient.isPlayerRendererAllowed()) {
             return;
         }
-
-        mca$vanillaModel = model;
-        ModelLayerLocation playerLayer = slim ? ModelLayers.PLAYER_SLIM : ModelLayers.PLAYER;
-
-        mca$villagerModel = new PlayerEntityExtendedModel<>(
-                ctx.bakeLayer(MCAModelLayers.VILLAGER),
-                false,
-                new PlayerAnimationBridge<>(new PlayerModel<>(ctx.bakeLayer(playerLayer), slim))
-        );
-
-        // Player mode renders the actual EMF-interceptable player root and adds only
-        // MCA morphology from a separately registered attachment layer.
-        mca$playerModel = new PlayerEntityExtendedModel<>(
-                ctx.bakeLayer(playerLayer),
-                slim,
-                ctx.bakeLayer(MCAModelLayers.PLAYER_ATTACHMENTS)
-        );
 
         addLayer(new FaceLayer<>(
                 this,
@@ -110,44 +70,85 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
         );
         addLayer(mca$clothingLayer);
         addLayer(new HairLayer<>(this, mca$createVisibleModel(ctx, MCAModelLayers.VILLAGER_HAIR)));
+        // Player morphology replaces geometry that used to render with the base model,
+        // so keep it ahead of armor and the other player render layers.
+        layers.add(0, new PlayerMorphologyLayer(this, ctx.bakeLayer(MCAModelLayers.PLAYER_ATTACHMENTS)));
     }
 
-    @Inject(method = "render(Lnet/minecraft/client/player/AbstractClientPlayer;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V", at = @At("HEAD"))
-    private void mca$selectThirdPersonModel(AbstractClientPlayer player, float yaw, float tickDelta, PoseStack matrices, MultiBufferSource vertexConsumers, int light, CallbackInfo ci) {
-        mca$selectModel(player);
-    }
-
-    @Inject(
-            method = "renderRightHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/client/player/AbstractClientPlayer;)V",
-            at = @At("HEAD")
+    @WrapOperation(
+            method = "render(Lnet/minecraft/client/player/AbstractClientPlayer;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/client/renderer/entity/LivingEntityRenderer;render(Lnet/minecraft/world/entity/LivingEntity;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V"
+            )
     )
-    private void mca$selectRightHandModel(PoseStack matrices, MultiBufferSource buffers, int light, AbstractClientPlayer player, CallbackInfo ci) {
-        mca$selectModel(player);
-        if (model == mca$villagerModel && !MCAClient.renderArms(player.getUUID(), "right_arm")) {
-            model = mca$vanillaModel;
+    private void mca$preservePlayerModelState(
+            PlayerRenderer renderer,
+            LivingEntity entity,
+            float yaw,
+            float tickDelta,
+            PoseStack matrices,
+            MultiBufferSource buffers,
+            int light,
+            Operation<Void> original
+    ) {
+        AbstractClientPlayer player = (AbstractClientPlayer) entity;
+        VillagerLike<?> villager = MCAClient.getGeneticsPlayerData(player.getUUID())
+                .orElse(null);
+        if (villager == null) {
+            original.call(renderer, entity, yaw, tickDelta, matrices, buffers, light);
+            return;
+        }
+
+        PlayerModel<AbstractClientPlayer> playerModel = renderer.getModel();
+        ModelPart head = playerModel.head;
+        ModelPart hat = playerModel.hat;
+        float headX = head.xScale;
+        float headY = head.yScale;
+        float headZ = head.zScale;
+        float hatX = hat.xScale;
+        float hatY = hat.yScale;
+        float hatZ = hat.zScale;
+        boolean hideVanillaWears = villager.getPlayerModel() == VillagerLike.PlayerModel.VILLAGER;
+        boolean jacketVisible = false;
+        boolean leftSleeveVisible = false;
+        boolean rightSleeveVisible = false;
+        boolean leftPantsVisible = false;
+        boolean rightPantsVisible = false;
+        if (hideVanillaWears) {
+            jacketVisible = playerModel.jacket.visible;
+            leftSleeveVisible = playerModel.leftSleeve.visible;
+            rightSleeveVisible = playerModel.rightSleeve.visible;
+            leftPantsVisible = playerModel.leftPants.visible;
+            rightPantsVisible = playerModel.rightPants.visible;
+        }
+        try {
+            original.call(renderer, entity, yaw, tickDelta, matrices, buffers, light);
+        } finally {
+            head.xScale = headX;
+            head.yScale = headY;
+            head.zScale = headZ;
+            hat.xScale = hatX;
+            hat.yScale = hatY;
+            hat.zScale = hatZ;
+            if (hideVanillaWears) {
+                playerModel.jacket.visible = jacketVisible;
+                playerModel.leftSleeve.visible = leftSleeveVisible;
+                playerModel.rightSleeve.visible = rightSleeveVisible;
+                playerModel.leftPants.visible = leftPantsVisible;
+                playerModel.rightPants.visible = rightPantsVisible;
+            }
         }
     }
 
-    @Inject(
-            method = "renderLeftHand(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/client/player/AbstractClientPlayer;)V",
-            at = @At("HEAD")
-    )
-    private void mca$selectLeftHandModel(PoseStack matrices, MultiBufferSource buffers, int light, AbstractClientPlayer player, CallbackInfo ci) {
-        mca$selectModel(player);
-        if (model == mca$villagerModel && !MCAClient.renderArms(player.getUUID(), "left_arm")) {
-            model = mca$vanillaModel;
-        }
-    }
-
-    @Inject(
+    @ModifyReturnValue(
             method = "getTextureLocation(Lnet/minecraft/client/player/AbstractClientPlayer;)Lnet/minecraft/resources/ResourceLocation;",
-            at = @At("HEAD"),
-            cancellable = true
+            at = @At("RETURN")
     )
-    private void mca$useVillagerSkin(AbstractClientPlayer player, CallbackInfoReturnable<ResourceLocation> cir) {
-        if (MCAClient.useVillagerRenderer(player.getUUID())) {
-            cir.setReturnValue(SkinExporter.getSkin(CommonVillagerModel.getVillager(player)));
-        }
+    private ResourceLocation mca$useVillagerSkin(ResourceLocation original, AbstractClientPlayer player) {
+        return MCAClient.useVillagerRenderer(player.getUUID())
+                ? SkinExporter.getSkin(CommonVillagerModel.getVillager(player))
+                : original;
     }
 
     @Inject(method = "scale(Lnet/minecraft/client/player/AbstractClientPlayer;Lcom/mojang/blaze3d/vertex/PoseStack;F)V", at = @At("TAIL"))
@@ -180,13 +181,12 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
             ModelPart sleeve,
             CallbackInfo ci
     ) {
-        if (model != mca$villagerModel) {
+        boolean right = arm == model.rightArm;
+        if (!MCAClient.renderArms(player.getUUID(), right ? "right_arm" : "left_arm")) {
             return;
         }
 
-        boolean right = arm == mca$villagerModel.rightArm;
-        mca$villagerModel.applyAnimationBridgeForArm(matrices, light, OverlayTexture.NO_OVERLAY, right);
-        ModelPart skinArm = right ? mca$villagerModel.rightArm : mca$villagerModel.leftArm;
+        ModelPart skinArm = arm;
         skinArm.visible = true;
         var villager = CommonVillagerModel.getVillager(player);
         ResourceLocation skin = SkinExporter.getSkin(villager);
@@ -222,25 +222,4 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
         part.render(matrices, buffer, light, OverlayTexture.NO_OVERLAY, color);
     }
 
-    @Inject(
-            method = "renderHand",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/client/model/geom/ModelPart;render(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;II)V",
-                    ordinal = 1
-            )
-    )
-    private void mca$syncPlayerSleeve(
-            PoseStack matrices,
-            MultiBufferSource buffers,
-            int light,
-            AbstractClientPlayer player,
-            ModelPart arm,
-            ModelPart sleeve,
-            CallbackInfo ci
-    ) {
-        if (model == mca$playerModel) {
-            sleeve.copyFrom(arm);
-        }
-    }
 }

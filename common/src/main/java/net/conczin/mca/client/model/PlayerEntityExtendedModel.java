@@ -1,19 +1,11 @@
 package net.conczin.mca.client.model;
 
 import com.google.common.collect.ImmutableList;
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
-import net.conczin.mca.client.resources.SkinExporter;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
-import net.minecraft.client.model.geom.PartNames;
-import net.minecraft.util.FastColor;
 import net.minecraft.world.entity.LivingEntity;
-import org.jetbrains.annotations.Nullable;
-
-import java.lang.ref.WeakReference;
 
 import static net.conczin.mca.client.model.VillagerEntityBaseModelMCA.BREASTS;
 import static net.conczin.mca.client.model.VillagerEntityBaseModelMCA.BREAST_TRANSFORM;
@@ -23,44 +15,17 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
     public final ModelPart breastTransform;
     public final ModelPart breasts;
     public final ModelPart breastsWear;
-    private final boolean detachedMorphology;
-    @Nullable
-    private final PlayerAnimationBridge<T> animationBridge;
     private boolean wearsHidden;
-    @Nullable
-    private WeakReference<T> currentEntity;
-    private int skinColor = 0xFFFFFFFF;
 
     public PlayerEntityExtendedModel(ModelPart root) {
-        this(root, false, null, null);
+        this(root, false);
     }
 
     public PlayerEntityExtendedModel(ModelPart root, boolean slim) {
-        this(root, slim, null, null);
-    }
-
-    public PlayerEntityExtendedModel(ModelPart root, boolean slim, ModelPart attachments) {
-        this(root, slim, attachments, null);
-    }
-
-    public PlayerEntityExtendedModel(ModelPart root, boolean slim, PlayerAnimationBridge<T> animationBridge) {
-        this(root, slim, null, animationBridge);
-        hideWearsInternal();
-    }
-
-    private PlayerEntityExtendedModel(
-            ModelPart root,
-            boolean slim,
-            @Nullable ModelPart attachments,
-            @Nullable PlayerAnimationBridge<T> animationBridge
-    ) {
         super(root, slim);
-        ModelPart morphologyBody = attachments == null ? body : attachments.getChild(PartNames.BODY);
-        breastTransform = morphologyBody.getChild(BREAST_TRANSFORM);
+        breastTransform = body.getChild(BREAST_TRANSFORM);
         breasts = breastTransform.getChild(BREASTS);
         breastsWear = breastTransform.getChild(BREASTPLATE);
-        detachedMorphology = attachments != null;
-        this.animationBridge = animationBridge;
     }
 
     @Override
@@ -69,9 +34,7 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
         if (target instanceof CommonVillagerModel<?> model) {
             copyMorphologyTo(model);
         }
-        if (target instanceof PlayerEntityExtendedModel<?> rawTarget) {
-            @SuppressWarnings("unchecked")
-            PlayerEntityExtendedModel<T> model = (PlayerEntityExtendedModel<T>) rawTarget;
+        if (target instanceof PlayerEntityExtendedModel<?> model) {
             model.hat.copyFrom(model.head);
             model.syncWearParts();
         }
@@ -116,48 +79,6 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
         breastsWear.copyFrom(breasts);
     }
 
-    public void applyAnimationBridgeForArm(PoseStack matrices, int light, int overlay, boolean right) {
-        T entity = currentEntity == null ? null : currentEntity.get();
-        if (animationBridge == null || entity == null) {
-            currentEntity = null;
-            return;
-        }
-        try {
-            animationBridge.applyArm(this, matrices, light, overlay, right);
-            applyVillagerDimensions(CommonVillagerModel.getVillager(entity));
-            syncWearParts();
-            hideWearsInternal();
-        } finally {
-            currentEntity = null;
-        }
-    }
-
-    @Override
-    public void renderToBuffer(PoseStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
-        T entity = currentEntity == null ? null : currentEntity.get();
-        try {
-            if (animationBridge != null && entity != null) {
-                animationBridge.apply(this, matrices, light, overlay);
-                applyVillagerDimensions(CommonVillagerModel.getVillager(entity));
-                syncWearParts();
-                hideWearsInternal();
-                color = FastColor.ARGB32.multiply(color, skinColor);
-            }
-
-            breastsWear.visible = !wearsHidden && jacket.visible && breastTransform.visible;
-            super.renderToBuffer(matrices, vertices, light, overlay, color);
-
-            if (detachedMorphology && body.visible && breastTransform.visible) {
-                matrices.pushPose();
-                body.translateAndRotate(matrices);
-                breastTransform.render(matrices, vertices, light, overlay, color);
-                matrices.popPose();
-            }
-        } finally {
-            currentEntity = null;
-        }
-    }
-
     @Override
     public ModelPart getMorphologyHead() {
         return head;
@@ -194,10 +115,6 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
 
         super.setupAnim(entity, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
         applyVillagerDimensions(villager);
-        if (animationBridge != null) {
-            currentEntity = new WeakReference<>(entity);
-            skinColor = SkinExporter.getSkinColor(villager);
-        }
     }
 
     @Override

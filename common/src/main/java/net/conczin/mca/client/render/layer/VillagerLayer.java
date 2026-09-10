@@ -70,6 +70,10 @@ public abstract class VillagerLayer<T extends LivingEntity, M extends HumanoidMo
             if (!(getParentModel() instanceof CommonVillagerModel<?>)) {
                 layer.applyVillagerDimensions(CommonVillagerModel.getVillager(villager));
             }
+            // Vanilla HumanoidModel.copyPropertiesTo only copies the canonical body
+            // bones. MCA wear parts are separate bones, so resync them after the
+            // parent animation has been copied into this layer model.
+            layer.syncWearParts();
             layer.copyVisibility(getParentModel());
         }
 

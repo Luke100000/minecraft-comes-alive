@@ -33,9 +33,11 @@
     "client.MixinClientLanguage",
     "client.MixinDeltaTrackerTimer",
     "client.MixinEntity",
+    "client.MixinEntityRenderDispatcher",
     "client.MixinGameRenderer",
     "client.MixinHumanoidArmorLayer",
     "client.MixinItemInHandLayer",
+    "client.MixinLivingEntityRenderer",
     "client.MixinPlayerRenderer",
     "client.MixinSoundBufferLibrary"
   ],
