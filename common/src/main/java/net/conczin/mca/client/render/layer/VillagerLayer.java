@@ -109,7 +109,7 @@ public abstract class VillagerLayer<T extends LivingEntity, M extends HumanoidMo
         model.renderToBuffer(transform, buffer, light, overlay, color);
     }
 
-    public final boolean canUse(ResourceLocation texture) {
+    public static boolean canUse(ResourceLocation texture) {
         return TEXTURE_EXIST_CACHE.computeIfAbsent(texture, s -> {
             if (texture != null && texture.getNamespace().equals("immersive_library")) {
                 return true;

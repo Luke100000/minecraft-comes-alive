@@ -18,6 +18,8 @@ import net.minecraft.util.FastColor;
 import net.minecraft.world.entity.LivingEntity;
 import org.jetbrains.annotations.Nullable;
 
+import java.lang.ref.WeakReference;
+
 public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> extends VillagerEntityBaseModelMCA<T> {
     protected static final String BREASTPLATE = "breastplate";
 
@@ -32,7 +34,7 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
     @Nullable
     private final PlayerAnimationBridge<T> animationBridge;
     @Nullable
-    private T currentVillager;
+    private WeakReference<T> currentVillager;
     private int skinColor = 0xFFFFFFFF;
 
     public VillagerEntityModelMCA(ModelPart tree) {
@@ -102,20 +104,25 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
         super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
         syncWearParts();
         if (animationBridge != null) {
-            currentVillager = villager;
+            currentVillager = new WeakReference<>(villager);
             skinColor = SkinExporter.getSkinColor(villager);
         }
     }
 
     @Override
     public void renderToBuffer(PoseStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
-        if (animationBridge != null && currentVillager != null) {
-            animationBridge.apply(this, matrices, light, overlay);
-            applyVillagerDimensions(currentVillager);
-            syncWearParts();
-            color = FastColor.ARGB32.multiply(color, skinColor);
+        T villager = currentVillager == null ? null : currentVillager.get();
+        try {
+            if (animationBridge != null && villager != null) {
+                animationBridge.apply(this, matrices, light, overlay);
+                applyVillagerDimensions(villager);
+                syncWearParts();
+                color = FastColor.ARGB32.multiply(color, skinColor);
+            }
+            super.renderToBuffer(matrices, vertices, light, overlay, color);
+        } finally {
+            currentVillager = null;
         }
-        super.renderToBuffer(matrices, vertices, light, overlay, color);
     }
 
     @Override

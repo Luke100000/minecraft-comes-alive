@@ -10,6 +10,7 @@ import net.conczin.mca.client.model.PlayerEntityExtendedModel;
 import net.conczin.mca.client.render.layer.ClothingLayer;
 import net.conczin.mca.client.render.layer.FaceLayer;
 import net.conczin.mca.client.render.layer.HairLayer;
+import net.conczin.mca.client.render.layer.VillagerLayer;
 import net.conczin.mca.client.resources.SkinExporter;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.AgeState;
@@ -189,7 +190,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
         skinArm.visible = true;
         var villager = CommonVillagerModel.getVillager(player);
         ResourceLocation skin = SkinExporter.getSkin(villager);
-        if (mca$clothingLayer.canUse(skin)) {
+        if (VillagerLayer.canUse(skin)) {
             mca$renderArmPart(matrices, buffers, light, skin, SkinExporter.getSkinColor(villager), skinArm);
         }
 

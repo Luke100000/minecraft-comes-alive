@@ -13,6 +13,8 @@ import net.minecraft.util.FastColor;
 import net.minecraft.world.entity.LivingEntity;
 import org.jetbrains.annotations.Nullable;
 
+import java.lang.ref.WeakReference;
+
 import static net.conczin.mca.client.model.VillagerEntityBaseModelMCA.BREASTS;
 import static net.conczin.mca.client.model.VillagerEntityBaseModelMCA.BREAST_TRANSFORM;
 import static net.conczin.mca.client.model.VillagerEntityModelMCA.BREASTPLATE;
@@ -26,7 +28,7 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
     private final PlayerAnimationBridge<T> animationBridge;
     private boolean wearsHidden;
     @Nullable
-    private T currentEntity;
+    private WeakReference<T> currentEntity;
     private int skinColor = 0xFFFFFFFF;
 
     public PlayerEntityExtendedModel(ModelPart root) {
@@ -115,33 +117,44 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
     }
 
     public void applyAnimationBridgeForArm(PoseStack matrices, int light, int overlay, boolean right) {
-        if (animationBridge == null || currentEntity == null) {
+        T entity = currentEntity == null ? null : currentEntity.get();
+        if (animationBridge == null || entity == null) {
+            currentEntity = null;
             return;
         }
-        animationBridge.applyArm(this, matrices, light, overlay, right);
-        applyVillagerDimensions(CommonVillagerModel.getVillager(currentEntity));
-        syncWearParts();
-        hideWearsInternal();
+        try {
+            animationBridge.applyArm(this, matrices, light, overlay, right);
+            applyVillagerDimensions(CommonVillagerModel.getVillager(entity));
+            syncWearParts();
+            hideWearsInternal();
+        } finally {
+            currentEntity = null;
+        }
     }
 
     @Override
     public void renderToBuffer(PoseStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
-        if (animationBridge != null && currentEntity != null) {
-            animationBridge.apply(this, matrices, light, overlay);
-            applyVillagerDimensions(CommonVillagerModel.getVillager(currentEntity));
-            syncWearParts();
-            hideWearsInternal();
-            color = FastColor.ARGB32.multiply(color, skinColor);
-        }
+        T entity = currentEntity == null ? null : currentEntity.get();
+        try {
+            if (animationBridge != null && entity != null) {
+                animationBridge.apply(this, matrices, light, overlay);
+                applyVillagerDimensions(CommonVillagerModel.getVillager(entity));
+                syncWearParts();
+                hideWearsInternal();
+                color = FastColor.ARGB32.multiply(color, skinColor);
+            }
 
-        breastsWear.visible = !wearsHidden && jacket.visible && breastTransform.visible;
-        super.renderToBuffer(matrices, vertices, light, overlay, color);
+            breastsWear.visible = !wearsHidden && jacket.visible && breastTransform.visible;
+            super.renderToBuffer(matrices, vertices, light, overlay, color);
 
-        if (detachedMorphology && body.visible && breastTransform.visible) {
-            matrices.pushPose();
-            body.translateAndRotate(matrices);
-            breastTransform.render(matrices, vertices, light, overlay, color);
-            matrices.popPose();
+            if (detachedMorphology && body.visible && breastTransform.visible) {
+                matrices.pushPose();
+                body.translateAndRotate(matrices);
+                breastTransform.render(matrices, vertices, light, overlay, color);
+                matrices.popPose();
+            }
+        } finally {
+            currentEntity = null;
         }
     }
 
@@ -182,7 +195,7 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
         super.setupAnim(entity, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
         applyVillagerDimensions(villager);
         if (animationBridge != null) {
-            currentEntity = entity;
+            currentEntity = new WeakReference<>(entity);
             skinColor = SkinExporter.getSkinColor(villager);
         }
     }
