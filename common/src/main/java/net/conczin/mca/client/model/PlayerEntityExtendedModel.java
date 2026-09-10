@@ -204,7 +204,7 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
     public void copyVisibility(HumanoidModel<?> model) {
         boolean showWears = !wearsHidden;
         head.visible = model.head.visible;
-        hat.visible = model.hat.visible;
+        hat.visible = model.head.visible && model.hat.visible;
         body.visible = model.body.visible;
         jacket.visible = showWears && model.body.visible;
         leftArm.visible = model.leftArm.visible;

@@ -174,7 +174,7 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
     public void copyVisibility(HumanoidModel<?> model) {
         boolean showWears = !wearsHidden;
         head.visible = model.head.visible;
-        hat.visible = model.hat.visible;
+        hat.visible = model.head.visible && model.hat.visible;
         body.visible = model.body.visible;
         bodyWear.visible = showWears && model.body.visible;
         leftArm.visible = model.leftArm.visible;
