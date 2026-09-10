@@ -168,8 +168,7 @@ public class AdminCommand {
         VillageManager villages = VillageManager.get(ctx.getSource().getLevel());
         Optional<Village> village = villages.findNearestVillage(player);
 
-        Optional<Building> building = village.flatMap(v -> v.getBuildings().values().stream().filter((b) ->
-                b.containsPos(player.blockPosition())).findAny());
+        Optional<Building> building = village.flatMap(v -> v.findPhysicalRoomAt(player.blockPosition()));
         if (building.isPresent()) {
             if (building.get().getType().equals(type)) {
                 building.get().setTypeForced(false);

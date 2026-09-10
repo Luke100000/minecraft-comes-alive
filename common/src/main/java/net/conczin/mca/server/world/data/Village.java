@@ -33,7 +33,6 @@ public class Village implements Iterable<Building> {
     public static final int PLAYER_BORDER_MARGIN = 32;
     public static final int BORDER_MARGIN = 48;
     public static final int MERGE_MARGIN = 64;
-    private static final int MAX_FLOOR_ATTACHMENT_GAP = 4;
     private static final int MOVE_IN_COOLDOWN = 1200;
     private static final long BED_SYNC_TIME = 200;
     private static final Comparator<AttachmentTarget> ATTACHMENT_TARGET_ORDER = Comparator
@@ -704,7 +703,7 @@ public class Village implements Iterable<Building> {
                 for (StructureFloor floor : structure.getFloors()) {
                     if (candidate.geometry().footprintIntersectionArea(floor.geometry()) == 0) continue;
                     int gap = candidate.attachmentGapTo(floor);
-                    if (gap > MAX_FLOOR_ATTACHMENT_GAP) continue;
+                    if (!hasDirectVerticalAttachmentEvidence(candidate, floor)) continue;
                     addAttachmentTarget(nearestByBuilding, structure, floor, gap);
                 }
             }
@@ -717,6 +716,37 @@ public class Village implements Iterable<Building> {
                 .anyMatch(target -> target.buildingId() != nearest.buildingId()
                         && target.gap() == nearest.gap())
                 ? Optional.empty() : Optional.of(nearest);
+    }
+
+    /**
+     * External Floors may attach without a connector only when overlapping exact columns prove that the
+     * two vertical structures physically meet. Canonical cell intervals may either meet directly, or the
+     * lower cell's first ceiling block may touch the upper cell's supporting block.
+     */
+    private static boolean hasDirectVerticalAttachmentEvidence(StructureFloor first, StructureFloor second) {
+        for (FloorGeometry.Cell firstCell : first.geometry().cells()) {
+            for (FloorGeometry.Cell secondCell : second.geometry()
+                    .cellsAtColumn(firstCell.feet().getX(), firstCell.feet().getZ())) {
+                if (verticalIntervalsMeet(firstCell, secondCell)
+                        || structuralShellsTouch(firstCell, secondCell)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean verticalIntervalsMeet(FloorGeometry.Cell first, FloorGeometry.Cell second) {
+        return first.ceilingY() == second.feet().getY()
+                || second.ceilingY() == first.feet().getY();
+    }
+
+    private static boolean structuralShellsTouch(FloorGeometry.Cell first, FloorGeometry.Cell second) {
+        FloorGeometry.Cell lower = first.feet().getY() <= second.feet().getY() ? first : second;
+        FloorGeometry.Cell upper = lower == first ? second : first;
+        int lowerCeilingBlockY = lower.ceilingY();
+        int upperSupportBlockY = upper.feet().getY() - 1;
+        return lowerCeilingBlockY + 1 == upperSupportBlockY;
     }
 
     private void addAttachmentTarget(Map<Integer, AttachmentTarget> nearestByBuilding,

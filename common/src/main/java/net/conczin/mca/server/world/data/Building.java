@@ -394,6 +394,10 @@ public class Building implements VillageBuilding {
 
     @Override
     public boolean containsPos(Vec3i pos) {
+        if (pos == null) return false;
+        if (!floorCells.isEmpty()) {
+            return ownsFloorCell(new BlockPos(pos.getX(), pos.getY(), pos.getZ()));
+        }
         return pos.getX() >= pos0X && pos.getX() <= pos1X
                 && pos.getY() >= pos0Y && pos.getY() <= pos1Y
                 && pos.getZ() >= pos0Z && pos.getZ() <= pos1Z;
@@ -427,39 +431,6 @@ public class Building implements VillageBuilding {
 
     public int getHorizontalArea() {
         return Math.max(1, pos1X - pos0X + 1) * Math.max(1, pos1Z - pos0Z + 1);
-    }
-
-    void copyScannedGeometryFrom(Building scanned, Level world) {
-        int oldFloorId = floorId;
-        int oldStructureId = structureId;
-        String oldType = type;
-        boolean oldForced = typeForced;
-        BlockPos oldSource = getSourceBlock();
-
-        pos0X = scanned.pos0X;
-        pos0Y = scanned.pos0Y;
-        pos0Z = scanned.pos0Z;
-        pos1X = scanned.pos1X;
-        pos1Y = scanned.pos1Y;
-        pos1Z = scanned.pos1Z;
-        floorCells = scanned.floorCells;
-        lastScan = scanned.lastScan;
-        blocks.clear();
-        scanned.blocks.forEach((key, value) -> blocks.put(key, new ArrayList<>(value)));
-        invalidateBlocksView();
-        structureId = oldStructureId;
-        floorId = oldFloorId;
-        type = oldType;
-        typeForced = oldForced;
-
-        BlockState oldSourceState = world.getBlockState(oldSource);
-        if (!containsPos(oldSource)
-                || !(oldSourceState.isAir() || !oldSourceState.getFluidState().isEmpty()
-                || oldSourceState.getCollisionShape(world, oldSource).isEmpty())) {
-            posX = scanned.posX;
-            posY = scanned.posY;
-            posZ = scanned.posZ;
-        }
     }
 
     Building copy() {

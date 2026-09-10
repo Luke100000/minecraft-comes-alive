@@ -18,6 +18,7 @@ import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Optional;
+import java.util.List;
 
 public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E> {
     private static final double SPEED_MODIFIER = 0.5D;
@@ -156,6 +157,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         updateSeeTime(visible);
 
         LivingEntity movementThreat = RangedCombatPositioning.nearestMovementThreat(entity, target);
+        List<LivingEntity> nearbyMovementThreats = RangedCombatPositioning.nearbyMovementThreats(entity, target);
         double targetDistanceSquared = entity.distanceToSqr(target);
         double threatDistanceSquared = entity.distanceToSqr(movementThreat);
         double threatVerticalDistance = Math.abs(entity.getY() - movementThreat.getY());
@@ -219,7 +221,8 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
                     publishAway(entity, movementThreat, KITE_SAFE_DISTANCE, KITE_SPEED_MODIFIER, targetChanged || stateChanged);
                 }
                 case EMERGENCY_FLEE -> {
-                    publishAway(entity, movementThreat, EMERGENCY_SAFE_DISTANCE, EMERGENCY_SPEED_MODIFIER, targetChanged || stateChanged);
+                    publishEmergencyAway(entity, nearbyMovementThreats, EMERGENCY_SAFE_DISTANCE,
+                            EMERGENCY_SPEED_MODIFIER, targetChanged || stateChanged);
                     trackEscapeOrTarget(entity, target);
                 }
                 default -> throw new IllegalStateException("Unexpected ranged combat base state: " + baseState);
@@ -279,6 +282,8 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
     }
 
     private void tryStartStrafe(E entity, LivingEntity target, boolean visible, boolean inRange, boolean closeThreat) {
+        trackTarget(entity, target);
+        entity.lookAt(target, LOOK_SPEED, LOOK_SPEED);
         float preferredDirection = entity.getRandom().nextBoolean() ? 1.0F : -1.0F;
         float direction = findSafeStrafeDirection(entity, preferredDirection);
         if (direction == 0.0F) {
@@ -303,6 +308,9 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             return;
         }
 
+        trackTarget(entity, target);
+        entity.lookAt(target, LOOK_SPEED, LOOK_SPEED);
+
         boolean sideBlocked = !RangedCombatPositioning.isStrafeSideWalkable(entity, this.strafeDirection);
         boolean collided = entity.horizontalCollision || entity.minorHorizontalCollision || sideBlocked;
         boolean stalled = this.strafeTicksElapsed > 3
@@ -313,8 +321,6 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             return;
         }
 
-        trackTarget(entity, target);
-        entity.lookAt(target, LOOK_SPEED, LOOK_SPEED);
         entity.getMoveControl().strafe(0.0F, this.strafeDirection * STRAFE_INPUT);
         this.strafeTicksElapsed++;
         this.strafeTicksRemaining--;
@@ -367,9 +373,9 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
                 attackRangeSquared
         );
         if (firingPosition.isEmpty()) {
-            clearCombatWalkTarget(entity);
-            scheduleWalkTargetRetry(entity);
-            logMovementIntent(entity, "hold", "no_firing_position", null);
+            WalkTarget walkTarget = new WalkTarget(new EntityTracker(target, false), (float)SPEED_MODIFIER, 0);
+            setCombatWalkTarget(entity, walkTarget);
+            logMovementIntent(entity, "walk", "reposition_approach_fallback", walkTarget);
             return;
         }
 
@@ -394,6 +400,30 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         WalkTarget walkTarget = new WalkTarget(awayPosition.orElseThrow(), (float)speedModifier, 0);
         setCombatWalkTarget(entity, walkTarget);
         logMovementIntent(entity, "walk", "away_from_threat", walkTarget);
+    }
+
+    private void publishEmergencyAway(
+            E entity,
+            List<LivingEntity> threats,
+            double desiredDistance,
+            double speedModifier,
+            boolean force
+    ) {
+        if (!canPublishCombatWalkTarget(entity, force)) {
+            return;
+        }
+
+        Optional<Vec3> awayPosition = RangedCombatPositioning.findEmergencyEscapePosition(entity, threats, desiredDistance);
+        if (awayPosition.isEmpty()) {
+            clearCombatWalkTarget(entity);
+            scheduleWalkTargetRetry(entity);
+            logMovementIntent(entity, "hold", "no_group_escape_position", null);
+            return;
+        }
+
+        WalkTarget walkTarget = new WalkTarget(awayPosition.orElseThrow(), (float)speedModifier, 0);
+        setCombatWalkTarget(entity, walkTarget);
+        logMovementIntent(entity, "walk", "away_from_threat_group", walkTarget);
     }
 
     private boolean publishCombatWalkTarget(E entity, WalkTarget walkTarget, boolean force) {

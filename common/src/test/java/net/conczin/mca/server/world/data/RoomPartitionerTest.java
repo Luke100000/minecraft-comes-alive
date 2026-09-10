@@ -3,6 +3,9 @@ package net.conczin.mca.server.world.data;
 import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 
+import java.util.AbstractCollection;
+import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -25,6 +28,27 @@ class RoomPartitionerTest {
         assertEquals(2, parts.size());
         assertTrue(parts.stream().anyMatch(part -> part.area() == 2));
         assertTrue(parts.stream().anyMatch(part -> part.area() == 1));
+    }
+
+    @Test
+    void partitionIndexesAcceptedTransitionsOnce() {
+        Set<FloorGeometry.Cell> cells = new java.util.LinkedHashSet<>();
+        List<SelectedFloorScanner.Transition> edges = new ArrayList<>();
+        for (int x = 0; x < 64; x++) {
+            cells.add(cell(x, 64, 0));
+            if (x > 0) {
+                edges.add(new SelectedFloorScanner.Transition(
+                        new BlockPos(x - 1, 64, 0), new BlockPos(x, 64, 0)));
+            }
+        }
+        CountingTransitions transitions = new CountingTransitions(edges);
+
+        List<RoomPartitioner.Component> parts = RoomPartitioner.partition(geometry(cells, Map.of()), transitions);
+
+        assertEquals(1, parts.size());
+        assertEquals(64, parts.getFirst().area());
+        assertEquals(1, transitions.iteratorCalls,
+                "partition repeatedly scanned the full transition collection");
     }
 
     @Test
@@ -120,5 +144,25 @@ class RoomPartitionerTest {
             }
         }
         return Set.copyOf(transitions);
+    }
+
+    private static final class CountingTransitions extends AbstractCollection<SelectedFloorScanner.Transition> {
+        private final List<SelectedFloorScanner.Transition> transitions;
+        private int iteratorCalls;
+
+        private CountingTransitions(List<SelectedFloorScanner.Transition> transitions) {
+            this.transitions = List.copyOf(transitions);
+        }
+
+        @Override
+        public Iterator<SelectedFloorScanner.Transition> iterator() {
+            iteratorCalls++;
+            return transitions.iterator();
+        }
+
+        @Override
+        public int size() {
+            return transitions.size();
+        }
     }
 }

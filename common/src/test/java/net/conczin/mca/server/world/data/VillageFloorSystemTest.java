@@ -321,6 +321,17 @@ class VillageFloorSystemTest {
     }
 
     @Test
+    void floorAttachmentRejectsSeparatedOverlappingFootprintWithoutConnectorEvidence() {
+        Village village = new Village(1, null);
+        StructureFloor existingFloor = TestStructureFloors.create(0, 64, 68, 0, region(64));
+        registerStructure(village, structure(10, 10, existingFloor), room(100, 10, 0, true));
+
+        StructureFloor separatedBasement = TestStructureFloors.create(1, 59, 63, 0, region(59));
+
+        assertTrue(village.selectAttachmentTarget(separatedBasement, List.of()).isEmpty());
+    }
+
+    @Test
     void floorAttachmentRejectsDirectFootprintTouchWithoutConnectorEvidence() {
         Village village = new Village(1, null);
         StructureFloor existingFloor = TestStructureFloors.create(0, 64, 68, 0, region(64));
@@ -517,6 +528,36 @@ class VillageFloorSystemTest {
         BlockPos supportBlock = new BlockPos(0, 63, 0);
         assertTrue(village.findPhysicalRoomAt(supportBlock).isEmpty());
         assertEquals(room, village.findInteractionRoomAt(supportBlock).orElseThrow());
+    }
+
+    @Test
+    void functionalRoomContainmentOwnsOnlyExactFloorCells() {
+        Building room = new Building(new BlockPos(0, 64, 0));
+        Set<BlockPos> cells = Set.of(
+                new BlockPos(0, 64, 0),
+                new BlockPos(1, 64, 0),
+                new BlockPos(0, 64, 1));
+        room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 1), cells);
+
+        assertTrue(room.containsPos(new BlockPos(0, 64, 0)));
+        assertFalse(room.containsPos(new BlockPos(0, 66, 0)),
+                "Room membership must not extrude an owned Floor cell vertically");
+        assertFalse(room.containsPos(new BlockPos(1, 64, 1)),
+                "a hole inside the derived bounds became Room membership");
+        assertFalse(room.containsPos(new BlockPos(0, 63, 0)));
+        assertFalse(room.containsPos(new BlockPos(0, 68, 0)));
+    }
+
+    @Test
+    void physicalRoomLookupUsesFloorCellVerticalInterval() {
+        Village village = new Village(1, null);
+        StructureFloor floor = TestStructureFloors.create(0, 64, 68, 0, region(64));
+        Structure structure = structure(10, 10, floor);
+        Building room = room(100, 10, 0, true);
+        room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 1), region(64));
+        registerStructure(village, structure, room);
+
+        assertEquals(room, village.findPhysicalRoomAt(new BlockPos(0, 66, 0)).orElseThrow());
     }
 
     @Test

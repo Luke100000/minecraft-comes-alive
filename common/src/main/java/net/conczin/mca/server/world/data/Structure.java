@@ -23,7 +23,7 @@ public final class Structure implements VillageBuilding {
         logicalBuildingId = id;
         this.source = source.immutable();
         for (StructureFloor floor : floors) {
-            this.floors.put(floor.id(), floor);
+            putFloorUnique(floor);
             nextFloorId = Math.max(nextFloorId, floor.id() + 1);
         }
         recomputeBoundsFromFloors();
@@ -36,10 +36,18 @@ public final class Structure implements VillageBuilding {
         source = NbtHelper.decodeBlockPos(tag.get("source"));
         for (StructureFloor floor : NbtHelper.toList(tag.getList("floors", Tag.TAG_COMPOUND),
                 value -> StructureFloor.load((CompoundTag) value))) {
-            floors.put(floor.id(), floor);
+            putFloorUnique(floor);
             nextFloorId = Math.max(nextFloorId, floor.id() + 1);
         }
         recomputeBoundsFromFloors();
+    }
+
+    private void putFloorUnique(StructureFloor floor) {
+        Objects.requireNonNull(floor, "floor");
+        if (floors.putIfAbsent(floor.id(), floor) != null) {
+            throw new IllegalArgumentException("Duplicate StructureFloor id " + floor.id()
+                    + " in Structure " + id);
+        }
     }
 
     public CompoundTag save() {

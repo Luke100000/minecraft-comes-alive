@@ -75,10 +75,17 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
 
     protected Optional<BlockPos> getNextPosition(VillagerEntityMCA villager) {
         Optional<Building> b = getNearestBuilding(villager);
-        if (b.isPresent() && !b.get().containsPos(villager.blockPosition())) {
+        if (b.isPresent() && !isInsideBuilding(b.get(), villager)) {
             return getRandomPositionIn(b.get(), villager.level(), villager);
         }
         return Optional.empty();
+    }
+
+    protected boolean isInsideBuilding(Building target, VillagerEntityMCA villager) {
+        return villager.getResidency().getHomeVillage()
+                .flatMap(village -> village.findPhysicalRoomAt(villager.blockPosition()))
+                .map(current -> current.getId() == target.getId())
+                .orElse(false);
     }
 
     protected int getCompletionRange() {

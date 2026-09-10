@@ -10,7 +10,6 @@ import net.minecraft.nbt.Tag;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -27,12 +26,8 @@ final class RoomDFU {
         Objects.requireNonNull(villageTag, "villageTag");
         if (villageTag.contains("buildingDataVersion")) {
             int version = villageTag.getInt("buildingDataVersion");
-            return switch (version) {
-                case 1 -> loadCurrent(migrateCanonicalV1(villageTag));
-                case Village.BUILDING_DATA_VERSION -> loadCurrent(villageTag);
-                default -> throw new IllegalArgumentException(
-                        "Unsupported MCA buildingDataVersion: " + version);
-            };
+            if (version == Village.BUILDING_DATA_VERSION) return loadCurrent(villageTag);
+            throw new IllegalArgumentException("Unsupported MCA buildingDataVersion: " + version);
         }
         return villageTag.contains("structures", Tag.TAG_LIST)
                 ? migrateUpstreamFloorCleanSquash(villageTag)
@@ -75,44 +70,6 @@ final class RoomDFU {
         return new Result(rooms, external, structures, logicalBuildings);
     }
 
-    private static CompoundTag migrateCanonicalV1(CompoundTag villageTag) {
-        CompoundTag migrated = villageTag.copy();
-        for (Tag externalValue : migrated.getList("externalBuildings", Tag.TAG_COMPOUND)) {
-            normalizeCanonicalV1ExternalBuilding((CompoundTag) externalValue);
-        }
-        for (Tag structureValue : migrated.getList("structures", Tag.TAG_COMPOUND)) {
-            CompoundTag structure = (CompoundTag) structureValue;
-            for (Tag floorValue : structure.getList("floors", Tag.TAG_COMPOUND)) {
-                CompoundTag floor = (CompoundTag) floorValue;
-                StructureFloor.load(floor);
-                for (Tag cellValue : floor.getList("cells", Tag.TAG_COMPOUND)) {
-                    CompoundTag cell = (CompoundTag) cellValue;
-                    if (!cell.contains("surfaceY", Tag.TAG_DOUBLE)) {
-                        throw new IllegalArgumentException("FloorGeometry cell is missing surfaceY");
-                    }
-                    double surfaceY = cell.getDouble("surfaceY");
-                    BlockPos pos = NbtHelper.decodeBlockPos(cell.get("pos"));
-                    if (!Double.isFinite(surfaceY)
-                            || surfaceY < pos.getY() - 1.0D
-                            || surfaceY >= cell.getInt("ceilingY")) {
-                        throw new IllegalArgumentException(
-                                "FloorGeometry cell surface must be within its physical height");
-                    }
-                    cell.remove("surfaceY");
-                }
-            }
-        }
-        migrated.putInt("buildingDataVersion", Village.BUILDING_DATA_VERSION);
-        return migrated;
-    }
-
-    private static void normalizeCanonicalV1ExternalBuilding(CompoundTag building) {
-        if (!building.contains("floorCells")) building.put("floorCells", new ListTag());
-        if (!building.contains("contributesToMain")) building.putBoolean("contributesToMain", true);
-        if (!building.contains("structureId")) building.putInt("structureId", -1);
-        if (!building.contains("floorId")) building.putInt("floorId", -1);
-    }
-
     private static <T> void putUnique(Map<Integer, T> target, int id, T value, String kind) {
         if (target.putIfAbsent(id, value) != null) {
             throw new IllegalArgumentException("Duplicate canonical " + kind + " id " + id);
@@ -125,14 +82,15 @@ final class RoomDFU {
         for (Tag value : villageTag.getList("structures", Tag.TAG_COMPOUND)) {
             CompoundTag oldStructure = (CompoundTag) value;
             int id = oldStructure.getInt("id");
-            int logicalBuildingId = oldStructure.contains("buildingId")
-                    ? oldStructure.getInt("buildingId") : id;
+            int logicalBuildingId = oldStructure.getInt("buildingId");
             List<StructureFloor> floors = oldStructure.getList("floors", Tag.TAG_COMPOUND).stream()
                     .map(tag -> migrateUpstreamFloor((CompoundTag) tag))
                     .toList();
             if (floors.isEmpty()) continue;
-            BlockPos source = decodeCompatibleBlockPos(oldStructure.get("source"));
-            if (source == null) source = floors.getFirst().geometry().cells().iterator().next().feet();
+            BlockPos source = NbtHelper.decodeBlockPos(oldStructure.get("source"));
+            if (source == null) {
+                throw new IllegalArgumentException("Upstream floor-clean Structure is missing a valid source");
+            }
             Structure structure = new Structure(id, source, floors);
             structure.setLogicalBuildingId(logicalBuildingId);
             structures.put(id, structure);
@@ -175,7 +133,10 @@ final class RoomDFU {
                             .thenComparingInt(Structure::getId))
                     .orElseThrow();
             CompoundTag oldRoot = oldStructureTags.get(root.getId());
-            int mainRoomId = oldRoot == null ? -1 : oldRoot.getInt("mainRoomId");
+            if (oldRoot == null) {
+                throw new IllegalArgumentException("Upstream floor-clean Structure is missing its persisted root");
+            }
+            int mainRoomId = oldRoot.getInt("mainRoomId");
             logicalBuildings.put(buildingId, new LogicalBuilding(
                     buildingId, mainRoomId,
                     inheritanceByRoom.getOrDefault(mainRoomId, true)));
@@ -190,19 +151,9 @@ final class RoomDFU {
                 .map(pos -> new FloorGeometry.Cell(
                         pos, Math.max(pos.getY() + 1, ceilingY)))
                 .toList();
-        Set<BlockPos> cellPositions = cells.stream().map(FloorGeometry.Cell::feet)
-                .collect(Collectors.toSet());
-        Map<BlockPos, FloorConnector.Type> connectors = new LinkedHashMap<>();
-        for (Tag value : oldFloor.getList("connectors", Tag.TAG_COMPOUND)) {
-            CompoundTag oldConnector = (CompoundTag) value;
-            BlockPos pos = decodeCompatibleBlockPos(oldConnector.get("pos"));
-            FloorConnector.Type type = FloorConnector.Type.fromSerializedName(
-                    oldConnector.getString("type"));
-            if (pos != null && type != null && cellPositions.contains(pos)) connectors.put(pos, type);
-        }
         return new StructureFloor(
                 oldFloor.getInt("id"), oldFloor.getInt("floorNumber"),
-                new FloorGeometry(cells, connectors));
+                new FloorGeometry(cells, Map.of()));
     }
 
     private static Set<BlockPos> upstreamRoomCells(CompoundTag oldRoom, StructureFloor floor) {
@@ -287,7 +238,7 @@ final class RoomDFU {
             boolean grouped = BuildingTypes.getInstance().getBuildingType(old.getString("type")).grouped();
             if (grouped) {
                 ExternalBuilding building = new ExternalBuilding(
-                        canonicalBuildingTag(old, Set.of(), -1, -1, true));
+                        canonicalOriginBuildingTag(old, Set.of(), -1, -1, true));
                 external.put(building.getId(), building);
                 continue;
             }
@@ -295,7 +246,7 @@ final class RoomDFU {
             int anchorY = old.getInt("pos0Y") + 1;
             Set<BlockPos> floorCells = rectangularCells(old, anchorY);
             if (floorCells.isEmpty()) continue;
-            Building room = new Building(canonicalBuildingTag(old, floorCells, id, 0, true));
+            Building room = new Building(canonicalOriginBuildingTag(old, floorCells, id, 0, true));
             int ceilingY = Math.max(anchorY + 1, old.getInt("pos1Y") + 1);
             FloorGeometry geometry = new FloorGeometry(floorCells.stream()
                     .map(pos -> new FloorGeometry.Cell(pos, ceilingY))
@@ -328,36 +279,34 @@ final class RoomDFU {
         tag.remove("size");
         tag.remove("floorRegions");
         tag.remove("inheritanceEnabled");
-        tag.remove("rootRoomId");
-        tag.remove("mainRoomAutomatic");
         tag.putInt("structureId", structureId);
         tag.putInt("floorId", floorId);
         tag.putBoolean("contributesToMain", contributesToMain);
         tag.put("floorCells", NbtHelper.fromList(floorCells, NbtHelper::encodeBlockPos));
-        tag.put("blocks2", normalizeBlocks(source.getCompound("blocks2")));
         return tag;
     }
 
-    private static CompoundTag normalizeBlocks(CompoundTag blocks) {
+    private static CompoundTag canonicalOriginBuildingTag(CompoundTag source,
+                                                           Set<BlockPos> floorCells,
+                                                           int structureId,
+                                                           int floorId,
+                                                           boolean contributesToMain) {
+        CompoundTag tag = canonicalBuildingTag(
+                source, floorCells, structureId, floorId, contributesToMain);
+        tag.put("blocks2", normalizeOriginBlocks(source.getCompound("blocks2")));
+        return tag;
+    }
+
+    private static CompoundTag normalizeOriginBlocks(CompoundTag blocks) {
         CompoundTag normalized = new CompoundTag();
         for (String key : blocks.getAllKeys()) {
-            Tag positionsTag = blocks.get(key);
-            if (!(positionsTag instanceof ListTag positions)) continue;
-            List<BlockPos> normalizedPositions = positions.stream()
-                    .map(RoomDFU::decodeCompatibleBlockPos)
-                    .filter(Objects::nonNull)
+            List<BlockPos> normalizedPositions = blocks.getList(key, Tag.TAG_COMPOUND).stream()
+                    .map(CompoundTag.class::cast)
+                    .map(pos -> new BlockPos(pos.getInt("x"), pos.getInt("y"), pos.getInt("z")))
                     .toList();
             normalized.put(key, NbtHelper.fromList(normalizedPositions, NbtHelper::encodeBlockPos));
         }
         return normalized;
-    }
-
-    private static BlockPos decodeCompatibleBlockPos(Tag value) {
-        if (value instanceof CompoundTag pos
-                && pos.contains("x") && pos.contains("y") && pos.contains("z")) {
-            return new BlockPos(pos.getInt("x"), pos.getInt("y"), pos.getInt("z"));
-        }
-        return value == null ? null : NbtHelper.decodeBlockPos(value);
     }
 
     record Result(
