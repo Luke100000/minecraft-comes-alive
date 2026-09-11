@@ -113,26 +113,6 @@ class BuildingRoomScannerOwnerTest {
                 .contains(connector));
     }
 
-    @Test
-    void connectorFloorMembershipDependsOnTouchingSurfaceNotVerticalTraversalType() {
-        BlockPos connector = new BlockPos(1, 65, 0);
-        FloorGeometry geometry = new FloorGeometry(Set.of(
-                cell(0, 64, 0), cell(2, 64, 0)), Map.of());
-
-        Set<BlockPos> cells = StructureConnector.floorMembershipCells(connector, geometry);
-
-        assertEquals(Set.of(new BlockPos(1, 64, 0)), cells);
-    }
-
-    @Test
-    void connectorOnAnotherStoreyCannotClaimFloorByColumnAlone() {
-        BlockPos upperDoor = new BlockPos(-303, 91, -1623);
-        FloorGeometry lowerFloor = new FloorGeometry(Set.of(
-                cell(-302, 88, -1623), cell(-301, 88, -1623)), Map.of());
-
-        assertTrue(StructureConnector.floorMembershipCells(upperDoor, lowerFloor).isEmpty());
-    }
-
     private static FloorGeometry.Cell cell(int x, int y, int z) {
         return new FloorGeometry.Cell(new BlockPos(x, y, z), y + 4);
     }

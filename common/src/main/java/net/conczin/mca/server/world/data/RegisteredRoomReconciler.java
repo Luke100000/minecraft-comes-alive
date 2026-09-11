@@ -88,8 +88,8 @@ final class RegisteredRoomReconciler {
 
     /**
      * Reconciles a complete fresh Floor partition for Add Room. Boundary connector cells are
-     * deliberately excluded from persistence identity because their deterministic Room owner may
-     * change when the adjacent Room sizes change.
+     * deliberately excluded from persistence identity because boundary ownership is topology,
+     * not stable Room identity.
      */
     static Optional<List<Building>> reconcileAddition(Collection<Building> previousRooms,
                                                        Collection<Building> scannedComponents,
@@ -109,28 +109,36 @@ final class RegisteredRoomReconciler {
                 .map(Map.Entry::getKey)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
 
+        Building addedComponent = null;
+        for (Building component : components) {
+            if (!component.getFloorCells().equals(addedRoom.getFloorCells())) continue;
+            if (addedComponent != null) return Optional.empty();
+            addedComponent = component;
+        }
+        if (addedComponent == null) return Optional.empty();
+
+        Building selectedAddedComponent = addedComponent;
+        List<Building> addedMatches = previous.stream()
+                .filter(room -> hasIdentityOverlap(selectedAddedComponent, room, boundaryCells))
+                .toList();
+        if (addedMatches.size() > 1) return Optional.empty();
+
         List<Building> replacements = new ArrayList<>(previous.size());
         Set<Integer> matchedRoomIds = new HashSet<>();
-        boolean matchedAddedRoom = false;
         for (Building component : components) {
+            if (component == addedComponent) continue;
             List<Building> matches = previous.stream()
                     .filter(room -> hasIdentityOverlap(component, room, boundaryCells))
                     .toList();
+            if (matches.isEmpty()) continue;
             if (matches.size() > 1) return Optional.empty();
-            if (matches.isEmpty()) {
-                if (matchedAddedRoom || !component.getFloorCells().equals(addedRoom.getFloorCells())) {
-                    return Optional.empty();
-                }
-                matchedAddedRoom = true;
-                continue;
-            }
 
             Building previousRoom = matches.getFirst();
             if (!matchedRoomIds.add(previousRoom.getId())) return Optional.empty();
             preserveIdentity(component, previousRoom);
             replacements.add(component);
         }
-        if (!matchedAddedRoom || matchedRoomIds.size() != previous.size()) return Optional.empty();
+        if (matchedRoomIds.size() != previous.size()) return Optional.empty();
         return Optional.of(List.copyOf(replacements));
     }
 

@@ -50,7 +50,7 @@ public final class RoomWorkflow {
         Structure candidate = structureScan.toStructure(-1);
         StructureFloor floor = candidate.getFloors().getFirst();
         return scanResolvedRoom(village, candidate, structureScan.source(), -1,
-                floor, structureScan.scannedFloor(), structureScan.transitions(), Set.of())
+                floor, structureScan.scannedFloor(), structureScan.transitions())
                 .withPendingStructure(candidate);
     }
 
@@ -71,8 +71,9 @@ public final class RoomWorkflow {
         if (structure == null || floor == null) {
             return failedRoom(Building.validationResult.NOT_IN_BUILDING, source, village);
         }
+        BlockPos scanSeed = plan.scanSeed();
         StructureScanner.Result fresh = StructureScanner.scanExistingFloor(
-                world, structure, floor, source, village.getStructures().values());
+                world, structure, floor, scanSeed, village.getStructures().values());
         if (fresh.result() != Building.validationResult.SUCCESS) {
             return failedRoom(fresh.result(), source, village);
         }
@@ -86,16 +87,15 @@ public final class RoomWorkflow {
             return failedRoom(Building.validationResult.OVERLAP, source, village);
         }
         BuildingScanResult addition = scanResolvedRoom(
-                village, refreshed, source, -1, refreshedFloor, fresh.scannedFloor(),
-                fresh.transitions(), registeredRoomIdentityCells(
-                        village, structure.getId(), floor.id(), fresh.scannedFloor(), -1));
+                village, refreshed, scanSeed, -1, refreshedFloor, fresh.scannedFloor(),
+                fresh.transitions());
         if (addition.result() != Building.validationResult.SUCCESS) {
             return addition.withSource(source);
         }
 
         List<Building> freshRooms = new ArrayList<>();
         for (BuildingRoomScanner.Result component : BuildingRoomScanner.partition(
-                world, source, Config.getInstance().maxBuildingSize,
+                world, scanSeed, Config.getInstance().maxBuildingSize,
                 floor.id(), fresh.scannedFloor(), fresh.transitions())) {
             BuildingScanResult componentScan = roomResultFromGeometry(
                     village, refreshed, refreshedFloor, component, -1);
@@ -164,7 +164,7 @@ public final class RoomWorkflow {
 
         candidate.setLogicalBuildingId(plan.targetBuildingId());
         return scanResolvedRoom(village, candidate, plan.scanSeed(), -1,
-                attachmentFloor, structureScan.scannedFloor(), structureScan.transitions(), Set.of())
+                attachmentFloor, structureScan.scannedFloor(), structureScan.transitions())
                 .withSource(source)
                 .withPendingStructure(candidate);
     }
@@ -265,34 +265,15 @@ public final class RoomWorkflow {
         return refreshed.replaceFloorGeometry(floorId, floor) ? refreshed : null;
     }
 
-    private static Set<BlockPos> registeredRoomIdentityCells(Village village,
-                                                             int structureId,
-                                                             int floorId,
-                                                             FloorGeometry floor,
-                                                             int excludedRoomId) {
-        if (village == null || floor == null) return Set.of();
-        return village.getRooms()
-                .filter(room -> room.getId() != excludedRoomId)
-                .filter(room -> room.getStructureId() == structureId)
-                .filter(room -> room.getFloorId() == floorId)
-                .flatMap(room -> room.getFloorCells().stream())
-                .filter(cell -> {
-                    FloorConnector.Type connector = floor.connectorTypesByCell().get(cell);
-                    return connector == null || !connector.roomBoundary();
-                })
-                .collect(java.util.stream.Collectors.toSet());
-    }
-
     private BuildingScanResult scanResolvedRoom(Village village,
                                                 Structure structure,
                                                 BlockPos source,
-                                                 int existingRoomId,
-                                                 StructureFloor floor,
-                                                 FloorGeometry scannedFloor,
-                                                 Collection<SelectedFloorScanner.Transition> transitions,
-                                                 Set<BlockPos> blocked) {
+                                                int existingRoomId,
+                                                StructureFloor floor,
+                                                FloorGeometry scannedFloor,
+                                                Collection<SelectedFloorScanner.Transition> transitions) {
         BuildingRoomScanner.Result geometry = BuildingRoomScanner.scan(
-                world, source, blocked, Config.getInstance().maxBuildingSize,
+                world, source, Config.getInstance().maxBuildingSize,
                 floor.id(), scannedFloor, transitions);
         return roomResultFromGeometry(village, structure, floor, geometry, existingRoomId);
     }

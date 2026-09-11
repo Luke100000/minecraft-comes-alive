@@ -1,6 +1,7 @@
 package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -28,8 +29,16 @@ final class RoomPartitioner {
 
     static List<Component> partition(FloorGeometry geometry,
                                      Collection<SelectedFloorScanner.Transition> transitions) {
+        return partition(geometry, transitions, Map.of());
+    }
+
+    static List<Component> partition(FloorGeometry geometry,
+                                     Collection<SelectedFloorScanner.Transition> transitions,
+                                     Map<BlockPos, Direction> preferredBoundarySides) {
         Collection<SelectedFloorScanner.Transition> acceptedTransitions =
                 transitions == null ? List.of() : transitions;
+        Map<BlockPos, Direction> preferredSides = preferredBoundarySides == null
+                ? Map.of() : Map.copyOf(preferredBoundarySides);
         TransitionIndex transitionIndex = TransitionIndex.from(acceptedTransitions);
         Set<BlockPos> boundaryCells = geometry.connectorTypesByCell().entrySet().stream()
                 .filter(entry -> entry.getValue().roomBoundary())
@@ -50,7 +59,7 @@ final class RoomPartitioner {
         }
 
         List<Component> result = assignBoundaryClusters(
-                geometry, boundaryCells, openComponents, transitionIndex);
+                geometry, boundaryCells, openComponents, transitionIndex, preferredSides);
         result.sort(Comparator.comparingInt(Component::minX)
                 .thenComparingInt(Component::minZ)
                 .thenComparingInt(Component::minY)
@@ -63,7 +72,8 @@ final class RoomPartitioner {
     private static List<Component> assignBoundaryClusters(FloorGeometry geometry,
                                                            Set<BlockPos> boundaryCells,
                                                            List<Component> openComponents,
-                                                           TransitionIndex transitions) {
+                                                           TransitionIndex transitions,
+                                                           Map<BlockPos, Direction> preferredBoundarySides) {
         if (boundaryCells.isEmpty()) return new ArrayList<>(openComponents);
 
         List<Set<FloorGeometry.Cell>> clusters = boundaryClusters(geometry, boundaryCells, transitions);
@@ -81,7 +91,8 @@ final class RoomPartitioner {
                     if (component != null) adjacent.add(component);
                 }
             }
-            Component owner = owner(adjacent);
+            Component owner = preferredOwner(cluster, componentByCell, transitions, preferredBoundarySides);
+            if (owner == null) owner = owner(adjacent);
             if (owner == null) {
                 unowned.add(new Component(cluster));
             } else {
@@ -97,6 +108,29 @@ final class RoomPartitioner {
         }
         result.addAll(unowned);
         return result;
+    }
+
+    private static Component preferredOwner(Set<FloorGeometry.Cell> cluster,
+                                            Map<BlockPos, Component> componentByCell,
+                                            TransitionIndex transitions,
+                                            Map<BlockPos, Direction> preferredBoundarySides) {
+        LinkedHashSet<Component> preferred = new LinkedHashSet<>();
+        for (FloorGeometry.Cell cell : cluster) {
+            BlockPos boundary = cell.feet();
+            Direction side = preferredBoundarySides.get(boundary);
+            if (side == null) continue;
+            for (BlockPos neighbor : transitions.neighbors(boundary)) {
+                if (!isOnSide(boundary, neighbor, side)) continue;
+                Component component = componentByCell.get(neighbor);
+                if (component != null) preferred.add(component);
+            }
+        }
+        return preferred.size() == 1 ? preferred.iterator().next() : null;
+    }
+
+    private static boolean isOnSide(BlockPos boundary, BlockPos neighbor, Direction side) {
+        return neighbor.getX() - boundary.getX() == side.getStepX()
+                && neighbor.getZ() - boundary.getZ() == side.getStepZ();
     }
 
     private static List<Set<FloorGeometry.Cell>> boundaryClusters(FloorGeometry geometry,
@@ -164,7 +198,7 @@ final class RoomPartitioner {
 
     private static FloorGeometry.Cell resolveSourceCell(BlockPos source, FloorGeometry geometry) {
         List<FloorGeometry.Cell> column = geometry.cellsAtColumn(source.getX(), source.getZ());
-        if (column.isEmpty()) return nearestAdjacentCell(source, geometry);
+        if (column.isEmpty()) return null;
 
         FloorGeometry.Cell interior = column.stream()
                 .filter(cell -> cell.feet().getY() <= source.getY() && source.getY() < cell.ceilingY())
@@ -174,18 +208,7 @@ final class RoomPartitioner {
 
         return column.stream()
                 .min(Comparator.comparingInt((FloorGeometry.Cell cell) -> Math.abs(cell.feet().getY() - source.getY()))
-                        .thenComparingInt(cell -> cell.feet().getY()))
-                .orElse(null);
-    }
-
-    private static FloorGeometry.Cell nearestAdjacentCell(BlockPos source, FloorGeometry geometry) {
-        return geometry.cells().stream()
-                .filter(cell -> Math.abs(cell.feet().getX() - source.getX())
-                        + Math.abs(cell.feet().getZ() - source.getZ()) == 1)
-                .min(Comparator.comparingInt((FloorGeometry.Cell cell) -> Math.abs(cell.feet().getY() - source.getY()))
-                        .thenComparingInt(cell -> cell.feet().getX())
-                        .thenComparingInt(cell -> cell.feet().getZ())
-                        .thenComparingInt(cell -> cell.feet().getY()))
+                .thenComparingInt(cell -> cell.feet().getY()))
                 .orElse(null);
     }
 

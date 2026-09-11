@@ -466,7 +466,7 @@ class VillageFloorSystemTest {
     }
 
     @Test
-    void duplicateCheckUsesSemanticBandInsteadOfLegacyCeilingVolume() {
+    void duplicateCheckUsesExactFloorCellsInsteadOfLegacyCeilingVolume() {
         Village village = new Village(1, null);
         Structure staleLower = structure(10, 10,
                 TestStructureFloors.create(0, 88, 93, 0, region(88)));
@@ -474,11 +474,24 @@ class VillageFloorSystemTest {
 
         Structure upper = structure(-1, 10,
                 TestStructureFloors.create(0, 91, 94, 0, region(91)));
-        Structure sameBand = structure(-1, 10,
-                TestStructureFloors.create(0, 90, 94, 0, region(90)));
+        Structure exactDuplicate = structure(-1, 10,
+                TestStructureFloors.create(0, 88, 94, 0, region(88)));
 
         assertFalse(village.hasRegisteredFloorOverlap(upper));
-        assertTrue(village.hasRegisteredFloorOverlap(sameBand));
+        assertTrue(village.hasRegisteredFloorOverlap(exactDuplicate));
+    }
+
+    @Test
+    void duplicateCheckRequiresPhysicalVerticalOverlapInsideSemanticBand() {
+        Village village = new Village(1, null);
+        Structure lower = structure(10, 10,
+                TestStructureFloors.create(0, 88, 90, 0, region(88)));
+        registerStructure(village, lower, room(100, 10, 0, true));
+
+        Structure touchingAbove = structure(-1, 20,
+                TestStructureFloors.create(0, 90, 92, 0, region(90)));
+
+        assertFalse(village.hasRegisteredFloorOverlap(touchingAbove));
     }
 
     @Test

@@ -13,7 +13,9 @@
 ## Global Constraints
 
 - Preserve emergency hysteresis exactly: enter below `12.25` squared (3.5 blocks), exit at `25.0` squared (5 blocks), vertical threat distance `<= 2.5`, desired retreat distance `6`, speed `0.9`.
+- `EMERGENCY_FLEE` evaluates the nearby visible valid hostile set together and chooses a bounded geometric escape that improves the minimum distance to that group; it must not flee from one close mob directly toward another.
 - Preserve kite hysteresis exactly: enter below `36.0` squared (6 blocks), exit at `81.0` squared (9 blocks), vertical threat distance `<= 2.5`, desired retreat distance `9`, speed `0.85`.
+- `KITE` remains single-threat-oriented and retreats from the physically nearest close hostile. The 9-block value is desired/exit spacing; the first bounded random candidate is only required to open useful distance.
 - Preserve approach speed `0.5` and 10-tick sustained LOS-loss grace before `REPOSITION`.
 - Reposition samples at most 8 geometric candidates inside 8 horizontal / 4 vertical blocks; candidate evaluation must not call `PathNavigation.createPath(...)`.
 - Stable `HOLD` must last at least 40 ticks before a strafe may begin.
@@ -459,7 +461,7 @@ private void publishApproach(E entity, LivingEntity target) {
 }
 ```
 
-For `KITE`/`EMERGENCY_FLEE`, use `RangedCombatPositioning.findAwayPosition(...)` and publish `new WalkTarget(position, speed, 0)`.
+For `KITE`, use `RangedCombatPositioning.findAwayPosition(...)` and publish `new WalkTarget(position, speed, 0)`. For `EMERGENCY_FLEE`, use the group-aware emergency escape helper over nearby valid threats and publish one Brain-owned `WalkTarget`; candidate evaluation remains geometric and never creates a path.
 
 For `REPOSITION`, use `findFiringPosition(...)`; if absent, publish ordinary approach intent as specified.
 

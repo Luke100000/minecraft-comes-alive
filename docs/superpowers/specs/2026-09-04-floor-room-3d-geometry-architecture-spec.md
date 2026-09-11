@@ -432,7 +432,8 @@ established.
 
 ## Persistence format
 
-Introduce `buildingDataVersion = 1` for the new canonical exact-geometry format.
+The canonical exact-geometry format is versioned by
+`Village.BUILDING_DATA_VERSION`.
 
 The canonical save contains only the current object model. Legacy field names
 must not be interpreted by `Village`, `Building`, `Structure`, or scanners.
@@ -441,7 +442,7 @@ Conceptually:
 
 ```text
 Village
-  buildingDataVersion: 1
+  buildingDataVersion: current
   buildings: [Room...]
   externalBuildings: [...]
   structures: [Structure...]
@@ -491,8 +492,8 @@ second historical-format switch.
 2. **Upstream `origin/feature/1.21.1-floor-clean-squash`** — Structures/Floors
    exist but no `buildingDataVersion`. This is the only Floor-system migration
    source that must be supported.
-3. **Current canonical save** — `buildingDataVersion == 1`; this is not a
-   migration path.
+3. **Current canonical save** — `buildingDataVersion == Village.BUILDING_DATA_VERSION`;
+   this is not a migration path.
 
 Historical tag interpretation and normalization lives only in `RoomDFU`.
 

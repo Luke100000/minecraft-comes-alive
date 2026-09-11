@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make Floor/Room membership a set of canonical integer 3D cells, keep fractional Minecraft surface height transient during fresh discovery only, remove connector-manufactured cells and post-hoc semantic-band reconstruction, and migrate the previous exact-cell save shape cleanly to `buildingDataVersion = 2`.
+**Goal:** Make Floor/Room membership a set of canonical integer 3D cells, keep fractional Minecraft surface height transient during fresh discovery only, remove connector-manufactured cells and post-hoc semantic-band reconstruction, and keep persistence compatibility limited to the two supported upstream baselines.
 
 **Architecture:** `SelectedFloorScanner` owns live Minecraft collision probing and records accepted integer cell-to-cell transitions only for the current observation. `FloorGeometry` persists integer membership cells plus retained `ceilingY` metadata and connector markers; it does not persist `surfaceY`. `RoomPartitioner` partitions a fresh Floor using the accepted transient transitions, while Rooms persist only the exact cell keys they own.
 
@@ -14,7 +14,7 @@
 
 - `FloorGeometry.Cell.feet` is the only canonical Floor/Room membership identity.
 - Canonical cells are integer `BlockPos` values. Supporting blocks and fractional collision surfaces are discovery evidence only.
-- `surfaceY` must not remain in `FloorGeometry.Cell`, version-2 `StructureFloor` NBT, Room persistence, projection, or Room partitioning.
+- `surfaceY` must not remain in `FloorGeometry.Cell`, current canonical `StructureFloor` NBT, Room persistence, projection, or Room partitioning.
 - `ceilingY` may remain per-cell vertical-interval metadata; it is not identity and must not decide Room connectivity.
 - Multiple exact cells in the same X/Z column remain valid and independently addressable.
 - Fresh physical reachability is represented only by bounded transient accepted transitions propagated with the current scan/observation. Do not create a second persisted geometry model.
@@ -27,7 +27,7 @@
 - Ladders/trapdoors attach semantic Floors but never merge Room components.
 - POI relevance never manufactures Floor cells. Beds/carpet/low furniture may occupy an already valid interior membership cell; full cubes remain obstructions.
 - Physical world discovery is independent of persisted Floor identity. Persistence may classify an already-discovered transition semantically; it must never decide whether Minecraft considers the transition physically valid.
-- `RoomDFU` remains the only compatibility boundary. Version-1 canonical exact-cell saves migrate to version 2 by discarding persisted `surfaceY`; released-origin and upstream-unversioned floor-clean-squash migrations remain supported.
+- `RoomDFU` remains the only compatibility boundary. It loads the current canonical shape directly and migrates only released `origin/1.21.1` plus unversioned `origin/feature/1.21.1-floor-clean-squash`.
 - Prefer existing owners and nested/private helpers; do not add a new top-level traversal subsystem.
 - Current branch is `dev/1.21.1`. Verify branch/status before implementation tasks and preserve unrelated dirty work.
 - `neoforge/src/main/java/net/conczin/mca/server/world/data/FloorScannerGameTests.java` is pre-existing untracked user evidence. Inspect and modify it as needed, but never stage its parent directory wholesale.
@@ -57,11 +57,11 @@
 - `common/src/main/java/net/conczin/mca/server/world/data/StructureConnector.java`
   - Connector classification/normalization and association with already-discovered exact cells; never materializes missing Floor geometry.
 - `common/src/main/java/net/conczin/mca/server/world/data/StructureFloor.java`
-  - Version-2 canonical exact cell persistence: `pos` plus `ceilingY`; persisted connector markers reference existing exact cells.
+  - Current canonical exact cell persistence: `pos` plus `ceilingY`; persisted connector markers reference existing exact cells.
 - `common/src/main/java/net/conczin/mca/server/world/data/RoomDFU.java`
-  - Sole compatibility boundary, including canonical v1 -> v2 migration.
+  - Sole compatibility boundary for the current shape plus the two supported upstream baselines.
 - `common/src/main/java/net/conczin/mca/server/world/data/Village.java`
-  - Owns `BUILDING_DATA_VERSION = 2`.
+  - Owns `BUILDING_DATA_VERSION` for the current canonical shape.
 - `common/src/main/java/net/conczin/mca/server/world/data/RoomPoiEvidence.java`
   - POI/perimeter evidence derived after Room topology; adapts to surface-free cells.
 - `common/src/test/java/net/conczin/mca/server/world/data/`
@@ -325,7 +325,7 @@ git commit -m "refactor: keep floor surface height transient"
 
 **Interfaces:**
 - Produces `RoomPartitioner.partition(FloorGeometry, Collection<SelectedFloorScanner.Transition>)`.
-- `BuildingRoomScanner.scan(Level, BlockPos, Set<BlockPos>, int, int, FloorGeometry, Collection<SelectedFloorScanner.Transition>)` and `BuildingRoomScanner.partition(Level, BlockPos, int, int, FloorGeometry, Collection<SelectedFloorScanner.Transition>)` receive the same transition collection as the Floor they materialize.
+- `BuildingRoomScanner.scan(Level, BlockPos, int, int, FloorGeometry, Collection<SelectedFloorScanner.Transition>)` and `BuildingRoomScanner.partition(Level, BlockPos, int, int, FloorGeometry, Collection<SelectedFloorScanner.Transition>)` receive the same transition collection as the Floor they materialize.
 - `SelectedFloorScanner.Result` is the single immutable fresh-scan evidence bundle. `StructureConnector.FloorHandoff` and `StructureScanner.FloorObservation` carry that result rather than duplicating its Floor, transitions, and connected-Floor evidence; `StructureScanner.Result` continues to expose the selected scan to Room workflows.
 - `FloorGeometry.connectorTypesByCell()` remains keyed to exact cells. Raw connector evidence may exist outside `FloorGeometry`, but persisted Room-boundary markers never create their own cell.
 
@@ -410,7 +410,7 @@ void doorCellBelongsToOneRoomWithoutConnectingBothRooms() {
 }
 ```
 
-Keep `FloorGeometryTest.connectorMustReferenceExistingExactCell()` as a hard invariant: a connector marker with no independently discovered exact cell is rejected rather than manufacturing geometry. Keep `connectorOwnerUsesLargestComponentThenStableBounds()` and add/retain an enclosed-interior-vs-tiny-exterior regression so the larger enclosed component owns the doorway cell.
+Keep `FloorGeometryTest.connectorMustReferenceExistingExactCell()` as a hard invariant: a connector marker with no independently discovered exact cell is rejected rather than manufacturing geometry. Keep the stable largest-component ordering only as the fallback for ambiguous non-door boundaries. Door ownership is derived from the placed door's closed occupied side instead of Room size.
 
 - [ ] **Step 6: Remove connector-cell synthesis while preserving valid connector cells**
 
@@ -439,9 +439,9 @@ Ordinary world discovery is responsible for discovering a doorway cell. Connecto
 
 - [ ] **Step 7: Preserve deterministic one-Room ownership for boundary cells**
 
-Retain the current `RoomPartitioner` shape: remove Room-boundary cells before ordinary component flood-fill, form components from non-boundary cells using only the accepted transitions from this fresh observation, then attach each boundary cluster to `RoomPartitioner.owner(adjacent)`. Keep the existing owner ordering: largest component first, then stable bounds/coordinate ordering. If a boundary cluster has no adjacent component, retain its existing deterministic standalone-component behavior.
+Retain the current `RoomPartitioner` shape: remove Room-boundary cells before ordinary component flood-fill, form components from non-boundary cells using only the accepted transitions from this fresh observation, then attach each boundary cluster to `RoomPartitioner.owner(adjacent)`. For doors, filter the transient partition transitions to the side occupied by the closed door, derived from `DoorBlock.FACING.getOpposite()`; `OPEN` and hinge do not affect ownership. Gates and other ambiguous boundary cells keep the existing fallback ordering: largest component first, then stable bounds/coordinate ordering. If a boundary cluster has no adjacent component, retain its existing deterministic standalone-component behavior.
 
-Do not let transitions through a door/gate make the two adjacent components one Room. Source selection from a doorway must resolve to the component that owns that doorway cell after assignment.
+Do not let transitions through a door/gate make the two adjacent components one Room. Reversing a door facing must reverse its Room owner, while opening or closing it must not. Source selection from a doorway must resolve to the component that owns that doorway cell after assignment.
 
 - [ ] **Step 8: Run focused tests and GameTests**
 
@@ -462,7 +462,7 @@ git commit -m "refactor: partition rooms from fresh cell transitions"
 
 ---
 
-### Task 4: Introduce canonical persistence version 2
+### Task 4: Pin current canonical persistence and upstream migrations
 
 **Files:**
 - Modify: `common/src/main/java/net/conczin/mca/server/world/data/Village.java`
@@ -472,11 +472,11 @@ git commit -m "refactor: partition rooms from fresh cell transitions"
 - Modify: `common/src/test/java/net/conczin/mca/server/world/data/RoomDFUTest.java`
 
 **Interfaces:**
-- Produces `Village.BUILDING_DATA_VERSION = 2`.
-- Version-2 `StructureFloor` cell NBT contains `pos` plus `ceilingY`, never `surfaceY`.
-- `RoomDFU` recognizes current v2, canonical v1 migration, upstream unversioned floor-clean-squash, and released origin.
+- Produces the current `Village.BUILDING_DATA_VERSION`.
+- Current canonical `StructureFloor` cell NBT contains `pos` plus `ceilingY`, never `surfaceY`.
+- `RoomDFU` recognizes the current canonical version, unversioned `origin/feature/1.21.1-floor-clean-squash`, and released `origin/1.21.1` only.
 
-- [ ] **Step 1: Write version-2 save RED**
+- [ ] **Step 1: Write current canonical save RED**
 
 Update the current version assertion and add the cell-shape assertion:
 
@@ -518,11 +518,12 @@ private static FloorGeometry.Cell loadCell(CompoundTag tag) {
 }
 ```
 
-Canonical v2 load must not interpret optional `surfaceY`.
+Current canonical load must not interpret optional `surfaceY`.
 
-- [ ] **Step 3: Add canonical-v1 migration fixture**
+- [ ] **Step 3: Pin the two supported migration fixtures**
 
-Construct a canonical-v1 tag from a valid current fixture by setting `buildingDataVersion` to `1` and adding an old `surfaceY` double to every Floor cell. Use a fractional value on at least one cell. Assert `RoomDFU.load(CompoundTag)` preserves exact `feet` and `ceilingY` ownership while the next v2 save contains no `surfaceY`.
+Keep fixtures derived from the save shapes at `origin/1.21.1` and
+`origin/feature/1.21.1-floor-clean-squash`.
 
 - [ ] **Step 4: Route versions explicitly in `RoomDFU.load(CompoundTag)`**
 
@@ -531,25 +532,22 @@ Use:
 ```java
 if (villageTag.contains("buildingDataVersion")) {
     int version = villageTag.getInt("buildingDataVersion");
-    return switch (version) {
-        case 1 -> loadCurrent(migrateCanonicalV1(villageTag));
-        case Village.BUILDING_DATA_VERSION -> loadCurrent(villageTag);
-        default -> throw new IllegalArgumentException(
-                "Unsupported MCA buildingDataVersion: " + version);
-    };
+    if (version == Village.BUILDING_DATA_VERSION) return loadCurrent(villageTag);
+    throw new IllegalArgumentException("Unsupported MCA buildingDataVersion: " + version);
 }
 ```
 
-`migrateCanonicalV1(CompoundTag)` works on `villageTag.copy()`, validates the v1 cell fields it depends on, removes `surfaceY` from every canonical Floor cell, sets the copy's `buildingDataVersion` to 2, and returns the copy. It must not mutate the caller's tag.
+Unversioned input is classified only into the two supported upstream shapes:
+presence of the upstream `structures` list selects the floor-clean-squash
+migration; otherwise the released-origin building migration is used.
 
 - [ ] **Step 5: Update old corruption tests deliberately**
 
 Required test outcomes:
 
 - Missing/invalid `pos` or `ceilingY` remains invalid.
-- Version-1 malformed/non-finite `surfaceY` is validated only inside the v1 migration path if the historical-shape validator still requires it.
-- Version 3 becomes the unsupported-version case after v2 is current.
-- Fractional v1 `surfaceY = 63.5D` migrates successfully but does not survive in v2 state/save output.
+- Any non-current `buildingDataVersion` is rejected as unsupported.
+- The two upstream fixtures continue to migrate into the current canonical shape.
 
 - [ ] **Step 6: Re-run persistence tests**
 
@@ -557,7 +555,7 @@ Required test outcomes:
 .\gradlew.bat :common:test --tests 'net.conczin.mca.server.world.data.RoomDFUTest' --tests 'net.conczin.mca.server.world.data.StructureFloorTest' --rerun-tasks
 ```
 
-Expected: current v2 round-trip, canonical-v1 migration, released-origin migration, and upstream-unversioned migration pass.
+Expected: current canonical round-trip, released-origin migration, and upstream-unversioned floor-clean-squash migration pass.
 
 - [ ] **Step 7: Commit Task 4**
 
@@ -861,9 +859,9 @@ rg -n "surfaceY" common/src/main/java common/src/test/java
 Expected allowed locations only:
 
 - transient `SelectedFloorScanner.SurfaceCell` / live physical helpers;
-- canonical-v1 migration/fixtures in `RoomDFU` / `RoomDFUTest`.
+- no persisted canonical `surfaceY` compatibility path in `RoomDFU` / `RoomDFUTest`.
 
-`FloorGeometry.java` and version-2 `StructureFloor.saveCell` must contain no `surfaceY`.
+`FloorGeometry.java` and current canonical `StructureFloor.saveCell` must contain no `surfaceY`.
 
 - [ ] **Step 2: Run the complete world-data test lane**
 
@@ -913,7 +911,7 @@ wall POI remains metadata with one deterministic owner
 Required persistence evidence:
 
 - current saves write `buildingDataVersion = 2`;
-- v2 Floor cells contain `pos` plus `ceilingY`, not `surfaceY`;
+- current canonical Floor cells contain `pos` plus `ceilingY`, not `surfaceY`;
 - v1 canonical exact-cell saves migrate and preserve cell ownership;
 - unsupported version 3 rejects;
 - released-origin and upstream-unversioned migrations remain green;
@@ -962,8 +960,8 @@ Do not create an empty commit.
 | Ladder/trapdoor attachments do not merge Rooms | Task 6 |
 | Wall POIs remain metadata with one owner | Task 6 |
 | Projection remains derived | Task 6 |
-| Canonical persistence is version 2 without `surfaceY` | Task 4 |
-| Canonical v1 migrates deterministically | Task 4 |
+| Canonical persistence uses the current version without `surfaceY` | Task 4 |
+| Only the two upstream baseline formats migrate | Task 4 |
 | Semantic-band/slice-area reconstruction removed | Tasks 5, 7 |
 
 ## Expected End State
@@ -986,7 +984,7 @@ FloorGeometry(Cell{feet, ceilingY} + connector markers)
     +-> RoomPoiEvidence / projection
     |
     v
-StructureFloor v2 persistence (pos + ceilingY, no surfaceY)
+StructureFloor canonical persistence (pos + ceilingY, no surfaceY)
 ```
 
 There is one long-lived spatial truth: integer exact Floor/Room membership cells. Collision height exists only while Minecraft is being observed.

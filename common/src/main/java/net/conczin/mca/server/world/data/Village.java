@@ -448,7 +448,8 @@ public class Village implements Iterable<Building> {
         for (StructureFloor candidateFloor : candidate.getFloors()) {
             for (Structure registered : structures.values()) {
                 for (StructureFloor registeredFloor : registered.getFloors()) {
-                    if (candidateFloor.overlapsSameSemanticBand(registeredFloor)) {
+                    if (candidateFloor.geometry().cells().stream()
+                            .anyMatch(cell -> registeredFloor.geometry().cellAt(cell.feet()).isPresent())) {
                         return true;
                     }
                 }

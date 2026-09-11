@@ -25,6 +25,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BlueprintMapGeometryTest {
     private Map<String, BuildingType> previousBuildingTypes;
@@ -144,6 +145,8 @@ class BlueprintMapGeometryTest {
                 new FloorConnector.Marker(
                         new BlockPos(1, 60, 0), FloorConnector.Type.DOOR));
         Building basementRoom = room(2, 11, 0, new BlockPos(1, 60, 0));
+        setRoomFootprint(basementRoom, Set.of(
+                new BlockPos(0, 60, 0), new BlockPos(1, 60, 0)));
         registerStructure(village, basementStructure, basementRoom);
 
         BlueprintMapGeometry map = BlueprintMapGeometry.build(village, null);
@@ -160,6 +163,27 @@ class BlueprintMapGeometryTest {
                 basement.connectorLayers().stream()
                         .filter(layer -> layer.marker().type() == FloorConnector.Type.LADDER)
                         .findFirst().orElseThrow().marker().type());
+    }
+
+    @Test
+    void floorConnectorMarkersAreLimitedToRegisteredRoomCells() throws Exception {
+        Village village = new Village(1, null);
+        BlockPos ownedDoor = new BlockPos(1, 64, 0);
+        BlockPos strayDoor = new BlockPos(5, 64, 0);
+        Structure structure = structure(10, 10, 64, 0,
+                new FloorConnector.Marker(ownedDoor, FloorConnector.Type.DOOR),
+                new FloorConnector.Marker(strayDoor, FloorConnector.Type.DOOR));
+        Building room = room(1, 10, 0, new BlockPos(0, 64, 0));
+        setRoomFootprint(room, Set.of(new BlockPos(0, 64, 0), ownedDoor));
+        registerStructure(village, structure, room);
+
+        BlueprintMapGeometry.MapGeometry ground = BlueprintMapGeometry.build(village, null).get(0);
+
+        assertEquals(1, ground.connectorLayers().size());
+        assertTrue(ground.connectorLayers().stream()
+                .anyMatch(layer -> layer.marker().pos().equals(ownedDoor)));
+        assertTrue(ground.connectorLayers().stream()
+                .noneMatch(layer -> layer.marker().pos().equals(strayDoor)));
     }
 
     @Test
@@ -259,13 +283,21 @@ class BlueprintMapGeometryTest {
     }
 
     private static void setRoomFootprint(Building room, Set<BlockPos> cells) throws Exception {
+        int floorY = cells.stream().mapToInt(BlockPos::getY).min().orElseThrow();
+        int minX = cells.stream().mapToInt(BlockPos::getX).min().orElseThrow();
+        int minZ = cells.stream().mapToInt(BlockPos::getZ).min().orElseThrow();
+        int maxX = cells.stream().mapToInt(BlockPos::getX).max().orElseThrow();
+        int maxZ = cells.stream().mapToInt(BlockPos::getZ).max().orElseThrow();
         Method fromFootprint = BuildingFloorRegion.class.getDeclaredMethod(
                 "fromFootprint", int.class, java.util.Collection.class);
         fromFootprint.setAccessible(true);
-        BuildingFloorRegion region = (BuildingFloorRegion) fromFootprint.invoke(null, 64, cells);
+        BuildingFloorRegion region = (BuildingFloorRegion) fromFootprint.invoke(null, floorY, cells);
         Method setGeometry = Building.class.getDeclaredMethod(
                 "setGeometry", BlockPos.class, BlockPos.class, BuildingFloorRegion.class);
         setGeometry.setAccessible(true);
-        setGeometry.invoke(room, new BlockPos(0, 64, 0), new BlockPos(1, 67, 0), region);
+        setGeometry.invoke(room,
+                new BlockPos(minX, floorY, minZ),
+                new BlockPos(maxX, floorY + 3, maxZ),
+                region);
     }
 }

@@ -21,6 +21,8 @@ import java.util.Optional;
 final class RangedCombatPositioning {
     private static final int AWAY_HORIZONTAL_RANGE = 12;
     private static final int AWAY_VERTICAL_RANGE = 5;
+    private static final int AWAY_FALLBACK_DIRECTIONS = 32;
+    private static final double[] AWAY_FALLBACK_RADII = {2.0D, 4.0D, 6.0D, 8.0D, 10.0D, 12.0D};
     private static final int FIRING_CANDIDATE_ATTEMPTS = 8;
     private static final int FIRING_HORIZONTAL_RANGE = 8;
     private static final int FIRING_VERTICAL_RANGE = 4;
@@ -63,13 +65,61 @@ final class RangedCombatPositioning {
         double currentDistanceSquared = entity.distanceToSqr(threat);
         int horizontalRange = Math.max(AWAY_HORIZONTAL_RANGE, (int)Math.ceil(desiredDistance));
         Vec3 candidate = LandRandomPos.getPosAway(entity, horizontalRange, AWAY_VERTICAL_RANGE, threat.position());
-        if (candidate == null || !isWalkableDestination(entity, candidate) || !hasStandingSpace(entity, candidate)) {
-            return Optional.empty();
+        if (candidate != null
+                && isWalkableDestination(entity, candidate)
+                && hasStandingSpace(entity, candidate)
+                && candidate.distanceToSqr(threat.position()) > currentDistanceSquared + MIN_USEFUL_DISTANCE_GAIN) {
+            return Optional.of(candidate);
         }
 
-        return candidate.distanceToSqr(threat.position()) > currentDistanceSquared + MIN_USEFUL_DISTANCE_GAIN
-                ? Optional.of(candidate)
-                : Optional.empty();
+        return findAwayFallbackPosition(entity, threat, desiredDistance, currentDistanceSquared);
+    }
+
+    private static Optional<Vec3> findAwayFallbackPosition(
+            PathfinderMob entity,
+            LivingEntity threat,
+            double desiredDistance,
+            double currentDistanceSquared
+    ) {
+        Vec3 origin = entity.position();
+        double desiredDistanceSquared = desiredDistance * desiredDistance;
+        Vec3 bestImprovement = null;
+        double bestDistanceSquared = currentDistanceSquared;
+
+        for (double radius : AWAY_FALLBACK_RADII) {
+            Vec3 bestSafeAtRadius = null;
+            double bestSafeDistanceSquared = Double.NEGATIVE_INFINITY;
+
+            for (int direction = 0; direction < AWAY_FALLBACK_DIRECTIONS; direction++) {
+                double angle = Math.PI * 2.0D * direction / AWAY_FALLBACK_DIRECTIONS;
+                Vec3 candidate = origin.add(Math.cos(angle) * radius, 0.0D, Math.sin(angle) * radius);
+                if (!isWalkableDestination(entity, candidate) || !hasStandingSpace(entity, candidate)) {
+                    continue;
+                }
+
+                double candidateDistanceSquared = candidate.distanceToSqr(threat.position());
+                if (candidateDistanceSquared <= currentDistanceSquared + MIN_USEFUL_DISTANCE_GAIN) {
+                    continue;
+                }
+
+                if (candidateDistanceSquared > bestDistanceSquared) {
+                    bestDistanceSquared = candidateDistanceSquared;
+                    bestImprovement = candidate;
+                }
+
+                if (candidateDistanceSquared >= desiredDistanceSquared
+                        && candidateDistanceSquared > bestSafeDistanceSquared) {
+                    bestSafeDistanceSquared = candidateDistanceSquared;
+                    bestSafeAtRadius = candidate;
+                }
+            }
+
+            if (bestSafeAtRadius != null) {
+                return Optional.of(bestSafeAtRadius);
+            }
+        }
+
+        return Optional.ofNullable(bestImprovement);
     }
 
     static Optional<Vec3> findEmergencyEscapePosition(
@@ -176,7 +226,16 @@ final class RangedCombatPositioning {
         float yawRadians = entity.getYRot() * (float)(Math.PI / 180.0D);
         double dx = -sign * Math.sin(yawRadians);
         double dz = sign * Math.cos(yawRadians);
-        Vec3 candidate = entity.position().add(dx, 0.0D, dz);
+        return isMovementDirectionWalkable(entity, new Vec3(dx, 0.0D, dz));
+    }
+
+    static boolean isMovementDirectionWalkable(PathfinderMob entity, Vec3 direction) {
+        Vec3 horizontal = new Vec3(direction.x, 0.0D, direction.z);
+        if (horizontal.lengthSqr() < 1.0E-6D) {
+            return false;
+        }
+
+        Vec3 candidate = entity.position().add(horizontal.normalize());
         return isWalkableDestination(entity, candidate) && hasStandingSpace(entity, candidate);
     }
 

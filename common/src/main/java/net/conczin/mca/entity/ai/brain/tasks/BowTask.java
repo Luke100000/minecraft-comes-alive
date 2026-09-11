@@ -90,6 +90,9 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
 
         entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
         entity.getLookControl().setLookAt(target, LOOK_SPEED, LOOK_SPEED);
+        if (entity.isUsingItem()) {
+            entity.lookAt(target, LOOK_SPEED, LOOK_SPEED);
+        }
 
         if (visible) {
             this.lostSightTicks = 0;

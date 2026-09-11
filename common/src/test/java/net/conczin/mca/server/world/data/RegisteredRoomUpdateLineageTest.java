@@ -4,6 +4,8 @@ import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -51,6 +53,43 @@ class RegisteredRoomUpdateLineageTest {
     }
 
     @Test
+    void addRoomCanClaimOneSideOfAStaleRoomSplitByANewDoor() {
+        Building previous = room(12, 0, 4);
+        Building retained = room(-1, 0, 2);
+        Building added = room(-1, 3, 4);
+        BlockPos door = new BlockPos(2, 64, 0);
+        FloorGeometry floor = new FloorGeometry(Set.of(
+                cell(0), cell(1), cell(2), cell(3), cell(4)),
+                Map.of(door, FloorConnector.Type.DOOR));
+
+        List<Building> replacements = RegisteredRoomReconciler.reconcileAddition(
+                List.of(previous), List.of(retained, added), added, floor).orElseThrow();
+
+        assertEquals(1, replacements.size());
+        assertEquals(12, replacements.getFirst().getId());
+        assertEquals(retained.getFloorCells(), replacements.getFirst().getFloorCells());
+    }
+
+    @Test
+    void addRoomIgnoresOtherFreshComponentsThatWereNeverRegistered() {
+        Building previous = room(12, 0, 2);
+        Building retained = room(-1, 0, 2);
+        Building added = room(-1, 4, 6);
+        Building unrelated = room(-1, 8, 10);
+        FloorGeometry floor = new FloorGeometry(Set.of(
+                cell(0), cell(1), cell(2),
+                cell(4), cell(5), cell(6),
+                cell(8), cell(9), cell(10)), Map.of());
+
+        List<Building> replacements = RegisteredRoomReconciler.reconcileAddition(
+                List.of(previous), List.of(retained, added, unrelated), added, floor).orElseThrow();
+
+        assertEquals(1, replacements.size());
+        assertEquals(12, replacements.getFirst().getId());
+        assertEquals(retained.getFloorCells(), replacements.getFirst().getFloorCells());
+    }
+
+    @Test
     void structureFloorReplacementUsesFreshGeometryAndKeepsFloorNumber() {
         BuildingFloorRegion original = BuildingFloorRegion.fromFootprint(64, List.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));
@@ -93,5 +132,9 @@ class RegisteredRoomUpdateLineageTest {
         room.setFloorId(0);
         room.setGeometry(new BlockPos(minX, 64, 0), new BlockPos(maxX, 68, 0), footprint);
         return room;
+    }
+
+    private static FloorGeometry.Cell cell(int x) {
+        return new FloorGeometry.Cell(new BlockPos(x, 64, 0), 68);
     }
 }

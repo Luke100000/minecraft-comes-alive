@@ -2,7 +2,10 @@ package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.MCA;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
@@ -69,8 +72,11 @@ public final class BuildingDiagnostics {
         StructureFloor freshPlayerFloor = null;
         if (inspected != null) {
             boolean contains = inspected.containsPos(pos);
+            List<Building> inspectedRooms = village.getRooms()
+                    .filter(candidate -> candidate.getStructureId() == inspected.getId())
+                    .toList();
             Structure.InteractionPosition interaction = inspected
-                    .resolveInteractionPosition(pos, List.of()).orElse(null);
+                    .resolveInteractionPosition(pos, inspectedRooms).orElse(null);
             boolean attaches = interaction != null;
             StructureFloor resolvedFloor = inspected.resolveFloorAt(pos).orElse(null);
             StructureFloor physicalFloor = inspected.physicalFloorAt(pos).orElse(null);
@@ -78,6 +84,7 @@ public final class BuildingDiagnostics {
                     inspected.getId(), inspected.getLogicalBuildingId(), inspected.getSource(),
                     inspected.getRawPos0(), inspected.getRawPos1(),
                     contains, attaches, floor(resolvedFloor), floor(physicalFloor));
+            logInteractionConnector(traceId, world, pos, resolvedFloor);
             log(traceId, "interactionFloorId={} interactionFloorNumber={} interactionRoomId={}",
                     interaction == null ? "none" : interaction.floor().id(),
                     interaction == null ? "none" : interaction.floor().floorNumber(),
@@ -137,6 +144,33 @@ public final class BuildingDiagnostics {
         String verdict = verdict(position, uiAction, analysis, inspected, room, freshPlayerFloor, pos, world);
         log(traceId, "verdict={}", verdict);
         return new Result(traceId, position, uiAction, verdict);
+    }
+
+    private static void logInteractionConnector(long traceId,
+                                                ServerLevel world,
+                                                BlockPos pos,
+                                                StructureFloor floor) {
+        BlockState clickedState = world.getBlockState(pos);
+        BlockPos connectorPos = StructureConnector.normalize(pos, clickedState);
+        BlockState connectorState = world.getBlockState(connectorPos);
+        FloorConnector.Type persistedType = floor == null
+                ? null
+                : floor.geometry().connectorTypesByCell().get(connectorPos);
+        FloorConnector.Type worldType = FloorConnector.Type.fromBlockState(connectorState);
+        Direction doorFacing = connectorState.getBlock() instanceof DoorBlock
+                ? connectorState.getValue(DoorBlock.FACING)
+                : null;
+        Direction doorOwnerSide = StructureConnector.doorOwnerSide(connectorState);
+
+        log(traceId,
+                "interactionConnector position={} normalizedPosition={} floorCell={} persistedType={} worldType={} doorFacing={} doorOwnerSide={}",
+                pos, connectorPos,
+                floor != null && floor.geometry().cellAt(connectorPos).isPresent(),
+                value(persistedType), value(worldType), value(doorFacing), value(doorOwnerSide));
+    }
+
+    private static String value(Object value) {
+        return value == null ? "none" : value.toString();
     }
 
     static PlanAttempt planAttempt(Supplier<RoomScanPlan> supplier) {

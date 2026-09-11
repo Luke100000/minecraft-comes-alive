@@ -80,6 +80,25 @@ class RoomScanPlannerTest {
     }
 
     @Test
+    void freshDoorOwnedByRegisteredSideDoesNotRedirectToUnregisteredSide() {
+        Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
+        Building room = room(100, 20, 0, Set.of(
+                new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
+                new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
+        Village village = village(persisted, room);
+        BlockPos door = new BlockPos(4, 64, 0);
+        FloorGeometry fresh = new FloorGeometry(Set.of(
+                cell(0, 64), cell(1, 64), cell(2, 64), cell(3, 64), cell(4, 64),
+                cell(5, 64), cell(6, 64)), Map.of(door, FloorConnector.Type.DOOR));
+
+        RoomScanPlan plan = RoomScanPlanner.planFresh(
+                village, door, observation(door, fresh, List.of()));
+
+        assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
+        assertEquals(room, plan.currentRoom().orElseThrow());
+    }
+
+    @Test
     void sharedDoorCellAloneDoesNotResolveTheOtherRoom() {
         BlockPos door = new BlockPos(4, 64, 0);
         Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 10));
@@ -183,6 +202,28 @@ class RoomScanPlannerTest {
 
         assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
         assertEquals(room, plan.currentRoom().orElseThrow());
+    }
+
+    @Test
+    void unownedDoorCellDoesNotBorrowAdjacentRegisteredRoom() {
+        BlockPos door = new BlockPos(4, 64, 0);
+        FloorGeometry geometry = new FloorGeometry(Set.of(
+                cell(0, 64), cell(1, 64), cell(2, 64), cell(3, 64), cell(4, 64),
+                cell(5, 64), cell(6, 64), cell(7, 64), cell(8, 64)),
+                Map.of(door, FloorConnector.Type.DOOR));
+        StructureFloor persistedFloor = new StructureFloor(0, 0, geometry);
+        Structure persisted = structure(20, 20, persistedFloor);
+        Building room = room(100, 20, 0, Set.of(
+                new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
+                new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
+        Village village = village(persisted, room);
+
+        RoomScanPlan plan = RoomScanPlanner.plan(village, null, door);
+
+        assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
+        assertEquals(20, plan.targetStructureId());
+        assertEquals(0, plan.targetFloorId());
+        assertTrue(plan.currentRoom().isEmpty());
     }
 
     private static Village village(Structure structure, Building room) {

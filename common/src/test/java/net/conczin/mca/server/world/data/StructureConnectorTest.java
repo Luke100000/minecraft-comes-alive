@@ -4,10 +4,12 @@ import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StructureConnectorTest {
@@ -60,18 +62,6 @@ class StructureConnectorTest {
     }
 
     @Test
-    void connectorOneBlockBelowFloorSupportProjectsToWalkableFeet() {
-        BlockPos connector = new BlockPos(0, 67, 0);
-        BlockPos upperFeet = new BlockPos(1, 69, 0);
-        FloorGeometry upper = new FloorGeometry(Set.of(
-                new FloorGeometry.Cell(upperFeet, 73)), java.util.Map.of());
-
-        Set<BlockPos> membership = StructureConnector.floorMembershipCells(connector, upper);
-
-        assertEquals(Set.of(new BlockPos(0, 69, 0)), membership);
-    }
-
-    @Test
     void legacyCeilingOverlapDoesNotMakeUpperOnlyConnectorReachLowerFloor() {
         StructureFloor staleLower = floor(88, 93);
         StructureFloor upper = floor(91, 94);
@@ -81,34 +71,14 @@ class StructureConnectorTest {
     }
 
     @Test
-    void connectorMembershipProjectsExactHandoffHeightIntoConnectorColumn() {
-        BlockPos left = new BlockPos(0, 64, 0);
-        BlockPos right = new BlockPos(2, 64, 0);
+    void floorGeometryRejectsConnectorMetadataForMissingCell() {
         BlockPos connector = new BlockPos(1, 64, 0);
-        FloorGeometry geometry = new FloorGeometry(Set.of(
-                new FloorGeometry.Cell(left, 68),
-                new FloorGeometry.Cell(right, 68)), java.util.Map.of());
+        Set<FloorGeometry.Cell> cells = Set.of(
+                new FloorGeometry.Cell(new BlockPos(0, 64, 0), 68),
+                new FloorGeometry.Cell(new BlockPos(2, 64, 0), 68));
 
-        Set<BlockPos> membership = StructureConnector.floorMembershipCells(
-                connector, geometry);
-
-        assertEquals(Set.of(connector), membership);
-    }
-
-    @Test
-    void connectorAssociationsDoNotManufactureMissingFloorCells() {
-        BlockPos left = new BlockPos(0, 64, 0);
-        BlockPos right = new BlockPos(2, 64, 0);
-        BlockPos connector = new BlockPos(1, 64, 0);
-        FloorGeometry geometry = new FloorGeometry(Set.of(
-                new FloorGeometry.Cell(left, 68),
-                new FloorGeometry.Cell(right, 68)), java.util.Map.of());
-
-        FloorGeometry augmented = StructureConnector.withConnectorAssociations(
-                geometry, java.util.Map.of(connector, FloorConnector.Type.DOOR));
-
-        assertTrue(augmented.cellAt(connector).isEmpty());
-        assertFalse(augmented.connectorTypesByCell().containsKey(connector));
+        assertThrows(IllegalArgumentException.class,
+                () -> new FloorGeometry(cells, Map.of(connector, FloorConnector.Type.DOOR)));
     }
 
     private static StructureFloor floor(int anchorY, int ceilingY) {

@@ -1,10 +1,13 @@
 package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
 
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -18,45 +21,59 @@ final class RoomScanPlanner {
         if (village == null || pos == null) return RoomScanPlan.addBuilding(source);
 
         Village.ResolvedInteraction resolved = village.resolveInteractionPosition(pos).orElse(null);
+        RoomScanPlan persistedFloorPlan = null;
         if (resolved != null) {
-            if (level != null
-                    && source.getY() > resolved.position().floor().anchorY() + StructureFloor.BAND_TOLERANCE) {
-                StructureScanner.FloorObservation fresh = StructureScanner.observeFloor(
-                        level, source, village.getStructures().values()).orElse(null);
-                if (fresh != null) {
-                    StructureFloor freshFloor = new StructureFloor(0, 0, fresh.scan().floor());
-                    if (!StructureFloor.sameSemanticBand(
-                            freshFloor.anchorY(), resolved.position().floor().anchorY())) {
-                        return attachmentPlan(village, source, fresh)
-                                .orElseGet(() -> RoomScanPlan.addBuilding(source));
-                    }
-                }
-            }
             Building room = resolved.position().room();
             if (room != null) return RoomScanPlan.updateRoom(room, source);
-            return RoomScanPlan.addRoom(
+            persistedFloorPlan = RoomScanPlan.addRoom(
                     resolved.structure().getId(), resolved.position().floor().id(), source);
         }
 
-        if (level == null) return RoomScanPlan.addBuilding(source);
+        if (level == null) {
+            return persistedFloorPlan == null ? RoomScanPlan.addBuilding(source) : persistedFloorPlan;
+        }
         StructureScanner.FloorObservation observation = StructureScanner.observeFloor(
                 level, source, village.getStructures().values()).orElse(null);
-        return planFresh(village, source, observation);
+        if (observation == null) {
+            return persistedFloorPlan == null ? RoomScanPlan.addBuilding(source) : persistedFloorPlan;
+        }
+        Map<BlockPos, Direction> doorOwnerSides =
+                StructureConnector.doorOwnerSides(level, observation.scan().floor());
+        RoomScanPlan freshPlan = planFresh(village, source, observation, doorOwnerSides);
+        if (persistedFloorPlan == null || freshPlan.mode() == Village.RoomScanMode.UPDATE_ROOM) {
+            return freshPlan;
+        }
+        if (freshPlan.mode() == Village.RoomScanMode.ADD_ROOM
+                && freshPlan.targetStructureId() == persistedFloorPlan.targetStructureId()
+                && freshPlan.targetFloorId() == persistedFloorPlan.targetFloorId()) {
+            return freshPlan;
+        }
+        return persistedFloorPlan;
     }
 
     static RoomScanPlan planFresh(Village village,
                                   BlockPos source,
                                   StructureScanner.FloorObservation observation) {
+        return planFresh(village, source, observation, Map.of());
+    }
+
+    private static RoomScanPlan planFresh(Village village,
+                                          BlockPos source,
+                                          StructureScanner.FloorObservation observation,
+                                          Map<BlockPos, Direction> doorOwnerSides) {
         if (village == null || observation == null) return RoomScanPlan.addBuilding(source);
 
         FloorTarget expansion = selectSameStoreyTarget(village, observation.scan().floor()).orElse(null);
         if (expansion != null && validExpansion(village, observation, expansion)) {
-            Building existingRoom = registeredRoomForFreshComponent(
-                    village, expansion, observation.scan().floor(), observation.scan().transitions(), source)
-                    .orElse(null);
-            return existingRoom != null
-                    ? RoomScanPlan.updateRoom(existingRoom, source)
-                    : RoomScanPlan.addRoom(expansion.structureId(), expansion.floorId(), source);
+            FreshComponentSelection selected = selectFreshComponent(
+                    village, expansion, observation.scan().floor(), observation.scan().transitions(),
+                    observation.seed(), doorOwnerSides).orElse(null);
+            if (selected != null) {
+                return selected.existingRoom() != null
+                        ? RoomScanPlan.updateRoom(selected.existingRoom(), source)
+                        : RoomScanPlan.addRoom(
+                        expansion.structureId(), expansion.floorId(), source, selected.scanSeed());
+            }
         }
 
         return attachmentPlan(village, source, observation)
@@ -99,18 +116,34 @@ final class RoomScanPlanner {
         return matches.size() == 1 ? Optional.of(matches.getFirst()) : Optional.empty();
     }
 
-    private static Optional<Building> registeredRoomForFreshComponent(
+    private static Optional<FreshComponentSelection> selectFreshComponent(
             Village village,
             FloorTarget target,
             FloorGeometry floor,
             Collection<SelectedFloorScanner.Transition> transitions,
-            BlockPos source) {
-        if (village == null || target == null || floor == null || source == null) return Optional.empty();
-        List<RoomPartitioner.Component> components = RoomPartitioner.partition(floor, transitions);
-        RoomPartitioner.Component selected = RoomPartitioner.select(source, floor, components);
+            BlockPos scanSeed,
+            Map<BlockPos, Direction> doorOwnerSides) {
+        if (village == null || target == null || floor == null
+                || scanSeed == null) return Optional.empty();
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(
+                floor, transitions, doorOwnerSides);
+        RoomPartitioner.Component selected = RoomPartitioner.select(scanSeed, floor, components);
         if (selected == null) return Optional.empty();
 
-        Set<BlockPos> identityCells = selected.floorCells().stream()
+        Building existingRoom = registeredRoomForComponent(village, target, floor, selected).orElse(null);
+        return Optional.of(new FreshComponentSelection(
+                existingRoom, componentSeed(scanSeed, selected)));
+    }
+
+    private static Optional<Building> registeredRoomForComponent(
+            Village village,
+            FloorTarget target,
+            FloorGeometry floor,
+            RoomPartitioner.Component component) {
+        if (component == null) return Optional.empty();
+
+        Set<BlockPos> identityCells = component.cells().stream()
+                .map(FloorGeometry.Cell::feet)
                 .filter(cell -> {
                     FloorConnector.Type connector = floor.connectorTypesByCell().get(cell);
                     return connector == null || !connector.roomBoundary();
@@ -128,6 +161,23 @@ final class RoomScanPlanner {
         return matches.size() == 1 ? Optional.of(matches.getFirst()) : Optional.empty();
     }
 
+    private static BlockPos componentSeed(BlockPos source, RoomPartitioner.Component component) {
+        return component.cells().stream()
+                .map(FloorGeometry.Cell::feet)
+                .min(Comparator
+                        .comparingInt((BlockPos cell) -> Math.abs(cell.getX() - source.getX())
+                                + Math.abs(cell.getY() - source.getY())
+                                + Math.abs(cell.getZ() - source.getZ()))
+                        .thenComparingInt(BlockPos::getY)
+                        .thenComparingInt(BlockPos::getX)
+                        .thenComparingInt(BlockPos::getZ))
+                .orElse(source)
+                .immutable();
+    }
+
     private record FloorTarget(int structureId, int floorId) {
+    }
+
+    private record FreshComponentSelection(Building existingRoom, BlockPos scanSeed) {
     }
 }

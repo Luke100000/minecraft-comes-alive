@@ -166,7 +166,7 @@ class StructureFloorResolutionTest {
     }
 
     @Test
-    void reloadingCurrentRoomFootprintDoesNotAssignUnownedConnectorToRoom() {
+    void reloadingUnownedConnectorDoesNotInventRoomOwnership() {
         BlockPos connector = new BlockPos(1, 64, 0);
         StructureFloor floor = TestStructureFloors.create(0, 64, 68, 0,
                 BuildingFloorRegion.fromFootprint(64, Set.of(

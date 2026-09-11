@@ -106,8 +106,9 @@ There is no second spatial truth between world discovery and `FloorGeometry`.
   integer cell is valid.
 - Do not redesign `RoomIdentityPolicy`, Main Room selection, inheritance, or
   logical-building identity.
-- Change `RoomDFU` only as required to migrate the previous canonical exact-cell
-  save shape to the new surface-height-free shape.
+- Keep `RoomDFU` limited to loading the current canonical shape and migrating
+  only the two supported upstream baselines: released `origin/1.21.1` and
+  unversioned `origin/feature/1.21.1-floor-clean-squash`.
 - Do not add another persisted or long-lived scan DTO beside `FloorGeometry`.
 - Do not use unrestricted vanilla pathfinding as the Floor definition. A
   walkable route can legitimately cross semantic storeys.
@@ -329,11 +330,18 @@ never sufficient to create it.
 `RoomPartitioner` first partitions the non-boundary cells using the accepted
 fresh transitions while treating Room-boundary connector cells as blocked for
 ordinary flood-fill. It then assigns each already-present boundary cell to at
-most one deterministic adjacent Room. Reuse the existing owner ordering:
-prefer the largest adjacent component, then stable bounds/coordinate ordering
-as the tie-breaker. This preserves disjoint Room footprints and keeps an
-interior doorway with the intended enclosed Room instead of a tiny exterior
-apron.
+most one deterministic adjacent Room. Door ownership uses `DoorBlock.FACING`
+directly and ignores the current `OPEN` state and hinge. This makes reversing the placed door reverse
+which adjacent Room owns its doorway cell. Other ambiguous Room boundaries,
+including gates, use the existing fallback owner ordering: largest adjacent
+component first, then stable bounds/coordinate ordering.
+
+For persisted recovery, an exact Floor cell that has no persisted Room owner is
+re-evaluated through the fresh selected-Floor partition before the UI decides it
+is an unregistered Room. The deterministic connector ownership above selects the
+fresh component, and that component may recover one registered Room through its
+non-boundary exact cells. This repairs stale doorway ownership without borrowing
+an adjacent Room or inventing a second geometry rule.
 
 If a connector position was not independently discovered as a Floor cell, it
 remains connector/attachment evidence only; no synthetic replacement cell is
@@ -442,11 +450,9 @@ StructureFloor cell:
   # no surfaceY
 ```
 
-`RoomDFU` must migrate `buildingDataVersion == 1` by preserving each cell's
-`pos` and `ceilingY` and discarding its persisted `surfaceY`. The released
-`origin/1.21.1` and upstream unversioned floor-clean-squash migrations remain
-supported. Version 2 is the only direct canonical load shape after this change;
-do not make version 1 accept both encodings.
+`RoomDFU` directly loads only the current canonical version. Historical
+migration is deliberately restricted to the released `origin/1.21.1` save
+shape and the unversioned `origin/feature/1.21.1-floor-clean-squash` save shape.
 
 ## Expected simplifications
 
@@ -493,8 +499,9 @@ Required cases:
 5. **Slab transition:** live collision height controls whether the transition
    is accepted, but both canonical cells remain integer positions.
 6. **Room door:** a doorway independently discovered as a valid integer Floor
-   cell remains in the Floor, prevents Room merging, and belongs to exactly one
-   deterministic adjacent Room.
+   cell remains in the Floor, prevents Room merging, and belongs to the Room on
+   the door's `FACING` side, independent of whether
+   the door is currently open.
 7. **Vertical connector:** ladder/trapdoor attachment relates Floors but does
    not merge their Rooms.
 
@@ -544,16 +551,20 @@ The simplification is complete only when all of these hold:
    footprint; scanning from bed top finds the same Room.
 6. **Doors:** interior/exterior doors remain boundaries/metadata and do not
    invent floor geometry; an independently discovered doorway cell remains
-   canonical and has at most one deterministic Room owner.
+   canonical and is owned from the door's `FACING` side, ignoring its
+   current open state and hinge.
 7. **Wall POI:** a valid wall POI is counted while the wall remains outside the
    Room's exact floor-cell set.
 8. **Vertical connectors:** ladder/trapdoor relationships attach semantic Floors
    without merging Room components.
 9. **Projection:** Blueprint/coarse X/Z views remain derived from exact cells and
-   do not affect scan results.
-10. **Persistence:** version-2 saves contain exact membership cells without
-    `surfaceY`; version-1 canonical saves migrate to the same Floor/Room
-    ownership and identity.
+   do not affect scan results. Connector metadata may exist on unregistered Floor
+   cells, but the registered-building Blueprint only renders connector cells owned
+   by a visible registered Room.
+10. **Persistence:** current saves contain exact membership cells without
+    `surfaceY`; released `origin/1.21.1` and unversioned
+    `origin/feature/1.21.1-floor-clean-squash` migrate into that canonical
+    ownership model, while other historical shapes are rejected.
 
 ## Alternatives rejected
 

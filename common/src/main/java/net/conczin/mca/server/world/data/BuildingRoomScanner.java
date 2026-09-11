@@ -17,7 +17,6 @@ final class BuildingRoomScanner {
 
     static Result scan(Level world,
                        BlockPos source,
-                       Set<BlockPos> blocked,
                        int maxSize,
                        int floorId,
                        FloorGeometry floor,
@@ -25,11 +24,12 @@ final class BuildingRoomScanner {
         if (floor == null || floor.cells().isEmpty()) {
             return Result.failure(Building.validationResult.TOO_SMALL, source);
         }
-        List<RoomPartitioner.Component> components = RoomPartitioner.partition(floor, transitions);
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(
+                floor, transitions, StructureConnector.doorOwnerSides(world, floor));
         RoomPartitioner.Component selected = RoomPartitioner.select(source, floor, components);
         return selected == null
                 ? Result.failure(Building.validationResult.TOO_SMALL, source)
-                : materializeComponent(world, source, blocked, maxSize,
+                : materializeComponent(world, source, maxSize,
                 floorId, floor, components, selected);
     }
 
@@ -41,10 +41,11 @@ final class BuildingRoomScanner {
                                   FloorGeometry floor,
                                   Collection<SelectedFloorScanner.Transition> transitions) {
         if (floor == null || floor.cells().isEmpty()) return List.of();
-        List<RoomPartitioner.Component> components = RoomPartitioner.partition(floor, transitions);
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(
+                floor, transitions, StructureConnector.doorOwnerSides(world, floor));
         return components.stream()
                 .map(component -> materializeComponent(
-                        world, source, Set.of(), maxSize, floorId, floor, components, component))
+                        world, source, maxSize, floorId, floor, components, component))
                 .sorted(Comparator.comparingInt((Result result) -> result.min().getX())
                         .thenComparingInt(result -> result.min().getZ()))
                 .toList();
@@ -53,7 +54,6 @@ final class BuildingRoomScanner {
     private static Result materializeComponent(
             Level world,
             BlockPos source,
-            Set<BlockPos> blocked,
             int maxSize,
             int floorId,
             FloorGeometry floor,
@@ -61,8 +61,6 @@ final class BuildingRoomScanner {
             RoomPartitioner.Component component) {
         Set<BlockPos> floorCells = component.floorCells();
         if (floorCells.size() > maxSize) return Result.failure(Building.validationResult.BLOCK_LIMIT, source);
-        Set<BlockPos> blockedCells = blocked == null ? Set.of() : blocked;
-        if (floorCells.stream().anyMatch(blockedCells::contains)) return Result.failure(Building.validationResult.OVERLAP, source);
         if (floorCells.size() < MIN_INTERIOR_AREA) return Result.failure(Building.validationResult.TOO_SMALL, source);
 
         BlockPos seed = nearestCell(source, component.cells());

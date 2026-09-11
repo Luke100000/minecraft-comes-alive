@@ -48,8 +48,15 @@ public record RoomScanPlan(Optional<Building> currentRoom,
     }
 
     static RoomScanPlan addRoom(int structureId, int floorId, BlockPos source) {
+        return addRoom(structureId, floorId, source, source);
+    }
+
+    static RoomScanPlan addRoom(int structureId,
+                                int floorId,
+                                BlockPos source,
+                                BlockPos scanSeed) {
         return new RoomScanPlan(Optional.empty(), Village.RoomScanMode.ADD_ROOM,
-                NO_TARGET_BUILDING, NO_PROSPECTIVE_FLOOR, source, source, structureId, floorId);
+                NO_TARGET_BUILDING, NO_PROSPECTIVE_FLOOR, source, scanSeed, structureId, floorId);
     }
 
     static RoomScanPlan attachment(int targetBuildingId,

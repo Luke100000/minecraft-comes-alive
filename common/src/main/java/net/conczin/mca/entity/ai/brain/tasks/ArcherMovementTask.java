@@ -219,6 +219,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
                 case KITE -> {
                     trackTarget(entity, target);
                     publishAway(entity, movementThreat, KITE_SAFE_DISTANCE, KITE_SPEED_MODIFIER, targetChanged || stateChanged);
+                    continueAimedKiteWhileUsingWeapon(entity, target, movementThreat);
                 }
                 case EMERGENCY_FLEE -> {
                     publishEmergencyAway(entity, nearbyMovementThreats, EMERGENCY_SAFE_DISTANCE,
@@ -334,6 +335,24 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         return RangedCombatPositioning.isStrafeSideWalkable(entity, oppositeDirection)
                 ? oppositeDirection
                 : 0.0F;
+    }
+
+    private void continueAimedKiteWhileUsingWeapon(E entity, LivingEntity target, LivingEntity movementThreat) {
+        if (!entity.isUsingItem()) {
+            return;
+        }
+
+        Vec3 away = entity.position().subtract(movementThreat.position()).multiply(1.0D, 0.0D, 1.0D);
+        if (!RangedCombatPositioning.isMovementDirectionWalkable(entity, away)) {
+            return;
+        }
+
+        entity.lookAt(target, LOOK_SPEED, LOOK_SPEED);
+        float yawRadians = entity.getYRot() * (float)(Math.PI / 180.0D);
+        Vec3 direction = away.normalize();
+        float forward = (float)(direction.x * Math.cos(yawRadians) + direction.z * Math.sin(yawRadians));
+        float lateral = (float)(-direction.x * Math.sin(yawRadians) + direction.z * Math.cos(yawRadians));
+        entity.getMoveControl().strafe(forward, lateral);
     }
 
     private void finishStrafe(E entity, String reason) {

@@ -21,7 +21,7 @@
 - Room identity/Main Room policy stays separate from topology.
 - Non-top semantic ceiling is derived from the next semantic Floor anchor; top semantic ceiling comes from physical ceiling data.
 - Floor refresh and Room reconciliation are published atomically.
-- Canonical persistence starts at `buildingDataVersion = 1`.
+- Canonical persistence uses `Village.BUILDING_DATA_VERSION`.
 - `RoomDFU` supports migration only from released `origin/1.21.1` and the upstream unversioned `origin/feature/1.21.1-floor-clean-squash` save shape.
 - Historical field interpretation (`floorRegions`, old inheritance fields, legacy BlockPos compounds, old Structure main-room fields) belongs only in `RoomDFU` and migration tests.
 - Keep the repository compilable after each task; delete transitional wrappers only after their callers have moved.
@@ -804,7 +804,7 @@ git commit -m "refactor: publish floor and room refresh atomically"
 - Modify: `common/src/test/java/net/conczin/mca/server/world/data/RoomDFUTest.java`
 
 **Interfaces:**
-- `Village.BUILDING_DATA_VERSION = 1`.
+- `Village.BUILDING_DATA_VERSION` identifies the current canonical format.
 - `RoomDFU.load(CompoundTag villageTag)` is the only building-state load entry point.
 - Supported inputs:
   1. no `buildingDataVersion`, no `structures` -> released `origin/1.21.1` migration;
@@ -815,13 +815,8 @@ git commit -m "refactor: publish floor and room refresh atomically"
 
 Replace generic `previousBranchVillage` naming with `upstreamFloorCleanSquashVillage`, matching fields emitted by the upstream branch. Add:
 
-```java
-@Test
-void canonicalVillageSaveUsesVersionOne() {
-    Village village = new Village(1, null);
-    assertEquals(1, village.save().getInt("buildingDataVersion"));
-}
-```
+Add a canonical-save test that asserts the serialized version equals
+`Village.BUILDING_DATA_VERSION`.
 
 Keep released-origin tests for ID preservation, grouped/external migration, and legacy `blocks2` compound positions.
 Keep the upstream floor-clean-squash Main Room/inheritance assertions too:
@@ -871,7 +866,7 @@ floors: [
 ]
 ```
 
-`Building`, `Structure`, and `StructureFloor` constructors/loaders must not inspect `floorRegions`, `ceilingBoundaryRegion`, `inheritanceEnabled`, `rootRoomId`, `mainRoomAutomatic`, or legacy BlockPos `{x,y,z}` compounds.
+`Building`, `Structure`, and `StructureFloor` constructors/loaders must not inspect `floorRegions`, `ceilingBoundaryRegion`, `inheritanceEnabled`, `mainRoomAutomatic`, or legacy BlockPos `{x,y,z}` compounds.
 
 - [ ] **Step 5: Centralize every load path in `RoomDFU.load`**
 
@@ -908,11 +903,14 @@ For every upstream old `StructureFloor`:
 BuildingFloorRegion region = BuildingFloorRegion.load(oldFloor.getCompound("region"));
 int oldCeilingY = oldFloor.getInt("ceilingY");
 Set<FloorGeometry.Cell> cells = region.cells().stream()
-        .map(pos -> new FloorGeometry.Cell(pos, pos.getY(), oldCeilingY))
+        .map(pos -> new FloorGeometry.Cell(pos, oldCeilingY))
         .collect(Collectors.toUnmodifiableSet());
 ```
 
-Read old connectors only because they are part of the upstream format, associate them with these synthesized exact cells, and construct current `StructureFloor` directly. Do not parse `ceilingBoundaryRegion`; it is not part of the upstream migration source.
+Construct current `StructureFloor` directly from those cells. The upstream
+floor-clean-squash `StructureFloor` save shape contains no persisted connector
+metadata. Do not parse `ceilingBoundaryRegion`; it is not part of the upstream
+migration source.
 
 For each old Room `floorRegion`, assign every exact cell in its owning migrated Floor whose X/Z is in that old Region. This is the only place where old column ownership is interpreted.
 
@@ -934,7 +932,7 @@ Expected: origin migration PASS, upstream floor-clean-squash migration PASS, can
 Run these searches after migration is complete:
 
 ```powershell
-rg -n 'floorRegions|ceilingBoundaryRegion|inheritanceEnabled|rootRoomId|mainRoomAutomatic|groundStructureId|groundFloorId' common/src/main/java/net/conczin/mca/server/world/data
+rg -n 'floorRegions|ceilingBoundaryRegion|inheritanceEnabled|mainRoomAutomatic|groundStructureId|groundFloorId' common/src/main/java/net/conczin/mca/server/world/data
 ```
 
 Expected: historical parsing references occur only in `RoomDFU.java`; current-domain names that are still legitimate for `LogicalBuilding` behavior must not be old-format parsing branches.
@@ -1041,6 +1039,6 @@ git commit -m "refactor: remove flattened floor geometry model"
 - `ceilingBoundaryRegion`, `FloorSurface`, `FloorSurfacePartitioner`, and `ScannedFloor` are gone.
 - Floor + Room refresh is atomic.
 - `RoomScanPlan` remains action/identity only.
-- `buildingDataVersion` starts at 1 for the new canonical exact-geometry format.
+- `buildingDataVersion` identifies only the current canonical exact-geometry format.
 - `RoomDFU` directly loads the current canonical version and migrates only released `origin/1.21.1` plus upstream unversioned `origin/feature/1.21.1-floor-clean-squash`.
 - Full common tests, NeoForge compile, and `git diff --check` pass.

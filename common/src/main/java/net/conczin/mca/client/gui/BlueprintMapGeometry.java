@@ -54,7 +54,7 @@ final class BlueprintMapGeometry {
             List<MapStructureLayer> structures = buildStructureLayers(
                     outlineRoomsByBuilding, visibleRoomsByBuilding);
             List<MapIconLayer> icons = buildIconLayers(visibleRoomsByBuilding, selectedFloor);
-            List<MapConnectorLayer> connectors = buildConnectorLayers(selectedFloor);
+            List<MapConnectorLayer> connectors = buildConnectorLayers(selectedFloor, visibleRooms);
             List<Building> grouped = village.getExternalBuildings().filter(Building::isComplete)
                     .filter(building -> selectedFloor == null || selectedFloor == 0)
                     .sorted(Comparator.comparingInt(Building::getId)).map(Building.class::cast).toList();
@@ -196,17 +196,26 @@ final class BlueprintMapGeometry {
         return List.copyOf(icons);
     }
 
-    private List<MapConnectorLayer> buildConnectorLayers(Integer selectedFloor) {
+    private List<MapConnectorLayer> buildConnectorLayers(
+            Integer selectedFloor, List<MapFootprintLayer> visibleRooms) {
         if (selectedFloor == null) return List.of();
 
+        Map<Integer, Set<BlockPos>> registeredRoomCells = new HashMap<>();
+        for (MapFootprintLayer room : visibleRooms) {
+            registeredRoomCells
+                    .computeIfAbsent(room.building().getStructureId(), ignored -> new HashSet<>())
+                    .addAll(room.building().getFloorCells());
+        }
         LinkedHashMap<ConnectorLayerKey, MapConnectorLayer> layers = new LinkedHashMap<>();
         village.getStructures().values().stream()
                 .sorted(Comparator.comparingInt(Structure::getId))
                 .forEach(structure -> {
                     int logicalBuildingId = village.getLogicalBuildingId(structure.getId());
+                    Set<BlockPos> ownedCells = registeredRoomCells.getOrDefault(structure.getId(), Set.of());
                     for (StructureFloor floor : structure.getFloors()) {
                         if (floor.floorNumber() != selectedFloor) continue;
                         for (FloorConnector.Marker marker : floor.connectors()) {
+                            if (!ownedCells.contains(marker.pos())) continue;
                             ConnectorLayerKey key = new ConnectorLayerKey(
                                     logicalBuildingId, marker.pos().getX(), marker.pos().getZ(), marker.type());
                             layers.putIfAbsent(key, new MapConnectorLayer(logicalBuildingId, marker));

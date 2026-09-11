@@ -1,6 +1,7 @@
 package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import org.junit.jupiter.api.Test;
 
 import java.util.AbstractCollection;
@@ -12,6 +13,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RoomPartitionerTest {
@@ -99,6 +101,15 @@ class RoomPartitionerTest {
     }
 
     @Test
+    void selectionDoesNotBorrowHorizontallyAdjacentFloorCell() {
+        FloorGeometry.Cell onlyCell = cell(1, 64, 0);
+        FloorGeometry geometry = geometry(Set.of(onlyCell), Map.of());
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry, transitions(geometry));
+
+        assertNull(RoomPartitioner.select(new BlockPos(0, 64, 0), geometry, components));
+    }
+
+    @Test
     void doorCellBelongsToOneRoomWithoutConnectingBothRooms() {
         BlockPos connectorCell = new BlockPos(1, 64, 0);
         FloorGeometry geometry = geometry(Set.of(
@@ -116,7 +127,82 @@ class RoomPartitionerTest {
     }
 
     @Test
-    void connectorOwnerUsesLargestComponentThenStableBounds() {
+    void preferredDoorSideBeatsAdjacentRoomSize() {
+        BlockPos door = new BlockPos(2, 64, 0);
+        FloorGeometry geometry = geometry(Set.of(
+                cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0),
+                cell(3, 64, 0), cell(4, 64, 0), cell(5, 64, 0), cell(6, 64, 0)),
+                Map.of(door, FloorConnector.Type.DOOR));
+
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(
+                geometry, transitions(geometry), Map.of(door, Direction.WEST));
+        RoomPartitioner.Component owner = components.stream()
+                .filter(component -> component.contains(door))
+                .findFirst().orElseThrow();
+
+        assertTrue(owner.contains(new BlockPos(1, 64, 0)));
+        assertFalse(owner.contains(new BlockPos(3, 64, 0)));
+    }
+
+    @Test
+    void preferredDoorSideMatchesOneBlockUnevenNeighbor() {
+        BlockPos west = new BlockPos(1, 65, 0);
+        BlockPos door = new BlockPos(2, 64, 0);
+        BlockPos east = new BlockPos(3, 64, 0);
+        FloorGeometry geometry = geometry(Set.of(
+                cell(0, 65, 0), new FloorGeometry.Cell(west, 69),
+                new FloorGeometry.Cell(door, 68), new FloorGeometry.Cell(east, 68),
+                cell(4, 64, 0), cell(5, 64, 0)),
+                Map.of(door, FloorConnector.Type.DOOR));
+
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(
+                geometry, transitions(geometry), Map.of(door, Direction.WEST));
+        RoomPartitioner.Component owner = components.stream()
+                .filter(component -> component.contains(door))
+                .findFirst().orElseThrow();
+
+        assertTrue(owner.contains(west));
+        assertFalse(owner.contains(east));
+    }
+
+    @Test
+    void threeArmIrregularFloorRemainsOneRoom() {
+        FloorGeometry geometry = geometry(Set.of(
+                cell(2, 64, 2),
+                cell(1, 64, 2), cell(0, 64, 2),
+                cell(3, 64, 2), cell(4, 64, 2),
+                cell(2, 64, 3), cell(2, 64, 4)), Map.of());
+
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry, transitions(geometry));
+
+        assertEquals(1, components.size());
+        assertEquals(geometry.cells().size(), components.getFirst().area());
+    }
+
+    @Test
+    void multipleDoorBoundariesPartitionEveryFloorCellExactlyOnce() {
+        BlockPos firstDoor = new BlockPos(2, 64, 0);
+        BlockPos secondDoor = new BlockPos(5, 64, 0);
+        Set<FloorGeometry.Cell> cells = new java.util.LinkedHashSet<>();
+        for (int x = 0; x <= 8; x++) cells.add(cell(x, 64, 0));
+        FloorGeometry geometry = geometry(cells, Map.of(
+                firstDoor, FloorConnector.Type.DOOR,
+                secondDoor, FloorConnector.Type.DOOR));
+
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry, transitions(geometry));
+        Set<BlockPos> owned = components.stream()
+                .flatMap(component -> component.floorCells().stream())
+                .collect(java.util.stream.Collectors.toSet());
+
+        assertEquals(3, components.size());
+        assertEquals(geometry.cells().size(), components.stream().mapToInt(RoomPartitioner.Component::area).sum());
+        assertEquals(geometry.cells().size(), owned.size());
+        assertEquals(1, components.stream().filter(component -> component.contains(firstDoor)).count());
+        assertEquals(1, components.stream().filter(component -> component.contains(secondDoor)).count());
+    }
+
+    @Test
+    void fallbackOwnerUsesLargestComponentThenStableBounds() {
         var small = new RoomPartitioner.Component(Set.of(cell(0, 64, 0)));
         var large = new RoomPartitioner.Component(Set.of(cell(2, 64, 0), cell(3, 64, 0)));
 

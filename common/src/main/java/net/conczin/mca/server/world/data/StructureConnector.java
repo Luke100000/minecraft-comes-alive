@@ -48,8 +48,27 @@ final class StructureConnector {
         return half == DoubleBlockHalf.UPPER ? pos.below() : pos;
     }
 
-    /** Associates connector positions with exact handoff heights on the selected semantic floor. */
-    static Map<BlockPos, FloorConnector.Type> associatedFloorCells(
+    /** Room ownership follows the door's Minecraft FACING side, regardless of open state or hinge. */
+    static Direction doorOwnerSide(BlockState state) {
+        return state.getBlock() instanceof DoorBlock
+                ? state.getValue(DoorBlock.FACING)
+                : null;
+    }
+
+    static Map<BlockPos, Direction> doorOwnerSides(Level world, FloorGeometry geometry) {
+        if (world == null || geometry == null) return Map.of();
+
+        LinkedHashMap<BlockPos, Direction> ownerSides = new LinkedHashMap<>();
+        for (Map.Entry<BlockPos, FloorConnector.Type> entry : geometry.connectorTypesByCell().entrySet()) {
+            if (entry.getValue() != FloorConnector.Type.DOOR) continue;
+            Direction ownerSide = doorOwnerSide(world.getBlockState(entry.getKey()));
+            if (ownerSide != null) ownerSides.put(entry.getKey(), ownerSide);
+        }
+        return Map.copyOf(ownerSides);
+    }
+
+    /** Returns connector metadata keyed only by exact cells already owned by this Floor. */
+    static Map<BlockPos, FloorConnector.Type> connectorTypesForFloor(
             Level world, Collection<BlockPos> connectors, FloorGeometry geometry) {
         if (connectors.isEmpty() || geometry.cells().isEmpty()) return Map.of();
 
@@ -60,9 +79,12 @@ final class StructureConnector {
             BlockState state = world.getBlockState(connector);
             FloorConnector.Type type = FloorConnector.Type.fromBlockState(state);
             if (type == null) continue;
-            (type.vertical() ? verticalFloorMembershipCells(connector, geometry)
-                    : floorMembershipCells(connector, geometry))
-                    .forEach(floorCell -> result.putIfAbsent(floorCell, type));
+            if (type.vertical()) {
+                verticalFloorMembershipCells(connector, geometry)
+                        .forEach(floorCell -> result.putIfAbsent(floorCell, type));
+            } else if (geometry.cellAt(connector).isPresent()) {
+                result.putIfAbsent(connector.immutable(), type);
+            }
         }
         return Map.copyOf(result);
     }
@@ -75,36 +97,6 @@ final class StructureConnector {
                     .ifPresent(cells::add);
         }
         return Set.copyOf(cells);
-    }
-
-    static Set<BlockPos> floorMembershipCells(BlockPos connector, FloorGeometry geometry) {
-        if (connector == null || geometry == null || geometry.cells().isEmpty()) return Set.of();
-        LinkedHashSet<BlockPos> cells = new LinkedHashSet<>();
-        for (BlockPos handoff : handoffs(connector)) {
-            geometry.cellsAtColumn(handoff.getX(), handoff.getZ()).stream()
-                    .filter(landing -> handoff.getY() == landing.feet().getY()
-                            || handoff.getY() == landing.feet().getY() - 1)
-                    .forEach(landing -> cells.add(new BlockPos(
-                            connector.getX(), landing.feet().getY(), connector.getZ())));
-        }
-        return Set.copyOf(cells);
-    }
-
-    /** Attaches connector metadata only to exact Floor cells already discovered by the scanner. */
-    static FloorGeometry withConnectorAssociations(
-            FloorGeometry geometry,
-            Map<BlockPos, FloorConnector.Type> connectorTypesByCell) {
-        Objects.requireNonNull(geometry, "geometry");
-        if (connectorTypesByCell == null || connectorTypesByCell.isEmpty()) return geometry;
-
-        LinkedHashMap<BlockPos, FloorConnector.Type> connectors =
-                new LinkedHashMap<>(geometry.connectorTypesByCell());
-
-        for (Map.Entry<BlockPos, FloorConnector.Type> entry : connectorTypesByCell.entrySet()) {
-            BlockPos floorCell = entry.getKey().immutable();
-            if (geometry.cellAt(floorCell).isPresent()) connectors.putIfAbsent(floorCell, entry.getValue());
-        }
-        return new FloorGeometry(geometry.cells(), connectors);
     }
 
     /** Returns the vertical connector column for an occupied connector or its immediate open top-exit cell. */
