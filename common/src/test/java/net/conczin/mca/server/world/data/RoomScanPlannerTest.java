@@ -80,7 +80,7 @@ class RoomScanPlannerTest {
     }
 
     @Test
-    void freshDoorOwnedByRegisteredSideDoesNotRedirectToUnregisteredSide() {
+    void freshDoorWithoutWorldOrientationDoesNotGuessRegisteredSide() {
         Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
         Building room = room(100, 20, 0, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
@@ -94,8 +94,8 @@ class RoomScanPlannerTest {
         RoomScanPlan plan = RoomScanPlanner.planFresh(
                 village, door, observation(door, fresh, List.of()));
 
-        assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
-        assertEquals(room, plan.currentRoom().orElseThrow());
+        assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
+        assertTrue(plan.currentRoom().isEmpty());
     }
 
     @Test

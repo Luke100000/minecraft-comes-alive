@@ -34,11 +34,11 @@ final class RoomPartitioner {
 
     static List<Component> partition(FloorGeometry geometry,
                                      Collection<SelectedFloorScanner.Transition> transitions,
-                                     Map<BlockPos, Direction> preferredBoundarySides) {
+                                     Map<BlockPos, Direction> doorOwnerSides) {
         Collection<SelectedFloorScanner.Transition> acceptedTransitions =
                 transitions == null ? List.of() : transitions;
-        Map<BlockPos, Direction> preferredSides = preferredBoundarySides == null
-                ? Map.of() : Map.copyOf(preferredBoundarySides);
+        Map<BlockPos, Direction> ownerSides = doorOwnerSides == null
+                ? Map.of() : Map.copyOf(doorOwnerSides);
         TransitionIndex transitionIndex = TransitionIndex.from(acceptedTransitions);
         Set<BlockPos> boundaryCells = geometry.connectorTypesByCell().entrySet().stream()
                 .filter(entry -> entry.getValue().roomBoundary())
@@ -59,7 +59,7 @@ final class RoomPartitioner {
         }
 
         List<Component> result = assignBoundaryClusters(
-                geometry, boundaryCells, openComponents, transitionIndex, preferredSides);
+                geometry, boundaryCells, openComponents, transitionIndex, ownerSides);
         result.sort(Comparator.comparingInt(Component::minX)
                 .thenComparingInt(Component::minZ)
                 .thenComparingInt(Component::minY)
@@ -73,7 +73,7 @@ final class RoomPartitioner {
                                                            Set<BlockPos> boundaryCells,
                                                            List<Component> openComponents,
                                                            TransitionIndex transitions,
-                                                           Map<BlockPos, Direction> preferredBoundarySides) {
+                                                           Map<BlockPos, Direction> doorOwnerSides) {
         if (boundaryCells.isEmpty()) return new ArrayList<>(openComponents);
 
         List<Set<FloorGeometry.Cell>> clusters = boundaryClusters(geometry, boundaryCells, transitions);
@@ -91,8 +91,14 @@ final class RoomPartitioner {
                     if (component != null) adjacent.add(component);
                 }
             }
-            Component owner = preferredOwner(cluster, componentByCell, transitions, preferredBoundarySides);
-            if (owner == null) owner = owner(adjacent);
+            boolean containsDoor = cluster.stream().anyMatch(cell ->
+                    geometry.connectorTypesByCell().get(cell.feet()) == FloorConnector.Type.DOOR);
+            Component owner = containsDoor
+                    ? doorOwner(cluster, componentByCell, transitions, doorOwnerSides)
+                    : owner(adjacent);
+            if (containsDoor && owner == null && adjacent.size() == 1) {
+                owner = adjacent.iterator().next();
+            }
             if (owner == null) {
                 unowned.add(new Component(cluster));
             } else {
@@ -110,14 +116,14 @@ final class RoomPartitioner {
         return result;
     }
 
-    private static Component preferredOwner(Set<FloorGeometry.Cell> cluster,
-                                            Map<BlockPos, Component> componentByCell,
-                                            TransitionIndex transitions,
-                                            Map<BlockPos, Direction> preferredBoundarySides) {
+    private static Component doorOwner(Set<FloorGeometry.Cell> cluster,
+                                       Map<BlockPos, Component> componentByCell,
+                                       TransitionIndex transitions,
+                                       Map<BlockPos, Direction> doorOwnerSides) {
         LinkedHashSet<Component> preferred = new LinkedHashSet<>();
         for (FloorGeometry.Cell cell : cluster) {
             BlockPos boundary = cell.feet();
-            Direction side = preferredBoundarySides.get(boundary);
+            Direction side = doorOwnerSides.get(boundary);
             if (side == null) continue;
             for (BlockPos neighbor : transitions.neighbors(boundary)) {
                 if (!isOnSide(boundary, neighbor, side)) continue;
@@ -190,10 +196,10 @@ final class RoomPartitioner {
         FloorGeometry.Cell sourceCell = resolveSourceCell(source, geometry);
         if (sourceCell == null) return null;
 
-        for (Component component : components) {
-            if (component.contains(sourceCell.feet())) return component;
-        }
-        return owner(adjacent(sourceCell, components));
+        return components.stream()
+                .filter(component -> component.contains(sourceCell.feet()))
+                .findFirst()
+                .orElse(null);
     }
 
     private static FloorGeometry.Cell resolveSourceCell(BlockPos source, FloorGeometry geometry) {

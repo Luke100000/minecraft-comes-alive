@@ -148,8 +148,8 @@ public final class FloorScannerGameTests {
         helper.assertTrue(scan.transitions().stream().anyMatch(edge -> edge.connects(left, doorway)),
                 "doorway lost physical connectivity to its FACING owner side");
 
-        List<RoomPartitioner.Component> rooms = RoomPartitioner.partition(
-                scan.floor(), scan.transitions(), StructureConnector.doorOwnerSides(level, scan.floor()));
+        List<RoomPartitioner.Component> rooms = BuildingRoomScanner.components(
+                level, scan.floor(), scan.transitions());
         helper.assertTrue(rooms.size() == 2, "doorway merged both Room components");
         RoomPartitioner.Component owner = rooms.stream()
                 .filter(room -> room.contains(doorway))
@@ -191,8 +191,8 @@ public final class FloorScannerGameTests {
                 "reachable one-block-lower doorway was split into another storey");
         helper.assertTrue(scan.floor().cellAt(right).isPresent(),
                 "selected storey stopped at the one-block-lower doorway");
-        List<RoomPartitioner.Component> rooms = RoomPartitioner.partition(
-                scan.floor(), scan.transitions(), StructureConnector.doorOwnerSides(level, scan.floor()));
+        List<RoomPartitioner.Component> rooms = BuildingRoomScanner.components(
+                level, scan.floor(), scan.transitions());
         RoomPartitioner.Component owner = rooms.stream()
                 .filter(room -> room.contains(doorway))
                 .findFirst().orElseThrow();
@@ -226,8 +226,8 @@ public final class FloorScannerGameTests {
                 "upper-doorway scan failed: " + scan.result());
         helper.assertTrue(scan.floor().cellAt(doorway).isPresent(),
                 "reachable one-block-higher doorway was split from the selected storey");
-        List<RoomPartitioner.Component> rooms = RoomPartitioner.partition(
-                scan.floor(), scan.transitions(), StructureConnector.doorOwnerSides(level, scan.floor()));
+        List<RoomPartitioner.Component> rooms = BuildingRoomScanner.components(
+                level, scan.floor(), scan.transitions());
         RoomPartitioner.Component owner = rooms.stream()
                 .filter(room -> room.contains(doorway))
                 .findFirst().orElseThrow();
@@ -832,9 +832,8 @@ public final class FloorScannerGameTests {
         SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(helper.getLevel(), interior, 128, 16);
         helper.assertTrue(scan.result() == Building.validationResult.SUCCESS,
                 "single-sided doorway scan failed: " + scan.result());
-        List<RoomPartitioner.Component> rooms = RoomPartitioner.partition(
-                scan.floor(), scan.transitions(),
-                StructureConnector.doorOwnerSides(helper.getLevel(), scan.floor()));
+        List<RoomPartitioner.Component> rooms = BuildingRoomScanner.components(
+                helper.getLevel(), scan.floor(), scan.transitions());
         helper.assertTrue(rooms.size() == 1,
                 "single-sided doorway created a separate Room component");
         helper.assertTrue(rooms.getFirst().contains(doorway),
@@ -902,7 +901,8 @@ public final class FloorScannerGameTests {
         helper.assertTrue(scan.result() == Building.validationResult.SUCCESS,
                 "three-room floor scan failed: " + scan.result());
 
-        List<RoomPartitioner.Component> rooms = RoomPartitioner.partition(scan.floor(), scan.transitions());
+        List<RoomPartitioner.Component> rooms = BuildingRoomScanner.components(
+                helper.getLevel(), scan.floor(), scan.transitions());
         helper.assertTrue(rooms.size() == 3, "two doors produced " + rooms.size() + " Rooms instead of 3");
         helper.assertTrue(RoomPartitioner.select(firstSeed, scan.floor(), rooms)
                         != RoomPartitioner.select(secondSeed, scan.floor(), rooms),
@@ -1006,9 +1006,11 @@ public final class FloorScannerGameTests {
                 "lower Floor absorbed an upper Room cell");
         helper.assertTrue(upper.floor().cellAt(lowerLeft.offset(2, 0, 2)).isEmpty(),
                 "upper Floor absorbed a lower Room cell");
-        helper.assertTrue(RoomPartitioner.partition(lower.floor(), lower.transitions()).size() == 2,
+        helper.assertTrue(BuildingRoomScanner.components(
+                        helper.getLevel(), lower.floor(), lower.transitions()).size() == 2,
                 "lower Floor did not retain two Rooms");
-        helper.assertTrue(RoomPartitioner.partition(upper.floor(), upper.transitions()).size() == 2,
+        helper.assertTrue(BuildingRoomScanner.components(
+                        helper.getLevel(), upper.floor(), upper.transitions()).size() == 2,
                 "upper Floor did not retain two Rooms");
         helper.assertTrue(lower.floor().connectorTypesByCell().containsValue(FloorConnector.Type.DOOR),
                 "lower Floor lost its door connector");

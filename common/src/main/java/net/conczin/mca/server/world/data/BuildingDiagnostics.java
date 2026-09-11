@@ -62,6 +62,11 @@ public final class BuildingDiagnostics {
         Structure inspected = interactionStructure != null
                 ? interactionStructure
                 : structureAt != null ? structureAt : nearestStructure;
+        List<Building> inspectedRooms = inspected == null
+                ? List.of()
+                : village.getRooms()
+                .filter(candidate -> candidate.getStructureId() == inspected.getId())
+                .toList();
         Building room = plan.currentRoom().orElse(null);
         RoomTypeResolver roomTypeResolver = RoomTypeResolver.create(village);
 
@@ -72,9 +77,6 @@ public final class BuildingDiagnostics {
         StructureFloor freshPlayerFloor = null;
         if (inspected != null) {
             boolean contains = inspected.containsPos(pos);
-            List<Building> inspectedRooms = village.getRooms()
-                    .filter(candidate -> candidate.getStructureId() == inspected.getId())
-                    .toList();
             Structure.InteractionPosition interaction = inspected
                     .resolveInteractionPosition(pos, inspectedRooms).orElse(null);
             boolean attaches = interaction != null;
@@ -141,7 +143,8 @@ public final class BuildingDiagnostics {
         };
         log(traceId, "analysis action={} result={}", uiAction, analysis);
 
-        String verdict = verdict(position, uiAction, analysis, inspected, room, freshPlayerFloor, pos, world);
+        String verdict = verdict(
+                position, uiAction, analysis, inspected, inspectedRooms, room, freshPlayerFloor, pos, world);
         log(traceId, "verdict={}", verdict);
         return new Result(traceId, position, uiAction, verdict);
     }
@@ -212,6 +215,7 @@ public final class BuildingDiagnostics {
                                   String uiAction,
                                   Building.validationResult analysis,
                                   Structure structure,
+                                  Collection<Building> rooms,
                                   Building room,
                                   StructureFloor freshPlayerFloor,
                                   BlockPos pos,
@@ -221,7 +225,7 @@ public final class BuildingDiagnostics {
         }
         if (position == StructuralPosition.OUTSIDE) {
             boolean contains = structure.containsPos(pos);
-            boolean attaches = structure.resolveInteractionPosition(pos, List.of()).isPresent();
+            boolean attaches = structure.resolveInteractionPosition(pos, rooms).isPresent();
             return "NO_INTERACTION_STRUCTURE: UI uses " + uiAction + "; containsPos=" + contains
                     + ", interactionAttachment=" + attaches + ", analysis=" + analysis;
         }

@@ -24,12 +24,11 @@ final class BuildingRoomScanner {
         if (floor == null || floor.cells().isEmpty()) {
             return Result.failure(Building.validationResult.TOO_SMALL, source);
         }
-        List<RoomPartitioner.Component> components = RoomPartitioner.partition(
-                floor, transitions, StructureConnector.doorOwnerSides(world, floor));
+        List<RoomPartitioner.Component> components = components(world, floor, transitions);
         RoomPartitioner.Component selected = RoomPartitioner.select(source, floor, components);
         return selected == null
                 ? Result.failure(Building.validationResult.TOO_SMALL, source)
-                : materializeComponent(world, source, maxSize,
+                : materialize(world, source, maxSize,
                 floorId, floor, components, selected);
     }
 
@@ -41,17 +40,26 @@ final class BuildingRoomScanner {
                                   FloorGeometry floor,
                                   Collection<SelectedFloorScanner.Transition> transitions) {
         if (floor == null || floor.cells().isEmpty()) return List.of();
-        List<RoomPartitioner.Component> components = RoomPartitioner.partition(
-                floor, transitions, StructureConnector.doorOwnerSides(world, floor));
+        List<RoomPartitioner.Component> components = components(world, floor, transitions);
         return components.stream()
-                .map(component -> materializeComponent(
+                .map(component -> materialize(
                         world, source, maxSize, floorId, floor, components, component))
                 .sorted(Comparator.comparingInt((Result result) -> result.min().getX())
                         .thenComparingInt(result -> result.min().getZ()))
                 .toList();
     }
 
-    private static Result materializeComponent(
+    /** One world-aware Room partition entry point so door ownership cannot drift between callers. */
+    static List<RoomPartitioner.Component> components(
+            Level world,
+            FloorGeometry floor,
+            Collection<SelectedFloorScanner.Transition> transitions) {
+        if (floor == null || floor.cells().isEmpty()) return List.of();
+        return RoomPartitioner.partition(
+                floor, transitions, StructureConnector.doorOwnerSides(world, floor));
+    }
+
+    static Result materialize(
             Level world,
             BlockPos source,
             int maxSize,

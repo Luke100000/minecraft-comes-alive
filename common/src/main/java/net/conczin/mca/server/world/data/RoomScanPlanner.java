@@ -1,13 +1,11 @@
 package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
 
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -37,9 +35,9 @@ final class RoomScanPlanner {
         if (observation == null) {
             return persistedFloorPlan == null ? RoomScanPlan.addBuilding(source) : persistedFloorPlan;
         }
-        Map<BlockPos, Direction> doorOwnerSides =
-                StructureConnector.doorOwnerSides(level, observation.scan().floor());
-        RoomScanPlan freshPlan = planFresh(village, source, observation, doorOwnerSides);
+        List<RoomPartitioner.Component> components = BuildingRoomScanner.components(
+                level, observation.scan().floor(), observation.scan().transitions());
+        RoomScanPlan freshPlan = planFresh(village, source, observation, components);
         if (persistedFloorPlan == null || freshPlan.mode() == Village.RoomScanMode.UPDATE_ROOM) {
             return freshPlan;
         }
@@ -54,20 +52,24 @@ final class RoomScanPlanner {
     static RoomScanPlan planFresh(Village village,
                                   BlockPos source,
                                   StructureScanner.FloorObservation observation) {
-        return planFresh(village, source, observation, Map.of());
+        List<RoomPartitioner.Component> components = observation == null
+                ? List.of()
+                : BuildingRoomScanner.components(
+                null, observation.scan().floor(), observation.scan().transitions());
+        return planFresh(village, source, observation, components);
     }
 
     private static RoomScanPlan planFresh(Village village,
                                           BlockPos source,
                                           StructureScanner.FloorObservation observation,
-                                          Map<BlockPos, Direction> doorOwnerSides) {
+                                          List<RoomPartitioner.Component> components) {
         if (village == null || observation == null) return RoomScanPlan.addBuilding(source);
 
         FloorTarget expansion = selectSameStoreyTarget(village, observation.scan().floor()).orElse(null);
         if (expansion != null && validExpansion(village, observation, expansion)) {
             FreshComponentSelection selected = selectFreshComponent(
-                    village, expansion, observation.scan().floor(), observation.scan().transitions(),
-                    observation.seed(), doorOwnerSides).orElse(null);
+                    village, expansion, observation.scan().floor(),
+                    observation.seed(), components).orElse(null);
             if (selected != null) {
                 return selected.existingRoom() != null
                         ? RoomScanPlan.updateRoom(selected.existingRoom(), source)
@@ -120,13 +122,10 @@ final class RoomScanPlanner {
             Village village,
             FloorTarget target,
             FloorGeometry floor,
-            Collection<SelectedFloorScanner.Transition> transitions,
             BlockPos scanSeed,
-            Map<BlockPos, Direction> doorOwnerSides) {
+            List<RoomPartitioner.Component> components) {
         if (village == null || target == null || floor == null
                 || scanSeed == null) return Optional.empty();
-        List<RoomPartitioner.Component> components = RoomPartitioner.partition(
-                floor, transitions, doorOwnerSides);
         RoomPartitioner.Component selected = RoomPartitioner.select(scanSeed, floor, components);
         if (selected == null) return Optional.empty();
 

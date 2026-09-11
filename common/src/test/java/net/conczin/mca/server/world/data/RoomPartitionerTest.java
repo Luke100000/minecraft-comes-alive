@@ -119,7 +119,8 @@ class RoomPartitionerTest {
                 new SelectedFloorScanner.Transition(new BlockPos(0, 64, 0), connectorCell),
                 new SelectedFloorScanner.Transition(connectorCell, new BlockPos(2, 64, 0)));
 
-        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry, transitions);
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(
+                geometry, transitions, Map.of(connectorCell, Direction.WEST));
 
         assertEquals(2, components.size());
         assertEquals(1, components.stream().filter(component -> component.contains(connectorCell)).count());
@@ -166,6 +167,34 @@ class RoomPartitionerTest {
     }
 
     @Test
+    void doorWithoutOwnerSideDoesNotFallBackToLargerAdjacentRoom() {
+        BlockPos door = new BlockPos(2, 64, 0);
+        FloorGeometry geometry = geometry(Set.of(
+                cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0),
+                cell(3, 64, 0), cell(4, 64, 0), cell(5, 64, 0), cell(6, 64, 0)),
+                Map.of(door, FloorConnector.Type.DOOR));
+
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(
+                geometry, transitions(geometry), Map.of());
+        RoomPartitioner.Component doorComponent = components.stream()
+                .filter(component -> component.contains(door))
+                .findFirst().orElseThrow();
+
+        assertEquals(3, components.size());
+        assertEquals(Set.of(door), doorComponent.floorCells());
+    }
+
+    @Test
+    void selectionDoesNotBorrowAdjacentComponentWhenExactCellIsUnowned() {
+        FloorGeometry.Cell sourceCell = cell(1, 64, 0);
+        FloorGeometry geometry = geometry(Set.of(cell(0, 64, 0), sourceCell), Map.of());
+        RoomPartitioner.Component adjacent = new RoomPartitioner.Component(Set.of(cell(0, 64, 0)));
+
+        assertNull(RoomPartitioner.select(
+                sourceCell.feet(), geometry, List.of(adjacent)));
+    }
+
+    @Test
     void threeArmIrregularFloorRemainsOneRoom() {
         FloorGeometry geometry = geometry(Set.of(
                 cell(2, 64, 2),
@@ -173,7 +202,8 @@ class RoomPartitionerTest {
                 cell(3, 64, 2), cell(4, 64, 2),
                 cell(2, 64, 3), cell(2, 64, 4)), Map.of());
 
-        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry, transitions(geometry));
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(
+                geometry, transitions(geometry));
 
         assertEquals(1, components.size());
         assertEquals(geometry.cells().size(), components.getFirst().area());
@@ -189,7 +219,10 @@ class RoomPartitionerTest {
                 firstDoor, FloorConnector.Type.DOOR,
                 secondDoor, FloorConnector.Type.DOOR));
 
-        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry, transitions(geometry));
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(
+                geometry, transitions(geometry), Map.of(
+                        firstDoor, Direction.WEST,
+                        secondDoor, Direction.WEST));
         Set<BlockPos> owned = components.stream()
                 .flatMap(component -> component.floorCells().stream())
                 .collect(java.util.stream.Collectors.toSet());

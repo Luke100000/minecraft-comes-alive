@@ -86,23 +86,35 @@ public final class RoomWorkflow {
         if (refreshedFloor == null) {
             return failedRoom(Building.validationResult.OVERLAP, source, village);
         }
-        BuildingScanResult addition = scanResolvedRoom(
-                village, refreshed, scanSeed, -1, refreshedFloor, fresh.scannedFloor(),
-                fresh.transitions());
+        List<RoomPartitioner.Component> components = BuildingRoomScanner.components(
+                world, fresh.scannedFloor(), fresh.transitions());
+        RoomPartitioner.Component selectedComponent = RoomPartitioner.select(
+                scanSeed, fresh.scannedFloor(), components);
+        BuildingRoomScanner.Result selected = selectedComponent == null
+                ? BuildingRoomScanner.Result.failure(Building.validationResult.TOO_SMALL, scanSeed)
+                : BuildingRoomScanner.materialize(
+                world, scanSeed, Config.getInstance().maxBuildingSize, floor.id(),
+                fresh.scannedFloor(), components, selectedComponent);
+        BuildingScanResult addition = roomResultFromGeometry(
+                village, refreshed, refreshedFloor, selected, -1);
         if (addition.result() != Building.validationResult.SUCCESS) {
             return addition.withSource(source);
         }
 
         List<Building> freshRooms = new ArrayList<>();
-        for (BuildingRoomScanner.Result component : BuildingRoomScanner.partition(
-                world, scanSeed, Config.getInstance().maxBuildingSize,
-                floor.id(), fresh.scannedFloor(), fresh.transitions())) {
-            BuildingScanResult componentScan = roomResultFromGeometry(
-                    village, refreshed, refreshedFloor, component, -1);
-            if (componentScan.result() != Building.validationResult.SUCCESS) {
-                return failedRoom(Building.validationResult.OVERLAP, source, village);
+        for (RoomPartitioner.Component component : components) {
+            if (component == selectedComponent) {
+                freshRooms.add(addition.building());
+                continue;
             }
-            freshRooms.add(componentScan.building());
+            BuildingRoomScanner.Result geometry = BuildingRoomScanner.materialize(
+                    world, scanSeed, Config.getInstance().maxBuildingSize, floor.id(),
+                    fresh.scannedFloor(), components, component);
+            BuildingScanResult componentScan = roomResultFromGeometry(
+                    village, refreshed, refreshedFloor, geometry, -1);
+            if (componentScan.result() == Building.validationResult.SUCCESS) {
+                freshRooms.add(componentScan.building());
+            }
         }
         List<Building> previousRooms = village.getRooms()
                 .filter(room -> room.getStructureId() == structure.getId())
