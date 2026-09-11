@@ -154,7 +154,7 @@ final class StructureConnector {
                 .toList();
     }
 
-    static List<BlockPos> handoffs(BlockPos pos) {
+    private static List<BlockPos> handoffs(BlockPos pos) {
         List<BlockPos> result = new ArrayList<>();
         result.add(pos.above());
         result.add(pos.below());

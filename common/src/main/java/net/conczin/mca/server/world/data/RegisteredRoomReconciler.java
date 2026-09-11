@@ -20,7 +20,9 @@ final class RegisteredRoomReconciler {
                                       int expectedPlayerRoomId,
                                       int mainRoomId,
                                       Collection<Building> previousRooms,
-                                      Collection<Building> scannedComponents) {
+                                      Collection<Building> scannedComponents,
+                                      FloorGeometry floor) {
+        if (floor == null) return Optional.empty();
         List<Building> previous = previousRooms.stream()
                 .sorted(Comparator.comparingInt(Building::getId))
                 .toList();
@@ -34,8 +36,8 @@ final class RegisteredRoomReconciler {
         long[][] overlaps = new long[components.size()][previous.size()];
         for (int component = 0; component < components.size(); component++) {
             for (int room = 0; room < previous.size(); room++) {
-                overlaps[component][room] = components.get(component)
-                        .getFloorFootprintIntersectionArea(previous.get(room));
+                overlaps[component][room] = floor.roomIdentityOverlapCount(
+                        components.get(component).getFloorCells(), previous.get(room).getFloorCells());
             }
         }
 
@@ -72,15 +74,19 @@ final class RegisteredRoomReconciler {
 
     static Optional<List<Building>> updateLineage(Building selected,
                                                   Collection<Building> freshComponents,
-                                                  Collection<Building> otherRooms) {
+                                                  Collection<Building> otherRooms,
+                                                  FloorGeometry floor) {
+        if (selected == null || freshComponents == null || otherRooms == null || floor == null) {
+            return Optional.empty();
+        }
         List<Building> lineage = freshComponents.stream()
-                .filter(component -> component.getFloorFootprintIntersectionArea(selected) > 0)
+                .filter(component -> hasIdentityOverlap(component, selected, floor))
                 .sorted(COMPONENT_ORDER)
                 .toList();
         if (lineage.isEmpty()) return Optional.empty();
         for (Building component : lineage) {
             for (Building other : otherRooms) {
-                if (component.getFloorFootprintIntersectionArea(other) > 0) return Optional.empty();
+                if (hasIdentityOverlap(component, other, floor)) return Optional.empty();
             }
         }
         return Optional.of(lineage);
@@ -104,11 +110,6 @@ final class RegisteredRoomReconciler {
         List<Building> components = scannedComponents.stream()
                 .sorted(COMPONENT_ORDER)
                 .toList();
-        Set<BlockPos> boundaryCells = floor.connectorTypesByCell().entrySet().stream()
-                .filter(entry -> entry.getValue().roomBoundary())
-                .map(Map.Entry::getKey)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
-
         Building addedComponent = null;
         for (Building component : components) {
             if (!component.getFloorCells().equals(addedRoom.getFloorCells())) continue;
@@ -119,7 +120,7 @@ final class RegisteredRoomReconciler {
 
         Building selectedAddedComponent = addedComponent;
         List<Building> addedMatches = previous.stream()
-                .filter(room -> hasIdentityOverlap(selectedAddedComponent, room, boundaryCells))
+                .filter(room -> hasIdentityOverlap(selectedAddedComponent, room, floor))
                 .toList();
         if (addedMatches.size() > 1) return Optional.empty();
 
@@ -128,7 +129,7 @@ final class RegisteredRoomReconciler {
         for (Building component : components) {
             if (component == addedComponent) continue;
             List<Building> matches = previous.stream()
-                    .filter(room -> hasIdentityOverlap(component, room, boundaryCells))
+                    .filter(room -> hasIdentityOverlap(component, room, floor))
                     .toList();
             if (matches.isEmpty()) continue;
             if (matches.size() > 1) return Optional.empty();
@@ -149,19 +150,22 @@ final class RegisteredRoomReconciler {
         component.setContributesToMain(previous.contributesToMain());
     }
 
-    private static boolean hasIdentityOverlap(Building component,
-                                              Building previous,
-                                              Set<BlockPos> boundaryCells) {
-        return component.getFloorCells().stream()
-                .filter(cell -> !boundaryCells.contains(cell))
-                .anyMatch(previous.getFloorCells()::contains);
+    static boolean hasIdentityOverlap(Building component,
+                                      Building previous,
+                                      FloorGeometry floor) {
+        return floor.roomIdentityOverlapCount(
+                component.getFloorCells(), previous.getFloorCells()) > 0;
     }
 
     private static final Comparator<Building> COMPONENT_ORDER = Comparator
             .comparingInt((Building room) -> room.getRawPos0().getX())
             .thenComparingInt(room -> room.getRawPos0().getZ())
+            .thenComparingInt(room -> room.getRawPos0().getY())
             .thenComparingInt(room -> room.getRawPos1().getX())
-            .thenComparingInt(room -> room.getRawPos1().getZ());
+            .thenComparingInt(room -> room.getRawPos1().getZ())
+            .thenComparingInt(room -> room.getRawPos1().getY())
+            .thenComparing((first, second) -> RoomPartitioner.compareFloorCellSets(
+                    first.getFloorCells(), second.getFloorCells()));
 
     record Assignment(Building component, Building previous) {
         int roomId() {

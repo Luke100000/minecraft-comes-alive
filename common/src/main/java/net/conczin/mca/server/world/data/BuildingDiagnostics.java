@@ -270,26 +270,31 @@ public final class BuildingDiagnostics {
                     .filter(candidate -> candidate.anchorY() == persistentFloor.anchorY())
                     .findFirst().orElse(null);
             if (freshFloor == null) continue;
-            if (persistentFloor.geometry().sameFootprint(freshFloor.geometry())) continue;
+            if (persistentFloor.geometry().sameExactGeometry(freshFloor.geometry())) continue;
 
-            Set<BlockPos> persistentCells = persistentFloor.region().cells();
-            Set<BlockPos> freshCells = freshFloor.region().cells();
+            Set<FloorGeometry.Cell> persistentCells = persistentFloor.geometry().cells();
+            Set<FloorGeometry.Cell> freshCells = freshFloor.geometry().cells();
 
             geometryMismatch = true;
-            LinkedHashSet<BlockPos> added = new LinkedHashSet<>(freshCells);
+            LinkedHashSet<FloorGeometry.Cell> added = new LinkedHashSet<>(freshCells);
             added.removeAll(persistentCells);
-            LinkedHashSet<BlockPos> removed = new LinkedHashSet<>(persistentCells);
+            LinkedHashSet<FloorGeometry.Cell> removed = new LinkedHashSet<>(persistentCells);
             removed.removeAll(freshCells);
+            boolean sameFootprint = persistentFloor.geometry().sameFootprint(freshFloor.geometry());
+            boolean connectorsChanged = !persistentFloor.geometry().connectorTypesByCell()
+                    .equals(freshFloor.geometry().connectorTypesByCell());
             if (verbose) {
-                log(traceId, "floorGeometryMismatch anchorY={} persistentArea={} freshArea={} "
-                                + "addedColumns={} removedColumns={} addedSample={} removedSample={}",
-                        persistentFloor.anchorY(), persistentFloor.area(), freshFloor.area(),
-                        added.size(), removed.size(), sampleColumns(added), sampleColumns(removed));
+                log(traceId, "floorGeometryMismatch anchorY={} persistentCells={} freshCells={} "
+                                + "sameFootprint={} connectorsChanged={} addedCells={} removedCells={} "
+                                + "addedSample={} removedSample={}",
+                        persistentFloor.anchorY(), persistentCells.size(), freshCells.size(),
+                        sameFootprint, connectorsChanged, added.size(), removed.size(),
+                        sampleCells(added), sampleCells(removed));
             } else {
-                log(traceId, "floorGeometryMismatch anchorY={} persistentArea={} freshArea={} "
-                                + "addedColumns={} removedColumns={}",
-                        persistentFloor.anchorY(), persistentFloor.area(), freshFloor.area(),
-                        added.size(), removed.size());
+                log(traceId, "floorGeometryMismatch anchorY={} persistentCells={} freshCells={} "
+                                + "sameFootprint={} connectorsChanged={} addedCells={} removedCells={}",
+                        persistentFloor.anchorY(), persistentCells.size(), freshCells.size(),
+                        sameFootprint, connectorsChanged, added.size(), removed.size());
             }
         }
         if (persistentAnchors.equals(freshAnchors) && !geometryMismatch) {
@@ -297,11 +302,12 @@ public final class BuildingDiagnostics {
         }
     }
 
-    private static List<BlockPos> sampleColumns(Collection<BlockPos> cells) {
+    private static List<FloorGeometry.Cell> sampleCells(Collection<FloorGeometry.Cell> cells) {
         return cells.stream()
-                .sorted(Comparator.comparingInt((BlockPos p) -> p.getX())
-                        .thenComparingInt(p -> p.getZ())
-                        .thenComparingInt(p -> p.getY()))
+                .sorted(Comparator.comparingInt((FloorGeometry.Cell cell) -> cell.feet().getX())
+                        .thenComparingInt(cell -> cell.feet().getZ())
+                        .thenComparingInt(cell -> cell.feet().getY())
+                        .thenComparingInt(FloorGeometry.Cell::ceilingY))
                 .limit(16)
                 .toList();
     }

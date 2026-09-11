@@ -93,7 +93,7 @@ public final class RoomWorkflow {
         BuildingRoomScanner.Result selected = selectedComponent == null
                 ? BuildingRoomScanner.Result.failure(Building.validationResult.TOO_SMALL, scanSeed)
                 : BuildingRoomScanner.materialize(
-                world, scanSeed, Config.getInstance().maxBuildingSize, floor.id(),
+                scanSeed, Config.getInstance().maxBuildingSize, floor.id(),
                 fresh.scannedFloor(), components, selectedComponent);
         BuildingScanResult addition = roomResultFromGeometry(
                 village, refreshed, refreshedFloor, selected, -1);
@@ -108,7 +108,7 @@ public final class RoomWorkflow {
                 continue;
             }
             BuildingRoomScanner.Result geometry = BuildingRoomScanner.materialize(
-                    world, scanSeed, Config.getInstance().maxBuildingSize, floor.id(),
+                    scanSeed, Config.getInstance().maxBuildingSize, floor.id(),
                     fresh.scannedFloor(), components, component);
             BuildingScanResult componentScan = roomResultFromGeometry(
                     village, refreshed, refreshedFloor, geometry, -1);
@@ -243,14 +243,15 @@ public final class RoomWorkflow {
                 .toList();
 
         List<Building> lineage = RegisteredRoomReconciler
-                .updateLineage(expected, freshComponents, otherRooms).orElse(null);
+                .updateLineage(expected, freshComponents, otherRooms, fresh.scannedFloor()).orElse(null);
         if (lineage == null || lineage.isEmpty()) {
             return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, source, village);
         }
 
         int mainRoomId = village.getMainRoom(structure).map(Building::getId).orElse(-1);
         RegisteredRoomReconciler.Result reconciled = RegisteredRoomReconciler.reconcile(
-                source, expected.getId(), mainRoomId, List.of(expected), lineage).orElse(null);
+                source, expected.getId(), mainRoomId, List.of(expected), lineage,
+                fresh.scannedFloor()).orElse(null);
         if (reconciled == null) {
             return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, source, village);
         }

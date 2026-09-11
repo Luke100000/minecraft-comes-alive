@@ -12,8 +12,7 @@ final class RoomPoiEvidence {
     private RoomPoiEvidence() {
     }
 
-    static Set<BlockPos> candidates(FloorGeometry geometry,
-                                    Collection<RoomPartitioner.Component> components,
+    static Set<BlockPos> candidates(Collection<RoomPartitioner.Component> components,
                                     RoomPartitioner.Component component) {
         LinkedHashSet<BlockPos> result = new LinkedHashSet<>();
 
@@ -23,7 +22,7 @@ final class RoomPoiEvidence {
             for (Direction direction : Direction.Plane.HORIZONTAL) {
                 int x = cell.feet().getX() + direction.getStepX();
                 int z = cell.feet().getZ() + direction.getStepZ();
-                if (!component.containsColumn(x, z)
+                if (!occupiesPoiColumn(component, cell, x, z)
                         && ownsPerimeterColumn(component, components, cell, x, z)) {
                     addColumn(result, x, z, cell.feet().getY() - 1, cell.ceilingY());
                 }
@@ -37,11 +36,26 @@ final class RoomPoiEvidence {
                                                FloorGeometry.Cell sourceCell,
                                                int x,
                                                int z) {
-        if (components.stream().anyMatch(candidate -> candidate.containsColumn(x, z))) return false;
+        if (components.stream().anyMatch(candidate -> occupiesPoiColumn(candidate, sourceCell, x, z))) {
+            return false;
+        }
         FloorGeometry.Cell perimeter = new FloorGeometry.Cell(
                 new BlockPos(x, sourceCell.feet().getY(), z),
                 sourceCell.ceilingY());
         return component.equals(RoomPartitioner.owner(RoomPartitioner.adjacent(perimeter, components)));
+    }
+
+    private static boolean occupiesPoiColumn(RoomPartitioner.Component component,
+                                             FloorGeometry.Cell sourceCell,
+                                             int x,
+                                             int z) {
+        int sourceMinY = sourceCell.feet().getY() - 1;
+        int sourceMaxY = sourceCell.ceilingY();
+        return component.cells().stream().anyMatch(candidate ->
+                candidate.feet().getX() == x
+                        && candidate.feet().getZ() == z
+                        && candidate.feet().getY() - 1 < sourceMaxY
+                        && sourceMinY < candidate.ceilingY());
     }
 
     private static void addColumn(Set<BlockPos> result, int x, int z, int minY, int ceilingY) {

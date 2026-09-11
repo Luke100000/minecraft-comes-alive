@@ -236,11 +236,13 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     static boolean lineageOverlapsRegisteredRooms(
             Collection<RegisteredRoomReconciler.Assignment> assignments,
-            Collection<Building> otherRooms) {
+            Collection<Building> otherRooms,
+            FloorGeometry floor) {
+        if (floor == null) return true;
         for (RegisteredRoomReconciler.Assignment assignment : assignments) {
             Building component = assignment.component();
             for (Building other : otherRooms) {
-                if (component.getFloorFootprintIntersectionArea(other) > 0) return true;
+                if (RegisteredRoomReconciler.hasIdentityOverlap(component, other, floor)) return true;
             }
         }
         return false;
@@ -418,8 +420,10 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
 
         List<RegisteredRoomReconciler.Assignment> assignments = update.assignments();
+        StructureFloor refreshedFloor = update.refreshedStructure().getFloor(update.floorId()).orElse(null);
         Building.validationResult assignmentValidation = validateRoomAssignments(
-                assignments, playerRoom, currentFloorRooms);
+                assignments, playerRoom, currentFloorRooms,
+                refreshedFloor == null ? null : refreshedFloor.geometry());
         if (assignmentValidation != Building.validationResult.SUCCESS) {
             return assignmentValidation;
         }
@@ -444,7 +448,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     private static Building.validationResult validateRoomAssignments(
             List<RegisteredRoomReconciler.Assignment> assignments,
             Building playerRoom,
-            List<Building> currentFloorRooms) {
+            List<Building> currentFloorRooms,
+            FloorGeometry floor) {
         long previousAssignments = assignments.stream()
                 .filter(assignment -> assignment.previous() != null)
                 .count();
@@ -455,7 +460,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         List<Building> otherRooms = currentFloorRooms.stream()
                 .filter(room -> room != playerRoom)
                 .toList();
-        if (lineageOverlapsRegisteredRooms(assignments, otherRooms)) {
+        if (lineageOverlapsRegisteredRooms(assignments, otherRooms, floor)) {
             return Building.validationResult.OVERLAP;
         }
         return Building.validationResult.SUCCESS;

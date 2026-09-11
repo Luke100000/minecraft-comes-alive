@@ -17,12 +17,22 @@ import java.util.stream.Collectors;
 
 /** Pure Room topology over one exact FloorGeometry. */
 final class RoomPartitioner {
+    private static final Comparator<BlockPos> CELL_ORDER = Comparator
+            .comparingInt((BlockPos pos) -> pos.getX())
+            .thenComparingInt(pos -> pos.getZ())
+            .thenComparingInt(pos -> pos.getY());
+    private static final Comparator<Component> COMPONENT_ORDER = Comparator
+            .comparingInt(Component::minX)
+            .thenComparingInt(Component::minZ)
+            .thenComparingInt(Component::minY)
+            .thenComparingInt(Component::maxX)
+            .thenComparingInt(Component::maxZ)
+            .thenComparingInt(Component::maxY)
+            .thenComparing((first, second) -> compareFloorCellSets(
+                    first.floorCells(), second.floorCells()));
     private static final Comparator<Component> OWNER_ORDER =
             Comparator.comparingInt(Component::area).reversed()
-                    .thenComparingInt(Component::minX)
-                    .thenComparingInt(Component::minZ)
-                    .thenComparingInt(Component::maxX)
-                    .thenComparingInt(Component::maxZ);
+                    .thenComparing(COMPONENT_ORDER);
 
     private RoomPartitioner() {
     }
@@ -40,9 +50,8 @@ final class RoomPartitioner {
         Map<BlockPos, Direction> ownerSides = doorOwnerSides == null
                 ? Map.of() : Map.copyOf(doorOwnerSides);
         TransitionIndex transitionIndex = TransitionIndex.from(acceptedTransitions);
-        Set<BlockPos> boundaryCells = geometry.connectorTypesByCell().entrySet().stream()
-                .filter(entry -> entry.getValue().roomBoundary())
-                .map(Map.Entry::getKey)
+        Set<BlockPos> boundaryCells = geometry.connectorTypesByCell().keySet().stream()
+                .filter(geometry::isRoomBoundaryCell)
                 .collect(Collectors.toSet());
         Set<BlockPos> visited = new HashSet<>();
         List<Component> openComponents = new ArrayList<>();
@@ -60,12 +69,7 @@ final class RoomPartitioner {
 
         List<Component> result = assignBoundaryClusters(
                 geometry, boundaryCells, openComponents, transitionIndex, ownerSides);
-        result.sort(Comparator.comparingInt(Component::minX)
-                .thenComparingInt(Component::minZ)
-                .thenComparingInt(Component::minY)
-                .thenComparingInt(Component::maxX)
-                .thenComparingInt(Component::maxZ)
-                .thenComparingInt(Component::maxY));
+        result.sort(COMPONENT_ORDER);
         return List.copyOf(result);
     }
 
@@ -184,6 +188,17 @@ final class RoomPartitioner {
         return adjacent.stream().min(OWNER_ORDER).orElse(null);
     }
 
+    static int compareFloorCellSets(Set<BlockPos> first, Set<BlockPos> second) {
+        List<BlockPos> orderedFirst = first.stream().sorted(CELL_ORDER).toList();
+        List<BlockPos> orderedSecond = second.stream().sorted(CELL_ORDER).toList();
+        int sharedSize = Math.min(orderedFirst.size(), orderedSecond.size());
+        for (int index = 0; index < sharedSize; index++) {
+            int comparison = CELL_ORDER.compare(orderedFirst.get(index), orderedSecond.get(index));
+            if (comparison != 0) return comparison;
+        }
+        return Integer.compare(orderedFirst.size(), orderedSecond.size());
+    }
+
     static List<Component> adjacent(FloorGeometry.Cell floorCell, Collection<Component> components) {
         return components.stream().filter(component -> component.cells().stream().anyMatch(candidate ->
                         Math.abs(candidate.feet().getX() - floorCell.feet().getX())
@@ -250,8 +265,18 @@ final class RoomPartitioner {
             return cells.stream().anyMatch(cell -> cell.feet().equals(feet));
         }
 
-        boolean containsColumn(int x, int z) {
-            return cells.stream().anyMatch(cell -> cell.feet().getX() == x && cell.feet().getZ() == z);
+        BlockPos nearestCell(BlockPos source) {
+            return cells.stream()
+                    .map(FloorGeometry.Cell::feet)
+                    .min(Comparator.comparingInt((BlockPos cell) ->
+                                    Math.abs(cell.getX() - source.getX())
+                                            + Math.abs(cell.getY() - source.getY())
+                                            + Math.abs(cell.getZ() - source.getZ()))
+                            .thenComparingInt(BlockPos::getX)
+                            .thenComparingInt(BlockPos::getY)
+                            .thenComparingInt(BlockPos::getZ))
+                    .orElse(source)
+                    .immutable();
         }
 
         int minX() {

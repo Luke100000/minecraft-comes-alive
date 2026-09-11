@@ -80,6 +80,27 @@ class RoomScanPlannerTest {
     }
 
     @Test
+    void addedRoomUsesSameNearestCellRuleAsRoomMaterialization() {
+        Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
+        Building room = room(100, 20, 0, Set.of(
+                new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
+                new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
+        Village village = village(persisted, room);
+        BlockPos door = new BlockPos(4, 64, 0);
+        BlockPos expectedSeed = new BlockPos(5, 65, 0);
+        BlockPos source = new BlockPos(6, 65, 0);
+        FloorGeometry fresh = new FloorGeometry(Set.of(
+                cell(0, 64), cell(1, 64), cell(2, 64), cell(3, 64), cell(4, 64),
+                cell(5, 65), cell(6, 64)), Map.of(door, FloorConnector.Type.DOOR));
+
+        RoomScanPlan plan = RoomScanPlanner.planFresh(
+                village, source, observation(source, fresh, List.of()));
+
+        assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
+        assertEquals(expectedSeed, plan.scanSeed());
+    }
+
+    @Test
     void freshDoorWithoutWorldOrientationDoesNotGuessRegisteredSide() {
         Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
         Building room = room(100, 20, 0, Set.of(

@@ -536,9 +536,15 @@ public final class FloorScannerGameTests {
 
         BlockPos lowerRoom = origin.offset(1, 0, 1);
         BlockPos upperRoom = origin.offset(9, 3, 1);
+        SelectedFloorScanner.Result lower = SelectedFloorScanner.scan(
+                helper.getLevel(), lowerRoom, 256, 24);
         SelectedFloorScanner.Result upper = SelectedFloorScanner.scan(
                 helper.getLevel(), upperRoom, 256, 24);
 
+        helper.assertTrue(lower.result() == Building.validationResult.SUCCESS,
+                "narrow lower-storey scan failed: " + lower.result());
+        helper.assertTrue(lower.floor().cellAt(upperRoom).isEmpty(),
+                "lower storey absorbed the narrow upper corridor");
         helper.assertTrue(upper.result() == Building.validationResult.SUCCESS,
                 "narrow upper-storey scan failed: " + upper.result());
         helper.assertTrue(upper.floor().anchorY() == upperRoom.getY(),
@@ -871,11 +877,31 @@ public final class FloorScannerGameTests {
                 new BlockPos(2, 1, 3), new BlockPos(2, 0, 4));
         Set<BlockPos> expected = buildRoofedFootprint(helper, origin, relative);
 
-        assertExactFloorFromSources(helper, expected,
-                origin.offset(0, 0, 2),
-                origin.offset(4, 2, 2),
-                origin.offset(2, 0, 4),
-                origin.offset(2, 1, 2));
+        assertExactFloorFromSources(helper, expected, expected.toArray(BlockPos[]::new));
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_interior_hole", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void interiorFloorHoleDoesNotInvalidateRemainingRoom(GameTestHelper helper) {
+        BlockPos roomMin = helper.absolutePos(new BlockPos(5, 2, 5));
+        buildClosedRoom(helper, roomMin, 5, 5);
+        BlockPos hole = roomMin.offset(2, 0, 2);
+        helper.getLevel().setBlock(hole.below(), Blocks.AIR.defaultBlockState(), 3);
+
+        Set<BlockPos> expected = new HashSet<>();
+        for (int x = 0; x < 5; x++) {
+            for (int z = 0; z < 5; z++) {
+                BlockPos cell = roomMin.offset(x, 0, z);
+                if (!cell.equals(hole)) expected.add(cell);
+            }
+        }
+
+        assertExactFloorFromSources(helper, Set.copyOf(expected),
+                roomMin,
+                roomMin.offset(4, 0, 0),
+                roomMin.offset(0, 0, 4),
+                roomMin.offset(4, 0, 4));
         helper.succeed();
     }
 
@@ -1181,6 +1207,14 @@ public final class FloorScannerGameTests {
     private static void buildTwoStoreyStaircase(GameTestHelper helper, BlockPos origin) {
         var level = helper.getLevel();
         int y = origin.getY();
+        for (int x = -1; x <= 12; x++) {
+            for (int z = -1; z <= 3; z++) {
+                for (int dy = -1; dy <= 6; dy++) {
+                    level.setBlock(new BlockPos(origin.getX() + x, y + dy, origin.getZ() + z),
+                            Blocks.AIR.defaultBlockState(), 3);
+                }
+            }
+        }
         for (int x = -1; x <= 12; x++) {
             for (int z = -1; z <= 3; z++) {
                 if (x == -1 || x == 12 || z == -1 || z == 3) {

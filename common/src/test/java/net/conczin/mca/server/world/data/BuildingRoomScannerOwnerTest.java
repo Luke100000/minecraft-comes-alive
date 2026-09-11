@@ -74,7 +74,6 @@ class BuildingRoomScannerOwnerTest {
 
         assertEquals(1, components.size());
         RoomPartitioner.Component component = components.getFirst();
-        assertTrue(component.containsColumn(connector.getX(), connector.getZ()));
         assertTrue(component.floorCells()
                 .contains(connector));
     }

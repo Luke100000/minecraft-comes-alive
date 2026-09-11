@@ -452,10 +452,6 @@ final class SelectedFloorScanner {
             connectors = connectors == null ? Set.of() : Set.copyOf(connectors);
         }
 
-        static StoreyScan empty() {
-            return failure(Building.validationResult.NOT_IN_BUILDING);
-        }
-
         static StoreyScan failure(Building.validationResult result) {
             return new StoreyScan(result, null, Set.of(), Set.of(), Set.of());
         }

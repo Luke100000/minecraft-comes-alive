@@ -242,6 +242,26 @@ class RoomPartitionerTest {
         assertEquals(large, RoomPartitioner.owner(List.of(small, large)));
     }
 
+    @Test
+    void fallbackOwnerUsesHeightToBreakStackedBoundsTie() {
+        var lower = new RoomPartitioner.Component(Set.of(cell(0, 64, 0)));
+        var upper = new RoomPartitioner.Component(Set.of(cell(0, 70, 0)));
+
+        assertEquals(lower, RoomPartitioner.owner(List.of(upper, lower)));
+        assertEquals(lower, RoomPartitioner.owner(List.of(lower, upper)));
+    }
+
+    @Test
+    void fallbackOwnerUsesExactCellsToBreakIdenticalBoundsTie() {
+        var first = new RoomPartitioner.Component(Set.of(
+                cell(0, 64, 0), cell(1, 64, 1)));
+        var second = new RoomPartitioner.Component(Set.of(
+                cell(0, 64, 1), cell(1, 64, 0)));
+
+        assertEquals(first, RoomPartitioner.owner(List.of(second, first)));
+        assertEquals(first, RoomPartitioner.owner(List.of(first, second)));
+    }
+
     private static FloorGeometry geometry(Set<FloorGeometry.Cell> cells,
                                           Map<BlockPos, FloorConnector.Type> connectors) {
         return new FloorGeometry(cells, connectors);

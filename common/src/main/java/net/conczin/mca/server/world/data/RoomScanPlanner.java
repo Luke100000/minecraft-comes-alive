@@ -3,11 +3,8 @@ package net.conczin.mca.server.world.data;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 
-import java.util.Collection;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 
 /** Pure planning over one already-observed fresh Floor. */
 final class RoomScanPlanner {
@@ -82,9 +79,9 @@ final class RoomScanPlanner {
                 .orElseGet(() -> RoomScanPlan.addBuilding(source));
     }
 
-    static Optional<RoomScanPlan> attachmentPlan(Village village,
-                                                 BlockPos source,
-                                                 StructureScanner.FloorObservation observation) {
+    private static Optional<RoomScanPlan> attachmentPlan(Village village,
+                                                         BlockPos source,
+                                                         StructureScanner.FloorObservation observation) {
         if (village == null || observation == null) return Optional.empty();
         StructureFloor candidateFloor = new StructureFloor(0, 0, observation.scan().floor());
         Village.AttachmentTarget target = village.selectAttachmentTarget(
@@ -131,7 +128,7 @@ final class RoomScanPlanner {
 
         Building existingRoom = registeredRoomForComponent(village, target, floor, selected).orElse(null);
         return Optional.of(new FreshComponentSelection(
-                existingRoom, componentSeed(scanSeed, selected)));
+                existingRoom, selected.nearestCell(scanSeed)));
     }
 
     private static Optional<Building> registeredRoomForComponent(
@@ -141,37 +138,17 @@ final class RoomScanPlanner {
             RoomPartitioner.Component component) {
         if (component == null) return Optional.empty();
 
-        Set<BlockPos> identityCells = component.cells().stream()
-                .map(FloorGeometry.Cell::feet)
-                .filter(cell -> {
-                    FloorConnector.Type connector = floor.connectorTypesByCell().get(cell);
-                    return connector == null || !connector.roomBoundary();
-                })
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        if (identityCells.isEmpty()) return Optional.empty();
+        var componentCells = component.floorCells();
 
         List<Building> matches = village.getRooms()
                 .filter(Building::isFunctionalRoom)
                 .filter(room -> room.getStructureId() == target.structureId())
                 .filter(room -> room.getFloorId() == target.floorId())
-                .filter(room -> identityCells.stream().anyMatch(room.getFloorCells()::contains))
+                .filter(room -> floor.roomIdentityOverlapCount(
+                        componentCells, room.getFloorCells()) > 0)
                 .limit(2)
                 .toList();
         return matches.size() == 1 ? Optional.of(matches.getFirst()) : Optional.empty();
-    }
-
-    private static BlockPos componentSeed(BlockPos source, RoomPartitioner.Component component) {
-        return component.cells().stream()
-                .map(FloorGeometry.Cell::feet)
-                .min(Comparator
-                        .comparingInt((BlockPos cell) -> Math.abs(cell.getX() - source.getX())
-                                + Math.abs(cell.getY() - source.getY())
-                                + Math.abs(cell.getZ() - source.getZ()))
-                        .thenComparingInt(BlockPos::getY)
-                        .thenComparingInt(BlockPos::getX)
-                        .thenComparingInt(BlockPos::getZ))
-                .orElse(source)
-                .immutable();
     }
 
     private record FloorTarget(int structureId, int floorId) {

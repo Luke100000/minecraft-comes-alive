@@ -49,6 +49,25 @@ final class FloorGeometry {
         return connectorTypesByCell;
     }
 
+    boolean isRoomBoundaryCell(BlockPos cell) {
+        FloorConnector.Type connector = connectorTypesByCell.get(cell);
+        return connector != null && connector.roomBoundary();
+    }
+
+    boolean isRoomIdentityCell(BlockPos cell) {
+        return !isRoomBoundaryCell(cell);
+    }
+
+    long roomIdentityOverlapCount(Set<BlockPos> first, Set<BlockPos> second) {
+        if (first == null || second == null || first.isEmpty() || second.isEmpty()) return 0L;
+        Set<BlockPos> candidates = first.size() <= second.size() ? first : second;
+        Set<BlockPos> other = candidates == first ? second : first;
+        return candidates.stream()
+                .filter(this::isRoomIdentityCell)
+                .filter(other::contains)
+                .count();
+    }
+
     List<Cell> cellsAtColumn(int x, int z) {
         return cellsByColumn.getOrDefault(columnKey(x, z), List.of());
     }
@@ -99,6 +118,12 @@ final class FloorGeometry {
 
     boolean sameFootprint(FloorGeometry other) {
         return other != null && cellsByColumn.keySet().equals(other.cellsByColumn.keySet());
+    }
+
+    boolean sameExactGeometry(FloorGeometry other) {
+        return other != null
+                && cells.equals(other.cells)
+                && connectorTypesByCell.equals(other.connectorTypesByCell);
     }
 
     int footprintArea() {

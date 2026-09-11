@@ -36,8 +36,36 @@ class FloorGeometryTest {
                 new FloorGeometry.Cell(new BlockPos(2, 80, 0), 83)), Map.of());
 
         assertTrue(lower.sameFootprint(upper));
+        assertFalse(lower.sameExactGeometry(upper));
         assertEquals(1, lower.footprintIntersectionArea(partial));
         assertFalse(lower.sameFootprint(partial));
+    }
+
+    @Test
+    void exactGeometryIncludesConnectorMetadata() {
+        BlockPos door = new BlockPos(1, 64, 0);
+        Set<FloorGeometry.Cell> cells = Set.of(cell(0, 64, 0), cell(1, 64, 0));
+        FloorGeometry plain = new FloorGeometry(cells, Map.of());
+        FloorGeometry doorway = new FloorGeometry(cells, Map.of(door, FloorConnector.Type.DOOR));
+
+        assertFalse(plain.sameExactGeometry(doorway));
+        assertTrue(doorway.sameExactGeometry(new FloorGeometry(
+                cells, Map.of(door, FloorConnector.Type.DOOR))));
+    }
+
+    @Test
+    void roomIdentityOverlapExcludesBoundaryConnectorCells() {
+        BlockPos ordinary = new BlockPos(0, 64, 0);
+        BlockPos door = new BlockPos(1, 64, 0);
+        BlockPos other = new BlockPos(2, 64, 0);
+        FloorGeometry geometry = new FloorGeometry(Set.of(
+                cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0)),
+                Map.of(door, FloorConnector.Type.DOOR));
+
+        assertEquals(0, geometry.roomIdentityOverlapCount(
+                Set.of(ordinary, door), Set.of(door, other)));
+        assertEquals(1, geometry.roomIdentityOverlapCount(
+                Set.of(ordinary, door), Set.of(ordinary, door)));
     }
 
     @Test

@@ -4,7 +4,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
@@ -28,7 +27,7 @@ final class BuildingRoomScanner {
         RoomPartitioner.Component selected = RoomPartitioner.select(source, floor, components);
         return selected == null
                 ? Result.failure(Building.validationResult.TOO_SMALL, source)
-                : materialize(world, source, maxSize,
+                : materialize(source, maxSize,
                 floorId, floor, components, selected);
     }
 
@@ -43,9 +42,7 @@ final class BuildingRoomScanner {
         List<RoomPartitioner.Component> components = components(world, floor, transitions);
         return components.stream()
                 .map(component -> materialize(
-                        world, source, maxSize, floorId, floor, components, component))
-                .sorted(Comparator.comparingInt((Result result) -> result.min().getX())
-                        .thenComparingInt(result -> result.min().getZ()))
+                        source, maxSize, floorId, floor, components, component))
                 .toList();
     }
 
@@ -60,7 +57,6 @@ final class BuildingRoomScanner {
     }
 
     static Result materialize(
-            Level world,
             BlockPos source,
             int maxSize,
             int floorId,
@@ -71,8 +67,8 @@ final class BuildingRoomScanner {
         if (floorCells.size() > maxSize) return Result.failure(Building.validationResult.BLOCK_LIMIT, source);
         if (floorCells.size() < MIN_INTERIOR_AREA) return Result.failure(Building.validationResult.TOO_SMALL, source);
 
-        BlockPos seed = nearestCell(source, component.cells());
-        Set<BlockPos> poi = RoomPoiEvidence.candidates(floor, components, component);
+        BlockPos seed = component.nearestCell(source);
+        Set<BlockPos> poi = RoomPoiEvidence.candidates(components, component);
         int minX = floorCells.stream().mapToInt(BlockPos::getX).min().orElse(source.getX());
         int minY = floorCells.stream().mapToInt(BlockPos::getY).min().orElse(source.getY());
         int minZ = floorCells.stream().mapToInt(BlockPos::getZ).min().orElse(source.getZ());
@@ -83,19 +79,6 @@ final class BuildingRoomScanner {
         return new Result(Building.validationResult.SUCCESS, seed, floorId, floor.anchorY(), floorCells, poi,
                 new BlockPos(minX, minY, minZ),
                 new BlockPos(maxX, maxY, maxZ));
-    }
-
-    private static BlockPos nearestCell(BlockPos source, Collection<FloorGeometry.Cell> cells) {
-        return cells.stream()
-                .map(FloorGeometry.Cell::feet)
-                .min(Comparator.comparingInt((BlockPos cell) ->
-                                Math.abs(cell.getX() - source.getX())
-                                        + Math.abs(cell.getY() - source.getY())
-                                        + Math.abs(cell.getZ() - source.getZ()))
-                        .thenComparingInt(BlockPos::getX)
-                        .thenComparingInt(BlockPos::getY)
-                        .thenComparingInt(BlockPos::getZ))
-                .orElse(source);
     }
 
     record Result(Building.validationResult status,
