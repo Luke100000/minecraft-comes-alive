@@ -2,7 +2,9 @@ package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Memories;
+import net.conczin.mca.entity.ai.Mourning;
 import net.conczin.mca.resources.API;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.data.BuildingType;
@@ -17,6 +19,7 @@ import net.minecraft.nbt.*;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
@@ -35,6 +38,15 @@ public class Village implements Iterable<Building> {
     public static final int MERGE_MARGIN = 64;
     private static final int MOVE_IN_COOLDOWN = 1200;
     private static final long BED_SYNC_TIME = 200;
+    private static final long MIN_MOURNING_INTERVAL = 24_000L;
+    private static final long MAX_MOURNING_INTERVAL = 48_000L;
+    private static final long MIN_MOURNING_BURST_DELAY = 2_000L;
+    private static final long MAX_MOURNING_BURST_DELAY = 4_000L;
+    private static final int MIN_MOURNING_BURST_SIZE = 2;
+    private static final int MAX_MOURNING_BURST_SIZE = 4;
+    private static final int MIN_MOURNING_SESSION_SIZE = 3;
+    private static final int MAX_MOURNING_SESSION_SIZE = 12;
+    private static final int MOURNING_SESSION_SCALE_DIVISOR = 22;
     private static final Comparator<AttachmentTarget> ATTACHMENT_TARGET_ORDER = Comparator
             .comparingInt(AttachmentTarget::gap)
             .thenComparingInt(AttachmentTarget::buildingId)
@@ -68,6 +80,11 @@ public class Village implements Iterable<Building> {
     private float marriageThreshold = 0.5f;
     private boolean autoScan = Config.getInstance().enableAutoScanByDefault;
     private BlockBoxExtended box = new BlockBoxExtended(0, 0, 0, 0, 0, 0);
+    private long nextMourningTime;
+    private int mourningRemaining;
+    private long nextMourningBurstTime;
+    private final List<BlockPos> mourningGraveCache = new ArrayList<>();
+    private boolean mourningGraveCacheInitialized;
 
     public Village(int id, ServerLevel world) {
         this.id = id;
@@ -87,6 +104,9 @@ public class Village implements Iterable<Building> {
         if (tag.contains("populationThresholdFloat")) populationThreshold = tag.getFloat("populationThresholdFloat");
         if (tag.contains("marriageThresholdFloat")) marriageThreshold = tag.getFloat("marriageThresholdFloat");
         autoScan = tag.contains("autoScan") ? tag.getBoolean("autoScan") : true;
+        nextMourningTime = tag.getLong("nextMourningTime");
+        mourningRemaining = tag.getInt("mourningRemaining");
+        nextMourningBurstTime = tag.getLong("nextMourningBurstTime");
         this.world = world;
 
         RoomDFU.Result data = RoomDFU.load(tag);
@@ -557,6 +577,7 @@ public class Village implements Iterable<Building> {
     }
 
     public void tick(ServerLevel world, long time) {
+        tickMourning(world, time);
         time += getId();
         boolean taxSeason = time % Config.getInstance().taxSeason == 0;
         boolean update = time % MOVE_IN_COOLDOWN == 0;
@@ -568,6 +589,133 @@ public class Village implements Iterable<Building> {
             villageMarriageManager.marry(world);
             villageProcreationManager.procreate(world);
         }
+    }
+
+    long getNextMourningTime() {
+        return nextMourningTime;
+    }
+
+    int getMourningRemaining() {
+        return mourningRemaining;
+    }
+
+    long getNextMourningBurstTime() {
+        return nextMourningBurstTime;
+    }
+
+    static long calculateNextMourningTime(long now, RandomSource random) {
+        int range = (int) (MAX_MOURNING_INTERVAL - MIN_MOURNING_INTERVAL + 1L);
+        return now + MIN_MOURNING_INTERVAL + random.nextInt(range);
+    }
+
+    static long calculateNextMourningBurstTime(long now, RandomSource random) {
+        int range = (int) (MAX_MOURNING_BURST_DELAY - MIN_MOURNING_BURST_DELAY + 1L);
+        return now + MIN_MOURNING_BURST_DELAY + random.nextInt(range);
+    }
+
+    static int calculateMourningSessionSize(int residentCount) {
+        int scaled = MIN_MOURNING_SESSION_SIZE + residentCount / MOURNING_SESSION_SCALE_DIVISOR;
+        return Math.max(MIN_MOURNING_SESSION_SIZE, Math.min(MAX_MOURNING_SESSION_SIZE, scaled));
+    }
+
+    static int calculateMourningBurstSize(int remaining, RandomSource random) {
+        int requested = MIN_MOURNING_BURST_SIZE
+                + random.nextInt(MAX_MOURNING_BURST_SIZE - MIN_MOURNING_BURST_SIZE + 1);
+        return Math.min(remaining, requested);
+    }
+
+    private static <T> void shuffle(List<T> values, RandomSource random) {
+        for (int index = values.size() - 1; index > 0; index--) {
+            Collections.swap(values, index, random.nextInt(index + 1));
+        }
+    }
+
+    private void tickMourning(ServerLevel world, long time) {
+        if (!Config.getInstance().enableMourning) {
+            return;
+        }
+
+        if (mourningRemaining > 0) {
+            if (nextMourningBurstTime == 0L || time >= nextMourningBurstTime) {
+                if (!mourningGraveCacheInitialized) {
+                    refreshMourningGraveCache(world);
+                }
+                releaseMourningBurst(world, time);
+            }
+            return;
+        }
+
+        if (nextMourningTime == 0L) {
+            nextMourningTime = calculateNextMourningTime(time, world.random);
+            markDirty();
+            return;
+        }
+
+        if (time < nextMourningTime) {
+            return;
+        }
+
+        nextMourningTime = calculateNextMourningTime(time, world.random);
+        refreshMourningGraveCache(world);
+        if (mourningGraveCache.isEmpty()) {
+            endMourningSession();
+            markDirty();
+            return;
+        }
+
+        mourningRemaining = calculateMourningSessionSize(getResidents(world).size());
+        nextMourningBurstTime = time;
+        markDirty();
+        releaseMourningBurst(world, time);
+    }
+
+    private void refreshMourningGraveCache(ServerLevel world) {
+        mourningGraveCache.clear();
+        mourningGraveCache.addAll(Mourning.getMournableGraves(this, world));
+        mourningGraveCacheInitialized = true;
+    }
+
+    private void endMourningSession() {
+        mourningRemaining = 0;
+        nextMourningBurstTime = 0L;
+        mourningGraveCache.clear();
+        mourningGraveCacheInitialized = false;
+    }
+
+    private void releaseMourningBurst(ServerLevel world, long time) {
+        mourningGraveCache.removeIf(grave -> !Mourning.isMournableTombstone(world, grave));
+        if (mourningGraveCache.isEmpty()) {
+            endMourningSession();
+            markDirty();
+            return;
+        }
+
+        int burstBudget = calculateMourningBurstSize(mourningRemaining, world.random);
+        mourningRemaining -= burstBudget;
+
+        List<VillagerEntityMCA> candidates = getResidents(world).stream()
+                .filter(Mourning::canMournAmbiently)
+                .collect(Collectors.toCollection(ArrayList::new));
+
+        shuffle(mourningGraveCache, world.random);
+        shuffle(candidates, world.random);
+        candidates.sort(Comparator.comparingLong(villager -> villager.getBrain()
+                .getMemoryInternal(MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING)
+                .orElse(Long.MIN_VALUE)));
+
+        int count = Math.min(burstBudget, candidates.size());
+        for (int index = 0; index < count; index++) {
+            VillagerEntityMCA villager = candidates.get(index);
+            villager.getBrain().setMemory(MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING, time);
+            Mourning.start(villager, mourningGraveCache.get(index % mourningGraveCache.size()));
+        }
+
+        if (mourningRemaining > 0) {
+            nextMourningBurstTime = calculateNextMourningBurstTime(time, world.random);
+        } else {
+            endMourningSession();
+        }
+        markDirty();
     }
 
     public void onEnter(ServerLevel world) { villageTaxesManager.deliverTaxes(world); }
@@ -647,6 +795,9 @@ public class Village implements Iterable<Building> {
         tag.put("structures", NbtHelper.fromList(structures.values(), Structure::save));
         tag.put("logicalBuildings", NbtHelper.fromList(logicalBuildings.values(), LogicalBuilding::save));
         tag.putBoolean("autoScan", autoScan);
+        tag.putLong("nextMourningTime", nextMourningTime);
+        tag.putInt("mourningRemaining", mourningRemaining);
+        tag.putLong("nextMourningBurstTime", nextMourningBurstTime);
         return tag;
     }
 
