@@ -27,8 +27,6 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
-import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.Block;
@@ -193,14 +191,11 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
             }
         }
 
-        if (burialSite != null && type != RelationshipType.STRANGER) {
-            entity.getVillagerBrain().setGrieving();
-            entity.getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_SITE, burialSite);
-            entity.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION);
-            entity.getBrain().eraseMemory(MemoryModuleType.PATH);
-            entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-            entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new BlockPosTracker(burialSite));
-            entity.getBrain().setActiveActivityIfPossible(ActivitiesMCA.GRIEVE);
+        if (Config.getInstance().enableMourning
+                && burialSite != null
+                && type != RelationshipType.STRANGER
+                && entity instanceof VillagerEntityMCA villager) {
+            Mourning.start(villager, burialSite);
         }
 
         EntityRelationship.super.onTragedy(cause, burialSite, type, with);

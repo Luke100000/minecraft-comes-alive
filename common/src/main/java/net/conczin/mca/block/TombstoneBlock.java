@@ -384,6 +384,8 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
 
                         if (entity instanceof VillagerEntityMCA villager) {
                             villager.getBrain().eraseMemory(MemoryModuleTypeMCA.LAST_GRIEVE);
+                            villager.getBrain().eraseMemory(MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING);
+                            villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_RETRY_AT);
                             villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_SITE);
                             villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION);
                             villager.getBrain().eraseMemory(MemoryModuleType.PATH);

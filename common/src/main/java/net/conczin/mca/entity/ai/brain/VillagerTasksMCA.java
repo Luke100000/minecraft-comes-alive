@@ -9,6 +9,7 @@ import net.conczin.mca.entity.EquipmentSet;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
+import net.conczin.mca.entity.ai.Mourning;
 import net.conczin.mca.entity.ai.SchedulesMCA;
 import net.conczin.mca.entity.ai.SensorsMCA;
 import net.conczin.mca.entity.ai.RangedWeaponHelper;
@@ -50,6 +51,7 @@ import java.util.Optional;
 public class VillagerTasksMCA {
     private static final float GRIEVING_WALK_SPEED = 0.5F;
     private static final int GRIEVING_PATH_TIMEOUT = 1200;
+    private static final long GRIEVING_RETRY_DELAY = 1200L;
 
     public static final ImmutableList<MemoryModuleType<?>> MEMORY_TYPES = ImmutableList.of(
             MemoryModuleType.HOME,
@@ -92,6 +94,8 @@ public class VillagerTasksMCA {
             MemoryModuleTypeMCA.LAST_GRIEVE,
             MemoryModuleTypeMCA.MOURNING_SITE,
             MemoryModuleTypeMCA.MOURNING_POSITION,
+            MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING,
+            MemoryModuleTypeMCA.MOURNING_RETRY_AT,
             MemoryModuleTypeMCA.FORCED_HOME,
             MemoryModuleTypeMCA.RANGED_COMBAT_STATE
     );
@@ -457,16 +461,21 @@ public class VillagerTasksMCA {
                                 mournAtGrave,
                                 new LambdaTask<>((v) -> {
                                     boolean completed = mournAtGrave.hasCompleted();
-                                    boolean hadAssignedSite = v.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE).isPresent();
                                     boolean targetStillMournable = EnterGraveyardTask.hasMournableSite(v);
-                                    boolean periodicCandidateStillExists = !hadAssignedSite && EnterGraveyardTask.hasPeriodicMourningCandidate(v);
-                                    v.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_SITE);
-                                    v.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION);
-                                    if (completed || (!targetStillMournable && !periodicCandidateStillExists)) {
-                                        v.getVillagerBrain().justGrieved();
+
+                                    if (completed || !targetStillMournable) {
+                                        Mourning.clear(v);
                                     } else {
-                                        v.getVillagerBrain().retryGrievingLater();
+                                        v.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION);
+                                        v.getBrain().eraseMemory(MemoryModuleType.PATH);
+                                        v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+                                        v.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
+                                        v.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+                                        v.getBrain().setMemory(
+                                                MemoryModuleTypeMCA.MOURNING_RETRY_AT,
+                                                v.level().getGameTime() + GRIEVING_RETRY_DELAY);
                                     }
+
                                     v.getBrain().updateActivityFromSchedule(v.level().getDayTime(), v.level().getGameTime());
                                 })
 

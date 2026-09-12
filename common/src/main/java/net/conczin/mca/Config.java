@@ -996,4 +996,3 @@ public final class Config extends CommonConfig {
         }
     }
 }
-
