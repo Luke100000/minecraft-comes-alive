@@ -28,8 +28,6 @@ final class RangedCombatPositioning {
     private static final int FIRING_VERTICAL_RANGE = 4;
     private static final int EMERGENCY_ESCAPE_DIRECTIONS = 16;
     private static final double[] EMERGENCY_ESCAPE_RADII = {2.0D, 4.0D, 6.0D, 8.0D};
-    private static final double CLOSE_RANGE_VERTICAL_THREAT_DISTANCE = 2.5D;
-    private static final double KITE_ENTER_DISTANCE_SQUARED = 36.0D;
     private static final double NEARBY_THREAT_RANGE_SQUARED = 256.0D;
     private static final double MIN_USEFUL_DISTANCE_GAIN = 0.5D;
     private static final double MAX_REPOSITION_CLOSING_DISTANCE = 0.5D;
@@ -41,7 +39,7 @@ final class RangedCombatPositioning {
         return entity.getBrain().getMemory(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES)
                 .flatMap(visible -> visible.findClosest(candidate ->
                         RangedWeaponHelper.isValidAttackTarget(entity, candidate)
-                                && Math.abs(entity.getY() - candidate.getY()) <= CLOSE_RANGE_VERTICAL_THREAT_DISTANCE
+                                && Math.abs(entity.getY() - candidate.getY()) <= ArcherMovementTask.CLOSE_RANGE_VERTICAL_THREAT_DISTANCE
                                 && GuardEnemiesSensor.isGuardEnemy(candidate, entity)))
                 .orElse(fallback);
     }
@@ -201,7 +199,7 @@ final class RangedCombatPositioning {
                     || !hasStandingSpace(entity, candidate)
                     || candidateTargetDistanceSquared > attackRangeSquared
                     || candidateTargetDistanceSquared < minimumTargetDistanceSquared
-                    || movementThreat != null && (candidate.distanceToSqr(movementThreat.position()) < KITE_ENTER_DISTANCE_SQUARED
+                    || movementThreat != null && (candidate.distanceToSqr(movementThreat.position()) < ArcherMovementTask.KITE_ENTER_DISTANCE_SQUARED
                     || candidate.distanceToSqr(movementThreat.position()) < minimumThreatDistanceSquared)
                     || !hasLineOfSight(entity, candidate, target)) {
                 continue;
@@ -242,7 +240,7 @@ final class RangedCombatPositioning {
     private static boolean isNearbyMovementThreat(Mob entity, LivingEntity candidate) {
         return candidate != entity
                 && RangedWeaponHelper.isValidAttackTarget(entity, candidate)
-                && Math.abs(entity.getY() - candidate.getY()) <= CLOSE_RANGE_VERTICAL_THREAT_DISTANCE
+                && Math.abs(entity.getY() - candidate.getY()) <= ArcherMovementTask.CLOSE_RANGE_VERTICAL_THREAT_DISTANCE
                 && GuardEnemiesSensor.isGuardEnemy(candidate, entity)
                 && entity.getSensing().hasLineOfSight(candidate);
     }

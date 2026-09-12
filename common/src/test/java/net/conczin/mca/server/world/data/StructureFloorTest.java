@@ -131,8 +131,29 @@ class StructureFloorTest {
         FloorGeometry disjoint = new FloorGeometry(Set.of(
                 new FloorGeometry.Cell(new BlockPos(4, 65, 0), 69)), java.util.Map.of());
 
-        assertTrue(persisted.matchesSemanticStorey(overlappingUneven));
-        assertFalse(persisted.matchesSemanticStorey(differentStorey));
-        assertFalse(persisted.matchesSemanticStorey(disjoint));
+        assertTrue(persisted.overlapsSemanticStorey(overlappingUneven));
+        assertFalse(persisted.overlapsSemanticStorey(differentStorey));
+        assertFalse(persisted.overlapsSemanticStorey(disjoint));
+    }
+
+    @Test
+    void floorNumberBandsDoNotChainPairwiseTolerance() {
+        StructureFloor y64 = floorAt(0, 64);
+        StructureFloor y66 = floorAt(1, 66);
+        StructureFloor y68 = floorAt(2, 68);
+
+        assertTrue(StructureFloor.sameSemanticBand(y64.anchorY(), y66.anchorY()));
+        assertTrue(StructureFloor.sameSemanticBand(y66.anchorY(), y68.anchorY()));
+        assertFalse(StructureFloor.sameSemanticBand(y64.anchorY(), y68.anchorY()));
+
+        var numbers = StructureFloor.floorNumbers(List.of(y64, y66, y68), y64);
+        assertEquals(0, numbers.get(y64));
+        assertEquals(0, numbers.get(y66));
+        assertEquals(1, numbers.get(y68));
+    }
+
+    private static StructureFloor floorAt(int id, int y) {
+        return TestStructureFloors.create(id, 0, new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(new BlockPos(id, y, 0), y + 4)), java.util.Map.of()));
     }
 }

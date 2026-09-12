@@ -35,10 +35,10 @@ class FloorGeometryTest {
                 new FloorGeometry.Cell(new BlockPos(1, 80, 0), 83),
                 new FloorGeometry.Cell(new BlockPos(2, 80, 0), 83)), Map.of());
 
-        assertTrue(lower.sameFootprint(upper));
+        assertTrue(lower.sameProjectedFootprint(upper));
         assertFalse(lower.sameExactGeometry(upper));
         assertEquals(1, lower.footprintIntersectionArea(partial));
-        assertFalse(lower.sameFootprint(partial));
+        assertFalse(lower.sameProjectedFootprint(partial));
     }
 
     @Test
@@ -56,7 +56,7 @@ class FloorGeometryTest {
                 new FloorGeometry.Cell(new BlockPos(1, 71, 0), 74)), Map.of());
 
         assertTrue(geometry.sameCellPositions(sameCellsWithDoor));
-        assertTrue(geometry.sameFootprint(sameFootprintDifferentHeight));
+        assertTrue(geometry.sameProjectedFootprint(sameFootprintDifferentHeight));
         assertFalse(geometry.sameCellPositions(sameFootprintDifferentHeight));
     }
 

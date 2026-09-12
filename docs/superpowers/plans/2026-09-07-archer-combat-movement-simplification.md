@@ -4,7 +4,7 @@
 
 **Goal:** Replace the current permanent/oscillating archer strafe loop with deliberate Brain-owned ranged positioning plus short skeleton-style strafe bursts that never ping-pong direction.
 
-**Architecture:** `ArcherMovementTask` remains the sole tactical-state writer and publishes path movement through `WALK_TARGET`; vanilla `MoveToTargetSink`, MCA navigation, and `MCAMoveControl` own path execution. A new stateless `RangedCombatPositioning` helper performs bounded geometric candidate checks only. Direct `MoveControl.strafe(...)` remains only for the short `STRAFE` state, and bow/crossbow behavior reads the same runtime Brain state for emergency suppression.
+**Architecture:** `ArcherMovementTask` remains the sole tactical-state writer and publishes path movement through `WALK_TARGET`; vanilla `MoveToTargetSink`, MCA navigation, and `MCAMoveControl` own path execution. A new stateless `RangedCombatPositioning` helper performs bounded geometric candidate checks only. Direct strafe input is limited to the short `STRAFE` state plus the active-use `KITE` exception that keeps the archer facing its target; that exception reuses vanilla strafe math while preserving the canonical `0.85` kite speed. Bow/crossbow behavior reads the same runtime Brain state for emergency suppression.
 
 **Tech Stack:** Java 21, Minecraft 1.21.1, Gradle multi-loader, NeoForge 21.1.234, Fabric API 0.116.13+1.21.1, JUnit 5.10.2, NeoForge GameTest.
 
@@ -497,7 +497,7 @@ git commit -m "refactor: route archer combat movement through brain"
 - Extend: `neoforge/src/main/java/net/conczin/mca/entity/ai/brain/tasks/ArcherCombatMovementGameTests.java`
 
 **Interfaces:**
-- Uses ordinary `entity.getMoveControl().strafe(0.0F, lateral)` only while canonical state is `STRAFE`.
+- Uses ordinary `entity.getMoveControl().strafe(0.0F, lateral)` while canonical state is `STRAFE`; active-use `KITE` may use the shared `MCAMoveControl` speed-aware strafe entry point so target-facing retreat does not inherit vanilla's hard-coded `0.25` modifier.
 - Uses `RangedCombatPositioning.isStrafeSideWalkable(entity, lateral)` before a burst.
 - Calls `selectBaseState(...)` every tick first. Any base state other than `HOLD` preempts/cancels a burst immediately; a valid `HOLD` either remains `HOLD`, starts a burst when eligible, or keeps the current burst until its duration/cancellation rule ends it.
 - Produces package-private `static boolean shouldCancelStrafe(boolean visible, boolean inRange, boolean closeThreat, boolean collided, boolean stalled)` for deterministic cancellation tests.

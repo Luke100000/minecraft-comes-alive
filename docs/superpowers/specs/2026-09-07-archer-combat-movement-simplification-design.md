@@ -39,7 +39,7 @@ This design applies the Java cleanup review lenses to the fixed review scope of 
 ### Quality
 
 - `ArcherMovementTask` currently owns tactical state, path candidate search, path creation, navigation start/stop, strafe timing, collision reversal, look control, and debug output. The redesigned task owns tactical intent plus the bounded vanilla strafe micro-input; it does not own path computation or path execution.
-- `ArcherMoveControl` duplicates vanilla `MoveControl` strafe math and adds archer-only request/result state. Remove that parallel controller. Short strafing uses ordinary `MCAMoveControl`/vanilla `MoveControl.strafe(...)` with direction and timing owned only by `ArcherMovementTask`.
+- `ArcherMoveControl` duplicates vanilla `MoveControl` strafe math and adds archer-only request/result state. Remove that parallel controller. Short strafing uses ordinary `MCAMoveControl`/vanilla `MoveControl.strafe(...)` with direction and timing owned only by `ArcherMovementTask`. The active-use `KITE` exception delegates to that same vanilla strafe path but restores the canonical `0.85` kite speed modifier afterward, because vanilla `MoveControl.strafe(...)` hard-codes `0.25`.
 - Use one canonical ranged-combat state shared by movement and weapon behaviors instead of storing emergency tactical state inside `MoveControl`.
 - Keep candidate selection in one small stateless positioning helper so `ArcherMovementTask` remains readable and navigation remains owned by the Brain pipeline.
 
@@ -213,7 +213,7 @@ Remove archer tactical behavior from `ArcherMoveControl`:
 
 After those responsibilities are removed, `ArcherMoveControl` is an unnecessary wrapper. Delete it and make `MCAMoveControl` directly usable by `VillagerEntityMCA` (adjust visibility/constructor visibility as narrowly as required). Update `VillagerEntityMCA` to install `MCAMoveControl` directly and remove `getArcherMoveControl()`.
 
-Do not alter `MCAMoveControl`'s existing navigation/climb/jump behavior as part of this work. Its inherited vanilla strafe path is sufficient for both the bounded `STRAFE` burst and the narrow active-use `KITE` movement exception; do not copy the vanilla strafe implementation again.
+Do not alter `MCAMoveControl`'s existing navigation/climb/jump behavior as part of this work. Keep the inherited vanilla strafe implementation and add only a narrow speed-aware entry point for active-use `KITE`: delegate to `super.strafe(...)`, then restore the requested speed modifier. Do not copy vanilla strafe math or recreate an archer-specific movement controller.
 
 ## Weapon behavior coordination
 

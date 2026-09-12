@@ -1,12 +1,45 @@
 # 7.7.37
 
-* Improved villager bed pathfinding and sleeping reliability.
-* Improved ladder climbing and ladder-to-floor transitions.
+* Recommended to ***__backup__*** your world before updating due to the building and floor data migration in this release.
+* Major building, floor and room detection improvements.
+  * Reworked buildings around exact floor cells for more reliable multi-floor, stacked-floor, partial-height and irregular layouts.
+  * Improved stairs, ladders, vertical connectors, doors, room splits/expansions, rescanning and external floor attachments.
+  * Fixed rooms and floors being attached to the wrong storey, overlapping unrelated floors or disappearing during updates.
+  * Existing 7.7.36 building data is migrated to the new floor/room format when loaded.
+  * Added an explicit **Remove Floor** action for empty floors.
+  * Admin building-type changes now target the exact physical room the player is standing in.
+* Improved the **Blueprint Map**.
+  * Added mouse panning and scroll-wheel zooming.
+  * Improved floor selection, exact room outlines, labels, hover ordering, tooltips and player-marker rendering.
+  * Room tooltips now show residents more clearly and better group room requirements and inherited/shared blocks.
+  * The Building Catalog now shows current/required block counts for the room you are standing in.
+  * Improved terrain streaming and performance, including water rendering and seabed visibility.
+  * Improved room/floor add, update, remove and type-selection interactions.
+  * Adjusted some building map colours for better readability.
+* Improved villager pathfinding and sleeping reliability.
+  * Improved bed approaches, ladder climbing, climbable exits, doors, gates and other toggleable blocks.
+  * Improved long-distance walking and transitions between floors.
+  * Villagers now use exact room membership when deciding whether they have entered a target or favored building.
+  * Smarter door/gate handling is now part of the normal pathfinding behaviour.
 * Fixed workplace assignment and job POI ownership.
 * Fixed duplicate villager residency and bed ownership.
 * Improved HOME POI validation and repaired invalid resident-home assignments.
 * Fixed residents being assigned to the wrong building.
+* Improved **Set Home** so villagers can switch to an available bed near the player while safely retaining their existing bed when no new bed is available.
+* Improved archer combat movement.
+  * Added clearer approach, hold, reposition, kite and emergency-retreat behaviour.
+  * Improved crowd-aware retreating, obstacle handling, bounded strafing and close-range escape choices.
+  * Archers keep facing their attack target while kiting and correctly cancel bow/crossbow use during emergency retreats.
+* Improved guard enemy detection so guards can acquire visible threats beyond the normal 16-block nearby-entity scan.
+* Improved ChatAI conversations.
+  * Interacting with a villager now selects that exact villager as the active conversation target.
+  * Improved full-name/nickname targeting and stopped ambiguous partial-name matches from selecting a villager arbitrarily.
+  * AI requests now run asynchronously with request timeouts so remote calls do not block the server thread.
+* Improved Villager Editor profession changes so the edited villager data and profession are applied together and refreshed consistently.
 * Fixed villager age scaling at growth-stage boundaries.
+* Fixed golden apples aging child villagers by the wrong amount; they now advance age by the intended 20 minutes.
+* Preserved baby zombie villager age when vanilla baby zombies are converted to MCA zombie villagers.
+* Fixed flirty personality dialogue overriding parent/child dialogue for the player's children.
 
 # 7.7.36
 * Recommended to ***__backup__*** your world.

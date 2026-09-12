@@ -116,7 +116,7 @@ final class FloorGeometry {
         return BuildingFloorRegion.fromFootprint(y, projected);
     }
 
-    boolean sameFootprint(FloorGeometry other) {
+    boolean sameProjectedFootprint(FloorGeometry other) {
         return other != null && cellsByColumn.keySet().equals(other.cellsByColumn.keySet());
     }
 

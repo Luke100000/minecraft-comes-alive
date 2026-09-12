@@ -30,9 +30,9 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
 
     private static final double EMERGENCY_ENTER_DISTANCE_SQUARED = 12.25D;
     private static final double EMERGENCY_EXIT_DISTANCE_SQUARED = 25.0D;
-    private static final double KITE_ENTER_DISTANCE_SQUARED = 36.0D;
+    static final double KITE_ENTER_DISTANCE_SQUARED = 36.0D;
     private static final double KITE_EXIT_DISTANCE_SQUARED = 81.0D;
-    private static final double CLOSE_RANGE_VERTICAL_THREAT_DISTANCE = 2.5D;
+    static final double CLOSE_RANGE_VERTICAL_THREAT_DISTANCE = 2.5D;
     private static final double KITE_SAFE_DISTANCE = 9.0D;
     private static final double EMERGENCY_SAFE_DISTANCE = 6.0D;
 
@@ -52,31 +52,52 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             double attackRangeSquared,
             int seeTime
     ) {
+        return selectBaseDecision(
+                currentState,
+                targetDistanceSquared,
+                threatDistanceSquared,
+                threatVerticalDistance,
+                attackRangeSquared,
+                seeTime
+        ).state();
+    }
+
+    private static BaseStateDecision selectBaseDecision(
+            RangedCombatState currentState,
+            double targetDistanceSquared,
+            double threatDistanceSquared,
+            double threatVerticalDistance,
+            double attackRangeSquared,
+            int seeTime
+    ) {
         boolean closeRangeThreat = threatVerticalDistance <= CLOSE_RANGE_VERTICAL_THREAT_DISTANCE;
         if (closeRangeThreat) {
             if (currentState == RangedCombatState.EMERGENCY_FLEE
                     && threatDistanceSquared < EMERGENCY_EXIT_DISTANCE_SQUARED) {
-                return RangedCombatState.EMERGENCY_FLEE;
+                return new BaseStateDecision(RangedCombatState.EMERGENCY_FLEE, "emergency_hysteresis");
             }
             if (threatDistanceSquared < EMERGENCY_ENTER_DISTANCE_SQUARED) {
-                return RangedCombatState.EMERGENCY_FLEE;
-            }
-            if ((currentState == RangedCombatState.EMERGENCY_FLEE || currentState == RangedCombatState.KITE)
-                    && threatDistanceSquared < KITE_EXIT_DISTANCE_SQUARED) {
-                return RangedCombatState.KITE;
-            }
-            if (threatDistanceSquared < KITE_ENTER_DISTANCE_SQUARED) {
-                return RangedCombatState.KITE;
+                return new BaseStateDecision(RangedCombatState.EMERGENCY_FLEE, "emergency_close_threat");
             }
         }
 
         if (targetDistanceSquared > attackRangeSquared) {
-            return RangedCombatState.APPROACH;
+            return new BaseStateDecision(RangedCombatState.APPROACH, "out_of_range");
         }
         if (seeTime < -LOST_SIGHT_BEFORE_REPOSITION) {
-            return RangedCombatState.REPOSITION;
+            return new BaseStateDecision(RangedCombatState.REPOSITION, "lost_los");
         }
-        return RangedCombatState.HOLD;
+
+        if (closeRangeThreat) {
+            if ((currentState == RangedCombatState.EMERGENCY_FLEE || currentState == RangedCombatState.KITE)
+                    && threatDistanceSquared < KITE_EXIT_DISTANCE_SQUARED) {
+                return new BaseStateDecision(RangedCombatState.KITE, "kite_hysteresis");
+            }
+            if (threatDistanceSquared < KITE_ENTER_DISTANCE_SQUARED) {
+                return new BaseStateDecision(RangedCombatState.KITE, "kite_close_threat");
+            }
+        }
+        return new BaseStateDecision(RangedCombatState.HOLD, "hold");
     }
 
     static boolean shouldStartStrafe(int holdTicks, int strafeCooldown) {
@@ -157,7 +178,6 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         updateSeeTime(visible);
 
         LivingEntity movementThreat = RangedCombatPositioning.nearestMovementThreat(entity, target);
-        List<LivingEntity> nearbyMovementThreats = RangedCombatPositioning.nearbyMovementThreats(entity, target);
         double targetDistanceSquared = entity.distanceToSqr(target);
         double threatDistanceSquared = entity.distanceToSqr(movementThreat);
         double threatVerticalDistance = Math.abs(entity.getY() - movementThreat.getY());
@@ -167,7 +187,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         RangedCombatState hysteresisState = currentState == RangedCombatState.STRAFE
                 ? RangedCombatState.HOLD
                 : currentState;
-        RangedCombatState baseState = selectBaseState(
+        BaseStateDecision baseDecision = selectBaseDecision(
                 hysteresisState,
                 targetDistanceSquared,
                 threatDistanceSquared,
@@ -175,6 +195,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
                 attackRangeSquared,
                 this.seeTime
         );
+        RangedCombatState baseState = baseDecision.state();
 
         boolean closeThreat = threatVerticalDistance <= CLOSE_RANGE_VERTICAL_THREAT_DISTANCE
                 && threatDistanceSquared < KITE_ENTER_DISTANCE_SQUARED;
@@ -198,8 +219,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
                         movementThreat,
                         currentState,
                         baseState,
-                        stateReason(hysteresisState, targetDistanceSquared, threatDistanceSquared,
-                                threatVerticalDistance, attackRangeSquared, this.seeTime),
+                        baseDecision.reason(),
                         targetChanged,
                         targetDistanceSquared,
                         threatDistanceSquared,
@@ -222,7 +242,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
                     continueAimedKiteWhileUsingWeapon(entity, target, movementThreat);
                 }
                 case EMERGENCY_FLEE -> {
-                    publishEmergencyAway(entity, nearbyMovementThreats, EMERGENCY_SAFE_DISTANCE,
+                    publishEmergencyAway(entity, RangedCombatPositioning.nearbyMovementThreats(entity, target), EMERGENCY_SAFE_DISTANCE,
                             EMERGENCY_SPEED_MODIFIER, targetChanged || stateChanged);
                     trackEscapeOrTarget(entity, target);
                 }
@@ -578,40 +598,6 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         return MIN_STRAFE_COOLDOWN + entity.getRandom().nextInt(MAX_STRAFE_COOLDOWN - MIN_STRAFE_COOLDOWN + 1);
     }
 
-    private static String stateReason(
-            RangedCombatState currentState,
-            double targetDistanceSquared,
-            double threatDistanceSquared,
-            double threatVerticalDistance,
-            double attackRangeSquared,
-            int seeTime
-    ) {
-        boolean closeRangeThreat = threatVerticalDistance <= CLOSE_RANGE_VERTICAL_THREAT_DISTANCE;
-        if (closeRangeThreat) {
-            if (currentState == RangedCombatState.EMERGENCY_FLEE
-                    && threatDistanceSquared < EMERGENCY_EXIT_DISTANCE_SQUARED) {
-                return "emergency_hysteresis";
-            }
-            if (threatDistanceSquared < EMERGENCY_ENTER_DISTANCE_SQUARED) {
-                return "emergency_close_threat";
-            }
-            if ((currentState == RangedCombatState.EMERGENCY_FLEE || currentState == RangedCombatState.KITE)
-                    && threatDistanceSquared < KITE_EXIT_DISTANCE_SQUARED) {
-                return "kite_hysteresis";
-            }
-            if (threatDistanceSquared < KITE_ENTER_DISTANCE_SQUARED) {
-                return "kite_close_threat";
-            }
-        }
-        if (targetDistanceSquared > attackRangeSquared) {
-            return "out_of_range";
-        }
-        if (seeTime < -LOST_SIGHT_BEFORE_REPOSITION) {
-            return "lost_los";
-        }
-        return "hold";
-    }
-
     private static String strafeCancelReason(boolean visible, boolean inRange, boolean closeThreat, boolean collided, boolean stalled) {
         if (!visible) {
             return "lost_los";
@@ -731,5 +717,8 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
 
     private static LivingEntity getAttackTarget(LivingEntity entity) {
         return entity.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).orElse(null);
+    }
+
+    private record BaseStateDecision(RangedCombatState state, String reason) {
     }
 }

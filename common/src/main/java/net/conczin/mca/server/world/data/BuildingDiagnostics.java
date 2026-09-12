@@ -280,21 +280,21 @@ public final class BuildingDiagnostics {
             added.removeAll(persistentCells);
             LinkedHashSet<FloorGeometry.Cell> removed = new LinkedHashSet<>(persistentCells);
             removed.removeAll(freshCells);
-            boolean sameFootprint = persistentFloor.geometry().sameFootprint(freshFloor.geometry());
+            boolean sameProjectedFootprint = persistentFloor.geometry().sameProjectedFootprint(freshFloor.geometry());
             boolean connectorsChanged = !persistentFloor.geometry().connectorTypesByCell()
                     .equals(freshFloor.geometry().connectorTypesByCell());
             if (verbose) {
                 log(traceId, "floorGeometryMismatch anchorY={} persistentCells={} freshCells={} "
-                                + "sameFootprint={} connectorsChanged={} addedCells={} removedCells={} "
+                                + "sameProjectedFootprint={} connectorsChanged={} addedCells={} removedCells={} "
                                 + "addedSample={} removedSample={}",
                         persistentFloor.anchorY(), persistentCells.size(), freshCells.size(),
-                        sameFootprint, connectorsChanged, added.size(), removed.size(),
+                        sameProjectedFootprint, connectorsChanged, added.size(), removed.size(),
                         sampleCells(added), sampleCells(removed));
             } else {
                 log(traceId, "floorGeometryMismatch anchorY={} persistentCells={} freshCells={} "
-                                + "sameFootprint={} connectorsChanged={} addedCells={} removedCells={}",
+                                + "sameProjectedFootprint={} connectorsChanged={} addedCells={} removedCells={}",
                         persistentFloor.anchorY(), persistentCells.size(), freshCells.size(),
-                        sameFootprint, connectorsChanged, added.size(), removed.size());
+                        sameProjectedFootprint, connectorsChanged, added.size(), removed.size());
             }
         }
         if (persistentAnchors.equals(freshAnchors) && !geometryMismatch) {
