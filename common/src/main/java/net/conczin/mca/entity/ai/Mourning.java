@@ -24,6 +24,8 @@ public final class Mourning {
         villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_RETRY_AT);
         villager.getBrain().eraseMemory(MemoryModuleType.PATH);
         villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        villager.getBrain().eraseMemory(MemoryModuleType.BREED_TARGET);
+        villager.getBrain().eraseMemory(MemoryModuleType.INTERACTION_TARGET);
         villager.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new BlockPosTracker(grave));
         villager.getBrain().setActiveActivityIfPossible(ActivitiesMCA.GRIEVE);
     }
@@ -47,6 +49,7 @@ public final class Mourning {
                 .filter(Building::isComplete)
                 .flatMap(Building::getBlockPosStream)
                 .distinct()
+                .filter(level::isLoaded)
                 .filter(position -> isMournableTombstone(level, position))
                 .toList();
     }

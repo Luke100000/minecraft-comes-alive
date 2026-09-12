@@ -16,6 +16,7 @@ public class GrieveTask extends Behavior<VillagerEntityMCA> {
         super(ImmutableMap.of());
     }
 
+    @Override
     protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA entity) {
         if (!Config.getInstance().enableMourning) {
             return false;
@@ -26,7 +27,7 @@ public class GrieveTask extends Behavior<VillagerEntityMCA> {
             return false;
         }
 
-        if (!Mourning.isMournableTombstone(world, site.get())) {
+        if (site.filter(grave -> Mourning.isMournableTombstone(world, grave)).isEmpty()) {
             Mourning.clear(entity);
             return false;
         }

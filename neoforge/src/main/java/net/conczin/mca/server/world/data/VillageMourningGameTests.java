@@ -6,6 +6,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
+import net.conczin.mca.entity.ai.MoodGroup;
 import net.conczin.mca.entity.ai.Mourning;
 import net.conczin.mca.entity.ai.relationship.RelationshipType;
 import net.conczin.mca.registry.BlocksMCA;
@@ -65,6 +66,38 @@ public final class VillageMourningGameTests {
 
         helper.assertTrue(!Mourning.isMournableTombstone(helper.getLevel(), grave),
                 "resurrecting tombstone must not be mournable");
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void graveDiscoveryDoesNotLoadUnloadedChunks(GameTestHelper helper) {
+        BlockPos farPosition = helper.absolutePos(new BlockPos(4_096, 1, 4_096));
+        helper.assertTrue(!helper.getLevel().isLoaded(farPosition),
+                "fixture requires the distant chunk to start unloaded");
+        Village village = new Village(1, helper.getLevel());
+        registerGraveyard(village, farPosition);
+
+        helper.assertTrue(Mourning.getMournableGraves(village, helper.getLevel()).isEmpty(),
+                "an unloaded graveyard must not produce ambient mourning graves");
+        helper.assertTrue(!helper.getLevel().isLoaded(farPosition),
+                "ambient grave discovery must not force-load graveyard chunks");
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void mourningStartClearsCompetingInteractionState(GameTestHelper helper) {
+        BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
+        VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(3, 1, 1), "Mourning State Probe");
+        VillagerEntityMCA target = spawnVillager(helper, new BlockPos(4, 1, 1), "Mourning State Target");
+        mourner.getBrain().setMemory(MemoryModuleType.BREED_TARGET, target);
+        mourner.getBrain().setMemory(MemoryModuleType.INTERACTION_TARGET, target);
+
+        Mourning.start(mourner, grave);
+
+        helper.assertTrue(mourner.getBrain().getMemoryInternal(MemoryModuleType.BREED_TARGET).isEmpty(),
+                "starting mourning must stop an existing breeding interaction");
+        helper.assertTrue(mourner.getBrain().getMemoryInternal(MemoryModuleType.INTERACTION_TARGET).isEmpty(),
+                "starting mourning must stop an existing social interaction");
         helper.succeed();
     }
 
@@ -150,6 +183,24 @@ public final class VillageMourningGameTests {
     }
 
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void deceasedDoesNotMournOwnGrave(GameTestHelper helper) {
+        BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
+        VillagerEntityMCA deceased = spawnVillager(helper, new BlockPos(3, 1, 1), "Self Mourning Probe");
+        boolean previous = Config.getInstance().enableMourning;
+        try {
+            Config.getInstance().enableMourning = true;
+            deceased.getRelationships().onTragedy(
+                    helper.getLevel().damageSources().generic(), grave, RelationshipType.SELF, deceased);
+
+            helper.assertTrue(deceased.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE).isEmpty(),
+                    "the deceased villager must not be assigned its own grave for mourning");
+        } finally {
+            Config.getInstance().enableMourning = previous;
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void strangerTragedyDoesNotStartMourning(GameTestHelper helper) {
         BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
         VillagerEntityMCA deceased = spawnVillager(helper, new BlockPos(6, 1, 1), "Stranger Deceased Probe");
@@ -168,6 +219,8 @@ public final class VillageMourningGameTests {
         BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
         VillagerEntityMCA deceased = spawnVillager(helper, new BlockPos(6, 1, 1), "Disabled Deceased Probe");
         VillagerEntityMCA spouse = spawnVillager(helper, new BlockPos(3, 1, 1), "Disabled Mourner Probe");
+        spouse.getVillagerBrain().modifyMoodValue(
+                MoodGroup.MAX_LEVEL - spouse.getVillagerBrain().getMoodValue());
         int moodBefore = spouse.getVillagerBrain().getMoodValue();
         boolean previous = Config.getInstance().enableMourning;
         try {
@@ -188,14 +241,16 @@ public final class VillageMourningGameTests {
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 650)
     public static void resurrectionClearsAmbientRecencyAndRetryState(GameTestHelper helper) {
         BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
-        VillagerEntityMCA deceased = spawnVillager(helper, new BlockPos(8, 1, 1), "Resurrection Memory Probe");
+        VillagerEntityMCA deceased = VillagerFactory.newVillager(helper.getLevel())
+                .withPosition(Vec3.atCenterOf(helper.absolutePos(new BlockPos(8, 1, 1))))
+                .withName("Resurrection Memory Probe")
+                .build();
         long now = helper.getLevel().getGameTime();
         deceased.getBrain().setMemory(MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING, now);
         deceased.getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_RETRY_AT, now + 1_000L);
         helper.getLevel().setBlock(grave, BlocksMCA.CROSS_HEADSTONE.defaultBlockState(), 3);
         TombstoneBlock.Data data = TombstoneBlock.Data.of(helper.getLevel().getBlockEntity(grave)).orElseThrow();
         data.setEntity(deceased);
-        deceased.discard();
         data.startResurrecting(false);
 
         helper.onEachTick(() -> {
@@ -262,7 +317,7 @@ public final class VillageMourningGameTests {
         List<VillagerEntityMCA> residents = spawnResidents(helper, 10, "Burst Probe");
         long now = helper.getLevel().getGameTime();
         Village due = withMourningState(
-                villageWithGraveyard(helper, grave).village(), now + 24_000L, 8, now, helper.getLevel());
+                villageWithGraveyard(helper, grave), now + 24_000L, 8, now, helper.getLevel());
         residents.forEach(due::updateResident);
 
         due.tick(helper.getLevel(), now);
@@ -305,7 +360,7 @@ public final class VillageMourningGameTests {
         List<VillagerEntityMCA> residents = List.of(idle, meet, work, rest);
         long now = helper.getLevel().getGameTime();
         Village due = withMourningState(
-                villageWithGraveyard(helper, grave).village(), now + 24_000L, 2, now, helper.getLevel());
+                villageWithGraveyard(helper, grave), now + 24_000L, 2, now, helper.getLevel());
         residents.forEach(due::updateResident);
 
         due.tick(helper.getLevel(), now);
@@ -331,7 +386,7 @@ public final class VillageMourningGameTests {
             recent.getBrain().setMemory(MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING, now);
         }
         Village due = withMourningState(
-                villageWithGraveyard(helper, grave).village(), now + 24_000L, 2, now, helper.getLevel());
+                villageWithGraveyard(helper, grave), now + 24_000L, 2, now, helper.getLevel());
         residents.forEach(due::updateResident);
 
         due.tick(helper.getLevel(), now);
@@ -357,7 +412,7 @@ public final class VillageMourningGameTests {
         List<VillagerEntityMCA> residents = spawnResidents(helper, 4, "Disabled Ambient Probe");
         long now = helper.getLevel().getGameTime();
         Village due = withMourningState(
-                villageWithGraveyard(helper, grave).village(), now + 24_000L, 4, now, helper.getLevel());
+                villageWithGraveyard(helper, grave), now + 24_000L, 4, now, helper.getLevel());
         residents.forEach(due::updateResident);
         long beforeSession = due.getNextMourningTime();
         int beforeRemaining = due.getMourningRemaining();
@@ -387,8 +442,7 @@ public final class VillageMourningGameTests {
         occupyGrave(helper, grave);
         List<VillagerEntityMCA> residents = spawnResidents(helper, 45, "Cache Probe");
         long now = helper.getLevel().getGameTime();
-        VillageFixture fixture = villageWithGraveyard(helper, grave);
-        Village due = withMourningState(fixture.village(), now, 0, 0L, helper.getLevel());
+        Village due = withMourningState(villageWithGraveyard(helper, grave), now, 0, 0L, helper.getLevel());
         residents.forEach(due::updateResident);
 
         due.tick(helper.getLevel(), now);
@@ -416,7 +470,7 @@ public final class VillageMourningGameTests {
         List<VillagerEntityMCA> residents = spawnResidents(helper, 10, "Restored Cache Probe");
         long now = helper.getLevel().getGameTime();
         Village restored = withMourningState(
-                villageWithGraveyard(helper, grave).village(), now + 24_000L, 8, now, helper.getLevel());
+                villageWithGraveyard(helper, grave), now + 24_000L, 8, now, helper.getLevel());
         residents.forEach(restored::updateResident);
 
         restored.tick(helper.getLevel(), now);
@@ -435,8 +489,13 @@ public final class VillageMourningGameTests {
         helper.succeed();
     }
 
-    private static VillageFixture villageWithGraveyard(GameTestHelper helper, BlockPos grave) {
+    private static Village villageWithGraveyard(GameTestHelper helper, BlockPos grave) {
         Village village = new Village(1, helper.getLevel());
+        registerGraveyard(village, grave);
+        return village;
+    }
+
+    private static void registerGraveyard(Village village, BlockPos grave) {
         ExternalBuilding graveyard = new ExternalBuilding(grave);
         graveyard.setId(100);
         graveyard.setType("graveyard");
@@ -445,7 +504,6 @@ public final class VillageMourningGameTests {
         graveyard.addBlock(BlocksMCA.CROSS_HEADSTONE, grave.east());
         graveyard.addBlock(BlocksMCA.CROSS_HEADSTONE, grave.west());
         village.registerExternalBuilding(graveyard);
-        return new VillageFixture(village, graveyard);
     }
 
     private static Village withMourningState(
@@ -492,8 +550,5 @@ public final class VillageMourningGameTests {
                 .spawn(MobSpawnType.STRUCTURE);
         villager.refreshBrain(helper.getLevel());
         return villager;
-    }
-
-    private record VillageFixture(Village village, ExternalBuilding graveyard) {
     }
 }

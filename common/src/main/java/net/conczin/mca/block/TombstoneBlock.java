@@ -4,6 +4,7 @@ import com.mojang.serialization.MapCodec;
 import net.conczin.mca.entity.Infectable;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
+import net.conczin.mca.entity.ai.Mourning;
 import net.conczin.mca.entity.ai.relationship.CompassionateEntity;
 import net.conczin.mca.entity.ai.relationship.EntityRelationship;
 import net.conczin.mca.entity.ai.relationship.Gender;
@@ -385,9 +386,7 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
                         if (entity instanceof VillagerEntityMCA villager) {
                             villager.getBrain().eraseMemory(MemoryModuleTypeMCA.LAST_GRIEVE);
                             villager.getBrain().eraseMemory(MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING);
-                            villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_RETRY_AT);
-                            villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_SITE);
-                            villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION);
+                            Mourning.clear(villager);
                             villager.getBrain().eraseMemory(MemoryModuleType.PATH);
                             villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
                             villager.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);

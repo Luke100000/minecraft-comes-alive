@@ -191,9 +191,15 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
             }
         }
 
+        // CHILD is the callback a parent receives when their child dies. PARENT would notify children,
+        // which intentionally do not inherit grave mourning from a parent's death.
+        boolean familyMourning = type == RelationshipType.CHILD
+                || type == RelationshipType.SIBLING
+                || type == RelationshipType.SPOUSE;
         if (Config.getInstance().enableMourning
                 && burialSite != null
-                && type != RelationshipType.STRANGER
+                && familyMourning
+                && !entity.getUUID().equals(with.getUUID())
                 && entity instanceof VillagerEntityMCA villager) {
             Mourning.start(villager, burialSite);
         }

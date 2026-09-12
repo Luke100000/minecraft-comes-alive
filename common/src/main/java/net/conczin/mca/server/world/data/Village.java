@@ -12,6 +12,7 @@ import net.conczin.mca.server.world.data.villageComponents.*;
 import net.conczin.mca.util.BlockBoxExtended;
 import net.conczin.mca.util.NbtHelper;
 import net.conczin.mca.util.WorldUtils;
+import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.Vec3i;
@@ -19,6 +20,7 @@ import net.minecraft.nbt.*;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
@@ -38,10 +40,10 @@ public class Village implements Iterable<Building> {
     public static final int MERGE_MARGIN = 64;
     private static final int MOVE_IN_COOLDOWN = 1200;
     private static final long BED_SYNC_TIME = 200;
-    private static final long MIN_MOURNING_INTERVAL = 24_000L;
-    private static final long MAX_MOURNING_INTERVAL = 48_000L;
-    private static final long MIN_MOURNING_BURST_DELAY = 2_000L;
-    private static final long MAX_MOURNING_BURST_DELAY = 4_000L;
+    private static final int MIN_MOURNING_INTERVAL = 24_000;
+    private static final int MAX_MOURNING_INTERVAL = 48_000;
+    private static final int MIN_MOURNING_BURST_DELAY = 2_000;
+    private static final int MAX_MOURNING_BURST_DELAY = 4_000;
     private static final int MIN_MOURNING_BURST_SIZE = 2;
     private static final int MAX_MOURNING_BURST_SIZE = 4;
     private static final int MIN_MOURNING_SESSION_SIZE = 3;
@@ -604,30 +606,21 @@ public class Village implements Iterable<Building> {
     }
 
     static long calculateNextMourningTime(long now, RandomSource random) {
-        int range = (int) (MAX_MOURNING_INTERVAL - MIN_MOURNING_INTERVAL + 1L);
-        return now + MIN_MOURNING_INTERVAL + random.nextInt(range);
+        return now + Mth.nextInt(random, MIN_MOURNING_INTERVAL, MAX_MOURNING_INTERVAL);
     }
 
     static long calculateNextMourningBurstTime(long now, RandomSource random) {
-        int range = (int) (MAX_MOURNING_BURST_DELAY - MIN_MOURNING_BURST_DELAY + 1L);
-        return now + MIN_MOURNING_BURST_DELAY + random.nextInt(range);
+        return now + Mth.nextInt(random, MIN_MOURNING_BURST_DELAY, MAX_MOURNING_BURST_DELAY);
     }
 
     static int calculateMourningSessionSize(int residentCount) {
         int scaled = MIN_MOURNING_SESSION_SIZE + residentCount / MOURNING_SESSION_SCALE_DIVISOR;
-        return Math.max(MIN_MOURNING_SESSION_SIZE, Math.min(MAX_MOURNING_SESSION_SIZE, scaled));
+        return Mth.clamp(scaled, MIN_MOURNING_SESSION_SIZE, MAX_MOURNING_SESSION_SIZE);
     }
 
     static int calculateMourningBurstSize(int remaining, RandomSource random) {
-        int requested = MIN_MOURNING_BURST_SIZE
-                + random.nextInt(MAX_MOURNING_BURST_SIZE - MIN_MOURNING_BURST_SIZE + 1);
+        int requested = Mth.nextInt(random, MIN_MOURNING_BURST_SIZE, MAX_MOURNING_BURST_SIZE);
         return Math.min(remaining, requested);
-    }
-
-    private static <T> void shuffle(List<T> values, RandomSource random) {
-        for (int index = values.size() - 1; index > 0; index--) {
-            Collections.swap(values, index, random.nextInt(index + 1));
-        }
     }
 
     private void tickMourning(ServerLevel world, long time) {
@@ -665,7 +658,6 @@ public class Village implements Iterable<Building> {
 
         mourningRemaining = calculateMourningSessionSize(getResidents(world).size());
         nextMourningBurstTime = time;
-        markDirty();
         releaseMourningBurst(world, time);
     }
 
@@ -683,7 +675,8 @@ public class Village implements Iterable<Building> {
     }
 
     private void releaseMourningBurst(ServerLevel world, long time) {
-        mourningGraveCache.removeIf(grave -> !Mourning.isMournableTombstone(world, grave));
+        mourningGraveCache.removeIf(grave -> !world.isLoaded(grave)
+                || !Mourning.isMournableTombstone(world, grave));
         if (mourningGraveCache.isEmpty()) {
             endMourningSession();
             markDirty();
@@ -697,8 +690,8 @@ public class Village implements Iterable<Building> {
                 .filter(Mourning::canMournAmbiently)
                 .collect(Collectors.toCollection(ArrayList::new));
 
-        shuffle(mourningGraveCache, world.random);
-        shuffle(candidates, world.random);
+        Util.shuffle(mourningGraveCache, world.random);
+        Util.shuffle(candidates, world.random);
         candidates.sort(Comparator.comparingLong(villager -> villager.getBrain()
                 .getMemoryInternal(MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING)
                 .orElse(Long.MIN_VALUE)));
