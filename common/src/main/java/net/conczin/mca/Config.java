@@ -366,6 +366,9 @@ public final class Config extends CommonConfig {
      */
     public String defaultHeadstoneType = "cross_headstone";
 
+    /** Enables personal and ambient villager mourning at occupied graves. */
+    public boolean enableMourning = true;
+
     /**
      * Enables smarter villager door AI,
      * allowing them to open gates as well.
@@ -993,3 +996,4 @@ public final class Config extends CommonConfig {
         }
     }
 }
+
