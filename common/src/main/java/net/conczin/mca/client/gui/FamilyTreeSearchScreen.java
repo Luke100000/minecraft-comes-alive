@@ -65,6 +65,12 @@ public class FamilyTreeSearchScreen extends Screen {
         }));
         buttonPage = addRenderableWidget(new ButtonWidget(width / 2 - 24, height / 2 + 60, 48, 20, Component.literal("1/1"), (b) -> {
         }));
+
+        assert minecraft != null;
+        if (minecraft.player != null) {
+            String playerUUID = minecraft.player.getName().getString();
+            searchVillager(playerUUID);
+        }
     }
 
     @Override
@@ -120,13 +126,7 @@ public class FamilyTreeSearchScreen extends Screen {
         if (!MCA.isBlankString(v)) {
             Network.sendToServer(new FamilyTreeUUIDLookup(v));
         }
-        else {
-            assert minecraft != null;
-            if (minecraft.player != null) {
-                UUID playerUUID = minecraft.player.getUUID();
-                Network.sendToServer(new FamilyTreeUUIDLookup(playerUUID));
-            }
-        }
+
     }
 
     public void setList(List<FamilyTreeSearchEntry> list) {
