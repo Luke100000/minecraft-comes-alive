@@ -23,7 +23,7 @@
 - `LAST_GRIEVE` remains registered/profiled only for legacy brain decode compatibility and has no runtime mourning use.
 - `LAST_AMBIENT_MOURNING` is a persisted `MemoryModuleType<Long>` read/written only by ambient burst selection as a soft fairness marker.
 - `MOURNING_RETRY_AT` is a persisted `MemoryModuleType<Long>` and is the only retry deadline.
-- Ambient selection may use residents currently in `Activity.IDLE` or `Activity.MEET`; it must not pull villagers out of `WORK`, `REST`, panic, hide, raid, chores, or danger handling.
+- Ambient selection may use residents currently in `Activity.IDLE` or `Activity.MEET`; it must not pull villagers out of `WORK`, `REST`, panic, hide, raid, chores, danger handling, or player-directed FOLLOW/STAY modes (`PLAYER_FOLLOWING` / `STAYING`).
 - Complete graveyard discovery happens once per session. A restored active session may rebuild its transient cache once on its first due burst after load; later bursts only revalidate cached positions.
 - `Village.tick` must evaluate mourning with the unmodified absolute `time` before the existing `time += getId()` offset.
 - Do not modify `VillageManager` for mourning scheduling.
@@ -321,7 +321,7 @@ public final class Mourning {
 }
 ```
 
-This activity gate is part of ambient eligibility. It preserves normal daily scheduling: ambient remembrance may borrow IDLE/MEET time, while WORK/REST and emergency activities remain untouched. Personal tragedy does not use this predicate and may still start mourning immediately.
+This activity gate is part of ambient eligibility. It preserves normal daily scheduling: ambient remembrance may borrow IDLE/MEET time, while WORK/REST, emergency activities, and player-directed FOLLOW/STAY CORE behavior remain untouched. Personal tragedy does not use this predicate and may still start mourning immediately.
 
 - [ ] **Step 5: Make `EnterGraveyardTask` assigned-site only**
 

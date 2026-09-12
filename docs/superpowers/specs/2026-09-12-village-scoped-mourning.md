@@ -117,6 +117,7 @@ An ambient candidate must:
 - be a loaded resident of the scheduling `Village`
 - currently be in `Activity.IDLE` or `Activity.MEET`
 - not currently be in `Activity.WORK`, `Activity.REST`, or `ActivitiesMCA.CHORE`
+- not have `PLAYER_FOLLOWING` or `STAYING`; these player-directed modes run as CORE behavior while the non-core activity can still remain `IDLE`
 - not already have `MOURNING_SITE`
 - not already be in `ActivitiesMCA.GRIEVE`
 - not be in danger according to `VillagerTasksMCA.isInDanger(...)`

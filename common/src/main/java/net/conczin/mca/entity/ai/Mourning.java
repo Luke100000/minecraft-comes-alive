@@ -59,6 +59,8 @@ public final class Mourning {
                 || villager.getBrain().isActive(Activity.MEET);
         return villager.isAlive()
                 && ambientActivity
+                && villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isEmpty()
+                && villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.STAYING).isEmpty()
                 && !villager.getBrain().isActive(ActivitiesMCA.GRIEVE)
                 && villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE).isEmpty()
                 && !VillagerTasksMCA.isInDanger(villager)
