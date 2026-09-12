@@ -235,7 +235,7 @@ class RoomPartitionerTest {
     }
 
     @Test
-    void fallbackOwnerUsesLargestComponentThenStableBounds() {
+    void fallbackOwnerUsesLargestComponentThenCanonicalExactCells() {
         var small = new RoomPartitioner.Component(Set.of(cell(0, 64, 0)));
         var large = new RoomPartitioner.Component(Set.of(cell(2, 64, 0), cell(3, 64, 0)));
 
@@ -243,7 +243,7 @@ class RoomPartitionerTest {
     }
 
     @Test
-    void fallbackOwnerUsesHeightToBreakStackedBoundsTie() {
+    void fallbackOwnerUsesHeightToBreakStackedExactCellTie() {
         var lower = new RoomPartitioner.Component(Set.of(cell(0, 64, 0)));
         var upper = new RoomPartitioner.Component(Set.of(cell(0, 70, 0)));
 
@@ -260,6 +260,17 @@ class RoomPartitionerTest {
 
         assertEquals(first, RoomPartitioner.owner(List.of(second, first)));
         assertEquals(first, RoomPartitioner.owner(List.of(first, second)));
+    }
+
+    @Test
+    void fallbackOwnerUsesCanonicalExactCellsInsteadOfAggregateBounds() {
+        var boundsFirst = new RoomPartitioner.Component(Set.of(
+                cell(0, 64, 10), cell(1, 64, 0)));
+        var exactCellsFirst = new RoomPartitioner.Component(Set.of(
+                cell(0, 64, 5), cell(2, 64, 5)));
+
+        assertEquals(exactCellsFirst, RoomPartitioner.owner(List.of(boundsFirst, exactCellsFirst)));
+        assertEquals(exactCellsFirst, RoomPartitioner.owner(List.of(exactCellsFirst, boundsFirst)));
     }
 
     private static FloorGeometry geometry(Set<FloorGeometry.Cell> cells,

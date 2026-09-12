@@ -107,8 +107,7 @@ final class RoomScanPlanner {
         if (village == null || freshFloor == null) return Optional.empty();
         List<FloorTarget> matches = village.getStructures().values().stream()
                 .flatMap(structure -> structure.getFloors().stream()
-                        .filter(floor -> StructureFloor.sameSemanticBand(freshFloor.anchorY(), floor.anchorY()))
-                        .filter(floor -> freshFloor.footprintIntersectionArea(floor.geometry()) > 0)
+                        .filter(floor -> floor.matchesSemanticStorey(freshFloor))
                         .map(floor -> new FloorTarget(structure.getId(), floor.id())))
                 .limit(2)
                 .toList();

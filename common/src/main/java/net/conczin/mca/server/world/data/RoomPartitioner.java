@@ -21,15 +21,8 @@ final class RoomPartitioner {
             .comparingInt((BlockPos pos) -> pos.getX())
             .thenComparingInt(pos -> pos.getZ())
             .thenComparingInt(pos -> pos.getY());
-    private static final Comparator<Component> COMPONENT_ORDER = Comparator
-            .comparingInt(Component::minX)
-            .thenComparingInt(Component::minZ)
-            .thenComparingInt(Component::minY)
-            .thenComparingInt(Component::maxX)
-            .thenComparingInt(Component::maxZ)
-            .thenComparingInt(Component::maxY)
-            .thenComparing((first, second) -> compareFloorCellSets(
-                    first.floorCells(), second.floorCells()));
+    private static final Comparator<Component> COMPONENT_ORDER = (first, second) ->
+            compareFloorCellSets(first.floorCells(), second.floorCells());
     private static final Comparator<Component> OWNER_ORDER =
             Comparator.comparingInt(Component::area).reversed()
                     .thenComparing(COMPONENT_ORDER);
@@ -277,30 +270,6 @@ final class RoomPartitioner {
                             .thenComparingInt(BlockPos::getZ))
                     .orElse(source)
                     .immutable();
-        }
-
-        int minX() {
-            return cells.stream().mapToInt(cell -> cell.feet().getX()).min().orElse(0);
-        }
-
-        int minY() {
-            return cells.stream().mapToInt(cell -> cell.feet().getY()).min().orElse(0);
-        }
-
-        int minZ() {
-            return cells.stream().mapToInt(cell -> cell.feet().getZ()).min().orElse(0);
-        }
-
-        int maxX() {
-            return cells.stream().mapToInt(cell -> cell.feet().getX()).max().orElse(0);
-        }
-
-        int maxY() {
-            return cells.stream().mapToInt(cell -> cell.feet().getY()).max().orElse(0);
-        }
-
-        int maxZ() {
-            return cells.stream().mapToInt(cell -> cell.feet().getZ()).max().orElse(0);
         }
 
         Set<BlockPos> floorCells() {

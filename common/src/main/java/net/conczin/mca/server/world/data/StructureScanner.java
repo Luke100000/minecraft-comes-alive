@@ -156,7 +156,7 @@ final class StructureScanner {
                 selected = new FloorHandoff(candidate, scan);
                 selectedDistance = distance;
                 selectedY = candidate.getY();
-            } else if (!selected.scan().floor().sameFootprint(scan.floor())) {
+            } else if (!selected.scan().floor().sameCellPositions(scan.floor())) {
                 return Optional.empty();
             }
         }

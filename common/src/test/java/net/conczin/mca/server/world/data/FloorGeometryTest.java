@@ -42,6 +42,25 @@ class FloorGeometryTest {
     }
 
     @Test
+    void cellPositionComparisonUsesExactXyzButIgnoresConnectorMetadata() {
+        BlockPos first = new BlockPos(0, 64, 0);
+        BlockPos second = new BlockPos(1, 65, 0);
+        FloorGeometry geometry = new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(first, 67),
+                new FloorGeometry.Cell(second, 68)), Map.of());
+        FloorGeometry sameCellsWithDoor = new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(first, 70),
+                new FloorGeometry.Cell(second, 72)), Map.of(second, FloorConnector.Type.DOOR));
+        FloorGeometry sameFootprintDifferentHeight = new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(new BlockPos(0, 70, 0), 73),
+                new FloorGeometry.Cell(new BlockPos(1, 71, 0), 74)), Map.of());
+
+        assertTrue(geometry.sameCellPositions(sameCellsWithDoor));
+        assertTrue(geometry.sameFootprint(sameFootprintDifferentHeight));
+        assertFalse(geometry.sameCellPositions(sameFootprintDifferentHeight));
+    }
+
+    @Test
     void exactGeometryIncludesConnectorMetadata() {
         BlockPos door = new BlockPos(1, 64, 0);
         Set<FloorGeometry.Cell> cells = Set.of(cell(0, 64, 0), cell(1, 64, 0));

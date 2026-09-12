@@ -90,7 +90,14 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
     }
 
     boolean overlapsSameSemanticBand(StructureFloor other) {
-        return sameSemanticBand(other) && overlapsFootprint(other);
+        return other != null && matchesSemanticStorey(other.geometry);
+    }
+
+    /** Persisted-Floor identity matching for a freshly observed exact geometry. */
+    boolean matchesSemanticStorey(FloorGeometry other) {
+        return other != null
+                && sameSemanticBand(anchorY(), other.anchorY())
+                && geometry.footprintIntersectionArea(other) > 0;
     }
 
     int verticalGapTo(StructureFloor other) {

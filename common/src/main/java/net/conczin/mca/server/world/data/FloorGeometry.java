@@ -120,6 +120,11 @@ final class FloorGeometry {
         return other != null && cellsByColumn.keySet().equals(other.cellsByColumn.keySet());
     }
 
+    /** Exact Floor-cell membership, intentionally ignoring ceiling and connector metadata. */
+    boolean sameCellPositions(FloorGeometry other) {
+        return other != null && cellsByPosition.keySet().equals(other.cellsByPosition.keySet());
+    }
+
     boolean sameExactGeometry(FloorGeometry other) {
         return other != null
                 && cells.equals(other.cells)

@@ -11,6 +11,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StructureFloorTest {
     @Test
@@ -115,5 +116,23 @@ class StructureFloorTest {
 
         assertEquals(91, structure.semanticCeilingY(lower));
         assertEquals(95, structure.semanticCeilingY(upper));
+    }
+
+    @Test
+    void persistedStoreyMatchOwnsBandAndFootprintPolicy() {
+        StructureFloor persisted = TestStructureFloors.create(0, 0, new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(new BlockPos(0, 64, 0), 68),
+                new FloorGeometry.Cell(new BlockPos(1, 64, 0), 68)), java.util.Map.of()));
+        FloorGeometry overlappingUneven = new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(new BlockPos(1, 66, 0), 70),
+                new FloorGeometry.Cell(new BlockPos(2, 66, 0), 70)), java.util.Map.of());
+        FloorGeometry differentStorey = new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(new BlockPos(1, 68, 0), 72)), java.util.Map.of());
+        FloorGeometry disjoint = new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(new BlockPos(4, 65, 0), 69)), java.util.Map.of());
+
+        assertTrue(persisted.matchesSemanticStorey(overlappingUneven));
+        assertFalse(persisted.matchesSemanticStorey(differentStorey));
+        assertFalse(persisted.matchesSemanticStorey(disjoint));
     }
 }

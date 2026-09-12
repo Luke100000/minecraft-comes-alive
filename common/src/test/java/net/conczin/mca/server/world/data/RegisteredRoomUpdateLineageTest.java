@@ -155,6 +155,37 @@ class RegisteredRoomUpdateLineageTest {
     }
 
     @Test
+    void splitLineageUsesCanonicalExactCellsInsteadOfAggregateBounds() {
+        BlockPos currentCell = new BlockPos(10, 64, 0);
+        Set<BlockPos> boundsFirstCells = Set.of(
+                new BlockPos(0, 64, 10), new BlockPos(1, 64, 0));
+        Set<BlockPos> exactFirstCells = Set.of(
+                new BlockPos(0, 64, 5), new BlockPos(2, 64, 5));
+        Building current = room(10, Set.of(currentCell));
+        Building previous = room(20, java.util.stream.Stream.concat(
+                        boundsFirstCells.stream(), exactFirstCells.stream())
+                .collect(java.util.stream.Collectors.toSet()));
+        Building freshCurrent = room(-1, Set.of(currentCell));
+        Building boundsFirst = room(-1, boundsFirstCells);
+        Building exactFirst = room(-1, exactFirstCells);
+        FloorGeometry floor = new FloorGeometry(java.util.stream.Stream.concat(
+                        java.util.stream.Stream.of(new FloorGeometry.Cell(currentCell, 68)),
+                        java.util.stream.Stream.concat(boundsFirstCells.stream(), exactFirstCells.stream())
+                                .map(pos -> new FloorGeometry.Cell(pos, 68)))
+                .collect(java.util.stream.Collectors.toSet()), Map.of());
+
+        RegisteredRoomReconciler.Result boundsInputFirst = RegisteredRoomReconciler.reconcile(
+                currentCell, 10, 10,
+                List.of(current, previous), List.of(boundsFirst, freshCurrent, exactFirst), floor).orElseThrow();
+        RegisteredRoomReconciler.Result exactInputFirst = RegisteredRoomReconciler.reconcile(
+                currentCell, 10, 10,
+                List.of(current, previous), List.of(exactFirst, freshCurrent, boundsFirst), floor).orElseThrow();
+
+        assertEquals(exactFirstCells, componentForRoom(boundsInputFirst, 20).getFloorCells());
+        assertEquals(exactFirstCells, componentForRoom(exactInputFirst, 20).getFloorCells());
+    }
+
+    @Test
     void addRoomCanClaimOneSideOfAStaleRoomSplitByANewDoor() {
         Building previous = room(12, 0, 4);
         Building retained = room(-1, 0, 2);

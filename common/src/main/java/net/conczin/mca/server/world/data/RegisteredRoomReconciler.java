@@ -157,15 +157,8 @@ final class RegisteredRoomReconciler {
                 component.getFloorCells(), previous.getFloorCells()) > 0;
     }
 
-    private static final Comparator<Building> COMPONENT_ORDER = Comparator
-            .comparingInt((Building room) -> room.getRawPos0().getX())
-            .thenComparingInt(room -> room.getRawPos0().getZ())
-            .thenComparingInt(room -> room.getRawPos0().getY())
-            .thenComparingInt(room -> room.getRawPos1().getX())
-            .thenComparingInt(room -> room.getRawPos1().getZ())
-            .thenComparingInt(room -> room.getRawPos1().getY())
-            .thenComparing((first, second) -> RoomPartitioner.compareFloorCellSets(
-                    first.getFloorCells(), second.getFloorCells()));
+    private static final Comparator<Building> COMPONENT_ORDER = (first, second) ->
+            RoomPartitioner.compareFloorCellSets(first.getFloorCells(), second.getFloorCells());
 
     record Assignment(Building component, Building previous) {
         int roomId() {

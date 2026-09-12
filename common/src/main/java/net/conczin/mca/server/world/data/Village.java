@@ -774,8 +774,7 @@ public class Village implements Iterable<Building> {
             if (StructureFloor.sameSemanticBand(candidate.anchorY(), connected.anchorY())) continue;
             for (Structure structure : structures.values()) {
                 for (StructureFloor floor : structure.getFloors()) {
-                    if (StructureFloor.sameSemanticBand(connected.anchorY(), floor.anchorY())
-                            && connected.footprintIntersectionArea(floor.geometry()) > 0) {
+                    if (floor.matchesSemanticStorey(connected)) {
                         connections.add(new StructureConnector.VerticalConnection(structure, floor));
                     }
                 }
