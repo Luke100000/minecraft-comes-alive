@@ -120,6 +120,13 @@ public class FamilyTreeSearchScreen extends Screen {
         if (!MCA.isBlankString(v)) {
             Network.sendToServer(new FamilyTreeUUIDLookup(v));
         }
+        else {
+            assert minecraft != null;
+            if (minecraft.player != null) {
+                UUID playerUUID = minecraft.player.getUUID();
+                Network.sendToServer(new FamilyTreeUUIDLookup(playerUUID));
+            }
+        }
     }
 
     public void setList(List<FamilyTreeSearchEntry> list) {
