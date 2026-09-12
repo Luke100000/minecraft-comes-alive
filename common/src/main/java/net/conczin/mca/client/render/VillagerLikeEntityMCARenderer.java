@@ -103,6 +103,9 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
         float height = visuals.rawVerticalScaleFactor();
         float width = visuals.rawHorizontalScaleFactor();
         matrices.scale(width, height, width);
+        if (visuals.baby() && !state.isPassenger) {
+            matrices.translate(0.0F, 0.6F, 0.0F);
+        }
     }
 
     @Nullable

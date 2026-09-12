@@ -18,11 +18,19 @@ import java.util.List;
 import java.util.function.Predicate;
 
 public final class PathfindingBlacklist {
+    private static int cachedSize = -1;
+    private static int cachedHash;
+    private static List<Predicate<BlockState>> cachedMatchers = List.of();
     private static int cachedCollisionSize = -1;
     private static int cachedCollisionHash;
     private static List<Predicate<BlockState>> cachedCollisionMatchers = List.of();
 
     private PathfindingBlacklist() {
+    }
+
+    public static boolean isBlocked(BlockState state) {
+        refreshCacheIfNeeded();
+        return matches(state, cachedMatchers);
     }
 
     public static boolean overlapsSpecialCollisionBlock(BlockGetter level, AABB box) {
@@ -58,6 +66,20 @@ public final class PathfindingBlacklist {
         return false;
     }
 
+    private static void refreshCacheIfNeeded() {
+        List<String> configured = Config.getInstance().villagerPathfindingBlacklist;
+        int size = configured.size();
+        int hash = configured.hashCode();
+
+        if (size == cachedSize && hash == cachedHash) {
+            return;
+        }
+
+        cachedMatchers = buildMatchers(configured, "villagerPathfindingBlacklist");
+        cachedSize = size;
+        cachedHash = hash;
+    }
+
     private static void refreshCollisionCacheIfNeeded() {
         List<String> configured = Config.getInstance().villagerPathfindingCollisionCheckBlocks;
         int size = configured.size();
@@ -67,6 +89,12 @@ public final class PathfindingBlacklist {
             return;
         }
 
+        cachedCollisionMatchers = buildMatchers(configured, "villagerPathfindingCollisionCheckBlocks");
+        cachedCollisionSize = size;
+        cachedCollisionHash = hash;
+    }
+
+    private static List<Predicate<BlockState>> buildMatchers(List<String> configured, String configName) {
         List<Predicate<BlockState>> matchers = new ArrayList<>();
         for (String entry : configured) {
             if (entry == null || entry.isBlank()) {
@@ -77,7 +105,7 @@ public final class PathfindingBlacklist {
                 Identifier identifier = Identifier.parse(entry.substring(1));
                 TagKey<Block> tag = TagKey.create(Registries.BLOCK, identifier);
                 if (RegistryHelper.isTagEmpty(tag)) {
-                    throw new JsonSyntaxException("Unknown block tag in villagerPathfindingCollisionCheckBlocks '" + identifier + "'");
+                    throw new JsonSyntaxException("Unknown block tag in " + configName + " '" + identifier + "'");
                 }
 
                 matchers.add(state -> state.is(tag));
@@ -87,9 +115,7 @@ public final class PathfindingBlacklist {
             }
         }
 
-        cachedCollisionMatchers = List.copyOf(matchers);
-        cachedCollisionSize = size;
-        cachedCollisionHash = hash;
+        return List.copyOf(matchers);
     }
 
     private static int floorMin(double value) {

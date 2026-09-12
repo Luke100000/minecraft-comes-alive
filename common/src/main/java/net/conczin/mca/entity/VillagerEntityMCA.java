@@ -120,6 +120,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             VillagerEntityMCA.class,
             serializer -> SynchedEntityData.defineId(VillagerEntityMCA.class, serializer)
     )).build();
+    private static final int RECALCULATE_DIMENSIONS_EVERY_N_TICKS = 100;
     public final ConversationManager conversationManager = new ConversationManager(this);
     private String chatAIPrompt = "";
     final Identifier EXTRA_HEALTH_EFFECT_ID = MCA.locate("trait_health");
@@ -138,6 +139,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private int despawnDelay;
     private int burned;
     private long lastHit = 0;
+    private int prevVisualAge;
     private boolean ageStateEventsEnabled;
     private boolean interactedWith;
     private int lastAppliedHealthLevel = Integer.MIN_VALUE;
@@ -176,10 +178,22 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    public Vec3 handleRelativeFrictionAndCalculateMovement(Vec3 input, float friction) {
+        Vec3 movement = super.handleRelativeFrictionAndCalculateMovement(input, friction);
+        if (getNavigation() instanceof MCAGroundPathNavigation navigation) {
+            double controlledY = navigation.getControlledClimbableVelocity();
+            if (!Double.isNaN(controlledY)) {
+                return new Vec3(movement.x(), controlledY, movement.z());
+            }
+        }
+        return movement;
+    }
+
+    @Override
     public void setJumping(boolean jumping) {
         boolean navigationControlsClimb = this.getNavigation() instanceof MCAGroundPathNavigation navigation
-                && navigation.isControllingClimbable();
-        super.setJumping(jumping && !navigationControlsClimb);
+                && navigation.isControllingClimbableMovement();
+        super.setJumping(jumping && !this.onClimbable() && !navigationControlsClimb);
     }
 
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
@@ -859,6 +873,13 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         super.tick();
         mcaBrain.tickPanicAnimation();
 
+        int visualAge = getVisualAge();
+        if (visualAge < 0
+                && visualAge / RECALCULATE_DIMENSIONS_EVERY_N_TICKS != prevVisualAge / RECALCULATE_DIMENSIONS_EVERY_N_TICKS) {
+            prevVisualAge = visualAge;
+            refreshDimensions();
+        }
+
         if (level().isClientSide()) {
             // procreate anim
             if (relations.isProcreating()) {
@@ -1216,7 +1237,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public float getVoicePitch() {
         float r = (random.nextFloat() - 0.5f) * 0.05f;
         float g = (genetics.getGene(Genetics.VOICE) - 0.5f) * 0.3f;
-        float a = Mth.lerp(AgeState.getDelta(tickCount), getAgeState().getPitch(), getAgeState().getNext().getPitch());
+        float a = Mth.lerp(AgeState.getDelta(getVisualAge()), getAgeState().getPitch(), getAgeState().getNext().getPitch());
         return a + r + g;
     }
 

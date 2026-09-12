@@ -1,5 +1,6 @@
 package net.conczin.mca.server.world.data;
 
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Memories;
@@ -170,9 +171,14 @@ public class Village implements Iterable<Building> {
     }
 
     public List<String> getResidents(int building) {
-        return getBuilding(building).map(value -> residentHomes.entrySet().stream().filter(e -> {
-            return value.getBlockPosStream().anyMatch(pos -> pos.asLong() == e.getValue());
-        }).map(k -> residentNames.getOrDefault(k.getKey(), "Unknown")).collect(Collectors.toList())).orElseGet(List::of);
+        return getBuilding(building).map(value -> {
+            LongOpenHashSet buildingPositions = new LongOpenHashSet(value.getBlockCount());
+            value.getBlockPosStream().forEach(pos -> buildingPositions.add(pos.asLong()));
+            return residentHomes.entrySet().stream()
+                    .filter(entry -> buildingPositions.contains(entry.getValue().longValue()))
+                    .map(entry -> residentNames.getOrDefault(entry.getKey(), "Unknown"))
+                    .collect(Collectors.toList());
+        }).orElseGet(List::of);
     }
 
     public float getTaxes() {
@@ -418,7 +424,7 @@ public class Village implements Iterable<Building> {
 
         Optional<GlobalPos> home = e.getResidency().getHome();
         boolean accepted = true;
-        if (home.isPresent()) {
+        if (home.isPresent() && home.get().dimension().equals(world.dimension())) {
             long homePosition = home.get().pos().asLong();
             if (authoritativeHomeClaim) {
                 ResidentHomeAssignments.claimAuthoritatively(residentHomes, resident, homePosition);
