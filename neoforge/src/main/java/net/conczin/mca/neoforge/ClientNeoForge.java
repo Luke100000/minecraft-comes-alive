@@ -50,6 +50,7 @@ public final class ClientNeoForge extends ClientProxyAbstractImpl {
         }
         event.registerEntityRenderer(EntitiesMCA.GRIM_REAPER, GrimReaperRenderer::new);
         event.registerEntityRenderer(EntitiesMCA.CRIB, CribEntityRenderer::new);
+        event.registerEntityRenderer(EntitiesMCA.FISHING_BOBBER, MCAFishingBobberRenderer::new);
     }
 
     @SubscribeEvent
