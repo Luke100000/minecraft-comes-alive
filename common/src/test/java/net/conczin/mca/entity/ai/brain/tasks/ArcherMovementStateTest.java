@@ -58,10 +58,16 @@ class ArcherMovementStateTest {
     }
 
     @Test
+    void approachDoesNotDropAtTinyRangeBoundaryCrossing() {
+        assertEquals(APPROACH, selectBaseState(HOLD, 226, 100, 0, 225, 40));
+        assertEquals(APPROACH, selectBaseState(APPROACH, 224, 100, 0, 225, 40));
+    }
+
+    @Test
     void strafeRequiresStableHoldAndExpiredCooldown() {
-        assertFalse(shouldStartStrafe(39, 0));
-        assertFalse(shouldStartStrafe(40, 1));
-        assertTrue(shouldStartStrafe(40, 0));
+        assertFalse(shouldStartStrafe(19, 0));
+        assertFalse(shouldStartStrafe(20, 1));
+        assertTrue(shouldStartStrafe(20, 0));
     }
 
     @Test

@@ -26,6 +26,7 @@ final class RangedCombatPositioning {
     private static final int FIRING_CANDIDATE_ATTEMPTS = 8;
     private static final int FIRING_HORIZONTAL_RANGE = 8;
     private static final int FIRING_VERTICAL_RANGE = 4;
+    private static final double FIRING_LATERAL_STEP = 2.0D;
     private static final int EMERGENCY_ESCAPE_DIRECTIONS = 16;
     private static final double[] EMERGENCY_ESCAPE_RADII = {2.0D, 4.0D, 6.0D, 8.0D};
     private static final double NEARBY_THREAT_RANGE_SQUARED = 256.0D;
@@ -48,6 +49,7 @@ final class RangedCombatPositioning {
         List<LivingEntity> threats = new ArrayList<>();
         entity.getBrain().getMemory(MemoryModuleType.NEAREST_LIVING_ENTITIES).ifPresent(nearby -> nearby.stream()
                 .filter(candidate -> isNearbyMovementThreat(entity, candidate))
+                .filter(entity.getSensing()::hasLineOfSight)
                 .forEach(threats::add));
 
         if (fallback != null
@@ -189,19 +191,30 @@ final class RangedCombatPositioning {
             minimumThreatDistanceSquared = minimumThreatDistance * minimumThreatDistance;
         }
 
+        Optional<Vec3> preferred = findPreferredLateralFiringPosition(
+                entity,
+                target,
+                movementThreat,
+                attackRangeSquared,
+                minimumTargetDistanceSquared,
+                minimumThreatDistanceSquared
+        );
+        if (preferred.isPresent()) {
+            return preferred;
+        }
+
         for (int i = 0; i < FIRING_CANDIDATE_ATTEMPTS; i++) {
             Vec3 candidate = LandRandomPos.getPos(entity, FIRING_HORIZONTAL_RANGE, FIRING_VERTICAL_RANGE);
-            double candidateTargetDistanceSquared = candidate == null
-                    ? 0.0D
-                    : candidate.distanceToSqr(target.position());
             if (candidate == null
-                    || !isWalkableDestination(entity, candidate)
-                    || !hasStandingSpace(entity, candidate)
-                    || candidateTargetDistanceSquared > attackRangeSquared
-                    || candidateTargetDistanceSquared < minimumTargetDistanceSquared
-                    || movementThreat != null && (candidate.distanceToSqr(movementThreat.position()) < ArcherMovementTask.KITE_ENTER_DISTANCE_SQUARED
-                    || candidate.distanceToSqr(movementThreat.position()) < minimumThreatDistanceSquared)
-                    || !hasLineOfSight(entity, candidate, target)) {
+                    || !isValidFiringPosition(
+                    entity,
+                    target,
+                    movementThreat,
+                    attackRangeSquared,
+                    minimumTargetDistanceSquared,
+                    minimumThreatDistanceSquared,
+                    candidate
+            )) {
                 continue;
             }
 
@@ -213,6 +226,81 @@ final class RangedCombatPositioning {
         }
 
         return Optional.ofNullable(best);
+    }
+
+    private static Optional<Vec3> findPreferredLateralFiringPosition(
+            PathfinderMob entity,
+            LivingEntity target,
+            LivingEntity movementThreat,
+            double attackRangeSquared,
+            double minimumTargetDistanceSquared,
+            double minimumThreatDistanceSquared
+    ) {
+        Vec3 towardTarget = target.position().subtract(entity.position()).multiply(1.0D, 0.0D, 1.0D);
+        if (towardTarget.lengthSqr() < 1.0E-6D) {
+            return Optional.empty();
+        }
+
+        Vec3 lateral = new Vec3(-towardTarget.z, 0.0D, towardTarget.x).normalize();
+        double preferredSign = (entity.getUUID().getLeastSignificantBits() & 1L) == 0L ? 1.0D : -1.0D;
+        for (double distance = FIRING_LATERAL_STEP; distance <= FIRING_HORIZONTAL_RANGE; distance += FIRING_LATERAL_STEP) {
+            Vec3 preferredCandidate = entity.position().add(lateral.scale(distance * preferredSign));
+            if (isValidFiringPosition(
+                    entity,
+                    target,
+                    movementThreat,
+                    attackRangeSquared,
+                    minimumTargetDistanceSquared,
+                    minimumThreatDistanceSquared,
+                    preferredCandidate
+            )) {
+                return Optional.of(preferredCandidate);
+            }
+
+            Vec3 oppositeCandidate = entity.position().add(lateral.scale(-distance * preferredSign));
+            if (isValidFiringPosition(
+                    entity,
+                    target,
+                    movementThreat,
+                    attackRangeSquared,
+                    minimumTargetDistanceSquared,
+                    minimumThreatDistanceSquared,
+                    oppositeCandidate
+            )) {
+                return Optional.of(oppositeCandidate);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static boolean isValidFiringPosition(
+            PathfinderMob entity,
+            LivingEntity target,
+            LivingEntity movementThreat,
+            double attackRangeSquared,
+            double minimumTargetDistanceSquared,
+            double minimumThreatDistanceSquared,
+            Vec3 candidate
+    ) {
+        if (!isWalkableDestination(entity, candidate) || !hasStandingSpace(entity, candidate)) {
+            return false;
+        }
+
+        double candidateTargetDistanceSquared = candidate.distanceToSqr(target.position());
+        if (candidateTargetDistanceSquared > attackRangeSquared
+                || candidateTargetDistanceSquared < minimumTargetDistanceSquared) {
+            return false;
+        }
+
+        if (movementThreat != null) {
+            double candidateThreatDistanceSquared = candidate.distanceToSqr(movementThreat.position());
+            if (candidateThreatDistanceSquared < ArcherMovementTask.KITE_ENTER_DISTANCE_SQUARED
+                    || candidateThreatDistanceSquared < minimumThreatDistanceSquared) {
+                return false;
+            }
+        }
+
+        return hasLineOfSight(entity, candidate, target);
     }
 
     static boolean isStrafeSideWalkable(PathfinderMob entity, float lateralDirection) {
@@ -241,8 +329,7 @@ final class RangedCombatPositioning {
         return candidate != entity
                 && RangedWeaponHelper.isValidAttackTarget(entity, candidate)
                 && Math.abs(entity.getY() - candidate.getY()) <= ArcherMovementTask.CLOSE_RANGE_VERTICAL_THREAT_DISTANCE
-                && GuardEnemiesSensor.isGuardEnemy(candidate, entity)
-                && entity.getSensing().hasLineOfSight(candidate);
+                && GuardEnemiesSensor.isGuardEnemy(candidate, entity);
     }
 
     private static double minimumDistanceSquared(Vec3 candidate, List<? extends LivingEntity> threats) {

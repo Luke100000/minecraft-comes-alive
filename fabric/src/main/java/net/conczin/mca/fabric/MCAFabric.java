@@ -82,6 +82,7 @@ public final class MCAFabric implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        BedPoiCompatibilityFabric.init();
         registerHelper(BuiltInRegistries.ITEM, ItemsMCA::registerItems);
         registerHelper(BuiltInRegistries.BLOCK, BlocksMCA::registerBlocks);
         registerHelper(BuiltInRegistries.SOUND_EVENT, SoundsMCA::registerSounds);

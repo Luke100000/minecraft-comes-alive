@@ -35,8 +35,9 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
     static final double CLOSE_RANGE_VERTICAL_THREAT_DISTANCE = 2.5D;
     private static final double KITE_SAFE_DISTANCE = 9.0D;
     private static final double EMERGENCY_SAFE_DISTANCE = 6.0D;
+    private static final double APPROACH_EXIT_RANGE_BUFFER = 1.0D;
 
-    private static final int MIN_HOLD_TICKS_BEFORE_STRAFE = 40;
+    private static final int MIN_HOLD_TICKS_BEFORE_STRAFE = 20;
     private static final int MIN_STRAFE_TICKS = 8;
     private static final int MAX_STRAFE_TICKS = 14;
     private static final int MIN_STRAFE_COOLDOWN = 40;
@@ -95,6 +96,14 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             }
             if (threatDistanceSquared < KITE_ENTER_DISTANCE_SQUARED) {
                 return new BaseStateDecision(RangedCombatState.KITE, "kite_close_threat");
+            }
+        }
+
+        if (currentState == RangedCombatState.APPROACH) {
+            double attackRange = Math.sqrt(attackRangeSquared);
+            double approachExitRange = Math.max(0.0D, attackRange - APPROACH_EXIT_RANGE_BUFFER);
+            if (targetDistanceSquared > approachExitRange * approachExitRange) {
+                return new BaseStateDecision(RangedCombatState.APPROACH, "approach_hysteresis");
             }
         }
         return new BaseStateDecision(RangedCombatState.HOLD, "hold");

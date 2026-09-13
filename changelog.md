@@ -21,6 +21,10 @@
   * Improved long-distance walking and transitions between floors.
   * Villagers now use exact room membership when deciding whether they have entered a target or favored building.
   * Smarter door/gate handling is now part of the normal pathfinding behaviour.
+* Fixed the harvesting chore so villagers prioritise mature crops instead of wandering toward empty farmland.
+  * Immature crops can be targeted for bonemeal before villagers move on to planting empty farmland.
+  * Empty farmland is now only targeted when the villager actually has plantable seeds.
+  * Villagers still plant available farmland normally when seeds are present.
 * Fixed workplace assignment and job POI ownership.
 * Fixed duplicate villager residency and bed ownership.
 * Improved HOME POI validation and repaired invalid resident-home assignments.

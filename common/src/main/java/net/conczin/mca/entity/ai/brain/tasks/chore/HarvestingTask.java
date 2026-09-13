@@ -114,15 +114,13 @@ public class HarvestingTask extends AbstractChoreTask {
             lastCropScan = villager.tickCount;
         }
 
-        //try to find a planting task
-        currentPos = TaskUtils.getNearestPoint(villager.blockPosition(), plantable);
+        currentPos = TaskUtils.getNearestPoint(villager.blockPosition(), harvestable);
         if (currentPos == null) {
-            currentPos = TaskUtils.getNearestPoint(villager.blockPosition(), harvestable);
+            currentPos = TaskUtils.getNearestPoint(villager.blockPosition(), bonemealable);
             if (currentPos == null) {
-                currentPos = TaskUtils.getNearestPoint(villager.blockPosition(), bonemealable);
-                if (currentPos != null) {
-                    swapItem(stack -> stack.getItem() instanceof BoneMealItem);
-                }
+                currentPos = hasSeeds() ? TaskUtils.getNearestPoint(villager.blockPosition(), plantable) : null;
+            } else {
+                swapItem(stack -> stack.getItem() instanceof BoneMealItem);
             }
         }
     }
@@ -160,6 +158,16 @@ public class HarvestingTask extends AbstractChoreTask {
 
     private boolean hasBoneMeal() {
         return InventoryUtils.contains(villager.getInventory(), BoneMealItem.class);
+    }
+
+    private boolean hasSeeds() {
+        return InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), HarvestingTask::isPlantableCropItem) >= 0;
+    }
+
+    private static boolean isPlantableCropItem(ItemStack stack) {
+        return !stack.isEmpty()
+               && stack.getItem() instanceof BlockItem blockItem
+               && blockItem.getBlock() instanceof CropBlock;
     }
 
     private void searchUnusedFarmLand(int rangeX, int rangeY) {
@@ -240,7 +248,7 @@ public class HarvestingTask extends AbstractChoreTask {
 
         if (stack.isEmpty()) {
             stack = InventoryUtils.stream(villager.getInventory())
-                    .filter(s -> !s.isEmpty() && s.getItem() instanceof BlockItem blockItem && blockItem.getBlock() instanceof CropBlock)
+                    .filter(HarvestingTask::isPlantableCropItem)
                     .findAny();
         }
 
