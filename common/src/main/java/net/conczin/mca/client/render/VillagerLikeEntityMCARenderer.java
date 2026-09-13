@@ -32,6 +32,7 @@ import java.util.Set;
 public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
     extends HumanoidMobRenderer<T, VillagerRenderState, VillagerEntityModelMCA> {
     private static final Identifier TEXTURE = Identifier.parse("textures/entity/steve.png");
+    private static final float BABY_SITTING_OFFSET_Y = 0.6F;
 
     public VillagerLikeEntityMCARenderer(EntityRendererProvider.Context ctx, VillagerEntityModelMCA model) {
         super(ctx, model, 0.5F);
@@ -104,7 +105,7 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>>
         float width = visuals.rawHorizontalScaleFactor();
         matrices.scale(width, height, width);
         if (visuals.baby() && !state.isPassenger) {
-            matrices.translate(0.0F, 0.6F, 0.0F);
+            matrices.translate(0.0F, BABY_SITTING_OFFSET_Y, 0.0F);
         }
     }
 
