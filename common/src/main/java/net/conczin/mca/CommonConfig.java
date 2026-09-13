@@ -42,6 +42,11 @@ public class CommonConfig {
     public boolean allowTraitCustomizationInDestiny = true;
 
     /**
+     * Eye texture resource IDs disabled by the server. This list is synced to clients.
+     */
+    public List<String> disabledEyeTextures = List.of();
+
+    /**
      * Locations where the Destiny feature can teleport the player.
      * <a href="https://github.com/Luke100000/minecraft-comes-alive/wiki/Custom-Rumors-and-Destiny-Structures">Wiki</a>
      */
