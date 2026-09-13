@@ -40,6 +40,9 @@ public class FamilyTreeScreen extends Screen {
     private TreeNode focused;
     private double scrollX;
     private double scrollY;
+    private float zoom = 1.0F;  
+    private static final float MIN_ZOOM = 0.25F;
+    private static final float MAX_ZOOM = 2.0F;
 
     public FamilyTreeScreen(UUID entityId) {
         super(Component.translatable("gui.family_tree.title"));
@@ -104,6 +107,24 @@ public class FamilyTreeScreen extends Screen {
     }
 
     @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        float zoomDelta = (float) scrollY * 0.1F;
+        float newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom + zoomDelta));
+
+        if (newZoom != zoom) {
+            double worldMouseX = (mouseX - width / 2.0 - this.scrollX) / zoom;
+            double worldMouseY = (mouseY - height / 2.0 - this.scrollY) / zoom;
+
+            zoom = newZoom;
+
+            this.scrollX = mouseX - width / 2.0 - worldMouseX * zoom;
+            this.scrollY = mouseY - height / 2.0 - worldMouseY * zoom;
+        }
+
+        return true;
+    }
+
+    @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         super.render(context, mouseX, mouseY, delta);
 
@@ -129,7 +150,13 @@ public class FamilyTreeScreen extends Screen {
         int xx = (int) (scrollX + width / 2.0);
         int yy = (int) (scrollY + height / 2.0);
         matrices.translate(xx, yy, 0);
-        tree.render(context, mouseX - xx, mouseY - yy);
+        matrices.scale(zoom, zoom, 1.0F);  
+
+        // Adjust mouse coords for the zoom
+        float adjustedMouseX = (mouseX - xx) / zoom;
+        float adjustedMouseY = (mouseY - yy) / zoom;
+
+        tree.render(context, (int) adjustedMouseX, (int) adjustedMouseY);
         matrices.popPose();
 
         GL11.glDisable(GL11.GL_SCISSOR_TEST);
