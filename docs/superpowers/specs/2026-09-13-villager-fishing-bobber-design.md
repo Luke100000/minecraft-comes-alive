@@ -72,7 +72,9 @@ Create:
 
 `common/src/main/java/net/conczin/mca/entity/MCAFishingBobberEntity.java`
 
-The entity extends `Projectile` rather than `FishingHook`.
+The entity extends `ThrowableProjectile` rather than `FishingHook`.
+
+In the 1.21.1 mappings used by this branch, the direct `Projectile(EntityType, Level)` constructor is package-private, while `ThrowableProjectile` exposes the protected constructors MCA needs. `ThrowableProjectile` still supplies normal `Projectile` ownership, spawn-packet owner synchronization, `shoot(...)`, gravity, and basic collision/movement behavior, so no access widener or mixin is required.
 
 ### Registration
 
@@ -97,7 +99,7 @@ The bobber is transient and must not survive world saves or be summonable as nor
 
 The owner is the fishing `VillagerEntityMCA`.
 
-Use normal `Projectile.setOwner(...)` ownership. In 1.21.1 `Projectile` already includes the owner entity ID in its spawn packet and resolves that owner on the client in `recreateFromPacket(...)`, so the MCA bobber does not need custom owner synchronization.
+Use normal inherited `Projectile.setOwner(...)` ownership. In 1.21.1 `Projectile` already includes the owner entity ID in its spawn packet and resolves that owner on the client in `recreateFromPacket(...)`, so the MCA bobber does not need custom owner synchronization.
 
 The bobber should expose a focused helper such as:
 
@@ -114,27 +116,35 @@ Do not store the bobber on `VillagerEntityMCA` globally. `FishingTask` owns the 
 
 ### Cast trajectory
 
-The initial cast should visually match vanilla player fishing as closely as is useful.
+The cast should look like player fishing but must aim from MCA's already-known `targetWater`, not trust the villager's current pitch/yaw to land the bobber.
 
-Reuse the trajectory math from the 1.21.1 `FishingHook(Player, ...)` constructor, substituting the MCA villager as the living owner:
+`FishingTask` already chooses an exact water block before casting and only casts once the villager is within the existing `distanceToSqr(...) < 5.0D` threshold. Use that target as the authoritative destination.
 
-- spawn near the villager's eye position;
-- use villager X/Y rotation;
-- use the same 0.3-block rear/side spawn offset;
-- use the same normalized launch vector and random triangular spread;
-- set yaw/pitch from the resulting motion.
+When creating the bobber:
 
-The villager already looks at `targetWater` immediately before casting, so this produces a natural cast toward the chosen water without adding a separate aiming subsystem.
+1. spawn it near the villager's eye/rod-hand side using a small vanilla-like rear/side offset;
+2. compute the destination at the center of `targetWater` horizontally;
+3. compute destination Y from the target block's actual fluid surface with `world.getFluidState(targetWater).getHeight(world, targetWater)`;
+4. form a direction vector from the spawn position to that water-surface point;
+5. add a small upward arc component so the cast visibly rises before landing instead of travelling like a straight projectile;
+6. call inherited `shoot(...)` with vanilla-like speed and only small inaccuracy;
+7. let `shoot(...)` derive bobber yaw/pitch from the resulting motion.
+
+`villager.lookAt(targetWater)` remains because it makes the villager face the cast naturally, but it is presentation only. Projectile targeting comes from the exact water coordinates.
+
+This makes the normal cast deterministic enough to land in the selected nearby water while preserving a fishing-rod-like arc.
 
 ### Bobber movement
 
 Implement only the visual subset required by the chore:
 
-- while flying, apply normal projectile movement/gravity and collision handling sufficient for the cast to travel visibly;
+- while flying, use `ThrowableProjectile`'s normal projectile movement/gravity and collision handling so the cast travels visibly;
 - when the bobber reaches water, transition to a bobbing state;
 - while bobbing, remain near the water surface with small vanilla-like vertical stabilization rather than sinking;
 - do not run vanilla fish-attraction, nibble, open-water, hooked-entity, loot, XP, statistic, or advancement logic;
-- if it hits unsuitable terrain and cannot reach water, allow `FishingTask` to replace/recast it rather than building a second recovery system into the entity.
+- if it lands on ground or collides before reaching water, discard it so `FishingTask` can replace/recast it;
+- if it has not reached water within 40 ticks of being cast, discard it so a bad trajectory cannot leave the chore stuck;
+- if it moves more than 32 blocks from its owner, discard it as invalid.
 
 The implementation should copy only the minimum movement behavior needed from vanilla `FishingHook`. Keep this entity much smaller than vanilla `FishingHook`.
 
@@ -229,7 +239,7 @@ When the villager is close enough:
 
 1. stop navigation;
 2. look at `targetWater`;
-3. if there is no live owned bobber, swing the dominant hand and spawn one;
+3. if there is no live owned bobber, swing the dominant hand and spawn one aimed directly at the selected water surface;
 4. increment the existing catch timer while the cast remains active.
 
 Do not spawn multiple bobbers for one villager.
