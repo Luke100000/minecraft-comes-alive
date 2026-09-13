@@ -16,7 +16,7 @@ import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
-import javax.annotation.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 public final class MCAFishingBobberEntity extends ThrowableProjectile {
     private static final int MAX_FLYING_TICKS = 40;
@@ -65,7 +65,7 @@ public final class MCAFishingBobberEntity extends ThrowableProjectile {
         double horizontalDistance = direction.horizontalDistance();
 
         setPos(origin.x, origin.y, origin.z);
-        shoot(direction.x, direction.y + horizontalDistance * 0.25, direction.z, 0.6F, 0.5F);
+        shoot(direction.x, direction.y + horizontalDistance * 0.10, direction.z, 0.6F, 0.1F);
     }
 
     @Override
