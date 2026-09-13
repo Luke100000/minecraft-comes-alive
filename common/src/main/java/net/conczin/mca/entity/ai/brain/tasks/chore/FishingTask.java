@@ -1,13 +1,13 @@
 package net.conczin.mca.entity.ai.brain.tasks.chore;
 
 import com.google.common.collect.ImmutableMap;
+import net.conczin.mca.entity.MCAFishingBobberEntity;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Chore;
 import net.conczin.mca.entity.ai.TaskUtils;
 import net.conczin.mca.util.InventoryUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.item.FishingRodItem;
@@ -27,7 +27,7 @@ import java.util.List;
 public class FishingTask extends AbstractChoreTask {
 
     private BlockPos targetWater;
-    private boolean hasCastRod;
+    private MCAFishingBobberEntity bobber;
     private int ticks;
 
     public FishingTask() {
@@ -46,6 +46,11 @@ public class FishingTask extends AbstractChoreTask {
     }
 
     @Override
+    protected boolean timedOut(long time) {
+        return false;
+    }
+
+    @Override
     protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.start(world, villager, time);
         equipFishingRod(villager);
@@ -56,7 +61,14 @@ public class FishingTask extends AbstractChoreTask {
         super.tick(world, villager, time);
 
         if (!equipFishingRod(villager)) {
+            discardBobber();
             return;
+        }
+
+        if (targetWater != null && !world.getBlockState(targetWater).is(Blocks.WATER)) {
+            discardBobber();
+            targetWater = null;
+            ticks = 0;
         }
 
         if (targetWater == null) {
@@ -72,9 +84,14 @@ public class FishingTask extends AbstractChoreTask {
             villager.getNavigation().stop();
             villager.lookAt(targetWater);
 
-            if (!hasCastRod) {
+            if (bobber == null || bobber.isRemoved()) {
                 villager.swing(villager.getDominantHand());
-                hasCastRod = true;
+                bobber = MCAFishingBobberEntity.cast(world, villager, targetWater);
+                ticks = 0;
+            }
+
+            if (!bobber.isBobbing()) {
+                return;
             }
 
             ticks++;
@@ -84,6 +101,7 @@ public class FishingTask extends AbstractChoreTask {
                     ItemStack stack = getFishingLoot(world, villager);
 
                     villager.swing(villager.getDominantHand());
+                    discardBobber();
                     villager.getInventory().addItem(stack);
                     villager.getItemInHand(villager.getDominantHand()).hurtAndBreak(1, villager, villager.getDominantSlot());
                 }
@@ -129,8 +147,18 @@ public class FishingTask extends AbstractChoreTask {
         return loot.get(villager.getRandom().nextInt(loot.size())).copy();
     }
 
+    private void discardBobber() {
+        if (bobber != null && !bobber.isRemoved()) {
+            bobber.discard();
+        }
+        bobber = null;
+    }
+
     @Override
     protected void stop(ServerLevel world, VillagerEntityMCA villager, long time) {
+        discardBobber();
+        targetWater = null;
+        ticks = 0;
         clearChoreItem(villager);
     }
 }

@@ -21,6 +21,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.schedule.Activity;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -494,6 +495,9 @@ public final class VillageMourningGameTests {
     private static VillagerEntityMCA spawnVillager(GameTestHelper helper, BlockPos relativePos, String name) {
         BlockPos pos = helper.absolutePos(relativePos);
         helper.getLevel().getChunk(pos);
+        helper.getLevel().setBlock(pos.below(), Blocks.STONE.defaultBlockState(), 3);
+        helper.getLevel().setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
+        helper.getLevel().setBlock(pos.above(), Blocks.AIR.defaultBlockState(), 3);
         VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
                 .withAge(0)
                 .withPosition(Vec3.atBottomCenterOf(pos))

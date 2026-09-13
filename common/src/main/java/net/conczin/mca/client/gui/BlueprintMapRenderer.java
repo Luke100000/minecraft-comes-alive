@@ -8,7 +8,8 @@ import net.conczin.mca.client.gui.BlueprintMapGeometry.MapIconLayer;
 import net.conczin.mca.client.gui.BlueprintMapGeometry.MapConnectorLayer;
 import net.conczin.mca.client.gui.BlueprintMapGeometry.MapStructureLayer;
 import net.conczin.mca.client.gui.widget.WidgetUtils;
-import net.conczin.mca.client.render.JourneyMapIconBridge;
+import net.conczin.mca.client.render.DynamicSkinCache;
+import net.conczin.mca.client.render.VillagerVisuals;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.server.world.data.Building;
@@ -38,7 +39,6 @@ final class BlueprintMapRenderer {
     private static final int ROOM_SHADOW_COLOR = 0x50000000;
     private static final int PLAYER_MARKER_SIZE = 6;
     private static final int PLAYER_MARKER_EDGE_PADDING = 2;
-    private static final float PLAYER_MARKER_Z = 100.0F;
     private static final float CONNECTOR_GLYPH_CELL_FRACTION = 1.2F;
     private static final int CONNECTOR_MARKER_TEXT = 0xfff4f6f8;
     private static final int ROOM_FILL_ALPHA_ALL_FLOORS = 0x60;
@@ -228,6 +228,7 @@ final class BlueprintMapRenderer {
             }
         }
 
+        context.nextStratum();
         if (showBuildingIcons) {
             for (Building building : groupedIconBuildings) {
                 BuildingType buildingType = building.getBuildingType();
@@ -265,6 +266,7 @@ final class BlueprintMapRenderer {
         }
 
         context.disableScissor();
+        context.nextStratum();
         renderPlayerMarker(
                 context,
                 player,
@@ -399,28 +401,12 @@ final class BlueprintMapRenderer {
                                            BlueprintMapViewport viewport) {
         if (layers.stream().allMatch(layer -> layer.edges().isEmpty())) return;
 
-        Matrix3x2fStack matrices = context.pose();
-        matrices.popMatrix();
-        try {
-            for (OutlineLayer layer : layers) {
-                for (BlueprintMapFootprint.Edge edge : layer.edges()) {
-                    int x0 = (int)Math.round(viewport.screenX(edge.x0()));
-                    int y0 = (int)Math.round(viewport.screenY(edge.z0()));
-                    int x1 = (int)Math.round(viewport.screenX(edge.x1()));
-                    int y1 = (int)Math.round(viewport.screenY(edge.z1()));
-                    if (y0 == y1) {
-                        int minX = Math.min(x0, x1);
-                        int maxX = Math.max(x0, x1);
-                        context.fill(minX, y0, maxX + 1, y0 + 1, layer.color());
-                    } else {
-                        int minY = Math.min(y0, y1);
-                        int maxY = Math.max(y0, y1);
-                        context.fill(x0, minY, x0 + 1, maxY + 1, layer.color());
-                    }
-                }
+        for (OutlineLayer layer : layers) {
+            context.nextStratum();
+            for (BlueprintMapFootprint.Edge edge : layer.edges()) {
+                OutlineQuad quad = outlineQuad(edge, viewport.scale());
+                renderMapQuad(context, quad, layer.color());
             }
-        } finally {
-            pushWorldTransform(matrices, viewport);
         }
     }
 
@@ -457,9 +443,24 @@ final class BlueprintMapRenderer {
     private static void renderCellSpansMapSpace(GuiGraphicsExtractor context,
                                                 List<BlueprintMapFootprint.RowSpan> spans,
                                                 int color) {
+        if (spans.isEmpty()) return;
+
+        // 26.1 defers and re-sorts GUI rectangles by their transformed bounds. Keep each
+        // logical map layer in its own stratum so fractional camera movement cannot change
+        // the draw order of overlapping translucent cells.
+        context.nextStratum();
         for (BlueprintMapFootprint.RowSpan span : spans) {
             context.fill(span.minX(), span.z(), span.maxX() + 1, span.z() + 1, color);
         }
+    }
+
+    private static void renderMapQuad(GuiGraphicsExtractor context, OutlineQuad quad, int color) {
+        Matrix3x2fStack matrices = context.pose();
+        matrices.pushMatrix();
+        matrices.translate(quad.minX(), quad.minZ());
+        matrices.scale(quad.maxX() - quad.minX(), quad.maxZ() - quad.minZ());
+        context.fill(0, 0, 1, 1, color);
+        matrices.popMatrix();
     }
 
     private static void drawScaledBuildingIcon(GuiGraphicsExtractor context,
@@ -509,13 +510,13 @@ final class BlueprintMapRenderer {
                                         int x,
                                         int y,
                                         int size) {
-        Identifier mcaFace = MCAClient.getPlayerData(player.getUUID())
+        Identifier mcaSkin = MCAClient.getPlayerData(player.getUUID())
                 .filter(data -> data.getPlayerModel() != VillagerLike.PlayerModel.VANILLA)
-                .map(JourneyMapIconBridge::getOrCreateFaceIcon)
+                .map(VillagerVisuals::capture)
+                .map(DynamicSkinCache::getOrCreateStitchedSkin)
                 .orElse(null);
-        if (mcaFace != null) {
-            context.blit(RenderPipelines.GUI_TEXTURED, mcaFace, x, y,
-                    0.0F, 0.0F, size, size, 24, 24);
+        if (mcaSkin != null) {
+            PlayerFaceExtractor.extractRenderState(context, mcaSkin, x, y, size, true, false, -1);
         } else {
             PlayerFaceExtractor.extractRenderState(context, player.getSkin(), x, y, size);
         }

@@ -102,8 +102,6 @@ public final class DynamicSkinCache {
     }
 
     private static final Set<SkinKey> INCOMPLETE_CACHE = new HashSet<>();
-    private static final Set<SkinKey> INCOMPLETE_FACE_CACHE = new HashSet<>();
-
     private static final Map<SkinKey, Identifier> CACHE = new MaxSizeHashMap<>(128, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<SkinKey, Identifier> eldest) {
@@ -112,19 +110,6 @@ public final class DynamicSkinCache {
                 Identifier id = eldest.getValue();
                 Minecraft.getInstance().getTextureManager().release(id);
                 INCOMPLETE_CACHE.remove(eldest.getKey());
-            }
-            return remove;
-        }
-    };
-
-    private static final Map<SkinKey, Identifier> FACE_CACHE = new MaxSizeHashMap<>(128, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<SkinKey, Identifier> eldest) {
-            boolean remove = super.removeEldestEntry(eldest);
-            if (remove) {
-                Identifier id = eldest.getValue();
-                Minecraft.getInstance().getTextureManager().release(id);
-                INCOMPLETE_FACE_CACHE.remove(eldest.getKey());
             }
             return remove;
         }
@@ -171,88 +156,6 @@ public final class DynamicSkinCache {
             INCOMPLETE_CACHE.remove(key);
         }
         return newId;
-    }
-
-    public static Identifier getOrCreateCroppedFace(VillagerVisuals visuals) {
-        SkinKey key = SkinKey.from(visuals);
-        boolean missingAssets = isMissingImmersiveLibraryAssets(visuals);
-        Identifier cachedId = FACE_CACHE.get(key);
-        if (cachedId != null) {
-            if (!missingAssets && INCOMPLETE_FACE_CACHE.remove(key)) {
-                Minecraft.getInstance().getTextureManager().release(cachedId);
-                FACE_CACHE.remove(key);
-            } else {
-                return cachedId;
-            }
-        }
-
-        Identifier newId = generateCroppedFace(visuals, key);
-        FACE_CACHE.put(key, newId);
-        if (missingAssets) {
-            INCOMPLETE_FACE_CACHE.add(key);
-        } else {
-            INCOMPLETE_FACE_CACHE.remove(key);
-        }
-        return newId;
-    }
-
-    public static boolean isDynamicFaceIdentifier(Identifier id) {
-        return "mca".equals(id.getNamespace()) && id.getPath().startsWith("dynamic/icon/");
-    }
-
-    public static boolean isCachedFaceIdentifier(Identifier id) {
-        return FACE_CACHE.containsValue(id);
-    }
-
-    private static Identifier generateCroppedFace(VillagerVisuals visuals, SkinKey key) {
-        try {
-            Identifier stitchedId = getOrCreateStitchedSkin(visuals);
-            net.minecraft.client.renderer.texture.AbstractTexture texture =
-                Minecraft.getInstance().getTextureManager().getTexture(stitchedId);
-            if (!(texture instanceof DynamicTexture dynamicTexture)) {
-                return Identifier.parse("textures/entity/steve.png");
-            }
-
-            NativeImage base = dynamicTexture.getPixels();
-            if (base == null) {
-                return Identifier.parse("textures/entity/steve.png");
-            }
-
-            NativeImage face = new NativeImage(8, 8, true);
-            try {
-                // Create 8x8 base face image
-                for (int x = 0; x < 8; x++) {
-                    for (int y = 0; y < 8; y++) {
-                        face.setPixel(x, y, base.getPixel(8 + x, 8 + y));
-                    }
-                }
-
-                // Composite overlay (hat/hair/accessories layer) from (40, 8) to (47, 15)
-                for (int x = 0; x < 8; x++) {
-                    for (int y = 0; y < 8; y++) {
-                        int overlayPixel = base.getPixel(40 + x, 8 + y);
-                        SkinExporter.compositePixel(face, x, y, overlayPixel, 0xFFFFFFFF);
-                    }
-                }
-
-                // JourneyMap player face icons use a 24x24 nearest-neighbor crop.
-                NativeImage scaled = new NativeImage(24, 24, true);
-                for (int x = 0; x < 24; x++) {
-                    for (int y = 0; y < 24; y++) {
-                        scaled.setPixel(x, y, face.getPixel(x / 3, y / 3));
-                    }
-                }
-
-                Identifier newId = Identifier.fromNamespaceAndPath("mca", "dynamic/icon/" + keyId(key.getUniqueId()));
-                Minecraft.getInstance().getTextureManager().register(newId, new DynamicTexture(newId::toString, scaled));
-                return newId;
-            } finally {
-                face.close();
-            }
-        } catch (Exception e) {
-            MCA.LOGGER.error("Failed to generate dynamic cropped face icon", e);
-            return Identifier.parse("textures/entity/steve.png");
-        }
     }
 
     private static Identifier generateStitchedSkin(VillagerVisuals visuals, SkinKey key) {

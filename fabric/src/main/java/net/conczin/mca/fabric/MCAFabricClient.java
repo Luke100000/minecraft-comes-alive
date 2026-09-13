@@ -57,6 +57,7 @@ public final class MCAFabricClient extends ClientProxyAbstractImpl implements Cl
 
         EntityRenderers.register(EntitiesMCA.GRIM_REAPER, GrimReaperRenderer::new);
         EntityRenderers.register(EntitiesMCA.CRIB, CribEntityRenderer::new);
+        EntityRenderers.register(EntitiesMCA.FISHING_BOBBER, MCAFishingBobberRenderer::new);
 
         ParticleProviderRegistry.getInstance().register(ParticleTypesMCA.NEG_INTERACTION, InteractionParticle.Factory::new);
         ParticleProviderRegistry.getInstance().register(ParticleTypesMCA.POS_INTERACTION, InteractionParticle.Factory::new);

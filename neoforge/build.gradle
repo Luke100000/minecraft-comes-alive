@@ -119,6 +119,8 @@ tasks.named('processResources', ProcessResources) {
 
 tasks.named('jar') {
     exclude '**/*GameTests*.class'
+    exclude 'net/conczin/mca/neoforge/gametest/**'
+    exclude 'data/mca/structure/ported_1_21_1/**'
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
