@@ -23,6 +23,10 @@ import java.util.Set;
 /** Discovers one exact integer storey while using Minecraft surface heights only for movement. */
 final class SelectedFloorScanner {
     private static final double MAX_STEP_HEIGHT = 1.125D;
+    private static final Comparator<BlockPos> CELL_ORDER = Comparator
+            .comparingInt((BlockPos pos) -> pos.getX())
+            .thenComparingInt(BlockPos::getZ)
+            .thenComparingInt(BlockPos::getY);
     private static final Direction[] HORIZONTAL = {
             Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
     };
@@ -189,9 +193,7 @@ final class SelectedFloorScanner {
 
         for (Set<BlockPos> region : regions) {
             BlockPos representative = region.stream()
-                    .min(Comparator.comparingInt((BlockPos pos) -> pos.getX())
-                            .thenComparingInt(BlockPos::getZ)
-                            .thenComparingInt(BlockPos::getY))
+                    .min(CELL_ORDER)
                     .orElseThrow();
             SurfaceCell regionSeed = inspectSurfaceCell(world, representative, ceilings).orElse(null);
             if (regionSeed != null && reachesExterior(
@@ -246,19 +248,15 @@ final class SelectedFloorScanner {
         for (BlockPos pos : retained) {
             SurfaceCell current = inspectSurfaceCell(world, pos, ceilings).orElse(null);
             if (current == null) continue;
-            if (storeyRole(context, current, provider) == StoreyRole.EDGE) {
-                provider.steps(current).stream()
-                        .map(HorizontalStep::landing)
-                        .map(SurfaceCell::feet)
-                        .filter(candidate -> !retained.contains(candidate))
-                        .forEach(alternateSeeds::add);
-                continue;
+            StoreyRole currentRole = storeyRole(context, current, provider);
+            for (HorizontalStep step : provider.steps(current)) {
+                SurfaceCell candidate = step.landing();
+                if (currentRole == StoreyRole.EDGE) {
+                    if (!retained.contains(candidate.feet())) alternateSeeds.add(candidate.feet());
+                } else if (storeyRole(context, candidate, provider) == StoreyRole.OTHER) {
+                    alternateSeeds.add(candidate.feet());
+                }
             }
-            provider.steps(current).stream()
-                    .map(HorizontalStep::landing)
-                    .filter(candidate -> storeyRole(context, candidate, provider) == StoreyRole.OTHER)
-                    .map(SurfaceCell::feet)
-                    .forEach(alternateSeeds::add);
         }
         return Set.copyOf(alternateSeeds);
     }
@@ -267,28 +265,13 @@ final class SelectedFloorScanner {
             Set<BlockPos> floorCells,
             Set<BlockPos> boundaryCells,
             Map<BlockPos, List<BlockPos>> neighbors) {
+        Set<BlockPos> openCells = new HashSet<>(floorCells);
+        openCells.removeAll(boundaryCells);
         Set<BlockPos> visited = new HashSet<>();
         List<Set<BlockPos>> regions = new ArrayList<>();
-        for (BlockPos seed : floorCells.stream()
-                .sorted(Comparator.comparingInt((BlockPos pos) -> pos.getX())
-                        .thenComparingInt(BlockPos::getZ)
-                        .thenComparingInt(BlockPos::getY))
-                .toList()) {
-            if (boundaryCells.contains(seed) || !visited.add(seed)) continue;
-            LinkedHashSet<BlockPos> region = new LinkedHashSet<>();
-            ArrayDeque<BlockPos> queue = new ArrayDeque<>();
-            queue.addLast(seed);
-            while (!queue.isEmpty()) {
-                BlockPos current = queue.removeFirst();
-                region.add(current);
-                for (BlockPos next : neighbors.getOrDefault(current, List.of())) {
-                    if (!floorCells.contains(next)
-                            || boundaryCells.contains(next)
-                            || !visited.add(next)) continue;
-                    queue.addLast(next);
-                }
-            }
-            regions.add(Set.copyOf(region));
+        for (BlockPos seed : openCells.stream().sorted(CELL_ORDER).toList()) {
+            Set<BlockPos> region = connectedCells(seed, openCells, neighbors, visited);
+            if (!region.isEmpty()) regions.add(region);
         }
         return List.copyOf(regions);
     }
@@ -297,18 +280,26 @@ final class SelectedFloorScanner {
             BlockPos seed,
             Set<BlockPos> allowed,
             Map<BlockPos, List<BlockPos>> neighbors) {
-        if (!allowed.contains(seed)) return Set.of();
-        LinkedHashSet<BlockPos> reachable = new LinkedHashSet<>();
+        return connectedCells(seed, allowed, neighbors, new HashSet<>());
+    }
+
+    private static Set<BlockPos> connectedCells(
+            BlockPos seed,
+            Set<BlockPos> allowed,
+            Map<BlockPos, List<BlockPos>> neighbors,
+            Set<BlockPos> visited) {
+        if (!allowed.contains(seed) || !visited.add(seed)) return Set.of();
+        LinkedHashSet<BlockPos> connected = new LinkedHashSet<>();
         ArrayDeque<BlockPos> queue = new ArrayDeque<>();
         queue.addLast(seed);
-        reachable.add(seed);
         while (!queue.isEmpty()) {
             BlockPos current = queue.removeFirst();
+            connected.add(current);
             for (BlockPos next : neighbors.getOrDefault(current, List.of())) {
-                if (allowed.contains(next) && reachable.add(next)) queue.addLast(next);
+                if (allowed.contains(next) && visited.add(next)) queue.addLast(next);
             }
         }
-        return Set.copyOf(reachable);
+        return Set.copyOf(connected);
     }
 
     private static StoreyRole storeyRole(StoreyContext context,
