@@ -285,61 +285,73 @@ public final class VillageMourningGameTests {
 
         village.tick(helper.getLevel(), now);
 
-        helper.assertTrue(village.getNextMourningTime() >= now + 24_000L,
-                "first tick should schedule mourning at least one Minecraft day away");
-        helper.assertTrue(village.getNextMourningTime() <= now + 48_000L,
-                "first tick should schedule mourning no more than two Minecraft days away");
-        helper.assertTrue(village.getMourningRemaining() == 0,
-                "first tick must not start an ambient mourning session");
+        helper.assertTrue(village.getNextMourningTime() >= now + 4_000L,
+                "first tick should schedule mourning at least four thousand ticks away");
+        helper.assertTrue(village.getNextMourningTime() <= now + 10_000L,
+                "first tick should schedule mourning no more than ten thousand ticks away");
         helper.succeed();
     }
 
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
-    public static void dueVillageWithoutMournableGraveReschedulesAndEndsSession(GameTestHelper helper) {
+    public static void dueVillageWithoutMournableGraveReschedules(GameTestHelper helper) {
         long now = helper.getLevel().getGameTime();
-        Village due = withMourningState(new Village(1, helper.getLevel()), now, 0, 0L, helper.getLevel());
+        helper.getLevel().setDayTime(6_000L);
+        Village due = withNextMourningTime(new Village(1, helper.getLevel()), now, helper.getLevel());
 
         due.tick(helper.getLevel(), now);
 
         helper.assertTrue(due.getNextMourningTime() > now,
-                "empty due session must still schedule the following session");
-        helper.assertTrue(due.getMourningRemaining() == 0,
-                "empty graveyard must not leave an active mourning session");
-        helper.assertTrue(due.getNextMourningBurstTime() == 0L,
-                "empty graveyard must clear the active burst timestamp");
+                "empty due burst must still schedule the following burst");
         helper.succeed();
     }
 
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
-    public static void activeSessionReleasesOnlyOneStaggeredBurstAtATime(GameTestHelper helper) {
+    public static void dueVillageReleasesOneSmallBurstAndSchedulesAnother(GameTestHelper helper) {
         BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
         occupyGrave(helper, grave);
         List<VillagerEntityMCA> residents = spawnResidents(helper, 10, "Burst Probe");
         long now = helper.getLevel().getGameTime();
-        Village due = withMourningState(
-                villageWithGraveyard(helper, grave), now + 24_000L, 8, now, helper.getLevel());
+        helper.getLevel().setDayTime(6_000L);
+        Village due = withNextMourningTime(villageWithGraveyard(helper, grave), now, helper.getLevel());
         residents.forEach(due::updateResident);
 
         due.tick(helper.getLevel(), now);
         int firstCount = mourningSites(residents).size();
-        int remainingAfterFirst = due.getMourningRemaining();
-        long nextBurst = due.getNextMourningBurstTime();
+        long nextBurst = due.getNextMourningTime();
 
         helper.assertTrue(firstCount >= 2 && firstCount <= 4,
                 "one due burst must select only two to four residents");
-        helper.assertTrue(remainingAfterFirst >= 4 && remainingAfterFirst <= 6,
-                "first burst must consume only its two-to-four-person budget");
-        helper.assertTrue(nextBurst > now,
-                "remaining session budget must schedule a later burst");
+        helper.assertTrue(nextBurst >= now + 4_000L && nextBurst <= now + 10_000L,
+                "one due burst must schedule one later random burst");
 
         due.tick(helper.getLevel(), nextBurst - 1L);
         helper.assertTrue(mourningSites(residents).size() == firstCount,
-                "session must not release another burst before its timestamp");
+                "village must not release another burst before its timestamp");
+        helper.succeed();
+    }
 
-        due.tick(helper.getLevel(), nextBurst);
-        int secondCount = mourningSites(residents).size();
-        helper.assertTrue(secondCount > firstCount && secondCount <= firstCount + 4,
-                "due later burst must select fresh residents and add at most four mourners");
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void dueAmbientBurstWaitsUntilDaytime(GameTestHelper helper) {
+        BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
+        occupyGrave(helper, grave);
+        List<VillagerEntityMCA> residents = spawnResidents(helper, 4, "Night Burst Probe");
+        long now = helper.getLevel().getGameTime();
+        Village due = withNextMourningTime(villageWithGraveyard(helper, grave), now, helper.getLevel());
+        residents.forEach(due::updateResident);
+
+        helper.getLevel().setDayTime(18_000L);
+        due.tick(helper.getLevel(), now);
+        helper.assertTrue(mourningSites(residents).isEmpty(),
+                "ambient mourning must not start during the night");
+        helper.assertTrue(due.getNextMourningTime() == now,
+                "a due nighttime burst must remain due instead of being consumed");
+
+        helper.getLevel().setDayTime(6_000L);
+        due.tick(helper.getLevel(), now + 1L);
+        helper.assertTrue(!mourningSites(residents).isEmpty(),
+                "the deferred ambient burst should run once daytime returns");
+        helper.assertTrue(due.getNextMourningTime() > now + 1L,
+                "the daytime burst must schedule the next random occurrence");
         helper.succeed();
     }
 
@@ -359,8 +371,8 @@ public final class VillageMourningGameTests {
         rest.getBrain().setActiveActivityIfPossible(Activity.REST);
         List<VillagerEntityMCA> residents = List.of(idle, meet, work, rest);
         long now = helper.getLevel().getGameTime();
-        Village due = withMourningState(
-                villageWithGraveyard(helper, grave), now + 24_000L, 2, now, helper.getLevel());
+        helper.getLevel().setDayTime(6_000L);
+        Village due = withNextMourningTime(villageWithGraveyard(helper, grave), now, helper.getLevel());
         residents.forEach(due::updateResident);
 
         due.tick(helper.getLevel(), now);
@@ -385,8 +397,8 @@ public final class VillageMourningGameTests {
         for (VillagerEntityMCA recent : residents.subList(0, 4)) {
             recent.getBrain().setMemory(MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING, now);
         }
-        Village due = withMourningState(
-                villageWithGraveyard(helper, grave), now + 24_000L, 2, now, helper.getLevel());
+        helper.getLevel().setDayTime(6_000L);
+        Village due = withNextMourningTime(villageWithGraveyard(helper, grave), now, helper.getLevel());
         residents.forEach(due::updateResident);
 
         due.tick(helper.getLevel(), now);
@@ -394,8 +406,8 @@ public final class VillageMourningGameTests {
         List<VillagerEntityMCA> selected = residents.stream()
                 .filter(villager -> villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE).isPresent())
                 .toList();
-        helper.assertTrue(selected.size() == 2,
-                "two-person remaining budget must select exactly two eligible residents");
+        helper.assertTrue(selected.size() >= 2 && selected.size() <= 4,
+                "an ambient burst must select two to four eligible residents");
         helper.assertTrue(selected.stream().noneMatch(residents.subList(0, 4)::contains),
                 "ambient fairness must prefer never/older-selected residents when enough are available");
         helper.assertTrue(selected.stream().allMatch(villager -> villager.getBrain()
@@ -406,17 +418,15 @@ public final class VillageMourningGameTests {
     }
 
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
-    public static void disabledMourningFreezesVillageSessionState(GameTestHelper helper) {
+    public static void disabledMourningFreezesNextAmbientBurst(GameTestHelper helper) {
         BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
         occupyGrave(helper, grave);
         List<VillagerEntityMCA> residents = spawnResidents(helper, 4, "Disabled Ambient Probe");
         long now = helper.getLevel().getGameTime();
-        Village due = withMourningState(
-                villageWithGraveyard(helper, grave), now + 24_000L, 4, now, helper.getLevel());
+        helper.getLevel().setDayTime(6_000L);
+        Village due = withNextMourningTime(villageWithGraveyard(helper, grave), now, helper.getLevel());
         residents.forEach(due::updateResident);
-        long beforeSession = due.getNextMourningTime();
-        int beforeRemaining = due.getMourningRemaining();
-        long beforeBurst = due.getNextMourningBurstTime();
+        long beforeBurst = due.getNextMourningTime();
         boolean previous = Config.getInstance().enableMourning;
         try {
             Config.getInstance().enableMourning = false;
@@ -424,68 +434,11 @@ public final class VillageMourningGameTests {
 
             helper.assertTrue(mourningSites(residents).isEmpty(),
                     "disabled mourning must not assign ambient mourners");
-            helper.assertTrue(due.getNextMourningTime() == beforeSession,
-                    "disabled mourning must freeze the next session timestamp");
-            helper.assertTrue(due.getMourningRemaining() == beforeRemaining,
-                    "disabled mourning must freeze the active session budget");
-            helper.assertTrue(due.getNextMourningBurstTime() == beforeBurst,
-                    "disabled mourning must freeze the next burst timestamp");
+            helper.assertTrue(due.getNextMourningTime() == beforeBurst,
+                    "disabled mourning must freeze the next ambient burst timestamp");
         } finally {
             Config.getInstance().enableMourning = previous;
         }
-        helper.succeed();
-    }
-
-    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
-    public static void uninterruptedSessionReusesCachedGravesAcrossBursts(GameTestHelper helper) {
-        BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
-        occupyGrave(helper, grave);
-        List<VillagerEntityMCA> residents = spawnResidents(helper, 45, "Cache Probe");
-        long now = helper.getLevel().getGameTime();
-        Village due = withMourningState(villageWithGraveyard(helper, grave), now, 0, 0L, helper.getLevel());
-        residents.forEach(due::updateResident);
-
-        due.tick(helper.getLevel(), now);
-        int firstCount = mourningSites(residents).size();
-        long nextBurst = due.getNextMourningBurstTime();
-        helper.assertTrue(firstCount >= 2 && firstCount <= 4,
-                "first session burst should initialize the grave cache and select mourners");
-        helper.assertTrue(nextBurst > now,
-                "session must have another burst available for cache-reuse proof");
-
-        Building cachedGraveyard = due.getBuilding(100).orElseThrow();
-        cachedGraveyard.setType("house");
-        cachedGraveyard.setTypeForced(true);
-        due.tick(helper.getLevel(), nextBurst);
-
-        helper.assertTrue(mourningSites(residents).size() > firstCount,
-                "later burst must reuse the cached valid grave instead of rescanning graveyard buildings");
-        helper.succeed();
-    }
-
-    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
-    public static void restoredActiveSessionRebuildsGraveCacheOnlyOnce(GameTestHelper helper) {
-        BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
-        occupyGrave(helper, grave);
-        List<VillagerEntityMCA> residents = spawnResidents(helper, 10, "Restored Cache Probe");
-        long now = helper.getLevel().getGameTime();
-        Village restored = withMourningState(
-                villageWithGraveyard(helper, grave), now + 24_000L, 8, now, helper.getLevel());
-        residents.forEach(restored::updateResident);
-
-        restored.tick(helper.getLevel(), now);
-        int firstCount = mourningSites(residents).size();
-        long nextBurst = restored.getNextMourningBurstTime();
-        helper.assertTrue(firstCount >= 2 && firstCount <= 4,
-                "restored active session must rebuild its transient grave cache on the first due burst");
-
-        Building cachedGraveyard = restored.getBuilding(100).orElseThrow();
-        cachedGraveyard.setType("house");
-        cachedGraveyard.setTypeForced(true);
-        restored.tick(helper.getLevel(), nextBurst);
-
-        helper.assertTrue(mourningSites(residents).size() > firstCount,
-                "restored session must not rescan graveyard buildings after rebuilding its cache once");
         helper.succeed();
     }
 
@@ -506,16 +459,9 @@ public final class VillageMourningGameTests {
         village.registerExternalBuilding(graveyard);
     }
 
-    private static Village withMourningState(
-            Village village,
-            long nextSession,
-            int remaining,
-            long nextBurst,
-            ServerLevel level) {
+    private static Village withNextMourningTime(Village village, long nextMourningTime, ServerLevel level) {
         CompoundTag tag = village.save();
-        tag.putLong("nextMourningTime", nextSession);
-        tag.putInt("mourningRemaining", remaining);
-        tag.putLong("nextMourningBurstTime", nextBurst);
+        tag.putLong("nextMourningTime", nextMourningTime);
         return new Village(tag, level);
     }
 

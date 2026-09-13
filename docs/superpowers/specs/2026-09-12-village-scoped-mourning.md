@@ -1,5 +1,18 @@
 # Village-Scoped Mourning Specification
 
+> **Current design (2026-09-13):** This supersedes the multi-burst session design described below. The older text is retained as implementation history only.
+>
+> Ambient mourning is now one self-contained village burst at a time:
+>
+> - `Village` persists only `nextMourningTime`.
+> - After an ambient burst executes, the next one is randomized 4,000-10,000 ticks later.
+> - A burst selects 2-4 currently eligible loaded residents, independent of village population.
+> - Ambient bursts execute only during the daytime window 1,000-11,000 day ticks. If a burst becomes due at night, it remains due and runs after daytime returns; it is not consumed or rescheduled at night.
+> - Each occurrence discovers the currently loaded, valid occupied graves once. There is no persisted session, remaining budget, later-burst timestamp, or grave cache.
+> - `LAST_AMBIENT_MOURNING` remains a soft fairness timestamp so small villages do not repeatedly choose the same residents.
+> - Personal/family mourning remains event-driven and separate from the ambient scheduler. Close family members are assigned the deceased's exact grave by the tragedy propagation path, so a death can produce a natural family group rather than affecting the ambient burst budget.
+> - Existing FOLLOW/STAY/work/rest/chore/danger guards, exact-grave retry behaviour, loaded-chunk filtering, resurrection cleanup, and the master mourning toggle remain unchanged.
+
 ## Goal
 
 Replace MCA's per-villager periodic mourning schedule with a village-owned ambient mourning schedule while preserving the July 2026 mourning rework's exact-grave targeting, standing-position logic, pathfinding, dialogue, and relationship-driven mourning.

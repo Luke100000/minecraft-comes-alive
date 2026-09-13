@@ -1,5 +1,7 @@
 # Village-Scoped Mourning Implementation Plan
 
+> **2026-09-13 simplification:** The multi-burst session steps below are superseded. The implemented target is one random daytime ambient burst per occurrence: persist only `nextMourningTime`, use a 4,000-10,000 tick interval, choose 2-4 eligible villagers, discover valid loaded graves once for that occurrence, keep `LAST_AMBIENT_MOURNING` fairness, and defer overdue bursts through nighttime until the 1,000-11,000 daytime window. Remove `mourningRemaining`, `nextMourningBurstTime`, transient session grave caching, population-scaled session sizing, and session restoration logic. Personal/family exact-grave mourning and retry/lifecycle safeguards remain separate and unchanged.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace per-villager periodic mourning with persisted village-owned mourning sessions that scale to 3-12 total mourners but release only 2-4 villagers per staggered burst, while preserving immediate relationship-driven mourning and the July 2026 exact-grave/pathfinding behaviour.

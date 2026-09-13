@@ -40,15 +40,13 @@ public class Village implements Iterable<Building> {
     public static final int MERGE_MARGIN = 64;
     private static final int MOVE_IN_COOLDOWN = 1200;
     private static final long BED_SYNC_TIME = 200;
-    private static final int MIN_MOURNING_INTERVAL = 24_000;
-    private static final int MAX_MOURNING_INTERVAL = 48_000;
-    private static final int MIN_MOURNING_BURST_DELAY = 2_000;
-    private static final int MAX_MOURNING_BURST_DELAY = 4_000;
+    private static final int MIN_MOURNING_INTERVAL = 4_000;
+    private static final int MAX_MOURNING_INTERVAL = 10_000;
     private static final int MIN_MOURNING_BURST_SIZE = 2;
     private static final int MAX_MOURNING_BURST_SIZE = 4;
-    private static final int MIN_MOURNING_SESSION_SIZE = 3;
-    private static final int MAX_MOURNING_SESSION_SIZE = 12;
-    private static final int MOURNING_SESSION_SCALE_DIVISOR = 22;
+    private static final long MOURNING_DAY_START = 1_000L;
+    private static final long MOURNING_DAY_END = 11_000L;
+    private static final long MINECRAFT_DAY = 24_000L;
     private static final Comparator<AttachmentTarget> ATTACHMENT_TARGET_ORDER = Comparator
             .comparingInt(AttachmentTarget::gap)
             .thenComparingInt(AttachmentTarget::buildingId)
@@ -83,10 +81,6 @@ public class Village implements Iterable<Building> {
     private boolean autoScan = Config.getInstance().enableAutoScanByDefault;
     private BlockBoxExtended box = new BlockBoxExtended(0, 0, 0, 0, 0, 0);
     private long nextMourningTime;
-    private int mourningRemaining;
-    private long nextMourningBurstTime;
-    private final List<BlockPos> mourningGraveCache = new ArrayList<>();
-    private boolean mourningGraveCacheInitialized;
 
     public Village(int id, ServerLevel world) {
         this.id = id;
@@ -107,8 +101,6 @@ public class Village implements Iterable<Building> {
         if (tag.contains("marriageThresholdFloat")) marriageThreshold = tag.getFloat("marriageThresholdFloat");
         autoScan = tag.contains("autoScan") ? tag.getBoolean("autoScan") : true;
         nextMourningTime = tag.getLong("nextMourningTime");
-        mourningRemaining = tag.getInt("mourningRemaining");
-        nextMourningBurstTime = tag.getLong("nextMourningBurstTime");
         this.world = world;
 
         RoomDFU.Result data = RoomDFU.load(tag);
@@ -597,44 +589,21 @@ public class Village implements Iterable<Building> {
         return nextMourningTime;
     }
 
-    int getMourningRemaining() {
-        return mourningRemaining;
-    }
-
-    long getNextMourningBurstTime() {
-        return nextMourningBurstTime;
-    }
-
     static long calculateNextMourningTime(long now, RandomSource random) {
         return now + Mth.nextInt(random, MIN_MOURNING_INTERVAL, MAX_MOURNING_INTERVAL);
     }
 
-    static long calculateNextMourningBurstTime(long now, RandomSource random) {
-        return now + Mth.nextInt(random, MIN_MOURNING_BURST_DELAY, MAX_MOURNING_BURST_DELAY);
+    static int calculateMourningBurstSize(RandomSource random) {
+        return Mth.nextInt(random, MIN_MOURNING_BURST_SIZE, MAX_MOURNING_BURST_SIZE);
     }
 
-    static int calculateMourningSessionSize(int residentCount) {
-        int scaled = MIN_MOURNING_SESSION_SIZE + residentCount / MOURNING_SESSION_SCALE_DIVISOR;
-        return Mth.clamp(scaled, MIN_MOURNING_SESSION_SIZE, MAX_MOURNING_SESSION_SIZE);
-    }
-
-    static int calculateMourningBurstSize(int remaining, RandomSource random) {
-        int requested = Mth.nextInt(random, MIN_MOURNING_BURST_SIZE, MAX_MOURNING_BURST_SIZE);
-        return Math.min(remaining, requested);
+    static boolean isAmbientMourningTime(long dayTime) {
+        long timeOfDay = Math.floorMod(dayTime, MINECRAFT_DAY);
+        return timeOfDay >= MOURNING_DAY_START && timeOfDay <= MOURNING_DAY_END;
     }
 
     private void tickMourning(ServerLevel world, long time) {
         if (!Config.getInstance().enableMourning) {
-            return;
-        }
-
-        if (mourningRemaining > 0) {
-            if (nextMourningBurstTime == 0L || time >= nextMourningBurstTime) {
-                if (!mourningGraveCacheInitialized) {
-                    refreshMourningGraveCache(world);
-                }
-                releaseMourningBurst(world, time);
-            }
             return;
         }
 
@@ -644,69 +613,36 @@ public class Village implements Iterable<Building> {
             return;
         }
 
-        if (time < nextMourningTime) {
+        if (time < nextMourningTime || !isAmbientMourningTime(world.getDayTime())) {
             return;
         }
 
         nextMourningTime = calculateNextMourningTime(time, world.random);
-        refreshMourningGraveCache(world);
-        if (mourningGraveCache.isEmpty()) {
-            endMourningSession();
-            markDirty();
-            return;
-        }
-
-        mourningRemaining = calculateMourningSessionSize(getResidents(world).size());
-        nextMourningBurstTime = time;
         releaseMourningBurst(world, time);
     }
 
-    private void refreshMourningGraveCache(ServerLevel world) {
-        mourningGraveCache.clear();
-        mourningGraveCache.addAll(Mourning.getMournableGraves(this, world));
-        mourningGraveCacheInitialized = true;
-    }
-
-    private void endMourningSession() {
-        mourningRemaining = 0;
-        nextMourningBurstTime = 0L;
-        mourningGraveCache.clear();
-        mourningGraveCacheInitialized = false;
-    }
-
     private void releaseMourningBurst(ServerLevel world, long time) {
-        mourningGraveCache.removeIf(grave -> !world.isLoaded(grave)
-                || !Mourning.isMournableTombstone(world, grave));
-        if (mourningGraveCache.isEmpty()) {
-            endMourningSession();
+        List<BlockPos> graves = Mourning.getMournableGraves(this, world);
+        if (graves.isEmpty()) {
             markDirty();
             return;
         }
-
-        int burstBudget = calculateMourningBurstSize(mourningRemaining, world.random);
-        mourningRemaining -= burstBudget;
 
         List<VillagerEntityMCA> candidates = getResidents(world).stream()
                 .filter(Mourning::canMournAmbiently)
                 .collect(Collectors.toCollection(ArrayList::new));
 
-        Util.shuffle(mourningGraveCache, world.random);
+        Util.shuffle(graves, world.random);
         Util.shuffle(candidates, world.random);
         candidates.sort(Comparator.comparingLong(villager -> villager.getBrain()
                 .getMemoryInternal(MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING)
                 .orElse(Long.MIN_VALUE)));
 
-        int count = Math.min(burstBudget, candidates.size());
+        int count = Math.min(calculateMourningBurstSize(world.random), candidates.size());
         for (int index = 0; index < count; index++) {
             VillagerEntityMCA villager = candidates.get(index);
             villager.getBrain().setMemory(MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING, time);
-            Mourning.start(villager, mourningGraveCache.get(index % mourningGraveCache.size()));
-        }
-
-        if (mourningRemaining > 0) {
-            nextMourningBurstTime = calculateNextMourningBurstTime(time, world.random);
-        } else {
-            endMourningSession();
+            Mourning.start(villager, graves.get(index % graves.size()));
         }
         markDirty();
     }
@@ -789,8 +725,6 @@ public class Village implements Iterable<Building> {
         tag.put("logicalBuildings", NbtHelper.fromList(logicalBuildings.values(), LogicalBuilding::save));
         tag.putBoolean("autoScan", autoScan);
         tag.putLong("nextMourningTime", nextMourningTime);
-        tag.putInt("mourningRemaining", mourningRemaining);
-        tag.putLong("nextMourningBurstTime", nextMourningBurstTime);
         return tag;
     }
 
