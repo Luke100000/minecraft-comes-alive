@@ -17,7 +17,10 @@ mutable field net/minecraft/advancements/AdvancementRewards loot Ljava/util/List
 # Widen MoveControl.rotlerp for task usage
 accessible method net/minecraft/world/entity/ai/control/MoveControl rotlerp (FFF)F
 
-# Widen GroundPathNavigation.getSurfaceY so MCA can make water-tag-aware navigation.
+# Widen the vanilla action-bar renderer so BlueprintScreen can place it above its blur.
+accessible method net/minecraft/client/gui/Gui renderOverlayMessage (Lnet/minecraft/client/gui/GuiGraphics;Lnet/minecraft/client/DeltaTracker;)V
+
+# Widen GroundPathNavigation.getSurfaceY so MCA can make water-tag-aware navigation without replacing getTempMobPos.
 extendable method net/minecraft/world/entity/ai/navigation/GroundPathNavigation getSurfaceY ()I
 
 # Widen LivingEntity's air-movement calculation so MCA villagers can preserve
@@ -35,3 +38,8 @@ accessible field net/minecraft/world/level/block/FenceGateBlock type Lnet/minecr
 extendable method net/minecraft/world/entity/ai/behavior/CrossbowAttack crossbowAttack (Lnet/minecraft/world/entity/Mob;Lnet/minecraft/world/entity/LivingEntity;)V
 accessible field net/minecraft/world/entity/ai/behavior/CrossbowAttack crossbowState Lnet/minecraft/world/entity/ai/behavior/CrossbowAttack$CrossbowState;
 accessible class net/minecraft/world/entity/ai/behavior/CrossbowAttack$CrossbowState
+
+# Extend vanilla HOME POI states on Fabric without an accessor mixin.
+accessible method net/minecraft/world/entity/ai/village/poi/PoiTypes registerBlockStates (Lnet/minecraft/core/Holder;Ljava/util/Set;)V
+accessible field net/minecraft/world/entity/ai/village/poi/PoiType matchingStates Ljava/util/Set;
+mutable field net/minecraft/world/entity/ai/village/poi/PoiType matchingStates Ljava/util/Set;

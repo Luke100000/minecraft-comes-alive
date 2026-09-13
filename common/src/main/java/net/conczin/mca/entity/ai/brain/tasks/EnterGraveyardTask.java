@@ -1,10 +1,8 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
-import net.conczin.mca.block.TombstoneBlock;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
-import net.conczin.mca.registry.TagsMCA;
-import net.conczin.mca.server.world.data.Building;
+import net.conczin.mca.entity.ai.Mourning;
 import net.conczin.mca.util.WorldUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
@@ -52,23 +50,10 @@ public class EnterGraveyardTask extends EnterBuildingTask {
 
     private Optional<MourningTarget> findTarget(VillagerEntityMCA villager) {
         Level level = villager.level();
-        Optional<BlockPos> rememberedSite = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE);
-        if (rememberedSite.isPresent()) {
-            BlockPos grave = rememberedSite.get();
-            return isMournableTombstone(level, grave)
-                    ? findStandingPosition(level, villager, grave).map(position -> new MourningTarget(grave, position))
-                    : Optional.empty();
-        }
-
-        BlockPos origin = villager.blockPosition();
-        return getCompleteGraveyards(villager)
-                .flatMap(Building::getBlockPosStream)
-                .distinct()
-                .filter(grave -> isMournableTombstone(level, grave))
-                .sorted(Comparator.comparingInt(grave -> grave.distManhattan(origin)))
-                .map(grave -> findStandingPosition(level, villager, grave).map(position -> new MourningTarget(grave, position)))
-                .flatMap(Optional::stream)
-                .findFirst();
+        return villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE)
+                .filter(grave -> Mourning.isMournableTombstone(level, grave))
+                .flatMap(grave -> findStandingPosition(level, villager, grave)
+                        .map(position -> new MourningTarget(grave, position)));
     }
 
     public static boolean isAtMourningSite(VillagerEntityMCA villager) {
@@ -86,7 +71,7 @@ public class EnterGraveyardTask extends EnterBuildingTask {
     public static boolean isWithinMourningArea(VillagerEntityMCA villager) {
         BlockPos villagerPosition = villager.blockPosition();
         return villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE)
-                .filter(grave -> isMournableTombstone(villager.level(), grave))
+                .filter(grave -> Mourning.isMournableTombstone(villager.level(), grave))
                 .filter(grave -> grave.closerToCenterThan(villager.position(), MOURNING_GRAVE_DISTANCE))
                 .filter(grave -> grave.getX() != villagerPosition.getX() || grave.getZ() != villagerPosition.getZ())
                 .isPresent();
@@ -98,30 +83,16 @@ public class EnterGraveyardTask extends EnterBuildingTask {
 
     public static boolean hasMournableSite(VillagerEntityMCA villager) {
         return villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE)
-                .filter(grave -> isMournableTombstone(villager.level(), grave))
+                .filter(grave -> Mourning.isMournableTombstone(villager.level(), grave))
                 .isPresent();
-    }
-
-    public static boolean hasPeriodicMourningCandidate(VillagerEntityMCA villager) {
-        return getCompleteGraveyards(villager)
-                .flatMap(Building::getBlockPosStream)
-                .distinct()
-                .anyMatch(grave -> isMournableTombstone(villager.level(), grave));
     }
 
     private static Optional<BlockPos> getMourningPosition(VillagerEntityMCA villager) {
         return villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE)
-                .filter(grave -> isMournableTombstone(villager.level(), grave))
+                .filter(grave -> Mourning.isMournableTombstone(villager.level(), grave))
                 .flatMap(grave -> villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_POSITION))
                 .filter(position -> position.dimension().equals(villager.level().dimension()))
                 .map(GlobalPos::pos);
-    }
-
-    private static Stream<Building> getCompleteGraveyards(VillagerEntityMCA villager) {
-        return villager.getResidency().getHomeVillage()
-                .stream()
-                .flatMap(village -> village.getBuildingsOfType("graveyard"))
-                .filter(Building::isComplete);
     }
 
     private static Optional<BlockPos> findStandingPosition(Level level, VillagerEntityMCA villager, BlockPos grave) {
@@ -166,14 +137,6 @@ public class EnterGraveyardTask extends EnterBuildingTask {
     private static boolean isGoodWalkTarget(Level level, VillagerEntityMCA villager, BlockPos position) {
         return villager.getNavigation().isStableDestination(position)
                 && level.noCollision(villager, villager.getBoundingBox().move(Vec3.atBottomCenterOf(position).subtract(villager.position())));
-    }
-
-    private static boolean isMournableTombstone(Level level, BlockPos position) {
-        return level.getBlockState(position).is(TagsMCA.Blocks.TOMBSTONES)
-                && TombstoneBlock.Data.of(level.getBlockEntity(position))
-                .filter(TombstoneBlock.Data::hasEntity)
-                .filter(data -> !data.isResurrecting())
-                .isPresent();
     }
 
     private record MourningTarget(BlockPos grave, BlockPos standingPosition) {

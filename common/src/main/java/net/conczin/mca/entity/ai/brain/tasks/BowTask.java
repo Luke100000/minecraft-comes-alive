@@ -90,6 +90,9 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
 
         entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
         entity.getLookControl().setLookAt(target, LOOK_SPEED, LOOK_SPEED);
+        if (entity.isUsingItem()) {
+            entity.lookAt(target, LOOK_SPEED, LOOK_SPEED);
+        }
 
         if (visible) {
             this.lostSightTicks = 0;
@@ -172,6 +175,8 @@ public class BowTask<E extends Mob & CrossbowAttackMob> extends Behavior<E> {
     }
 
     private static boolean isEmergencyFleeing(Mob entity) {
-        return entity.getMoveControl() instanceof net.conczin.mca.entity.ai.ArcherMoveControl archerMoveControl && archerMoveControl.isEmergencyFleeing();
+        return RangedCombatState.current(entity)
+                .map(RangedCombatState::suppressesRangedAttack)
+                .orElse(false);
     }
 }

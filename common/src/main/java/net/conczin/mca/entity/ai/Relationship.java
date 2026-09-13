@@ -28,8 +28,6 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
-import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.NotNull;
@@ -190,14 +188,17 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
             }
         }
 
-        if (burialSite != null && type != RelationshipType.STRANGER) {
-            entity.getVillagerBrain().setGrieving();
-            entity.getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_SITE, burialSite);
-            entity.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION);
-            entity.getBrain().eraseMemory(MemoryModuleType.PATH);
-            entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-            entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new BlockPosTracker(burialSite));
-            entity.getBrain().setActiveActivityIfPossible(ActivitiesMCA.GRIEVE);
+        // CHILD is the callback a parent receives when their child dies. PARENT would notify children,
+        // which intentionally do not inherit grave mourning from a parent's death.
+        boolean familyMourning = type == RelationshipType.CHILD
+                || type == RelationshipType.SIBLING
+                || type == RelationshipType.SPOUSE;
+        if (Config.getInstance().enableMourning
+                && burialSite != null
+                && familyMourning
+                && !entity.getUUID().equals(with.getUUID())
+                && entity instanceof VillagerEntityMCA villager) {
+            Mourning.start(villager, burialSite);
         }
 
         EntityRelationship.super.onTragedy(cause, burialSite, type, with);

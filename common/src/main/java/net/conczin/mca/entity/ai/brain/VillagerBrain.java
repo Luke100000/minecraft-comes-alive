@@ -27,8 +27,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-import static net.conczin.mca.entity.ai.MemoryModuleTypeMCA.LAST_GRIEVE;
-
 /**
  * Handles memory and complex bodily functions. Such as walking, and not being a nitwit.
  */
@@ -44,9 +42,6 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
 
     private static final int PANIC_ANIMATION_HOLD_TICKS = 20;
     private static final float PANIC_ANIMATION_STEP = 0.25F;
-    private static final long GRIEVE_COOLDOWN = 24000 * 7;
-    private static final long GRIEVE_RETRY_DELAY = 1200L;
-    private final Random random = new Random();
     private final E entity;
     private int panicAnimationHoldTicks;
     private float panicAnimationProgress;
@@ -265,28 +260,6 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
 
     public void setArmorWear(boolean s) {
         entity.setTrackedValue(WEAR_ARMOR, s);
-    }
-
-    public void setGrieving() {
-        entity.getBrain().setMemory(LAST_GRIEVE, -GRIEVE_COOLDOWN);
-    }
-
-    public void retryGrievingLater() {
-        entity.getBrain().setMemory(LAST_GRIEVE, entity.level().getGameTime() - GRIEVE_COOLDOWN + GRIEVE_RETRY_DELAY);
-    }
-
-    public void justGrieved() {
-        entity.getBrain().setMemory(LAST_GRIEVE, entity.level().getGameTime());
-    }
-
-    public boolean shouldGrieve() {
-        Optional<Long> memory = entity.getBrain().getMemoryInternal(LAST_GRIEVE);
-        if (memory.isPresent()) {
-            return entity.level().getGameTime() - memory.get() > GRIEVE_COOLDOWN;
-        } else {
-            entity.getBrain().setMemory(LAST_GRIEVE, entity.level().getGameTime() - random.nextLong(GRIEVE_COOLDOWN));
-            return false;
-        }
     }
 
     /**

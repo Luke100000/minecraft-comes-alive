@@ -1,0 +1,212 @@
+package net.conczin.mca.server.world.data;
+
+import net.conczin.mca.resources.BuildingTypes;
+import net.conczin.mca.resources.data.BuildingType;
+import net.minecraft.core.BlockPos;
+import net.minecraft.resources.Identifier;
+
+import java.util.*;
+
+/** Single derived view for Room-local and Main Room inherited POIs/type matching. */
+public final class RoomTypeResolver {
+    private final Village village;
+    private final Map<Integer, Building> roomsById;
+    private final Map<Integer, List<Building>> roomsByBuilding;
+    private final Map<Integer, Context> contextByRoomId = new HashMap<>();
+
+    private RoomTypeResolver(Village village, Collection<Building> rooms) {
+        this.village = village;
+        List<Building> snapshot = rooms == null ? List.of() : List.copyOf(rooms);
+        Map<Integer, Building> byId = new HashMap<>();
+        Map<Integer, List<Building>> byBuilding = new HashMap<>();
+        for (Building room : snapshot) {
+            if (room.getId() >= 0) byId.put(room.getId(), room);
+            byBuilding.computeIfAbsent(logicalBuildingId(room), ignored -> new ArrayList<>()).add(room);
+        }
+        byBuilding.replaceAll((ignored, buildingRooms) -> List.copyOf(buildingRooms));
+        this.roomsById = Map.copyOf(byId);
+        this.roomsByBuilding = Map.copyOf(byBuilding);
+    }
+
+    public static RoomTypeResolver create(Village village) {
+        return new RoomTypeResolver(village, village == null ? List.of() : village.getRooms().toList());
+    }
+
+    static RoomTypeResolver create(Village village, Collection<Building> rooms) {
+        return new RoomTypeResolver(village, rooms);
+    }
+
+    static boolean requiresTypeChoice(List<String> eligibleTypes) {
+        return eligibleTypes != null && eligibleTypes.size() > 1;
+    }
+
+    static boolean matchesTypeChoice(List<String> eligibleTypes, String type) {
+        return type != null && eligibleTypes != null && eligibleTypes.contains(type);
+    }
+
+    static String resolveTypeChoice(List<String> eligibleTypes, String forcedType, String fallback) {
+        List<String> types = eligibleTypes == null ? List.of() : eligibleTypes;
+        if (forcedType != null) return types.contains(forcedType) ? forcedType : null;
+        if (types.isEmpty()) return fallback;
+        return types.size() == 1 ? types.getFirst() : null;
+    }
+
+    public Context resolve(Building room) {
+        if (room == null || room.getId() < 0 || roomsById.get(room.getId()) != room) {
+            return resolve(room, findMainRoom(room));
+        }
+        return contextByRoomId.computeIfAbsent(room.getId(), ignored ->
+                resolve(room, findMainRoom(room)));
+    }
+
+    /**
+     * Client-facing Room presentation. Inherited Rooms share the Main Room's effective
+     * type for colour/icon rendering without changing their persisted direct type.
+     */
+    public BuildingType presentationType(Building room) {
+        return room == null ? null : presentationType(resolve(room));
+    }
+
+    public BuildingType presentationType(Context context) {
+        if (context == null) return null;
+        if (!context.contributesToMain()) return context.effectiveType();
+        return resolve(context.mainRoom()).effectiveType();
+    }
+
+    Context resolve(Building room, Building mainRoom) {
+        Map<Identifier, List<BlockPos>> own = room == null ? Map.of() : room.getBlocks();
+        LogicalBuilding logicalBuilding = logicalBuilding(room);
+        boolean inheritanceEnabled = logicalBuilding != null && logicalBuilding.inheritanceEnabled();
+        if (room == null || !room.isFunctionalRoom()
+                || mainRoom == null || !sameRoom(mainRoom, room) || !inheritanceEnabled) {
+            return new Context(room, mainRoom == null ? room : mainRoom,
+                    own, Map.of(), own, List.of(), inheritanceEnabled);
+        }
+
+        List<Building> contributors = roomsByBuilding.getOrDefault(logicalBuildingId(room), List.of()).stream()
+                .filter(Building::isFunctionalRoom)
+                .filter(candidate -> !sameRoom(candidate, room))
+                .filter(Building::contributesToMain)
+                .filter(candidate -> !candidate.getBlocks().isEmpty())
+                .sorted(Comparator.comparingInt(Building::getId))
+                .toList();
+
+        Map<Identifier, LinkedHashSet<BlockPos>> inherited = new TreeMap<>(Comparator.comparing(Identifier::toString));
+        contributors.forEach(contributor -> merge(inherited, contributor.getBlocks()));
+        Map<Identifier, List<BlockPos>> inheritedPoi = toLists(inherited);
+
+        Map<Identifier, LinkedHashSet<BlockPos>> effective = mutable(own);
+        merge(effective, inheritedPoi);
+        return new Context(room, mainRoom, own, inheritedPoi, toLists(effective), contributors, true);
+    }
+
+    private static boolean sameRoom(Building first, Building second) {
+        return first == second || first != null && second != null
+                && first.getId() >= 0 && first.getId() == second.getId();
+    }
+
+    private Building findMainRoom(Building room) {
+        if (room == null) return null;
+        LogicalBuilding logicalBuilding = logicalBuilding(room);
+        int mainRoomId = logicalBuilding == null ? room.getId() : logicalBuilding.mainRoomId();
+        if (room.getId() == mainRoomId) return room;
+        Building snapshotRoom = roomsById.get(mainRoomId);
+        if (snapshotRoom != null) return snapshotRoom;
+        if (village == null) return room;
+        return village.getBuilding(mainRoomId).filter(Building::isFunctionalRoom).orElse(room);
+    }
+
+    private int logicalBuildingId(Building room) {
+        if (room == null) return -1;
+        return village == null ? room.getStructureId()
+                : village.getLogicalBuildingId(room.getStructureId());
+    }
+
+    private LogicalBuilding logicalBuilding(Building room) {
+        if (room == null) return null;
+        if (village == null) return null;
+        return village.getLogicalBuilding(logicalBuildingId(room)).orElse(null);
+    }
+
+    private static Map<Identifier, List<BlockPos>> snapshot(Map<Identifier, List<BlockPos>> source) {
+        Map<Identifier, List<BlockPos>> copy = new TreeMap<>(Comparator.comparing(Identifier::toString));
+        source.forEach((key, positions) -> copy.put(key, List.copyOf(positions)));
+        return Collections.unmodifiableMap(copy);
+    }
+
+    private static Map<Identifier, LinkedHashSet<BlockPos>> mutable(Map<Identifier, List<BlockPos>> source) {
+        Map<Identifier, LinkedHashSet<BlockPos>> result = new TreeMap<>(Comparator.comparing(Identifier::toString));
+        merge(result, source);
+        return result;
+    }
+
+    private static void merge(Map<Identifier, LinkedHashSet<BlockPos>> target,
+                              Map<Identifier, List<BlockPos>> source) {
+        source.forEach((key, positions) -> target.computeIfAbsent(key, ignored -> new LinkedHashSet<>()).addAll(positions));
+    }
+
+    private static Map<Identifier, List<BlockPos>> toLists(Map<Identifier, LinkedHashSet<BlockPos>> source) {
+        Map<Identifier, List<BlockPos>> result = new TreeMap<>(Comparator.comparing(Identifier::toString));
+        source.forEach((key, positions) -> result.put(key, List.copyOf(positions)));
+        return result;
+    }
+
+    public record Context(Building room,
+                          Building mainRoom,
+                          Map<Identifier, List<BlockPos>> ownPoi,
+                          Map<Identifier, List<BlockPos>> inheritedPoi,
+                          Map<Identifier, List<BlockPos>> effectivePoi,
+                          List<Building> contributors,
+                          boolean inheritanceEnabled) {
+        public Context {
+            boolean effectiveIsOwn = effectivePoi == ownPoi;
+            ownPoi = snapshot(ownPoi);
+            inheritedPoi = snapshot(inheritedPoi);
+            effectivePoi = effectiveIsOwn ? ownPoi : snapshot(effectivePoi);
+            contributors = List.copyOf(contributors);
+        }
+
+        public boolean isMainRoom() {
+            return sameRoom(room, mainRoom);
+        }
+
+        public boolean contributesToMain() {
+            return room != null && room.isFunctionalRoom() && room.contributesToMain()
+                    && inheritanceEnabled && mainRoom != null && !isMainRoom();
+        }
+
+        public Map<Identifier, List<BlockPos>> classificationPoi() {
+            return isMainRoom() ? effectivePoi : ownPoi;
+        }
+
+        public List<BuildingType> directMatchingTypes() {
+            return Building.visibleMatchingTypes(ownPoi);
+        }
+
+        public List<BuildingType> visibleMatchingTypes() {
+            return Building.visibleMatchingTypes(classificationPoi());
+        }
+
+        public boolean matchesForcedType(String typeName) {
+            if (room == null || typeName == null) return false;
+            BuildingType type = BuildingTypes.getInstance().getBuildingType(typeName);
+            return Building.matchesType(type, classificationPoi());
+        }
+
+        /** Returns the direct type to persist after an update, or null when a forced type is invalid. */
+        public String updatedType(String forcedType) {
+            if (room == null) return null;
+            if (forcedType != null) return matchesForcedType(forcedType) ? forcedType : null;
+            List<BuildingType> matches = directMatchingTypes();
+            return matches.isEmpty() ? (isMainRoom() ? "house" : "building") : matches.getFirst().name();
+        }
+
+        public BuildingType effectiveType() {
+            if (room == null || room.isTypeForced() || !isMainRoom() || inheritedPoi.isEmpty()) {
+                return room == null ? null : room.getBuildingType();
+            }
+            List<BuildingType> visible = visibleMatchingTypes();
+            return visible.isEmpty() ? room.getBuildingType() : visible.getFirst();
+        }
+    }
+}

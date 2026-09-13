@@ -50,6 +50,9 @@ public class AdminCommand {
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("mca-admin")
                 .then(register("help", AdminCommand::displayHelp))
+                .then(register("diagnose", AdminCommand::diagnoseBuilding)
+                        .then(Commands.argument("verbose", BoolArgumentType.bool())
+                                .executes(AdminCommand::diagnoseBuildingVerbose)))
                 .then(register("clearLoadedVillagers", AdminCommand::clearLoadedVillagers))
                 .then(register("restoreClearedVillagers", AdminCommand::restoreClearedVillagers))
                 .then(register("forceBuildingType").then(Commands.argument("type", StringArgumentType.string()).executes(AdminCommand::forceBuildingType)).executes(AdminCommand::clearForcedBuildingType))
@@ -169,8 +172,7 @@ public class AdminCommand {
         VillageManager villages = VillageManager.get(ctx.getSource().getLevel());
         Optional<Village> village = villages.findNearestVillage(player);
 
-        Optional<Building> building = village.flatMap(v -> v.getBuildings().values().stream().filter((b) ->
-                b.containsPos(player.blockPosition())).findAny());
+        Optional<Building> building = village.flatMap(v -> v.findPhysicalRoomAt(player.blockPosition()));
         if (building.isPresent()) {
             if (building.get().getType().equals(type)) {
                 building.get().setTypeForced(false);
@@ -212,6 +214,28 @@ public class AdminCommand {
     private static int buildingProcessingRate(CommandContext<CommandSourceStack> ctx) {
         int cooldown = IntegerArgumentType.getInteger(ctx, "cooldown");
         VillageManager.get(ctx.getSource().getLevel()).setBuildingCooldown(cooldown);
+        return 0;
+    }
+
+    private static int diagnoseBuilding(CommandContext<CommandSourceStack> ctx) {
+        return diagnoseBuilding(ctx, false);
+    }
+
+    private static int diagnoseBuildingVerbose(CommandContext<CommandSourceStack> ctx) {
+        return diagnoseBuilding(ctx, BoolArgumentType.getBool(ctx, "verbose"));
+    }
+
+    private static int diagnoseBuilding(CommandContext<CommandSourceStack> ctx, boolean verbose) {
+        ServerPlayer player = ctx.getSource().getPlayer();
+        if (player == null) {
+            fail("This command must be run by a player standing at the position to diagnose.", ctx);
+            return 0;
+        }
+
+        BuildingDiagnostics.Result result = BuildingDiagnostics.diagnose(
+                ctx.getSource().getLevel(), player.blockPosition(), verbose);
+        success("Building diagnose trace " + result.traceId() + ": " + result.position()
+                + " -> " + result.uiAction() + " | " + result.verdict(), ctx);
         return 0;
     }
 
@@ -350,6 +374,7 @@ public class AdminCommand {
         sendMessage(player, WHITE + " /mca-admin forceChildGrowth " + GOLD + " - Force nearby children to grow.");
         sendMessage(player, WHITE + " /mca-admin clearLoadedVillagers " + GOLD + " - Clear all loaded villagers. " + RED + "(IRREVERSIBLE)");
         sendMessage(player, WHITE + " /mca-admin restoreClearedVillagers " + GOLD + " - Restores cleared villagers. ");
+        sendMessage(player, WHITE + " /mca-admin diagnose " + GOLD + " - Log Structure/Floor/Room traversal diagnostics for your position.");
 
         sendMessage(player, WHITE + " /mca-admin listVillages " + GOLD + " - Prints a list of all villages.");
         sendMessage(player, WHITE + " /mca-admin removeVillage id" + GOLD + " - Removed a village with given ID.");

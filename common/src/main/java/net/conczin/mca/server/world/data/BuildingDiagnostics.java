@@ -1,0 +1,374 @@
+package net.conczin.mca.server.world.data;
+
+import net.conczin.mca.MCA;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.state.BlockState;
+
+import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
+
+/** Read-only diagnostics for Structure/Floor/Room lookup and traversal decisions. */
+public final class BuildingDiagnostics {
+    private static final AtomicLong NEXT_TRACE_ID = new AtomicLong();
+    private BuildingDiagnostics() {
+    }
+
+    public static Result diagnose(ServerLevel world, BlockPos pos) {
+        return diagnose(world, pos, false);
+    }
+
+    public static Result diagnose(ServerLevel world, BlockPos pos, boolean verbose) {
+        long traceId = NEXT_TRACE_ID.incrementAndGet();
+        VillageManager manager = VillageManager.get(world);
+        RoomWorkflow roomWorkflow = new RoomWorkflow(manager, world);
+        Village village = manager.findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
+        PlanAttempt planAttempt = planAttempt(() -> village == null
+                ? RoomScanPlan.addBuilding(pos)
+                : village.getRoomScanPlan(world, pos));
+        if (planAttempt.failure() != null) {
+            RuntimeException failure = planAttempt.failure();
+            log(traceId, "roomPlanFailure position={} dimension={} village={} type={} message={}",
+                    pos, world.dimension().identifier(), village == null ? "none" : village.getId(),
+                    failure.getClass().getSimpleName(), failure.getMessage());
+            logPersistentState(traceId, village, pos);
+            String verdict = "ROOM_PLAN_SCAN_FAILED: " + failure.getClass().getSimpleName()
+                    + ": " + failure.getMessage();
+            log(traceId, "verdict={}", verdict);
+            return new Result(traceId, StructuralPosition.OUTSIDE, "SCAN_FAILED", verdict);
+        }
+        RoomScanPlan plan = planAttempt.plan();
+        StructuralPosition position = structuralPosition(plan);
+        String uiAction = uiAction(plan.mode());
+
+        log(traceId, "start position={} scanSeed={} dimension={} village={} structuralPosition={} uiAction={} targetBuilding={} verbose={}",
+                pos, plan.scanSeed(), world.dimension().identifier(), village == null ? "none" : village.getId(),
+                position, uiAction, plan.targetBuildingId(), verbose);
+
+        if (village == null) {
+            Building.validationResult analysis = roomWorkflow.analyzeBuildingAddition(pos).result();
+            String verdict = "NO_NEARBY_VILLAGE: UI uses " + uiAction + "; initial structure analysis=" + analysis;
+            log(traceId, "analysis action={} result={}", uiAction, analysis);
+            log(traceId, "verdict={}", verdict);
+            return new Result(traceId, position, uiAction, verdict);
+        }
+
+        Structure structureAt = village.getExactStructureAt(pos).orElse(null);
+        Structure interactionStructure = village.getInteractionStructureAt(pos).orElse(null);
+        Structure nearestStructure = nearestStructure(village, pos);
+        Structure inspected = interactionStructure != null
+                ? interactionStructure
+                : structureAt != null ? structureAt : nearestStructure;
+        List<Building> inspectedRooms = inspected == null
+                ? List.of()
+                : village.getRooms()
+                .filter(candidate -> candidate.getStructureId() == inspected.getId())
+                .toList();
+        Building room = plan.currentRoom().orElse(null);
+        RoomTypeResolver roomTypeResolver = RoomTypeResolver.create(village);
+
+        log(traceId, "lookup structureAt={} interactionStructure={} nearestStructure={} lookupBuilding={} lookupBuildingFloor={}",
+                id(structureAt), id(interactionStructure), id(nearestStructure),
+                room == null ? "none" : room.getId(), room == null ? "none" : room.getFloorId());
+
+        StructureFloor freshPlayerFloor = null;
+        if (inspected != null) {
+            boolean contains = inspected.containsPos(pos);
+            Structure.InteractionPosition interaction = inspected
+                    .resolveInteractionPosition(pos, inspectedRooms).orElse(null);
+            boolean attaches = interaction != null;
+            StructureFloor resolvedFloor = inspected.resolveFloorAt(pos).orElse(null);
+            StructureFloor physicalFloor = inspected.physicalFloorAt(pos).orElse(null);
+            log(traceId, "structure id={} logicalBuildingId={} source={} bounds={}..{} containsPos={} connectorAttaches={} resolvedFloor={} physicalFloor={}",
+                    inspected.getId(), inspected.getLogicalBuildingId(), inspected.getSource(),
+                    inspected.getRawPos0(), inspected.getRawPos1(),
+                    contains, attaches, floor(resolvedFloor), floor(physicalFloor));
+            logInteractionConnector(traceId, world, pos, resolvedFloor);
+            log(traceId, "interactionFloorId={} interactionFloorNumber={} interactionRoomId={}",
+                    interaction == null ? "none" : interaction.floor().id(),
+                    interaction == null ? "none" : interaction.floor().floorNumber(),
+                    interaction == null || interaction.room() == null ? "none" : interaction.room().getId());
+            LogicalBuilding logicalBuilding = village.getLogicalBuilding(inspected.getLogicalBuildingId()).orElse(null);
+            Building logicalMain = logicalBuilding == null
+                    ? null : village.getBuilding(logicalBuilding.mainRoomId()).orElse(null);
+            log(traceId, "persistentFloors={} groundFloorStructureId={} groundFloorId={} logicalMainRoomId={} inheritanceEnabled={}",
+                    floors(inspected.getFloors()),
+                    logicalMain == null ? "none" : logicalMain.getStructureId(),
+                    logicalMain == null ? "none" : logicalMain.getFloorId(),
+                    logicalBuilding == null ? "none" : logicalBuilding.mainRoomId(),
+                    logicalBuilding != null && logicalBuilding.inheritanceEnabled());
+
+            if (room != null) {
+                StructureFloor roomFloor = inspected.getFloor(room.getFloorId()).orElse(null);
+                boolean sameColumn = room.containsFloorColumn(pos.getX(), pos.getZ());
+                boolean elevatedWithinBand = roomFloor != null
+                        && pos.getY() > roomFloor.anchorY() + StructureFloor.BAND_TOLERANCE
+                        && pos.getY() < roomFloor.maxPhysicalCeilingY();
+                RoomTypeResolver.Context resolved = roomTypeResolver.resolve(room);
+                log(traceId, "room id={} directType={} effectiveType={} structureId={} floorId={} floor={} footprintArea={} ownPoi={} effectivePoi={} containsColumn={} elevatedWithinSameFloorBand={}",
+                        room.getId(), room.getType(), resolved.effectiveType().name(), room.getStructureId(), room.getFloorId(), floor(roomFloor),
+                        room.getFloorFootprintArea(), room.getBlockCount(),
+                        resolved.effectivePoi().values().stream().mapToInt(List::size).sum(), sameColumn, elevatedWithinBand);
+            }
+
+            StructureFloor selectedFloor = room != null
+                    ? inspected.getFloor(room.getFloorId()).orElse(null)
+                    : inspected.resolveFloorAt(pos).orElse(null);
+            StructureScanner.Result scan = selectedFloor == null
+                    ? StructureScanner.Result.failure(Building.validationResult.NOT_IN_BUILDING, pos)
+                    : StructureScanner.scanExistingFloor(
+                    world, inspected, selectedFloor, pos, village.getStructures().values());
+            freshPlayerFloor = scan.result() == Building.validationResult.SUCCESS
+                    ? scan.floor()
+                    : null;
+            log(traceId, "freshFloorScan persistedFloor={} result={} scanSeed={} bounds={}..{} freshFloor={}",
+                    floor(selectedFloor), scan.result(), scan.source(), scan.min(), scan.max(),
+                    floor(freshPlayerFloor));
+            logFloorDifference(traceId,
+                    selectedFloor == null ? List.of() : List.of(selectedFloor),
+                    scan.floor() == null ? List.of() : List.of(scan.floor()), verbose);
+        }
+
+        Building.validationResult analysis = switch (plan.mode()) {
+            case ADD_BUILDING -> roomWorkflow.analyzeBuildingAddition(pos).result();
+            case ADD_ROOM -> roomWorkflow.analyzeRoom(pos).result();
+            case ADD_FLOOR, ADD_BASEMENT -> roomWorkflow.analyzeAttachedRoom(
+                    village, plan, plan.mode(), plan.targetBuildingId()).result();
+            case UPDATE_ROOM -> room == null
+                    ? Building.validationResult.NOT_IN_BUILDING
+                    : roomWorkflow.analyzeRegisteredRoomUpdate(village, room.getId(), pos).result();
+        };
+        log(traceId, "analysis action={} result={}", uiAction, analysis);
+
+        String verdict = verdict(
+                position, uiAction, analysis, inspected, inspectedRooms, room, freshPlayerFloor, pos, world);
+        log(traceId, "verdict={}", verdict);
+        return new Result(traceId, position, uiAction, verdict);
+    }
+
+    private static void logInteractionConnector(long traceId,
+                                                ServerLevel world,
+                                                BlockPos pos,
+                                                StructureFloor floor) {
+        BlockState clickedState = world.getBlockState(pos);
+        BlockPos connectorPos = StructureConnector.normalize(pos, clickedState);
+        BlockState connectorState = world.getBlockState(connectorPos);
+        FloorConnector.Type persistedType = floor == null
+                ? null
+                : floor.geometry().connectorTypesByCell().get(connectorPos);
+        FloorConnector.Type worldType = FloorConnector.Type.fromBlockState(connectorState);
+        Direction doorFacing = connectorState.getBlock() instanceof DoorBlock
+                ? connectorState.getValue(DoorBlock.FACING)
+                : null;
+        Direction doorOwnerSide = StructureConnector.doorOwnerSide(connectorState);
+
+        log(traceId,
+                "interactionConnector position={} normalizedPosition={} floorCell={} persistedType={} worldType={} doorFacing={} doorOwnerSide={}",
+                pos, connectorPos,
+                floor != null && floor.geometry().cellAt(connectorPos).isPresent(),
+                value(persistedType), value(worldType), value(doorFacing), value(doorOwnerSide));
+    }
+
+    private static String value(Object value) {
+        return value == null ? "none" : value.toString();
+    }
+
+    static PlanAttempt planAttempt(Supplier<RoomScanPlan> supplier) {
+        try {
+            return new PlanAttempt(supplier.get(), null);
+        } catch (RuntimeException failure) {
+            return new PlanAttempt(null, failure);
+        }
+    }
+
+    private static void logPersistentState(long traceId, Village village, BlockPos pos) {
+        if (village == null) {
+            log(traceId, "persistentState village=none");
+            return;
+        }
+
+        Building physicalRoom = village.findPhysicalRoomAt(pos).orElse(null);
+        log(traceId, "persistentState physicalRoom={} structures={}",
+                physicalRoom == null ? "none" : physicalRoom.getId(), village.getStructures().size());
+        village.getStructures().values().stream()
+                .sorted(Comparator.comparingLong(structure -> distanceSquared(structure.getCenter(), pos)))
+                .limit(5)
+                .forEach(structure -> log(traceId,
+                        "persistentStructure id={} logicalBuildingId={} source={} bounds={}..{} containsPos={} floors={}",
+                        structure.getId(), structure.getLogicalBuildingId(), structure.getSource(),
+                        structure.getRawPos0(), structure.getRawPos1(), structure.containsPos(pos),
+                        floors(structure.getFloors())));
+    }
+
+    private static StructuralPosition structuralPosition(RoomScanPlan plan) {
+        return switch (plan.mode()) {
+            case UPDATE_ROOM -> StructuralPosition.REGISTERED_ROOM;
+            case ADD_ROOM -> StructuralPosition.ATTACHABLE_ROOM;
+            case ADD_BUILDING, ADD_FLOOR, ADD_BASEMENT -> StructuralPosition.OUTSIDE;
+        };
+    }
+
+    private static String verdict(StructuralPosition position,
+                                  String uiAction,
+                                  Building.validationResult analysis,
+                                  Structure structure,
+                                  Collection<Building> rooms,
+                                  Building room,
+                                  StructureFloor freshPlayerFloor,
+                                  BlockPos pos,
+                                  ServerLevel world) {
+        if (structure == null) {
+            return "NO_STRUCTURE: no nearby physical Structure was available for this position";
+        }
+        if (position == StructuralPosition.OUTSIDE) {
+            boolean contains = structure.containsPos(pos);
+            boolean attaches = structure.resolveInteractionPosition(pos, rooms).isPresent();
+            return "NO_INTERACTION_STRUCTURE: UI uses " + uiAction + "; containsPos=" + contains
+                    + ", interactionAttachment=" + attaches + ", analysis=" + analysis;
+        }
+        if (analysis != Building.validationResult.SUCCESS) {
+            return "ANALYSIS_FAILED: " + uiAction + " returned " + analysis;
+        }
+        if (room != null) {
+            StructureFloor persistentRoomFloor = structure.getFloor(room.getFloorId()).orElse(null);
+            if (persistentRoomFloor != null && freshPlayerFloor != null
+                    && freshPlayerFloor.anchorY() > persistentRoomFloor.anchorY()) {
+                return "FRESH_SCAN_SEPARATES_UPPER_FLOOR: persisted Room is Floor " + room.getFloorId()
+                        + " @" + persistentRoomFloor.anchorY() + " but fresh scan resolves player to @"
+                        + freshPlayerFloor.anchorY();
+            }
+            if (persistentRoomFloor != null
+                    && pos.getY() > persistentRoomFloor.anchorY() + StructureFloor.BAND_TOLERANCE
+                    && pos.getY() < persistentRoomFloor.maxPhysicalCeilingY()) {
+                return "ELEVATED_POSITION_IN_SAME_FLOOR_BAND: no separate StructureFloor anchor currently owns this Y, "
+                        + "so Room lookup remains on Floor " + room.getFloorId() + " @" + persistentRoomFloor.anchorY();
+            }
+        }
+        return switch (position) {
+            case ATTACHABLE_ROOM -> "ATTACHABLE_ROOM: physical Structure/Floor resolved, but this component is not registered as a Room";
+            case REGISTERED_ROOM -> "REGISTERED_ROOM: Structure, Floor and Room lookup all resolved successfully";
+            case OUTSIDE -> "OUTSIDE";
+        };
+    }
+
+    private static void logFloorDifference(long traceId,
+                                           List<StructureFloor> persistent,
+                                           List<StructureFloor> fresh,
+                                           boolean verbose) {
+        List<Integer> persistentAnchors = persistent.stream().map(StructureFloor::anchorY).toList();
+        List<Integer> freshAnchors = fresh.stream().map(StructureFloor::anchorY).toList();
+        if (!persistentAnchors.equals(freshAnchors)) {
+            log(traceId, "floorMismatch persistentAnchors={} freshAnchors={}", persistentAnchors, freshAnchors);
+        }
+
+        boolean geometryMismatch = false;
+        for (StructureFloor persistentFloor : persistent) {
+            StructureFloor freshFloor = fresh.stream()
+                    .filter(candidate -> candidate.anchorY() == persistentFloor.anchorY())
+                    .findFirst().orElse(null);
+            if (freshFloor == null) continue;
+            if (persistentFloor.geometry().sameExactGeometry(freshFloor.geometry())) continue;
+
+            Set<FloorGeometry.Cell> persistentCells = persistentFloor.geometry().cells();
+            Set<FloorGeometry.Cell> freshCells = freshFloor.geometry().cells();
+
+            geometryMismatch = true;
+            LinkedHashSet<FloorGeometry.Cell> added = new LinkedHashSet<>(freshCells);
+            added.removeAll(persistentCells);
+            LinkedHashSet<FloorGeometry.Cell> removed = new LinkedHashSet<>(persistentCells);
+            removed.removeAll(freshCells);
+            boolean sameProjectedFootprint = persistentFloor.geometry().sameProjectedFootprint(freshFloor.geometry());
+            boolean connectorsChanged = !persistentFloor.geometry().connectorTypesByCell()
+                    .equals(freshFloor.geometry().connectorTypesByCell());
+            if (verbose) {
+                log(traceId, "floorGeometryMismatch anchorY={} persistentCells={} freshCells={} "
+                                + "sameProjectedFootprint={} connectorsChanged={} addedCells={} removedCells={} "
+                                + "addedSample={} removedSample={}",
+                        persistentFloor.anchorY(), persistentCells.size(), freshCells.size(),
+                        sameProjectedFootprint, connectorsChanged, added.size(), removed.size(),
+                        sampleCells(added), sampleCells(removed));
+            } else {
+                log(traceId, "floorGeometryMismatch anchorY={} persistentCells={} freshCells={} "
+                                + "sameProjectedFootprint={} connectorsChanged={} addedCells={} removedCells={}",
+                        persistentFloor.anchorY(), persistentCells.size(), freshCells.size(),
+                        sameProjectedFootprint, connectorsChanged, added.size(), removed.size());
+            }
+        }
+        if (persistentAnchors.equals(freshAnchors) && !geometryMismatch) {
+            log(traceId, "floorMismatch none anchors={}", persistentAnchors);
+        }
+    }
+
+    private static List<FloorGeometry.Cell> sampleCells(Collection<FloorGeometry.Cell> cells) {
+        return cells.stream()
+                .sorted(Comparator.comparingInt((FloorGeometry.Cell cell) -> cell.feet().getX())
+                        .thenComparingInt(cell -> cell.feet().getZ())
+                        .thenComparingInt(cell -> cell.feet().getY())
+                        .thenComparingInt(FloorGeometry.Cell::ceilingY))
+                .limit(16)
+                .toList();
+    }
+
+    private static Structure nearestStructure(Village village, BlockPos pos) {
+        return village.getStructures().values().stream()
+                .min(Comparator.comparingLong(structure -> distanceSquared(structure.getCenter(), pos)))
+                .orElse(null);
+    }
+
+    private static long distanceSquared(BlockPos first, BlockPos second) {
+        long dx = (long) first.getX() - second.getX();
+        long dy = (long) first.getY() - second.getY();
+        long dz = (long) first.getZ() - second.getZ();
+        return dx * dx + dy * dy + dz * dz;
+    }
+
+    private static StructureFloor floorAt(List<StructureFloor> floors, BlockPos pos) {
+        return floors.stream()
+                .filter(candidate -> candidate.anchorY() <= pos.getY()
+                        && pos.getY() < candidate.maxPhysicalCeilingY())
+                .filter(candidate -> candidate.contains(pos.getX(), pos.getZ()))
+                .max(Comparator.comparingInt(StructureFloor::anchorY))
+                .orElse(null);
+    }
+
+    private static String floors(List<StructureFloor> floors) {
+        return floors.stream().map(BuildingDiagnostics::floor).toList().toString();
+    }
+
+    private static String floor(StructureFloor floor) {
+        return floor == null ? "none"
+                : "id=" + floor.id() + " number=" + floor.floorNumber() + " @"
+                + floor.anchorY() + ".." + floor.maxPhysicalCeilingY() + " area=" + floor.area();
+    }
+
+    private static String id(Structure structure) {
+        return structure == null ? "none" : Integer.toString(structure.getId());
+    }
+
+    private static String uiAction(Village.RoomScanMode mode) {
+        return mode.name();
+    }
+
+    private static void log(long traceId, String message, Object... args) {
+        Object[] prefixed = new Object[args.length + 1];
+        prefixed[0] = traceId;
+        System.arraycopy(args, 0, prefixed, 1, args.length);
+        MCA.LOGGER.info("[MCA-Diagnose][{}] " + message, prefixed);
+    }
+
+    public record Result(long traceId,
+                         StructuralPosition position,
+                         String uiAction,
+                         String verdict) {
+    }
+
+    record PlanAttempt(RoomScanPlan plan, RuntimeException failure) {
+    }
+
+    public enum StructuralPosition {
+        OUTSIDE, REGISTERED_ROOM, ATTACHABLE_ROOM
+    }
+}

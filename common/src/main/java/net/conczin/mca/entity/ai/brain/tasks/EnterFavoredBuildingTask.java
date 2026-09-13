@@ -29,7 +29,7 @@ public class EnterFavoredBuildingTask extends EnterBuildingTask {
     protected Optional<BlockPos> getNextPosition(VillagerEntityMCA villager) {
         Optional<Building> b = getNearestBuilding(villager);
         if (b.isPresent()) {
-            if (b.get().containsPos(villager.blockPosition())) {
+            if (isInsideBuilding(b.get(), villager)) {
                 if (villager.tickCount > lastMoodIncrease + TICKS_PER_MOOD && villager.getVillagerBrain().getMoodValue() < 0) {
                     lastMoodIncrease = villager.tickCount;
                     villager.getVillagerBrain().modifyMoodValue(1);

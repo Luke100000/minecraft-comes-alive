@@ -1,0 +1,45 @@
+package net.conczin.mca.server.world.data;
+
+import net.minecraft.core.BlockPos;
+
+import java.util.List;
+
+/** Detached, fully analyzed update for one selected registered Room lineage. */
+public record RegisteredRoomUpdate(
+        Building.validationResult result,
+        BlockPos source,
+        Village village,
+        Structure refreshedStructure,
+        int structureId,
+        int floorId,
+        int expectedPlayerRoomId,
+        List<Integer> previousRoomIds,
+        List<RegisteredRoomReconciler.Assignment> assignments,
+        Building playerComponent,
+        List<String> playerMatchingTypes
+) {
+    public RegisteredRoomUpdate {
+        previousRoomIds = List.copyOf(previousRoomIds);
+        assignments = List.copyOf(assignments);
+        playerMatchingTypes = playerMatchingTypes == null ? List.of() : List.copyOf(playerMatchingTypes);
+    }
+
+    static RegisteredRoomUpdate failure(Building.validationResult result,
+                                        BlockPos source,
+                                        Village village) {
+        return new RegisteredRoomUpdate(result, source, village, null, -1, -1, -1,
+                List.of(), List.of(), null, List.of());
+    }
+
+    public boolean isAmbiguous() {
+        return RoomTypeResolver.requiresTypeChoice(playerMatchingTypes);
+    }
+
+    public boolean requiresTypeSelection() {
+        return result == Building.validationResult.SUCCESS && isAmbiguous();
+    }
+
+    public boolean matchesType(String type) {
+        return RoomTypeResolver.matchesTypeChoice(playerMatchingTypes, type);
+    }
+}
