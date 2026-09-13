@@ -32,6 +32,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.Arrays;
 
 public class CribEntity extends Entity implements CTrackedEntity<CribEntity> {
+    private static final double MATTRESS_ATTACHMENT_Y = 5.0 / 16.0;
     private static final CDataParameter<ItemStack> BABY = CParameter.create("BabyItem", ItemStack.EMPTY);
     private static final CEnumParameter<CribWoodType> WOOD = CParameter.create("Wood", CribWoodType.OAK);
     private static final CEnumParameter<DyeColor> COLOR = CParameter.create("Color", DyeColor.RED);
@@ -112,7 +113,7 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity> {
 
     @Override
     protected Vec3 getPassengerAttachmentPoint(Entity entity, EntityDimensions dimensions, float partialTick) {
-        return new Vec3(0.0, 0.1, 0.0);
+        return new Vec3(0.0, MATTRESS_ATTACHMENT_Y, 0.0);
     }
 
     private void setEntityOccupant(VillagerEntityMCA occupant) {
