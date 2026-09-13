@@ -3,7 +3,6 @@ package net.conczin.mca.server.world.data;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 
@@ -18,12 +17,13 @@ final class BuildingRoomScanner {
                        BlockPos source,
                        int maxSize,
                        int floorId,
-                       FloorGeometry floor,
-                       Collection<SelectedFloorScanner.Transition> transitions) {
+                       SelectedFloorScanner.Result scan) {
+        if (scan == null) return Result.failure(Building.validationResult.TOO_SMALL, source);
+        FloorGeometry floor = scan.floor();
         if (floor == null || floor.cells().isEmpty()) {
             return Result.failure(Building.validationResult.TOO_SMALL, source);
         }
-        List<RoomPartitioner.Component> components = components(world, floor, transitions);
+        List<RoomPartitioner.Component> components = components(world, scan);
         RoomPartitioner.Component selected = RoomPartitioner.select(source, floor, components);
         return selected == null
                 ? Result.failure(Building.validationResult.TOO_SMALL, source)
@@ -36,10 +36,11 @@ final class BuildingRoomScanner {
                                   BlockPos source,
                                   int maxSize,
                                   int floorId,
-                                  FloorGeometry floor,
-                                  Collection<SelectedFloorScanner.Transition> transitions) {
+                                  SelectedFloorScanner.Result scan) {
+        if (scan == null) return List.of();
+        FloorGeometry floor = scan.floor();
         if (floor == null || floor.cells().isEmpty()) return List.of();
-        List<RoomPartitioner.Component> components = components(world, floor, transitions);
+        List<RoomPartitioner.Component> components = components(world, scan);
         return components.stream()
                 .map(component -> materialize(
                         source, maxSize, floorId, floor, components, component))
@@ -47,13 +48,12 @@ final class BuildingRoomScanner {
     }
 
     /** One world-aware Room partition entry point so door ownership cannot drift between callers. */
-    static List<RoomPartitioner.Component> components(
-            Level world,
-            FloorGeometry floor,
-            Collection<SelectedFloorScanner.Transition> transitions) {
+    static List<RoomPartitioner.Component> components(Level world, SelectedFloorScanner.Result scan) {
+        if (scan == null) return List.of();
+        FloorGeometry floor = scan.floor();
         if (floor == null || floor.cells().isEmpty()) return List.of();
         return RoomPartitioner.partition(
-                floor, transitions, StructureConnector.doorOwnerSides(world, floor));
+                floor, scan.transitions(), StructureConnector.doorOwnerSides(world, floor), scan.storeyEdgeCells());
     }
 
     static Result materialize(

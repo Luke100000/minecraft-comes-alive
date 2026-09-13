@@ -32,8 +32,7 @@ final class RoomScanPlanner {
         if (observation == null) {
             return persistedFloorPlan == null ? RoomScanPlan.addBuilding(source) : persistedFloorPlan;
         }
-        List<RoomPartitioner.Component> components = BuildingRoomScanner.components(
-                level, observation.scan().floor(), observation.scan().transitions());
+        List<RoomPartitioner.Component> components = BuildingRoomScanner.components(level, observation.scan());
         RoomScanPlan freshPlan = planFresh(village, source, observation, components);
         if (persistedFloorPlan == null || freshPlan.mode() == Village.RoomScanMode.UPDATE_ROOM) {
             return freshPlan;
@@ -51,8 +50,7 @@ final class RoomScanPlanner {
                                   StructureScanner.FloorObservation observation) {
         List<RoomPartitioner.Component> components = observation == null
                 ? List.of()
-                : BuildingRoomScanner.components(
-                null, observation.scan().floor(), observation.scan().transitions());
+                : BuildingRoomScanner.components(null, observation.scan());
         return planFresh(village, source, observation, components);
     }
 

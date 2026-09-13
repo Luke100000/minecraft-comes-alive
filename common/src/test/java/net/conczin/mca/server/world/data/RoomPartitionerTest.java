@@ -66,6 +66,43 @@ class RoomPartitionerTest {
     }
 
     @Test
+    void sparseTopStairTransitionDoesNotMergeLowerRooms() {
+        BlockPos leftRoom = new BlockPos(0, 64, 0);
+        BlockPos leftStep = new BlockPos(1, 65, 0);
+        BlockPos leftUpperStep = new BlockPos(2, 66, 0);
+        BlockPos topStair = new BlockPos(3, 67, 0);
+        BlockPos rightUpperStep = new BlockPos(4, 66, 0);
+        BlockPos rightStep = new BlockPos(5, 65, 0);
+        BlockPos rightRoom = new BlockPos(6, 64, 0);
+        FloorGeometry geometry = geometry(Set.of(
+                cell(0, 64, 0), cell(0, 64, 1), cell(0, 64, 2), cell(0, 64, 3),
+                cell(1, 65, 0), cell(2, 66, 0), cell(3, 67, 0),
+                cell(4, 66, 0), cell(5, 65, 0),
+                cell(6, 64, 0), cell(6, 64, 1), cell(6, 64, 2), cell(6, 64, 3)), Map.of());
+        Set<SelectedFloorScanner.Transition> transitions = Set.of(
+                new SelectedFloorScanner.Transition(leftRoom, leftStep),
+                new SelectedFloorScanner.Transition(leftStep, leftUpperStep),
+                new SelectedFloorScanner.Transition(leftUpperStep, topStair),
+                new SelectedFloorScanner.Transition(topStair, rightUpperStep),
+                new SelectedFloorScanner.Transition(rightUpperStep, rightStep),
+                new SelectedFloorScanner.Transition(rightStep, rightRoom),
+                new SelectedFloorScanner.Transition(new BlockPos(0, 64, 0), new BlockPos(0, 64, 1)),
+                new SelectedFloorScanner.Transition(new BlockPos(0, 64, 1), new BlockPos(0, 64, 2)),
+                new SelectedFloorScanner.Transition(new BlockPos(0, 64, 2), new BlockPos(0, 64, 3)),
+                new SelectedFloorScanner.Transition(new BlockPos(6, 64, 0), new BlockPos(6, 64, 1)),
+                new SelectedFloorScanner.Transition(new BlockPos(6, 64, 1), new BlockPos(6, 64, 2)),
+                new SelectedFloorScanner.Transition(new BlockPos(6, 64, 2), new BlockPos(6, 64, 3)));
+
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(
+                geometry, transitions, Map.of(), Set.of(topStair));
+
+        assertEquals(2, components.size(),
+                "a storey-edge stair cell must not bridge otherwise separate lower Rooms");
+        assertEquals(1, components.stream().filter(component -> component.contains(topStair)).count());
+        assertEquals(geometry.cells().size(), components.stream().mapToInt(RoomPartitioner.Component::area).sum());
+    }
+
+    @Test
     void adjacentColumnChoosesAllStepCompatibleCellsInsteadOfOneColumnRepresentative() {
         FloorGeometry.Cell start = cell(0, 90, 0);
         FloorGeometry.Cell tooLow = cell(1, 88, 0);

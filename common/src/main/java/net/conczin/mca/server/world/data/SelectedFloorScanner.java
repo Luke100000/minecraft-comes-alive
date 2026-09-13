@@ -40,8 +40,9 @@ final class SelectedFloorScanner {
         if (selected.result() != Building.validationResult.SUCCESS || selected.floor() == null) {
             return Result.failure(selected.result(), seed);
         }
-        if (reachesExterior(world, seedCell, ceilings, maxRadius, provider)) {
-            return Result.failure(Building.validationResult.NOT_IN_BUILDING, seed);
+        selected = retainEnclosedRegions(world, seedCell, selected, ceilings, maxRadius, provider);
+        if (selected.result() != Building.validationResult.SUCCESS || selected.floor() == null) {
+            return Result.failure(selected.result(), seed);
         }
 
         LinkedHashSet<BlockPos> connectors = new LinkedHashSet<>(selected.connectors());
@@ -54,7 +55,7 @@ final class SelectedFloorScanner {
         FloorGeometry floor = attachConnectors(world, selected.floor(), connectors);
         List<FloorGeometry> connectedFloors = connectedStoreyEvidence(
                 world, selected, floor, provider, ceilings, maxSize, maxRadius);
-        return success(seed, floor, selected.transitions(), connectedFloors);
+        return success(seed, floor, selected.transitions(), selected.storeyEdgeCells(), connectedFloors);
     }
 
     private static FloorGeometry attachConnectors(
@@ -85,6 +86,8 @@ final class SelectedFloorScanner {
             SurfaceCell seed = inspectSurfaceCell(world, pos, ceilings).orElse(null);
             if (seed == null) continue;
             StoreyScan adjacent = traverseStorey(seed, maxSize, maxRadius, provider);
+            if (adjacent.result() != Building.validationResult.SUCCESS || adjacent.floor() == null) continue;
+            adjacent = retainEnclosedRegions(world, seed, adjacent, ceilings, maxRadius, provider);
             if (adjacent.result() != Building.validationResult.SUCCESS || adjacent.floor() == null) continue;
             LinkedHashSet<BlockPos> adjacentConnectors = new LinkedHashSet<>(adjacent.connectors());
             for (FloorGeometry.Cell cell : adjacent.floor().cells()) {
@@ -118,6 +121,7 @@ final class SelectedFloorScanner {
         Set<BlockPos> queued = new HashSet<>();
         LinkedHashMap<BlockPos, SurfaceCell> cells = new LinkedHashMap<>();
         LinkedHashSet<Transition> transitions = new LinkedHashSet<>();
+        LinkedHashSet<BlockPos> storeyEdgeCells = new LinkedHashSet<>();
         LinkedHashSet<BlockPos> alternateSeeds = new LinkedHashSet<>();
         LinkedHashSet<BlockPos> connectors = new LinkedHashSet<>();
         queue.addLast(anchor);
@@ -140,6 +144,7 @@ final class SelectedFloorScanner {
                 transitions.add(new Transition(current.feet(), landing.feet()));
                 if (role == StoreyRole.EDGE) {
                     cells.putIfAbsent(landing.feet(), landing);
+                    storeyEdgeCells.add(landing.feet());
                     provider.steps(landing).stream()
                             .map(HorizontalStep::landing)
                             .map(SurfaceCell::feet)
@@ -157,7 +162,153 @@ final class SelectedFloorScanner {
         FloorGeometry floor = new FloorGeometry(cells.values().stream()
                 .map(SurfaceCell::canonical).collect(java.util.stream.Collectors.toSet()), Map.of());
         return new StoreyScan(Building.validationResult.SUCCESS, floor,
-                Set.copyOf(transitions), Set.copyOf(alternateSeeds), Set.copyOf(connectors));
+                Set.copyOf(transitions), Set.copyOf(storeyEdgeCells),
+                Set.copyOf(alternateSeeds), Set.copyOf(connectors));
+    }
+
+    private static StoreyScan retainEnclosedRegions(
+            Level world,
+            SurfaceCell seed,
+            StoreyScan selected,
+            FloorCeilingResolver ceilings,
+            int maxRadius,
+            StepProvider provider) {
+        Map<BlockPos, FloorConnector.Type> connectorTypes = StructureConnector.connectorTypesForFloor(
+                world, selected.connectors(), selected.floor());
+        Set<BlockPos> boundaryCells = connectorTypes.entrySet().stream()
+                .filter(entry -> entry.getValue().roomBoundary())
+                .map(Map.Entry::getKey)
+                .collect(java.util.stream.Collectors.toSet());
+        Map<BlockPos, List<BlockPos>> neighbors = Transition.neighborIndex(selected.transitions());
+        Set<BlockPos> floorCells = selected.floor().cells().stream()
+                .map(FloorGeometry.Cell::feet)
+                .collect(java.util.stream.Collectors.toSet());
+        List<Set<BlockPos>> regions = connectedRegions(floorCells, boundaryCells, neighbors);
+        StoreyContext context = new StoreyContext(seed.feet().getY());
+        Set<BlockPos> exteriorCells = new HashSet<>();
+
+        for (Set<BlockPos> region : regions) {
+            BlockPos representative = region.stream()
+                    .min(Comparator.comparingInt((BlockPos pos) -> pos.getX())
+                            .thenComparingInt(BlockPos::getZ)
+                            .thenComparingInt(BlockPos::getY))
+                    .orElseThrow();
+            SurfaceCell regionSeed = inspectSurfaceCell(world, representative, ceilings).orElse(null);
+            if (regionSeed != null && reachesExterior(
+                    world, regionSeed, seed.feet(), context, ceilings, maxRadius, provider)) {
+                exteriorCells.addAll(region);
+            }
+        }
+
+        if (exteriorCells.contains(seed.feet())) {
+            return StoreyScan.failure(Building.validationResult.NOT_IN_BUILDING);
+        }
+
+        Set<BlockPos> allowed = new HashSet<>(floorCells);
+        allowed.removeAll(exteriorCells);
+        Set<BlockPos> reachable = reachableCells(seed.feet(), allowed, neighbors);
+        if (reachable.isEmpty()) {
+            return StoreyScan.failure(Building.validationResult.NOT_IN_BUILDING);
+        }
+
+        Set<FloorGeometry.Cell> cells = selected.floor().cells().stream()
+                .filter(cell -> reachable.contains(cell.feet()))
+                .collect(java.util.stream.Collectors.toSet());
+        Set<Transition> transitions = selected.transitions().stream()
+                .filter(transition -> reachable.contains(transition.first())
+                        && reachable.contains(transition.second()))
+                .collect(java.util.stream.Collectors.toSet());
+        Set<BlockPos> storeyEdgeCells = selected.storeyEdgeCells().stream()
+                .filter(reachable::contains)
+                .collect(java.util.stream.Collectors.toSet());
+        Set<BlockPos> connectors = selected.connectors().stream()
+                .filter(connector -> reachable.contains(StructureConnector.normalize(
+                        connector, world.getBlockState(connector))))
+                .collect(java.util.stream.Collectors.toSet());
+        Set<BlockPos> alternateSeeds = alternateSeedsForRetainedFloor(
+                world, ceilings, reachable, context, provider);
+        return new StoreyScan(
+                Building.validationResult.SUCCESS,
+                new FloorGeometry(cells, Map.of()),
+                transitions,
+                storeyEdgeCells,
+                alternateSeeds,
+                connectors);
+    }
+
+    private static Set<BlockPos> alternateSeedsForRetainedFloor(
+            Level world,
+            FloorCeilingResolver ceilings,
+            Set<BlockPos> retained,
+            StoreyContext context,
+            StepProvider provider) {
+        LinkedHashSet<BlockPos> alternateSeeds = new LinkedHashSet<>();
+        for (BlockPos pos : retained) {
+            SurfaceCell current = inspectSurfaceCell(world, pos, ceilings).orElse(null);
+            if (current == null) continue;
+            if (storeyRole(context, current, provider) == StoreyRole.EDGE) {
+                provider.steps(current).stream()
+                        .map(HorizontalStep::landing)
+                        .map(SurfaceCell::feet)
+                        .filter(candidate -> !retained.contains(candidate))
+                        .forEach(alternateSeeds::add);
+                continue;
+            }
+            provider.steps(current).stream()
+                    .map(HorizontalStep::landing)
+                    .filter(candidate -> storeyRole(context, candidate, provider) == StoreyRole.OTHER)
+                    .map(SurfaceCell::feet)
+                    .forEach(alternateSeeds::add);
+        }
+        return Set.copyOf(alternateSeeds);
+    }
+
+    private static List<Set<BlockPos>> connectedRegions(
+            Set<BlockPos> floorCells,
+            Set<BlockPos> boundaryCells,
+            Map<BlockPos, List<BlockPos>> neighbors) {
+        Set<BlockPos> visited = new HashSet<>();
+        List<Set<BlockPos>> regions = new ArrayList<>();
+        for (BlockPos seed : floorCells.stream()
+                .sorted(Comparator.comparingInt((BlockPos pos) -> pos.getX())
+                        .thenComparingInt(BlockPos::getZ)
+                        .thenComparingInt(BlockPos::getY))
+                .toList()) {
+            if (boundaryCells.contains(seed) || !visited.add(seed)) continue;
+            LinkedHashSet<BlockPos> region = new LinkedHashSet<>();
+            ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+            queue.addLast(seed);
+            while (!queue.isEmpty()) {
+                BlockPos current = queue.removeFirst();
+                region.add(current);
+                for (BlockPos next : neighbors.getOrDefault(current, List.of())) {
+                    if (!floorCells.contains(next)
+                            || boundaryCells.contains(next)
+                            || !visited.add(next)) continue;
+                    queue.addLast(next);
+                }
+            }
+            regions.add(Set.copyOf(region));
+        }
+        return List.copyOf(regions);
+    }
+
+    private static Set<BlockPos> reachableCells(
+            BlockPos seed,
+            Set<BlockPos> allowed,
+            Map<BlockPos, List<BlockPos>> neighbors) {
+        if (!allowed.contains(seed)) return Set.of();
+        LinkedHashSet<BlockPos> reachable = new LinkedHashSet<>();
+        ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+        queue.addLast(seed);
+        reachable.add(seed);
+        while (!queue.isEmpty()) {
+            BlockPos current = queue.removeFirst();
+            for (BlockPos next : neighbors.getOrDefault(current, List.of())) {
+                if (allowed.contains(next) && reachable.add(next)) queue.addLast(next);
+            }
+        }
+        return Set.copyOf(reachable);
     }
 
     private static StoreyRole storeyRole(StoreyContext context,
@@ -267,19 +418,19 @@ final class SelectedFloorScanner {
     private static boolean reachesExterior(
             Level world,
             SurfaceCell start,
+            BlockPos scanAnchor,
+            StoreyContext context,
             FloorCeilingResolver ceilings,
             int maxRadius,
             StepProvider provider) {
-        SurfaceCell anchor = start;
-        StoreyContext context = new StoreyContext(anchor.feet().getY());
         ArrayDeque<SurfaceCell> queue = new ArrayDeque<>();
         Set<BlockPos> visited = new HashSet<>();
-        queue.addLast(anchor);
-        visited.add(anchor.feet());
+        queue.addLast(start);
+        visited.add(start.feet());
 
         while (!queue.isEmpty()) {
             SurfaceCell current = queue.removeFirst();
-            if (horizontalDistance(current.feet(), anchor.feet()) >= maxRadius - 1) return true;
+            if (horizontalDistance(current.feet(), scanAnchor) >= maxRadius - 1) return true;
 
             for (PhysicalStep step : physicalSteps(world, new SurfaceProbe(current.feet(), current.surfaceY()))) {
                 if (step.connector() != null) continue;
@@ -372,6 +523,7 @@ final class SelectedFloorScanner {
     private static Result success(BlockPos seed,
                                   FloorGeometry floor,
                                   Set<Transition> transitions,
+                                  Set<BlockPos> storeyEdgeCells,
                                   List<FloorGeometry> connectedFloors) {
         FloorGeometry geometry = floor;
         Set<BlockPos> footprint = geometry.projection().cells();
@@ -384,7 +536,8 @@ final class SelectedFloorScanner {
         int maxY = geometry.cells().stream().mapToInt(cell -> cell.ceilingY() - 1)
                 .max().orElse(seed.getY());
         return new Result(Building.validationResult.SUCCESS, floor,
-                new BlockPos(minX, minY, minZ), new BlockPos(maxX, maxY, maxZ), transitions, connectedFloors);
+                new BlockPos(minX, minY, minZ), new BlockPos(maxX, maxY, maxZ),
+                transitions, storeyEdgeCells, connectedFloors);
     }
 
     record SurfaceCell(BlockPos feet, double surfaceY, int ceilingY) {
@@ -401,6 +554,21 @@ final class SelectedFloorScanner {
         Transition {
             first = first.immutable();
             second = second.immutable();
+        }
+
+        static Map<BlockPos, List<BlockPos>> neighborIndex(Collection<Transition> transitions) {
+            Map<BlockPos, LinkedHashSet<BlockPos>> indexed = new LinkedHashMap<>();
+            if (transitions != null) {
+                for (Transition transition : transitions) {
+                    indexed.computeIfAbsent(transition.first(), ignored -> new LinkedHashSet<>())
+                            .add(transition.second());
+                    indexed.computeIfAbsent(transition.second(), ignored -> new LinkedHashSet<>())
+                            .add(transition.first());
+                }
+            }
+            Map<BlockPos, List<BlockPos>> frozen = new LinkedHashMap<>();
+            indexed.forEach((cell, neighbors) -> frozen.put(cell, List.copyOf(neighbors)));
+            return Map.copyOf(frozen);
         }
 
         boolean connects(BlockPos a, BlockPos b) {
@@ -444,16 +612,18 @@ final class SelectedFloorScanner {
     record StoreyScan(Building.validationResult result,
                       FloorGeometry floor,
                       Set<Transition> transitions,
+                      Set<BlockPos> storeyEdgeCells,
                       Set<BlockPos> alternateSeeds,
                       Set<BlockPos> connectors) {
         StoreyScan {
             transitions = transitions == null ? Set.of() : Set.copyOf(transitions);
+            storeyEdgeCells = storeyEdgeCells == null ? Set.of() : Set.copyOf(storeyEdgeCells);
             alternateSeeds = alternateSeeds == null ? Set.of() : Set.copyOf(alternateSeeds);
             connectors = connectors == null ? Set.of() : Set.copyOf(connectors);
         }
 
         static StoreyScan failure(Building.validationResult result) {
-            return new StoreyScan(result, null, Set.of(), Set.of(), Set.of());
+            return new StoreyScan(result, null, Set.of(), Set.of(), Set.of(), Set.of());
         }
     }
 
@@ -465,14 +635,16 @@ final class SelectedFloorScanner {
                   BlockPos min,
                   BlockPos max,
                   Set<Transition> transitions,
+                  Set<BlockPos> storeyEdgeCells,
                   List<FloorGeometry> connectedFloors) {
         Result {
             transitions = transitions == null ? Set.of() : Set.copyOf(transitions);
+            storeyEdgeCells = storeyEdgeCells == null ? Set.of() : Set.copyOf(storeyEdgeCells);
             connectedFloors = connectedFloors == null ? List.of() : List.copyOf(connectedFloors);
         }
 
         static Result failure(Building.validationResult result, BlockPos source) {
-            return new Result(result, null, source, source, Set.of(), List.of());
+            return new Result(result, null, source, source, Set.of(), Set.of(), List.of());
         }
     }
 }

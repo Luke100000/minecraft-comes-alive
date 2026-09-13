@@ -258,7 +258,7 @@ class RoomScanPlannerTest {
                                                                    List<FloorGeometry> connected) {
         return new StructureScanner.FloorObservation(
                 source, new SelectedFloorScanner.Result(Building.validationResult.SUCCESS,
-                floor, source, source, transitions(floor), connected), List.of());
+                floor, source, source, transitions(floor), Set.of(), connected), List.of());
     }
 
     private static Structure structure(int id, int logicalBuildingId, StructureFloor floor) {

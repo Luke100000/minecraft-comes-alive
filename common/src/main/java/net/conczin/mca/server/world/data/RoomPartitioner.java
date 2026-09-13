@@ -32,20 +32,36 @@ final class RoomPartitioner {
 
     static List<Component> partition(FloorGeometry geometry,
                                      Collection<SelectedFloorScanner.Transition> transitions) {
-        return partition(geometry, transitions, Map.of());
+        return partition(geometry, transitions, Map.of(), Set.of());
     }
 
     static List<Component> partition(FloorGeometry geometry,
                                      Collection<SelectedFloorScanner.Transition> transitions,
                                      Map<BlockPos, Direction> doorOwnerSides) {
+        return partition(geometry, transitions, doorOwnerSides, Set.of());
+    }
+
+    static List<Component> partition(FloorGeometry geometry,
+                                     Collection<SelectedFloorScanner.Transition> transitions,
+                                     Map<BlockPos, Direction> doorOwnerSides,
+                                     Collection<BlockPos> storeyEdgeCells) {
         Collection<SelectedFloorScanner.Transition> acceptedTransitions =
                 transitions == null ? List.of() : transitions;
         Map<BlockPos, Direction> ownerSides = doorOwnerSides == null
                 ? Map.of() : Map.copyOf(doorOwnerSides);
-        TransitionIndex transitionIndex = TransitionIndex.from(acceptedTransitions);
-        Set<BlockPos> boundaryCells = geometry.connectorTypesByCell().keySet().stream()
+        Map<BlockPos, List<BlockPos>> transitionNeighbors =
+                SelectedFloorScanner.Transition.neighborIndex(acceptedTransitions);
+        Set<BlockPos> connectorBoundaryCells = geometry.connectorTypesByCell().keySet().stream()
                 .filter(geometry::isRoomBoundaryCell)
                 .collect(Collectors.toSet());
+        Set<BlockPos> storeyBoundaryCells = storeyEdgeCells == null
+                ? Set.of()
+                : storeyEdgeCells.stream()
+                .filter(pos -> geometry.cellAt(pos).isPresent())
+                .filter(pos -> !connectorBoundaryCells.contains(pos))
+                .collect(Collectors.toSet());
+        Set<BlockPos> boundaryCells = new HashSet<>(connectorBoundaryCells);
+        boundaryCells.addAll(storeyBoundaryCells);
         Set<BlockPos> visited = new HashSet<>();
         List<Component> openComponents = new ArrayList<>();
 
@@ -56,12 +72,14 @@ final class RoomPartitioner {
                 .toList();
         for (FloorGeometry.Cell seed : seeds) {
             Set<FloorGeometry.Cell> component = connectedCells(
-                    geometry, seed, visited, cell -> !boundaryCells.contains(cell.feet()), transitionIndex);
+                    geometry, seed, visited, cell -> !boundaryCells.contains(cell.feet()), transitionNeighbors);
             if (!component.isEmpty()) openComponents.add(new Component(component));
         }
 
         List<Component> result = assignBoundaryClusters(
-                geometry, boundaryCells, openComponents, transitionIndex, ownerSides);
+                geometry, connectorBoundaryCells, openComponents, transitionNeighbors, ownerSides);
+        result = assignBoundaryClusters(
+                geometry, storeyBoundaryCells, result, transitionNeighbors, Map.of());
         result.sort(COMPONENT_ORDER);
         return List.copyOf(result);
     }
@@ -69,11 +87,12 @@ final class RoomPartitioner {
     private static List<Component> assignBoundaryClusters(FloorGeometry geometry,
                                                            Set<BlockPos> boundaryCells,
                                                            List<Component> openComponents,
-                                                           TransitionIndex transitions,
+                                                           Map<BlockPos, List<BlockPos>> transitionNeighbors,
                                                            Map<BlockPos, Direction> doorOwnerSides) {
         if (boundaryCells.isEmpty()) return new ArrayList<>(openComponents);
 
-        List<Set<FloorGeometry.Cell>> clusters = boundaryClusters(geometry, boundaryCells, transitions);
+        List<Set<FloorGeometry.Cell>> clusters = boundaryClusters(
+                geometry, boundaryCells, transitionNeighbors);
         Map<BlockPos, Component> componentByCell = new HashMap<>();
         for (Component component : openComponents) {
             for (FloorGeometry.Cell cell : component.cells()) componentByCell.put(cell.feet(), component);
@@ -83,7 +102,7 @@ final class RoomPartitioner {
         for (Set<FloorGeometry.Cell> cluster : clusters) {
             LinkedHashSet<Component> adjacent = new LinkedHashSet<>();
             for (FloorGeometry.Cell cell : cluster) {
-                for (BlockPos neighbor : transitions.neighbors(cell.feet())) {
+                for (BlockPos neighbor : transitionNeighbors.getOrDefault(cell.feet(), List.of())) {
                     Component component = componentByCell.get(neighbor);
                     if (component != null) adjacent.add(component);
                 }
@@ -91,7 +110,7 @@ final class RoomPartitioner {
             boolean containsDoor = cluster.stream().anyMatch(cell ->
                     geometry.connectorTypesByCell().get(cell.feet()) == FloorConnector.Type.DOOR);
             Component owner = containsDoor
-                    ? doorOwner(cluster, componentByCell, transitions, doorOwnerSides)
+                    ? doorOwner(cluster, componentByCell, transitionNeighbors, doorOwnerSides)
                     : owner(adjacent);
             if (containsDoor && owner == null && adjacent.size() == 1) {
                 owner = adjacent.iterator().next();
@@ -115,14 +134,14 @@ final class RoomPartitioner {
 
     private static Component doorOwner(Set<FloorGeometry.Cell> cluster,
                                        Map<BlockPos, Component> componentByCell,
-                                       TransitionIndex transitions,
+                                       Map<BlockPos, List<BlockPos>> transitionNeighbors,
                                        Map<BlockPos, Direction> doorOwnerSides) {
         LinkedHashSet<Component> preferred = new LinkedHashSet<>();
         for (FloorGeometry.Cell cell : cluster) {
             BlockPos boundary = cell.feet();
             Direction side = doorOwnerSides.get(boundary);
             if (side == null) continue;
-            for (BlockPos neighbor : transitions.neighbors(boundary)) {
+            for (BlockPos neighbor : transitionNeighbors.getOrDefault(boundary, List.of())) {
                 if (!isOnSide(boundary, neighbor, side)) continue;
                 Component component = componentByCell.get(neighbor);
                 if (component != null) preferred.add(component);
@@ -138,7 +157,7 @@ final class RoomPartitioner {
 
     private static List<Set<FloorGeometry.Cell>> boundaryClusters(FloorGeometry geometry,
                                                                   Set<BlockPos> boundaryCells,
-                                                                  TransitionIndex transitions) {
+                                                                  Map<BlockPos, List<BlockPos>> transitionNeighbors) {
         Set<BlockPos> visited = new HashSet<>();
         List<Set<FloorGeometry.Cell>> result = new ArrayList<>();
         List<FloorGeometry.Cell> seeds = boundaryCells.stream()
@@ -150,7 +169,7 @@ final class RoomPartitioner {
                 .toList();
         for (FloorGeometry.Cell seed : seeds) {
             Set<FloorGeometry.Cell> cluster = connectedCells(
-                    geometry, seed, visited, cell -> boundaryCells.contains(cell.feet()), transitions);
+                    geometry, seed, visited, cell -> boundaryCells.contains(cell.feet()), transitionNeighbors);
             if (!cluster.isEmpty()) result.add(Set.copyOf(cluster));
         }
         return List.copyOf(result);
@@ -160,7 +179,7 @@ final class RoomPartitioner {
                                                            FloorGeometry.Cell seed,
                                                            Set<BlockPos> visited,
                                                            Predicate<FloorGeometry.Cell> included,
-                                                           TransitionIndex transitions) {
+                                                           Map<BlockPos, List<BlockPos>> transitionNeighbors) {
         if (!included.test(seed) || !visited.add(seed.feet())) return Set.of();
         LinkedHashSet<FloorGeometry.Cell> component = new LinkedHashSet<>();
         ArrayDeque<FloorGeometry.Cell> queue = new ArrayDeque<>();
@@ -168,7 +187,7 @@ final class RoomPartitioner {
         while (!queue.isEmpty()) {
             FloorGeometry.Cell current = queue.removeFirst();
             component.add(current);
-            for (BlockPos nextPos : transitions.neighbors(current.feet())) {
+            for (BlockPos nextPos : transitionNeighbors.getOrDefault(current.feet(), List.of())) {
                 FloorGeometry.Cell next = nextPos == null ? null : geometry.cellAt(nextPos).orElse(null);
                 if (next == null || !included.test(next) || !visited.add(next.feet())) continue;
                 queue.addLast(next);
@@ -224,25 +243,6 @@ final class RoomPartitioner {
                 .min(Comparator.comparingInt((FloorGeometry.Cell cell) -> Math.abs(cell.feet().getY() - source.getY()))
                 .thenComparingInt(cell -> cell.feet().getY()))
                 .orElse(null);
-    }
-
-    private record TransitionIndex(Map<BlockPos, List<BlockPos>> neighborsByCell) {
-        static TransitionIndex from(Collection<SelectedFloorScanner.Transition> transitions) {
-            Map<BlockPos, LinkedHashSet<BlockPos>> indexed = new HashMap<>();
-            for (SelectedFloorScanner.Transition transition : transitions) {
-                indexed.computeIfAbsent(transition.first(), ignored -> new LinkedHashSet<>())
-                        .add(transition.second());
-                indexed.computeIfAbsent(transition.second(), ignored -> new LinkedHashSet<>())
-                        .add(transition.first());
-            }
-            Map<BlockPos, List<BlockPos>> frozen = new HashMap<>();
-            indexed.forEach((cell, neighbors) -> frozen.put(cell, List.copyOf(neighbors)));
-            return new TransitionIndex(Map.copyOf(frozen));
-        }
-
-        List<BlockPos> neighbors(BlockPos cell) {
-            return neighborsByCell.getOrDefault(cell, List.of());
-        }
     }
 
     record Component(Set<FloorGeometry.Cell> cells) {

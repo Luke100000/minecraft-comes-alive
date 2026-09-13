@@ -288,10 +288,6 @@ final class StructureScanner {
             return scan == null ? null : scan.floor();
         }
 
-        Set<SelectedFloorScanner.Transition> transitions() {
-            return scan == null ? Set.of() : scan.transitions();
-        }
-
         List<FloorGeometry> connectedFloors() {
             return scan == null ? List.of() : scan.connectedFloors();
         }
