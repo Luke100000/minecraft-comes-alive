@@ -65,13 +65,14 @@ public class FamilyTreeSearchScreen extends Screen {
         }));
         buttonPage = addRenderableWidget(new ButtonWidget(width / 2 - 24, height / 2 + 60, 48, 20, Component.literal("1/1"), (b) -> {
         }));
+
+        searchVillager("");
     }
 
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         renderBackground(context, mouseX, mouseY, delta);
 
-        assert minecraft != null;
         this.mouseX = (int) (minecraft.mouseHandler.xpos() * width / minecraft.getWindow().getWidth());
         this.mouseY = (int) (minecraft.mouseHandler.ypos() * height / minecraft.getWindow().getHeight());
 
@@ -116,9 +117,14 @@ public class FamilyTreeSearchScreen extends Screen {
         }
     }
 
-    private void searchVillager(String v) {
-        if (!MCA.isBlankString(v)) {
-            Network.sendToServer(new FamilyTreeUUIDLookup(v));
+    private void searchVillager(String value) {
+        String search = value;
+        if (MCA.isBlankString(search) && minecraft.player != null) {
+            search = minecraft.player.getName().getString();
+        }
+
+        if (!MCA.isBlankString(search)) {
+            Network.sendToServer(new FamilyTreeUUIDLookup(search));
         }
     }
 
@@ -141,7 +147,6 @@ public class FamilyTreeSearchScreen extends Screen {
     }
 
     void selectVillager(String name, UUID villager) {
-        assert minecraft != null;
         minecraft.setScreen(new FamilyTreeScreen(villager));
     }
 
