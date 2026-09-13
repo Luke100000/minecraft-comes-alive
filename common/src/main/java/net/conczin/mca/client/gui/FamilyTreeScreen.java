@@ -40,6 +40,10 @@ public class FamilyTreeScreen extends Screen {
     private TreeNode focused;
     private double scrollX;
     private double scrollY;
+    private float zoom = 1.0F;
+    private static final float MIN_ZOOM = 0.25F;
+    private static final float MAX_ZOOM = 2.0F;
+    private boolean showDeceasedTooltip;
 
     public FamilyTreeScreen(UUID entityId) {
         super(Component.translatable("gui.family_tree.title"));
@@ -104,12 +108,37 @@ public class FamilyTreeScreen extends Screen {
     }
 
     @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (mouseY < 30 || mouseY >= height - 30 || scrollY == 0.0) {
+            return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        }
+
+        float zoomDelta = (float) scrollY * 0.1F;
+        float newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom + zoomDelta));
+
+        if (newZoom == zoom) {
+            return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        }
+
+        double worldMouseX = (mouseX - width / 2.0 - this.scrollX) / zoom;
+        double worldMouseY = (mouseY - height / 2.0 - this.scrollY) / zoom;
+
+        zoom = newZoom;
+
+        this.scrollX = mouseX - width / 2.0 - worldMouseX * zoom;
+        this.scrollY = mouseY - height / 2.0 - worldMouseY * zoom;
+
+        return true;
+    }
+
+    @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         super.render(context, mouseX, mouseY, delta);
 
         context.fill(0, 30, width, height - 30, 0x66000000);
 
         focused = null;
+        showDeceasedTooltip = false;
 
         Window window = Minecraft.getInstance().getWindow();
         double f = window.getGuiScale();
@@ -129,10 +158,20 @@ public class FamilyTreeScreen extends Screen {
         int xx = (int) (scrollX + width / 2.0);
         int yy = (int) (scrollY + height / 2.0);
         matrices.translate(xx, yy, 0);
-        tree.render(context, mouseX - xx, mouseY - yy);
+        matrices.scale(zoom, zoom, 1.0F);
+
+        // Adjust mouse coords for the zoom
+        float adjustedMouseX = (mouseX - xx) / zoom;
+        float adjustedMouseY = (mouseY - yy) / zoom;
+
+        tree.render(context, (int) adjustedMouseX, (int) adjustedMouseY);
         matrices.popPose();
 
         GL11.glDisable(GL11.GL_SCISSOR_TEST);
+
+        if (showDeceasedTooltip) {
+            context.renderTooltip(font, Component.translatable("gui.family_tree.label.deceased"), mouseX, mouseY);
+        }
 
         FamilyTreeNode selected = family.get(focusedEntityId);
 
@@ -326,10 +365,7 @@ public class FamilyTreeScreen extends Screen {
                 context.blit(InteractScreen.ICON_TEXTURES, bounds.left + 6, bounds.top + 6, 0, icon.u(), icon.v(), 16, 16, 256, 256);
 
                 if (isFocused && mouseX <= bounds.left + 20) {
-                    matrices.pushPose();
-                    matrices.translate(0, 0, 20);
-                    context.renderTooltip(font, Component.translatable("gui.family_tree.label.deceased"), mouseX, mouseY);
-                    matrices.popPose();
+                    showDeceasedTooltip = true;
                 }
             }
 
