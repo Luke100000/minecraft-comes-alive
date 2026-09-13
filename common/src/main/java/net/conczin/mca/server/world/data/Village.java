@@ -41,7 +41,7 @@ public class Village implements Iterable<Building> {
     private static final int MOVE_IN_COOLDOWN = 1200;
     private static final long BED_SYNC_TIME = 200;
     private static final int MIN_MOURNING_INTERVAL = 4_000;
-    private static final int MAX_MOURNING_INTERVAL = 10_000;
+    private static final int MAX_MOURNING_INTERVAL = 9_000;
     private static final int MIN_MOURNING_BURST_SIZE = 2;
     private static final int MAX_MOURNING_BURST_SIZE = 4;
     private static final long MOURNING_DAY_START = 1_000L;

@@ -287,8 +287,8 @@ public final class VillageMourningGameTests {
 
         helper.assertTrue(village.getNextMourningTime() >= now + 4_000L,
                 "first tick should schedule mourning at least four thousand ticks away");
-        helper.assertTrue(village.getNextMourningTime() <= now + 10_000L,
-                "first tick should schedule mourning no more than ten thousand ticks away");
+        helper.assertTrue(village.getNextMourningTime() <= now + 9_000L,
+                "first tick should schedule mourning no more than nine thousand ticks away");
         helper.succeed();
     }
 
@@ -321,7 +321,7 @@ public final class VillageMourningGameTests {
 
         helper.assertTrue(firstCount >= 2 && firstCount <= 4,
                 "one due burst must select only two to four residents");
-        helper.assertTrue(nextBurst >= now + 4_000L && nextBurst <= now + 10_000L,
+        helper.assertTrue(nextBurst >= now + 4_000L && nextBurst <= now + 9_000L,
                 "one due burst must schedule one later random burst");
 
         due.tick(helper.getLevel(), nextBurst - 1L);

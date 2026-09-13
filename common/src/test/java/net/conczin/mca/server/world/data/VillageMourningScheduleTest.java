@@ -31,12 +31,12 @@ class VillageMourningScheduleTest {
     }
 
     @Test
-    void nextMourningFallsBetweenFourAndTenThousandTicks() {
+    void nextMourningFallsBetweenFourAndNineThousandTicks() {
         long now = 200_000L;
         long next = Village.calculateNextMourningTime(now, RandomSource.create(1234L));
 
         assertTrue(next >= now + 4_000L);
-        assertTrue(next <= now + 10_000L);
+        assertTrue(next <= now + 9_000L);
     }
 
     @Test

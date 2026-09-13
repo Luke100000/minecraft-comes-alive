@@ -5,7 +5,7 @@
 > Ambient mourning is now one self-contained village burst at a time:
 >
 > - `Village` persists only `nextMourningTime`.
-> - After an ambient burst executes, the next one is randomized 4,000-10,000 ticks later.
+> - After an ambient burst executes, the next one is randomized 4,000-9,000 ticks later.
 > - A burst selects 2-4 currently eligible loaded residents, independent of village population.
 > - Ambient bursts execute only during the daytime window 1,000-11,000 day ticks. If a burst becomes due at night, it remains due and runs after daytime returns; it is not consumed or rescheduled at night.
 > - Each occurrence discovers the currently loaded, valid occupied graves once. There is no persisted session, remaining budget, later-burst timestamp, or grave cache.
