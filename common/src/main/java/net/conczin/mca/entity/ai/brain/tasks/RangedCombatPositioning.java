@@ -19,16 +19,13 @@ import java.util.List;
 import java.util.Optional;
 
 final class RangedCombatPositioning {
-    private static final int AWAY_HORIZONTAL_RANGE = 12;
-    private static final int AWAY_VERTICAL_RANGE = 5;
-    private static final int AWAY_FALLBACK_DIRECTIONS = 32;
-    private static final double[] AWAY_FALLBACK_RADII = {2.0D, 4.0D, 6.0D, 8.0D, 10.0D, 12.0D};
     private static final int FIRING_CANDIDATE_ATTEMPTS = 8;
     private static final int FIRING_HORIZONTAL_RANGE = 8;
     private static final int FIRING_VERTICAL_RANGE = 4;
     private static final double FIRING_LATERAL_STEP = 2.0D;
-    private static final int EMERGENCY_ESCAPE_DIRECTIONS = 16;
-    private static final double[] EMERGENCY_ESCAPE_RADII = {2.0D, 4.0D, 6.0D, 8.0D};
+    private static final int GROUP_ESCAPE_DIRECTIONS = 32;
+    private static final int GROUP_ESCAPE_VERTICAL_RANGE = 5;
+    private static final double[] GROUP_ESCAPE_RADII = {2.0D, 4.0D, 6.0D, 8.0D};
     private static final double NEARBY_THREAT_RANGE_SQUARED = 256.0D;
     private static final double MIN_USEFUL_DISTANCE_GAIN = 0.5D;
     private static final double MAX_REPOSITION_CLOSING_DISTANCE = 0.5D;
@@ -61,65 +58,13 @@ final class RangedCombatPositioning {
         return threats;
     }
 
-    static Optional<Vec3> findAwayPosition(PathfinderMob entity, LivingEntity threat, double desiredDistance) {
-        double currentDistanceSquared = entity.distanceToSqr(threat);
-        int horizontalRange = Math.max(AWAY_HORIZONTAL_RANGE, (int)Math.ceil(desiredDistance));
-        Vec3 candidate = LandRandomPos.getPosAway(entity, horizontalRange, AWAY_VERTICAL_RANGE, threat.position());
-        if (candidate != null
-                && isWalkableDestination(entity, candidate)
-                && hasStandingSpace(entity, candidate)
-                && candidate.distanceToSqr(threat.position()) > currentDistanceSquared + MIN_USEFUL_DISTANCE_GAIN) {
-            return Optional.of(candidate);
-        }
-
-        return findAwayFallbackPosition(entity, threat, desiredDistance, currentDistanceSquared);
-    }
-
-    private static Optional<Vec3> findAwayFallbackPosition(
+    static Optional<Vec3> findGroupEscapePosition(
             PathfinderMob entity,
-            LivingEntity threat,
-            double desiredDistance,
-            double currentDistanceSquared
+            List<? extends LivingEntity> threats,
+            double desiredDistance
     ) {
-        Vec3 origin = entity.position();
-        double desiredDistanceSquared = desiredDistance * desiredDistance;
-        Vec3 bestImprovement = null;
-        double bestDistanceSquared = currentDistanceSquared;
-
-        for (double radius : AWAY_FALLBACK_RADII) {
-            Vec3 bestSafeAtRadius = null;
-            double bestSafeDistanceSquared = Double.NEGATIVE_INFINITY;
-
-            for (int direction = 0; direction < AWAY_FALLBACK_DIRECTIONS; direction++) {
-                double angle = Math.PI * 2.0D * direction / AWAY_FALLBACK_DIRECTIONS;
-                Vec3 candidate = origin.add(Math.cos(angle) * radius, 0.0D, Math.sin(angle) * radius);
-                if (!isWalkableDestination(entity, candidate) || !hasStandingSpace(entity, candidate)) {
-                    continue;
-                }
-
-                double candidateDistanceSquared = candidate.distanceToSqr(threat.position());
-                if (candidateDistanceSquared <= currentDistanceSquared + MIN_USEFUL_DISTANCE_GAIN) {
-                    continue;
-                }
-
-                if (candidateDistanceSquared > bestDistanceSquared) {
-                    bestDistanceSquared = candidateDistanceSquared;
-                    bestImprovement = candidate;
-                }
-
-                if (candidateDistanceSquared >= desiredDistanceSquared
-                        && candidateDistanceSquared > bestSafeDistanceSquared) {
-                    bestSafeDistanceSquared = candidateDistanceSquared;
-                    bestSafeAtRadius = candidate;
-                }
-            }
-
-            if (bestSafeAtRadius != null) {
-                return Optional.of(bestSafeAtRadius);
-            }
-        }
-
-        return Optional.ofNullable(bestImprovement);
+        GroupEscapeCandidates candidates = findGroupEscapeCandidates(entity, threats, desiredDistance);
+        return Optional.ofNullable(candidates.safe() != null ? candidates.safe() : candidates.bestNonClosingImprovement());
     }
 
     static Optional<Vec3> findEmergencyEscapePosition(
@@ -127,8 +72,17 @@ final class RangedCombatPositioning {
             List<? extends LivingEntity> threats,
             double desiredDistance
     ) {
+        GroupEscapeCandidates candidates = findGroupEscapeCandidates(entity, threats, desiredDistance);
+        return Optional.ofNullable(candidates.safe() != null ? candidates.safe() : candidates.bestImprovement());
+    }
+
+    private static GroupEscapeCandidates findGroupEscapeCandidates(
+            PathfinderMob entity,
+            List<? extends LivingEntity> threats,
+            double desiredDistance
+    ) {
         if (threats.isEmpty()) {
-            return Optional.empty();
+            return new GroupEscapeCandidates(null, null, null);
         }
 
         Vec3 origin = entity.position();
@@ -136,15 +90,20 @@ final class RangedCombatPositioning {
         double desiredDistanceSquared = desiredDistance * desiredDistance;
         Vec3 bestImprovement = null;
         double bestMinimumDistanceSquared = currentMinimumDistanceSquared;
+        Vec3 bestNonClosingImprovement = null;
+        double bestNonClosingMinimumDistanceSquared = currentMinimumDistanceSquared;
 
-        for (double radius : EMERGENCY_ESCAPE_RADII) {
+        for (double radius : GROUP_ESCAPE_RADII) {
             Vec3 bestSafeAtRadius = null;
             double bestSafeMinimumDistanceSquared = Double.NEGATIVE_INFINITY;
 
-            for (int direction = 0; direction < EMERGENCY_ESCAPE_DIRECTIONS; direction++) {
-                double angle = Math.PI * 2.0D * direction / EMERGENCY_ESCAPE_DIRECTIONS;
-                Vec3 candidate = origin.add(Math.cos(angle) * radius, 0.0D, Math.sin(angle) * radius);
-                if (!isWalkableDestination(entity, candidate) || !hasStandingSpace(entity, candidate)) {
+            for (int direction = 0; direction < GROUP_ESCAPE_DIRECTIONS; direction++) {
+                double angle = Math.PI * 2.0D * direction / GROUP_ESCAPE_DIRECTIONS;
+                Vec3 candidate = resolveGroupEscapeCandidate(
+                        entity,
+                        origin.add(Math.cos(angle) * radius, 0.0D, Math.sin(angle) * radius)
+                );
+                if (candidate == null) {
                     continue;
                 }
 
@@ -158,8 +117,14 @@ final class RangedCombatPositioning {
                     bestImprovement = candidate;
                 }
 
+                boolean opensEveryThreat = opensDistanceFromEveryThreat(origin, candidate, threats);
+                if (opensEveryThreat && minimumDistanceSquared > bestNonClosingMinimumDistanceSquared) {
+                    bestNonClosingMinimumDistanceSquared = minimumDistanceSquared;
+                    bestNonClosingImprovement = candidate;
+                }
+
                 if (minimumDistanceSquared >= desiredDistanceSquared
-                        && opensDistanceFromEveryThreat(origin, candidate, threats)
+                        && opensEveryThreat
                         && minimumDistanceSquared > bestSafeMinimumDistanceSquared) {
                     bestSafeMinimumDistanceSquared = minimumDistanceSquared;
                     bestSafeAtRadius = candidate;
@@ -167,11 +132,23 @@ final class RangedCombatPositioning {
             }
 
             if (bestSafeAtRadius != null) {
-                return Optional.of(bestSafeAtRadius);
+                return new GroupEscapeCandidates(bestSafeAtRadius, bestNonClosingImprovement, bestImprovement);
             }
         }
 
-        return Optional.ofNullable(bestImprovement);
+        return new GroupEscapeCandidates(null, bestNonClosingImprovement, bestImprovement);
+    }
+
+    private static Vec3 resolveGroupEscapeCandidate(PathfinderMob entity, Vec3 candidate) {
+        BlockPos resolved = LandRandomPos.movePosUpOutOfSolid(entity, BlockPos.containing(candidate));
+        if (resolved == null || resolved.getY() - entity.getBlockY() > GROUP_ESCAPE_VERTICAL_RANGE) {
+            return null;
+        }
+
+        Vec3 grounded = Vec3.atBottomCenterOf(resolved);
+        return isWalkableDestination(entity, grounded) && hasStandingSpace(entity, grounded)
+                ? grounded
+                : null;
     }
 
     static Optional<Vec3> findFiringPosition(
@@ -372,5 +349,8 @@ final class RangedCombatPositioning {
                 ClipContext.Fluid.NONE,
                 entity
         )).getType() == HitResult.Type.MISS;
+    }
+
+    private record GroupEscapeCandidates(Vec3 safe, Vec3 bestNonClosingImprovement, Vec3 bestImprovement) {
     }
 }

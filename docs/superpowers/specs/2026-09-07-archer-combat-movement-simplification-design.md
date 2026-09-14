@@ -39,7 +39,7 @@ This design applies the Java cleanup review lenses to the fixed review scope of 
 ### Quality
 
 - `ArcherMovementTask` currently owns tactical state, path candidate search, path creation, navigation start/stop, strafe timing, collision reversal, look control, and debug output. The redesigned task owns tactical intent plus the bounded vanilla strafe micro-input; it does not own path computation or path execution.
-- `ArcherMoveControl` duplicates vanilla `MoveControl` strafe math and adds archer-only request/result state. Remove that parallel controller. Short strafing uses ordinary `MCAMoveControl`/vanilla `MoveControl.strafe(...)` with direction and timing owned only by `ArcherMovementTask`. The active-use `KITE` exception delegates to that same vanilla strafe path but restores the canonical `0.85` kite speed modifier afterward, because vanilla `MoveControl.strafe(...)` hard-codes `0.25`.
+- `ArcherMoveControl` duplicates vanilla `MoveControl` strafe math and adds archer-only request/result state. Remove that parallel controller. Short `STRAFE` bursts use ordinary `MCAMoveControl`/vanilla `MoveControl.strafe(...)` with direction and timing owned only by `ArcherMovementTask`. Path-driven `KITE` never issues a direct strafe command, because doing so replaces vanilla `MOVE_TO` for that tick and bypasses its step/jump handling.
 - Use one canonical ranged-combat state shared by movement and weapon behaviors instead of storing emergency tactical state inside `MoveControl`.
 - Keep candidate selection in one small stateless positioning helper so `ArcherMovementTask` remains readable and navigation remains owned by the Brain pipeline.
 
@@ -102,13 +102,13 @@ Preserve the current hysteresis:
 - an archer leaving `EMERGENCY_FLEE` inside the kite exit band transitions to `KITE`, not directly to `HOLD`
 - apply only when vertical threat distance is at most `2.5` blocks
 - desired retreat distance remains 9 blocks
-- speed modifier remains `0.85`
+- speed modifier is `0.5`, matching ordinary approach movement rather than accelerating the retreat
 
-Archers may continue aiming/firing during `KITE` when their weapon behavior's normal range and visibility rules permit it. While actively drawing/charging a ranged weapon, the archer keeps its body facing the attack target and expresses the immediate retreat direction as player-like forward/lateral strafe input. That local input is validated before use and supplements, rather than replaces, the existing Brain-owned retreat destination.
+Archers may continue aiming/firing during `KITE` when their weapon behavior's normal range and visibility rules permit it. `LOOK_TARGET`/`LookControl` continue tracking the attack target while Brain navigation owns path locomotion and body yaw. Weapon use must not replace `MOVE_TO` with a direct strafe command or force entity yaw toward the target while pathing.
 
-`KITE` is normal combat spacing, not panic. It begins when a close threat enters the 6-block band and persists until the threat reaches the 9-block exit distance. Outside an active ranged-use cycle, ordinary path movement may turn the body toward the retreat route. During an active bow draw/crossbow charge, target-facing body yaw takes precedence and the immediate retreat step is converted to target-relative strafe input so movement and aiming do not fight over entity yaw.
+`KITE` is normal combat spacing, not panic. It begins when a close threat enters the 6-block band and persists until the threat reaches the 9-block exit distance. Ordinary path movement turns the body toward the retreat route; head/look control tracks the attack target independently. Bow/crossbow behavior must not fight navigation for entity yaw.
 
-Kite movement remains single-threat-oriented: retreat from the physically nearest visible movement threat. The 9-block value is a desired spacing/exit distance, not a requirement that the first random `WalkTarget` already land at least 9 blocks from the threat. A valid bounded candidate only needs to open useful distance; state hysteresis keeps `KITE` active until the actual threat distance reaches the exit band.
+Kite state thresholds remain based on the physically nearest visible movement threat, but retreat destination selection is group-aware across nearby movement threats. A valid candidate must improve spacing without retreating directly into another nearby threat. The 9-block value is a desired spacing/exit distance, not a requirement that the first `WalkTarget` already land at least 9 blocks from every threat; state hysteresis keeps `KITE` active until the nearest relevant threat reaches the exit band.
 
 ### Approach
 
@@ -140,7 +140,7 @@ If the archer is in effective weapon range, has line of sight, and is outside cl
 
 `HOLD` is the normal stable firing state. The archer faces the target and does not immediately begin orbiting merely because it has seen the target for 20 ticks.
 
-After at least 40 consecutive ticks in a valid stable `HOLD`, and only when the strafe cooldown has expired, the archer may begin one short `STRAFE` burst. The next cooldown is randomized between 40 and 80 ticks so groups of archers do not synchronize.
+After at least 10 consecutive ticks in a valid stable `HOLD`, and only when the strafe cooldown has expired, the archer may begin one bounded `STRAFE` burst. The next cooldown is randomized between 20 and 40 ticks so groups of archers do not synchronize while keeping normal ranged combat visibly mobile.
 
 ### Strafe
 
@@ -151,7 +151,7 @@ Rules:
 - choose left or right once when the burst begins;
 - begin the burst only if the positioning helper confirms the chosen lateral side is locally walkable for the current navigation/path type; if the first side is unsafe, try the opposite side once, otherwise remain in `HOLD` and start the cooldown;
 - use lateral input only: forward component `0.0`, lateral magnitude `0.35`;
-- keep the chosen direction for 8-14 ticks;
+- keep the chosen direction for 24-40 ticks (1.2-2.0 seconds at 20 TPS);
 - continue facing/aiming at the attack target while strafing;
 - bow/crossbow attack behavior may continue normally during the burst;
 - immediately end the burst and return to `HOLD` if line of sight is lost, the target leaves effective range, a close threat requires `KITE`/`EMERGENCY_FLEE`, the entity collides horizontally/minor-horizontally, or horizontal motion stalls after the burst has started;
@@ -173,7 +173,7 @@ Rules:
 - no `navigation.moveTo(...)` from ranged-combat movement;
 - no combat-owned `navigation.createPath(...)`;
 - no per-tick `navigation.stop()`;
-- `moveControl.strafe(...)` is allowed while the canonical state is `STRAFE`, and as a narrow `KITE` exception while a ranged weapon is actively being used. The `KITE` exception is only a locally validated immediate retreat input that keeps target-facing aim coherent; `WALK_TARGET` remains the owner of the retreat destination and route lifecycle;
+- `moveControl.strafe(...)` is allowed only while the canonical state is the bounded non-path `STRAFE` burst. `KITE` always remains Brain/navigation-owned so vanilla `MOVE_TO` retains turning, collision, step-up, and jump behavior;
 - no archer-specific strafe request API, silent redirection, or second strafe controller;
 - no per-tick erase of `CANT_REACH_WALK_TARGET_SINCE`;
 - do not mutate `PATH` directly;
@@ -181,7 +181,7 @@ Rules:
 - entering `HOLD` clears stale combat walking intent once, then remains stationary without repeatedly erasing Brain movement state every tick;
 - `WALK_TARGET` owns destination/path intent only; it does not own ranged target look/aim intent;
 - during `HOLD`, `STRAFE`, `APPROACH`, and `REPOSITION`, keep the attack target as `LOOK_TARGET` and continue target-directed `LookControl` updates while the movement state is active;
-- during `EMERGENCY_FLEE`, movement may fully turn the body toward the escape route. During `KITE`, ordinary path travel may also face the route, but an active ranged-use cycle keeps the body facing the attack target and uses target-relative backward/diagonal movement instead;
+- during `EMERGENCY_FLEE` and path-driven `KITE`, movement may turn the body toward the escape route while `LOOK_TARGET`/`LookControl` continue tracking the attack target as applicable;
 - do not fight vanilla path locomotion with a custom per-tick body-yaw override. Vanilla 1.21.1 `MoveControl` rotates entity yaw toward `MOVE_TO`, `BodyRotationControl` aligns the moving body to that yaw, and `LookControl` independently tracks/clamps head aim. Therefore target-facing during path-oriented `APPROACH`/`REPOSITION` means retained look/aim ownership, not forcing the torso to ignore its travel direction;
 - while `HOLD`/`STRAFE` are not path-driven, preserve the existing target-facing combat presentation; in particular, `STRAFE` must establish target-facing yaw before applying lateral input so `MoveControl.strafe(0.0F, lateral)` remains lateral relative to the opponent;
 - existing panic, safety, swimming, interaction, and higher-priority activity ownership must continue to preempt guard combat movement through the existing Brain scheduling model.
@@ -213,7 +213,7 @@ Remove archer tactical behavior from `ArcherMoveControl`:
 
 After those responsibilities are removed, `ArcherMoveControl` is an unnecessary wrapper. Delete it and make `MCAMoveControl` directly usable by `VillagerEntityMCA` (adjust visibility/constructor visibility as narrowly as required). Update `VillagerEntityMCA` to install `MCAMoveControl` directly and remove `getArcherMoveControl()`.
 
-Do not alter `MCAMoveControl`'s existing navigation/climb/jump behavior as part of this work. Keep the inherited vanilla strafe implementation and add only a narrow speed-aware entry point for active-use `KITE`: delegate to `super.strafe(...)`, then restore the requested speed modifier. Do not copy vanilla strafe math or recreate an archer-specific movement controller.
+Do not alter `MCAMoveControl`'s existing navigation/climb/jump behavior as part of this work. Keep the inherited vanilla strafe implementation for the bounded `STRAFE` state only. Do not add a KITE-specific movement-control entry point, copy vanilla strafe math, or recreate an archer-specific movement controller.
 
 ## Weapon behavior coordination
 
@@ -249,16 +249,16 @@ Tests must prove observable combat behavior rather than merely asserting that cl
 
 Required behavior coverage:
 
-1. An archer with a stationary visible target in a clear firing lane spends most combat time in `HOLD`, may perform bounded 8-14 tick lateral `STRAFE` bursts, returns to `HOLD`, and never enters rapid left/right ping-pong. The regression test must specifically detect repeated alternating lateral motion while the archer remains within the same roughly one-block lateral envelope.
+1. An archer with a stationary visible target in a clear firing lane alternates stable `HOLD` periods with bounded 24-40 tick lateral `STRAFE` bursts, returns to `HOLD`, and never enters rapid left/right ping-pong. The regression test must specifically detect repeated alternating lateral motion while the archer remains within the same roughly one-block lateral envelope.
 2. Brief line-of-sight loss below the grace period does not start movement; sustained in-range LOS loss enters `REPOSITION` and produces one Brain-owned walking intent toward a firing candidate/fallback.
 3. A target moving across the 6/9-block kite band does not cause per-tick state ping-pong; the current hysteresis is preserved.
 4. A target entering the 3.5/5-block emergency band causes group-aware escape movement that does not flee from one nearby threat directly toward another, and both bow and crossbow attack cycles remain suppressed until emergency exit.
-5. With multiple valid visible enemies outside emergency range, KITE responds to the physically nearest close threat rather than a farther higher-priority attack target.
-6. Combat movement publishes `WALK_TARGET` and allows `MoveToTargetSink`/navigation to own `PATH`; obstacle traversal, doors, jumping, and MCA climb behavior are not replaced by custom archer locomotion.
+5. With multiple valid visible enemies outside emergency range, KITE state selection responds to the physically nearest close threat while its retreat destination remains group-aware and does not close distance on another nearby threat.
+6. Combat movement publishes `WALK_TARGET` and allows `MoveToTargetSink`/navigation to own `PATH`; obstacle traversal, doors, one-block step/jump traversal, and MCA climb behavior are not replaced by custom archer locomotion.
 7. A blocked/unreachable reposition candidate does not trigger repeated multi-path searches in the archer task; Brain navigation invalidation/retry leads to a bounded new candidate or approach fallback.
 8. Target loss, weapon removal, panic/safety preemption, and combat behavior stop cleanly release ranged-combat state and stale combat movement intent.
 9. A blocked strafe ends the current burst without reversing direction; another strafe cannot begin until the cooldown expires.
-10. `WALK_TARGET` pathing does not erase combat look ownership: `HOLD`, `STRAFE`, `APPROACH`, and `REPOSITION` retain target look/aim intent; `EMERGENCY_FLEE` may orient the body toward escape movement; and a moving `KITE` archer observed during an active bow draw keeps its body facing the attack target while still opening distance. No custom post-movement body-yaw loop is added to fight vanilla `MoveControl`/`BodyRotationControl`.
+10. `WALK_TARGET` pathing does not erase combat look ownership: `HOLD`, `STRAFE`, `APPROACH`, `REPOSITION`, and path-driven `KITE` retain attack-target look/aim intent where applicable, while navigation remains free to orient the moving body toward travel. No weapon task or post-movement loop overrides locomotion yaw during path travel.
 
 Where pure state selection can be tested without world behavior, use focused unit coverage. Movement ownership, LOS repositioning, obstacle traversal, and visible anti-oscillation behavior require an actual server/GameTest or equivalent live integration scenario; do not claim them from compilation alone.
 

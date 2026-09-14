@@ -15,6 +15,11 @@ public class MCAMoveControl extends MoveControl {
         super(mob);
     }
 
+    public void strafe(float forwards, float right, double speedModifier) {
+        super.strafe(forwards, right);
+        this.speedModifier = speedModifier;
+    }
+
     protected final boolean isClimbNavigationActive() {
         return this.mob.getNavigation() instanceof MCAGroundPathNavigation navigation
                 && navigation.isControllingClimbableMovement();
