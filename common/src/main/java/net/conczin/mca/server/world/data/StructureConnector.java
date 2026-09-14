@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 
@@ -80,7 +81,7 @@ final class StructureConnector {
             FloorConnector.Type type = FloorConnector.Type.fromBlockState(state);
             if (type == null) continue;
             if (type.vertical()) {
-                verticalFloorMembershipCells(connector, geometry)
+                verticalFloorMembershipCells(connector, state, geometry)
                         .forEach(floorCell -> result.putIfAbsent(floorCell, type));
             } else if (geometry.cellAt(connector).isPresent()) {
                 result.putIfAbsent(connector.immutable(), type);
@@ -89,14 +90,31 @@ final class StructureConnector {
         return Map.copyOf(result);
     }
 
-    private static Set<BlockPos> verticalFloorMembershipCells(BlockPos connector, FloorGeometry geometry) {
+    private static Set<BlockPos> verticalFloorMembershipCells(
+            BlockPos connector, BlockState state, FloorGeometry geometry) {
         LinkedHashSet<BlockPos> cells = new LinkedHashSet<>();
         for (BlockPos handoff : handoffs(connector)) {
             geometry.interactionCellAt(handoff.getX(), handoff.getY(), handoff.getZ())
                     .map(FloorGeometry.Cell::feet)
                     .ifPresent(cells::add);
         }
-        return Set.copyOf(cells);
+        if (cells.isEmpty()) return Set.of();
+
+        Direction preferredSide = state.getBlock() instanceof LadderBlock
+                ? state.getValue(LadderBlock.FACING)
+                : null;
+        BlockPos preferredColumn = preferredSide == null ? null : connector.relative(preferredSide);
+        BlockPos selected = cells.stream().min(Comparator
+                .comparingInt((BlockPos cell) -> preferredColumn != null
+                        && cell.getX() == preferredColumn.getX()
+                        && cell.getZ() == preferredColumn.getZ() ? 0 : 1)
+                .thenComparingInt(cell -> Math.abs(cell.getY() - connector.getY()))
+                .thenComparingInt(cell -> Math.abs(cell.getX() - connector.getX())
+                        + Math.abs(cell.getZ() - connector.getZ()))
+                .thenComparingInt(BlockPos::getX)
+                .thenComparingInt(BlockPos::getZ)
+                .thenComparingInt(BlockPos::getY)).orElseThrow();
+        return Set.of(selected.immutable());
     }
 
     /** Returns the vertical connector column for an occupied connector or its immediate open top-exit cell. */

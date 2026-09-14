@@ -112,8 +112,10 @@ final class RoomPartitioner {
             Component owner = containsDoor
                     ? doorOwner(cluster, componentByCell, transitionNeighbors, doorOwnerSides)
                     : owner(adjacent);
-            if (containsDoor && owner == null && adjacent.size() == 1) {
-                owner = adjacent.iterator().next();
+            boolean hasDoorOwnerSide = containsDoor && cluster.stream()
+                    .anyMatch(cell -> doorOwnerSides.containsKey(cell.feet()));
+            if (containsDoor && owner == null && (hasDoorOwnerSide || adjacent.size() == 1)) {
+                owner = owner(adjacent);
             }
             if (owner == null) {
                 unowned.add(new Component(cluster));
