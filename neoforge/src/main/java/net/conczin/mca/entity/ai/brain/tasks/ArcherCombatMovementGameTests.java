@@ -3,6 +3,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
+import net.conczin.mca.entity.ai.MoveState;
 import net.conczin.mca.entity.ai.RangedWeaponHelper;
 import net.conczin.mca.registry.ProfessionsMCA;
 import net.minecraft.core.BlockPos;
@@ -16,6 +17,8 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.behavior.EntityTracker;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -66,6 +69,69 @@ public final class ArcherCombatMovementGameTests {
                 archer.getMoveControl().getClass().getSimpleName().equals("MCAMoveControl"),
                 "MCA villager still uses a specialised archer move controller: " + archer.getMoveControl().getClass().getName()
         );
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_brain_refresh_memories", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void refreshBrainPreservesLiveTransientMemories(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(6, 2, 6));
+        prepareFlatArea(helper, start, 8);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        Zombie target = spawnTarget(helper, start.east(6));
+        WalkTarget walkTarget = new WalkTarget(new EntityTracker(target, false), 0.75F, 0);
+
+        archer.setNoAi(true);
+        archer.getBrain().setMemory(MemoryModuleTypeMCA.HIT_BY_PLAYER, target);
+        archer.getBrain().setMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY, target);
+        archer.getBrain().setMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE, RangedCombatState.REPOSITION);
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+        archer.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
+        archer.getBrain().setMemory(MemoryModuleType.WALK_TARGET, walkTarget);
+
+        archer.refreshBrain(helper.getLevel());
+
+        helper.assertTrue(archer.getBrain().getMemory(MemoryModuleTypeMCA.HIT_BY_PLAYER).orElse(null) == target,
+                "refreshBrain dropped HIT_BY_PLAYER");
+        helper.assertTrue(archer.getBrain().getMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY).orElse(null) == target,
+                "refreshBrain dropped NEAREST_GUARD_ENEMY");
+        helper.assertTrue(RangedCombatState.current(archer).orElse(null) == RangedCombatState.REPOSITION,
+                "refreshBrain dropped RANGED_COMBAT_STATE");
+        helper.assertTrue(archer.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).orElse(null) == target,
+                "refreshBrain dropped ATTACK_TARGET");
+        helper.assertTrue(archer.getBrain().getMemory(MemoryModuleType.LOOK_TARGET).isPresent(),
+                "refreshBrain dropped LOOK_TARGET");
+        helper.assertTrue(archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).isPresent(),
+                "refreshBrain dropped WALK_TARGET");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_guard_follow_combat", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void guardFollowPreservesActiveCombatTarget(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(6, 2, 6));
+        prepareFlatArea(helper, start, 8);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        Zombie target = spawnTarget(helper, start.east(6));
+        Player leader = helper.makeMockPlayer(GameType.SURVIVAL);
+        leader.snapTo(start.getX() + 0.5D, start.getY(), start.getZ() + 2.5D);
+
+        archer.setNoAi(true);
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+        archer.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
+        archer.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                new WalkTarget(new EntityTracker(target, false), 0.75F, 0));
+
+        archer.getVillagerBrain().setMoveState(MoveState.FOLLOW, leader);
+
+        helper.assertTrue(archer.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).orElse(null) == target,
+                "FOLLOW dropped the active guard ATTACK_TARGET");
+        helper.assertTrue(archer.getBrain().getMemory(MemoryModuleType.LOOK_TARGET).isPresent(),
+                "FOLLOW dropped the active guard LOOK_TARGET");
+        helper.assertTrue(archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).isPresent(),
+                "FOLLOW dropped the active guard WALK_TARGET");
+        helper.assertTrue(archer.getBrain().getMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING).orElse(null) == leader,
+                "FOLLOW did not retain PLAYER_FOLLOWING");
         helper.succeed();
     }
 

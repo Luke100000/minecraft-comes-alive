@@ -286,11 +286,29 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @SuppressWarnings("unchecked")
     public void refreshBrain(ServerLevel world) {
         Brain<VillagerEntityMCA> brain = getMCABrain();
-        Optional<Player> followingPlayer = brain.getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING);
         brain.stopAll(world, this);
         this.brain = VillagerTasksMCA.createProfile().makeBrain(this, brain.pack());
-        followingPlayer.ifPresent(player -> getMCABrain().setMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING, player));
+        copyLiveBrainMemories(brain, getMCABrain());
         VillagerTasksMCA.initializeTasks(this, getMCABrain());
+    }
+
+    private static void copyLiveBrainMemories(Brain<?> source, Brain<?> target) {
+        source.forEach(new Brain.Visitor() {
+            @Override
+            public <U> void acceptEmpty(MemoryModuleType<U> type) {
+                target.eraseMemory(type);
+            }
+
+            @Override
+            public <U> void accept(MemoryModuleType<U> type, U value) {
+                target.setMemory(type, value);
+            }
+
+            @Override
+            public <U> void accept(MemoryModuleType<U> type, U value, long timeToLive) {
+                target.setMemoryWithExpiry(type, value, timeToLive);
+            }
+        });
     }
 
     @SuppressWarnings("unchecked")
