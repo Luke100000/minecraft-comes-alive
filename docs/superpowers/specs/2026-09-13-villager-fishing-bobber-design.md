@@ -139,11 +139,13 @@ Do not copy open-water scanning or entity-hooking code. The bobber needs only en
 
 ## Catch semantics
 
-A genuine bite always produces a catch.
+Use vanilla retrieval semantics for catch success. Vanilla does not perform a second random success roll after a bite: `FishingHook.retrieve(...)` generates fishing loot only while `nibble > 0`. Reeling before the bite or after the nibble window expires produces no fishing loot.
 
 Remove `FishingTask`'s independent `ticks` catch timer and the current hidden post-wait random miss. The current code succeeds when `random.nextFloat() >= 0.35F`, so it has a 35% miss / 65% catch roll. That roll must disappear from the new design.
 
-The bobber's biting state is the only catch trigger:
+The bobber's biting/nibble state is the only catch trigger. MCA reels immediately when `isBiting()` becomes true, so under normal AI operation every real bite is successfully caught. If a bite expires before the reel for any reason, clear biting and return to the lure cycle without generating loot, matching vanilla's timing rule.
+
+The normal catch path is:
 
 1. `FishingTask` sees its owned bobber biting.
 2. The villager swings/reels immediately.
@@ -154,9 +156,7 @@ The bobber's biting state is the only catch trigger:
 7. The caught item visibly flies toward the villager.
 8. After delivery, the next fishing cycle may cast again.
 
-Do not introduce a second success roll after the bite. Do not fake a bite that can silently produce no catch.
-
-The switch from a 65% post-wait success roll to guaranteed bite success intentionally changes catch semantics. That is part of the approved player-parity behavior.
+Do not introduce a second success roll after the bite. Catch success comes from retrieving during the real nibble window, matching vanilla.
 
 ## Visible caught-item reel
 

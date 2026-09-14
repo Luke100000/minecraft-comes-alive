@@ -18,7 +18,7 @@
 - Reuse vanilla generic APIs directly: inherited projectile ownership/movement, `SynchedEntityData`, `ParticleTypes`, `SoundEvents.FISHING_BOBBER_SPLASH`, `ItemEntity`, `ItemEntity.setNeverPickUp()`, `SimpleContainer.addItem(...)`, `HumanoidModel.translateToHand(...)`, vanilla held-item transforms, hook texture, and line geometry.
 - Adapt only the narrow vanilla logic that is private or player-bound. Do not add mixins/invokers solely to reach private fishing helpers.
 - Use vanilla base fishing timing ranges: lure wait 100-600 ticks, approach 20-80 ticks, bite window 20-40 ticks. Do not add vanilla open-water checks, rain/sky timing modifiers, Lure/Luck mechanics, hooked-entity behavior, player XP/stats/criteria, or fake players.
-- Every genuine bite reeled by the villager produces a catch. Remove the current independent 200-399 tick timer and the hidden 35% miss / 65% catch roll.
+- Use vanilla catch timing: fishing loot is produced only when the hook is retrieved during the active nibble/bite window. The villager reels immediately on `isBiting()`, so normal AI operation catches every real bite without a separate success roll. Remove the current independent 200-399 tick timer and hidden 35% miss / 65% catch roll.
 - The in-flight caught stack exists in exactly one real `ItemEntity`; do not insert a duplicate into inventory while it is flying.
 - Call `ItemEntity.setNeverPickUp()` immediately when the reel item is created. While MCA owns that reel, player/mob pickup and normal item-entity merging must remain disabled by vanilla pickup-delay behavior.
 - Release pickup protection only when the reel has ended: inventory remainder, owner death/removal, or lost task ownership. Use `setNoPickUpDelay()` then leave the one real remainder as a normal world drop.
@@ -316,7 +316,7 @@ git commit -m "feat: add vanilla-style villager fishing bites"
 - Preserves: `getFishingLoot(ServerLevel, VillagerEntityMCA)` and MCA loot context
 - Uses vanilla API: `ItemEntity.setNeverPickUp()`, `ItemEntity.setNoPickUpDelay()`, `SimpleContainer.addItem(...)`
 
-- [ ] **Step 1: Add an end-to-end regression for guaranteed catch and protected reel flight**
+- [ ] **Step 1: Add an end-to-end regression for vanilla bite-window catch and protected reel flight**
 
 Add imports for `ItemEntity` and `AtomicBoolean`, then add:
 
@@ -436,7 +436,7 @@ if (bobber.isBiting()) {
 }
 ```
 
-No second random success check is allowed after `isBiting()` becomes true.
+No second random success check is allowed after `isBiting()` becomes true. This mirrors vanilla `FishingHook.retrieve(...)`: fishing loot is created when retrieval happens during the active nibble window; an expired bite returns to the lure cycle without loot.
 
 - [ ] **Step 4: Spawn the caught item using vanilla `FishingHook.retrieve(...)` velocity and vanilla pickup protection**
 
