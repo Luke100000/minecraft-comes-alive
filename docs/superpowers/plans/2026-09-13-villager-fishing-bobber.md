@@ -15,12 +15,12 @@
 - Implement and validate 1.21.1 first; port to 26.1.2 and 26.2 only after live 1.21.1 proof.
 - Preserve the existing MCA bobber entity and exact-water targeting; do not mix into or subclass vanilla `FishingHook`.
 - Treat `C:/Users/Mik/Downloads/MCA/local-source/src` as the 1.21.1 design oracle and never modify it.
-- Reuse vanilla generic APIs directly: inherited projectile ownership/movement, `SynchedEntityData`, `ParticleTypes`, `SoundEvents.FISHING_BOBBER_SPLASH`, `ItemEntity`, `ItemEntity.setNeverPickUp()`, `SimpleContainer.addItem(...)`, `HumanoidModel.translateToHand(...)`, vanilla held-item transforms, hook texture, and line geometry.
+- Reuse vanilla generic APIs directly: inherited projectile ownership/movement, `SynchedEntityData`, `ParticleTypes`, `SoundEvents.FISHING_BOBBER_SPLASH`, `ItemEntity`, `ItemEntity.setNeverPickUp()`, vanilla thrower/target state, `SimpleContainer.addItem(...)`, `HumanoidModel.translateToHand(...)`, vanilla held-item transforms, hook texture, and line geometry.
 - Adapt only the narrow vanilla logic that is private or player-bound. Do not add mixins/invokers solely to reach private fishing helpers.
 - Use vanilla base fishing timing ranges: lure wait 100-600 ticks, approach 20-80 ticks, bite window 20-40 ticks. Do not add vanilla open-water checks, rain/sky timing modifiers, Lure/Luck mechanics, hooked-entity behavior, player XP/stats/criteria, or fake players.
 - Use vanilla catch timing for the real bite window, but preserve origin/1.21.1's catch chance: on the first tick of each bite, roll exactly once with `random.nextFloat() >= 0.35F`. Success reels during the nibble window; failure lets that bite expire without loot or rod damage. Remove only the independent 200-399 tick catch timer.
 - The in-flight caught stack exists in exactly one real `ItemEntity`; do not insert a duplicate into inventory while it is flying.
-- Call `ItemEntity.setNeverPickUp()` immediately when the reel item is created. While MCA owns that reel, player/mob pickup and normal item-entity merging must remain disabled by vanilla pickup-delay behavior.
+- Call `ItemEntity.setNeverPickUp()` when the reel item is created and mark it with vanilla thrower/target state pointing at the villager. While MCA owns that reel, player/mob pickup and merging stay disabled. If the protected item is loaded without its in-memory task reference, release that exact marker back to normal pickup.
 - Release pickup protection only when the reel has ended: inventory remainder, owner death/removal, or lost task ownership. Use `setNoPickUpDelay()` then leave the one real remainder as a normal world drop.
 - Fishing must remain active past the inherited 400-tick chore timeout; keep the fishing-specific `timedOut(...) == false` behavior.
 - The fishing line must derive from the rendered MCA humanoid arm/held-item transform. Do not restore an eye/body offset approximation.
@@ -314,7 +314,7 @@ git commit -m "feat: add vanilla-style villager fishing bites"
 - Consumes: `MCAFishingBobberEntity.isBiting()` from Task 1
 - Produces task state: `ItemEntity reelItem`, `int reelTicks`, `boolean biteAttempted`
 - Preserves: `getFishingLoot(ServerLevel, VillagerEntityMCA)` and MCA loot context
-- Uses vanilla API: `ItemEntity.setNeverPickUp()`, `ItemEntity.setNoPickUpDelay()`, `SimpleContainer.addItem(...)`
+- Uses vanilla API: `ItemEntity.setThrower(...)`, `ItemEntity.setTarget(...)`, `ItemEntity.setNeverPickUp()`, `ItemEntity.setNoPickUpDelay()`, `SimpleContainer.addItem(...)`
 
 - [ ] **Step 1: Add an end-to-end regression for vanilla bite-window catch and protected reel flight**
 
@@ -555,6 +555,8 @@ private void beginReel(ServerLevel world, VillagerEntityMCA villager) {
     villager.swing(villager.getDominantHand());
 
     ItemEntity item = new ItemEntity(world, bobber.getX(), bobber.getY(), bobber.getZ(), caught);
+    item.setThrower(villager);
+    item.setTarget(villager.getUUID());
     item.setNeverPickUp();
 
     double dx = villager.getX() - bobber.getX();
@@ -989,7 +991,7 @@ Confirm:
 - bobber timer/particle math still maps directly to `FishingHook.catchingFish(...)`;
 - biting has one source of truth (`DATA_BITING`), with no shadow task boolean/timer;
 - reel velocity still matches `FishingHook.retrieve(...)`;
-- `setNeverPickUp()` remains active for the entire task-owned flight and uses vanilla player/mob pickup behavior;
+- `setNeverPickUp()` remains active for the entire task-owned flight and the vanilla thrower/target marker is released if the item is reloaded without its task;
 - inventory delivery handles `SimpleContainer.addItem(...)` remainder without duplicate/loss;
 - line origin still uses posed `translateToHand(...)` + `ItemInHandLayer` transform and no body-offset fallback;
 - no mixin/accessor can replace custom code more cleanly without dragging in player-only state.
@@ -1049,7 +1051,7 @@ Recheck the exact visual acceptance from Task 3 after the cleanup pass. Completi
 - wait/approach/bite particle sequence;
 - visible bite dip and splash sound;
 - protected item flying from bobber to villager;
-- one catch per bite with no hidden miss;
+- one origin/1.21.1 65% catch / 35% miss roll per genuine bite, with no reroll during the same bite;
 - no periodic de-equip beyond 400 ticks;
 - clean bobber/item/rod state after chore cancellation and rod loss.
 - water invalidation still discards/recasts instead of leaving an orphan bobber;

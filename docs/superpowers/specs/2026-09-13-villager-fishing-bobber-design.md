@@ -172,7 +172,7 @@ The reel item is the authoritative caught stack during flight. Do not simultaneo
 
 `FishingTask` holds a short-lived reference to the reel `ItemEntity` while it travels. This is orchestration state, not a second copy of the loot.
 
-Immediately call vanilla `ItemEntity.setNeverPickUp()` on the reel item. While MCA owns the reel, neither players nor mobs may naturally collect it: vanilla player pickup requires a zero pickup delay, and vanilla `Mob.aiStep()` ignores item entities whose `hasPickUpDelay()` is true. Do not add a custom reserved-item entity, pickup event interceptor, ownership capability, or collision rule for this.
+Immediately call vanilla `ItemEntity.setNeverPickUp()` on the reel item. Also set the vanilla thrower and target UUID to the villager. While MCA owns the reel, neither players nor mobs may naturally collect it and vanilla merging is disabled. The matching thrower/target pair is a transient reel marker using existing `ItemEntity` state: if an in-flight reel item is serialized and later loaded without its task reference, the `ItemEntity` load hook clears the target and pickup protection so the one surviving item becomes a normal world drop. Do not add a custom reserved-item entity, ownership capability, or custom persisted reel state for this.
 
 Deliver when the reel item comes within 1.5 blocks of the villager, or after 40 reel ticks as a fallback. On delivery, pass the entity's current stack through vanilla `SimpleContainer.addItem(...)`. If the returned remainder is empty, discard the reel entity. If inventory space is insufficient, keep only that returned remainder in the existing item entity, call `setNoPickUpDelay()`, clear reel tracking, and leave it as a normal world drop. This follows MCA's existing remainder-handling pattern and prevents either duplication or deletion. The task performs delivery explicitly; natural item pickup is never part of the protected reel path.
 
@@ -180,7 +180,7 @@ Correctness rules:
 
 - if the reel entity was already removed before MCA delivery, do not generate or insert a replacement copy;
 - if fishing stops while the villager is still alive and the tracked reel item still exists, complete the transfer before cleanup so an earned catch is not lost;
-- while the reel remains owned by a live fishing task, leave `setNeverPickUp()` in force so another player or mob entity cannot steal the catch in flight; vanilla also excludes `pickupDelay == 32767` items from normal item-entity merging;
+- while the reel remains owned by a live fishing task, leave `setNeverPickUp()` in force so another player or mob entity cannot steal the catch in flight and vanilla cannot merge the tracked entity away;
 - if the villager dies or is removed during the reel, the item stops being MCA reel state: call vanilla `setNoPickUpDelay()`, clear task tracking, and leave the one real item in the world rather than duplicating or deleting it;
 - do not persist or reconstruct reel ownership across unload. If task tracking is lost because the owner/task disappears, release the surviving item to normal vanilla pickup rather than leaving a permanently uncollectable item.
 

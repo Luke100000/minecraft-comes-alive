@@ -12,6 +12,7 @@
     "MixinEntityType",
     "MixinGoat",
     "MixinInventory",
+    "MixinItemEntity",
     "MixinIronGolem",
     "MixinItemStack",
     "MixinLivingEntity",

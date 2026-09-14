@@ -9,9 +9,9 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.entity.FishingHookRenderer;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.layers.RenderLayer;
-import net.minecraft.util.Mth;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.item.FishingRodItem;
 import net.minecraft.world.phys.Vec3;
@@ -58,11 +58,6 @@ public final class VillagerFishingLineLayer
 
     private Vector3f getRenderedRodOrigin(VillagerEntityMCA villager) {
         PoseStack handPose = new PoseStack();
-        if (getParentModel().young) {
-            handPose.translate(0.0F, 0.75F, 0.0F);
-            handPose.scale(0.5F, 0.5F, 0.5F);
-        }
-
         HumanoidArm arm = villager.getMainArm();
         getParentModel().translateToHand(arm, handPose);
         handPose.mulPose(Axis.XP.rotationDegrees(-90.0F));
@@ -102,39 +97,16 @@ public final class VillagerFishingLineLayer
         float dy = hand.y() - hook.y();
         float dz = hand.z() - hook.z();
         VertexConsumer consumer = bufferSource.getBuffer(RenderType.lineStrip());
+        poseStack.pushPose();
+        poseStack.translate(hook.x(), hook.y() - 0.25F, hook.z());
         PoseStack.Pose pose = poseStack.last();
 
         for (int segment = 0; segment <= 16; segment++) {
             float fraction = (float) segment / 16.0F;
             float nextFraction = (float) (segment + 1) / 16.0F;
-            stringVertex(hook, dx, dy, dz, consumer, pose, fraction, nextFraction);
+            FishingHookRenderer.stringVertex(dx, dy, dz, consumer, pose, fraction, nextFraction);
         }
-    }
-
-    private static void stringVertex(
-            Vector3f hook,
-            float dx,
-            float dy,
-            float dz,
-            VertexConsumer consumer,
-            PoseStack.Pose pose,
-            float fraction,
-            float nextFraction
-    ) {
-        float x = hook.x() + dx * fraction;
-        float y = hook.y() + dy * (fraction * fraction + fraction) * 0.5F;
-        float z = hook.z() + dz * fraction;
-        float nextX = hook.x() + dx * nextFraction;
-        float nextY = hook.y() + dy * (nextFraction * nextFraction + nextFraction) * 0.5F;
-        float nextZ = hook.z() + dz * nextFraction;
-        float normalX = nextX - x;
-        float normalY = nextY - y;
-        float normalZ = nextZ - z;
-        float normalLength = Mth.sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ);
-
-        consumer.addVertex(pose, x, y, z)
-                .setColor(-16777216)
-                .setNormal(pose, normalX / normalLength, normalY / normalLength, normalZ / normalLength);
+        poseStack.popPose();
     }
 
     @Nullable
