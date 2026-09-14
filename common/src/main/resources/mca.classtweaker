@@ -17,6 +17,12 @@ mutable field net/minecraft/advancements/AdvancementRewards loot Ljava/util/List
 # Widen MoveControl.rotlerp for task usage
 accessible method net/minecraft/world/entity/ai/control/MoveControl rotlerp (FFF)F
 
+# Reuse vanilla's fishing-line curve primitive for MCA villager bobbers.
+accessible method net/minecraft/client/renderer/entity/FishingHookRenderer stringVertex (FFFLcom/mojang/blaze3d/vertex/VertexConsumer;Lcom/mojang/blaze3d/vertex/PoseStack$Pose;FFF)V
+
+# Reuse ItemEntity's vanilla infinite-delay sentinel when identifying protected MCA reel items.
+accessible field net/minecraft/world/entity/item/ItemEntity INFINITE_PICKUP_DELAY I
+
 # Widen GroundPathNavigation.getSurfaceY so MCA can make water-tag-aware navigation without replacing getTempMobPos.
 extendable method net/minecraft/world/entity/ai/navigation/GroundPathNavigation getSurfaceY ()I
 

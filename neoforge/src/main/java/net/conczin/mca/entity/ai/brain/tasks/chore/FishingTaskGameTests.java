@@ -9,8 +9,12 @@ import net.minecraft.core.BlockPos;
 import net.conczin.mca.neoforge.gametest.GameTest;
 import net.conczin.mca.neoforge.gametest.GameTestHolder;
 import net.conczin.mca.neoforge.gametest.PrefixGameTestTemplate;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.FishingRodItem;
@@ -19,6 +23,9 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.storage.TagValueInput;
+import net.minecraft.world.level.storage.TagValueOutput;
+import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Comparator;
@@ -89,7 +96,9 @@ public final class FishingTaskGameTests {
         VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
         TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL), true);
         Player thief = helper.makeMockPlayer(GameType.SURVIVAL);
+        Player reloadPicker = helper.makeMockPlayer(GameType.SURVIVAL);
         AtomicBoolean sawProtectedReel = new AtomicBoolean();
+        AtomicBoolean sawReloadRelease = new AtomicBoolean();
         AtomicBoolean delivered = new AtomicBoolean();
         AtomicReference<ItemEntity> reelItem = new AtomicReference<>();
         int startingLoot = countCaughtItems(villager);
@@ -126,6 +135,27 @@ public final class FishingTaskGameTests {
                 helper.assertTrue(item.hasPickUpDelay(), "reel item became naturally pickup-eligible in flight");
                 item.playerTouch(thief);
                 helper.assertTrue(!item.isRemoved(), "another player stole the protected reel item");
+
+                if (sawReloadRelease.compareAndSet(false, true)) {
+                    TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, helper.getLevel().registryAccess());
+                    item.saveWithoutId(output);
+                    CompoundTag saved = output.buildResult();
+                    ValueInput savedInput = TagValueInput.create(ProblemReporter.DISCARDING, helper.getLevel().registryAccess(), saved);
+                    helper.assertTrue(
+                            savedInput.read("Thrower", UUIDUtil.CODEC).filter(villager.getUUID()::equals).isPresent(),
+                            "protected reel item did not retain the villager as its vanilla thrower"
+                    );
+                    helper.assertTrue(
+                            savedInput.read("Owner", UUIDUtil.CODEC).filter(villager.getUUID()::equals).isPresent(),
+                            "protected reel item did not carry the villager reel target marker"
+                    );
+
+                    ItemEntity reloaded = new ItemEntity(EntityType.ITEM, helper.getLevel());
+                    reloaded.load(TagValueInput.create(ProblemReporter.DISCARDING, helper.getLevel().registryAccess(), saved));
+                    helper.assertTrue(!reloaded.hasPickUpDelay(), "reloaded orphan reel stayed pickup-protected");
+                    reloaded.playerTouch(reloadPicker);
+                    helper.assertTrue(reloaded.isRemoved(), "reloaded orphan reel stayed target-locked to the villager");
+                }
             }
 
             if (item != null && item.isRemoved() && countCaughtItems(villager) > startingLoot) {
@@ -135,6 +165,7 @@ public final class FishingTaskGameTests {
 
         helper.succeedWhen(() -> {
             helper.assertTrue(sawProtectedReel.get(), "no real reel ItemEntity was observed");
+            helper.assertTrue(sawReloadRelease.get(), "protected reel reload behavior was not exercised");
             helper.assertTrue(delivered.get(), "protected reel item was not delivered into MCA inventory");
             helper.assertTrue(thief.getInventory().isEmpty(), "protected reel item entered another player's inventory");
             helper.assertTrue(countCaughtItems(villager) > startingLoot, "a real bite did not deliver a catch");

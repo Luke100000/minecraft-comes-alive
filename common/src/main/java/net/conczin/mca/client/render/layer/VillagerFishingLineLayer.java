@@ -1,16 +1,15 @@
 package net.conczin.mca.client.render.layer;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
 import net.conczin.mca.client.render.VillagerRenderState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.client.renderer.entity.FishingHookRenderer;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.layers.RenderLayer;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
-import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.item.FishingRodItem;
@@ -80,48 +79,20 @@ public final class VillagerFishingLineLayer extends RenderLayer<VillagerRenderSt
         float dz = hand.z() - hook.z();
         float width = Minecraft.getInstance().gameRenderer.getGameRenderState().windowRenderState.appropriateLineWidth;
 
+        poseStack.pushPose();
+        poseStack.translate(hook.x(), hook.y() - 0.25F, hook.z());
         submitNodeCollector.submitCustomGeometry(poseStack, RenderTypes.lines(), (pose, buffer) -> {
             for (int segment = 0; segment < 16; segment++) {
                 float current = fraction(segment, 16);
                 float next = fraction(segment + 1, 16);
-                stringVertex(hook, dx, dy, dz, buffer, pose, current, next, width);
-                stringVertex(hook, dx, dy, dz, buffer, pose, next, current, width);
+                FishingHookRenderer.stringVertex(dx, dy, dz, buffer, pose, current, next, width);
+                FishingHookRenderer.stringVertex(dx, dy, dz, buffer, pose, next, current, width);
             }
         });
+        poseStack.popPose();
     }
 
     private static float fraction(int value, int total) {
         return (float) value / total;
-    }
-
-    private static void stringVertex(
-            Vector3f hook,
-            float dx,
-            float dy,
-            float dz,
-            VertexConsumer consumer,
-            PoseStack.Pose pose,
-            float fraction,
-            float nextFraction,
-            float width
-    ) {
-        float x = hook.x() + dx * fraction;
-        float y = hook.y() + dy * (fraction * fraction + fraction) * 0.5F;
-        float z = hook.z() + dz * fraction;
-        float nextX = hook.x() + dx * nextFraction;
-        float nextY = hook.y() + dy * (nextFraction * nextFraction + nextFraction) * 0.5F;
-        float nextZ = hook.z() + dz * nextFraction;
-        float normalX = nextX - x;
-        float normalY = nextY - y;
-        float normalZ = nextZ - z;
-        float normalLength = Mth.sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ);
-        normalX /= normalLength;
-        normalY /= normalLength;
-        normalZ /= normalLength;
-
-        consumer.addVertex(pose, x, y, z)
-                .setColor(-16777216)
-                .setNormal(pose, normalX, normalY, normalZ)
-                .setLineWidth(width);
     }
 }

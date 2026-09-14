@@ -124,6 +124,8 @@ public class FishingTask extends AbstractChoreTask {
         villager.swing(villager.getDominantHand());
 
         ItemEntity item = new ItemEntity(world, bobber.getX(), bobber.getY(), bobber.getZ(), caught);
+        item.setThrower(villager);
+        item.setTarget(villager.getUUID());
         item.setNeverPickUp();
 
         double dx = villager.getX() - bobber.getX();
@@ -172,16 +174,21 @@ public class FishingTask extends AbstractChoreTask {
             reelItem.discard();
         } else {
             reelItem.setItem(remainder);
-            reelItem.setNoPickUpDelay();
+            releasePickupProtection(reelItem);
         }
         clearReelReference();
     }
 
     private void releaseReelItem() {
         if (reelItem != null && !reelItem.isRemoved()) {
-            reelItem.setNoPickUpDelay();
+            releasePickupProtection(reelItem);
         }
         clearReelReference();
+    }
+
+    private static void releasePickupProtection(ItemEntity item) {
+        item.setTarget(null);
+        item.setNoPickUpDelay();
     }
 
     private void clearReelReference() {
