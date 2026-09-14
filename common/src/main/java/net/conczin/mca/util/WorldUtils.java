@@ -32,10 +32,12 @@ import org.jetbrains.annotations.Nullable;
 import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
 public interface WorldUtils {
     static List<Entity> getCloseEntities(Level world, Entity e, double range) {
@@ -53,8 +55,19 @@ public interface WorldUtils {
 
     @SuppressWarnings("DataFlowIssue")
     static <T extends SavedData> T loadData(ServerLevel world, BiFunction<CompoundTag, HolderLookup.Provider, T> loader, Function<ServerLevel, T> factory, String dataId) {
+        return loadData(world, loader, factory, dataId, new String[0]);
+    }
+
+    @SuppressWarnings("DataFlowIssue")
+    static <T extends SavedData> T loadData(
+            ServerLevel world,
+            BiFunction<CompoundTag, HolderLookup.Provider, T> loader,
+            Function<ServerLevel, T> factory,
+            String dataId,
+            String... legacyDataIds
+    ) {
         SavedDataType<T> type = createSavedDataType(world, loader, factory, dataId);
-        T data = getSavedDataWithLegacyFallback(world, type, dataId);
+        T data = getSavedDataWithLegacyFallback(world, type, savedDataLookupIds(dataId, legacyDataIds));
         if (data != null) {
             return data;
         }
@@ -66,7 +79,13 @@ public interface WorldUtils {
 
     static <T extends SavedData> Optional<T> loadDataIfPresent(ServerLevel world, BiFunction<CompoundTag, HolderLookup.Provider, T> loader, String dataId) {
         SavedDataType<T> type = createSavedDataType(world, loader, ignored -> null, dataId);
-        return Optional.ofNullable(getSavedDataWithLegacyFallback(world, type, dataId));
+        return Optional.ofNullable(getSavedDataWithLegacyFallback(world, type, List.of(dataId)));
+    }
+
+    static List<String> savedDataLookupIds(String currentId, String... legacyDataIds) {
+        return Stream.concat(Stream.of(currentId), Arrays.stream(legacyDataIds))
+                .distinct()
+                .toList();
     }
 
     @SuppressWarnings("deprecation")
@@ -156,19 +175,22 @@ public interface WorldUtils {
         );
     }
 
-    private static <T extends SavedData> @Nullable T getSavedDataWithLegacyFallback(ServerLevel world, SavedDataType<T> type, String legacyDataId) {
+    private static <T extends SavedData> @Nullable T getSavedDataWithLegacyFallback(ServerLevel world, SavedDataType<T> type, List<String> legacyDataIds) {
         SavedDataStorage storage = world.getDataStorage();
         T data = storage.get(type);
         if (data != null) {
             return data;
         }
 
-        T legacyData = tryLoadLegacySavedData(world, storage, type, legacyDataId);
-        if (legacyData != null) {
-            // Cache the migrated data under the new type so later lookups stay coherent.
-            storage.set(type, legacyData);
+        for (String legacyDataId : legacyDataIds) {
+            T legacyData = tryLoadLegacySavedData(world, storage, type, legacyDataId);
+            if (legacyData != null) {
+                // Cache the migrated data under the new type so later lookups stay coherent.
+                storage.set(type, legacyData);
+                return legacyData;
+            }
         }
-        return legacyData;
+        return null;
     }
 
     @SuppressWarnings("deprecation")

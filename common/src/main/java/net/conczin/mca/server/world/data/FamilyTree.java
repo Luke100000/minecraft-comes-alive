@@ -19,6 +19,7 @@ import java.util.stream.Stream;
 
 public class FamilyTree extends SavedData {
     private static final String DATA_ID = "family_tree";
+    private static final String LEGACY_DATA_ID = "MCA-FamilyTree";
 
 
     private final Map<UUID, FamilyTreeNode> entries;
@@ -32,7 +33,7 @@ public class FamilyTree extends SavedData {
     }
 
     public static FamilyTree get(ServerLevel world) {
-        return WorldUtils.loadData(world.getServer().overworld(), FamilyTree::new, FamilyTree::new, DATA_ID);
+        return WorldUtils.loadData(world.getServer().overworld(), FamilyTree::new, FamilyTree::new, DATA_ID, LEGACY_DATA_ID);
     }
 
     public CompoundTag save(CompoundTag nbt, HolderLookup.Provider provider) {
