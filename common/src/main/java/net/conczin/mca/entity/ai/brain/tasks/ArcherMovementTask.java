@@ -3,6 +3,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 import com.google.common.collect.ImmutableMap;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.MCAMoveControl;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.RangedWeaponHelper;
 import net.minecraft.server.level.ServerLevel;
@@ -17,12 +18,11 @@ import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.Optional;
 import java.util.List;
+import java.util.Optional;
 
 public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E> {
     private static final double SPEED_MODIFIER = 0.5D;
-    private static final double KITE_SPEED_MODIFIER = 0.85D;
     private static final double EMERGENCY_SPEED_MODIFIER = 0.9D;
     private static final float LOOK_SPEED = 30.0F;
     private static final int LOST_SIGHT_BEFORE_REPOSITION = 10;
@@ -37,11 +37,11 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
     private static final double EMERGENCY_SAFE_DISTANCE = 6.0D;
     private static final double APPROACH_EXIT_RANGE_BUFFER = 1.0D;
 
-    private static final int MIN_HOLD_TICKS_BEFORE_STRAFE = 20;
-    private static final int MIN_STRAFE_TICKS = 8;
-    private static final int MAX_STRAFE_TICKS = 14;
-    private static final int MIN_STRAFE_COOLDOWN = 40;
-    private static final int MAX_STRAFE_COOLDOWN = 80;
+    private static final int MIN_HOLD_TICKS_BEFORE_STRAFE = 10;
+    private static final int MIN_STRAFE_TICKS = 24;
+    private static final int MAX_STRAFE_TICKS = 40;
+    private static final int MIN_STRAFE_COOLDOWN = 20;
+    private static final int MAX_STRAFE_COOLDOWN = 40;
     private static final float STRAFE_INPUT = 0.35F;
     private static final double STUCK_HORIZONTAL_SPEED_SQUARED = 2.5E-5D;
 
@@ -247,12 +247,18 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
                 }
                 case KITE -> {
                     trackTarget(entity, target);
-                    publishAway(entity, movementThreat, KITE_SAFE_DISTANCE, KITE_SPEED_MODIFIER, targetChanged || stateChanged);
-                    continueAimedKiteWhileUsingWeapon(entity, target, movementThreat);
+                    publishKiteAway(
+                            entity,
+                            RangedCombatPositioning.nearbyMovementThreats(entity, movementThreat),
+                            targetChanged || stateChanged
+                    );
                 }
                 case EMERGENCY_FLEE -> {
-                    publishEmergencyAway(entity, RangedCombatPositioning.nearbyMovementThreats(entity, target), EMERGENCY_SAFE_DISTANCE,
-                            EMERGENCY_SPEED_MODIFIER, targetChanged || stateChanged);
+                    publishEmergencyAway(
+                            entity,
+                            RangedCombatPositioning.nearbyMovementThreats(entity, target),
+                            targetChanged || stateChanged
+                    );
                     trackEscapeOrTarget(entity, target);
                 }
                 default -> throw new IllegalStateException("Unexpected ranged combat base state: " + baseState);
@@ -296,7 +302,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             boolean inRange,
             boolean closeThreat
     ) {
-        clearCombatWalkTarget(entity);
+        claimDirectMovement(entity);
         trackTarget(entity, target);
 
         if (currentState == RangedCombatState.STRAFE) {
@@ -351,7 +357,11 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             return;
         }
 
-        entity.getMoveControl().strafe(0.0F, this.strafeDirection * STRAFE_INPUT);
+        ((MCAMoveControl)entity.getMoveControl()).strafe(
+                0.0F,
+                this.strafeDirection * STRAFE_INPUT,
+                SPEED_MODIFIER
+        );
         this.strafeTicksElapsed++;
         this.strafeTicksRemaining--;
     }
@@ -364,24 +374,6 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         return RangedCombatPositioning.isStrafeSideWalkable(entity, oppositeDirection)
                 ? oppositeDirection
                 : 0.0F;
-    }
-
-    private void continueAimedKiteWhileUsingWeapon(E entity, LivingEntity target, LivingEntity movementThreat) {
-        if (!entity.isUsingItem()) {
-            return;
-        }
-
-        Vec3 away = entity.position().subtract(movementThreat.position()).multiply(1.0D, 0.0D, 1.0D);
-        if (!RangedCombatPositioning.isMovementDirectionWalkable(entity, away)) {
-            return;
-        }
-
-        entity.lookAt(target, LOOK_SPEED, LOOK_SPEED);
-        float yawRadians = entity.getYRot() * (float)(Math.PI / 180.0D);
-        Vec3 direction = away.normalize();
-        float forward = (float)(direction.x * Math.cos(yawRadians) + direction.z * Math.sin(yawRadians));
-        float lateral = (float)(-direction.x * Math.sin(yawRadians) + direction.z * Math.cos(yawRadians));
-        entity.getMoveControl().strafe(forward, lateral);
     }
 
     private void finishStrafe(E entity, String reason) {
@@ -432,36 +424,33 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         logMovementIntent(entity, "walk", "reposition_firing_position", walkTarget);
     }
 
-    private void publishAway(E entity, LivingEntity threat, double desiredDistance, double speedModifier, boolean force) {
+    private void publishKiteAway(E entity, List<LivingEntity> threats, boolean force) {
         if (!canPublishCombatWalkTarget(entity, force)) {
             return;
         }
-
-        Optional<Vec3> awayPosition = RangedCombatPositioning.findAwayPosition(entity, threat, desiredDistance);
-        if (awayPosition.isEmpty()) {
-            clearCombatWalkTarget(entity);
-            scheduleWalkTargetRetry(entity);
-            logMovementIntent(entity, "hold", "no_away_position", null);
-            return;
-        }
-
-        WalkTarget walkTarget = new WalkTarget(awayPosition.orElseThrow(), (float)speedModifier, 0);
-        setCombatWalkTarget(entity, walkTarget);
-        logMovementIntent(entity, "walk", "away_from_threat", walkTarget);
+        publishGroupAway(
+                entity,
+                RangedCombatPositioning.findGroupEscapePosition(entity, threats, KITE_SAFE_DISTANCE),
+                SPEED_MODIFIER
+        );
     }
 
-    private void publishEmergencyAway(
-            E entity,
-            List<LivingEntity> threats,
-            double desiredDistance,
-            double speedModifier,
-            boolean force
-    ) {
+    private void publishEmergencyAway(E entity, List<LivingEntity> threats, boolean force) {
         if (!canPublishCombatWalkTarget(entity, force)) {
             return;
         }
+        publishGroupAway(
+                entity,
+                RangedCombatPositioning.findEmergencyEscapePosition(entity, threats, EMERGENCY_SAFE_DISTANCE),
+                EMERGENCY_SPEED_MODIFIER
+        );
+    }
 
-        Optional<Vec3> awayPosition = RangedCombatPositioning.findEmergencyEscapePosition(entity, threats, desiredDistance);
+    private void publishGroupAway(
+            E entity,
+            Optional<Vec3> awayPosition,
+            double speedModifier
+    ) {
         if (awayPosition.isEmpty()) {
             clearCombatWalkTarget(entity);
             scheduleWalkTargetRetry(entity);
@@ -483,14 +472,15 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
     }
 
     private boolean canPublishCombatWalkTarget(E entity, boolean force) {
+        if (force) {
+            return true;
+        }
+
         WalkTarget current = entity.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
-        if (current != null && current != this.combatWalkTarget) {
-            return false;
+        if (current == null) {
+            return this.walkTargetRetryCooldown <= 0;
         }
-        if (current == this.combatWalkTarget && current != null && !force) {
-            return false;
-        }
-        return force || this.walkTargetRetryCooldown <= 0;
+        return current != this.combatWalkTarget;
     }
 
     private void setCombatWalkTarget(E entity, WalkTarget walkTarget) {
@@ -511,6 +501,17 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         WalkTarget current = entity.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
         if (current == this.combatWalkTarget) {
             entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        }
+        this.combatWalkTarget = null;
+        this.walkTargetRetryCooldown = 0;
+    }
+
+    private void claimDirectMovement(E entity) {
+        if (entity.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET)) {
+            entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        }
+        if (!entity.getNavigation().isDone()) {
+            entity.getNavigation().stop();
         }
         this.combatWalkTarget = null;
         this.walkTargetRetryCooldown = 0;

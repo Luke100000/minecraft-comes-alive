@@ -65,9 +65,9 @@ class ArcherMovementStateTest {
 
     @Test
     void strafeRequiresStableHoldAndExpiredCooldown() {
-        assertFalse(shouldStartStrafe(19, 0));
-        assertFalse(shouldStartStrafe(20, 1));
-        assertTrue(shouldStartStrafe(20, 0));
+        assertFalse(shouldStartStrafe(9, 0));
+        assertFalse(shouldStartStrafe(10, 1));
+        assertTrue(shouldStartStrafe(10, 0));
     }
 
     @Test
