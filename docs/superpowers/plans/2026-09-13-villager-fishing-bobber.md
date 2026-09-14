@@ -1,154 +1,108 @@
-# Villager Fishing Bobber Implementation Plan
+# Villager Fishing Player-Parity Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give MCA 1.21.1 fishing villagers a visible, water-targeted fishing bobber and line that survive past the inherited 400-tick chore timeout while preserving MCA's existing loot, durability, and chore semantics.
+**Goal:** Upgrade MCA 1.21.1 villager fishing so the bobber uses vanilla-shaped lure/bite feedback, every real bite produces one protected caught item that visibly reels to the villager, and the fishing line attaches to the actually rendered rod/hand.
 
-**Architecture:** Add one lightweight `ThrowableProjectile` owned by `VillagerEntityMCA` for casting/bobbing presentation and one vanilla-style client renderer for the bobber and line. `FishingTask` remains authoritative for finding water, timing catches, awarding loot, damaging rods, recasting, and cleanup. The implementation deliberately does not mix into or subclass vanilla `FishingHook`, and loader-specific code is limited to renderer registration.
+**Architecture:** Keep the existing MCA-owned `MCAFishingBobberEntity` because vanilla `FishingHook` is player-bound, but reuse vanilla APIs and algorithms everywhere the ownership boundary allows it. The bobber owns vanilla-shaped bobbing/lure/bite state; `FishingTask` only orchestrates water, loot, reel delivery, durability, and cleanup; a villager render layer derives the line anchor from `HumanoidModel.translateToHand(...)` and vanilla `ItemInHandLayer` transforms; the bobber renderer becomes billboard-only.
 
-**Tech Stack:** Java 21, Minecraft 1.21.1, MCA common/Fabric/NeoForge modules, vanilla `ThrowableProjectile`, Fabric `EntityRendererRegistry`, NeoForge `EntityRenderersEvent.RegisterRenderers`, NeoForge GameTest, Gradle.
+**Tech Stack:** Java 21, Minecraft 1.21.1, MCA common/Fabric/NeoForge modules, vanilla `ThrowableProjectile`, `SynchedEntityData`, `ItemEntity`, `ParticleTypes`, `SoundEvents`, humanoid render layers, NeoForge GameTest, Gradle.
 
 **Spec:** `docs/superpowers/specs/2026-09-13-villager-fishing-bobber-design.md`
 
 ## Global Constraints
 
-- Implement and validate 1.21.1 first; only then forward-port to 26.1.2 and 26.2.
-- Do not modify `local-source`; it is reference-only.
-- Do not mix into or subclass vanilla `FishingHook`.
-- Do not add fake players, fishing XP, player advancements/statistics, hooked-mob behavior, or vanilla `FishingHook.retrieve(...)` semantics.
-- Preserve `FishingTask.getFishingLoot(...)`, the existing 35% miss / 65% successful-catch behavior, rod durability loss, and AquaCulture-compatible loot-table context.
-- Aim casts from the already-selected `targetWater` water-surface coordinates; `villager.lookAt(targetWater)` is visual only.
-- Use `ThrowableProjectile` because 1.21.1 `Projectile(EntityType, Level)` is package-private while `ThrowableProjectile` exposes protected constructors and keeps generic owner spawn synchronization.
-- The bobber is transient: `.noSave()`, `.noSummon()`, 0.25 x 0.25, tracking range 4, update interval 5.
-- A failed cast self-discards if it hits terrain before water, remains airborne for 40 ticks, loses a valid fishing owner/rod/chore, or moves farther than 32 blocks from its owner.
-- Fishing must not stop solely because `AbstractChoreTask` supplied a 400-tick duration; override only `FishingTask`, not all chores.
-- Real task stop must discard the bobber, reset target/timer state, and clear the temporary held rod.
-- Preserve unrelated dirty worktree changes. Stage and commit only files belonging to the fishing feature in each task.
+- Implement and validate 1.21.1 first; port to 26.1.2 and 26.2 only after live 1.21.1 proof.
+- Preserve the existing MCA bobber entity and exact-water targeting; do not mix into or subclass vanilla `FishingHook`.
+- Treat `C:/Users/Mik/Downloads/MCA/local-source/src` as the 1.21.1 design oracle and never modify it.
+- Reuse vanilla generic APIs directly: inherited projectile ownership/movement, `SynchedEntityData`, `ParticleTypes`, `SoundEvents.FISHING_BOBBER_SPLASH`, `ItemEntity`, `ItemEntity.setNeverPickUp()`, `SimpleContainer.addItem(...)`, `HumanoidModel.translateToHand(...)`, vanilla held-item transforms, hook texture, and line geometry.
+- Adapt only the narrow vanilla logic that is private or player-bound. Do not add mixins/invokers solely to reach private fishing helpers.
+- Use vanilla base fishing timing ranges: lure wait 100-600 ticks, approach 20-80 ticks, bite window 20-40 ticks. Do not add vanilla open-water checks, rain/sky timing modifiers, Lure/Luck mechanics, hooked-entity behavior, player XP/stats/criteria, or fake players.
+- Every genuine bite reeled by the villager produces a catch. Remove the current independent 200-399 tick timer and the hidden 35% miss / 65% catch roll.
+- The in-flight caught stack exists in exactly one real `ItemEntity`; do not insert a duplicate into inventory while it is flying.
+- Call `ItemEntity.setNeverPickUp()` immediately when the reel item is created. While MCA owns that reel, player/mob pickup and normal item-entity merging must remain disabled by vanilla pickup-delay behavior.
+- Release pickup protection only when the reel has ended: inventory remainder, owner death/removal, or lost task ownership. Use `setNoPickUpDelay()` then leave the one real remainder as a normal world drop.
+- Fishing must remain active past the inherited 400-tick chore timeout; keep the fishing-specific `timedOut(...) == false` behavior.
+- The fishing line must derive from the rendered MCA humanoid arm/held-item transform. Do not restore an eye/body offset approximation.
+- Client visual verification is mandatory for the line, particles, dip, item flight, and handedness; server tests and compilation are insufficient proof.
+- Preserve unrelated dirty worktree changes. Each commit stages only the fishing files changed by that task.
+- Before completion, follow `java-code-review-cleanup`: freeze one fishing-only diff, compare against local vanilla owners, run reuse/quality/correctness/efficiency review lenses, fix worthwhile findings, and rerun verification.
 
 ---
 
 ## File Map
 
-### Create
-
-- `common/src/main/java/net/conczin/mca/entity/MCAFishingBobberEntity.java`
-  - transient villager-owned projectile
-  - exact-water cast targeting
-  - flying-to-bobbing transition
-  - owner/range/failed-cast cleanup
-- `common/src/main/java/net/conczin/mca/client/render/MCAFishingBobberRenderer.java`
-  - vanilla fishing-hook billboard
-  - curved fishing line anchored to the villager's physical main arm
-- `neoforge/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/FishingTaskGameTests.java`
-  - server-side entity/lifecycle regression coverage
-
 ### Modify
 
-- `common/src/main/java/net/conczin/mca/registry/EntitiesMCA.java`
-  - register `FISHING_BOBBER`
+- `common/src/main/java/net/conczin/mca/entity/MCAFishingBobberEntity.java`
+  - add synchronized biting state
+  - port the visible vanilla lure/approach/bite cycle
+  - use vanilla-shaped bobbing stabilization and bite dip
 - `common/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/FishingTask.java`
-  - replace `hasCastRod` with bobber state
-  - cast at `targetWater`
-  - prevent 400-tick timeout
-  - reel/recast and cleanup
+  - remove the independent timer and miss roll
+  - reel on `bobber.isBiting()`
+  - create/protect/deliver one vanilla `ItemEntity`
+  - keep catch cleanup and rod durability single-owned
+- `common/src/main/java/net/conczin/mca/client/render/MCAFishingBobberRenderer.java`
+  - retain vanilla hook billboard only
+  - remove the guessed hand-position and line code
+- `common/src/main/java/net/conczin/mca/client/render/VillagerEntityMCARenderer.java`
+  - install the fishing-line render layer
+- `neoforge/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/FishingTaskGameTests.java`
+  - add bite, reel, anti-pickup, and remainder regressions
+
+### Create
+
+- `common/src/main/java/net/conczin/mca/client/render/layer/VillagerFishingLineLayer.java`
+  - locate the villager-owned MCA bobber on the client
+  - derive the fishing-line origin from the posed humanoid hand/item transform
+  - render vanilla-shaped 16-segment line geometry
+
+### Intentionally unchanged unless compilation proves an API mismatch
+
+- `common/src/main/java/net/conczin/mca/registry/EntitiesMCA.java`
 - `fabric/src/main/java/net/conczin/mca/fabric/MCAFabricClient.java`
-  - register `MCAFishingBobberRenderer`
 - `neoforge/src/main/java/net/conczin/mca/neoforge/ClientNeoForge.java`
-  - register `MCAFishingBobberRenderer`
-
-### Explicitly unchanged
-
 - `common/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/AbstractChoreTask.java`
-- vanilla classes under `C:/Users/Mik/Downloads/MCA/local-source`
-- fishing loot tables / AquaCulture compatibility code
-- other chore equipment handling
+- files under `C:/Users/Mik/Downloads/MCA/local-source`
 
 ---
 
-### Task 1: Add the transient villager-owned bobber and prove it reaches water
+### Task 1: Make the MCA bobber own the vanilla-shaped lure and bite cycle
 
 **Files:**
-- Create: `common/src/main/java/net/conczin/mca/entity/MCAFishingBobberEntity.java`
-- Modify: `common/src/main/java/net/conczin/mca/registry/EntitiesMCA.java`
-- Create: `neoforge/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/FishingTaskGameTests.java`
+- Modify: `common/src/main/java/net/conczin/mca/entity/MCAFishingBobberEntity.java`
+- Modify: `neoforge/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/FishingTaskGameTests.java`
 
 **Interfaces:**
-- Produces: `EntitiesMCA.FISHING_BOBBER`
-- Produces: `MCAFishingBobberEntity.cast(ServerLevel, VillagerEntityMCA, BlockPos)`
-- Produces: `MCAFishingBobberEntity.getVillagerOwner()`
-- Produces: `MCAFishingBobberEntity.isBobbing()`
-- Consumed later by: `FishingTask`, `MCAFishingBobberRenderer`
+- Keeps: `MCAFishingBobberEntity.cast(ServerLevel, VillagerEntityMCA, BlockPos)`
+- Keeps: `MCAFishingBobberEntity.isBobbing()`
+- Produces: `public boolean isBiting()`
+- Consumed by Task 2: `FishingTask` reels only when `isBiting()` is true
 
-- [ ] **Step 1: Write the failing GameTest for an exact-water cast**
+- [ ] **Step 1: Add a natural-cycle GameTest that fails before bite state exists**
 
-Create `FishingTaskGameTests.java` with one initial test that prepares a short stone bank and a 3 x 3 source-water pool, spawns an MCA villager roughly two blocks from the nearest source block, gives it a fishing rod, assigns `Chore.FISH`, and asks the bobber factory to cast at that exact block:
+Add this test beside the existing bobber test. It deliberately waits through the real maximum 600 + 80 tick lure/approach window instead of adding a test-only timer setter:
 
 ```java
-package net.conczin.mca.entity.ai.brain.tasks.chore;
+@GameTest(
+        batch = "mca_fishing_bite",
+        templateNamespace = "minecraft",
+        template = "bastion/blocks/air",
+        timeoutTicks = 800
+)
+public static void bobberEventuallyEntersRealBiteWindow(GameTestHelper helper) {
+    BlockPos villagerPos = helper.absolutePos(new BlockPos(3, 2, 3));
+    BlockPos water = villagerPos.east(2);
+    prepareWater(helper, water);
 
-import net.conczin.mca.entity.MCAFishingBobberEntity;
-import net.conczin.mca.entity.VillagerEntityMCA;
-import net.conczin.mca.entity.VillagerFactory;
-import net.conczin.mca.entity.ai.Chore;
-import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.GameTest;
-import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.world.entity.MobSpawnType;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.level.GameType;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+    VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
+    MCAFishingBobberEntity bobber = MCAFishingBobberEntity.cast(helper.getLevel(), villager, water);
 
-@GameTestHolder("minecraft")
-@PrefixGameTestTemplate(false)
-public final class FishingTaskGameTests {
-    private FishingTaskGameTests() {
-    }
-
-    @GameTest(batch = "mca_fishing_bobber", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
-    public static void bobberCastAtSelectedWaterStartsBobbing(GameTestHelper helper) {
-        BlockPos villagerPos = helper.absolutePos(new BlockPos(3, 2, 3));
-        BlockPos water = villagerPos.east(2);
-        prepareWater(helper, water);
-
-        VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
-        MCAFishingBobberEntity bobber = MCAFishingBobberEntity.cast(helper.getLevel(), villager, water);
-
-        helper.assertTrue(!bobber.isRemoved(), "new fishing bobber was removed immediately");
-        helper.succeedWhen(() -> helper.assertTrue(
-                bobber.isBobbing(),
-                "bobber never reached the selected water block"
-        ));
-    }
-
-    private static VillagerEntityMCA spawnFisher(GameTestHelper helper, BlockPos pos) {
-        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
-                .withAge(0)
-                .withPosition(Vec3.atBottomCenterOf(pos))
-                .withName("Fishing Probe")
-                .spawn(MobSpawnType.STRUCTURE);
-        villager.refreshBrain(helper.getLevel());
-        villager.getInventory().addItem(new ItemStack(Items.FISHING_ROD));
-        villager.setItemInHand(villager.getDominantHand(), new ItemStack(Items.FISHING_ROD));
-        Player player = helper.makeMockPlayer(GameType.SURVIVAL);
-        villager.getVillagerBrain().assignJob(Chore.FISH, player);
-        return villager;
-    }
-
-    private static void prepareWater(GameTestHelper helper, BlockPos center) {
-        for (int x = -1; x <= 1; x++) {
-            for (int z = -1; z <= 1; z++) {
-                BlockPos water = center.offset(x, 0, z);
-                helper.getLevel().setBlock(water.below(), Blocks.STONE.defaultBlockState(), 3);
-                helper.getLevel().setBlock(water, Blocks.WATER.defaultBlockState(), 3);
-                helper.getLevel().setBlock(water.above(), Blocks.AIR.defaultBlockState(), 3);
-            }
-        }
-    }
+    helper.succeedWhen(() -> helper.assertTrue(
+            bobber.isBobbing() && bobber.isBiting(),
+            "bobber never reached the vanilla-shaped bite window"
+    ));
 }
 ```
 
@@ -160,500 +114,697 @@ Run:
 ./gradlew :neoforge:compileJava
 ```
 
-Expected: compilation fails because `MCAFishingBobberEntity` and its `cast(...)` / `isBobbing()` API do not exist yet.
+Expected: compilation fails because `MCAFishingBobberEntity.isBiting()` does not exist yet.
 
-- [ ] **Step 3: Register the MCA bobber entity type**
+- [ ] **Step 3: Add vanilla-shaped synchronized bite state without duplicate booleans**
 
-In `EntitiesMCA.java`, import `MCAFishingBobberEntity` and add beside `CRIB`:
-
-```java
-EntityType<MCAFishingBobberEntity> FISHING_BOBBER = register("fishing_bobber", EntityType.Builder
-        .<MCAFishingBobberEntity>of(MCAFishingBobberEntity::new, MobCategory.MISC)
-        .noSave()
-        .noSummon()
-        .sized(0.25F, 0.25F)
-        .clientTrackingRange(4)
-        .updateInterval(5)
-);
-```
-
-Do not add attributes; this is not a living entity.
-
-- [ ] **Step 4: Implement the minimal bobber entity**
-
-Create `MCAFishingBobberEntity` extending `ThrowableProjectile` with these fields and public API:
+In `MCAFishingBobberEntity`, add the vanilla-equivalent synchronized field plus only the state needed for the visible fish cycle:
 
 ```java
-public final class MCAFishingBobberEntity extends ThrowableProjectile {
-    private static final int MAX_FLYING_TICKS = 40;
-    private static final double MAX_OWNER_DISTANCE_SQR = 32.0 * 32.0;
+private static final EntityDataAccessor<Boolean> DATA_BITING =
+        SynchedEntityData.defineId(MCAFishingBobberEntity.class, EntityDataSerializers.BOOLEAN);
 
-    private boolean bobbing;
-    private int flyingTicks;
+private final RandomSource synchronizedRandom = RandomSource.create();
+private int nibble;
+private int timeUntilLured;
+private int timeUntilHooked;
+private float fishAngle;
 
-    public MCAFishingBobberEntity(EntityType<? extends MCAFishingBobberEntity> type, Level level) {
-        super(type, level);
-        noCulling = true;
-    }
+public boolean isBiting() {
+    return entityData.get(DATA_BITING);
+}
 
-    public static MCAFishingBobberEntity cast(ServerLevel world, VillagerEntityMCA owner, BlockPos targetWater) {
-        MCAFishingBobberEntity bobber = new MCAFishingBobberEntity(EntitiesMCA.FISHING_BOBBER, world);
-        bobber.setOwner(owner);
-        bobber.launchAt(owner, targetWater);
-        world.addFreshEntity(bobber);
-        return bobber;
-    }
-
-    @Nullable
-    public VillagerEntityMCA getVillagerOwner() {
-        return getOwner() instanceof VillagerEntityMCA villager ? villager : null;
-    }
-
-    public boolean isBobbing() {
-        return bobbing && !isRemoved();
-    }
+@Override
+protected void defineSynchedData(SynchedEntityData.Builder builder) {
+    builder.define(DATA_BITING, false);
 }
 ```
 
-Also implement an empty `defineSynchedData(...)`; the bobber needs no custom synchronized payload because inherited projectile spawning synchronizes the owner and normal entity movement synchronization supplies position.
+Do not add a second `boolean biting`; `DATA_BITING` is the one source of truth.
 
-- [ ] **Step 5: Aim the cast at the selected water surface**
-
-Implement `launchAt(...)` using `targetWater` as the authority, not owner pitch:
-
-```java
-private void launchAt(VillagerEntityMCA owner, BlockPos targetWater) {
-    int handSide = owner.getMainArm() == HumanoidArm.RIGHT ? 1 : -1;
-    float bodyYaw = owner.yBodyRot * Mth.DEG_TO_RAD;
-    double sin = Mth.sin(bodyYaw);
-    double cos = Mth.cos(bodyYaw);
-
-    Vec3 origin = owner.getEyePosition()
-            .add(-cos * handSide * 0.20 - sin * 0.20,
-                    -0.35,
-                    -sin * handSide * 0.20 + cos * 0.20);
-
-    FluidState fluid = level().getFluidState(targetWater);
-    double surfaceY = targetWater.getY() + fluid.getHeight(level(), targetWater);
-    Vec3 destination = new Vec3(
-            targetWater.getX() + 0.5,
-            surfaceY,
-            targetWater.getZ() + 0.5
-    );
-    Vec3 direction = destination.subtract(origin);
-    double horizontal = direction.horizontalDistance();
-
-    setPos(origin.x, origin.y, origin.z);
-    shoot(direction.x, direction.y + horizontal * 0.25, direction.z, 0.6F, 0.5F);
-}
-```
-
-Keep these values as the first implementation. Only tune them if live 1.21.1 verification shows the bobber visibly overshooting/undershooting ordinary two-block casts.
-
-- [ ] **Step 6: Implement flying, bobbing, and self-cleanup**
-
-Override `tick()` so server validity checks happen before movement, then use `ThrowableProjectile.tick()` for the actual cast. Keep the behavior small:
+Add the client/server transition response using vanilla `FishingHook.onSyncedDataUpdated(...)` as the source:
 
 ```java
 @Override
-public void tick() {
-    VillagerEntityMCA owner = getVillagerOwner();
-    if (!level().isClientSide && !canRemain(owner)) {
-        discard();
-        return;
+public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
+    if (DATA_BITING.equals(key) && isBiting()) {
+        setDeltaMovement(
+                getDeltaMovement().x,
+                -0.4F * Mth.nextFloat(synchronizedRandom, 0.6F, 1.0F),
+                getDeltaMovement().z
+        );
     }
-
-    super.tick();
-    if (isRemoved()) {
-        return;
-    }
-
-    FluidState fluid = level().getFluidState(blockPosition());
-    if (fluid.is(FluidTags.WATER)) {
-        bobbing = true;
-        flyingTicks = 0;
-        stabilizeOnWater(fluid);
-        return;
-    }
-
-    if (!bobbing && (++flyingTicks > MAX_FLYING_TICKS || onGround() || horizontalCollision)) {
-        discard();
-    }
-}
-
-private boolean canRemain(@Nullable VillagerEntityMCA owner) {
-    return owner != null
-            && owner.isAlive()
-            && owner.getVillagerBrain().getCurrentJob() == Chore.FISH
-            && owner.getItemInHand(owner.getDominantHand()).getItem() instanceof FishingRodItem
-            && distanceToSqr(owner) <= MAX_OWNER_DISTANCE_SQR;
-}
-
-private void stabilizeOnWater(FluidState fluid) {
-    BlockPos pos = blockPosition();
-    double surfaceY = pos.getY() + fluid.getHeight(level(), pos);
-    Vec3 motion = getDeltaMovement();
-    double offset = getY() - surfaceY;
-    setDeltaMovement(motion.x * 0.9, motion.y - offset * 0.2, motion.z * 0.9);
+    super.onSyncedDataUpdated(key);
 }
 ```
 
-If testing shows `ThrowableProjectile`'s collision callback leaves a terrain-hit bobber alive for one extra tick, override `onHitBlock(...)` narrowly to `discard()` when the hit block is not water. Do not add vanilla hooking behavior.
+- [ ] **Step 4: Replace MCA's independent bobbing approximation with the narrow vanilla water behavior we need**
 
-- [ ] **Step 7: Run the focused GameTest server and verify GREEN**
+At the start of `tick()`, seed the synchronized random the same way vanilla does:
+
+```java
+synchronizedRandom.setSeed(getUUID().getLeastSignificantBits() ^ level().getGameTime());
+```
+
+When the bobber is in water, keep MCA's outer `bobbing` flag but use the local 1.21.1 `FishingHook` surface correction formula:
+
+```java
+private void stabilizeOnWater(FluidState fluid) {
+    BlockPos pos = blockPosition();
+    double surfaceHeight = fluid.getHeight(level(), pos);
+    Vec3 motion = getDeltaMovement();
+    double surfaceOffset = getY() + motion.y - pos.getY() - surfaceHeight;
+    if (Math.abs(surfaceOffset) < 0.01) {
+        surfaceOffset += Math.signum(surfaceOffset) * 0.1;
+    }
+
+    setDeltaMovement(
+            motion.x * 0.9,
+            motion.y - surfaceOffset * random.nextFloat() * 0.2,
+            motion.z * 0.9
+    );
+
+    if (isBiting()) {
+        setDeltaMovement(getDeltaMovement().add(
+                0.0,
+                -0.1 * synchronizedRandom.nextFloat() * synchronizedRandom.nextFloat(),
+                0.0
+        ));
+    }
+}
+```
+
+After stabilization, call `catchingFish()` only on the server. Leave MCA's working exact-target cast, failed-cast timeout, owner/rod/chore validation, and 32-block owner-distance cleanup intact.
+
+- [ ] **Step 5: Port only vanilla's visible `catchingFish(...)` branch**
+
+Add this method based on local 1.21.1 `FishingHook.catchingFish(...)`. Keep vanilla timer ranges, particle formulas, and splash sound; intentionally omit open-water, rain/sky timing, lure enchantment, and player-only logic:
+
+```java
+private void catchingFish() {
+    ServerLevel world = (ServerLevel) level();
+
+    if (nibble > 0) {
+        nibble--;
+        if (nibble <= 0) {
+            timeUntilLured = 0;
+            timeUntilHooked = 0;
+            entityData.set(DATA_BITING, false);
+        }
+        return;
+    }
+
+    if (timeUntilHooked > 0) {
+        timeUntilHooked--;
+        if (timeUntilHooked > 0) {
+            fishAngle += (float) random.triangle(0.0, 9.188);
+            float angle = fishAngle * Mth.DEG_TO_RAD;
+            float sin = Mth.sin(angle);
+            float cos = Mth.cos(angle);
+            double x = getX() + sin * timeUntilHooked * 0.1F;
+            double y = Mth.floor(getY()) + 1.0F;
+            double z = getZ() + cos * timeUntilHooked * 0.1F;
+
+            if (world.getBlockState(BlockPos.containing(x, y - 1.0, z)).is(Blocks.WATER)) {
+                if (random.nextFloat() < 0.15F) {
+                    world.sendParticles(ParticleTypes.BUBBLE, x, y - 0.1F, z, 1, sin, 0.1, cos, 0.0);
+                }
+                float wakeX = sin * 0.04F;
+                float wakeZ = cos * 0.04F;
+                world.sendParticles(ParticleTypes.FISHING, x, y, z, 0, wakeZ, 0.01, -wakeX, 1.0);
+                world.sendParticles(ParticleTypes.FISHING, x, y, z, 0, -wakeZ, 0.01, wakeX, 1.0);
+            }
+        } else {
+            playSound(
+                    SoundEvents.FISHING_BOBBER_SPLASH,
+                    0.25F,
+                    1.0F + (random.nextFloat() - random.nextFloat()) * 0.4F
+            );
+            double y = getY() + 0.5;
+            int count = (int) (1.0F + getBbWidth() * 20.0F);
+            world.sendParticles(ParticleTypes.BUBBLE, getX(), y, getZ(), count, getBbWidth(), 0.0, getBbWidth(), 0.2F);
+            world.sendParticles(ParticleTypes.FISHING, getX(), y, getZ(), count, getBbWidth(), 0.0, getBbWidth(), 0.2F);
+            nibble = Mth.nextInt(random, 20, 40);
+            entityData.set(DATA_BITING, true);
+        }
+        return;
+    }
+
+    if (timeUntilLured > 0) {
+        timeUntilLured--;
+        float splashChance = 0.15F;
+        if (timeUntilLured < 20) {
+            splashChance += (20 - timeUntilLured) * 0.05F;
+        } else if (timeUntilLured < 40) {
+            splashChance += (40 - timeUntilLured) * 0.02F;
+        } else if (timeUntilLured < 60) {
+            splashChance += (60 - timeUntilLured) * 0.01F;
+        }
+
+        if (random.nextFloat() < splashChance) {
+            float angle = Mth.nextFloat(random, 0.0F, 360.0F) * Mth.DEG_TO_RAD;
+            float distance = Mth.nextFloat(random, 25.0F, 60.0F);
+            double x = getX() + Mth.sin(angle) * distance * 0.1;
+            double y = Mth.floor(getY()) + 1.0F;
+            double z = getZ() + Mth.cos(angle) * distance * 0.1F;
+            if (world.getBlockState(BlockPos.containing(x, y - 1.0, z)).is(Blocks.WATER)) {
+                world.sendParticles(ParticleTypes.SPLASH, x, y, z, 2 + random.nextInt(2), 0.1F, 0.0, 0.1F, 0.0);
+            }
+        }
+
+        if (timeUntilLured <= 0) {
+            fishAngle = Mth.nextFloat(random, 0.0F, 360.0F);
+            timeUntilHooked = Mth.nextInt(random, 20, 80);
+        }
+        return;
+    }
+
+    timeUntilLured = Mth.nextInt(random, 100, 600);
+}
+```
+
+Keep this method close to vanilla naming/structure so later source review and forward ports can diff it mechanically.
+
+- [ ] **Step 6: Run the fishing GameTests and verify GREEN**
 
 Run:
 
 ```powershell
-./gradlew :neoforge:runGameTestServer
+./gradlew :neoforge:runGameTestServer --no-configuration-cache
 ```
 
-Expected: the new `mca_fishing_bobber` test passes, and existing GameTests remain green.
+Expected: all registered NeoForge GameTests pass, including `mca_fishing_bite`; the existing cast/timeout/single-bobber/stop/rod-loss tests remain green.
 
-- [ ] **Step 8: Commit only the bobber domain seam and its first test**
+- [ ] **Step 7: Commit only Task 1 files**
 
 ```powershell
-git add common/src/main/java/net/conczin/mca/entity/MCAFishingBobberEntity.java `
-        common/src/main/java/net/conczin/mca/registry/EntitiesMCA.java `
-        neoforge/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/FishingTaskGameTests.java
-git diff --cached --name-only
-git commit -m "feat: add villager fishing bobber"
+git add common/src/main/java/net/conczin/mca/entity/MCAFishingBobberEntity.java neoforge/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/FishingTaskGameTests.java
+git commit -m "feat: add vanilla-style villager fishing bites"
 ```
-
-Before committing, confirm the staged list contains exactly those three paths.
 
 ---
 
-### Task 2: Integrate casting, timeout prevention, reel/recast, and cleanup into `FishingTask`
+### Task 2: Reel every bite through one protected vanilla `ItemEntity`
 
 **Files:**
 - Modify: `common/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/FishingTask.java`
 - Modify: `neoforge/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/FishingTaskGameTests.java`
 
 **Interfaces:**
-- Consumes: `MCAFishingBobberEntity.cast(ServerLevel, VillagerEntityMCA, BlockPos)`
-- Consumes: `MCAFishingBobberEntity.isBobbing()`
-- Produces: a fishing task that remains `Behavior.Status.RUNNING` after 400 ticks while `Chore.FISH` remains valid
-- Produces: exactly one active bobber per running fishing task
+- Consumes: `MCAFishingBobberEntity.isBiting()` from Task 1
+- Produces task state: `ItemEntity reelItem`, `int reelTicks`
+- Preserves: `getFishingLoot(ServerLevel, VillagerEntityMCA)` and MCA loot context
+- Uses vanilla API: `ItemEntity.setNeverPickUp()`, `ItemEntity.setNoPickUpDelay()`, `SimpleContainer.addItem(...)`
 
-- [ ] **Step 1: Add failing lifecycle tests before changing `FishingTask`**
+- [ ] **Step 1: Add an end-to-end regression for guaranteed catch and protected reel flight**
 
-Extend `FishingTaskGameTests` with three focused tests.
-
-First, prove the inherited 400-tick stop is a bug:
+Add imports for `ItemEntity` and `AtomicBoolean`, then add:
 
 ```java
-@GameTest(batch = "mca_fishing_lifecycle", templateNamespace = "minecraft", template = "bastion/blocks/air")
-public static void fishingDoesNotStopAtFourHundredTicks(GameTestHelper helper) {
+@GameTest(
+        batch = "mca_fishing_reel",
+        templateNamespace = "minecraft",
+        template = "bastion/blocks/air",
+        timeoutTicks = 900
+)
+public static void biteReelsOneProtectedItemIntoInventory(GameTestHelper helper) {
     BlockPos villagerPos = helper.absolutePos(new BlockPos(3, 2, 3));
     prepareWater(helper, villagerPos.east(2));
     VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
-    villager.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
-    villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+    TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL));
+    Player thief = helper.makeMockPlayer(GameType.SURVIVAL);
+    AtomicBoolean sawProtectedReel = new AtomicBoolean();
+    int startingLoot = countCaughtItems(villager);
+    int startingRodDamage = villager.getItemInHand(villager.getDominantHand()).getDamageValue();
 
-    FishingTask task = new FishingTask();
-    long start = helper.getLevel().getGameTime();
-    helper.assertTrue(task.tryStart(helper.getLevel(), villager, start), "fishing task did not start");
-    task.tickOrStop(helper.getLevel(), villager, start + 401L);
+    task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
+    helper.onEachTick(() -> {
+        task.tick(helper.getLevel(), villager, helper.getLevel().getGameTime());
+        for (ItemEntity item : activeReelItems(helper, villager)) {
+            sawProtectedReel.set(true);
+            helper.assertTrue(item.hasPickUpDelay(), "reel item became naturally pickup-eligible in flight");
+            item.playerTouch(thief);
+            helper.assertTrue(!item.isRemoved(), "another player stole the protected reel item");
+        }
+    });
 
-    helper.assertTrue(task.getStatus() == Behavior.Status.RUNNING, "fishing task stopped at the inherited 400-tick boundary");
-    helper.assertTrue(villager.getMainHandItem().is(Items.FISHING_ROD), "fishing timeout cleared the visible rod");
-    helper.succeed();
+    helper.succeedWhen(() -> {
+        helper.assertTrue(sawProtectedReel.get(), "no real reel ItemEntity was observed");
+        helper.assertTrue(thief.getInventory().isEmpty(), "protected reel item entered another player's inventory");
+        helper.assertTrue(countCaughtItems(villager) > startingLoot, "a real bite did not deliver a catch");
+        helper.assertTrue(activeReelItems(helper, villager).isEmpty(), "delivered reel item was left in the world");
+        helper.assertTrue(
+                villager.getItemInHand(villager.getDominantHand()).getDamageValue() == startingRodDamage + 1,
+                "one delivered bite did not damage the fishing rod exactly once"
+        );
+    });
 }
-```
 
-Second, prove repeated task ticks cannot create duplicate bobbers:
-
-```java
-@GameTest(batch = "mca_fishing_lifecycle", templateNamespace = "minecraft", template = "bastion/blocks/air")
-public static void repeatedFishingTicksKeepOneBobber(GameTestHelper helper) {
-    BlockPos villagerPos = helper.absolutePos(new BlockPos(3, 2, 3));
-    prepareWater(helper, villagerPos.east(2));
-    VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
-    villager.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
-    villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-
-    FishingTask task = new FishingTask();
-    long time = helper.getLevel().getGameTime();
-    task.start(helper.getLevel(), villager, time);
-    task.tick(helper.getLevel(), villager, time);
-    task.tick(helper.getLevel(), villager, time + 1);
-    task.tick(helper.getLevel(), villager, time + 2);
-
-    long bobbers = helper.getLevel()
-            .getEntitiesOfClass(MCAFishingBobberEntity.class, villager.getBoundingBox().inflate(32.0D))
-            .stream()
-            .filter(entity -> !entity.isRemoved())
-            .count();
-    helper.assertTrue(bobbers == 1L, "fishing task created " + bobbers + " active bobbers");
-    helper.succeed();
-}
-```
-
-Third, prove real stop cleans both the bobber and rod:
-
-```java
-@GameTest(batch = "mca_fishing_lifecycle", templateNamespace = "minecraft", template = "bastion/blocks/air")
-public static void stoppingFishingClearsBobberAndRod(GameTestHelper helper) {
-    BlockPos villagerPos = helper.absolutePos(new BlockPos(3, 2, 3));
-    prepareWater(helper, villagerPos.east(2));
-    VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
-    villager.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
-    villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-
-    FishingTask task = new FishingTask();
-    long time = helper.getLevel().getGameTime();
-    task.start(helper.getLevel(), villager, time);
-    task.tick(helper.getLevel(), villager, time);
-    task.doStop(helper.getLevel(), villager, time + 1);
-
-    helper.assertTrue(villager.getMainHandItem().isEmpty(), "stopped fishing task left the chore rod equipped");
-    helper.assertTrue(
-            helper.getLevel()
-                    .getEntitiesOfClass(MCAFishingBobberEntity.class, villager.getBoundingBox().inflate(32.0D))
-                    .stream()
-                    .noneMatch(entity -> !entity.isRemoved()),
-            "stopped fishing task left an active bobber"
+private static List<ItemEntity> activeReelItems(GameTestHelper helper, VillagerEntityMCA villager) {
+    return helper.getLevel().getEntitiesOfClass(
+            ItemEntity.class,
+            villager.getBoundingBox().inflate(32.0D),
+            item -> !item.isRemoved()
     );
-    helper.succeed();
+}
+
+private static int countCaughtItems(VillagerEntityMCA villager) {
+    return villager.getInventory().getItems().stream()
+            .filter(stack -> !stack.isEmpty())
+            .filter(stack -> !(stack.getItem() instanceof FishingRodItem))
+            .mapToInt(ItemStack::getCount)
+            .sum();
 }
 ```
 
-Add imports for `Behavior`, `MemoryModuleType`, and `MCAFishingBobberEntity`.
+This test exercises the real task/bobber path and directly calls vanilla `playerTouch(...)` on the in-flight item to prove the pickup delay protects it from a competing player.
 
-- [ ] **Step 2: Run GameTests and verify RED against the old fishing lifecycle**
+- [ ] **Step 2: Run the GameTest server and verify RED**
 
 Run:
 
 ```powershell
-./gradlew :neoforge:runGameTestServer
+./gradlew :neoforge:runGameTestServer --no-configuration-cache
 ```
 
-Expected before the task change: the 400-tick test fails because `FishingTask` is stopped by the inherited duration; bobber integration tests cannot pass until `FishingTask` owns a bobber.
+Expected: `mca_fishing_reel` fails because the current task has no reel `ItemEntity`; it still uses its independent timer/miss roll and inserts successful loot directly into inventory.
 
-- [ ] **Step 3: Replace boolean cast state with the bobber reference**
+- [ ] **Step 3: Replace the independent catch timer with reel state**
 
-In `FishingTask.java`, change:
+In `FishingTask`, remove:
 
 ```java
-private BlockPos targetWater;
-private boolean hasCastRod;
 private int ticks;
 ```
-
-to:
-
-```java
-private BlockPos targetWater;
-private MCAFishingBobberEntity bobber;
-private int ticks;
-```
-
-Remove the now-unused `EquipmentSlot` import if it remains unused.
-
-- [ ] **Step 4: Prevent only fishing from timing out at 400 ticks**
 
 Add:
 
 ```java
-@Override
-protected boolean timedOut(long time) {
-    return false;
-}
+private static final int MAX_REEL_TICKS = 40;
+private static final double REEL_DELIVERY_DISTANCE_SQR = 1.5 * 1.5;
+
+private ItemEntity reelItem;
+private int reelTicks;
 ```
 
-Do not alter `AbstractChoreTask`.
-
-- [ ] **Step 5: Validate the chosen water before using or recasting it**
-
-Before the near-water branch, add a narrow stale-target check:
+At the top of `tick(...)`, process an already-earned reel before checking for another rod/cast:
 
 ```java
-if (targetWater != null && !world.getBlockState(targetWater).is(Blocks.WATER)) {
-    discardBobber();
-    targetWater = null;
-    ticks = 0;
-}
-```
-
-Then allow the existing `targetWater == null` search branch to find a replacement on the following tick.
-
-- [ ] **Step 6: Cast one bobber when the villager reaches water**
-
-Replace the `hasCastRod` block with:
-
-```java
-if (bobber == null || bobber.isRemoved()) {
-    villager.swing(villager.getDominantHand());
-    bobber = MCAFishingBobberEntity.cast(world, villager, targetWater);
-    ticks = 0;
-}
-
-if (!bobber.isBobbing()) {
+if (tickReelItem(villager)) {
     return;
 }
-
-ticks++;
 ```
 
-The timer starts only once the cast has actually reached water. If a failed cast self-discards, the next task tick creates a fresh cast rather than accumulating a second live bobber.
+This ordering lets a bite that already earned loot finish even if that catch broke the villager's last rod. After the reel finishes, the normal next tick can equip a spare rod or abandon fishing.
 
-- [ ] **Step 7: Reel only successful catches and recast on the next tick**
-
-Keep the current random threshold/catch chance expression. Inside the successful catch branch, reel first:
+Delete all `ticks` resets and the current block containing:
 
 ```java
 if (ticks >= villager.level().random.nextInt(200) + 200) {
     if (villager.level().random.nextFloat() >= 0.35F) {
-        ItemStack stack = getFishingLoot(world, villager);
-
-        villager.swing(villager.getDominantHand());
-        discardBobber();
-        villager.getInventory().addItem(stack);
-        villager.getItemInHand(villager.getDominantHand())
-                .hurtAndBreak(1, villager, villager.getDominantSlot());
+        // direct catch
     }
     ticks = 0;
 }
 ```
 
-On the existing 35% miss case, do not discard/recast: just reset the timer as before.
+Replace the bobbing decision with:
 
-- [ ] **Step 8: Make stop cleanup idempotent**
+```java
+if (bobber.isBiting()) {
+    beginReel(world, villager);
+}
+```
+
+No second random success check is allowed after `isBiting()` becomes true.
+
+- [ ] **Step 4: Spawn the caught item using vanilla `FishingHook.retrieve(...)` velocity and vanilla pickup protection**
 
 Add:
 
 ```java
-private void discardBobber() {
-    if (bobber != null && !bobber.isRemoved()) {
-        bobber.discard();
-    }
-    bobber = null;
+private void beginReel(ServerLevel world, VillagerEntityMCA villager) {
+    ItemStack caught = getFishingLoot(world, villager);
+    villager.swing(villager.getDominantHand());
+
+    ItemEntity item = new ItemEntity(world, bobber.getX(), bobber.getY(), bobber.getZ(), caught);
+    item.setNeverPickUp();
+
+    double dx = villager.getX() - bobber.getX();
+    double dy = villager.getY() - bobber.getY();
+    double dz = villager.getZ() - bobber.getZ();
+    double distanceSqr = dx * dx + dy * dy + dz * dz;
+    item.setDeltaMovement(
+            dx * 0.1,
+            dy * 0.1 + Math.sqrt(Math.sqrt(distanceSqr)) * 0.08,
+            dz * 0.1
+    );
+
+    world.addFreshEntity(item);
+    reelItem = item;
+    reelTicks = 0;
+
+    discardBobber();
+    villager.getItemInHand(villager.getDominantHand())
+            .hurtAndBreak(1, villager, villager.getDominantSlot());
 }
 ```
 
-Replace `stop(...)` with:
+The velocity is the vanilla 1.21.1 retrieval formula with only the destination changed from `Player` to `VillagerEntityMCA`.
+
+- [ ] **Step 5: Deliver exactly the real in-flight stack and preserve inventory remainder**
+
+Add:
 
 ```java
-@Override
-protected void stop(ServerLevel world, VillagerEntityMCA villager, long time) {
-    discardBobber();
-    targetWater = null;
-    ticks = 0;
-
-    ItemStack stack = villager.getItemInHand(villager.getDominantHand());
-    if (!stack.isEmpty()) {
-        villager.setItemInHand(villager.getDominantHand(), ItemStack.EMPTY);
+private boolean tickReelItem(VillagerEntityMCA villager) {
+    if (reelItem == null) {
+        return false;
     }
+    if (reelItem.isRemoved()) {
+        clearReelReference();
+        return false;
+    }
+
+    reelTicks++;
+    if (reelItem.distanceToSqr(villager) <= REEL_DELIVERY_DISTANCE_SQR || reelTicks >= MAX_REEL_TICKS) {
+        finishReelItem(villager);
+    }
+    return true;
+}
+
+private void finishReelItem(VillagerEntityMCA villager) {
+    if (reelItem == null || reelItem.isRemoved()) {
+        clearReelReference();
+        return;
+    }
+
+    ItemStack remainder = villager.getInventory().addItem(reelItem.getItem());
+    if (remainder.isEmpty()) {
+        reelItem.discard();
+    } else {
+        reelItem.setItem(remainder);
+        reelItem.setNoPickUpDelay();
+    }
+    clearReelReference();
+}
+
+private void releaseReelItem() {
+    if (reelItem != null && !reelItem.isRemoved()) {
+        reelItem.setNoPickUpDelay();
+    }
+    clearReelReference();
+}
+
+private void clearReelReference() {
+    reelItem = null;
+    reelTicks = 0;
 }
 ```
 
-Do not refactor other chores or inventory ownership in this task.
+Do not call `setNoPickUpDelay()` while the task still owns a healthy in-flight reel. The only normal successful path is explicit MCA delivery into inventory.
 
-- [ ] **Step 9: Add rod-loss cleanup coverage**
+- [ ] **Step 6: Make task stop preserve an earned catch without creating a duplicate**
 
-Add one GameTest which starts/ticks fishing, removes every fishing rod from the held hand/inventory, ticks again, and asserts no active bobber remains after the chore abandons. Use the existing `chore.fishing.norod` path; do not expose private fields solely for testing.
+Keep `discardBobber()` idempotent. In `stop(...)`, handle a live reel before clearing the temporary rod:
 
-- [ ] **Step 10: Run the full NeoForge GameTest server and verify GREEN**
+```java
+if (reelItem != null) {
+    if (villager.isAlive() && !villager.isRemoved()) {
+        finishReelItem(villager);
+    } else {
+        releaseReelItem();
+    }
+}
+
+discardBobber();
+targetWater = null;
+```
+
+If `finishReelItem(...)` encounters a full inventory, the existing `ItemEntity` becomes the one normal world remainder. If the owner is gone, the existing item is released to normal pickup. Never generate a replacement stack in either case.
+
+- [ ] **Step 7: Add the full-inventory remainder regression**
+
+Add a second GameTest using the same natural fishing cycle. Fill the villager inventory after `spawnFisher(...)` while leaving the held rod intact:
+
+```java
+@GameTest(
+        batch = "mca_fishing_reel_remainder",
+        templateNamespace = "minecraft",
+        template = "bastion/blocks/air",
+        timeoutTicks = 900
+)
+public static void fullInventoryReleasesOnlyTheRealReelRemainder(GameTestHelper helper) {
+    BlockPos villagerPos = helper.absolutePos(new BlockPos(3, 2, 3));
+    prepareWater(helper, villagerPos.east(2));
+    VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
+    for (int slot = 0; slot < villager.getInventory().getContainerSize(); slot++) {
+        villager.getInventory().setItem(slot, new ItemStack(Blocks.STONE, 64));
+    }
+
+    TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL));
+    task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
+    helper.onEachTick(() -> task.tick(helper.getLevel(), villager, helper.getLevel().getGameTime()));
+
+    helper.succeedWhen(() -> {
+        List<ItemEntity> drops = activeReelItems(helper, villager);
+        helper.assertTrue(drops.size() == 1, "full inventory did not preserve exactly one reel remainder");
+        helper.assertTrue(!drops.getFirst().hasPickUpDelay(), "finished reel remainder stayed permanently protected");
+    });
+}
+```
+
+Java 21 is configured on this branch, so `List.getFirst()` is available.
+
+- [ ] **Step 8: Run focused compilation and full GameTests**
 
 Run:
 
 ```powershell
-./gradlew :neoforge:runGameTestServer
+./gradlew :common:compileJava :neoforge:compileJava
+./gradlew :neoforge:runGameTestServer --no-configuration-cache
 ```
 
-Expected: all fishing tests and pre-existing GameTests pass.
+Expected: compilation succeeds; all GameTests pass; `mca_fishing_reel` observes a protected real item before inventory delivery; `mca_fishing_reel_remainder` leaves one normal remainder when inventory is full.
 
-- [ ] **Step 11: Commit only fishing task + fishing tests**
+- [ ] **Step 9: Commit only Task 2 files**
 
 ```powershell
-git add common/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/FishingTask.java `
-        neoforge/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/FishingTaskGameTests.java
-git diff --cached --name-only
-git commit -m "fix: keep villager fishing cast active"
+git add common/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/FishingTask.java neoforge/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/FishingTaskGameTests.java
+git commit -m "feat: reel villager fishing catches visibly"
 ```
 
 ---
 
-### Task 3: Render the vanilla-style bobber and fishing line on both loaders
+### Task 3: Attach the fishing line to MCA's actual rendered rod/hand
 
 **Files:**
-- Create: `common/src/main/java/net/conczin/mca/client/render/MCAFishingBobberRenderer.java`
-- Modify: `fabric/src/main/java/net/conczin/mca/fabric/MCAFabricClient.java`
-- Modify: `neoforge/src/main/java/net/conczin/mca/neoforge/ClientNeoForge.java`
+- Create: `common/src/main/java/net/conczin/mca/client/render/layer/VillagerFishingLineLayer.java`
+- Modify: `common/src/main/java/net/conczin/mca/client/render/MCAFishingBobberRenderer.java`
+- Modify: `common/src/main/java/net/conczin/mca/client/render/VillagerEntityMCARenderer.java`
 
 **Interfaces:**
-- Consumes: `MCAFishingBobberEntity.getVillagerOwner()`
-- Produces: client-visible vanilla fishing hook texture and 16-segment curved line anchored to the MCA villager's main arm
+- Consumes: `MCAFishingBobberEntity.getVillagerOwner()` and the existing owner relation
+- Consumes vanilla model API: `VillagerEntityModelMCA.translateToHand(HumanoidArm, PoseStack)` inherited from `HumanoidModel`
+- Produces: one client render layer; no synchronized bobber ID, cache, or new network state
+- Leaves loader registration unchanged: both loaders already register `MCAFishingBobberRenderer`
 
-- [ ] **Step 1: Implement the renderer from the 1.21.1 vanilla renderer, omitting player-only code**
+This is visual work. Do not add a brittle unit test that merely repeats matrix constants. Verification is loader compilation plus live client proof against the supplied screenshot regression.
 
-Create `MCAFishingBobberRenderer extends EntityRenderer<MCAFishingBobberEntity>`.
+- [ ] **Step 1: Reduce the bobber renderer to vanilla billboard responsibility**
 
-Use:
+In `MCAFishingBobberRenderer`, keep the vanilla hook texture, `RenderType.entityCutout(...)`, billboard scale/orientation, four hook vertices, and `getTextureLocation(...)`.
+
+Remove:
 
 ```java
-private static final ResourceLocation TEXTURE_LOCATION =
-        ResourceLocation.withDefaultNamespace("textures/entity/fishing_hook.png");
-private static final RenderType RENDER_TYPE = RenderType.entityCutout(TEXTURE_LOCATION);
+getVillagerHandPos(...)
+fraction(...)
+stringVertex(...)
+RenderType.lineStrip()
 ```
 
-In `render(...)`:
+Also remove imports used only by the old guessed player-style hand offset (`HumanoidArm`, `Mth`, and `Vec3` if no longer used).
 
-1. obtain `VillagerEntityMCA owner = bobber.getVillagerOwner()`;
-2. return without rendering if owner is null;
-3. render the same 0.5-scale four-vertex camera-facing hook billboard as vanilla 1.21.1;
-4. compute the villager hand position;
-5. subtract `bobber.getPosition(partialTicks).add(0.0, 0.25, 0.0)`;
-6. render the same 16-segment curved black line using `RenderType.lineStrip()`;
-7. call `super.render(...)`.
+The bobber renderer should no longer reconstruct any villager arm position.
 
-Copy the vanilla `vertex(...)`, `fraction(...)`, and `stringVertex(...)` geometry helpers directly in behavior, adapting naming/style to MCA. Do not copy the first-person camera branch.
+- [ ] **Step 2: Create `VillagerFishingLineLayer` and derive the hand origin through the same vanilla model path that renders held items**
 
-- [ ] **Step 2: Anchor the line to the MCA villager's physical main arm**
-
-Implement the third-person hand calculation as:
+Create `common/src/main/java/net/conczin/mca/client/render/layer/VillagerFishingLineLayer.java` with this structure:
 
 ```java
-private Vec3 getVillagerHandPos(VillagerEntityMCA owner, float partialTicks) {
-    int side = owner.getMainArm() == HumanoidArm.RIGHT ? 1 : -1;
-    float bodyYaw = Mth.lerp(partialTicks, owner.yBodyRotO, owner.yBodyRot) * Mth.DEG_TO_RAD;
-    double sin = Mth.sin(bodyYaw);
-    double cos = Mth.cos(bodyYaw);
-    float scale = owner.getScale();
-    double sideOffset = side * 0.35 * scale;
-    double forwardOffset = 0.8 * scale;
-    float crouchOffset = owner.isCrouching() ? -0.1875F : 0.0F;
+public final class VillagerFishingLineLayer
+        extends RenderLayer<VillagerEntityMCA, VillagerEntityModelMCA<VillagerEntityMCA>> {
+    private static final double BOBBER_SEARCH_RADIUS = 32.0;
 
-    return owner.getEyePosition(partialTicks).add(
-            -cos * sideOffset - sin * forwardOffset,
-            crouchOffset - 0.45 * scale,
-            -sin * sideOffset + cos * forwardOffset
-    );
+    public VillagerFishingLineLayer(
+            RenderLayerParent<VillagerEntityMCA, VillagerEntityModelMCA<VillagerEntityMCA>> parent
+    ) {
+        super(parent);
+    }
+
+    @Override
+    public void render(
+            PoseStack poseStack,
+            MultiBufferSource bufferSource,
+            int packedLight,
+            VillagerEntityMCA villager,
+            float limbSwing,
+            float limbSwingAmount,
+            float partialTicks,
+            float ageInTicks,
+            float netHeadYaw,
+            float headPitch
+    ) {
+        if (!(villager.getItemInHand(villager.getDominantHand()).getItem() instanceof FishingRodItem)) {
+            return;
+        }
+
+        MCAFishingBobberEntity bobber = findOwnedBobber(villager);
+        if (bobber == null) {
+            return;
+        }
+
+        Vector3f hand = getRenderedRodOrigin(villager);
+        Vector3f hook = getHookInCurrentModelSpace(poseStack, bobber, partialTicks);
+        renderLine(poseStack, bufferSource, hook, hand);
+    }
 }
 ```
 
-This intentionally uses `getMainArm()`, not `getDominantHand()`, because MCA's left-handed trait controls the physical arm.
-
-- [ ] **Step 3: Register the renderer on Fabric**
-
-In `MCAFabricClient.onInitializeClient()`, alongside `CRIB` and `GRIM_REAPER`, add:
+Implement `getRenderedRodOrigin(...)` from local vanilla `ItemInHandLayer.render(...)` and `renderArmWithItem(...)`, reusing the already-posed parent model:
 
 ```java
-EntityRendererRegistry.register(EntitiesMCA.FISHING_BOBBER, MCAFishingBobberRenderer::new);
+private Vector3f getRenderedRodOrigin(VillagerEntityMCA villager) {
+    PoseStack handPose = new PoseStack();
+    if (getParentModel().young) {
+        handPose.translate(0.0F, 0.75F, 0.0F);
+        handPose.scale(0.5F, 0.5F, 0.5F);
+    }
+
+    HumanoidArm arm = villager.getMainArm();
+    getParentModel().translateToHand(arm, handPose);
+    handPose.mulPose(Axis.XP.rotationDegrees(-90.0F));
+    handPose.mulPose(Axis.YP.rotationDegrees(180.0F));
+    boolean left = arm == HumanoidArm.LEFT;
+    handPose.translate((left ? -1 : 1) / 16.0F, 0.125F, -0.625F);
+
+    return handPose.last().pose().transformPosition(new Vector3f());
+}
 ```
 
-The existing wildcard `net.conczin.mca.client.render.*` import should already cover the renderer.
+Start with the exact `ItemInHandLayer` grip transform. Do not add a body/eye-space correction. If live client proof shows the line enters the grip rather than the visible rod/string point, tune at most one small **rod-local** offset after this transform and document the measured value next to it.
 
-- [ ] **Step 4: Register the renderer on NeoForge**
+- [ ] **Step 3: Convert the interpolated bobber world position into the already-transformed villager model space**
 
-In `ClientNeoForge.onRegisterRenderers(...)`, add:
+The render layer's current `PoseStack` already contains `LivingEntityRenderer` rotation, scale, MCA body scaling, and baby translation. Convert the bobber endpoint through the inverse of that exact matrix rather than recreating those transforms:
 
 ```java
-event.registerEntityRenderer(EntitiesMCA.FISHING_BOBBER, MCAFishingBobberRenderer::new);
+private Vector3f getHookInCurrentModelSpace(
+        PoseStack poseStack,
+        MCAFishingBobberEntity bobber,
+        float partialTicks
+) {
+    Vec3 hookWorld = bobber.getPosition(partialTicks).add(0.0, 0.25, 0.0);
+    Vec3 camera = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
+    Vector3f hookRenderSpace = new Vector3f(
+            (float) (hookWorld.x - camera.x),
+            (float) (hookWorld.y - camera.y),
+            (float) (hookWorld.z - camera.z)
+    );
+
+    Matrix4f inverseVillagerPose = new Matrix4f(poseStack.last().pose()).invert();
+    return inverseVillagerPose.transformPosition(hookRenderSpace);
+}
 ```
 
-- [ ] **Step 5: Compile both loader clients**
+During execution, verify this against local `EntityRenderDispatcher.render(...)`: the entity pose stack is translated by camera-relative entity coordinates before `LivingEntityRenderer` applies the model transforms. If the active mapping exposes the main camera through a slightly different accessor, use the mapped 1.21.1 equivalent while preserving this coordinate-space rule.
+
+- [ ] **Step 4: Render the same 16-segment vanilla curve between hook and hand**
+
+Use `RenderType.lineStrip()` and adapt vanilla `FishingHookRenderer.stringVertex(...)` so the start point is the hook already expressed in villager model space:
+
+```java
+private static void renderLine(
+        PoseStack poseStack,
+        MultiBufferSource bufferSource,
+        Vector3f hook,
+        Vector3f hand
+) {
+    float dx = hand.x() - hook.x();
+    float dy = hand.y() - hook.y();
+    float dz = hand.z() - hook.z();
+    VertexConsumer consumer = bufferSource.getBuffer(RenderType.lineStrip());
+    PoseStack.Pose pose = poseStack.last();
+
+    for (int segment = 0; segment <= 16; segment++) {
+        float fraction = (float) segment / 16.0F;
+        float nextFraction = (float) (segment + 1) / 16.0F;
+        stringVertex(hook, dx, dy, dz, consumer, pose, fraction, nextFraction);
+    }
+}
+
+private static void stringVertex(
+        Vector3f hook,
+        float dx,
+        float dy,
+        float dz,
+        VertexConsumer consumer,
+        PoseStack.Pose pose,
+        float fraction,
+        float nextFraction
+) {
+    float x = hook.x() + dx * fraction;
+    float y = hook.y() + dy * (fraction * fraction + fraction) * 0.5F;
+    float z = hook.z() + dz * fraction;
+    float nextX = hook.x() + dx * nextFraction;
+    float nextY = hook.y() + dy * (nextFraction * nextFraction + nextFraction) * 0.5F;
+    float nextZ = hook.z() + dz * nextFraction;
+    float nx = nextX - x;
+    float ny = nextY - y;
+    float nz = nextZ - z;
+    float length = Mth.sqrt(nx * nx + ny * ny + nz * nz);
+
+    consumer.addVertex(pose, x, y, z)
+            .setColor(-16777216)
+            .setNormal(pose, nx / length, ny / length, nz / length);
+}
+```
+
+The `+0.25` hook-height adjustment is already included in `hookWorld`; do not add it again inside the curve.
+
+- [ ] **Step 5: Find the client bobber through inherited projectile ownership without new sync/cache state**
+
+Add:
+
+```java
+@Nullable
+private static MCAFishingBobberEntity findOwnedBobber(VillagerEntityMCA villager) {
+    return villager.level()
+            .getEntitiesOfClass(
+                    MCAFishingBobberEntity.class,
+                    villager.getBoundingBox().inflate(BOBBER_SEARCH_RADIUS),
+                    bobber -> !bobber.isRemoved() && bobber.getVillagerOwner() == villager
+            )
+            .stream()
+            .findFirst()
+            .orElse(null);
+}
+```
+
+Do not add a synchronized bobber ID or persistent render cache unless profiling later proves this bounded lookup material.
+
+- [ ] **Step 6: Install the layer on the MCA villager renderer**
+
+In `VillagerEntityMCARenderer` after the existing skin/face/clothing/hair layers, add:
+
+```java
+addLayer(new VillagerFishingLineLayer(this));
+```
+
+Import the new layer. Do not add loader-specific registration for this layer.
+
+- [ ] **Step 7: Compile both loaders**
 
 Run:
 
@@ -661,222 +812,149 @@ Run:
 ./gradlew :fabric:compileJava :neoforge:compileJava
 ```
 
-Expected: both loader modules compile with the shared renderer.
+Expected: both loaders compile with the common render layer and the existing bobber renderer registrations unchanged.
 
-- [ ] **Step 6: Commit renderer + registrations only**
+- [ ] **Step 8: Run live Fabric and NeoForge visual acceptance before committing**
+
+Launch each 1.21.1 client using the repository's existing run tasks/configurations. For each loader, verify all of these in-world:
+
+1. right-handed villager: line intersects the held rod/hand and never starts from neck/chest;
+2. left-handed villager: line attaches to the physical left-side rod;
+3. arm swing/cast: attachment follows the posed arm rather than remaining fixed on the torso;
+4. adult and baby/custom-scale villagers: attachment remains visually connected under MCA scaling;
+5. bobber wait: intermittent vanilla-style distant splash appears;
+6. approach: `FISHING` wake and occasional bubbles converge on the bobber;
+7. bite: splash sound/particles occur and the bobber visibly dips;
+8. reel: the caught item visibly leaves the bobber and travels toward the villager;
+9. leave fishing running past 400 ticks: rod/bobber do not periodically de-equip;
+10. compare against the supplied screenshot: the previous upper-body line origin must be gone.
+11. remove/replace the selected water while fishing and confirm the stale bobber is discarded and a new valid target can be found.
+12. run the existing AquaCulture/current fishing-loot compatibility scenario and confirm the caught item still comes from MCA's existing fishing loot path.
+
+If the grip-origin needs correction, change only a small rod-local offset after the vanilla hand/item transform, rerun both clients, and keep the offset only when it visibly improves both handedness cases.
+
+- [ ] **Step 9: Commit only Task 3 files**
 
 ```powershell
-git add common/src/main/java/net/conczin/mca/client/render/MCAFishingBobberRenderer.java `
-        fabric/src/main/java/net/conczin/mca/fabric/MCAFabricClient.java `
-        neoforge/src/main/java/net/conczin/mca/neoforge/ClientNeoForge.java
-git diff --cached --name-only
-git commit -m "feat: render villager fishing line"
+git add common/src/main/java/net/conczin/mca/client/render/MCAFishingBobberRenderer.java common/src/main/java/net/conczin/mca/client/render/VillagerEntityMCARenderer.java common/src/main/java/net/conczin/mca/client/render/layer/VillagerFishingLineLayer.java
+git commit -m "fix: attach villager fishing line to rendered rod"
 ```
-
-Because `fabric/src/main/java/net/conczin/mca/fabric/MCAFabric.java` is already dirty for unrelated work, do not stage it accidentally; this task touches `MCAFabricClient.java`, not `MCAFabric.java`.
 
 ---
 
-### Task 4: Verify server lifecycle, build artifacts, and live 1.21.1 behavior
+### Task 4: Run the source-grounded Java cleanup gate and final verification
 
 **Files:**
-- No new production files expected unless verification finds a defect directly attributable to this feature.
+- Review/fix only the fishing Java scope created by Tasks 1-3 and the existing fishing GameTests
+- Do not absorb unrelated dirty files into review fixes or commits
 
 **Interfaces:**
-- Validates all interfaces from Tasks 1-3 together.
+- Consumes the completed Task 1-3 implementation
+- Produces a reviewed fishing-only diff with one state owner per concern and verified 1.21.1 behavior
 
-- [ ] **Step 1: Run common unit tests**
+- [ ] **Step 1: Freeze the exact fishing-only diff for all four review lenses**
 
-```powershell
-./gradlew :common:test
-```
-
-Expected: existing JUnit tests pass.
-
-- [ ] **Step 2: Run the NeoForge GameTest server**
+Use the initial committed fishing renderer checkpoint as the comparison base and restrict the diff to the fishing scope:
 
 ```powershell
-./gradlew :neoforge:runGameTestServer
+git diff 4dacd1435..HEAD -- common/src/main/java/net/conczin/mca/entity/MCAFishingBobberEntity.java common/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/FishingTask.java common/src/main/java/net/conczin/mca/client/render/MCAFishingBobberRenderer.java common/src/main/java/net/conczin/mca/client/render/VillagerEntityMCARenderer.java common/src/main/java/net/conczin/mca/client/render/layer/VillagerFishingLineLayer.java neoforge/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/FishingTaskGameTests.java
 ```
 
-Expected: all GameTests pass, including `mca_fishing_bobber` and `mca_fishing_lifecycle`.
+Save/reuse that same file set/diff for reuse, quality, correctness, and efficiency review. Do not silently widen the review to the unrelated archer/config/navigation worktree changes.
 
-- [ ] **Step 3: Build both loaders**
+- [ ] **Step 2: Recompare every adapted behavior with its vanilla/MCA owner before accepting custom code**
+
+Read side by side:
+
+```text
+C:/Users/Mik/Downloads/MCA/local-source/src/main/java/net/minecraft/world/entity/projectile/FishingHook.java
+C:/Users/Mik/Downloads/MCA/local-source/src/main/java/net/minecraft/world/entity/item/ItemEntity.java
+C:/Users/Mik/Downloads/MCA/local-source/src/main/java/net/minecraft/world/entity/Mob.java
+C:/Users/Mik/Downloads/MCA/local-source/src/main/java/net/minecraft/client/renderer/entity/FishingHookRenderer.java
+C:/Users/Mik/Downloads/MCA/local-source/src/main/java/net/minecraft/client/renderer/entity/layers/ItemInHandLayer.java
+C:/Users/Mik/Downloads/MCA/local-source/src/main/java/net/minecraft/client/model/HumanoidModel.java
+common/src/main/java/net/conczin/mca/entity/VillagerEntityMCA.java
+common/src/main/java/net/conczin/mca/client/render/VillagerLikeEntityMCARenderer.java
+```
+
+Confirm:
+
+- bobber timer/particle math still maps directly to `FishingHook.catchingFish(...)`;
+- biting has one source of truth (`DATA_BITING`), with no shadow task boolean/timer;
+- reel velocity still matches `FishingHook.retrieve(...)`;
+- `setNeverPickUp()` remains active for the entire task-owned flight and uses vanilla player/mob pickup behavior;
+- inventory delivery handles `SimpleContainer.addItem(...)` remainder without duplicate/loss;
+- line origin still uses posed `translateToHand(...)` + `ItemInHandLayer` transform and no body-offset fallback;
+- no mixin/accessor can replace custom code more cleanly without dragging in player-only state.
+
+- [ ] **Step 3: Run the four `java-code-review-cleanup` lenses over the frozen diff**
+
+Review the same diff for:
+
+1. **Reuse:** duplicate helpers/constants, copied vanilla code that can call a generic vanilla API directly, repeated GameTest fixture code.
+2. **Quality:** redundant timer/boolean/cache state, parameter sprawl, unnecessary wrappers, line-render state that can remain local.
+3. **Correctness:** double catches, lost catches, pickup-protection gaps, full-inventory remainder, owner death/stop ordering, rod breakage while reel is active, client/server sync, line coordinate-space mistakes.
+4. **Efficiency:** per-frame allocations/searches in the line layer, repeated entity lookups, unnecessary collections, hot-path math that can be safely local/reused.
+
+Fix only high-confidence findings inside this feature scope. If the client bobber lookup is acceptable at one active fisher scale, keep the simple implementation; do not add speculative synchronized IDs/caches.
+
+- [ ] **Step 4: If cleanup changes Java, rerun the smallest affected checks and commit the cleanup separately**
+
+For server/gameplay changes:
 
 ```powershell
-./gradlew :fabric:build :neoforge:build
+./gradlew :common:compileJava :neoforge:compileJava
+./gradlew :neoforge:runGameTestServer --no-configuration-cache
 ```
 
-Expected: both distributions build successfully.
+For renderer-only cleanup:
 
-- [ ] **Step 4: Launch Fabric 1.21.1 and verify the full visual loop**
+```powershell
+./gradlew :fabric:compileJava :neoforge:compileJava
+```
+
+If cleanup made changes, commit only those fishing files:
+
+```powershell
+git add common/src/main/java/net/conczin/mca/entity/MCAFishingBobberEntity.java common/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/FishingTask.java common/src/main/java/net/conczin/mca/client/render/MCAFishingBobberRenderer.java common/src/main/java/net/conczin/mca/client/render/VillagerEntityMCARenderer.java common/src/main/java/net/conczin/mca/client/render/layer/VillagerFishingLineLayer.java neoforge/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/FishingTaskGameTests.java
+git commit -m "refactor: clean up villager fishing parity"
+```
+
+If there are no worthwhile findings, make no cleanup commit.
+
+- [ ] **Step 5: Run final automated verification**
 
 Run:
 
 ```powershell
-./gradlew :fabric:runClient
+./gradlew :common:test :fabric:compileJava :neoforge:compileJava
+./gradlew :neoforge:runGameTestServer --no-configuration-cache
 ```
 
-In a test world:
+Expected: common tests pass, both loader production source sets compile, and the full NeoForge GameTest suite passes including all fishing regressions.
 
-1. assign `FISH` to a villager with a fishing rod;
-2. watch it choose and approach nearby water;
-3. confirm the villager faces the selected water;
-4. confirm the bobber launches in a visible arc and lands in that water rather than following stale pitch;
-5. confirm the hook texture is visible;
-6. confirm the black line runs from the bobber to the villager's physical rod arm;
-7. test a naturally right-handed and left-handed MCA villager;
-8. leave fishing active for at least 500 ticks and confirm rod/bobber do not disappear at 400 ticks;
-9. wait for a successful catch and confirm swing -> bobber removal -> loot/durability -> next cast;
-10. confirm a 35% miss resets the wait without an artificial reel animation;
-11. remove the target water and confirm stale bobber cleanup/reselection;
-12. remove/break the last rod and confirm the chore abandons without an orphan bobber.
+- [ ] **Step 6: Repeat final live client proof on both loaders**
 
-- [ ] **Step 5: Launch NeoForge 1.21.1 and repeat the loader-sensitive checks**
+Recheck the exact visual acceptance from Task 3 after the cleanup pass. Completion requires direct client proof of:
+
+- rod/hand line attachment for right- and left-handed villagers;
+- no neck/chest origin;
+- wait/approach/bite particle sequence;
+- visible bite dip and splash sound;
+- protected item flying from bobber to villager;
+- one catch per bite with no hidden miss;
+- no periodic de-equip beyond 400 ticks;
+- clean bobber/item/rod state after chore cancellation and rod loss.
+- water invalidation still discards/recasts instead of leaving an orphan bobber;
+- AquaCulture/current fishing loot compatibility still uses MCA's existing loot path.
+
+- [ ] **Step 7: Confirm unrelated dirty work remains untouched**
 
 Run:
 
 ```powershell
-./gradlew :neoforge:runClient
-```
-
-Recheck renderer registration, bobber visibility, line visibility, catch/recast, and >400-tick persistence. The gameplay logic is shared, so there is no need to repeat every server-only assertion manually.
-
-- [ ] **Step 6: Recheck the original compatibility scenario**
-
-With AquaCulture (or the exact mod setup that motivated the July fishing compatibility change), confirm that catches still come through `FishingTask.getFishingLoot(...)` with the held fishing rod as `LootContextParams.TOOL`. Do not route catches through vanilla `FishingHook.retrieve(...)` to fix any visual issue.
-
-- [ ] **Step 7: Inspect the final fishing-only diff**
-
-Run:
-
-```powershell
-git log --oneline --decorate -6
-git show --stat --oneline HEAD~2..HEAD
 git status --short
+git log -6 --oneline
 ```
 
-Confirm unrelated dirty files remain untouched and unstaged.
-
-If live verification required tuning only the bobber launch offsets/speed or renderer hand offset, make the smallest adjustment, rerun the focused loader/client check, and commit it separately as:
-
-```powershell
-git commit -m "fix: tune villager fishing cast visuals"
-```
-
-Do not use verification as an excuse for unrelated chore refactors.
-
----
-
-### Task 5: Forward-port the verified feature to 26.1.2
-
-**Files:**
-- Port the same six production paths into the 26.1.2 checkout.
-- Port `FishingTaskGameTests.java` if that branch has the same NeoForge GameTest setup; otherwise preserve the same server assertions in the nearest existing GameTest location.
-
-**Interfaces:**
-- Consumes: the completed 1.21.1 commits from Tasks 1-3 plus any visual-tuning commit from Task 4.
-- Produces: behaviorally identical 26.1.2 fishing.
-
-- [ ] **Step 1: Merge/cherry-pick the verified 1.21.1 feature commits into 26.1.2**
-
-Use the actual commit IDs produced during Tasks 1-4. Resolve only mapping/API differences; do not redesign the feature.
-
-- [ ] **Step 2: Reconcile mapping differences while preserving these invariants**
-
-- custom MCA bobber, not vanilla `FishingHook`;
-- generic villager owner sync;
-- exact `targetWater` surface aiming;
-- one bobber per task;
-- fishing-specific timeout suppression;
-- same existing MCA loot code;
-- idempotent stop cleanup;
-- vanilla-style texture/line anchored to `getMainArm()`.
-
-- [ ] **Step 3: Run 26.1.2 tests/build and a short live client check**
-
-Use that checkout's Gradle tasks equivalent to:
-
-```powershell
-./gradlew :common:test :fabric:build :neoforge:build
-```
-
-Then live-check one loader for cast -> bob -> catch -> recast and >400 ticks, plus the second loader for renderer registration.
-
-- [ ] **Step 4: Commit only mapping/port changes**
-
-Use a port-specific commit such as:
-
-```powershell
-git commit -m "feat: port villager fishing bobber"
-```
-
----
-
-### Task 6: Forward-port the verified feature to 26.2 and adapt only the renderer API
-
-**Files:**
-- Port `MCAFishingBobberEntity`, `EntitiesMCA`, and `FishingTask` conceptually unchanged.
-- Port Fabric/NeoForge renderer registrations using the 26.2 loader APIs.
-- Rewrite only `MCAFishingBobberRenderer` to the 26.2 render-state API.
-
-**Interfaces:**
-- Consumes: verified 26.1.2 behavior.
-- Produces: behaviorally identical 26.2 fishing with the newer renderer infrastructure.
-
-- [ ] **Step 1: Merge/cherry-pick the feature into the 26.2 checkout**
-
-Keep the generic projectile-owner design; 26.2 still supports generic owner IDs in projectile spawn packets.
-
-- [ ] **Step 2: Use the 26.2 shared chore cleanup helper**
-
-In 26.2 `FishingTask.stop(...)`, use the branch's existing:
-
-```java
-clearChoreItem(villager);
-```
-
-instead of carrying forward 1.21.1's direct hand clear.
-
-- [ ] **Step 3: Port the renderer to 26.2 render state**
-
-Follow 26.2 vanilla `FishingHookRenderer` geometry but replace player extraction with the MCA villager owner. Preserve:
-
-- vanilla 26.2 fishing-hook texture;
-- hook billboard;
-- 16-segment line;
-- hand-origin offset from `VillagerEntityMCA.getMainArm()`;
-- no first-person branch.
-
-Do not mix into 26.2 vanilla `FishingHookRenderer`.
-
-- [ ] **Step 4: Run 26.2 tests/build and live verification**
-
-Run the branch-equivalent common tests, GameTests, Fabric build, and NeoForge build, then verify visible casting/line/recast and >400-tick persistence in client.
-
-- [ ] **Step 5: Commit only the 26.2 port**
-
-```powershell
-git commit -m "feat: port villager fishing bobber to 26.2"
-```
-
----
-
-## Final Acceptance Checklist
-
-- [ ] 1.21.1 villager casts a real MCA bobber entity at the exact selected water surface.
-- [ ] A failed cast self-recovers; no permanent terrain-stuck hook.
-- [ ] Bobber reaches water and visibly bobs rather than sinking away.
-- [ ] Vanilla hook texture renders on Fabric and NeoForge.
-- [ ] Fishing line attaches to the correct physical villager arm, including left-handed villagers.
-- [ ] Fishing remains active past 400 ticks with no periodic rod/hook disappearance.
-- [ ] One villager never accumulates multiple active bobbers.
-- [ ] Successful catch visibly reels, awards the existing MCA loot, damages the rod, and recasts.
-- [ ] Existing 35% miss behavior does not fake a reel/catch.
-- [ ] Missing/broken last rod abandons fishing and leaves no orphan bobber.
-- [ ] Changing/cancelling the chore clears bobber, timer/target state, and temporary held rod.
-- [ ] Removing target water causes cleanup and reselection.
-- [ ] Existing AquaCulture-compatible loot behavior remains intact.
-- [ ] No `FishingHook`/`FishingHookRenderer` mixins were added.
-- [ ] Unrelated dirty worktree changes were not staged or committed.
-- [ ] 26.1.2 and 26.2 ports preserve behavior and only adapt version APIs.
+Expected: the fishing commits are present; pre-existing unrelated dirty files remain dirty exactly as user work and were never staged into fishing commits.

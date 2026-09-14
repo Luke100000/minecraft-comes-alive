@@ -4,7 +4,7 @@
 
 Make MCA 1.21.1 fishing villagers visibly and mechanically fish like a player at the bobber level, while keeping MCA ownership, water targeting, loot-table integration, chore lifecycle, and forward-portability.
 
-This design supersedes the earlier presentation-only version of this spec. The existing implementation plan at `docs/superpowers/plans/2026-09-13-villager-fishing-bobber.md` is stale after this design change and must be rewritten after this spec is approved.
+This design supersedes the earlier presentation-only version of this spec. The synchronized implementation plan lives at `docs/superpowers/plans/2026-09-13-villager-fishing-bobber.md`.
 
 Success means a fishing villager:
 
@@ -59,6 +59,18 @@ The design changes ownership inside MCA:
 - a villager render layer owns the fishing line so the line can use the already-posed MCA humanoid arm and held-item transform rather than reconstructing a player hand position.
 
 This keeps one source of truth for each concern and avoids a parallel `FishingTask` timer that can disagree with the bobber animation.
+
+### Vanilla reuse rule
+
+Reuse vanilla behavior and APIs directly whenever the relevant owner is generic enough for villagers. In particular:
+
+- use inherited `Projectile`/`ThrowableProjectile` ownership, movement, spawn synchronization, and collision behavior instead of recreating them;
+- use vanilla `ParticleTypes`, `SoundEvents.FISHING_BOBBER_SPLASH`, and the 1.21.1 `FishingHook` timer/particle formulas as the source for lure and bite behavior;
+- use vanilla `ItemEntity` plus `setNeverPickUp()` for protected reel flight, and use vanilla retrieval velocity unchanged except that the destination is the villager;
+- use `HumanoidModel.translateToHand(...)` and the same third-person held-item transform as `ItemInHandLayer` for the line attachment;
+- use the vanilla fishing-hook texture, billboard geometry, and 16-segment line shape.
+
+Only adapt/copy the narrow logic that vanilla keeps private or binds to `Player`. Do not introduce mixins/invokers merely to reach private `FishingHook` or renderer helpers when doing so would couple MCA to player-only state. A local-source review should be able to map every adapted block back to its vanilla owner and explain why direct delegation was unavailable.
 
 ## Bobber lifecycle
 
@@ -159,16 +171,19 @@ The reel item is the authoritative caught stack during flight. Do not simultaneo
 
 `FishingTask` holds a short-lived reference to the reel `ItemEntity` while it travels. This is orchestration state, not a second copy of the loot.
 
-Set the reel item pickup delay to 60 ticks. Deliver when it comes within 1.5 blocks of the villager, or after 40 reel ticks as a fallback. On delivery, transfer the entity's current remaining stack into the villager inventory and discard the item entity.
+Immediately call vanilla `ItemEntity.setNeverPickUp()` on the reel item. While MCA owns the reel, neither players nor mobs may naturally collect it: vanilla player pickup requires a zero pickup delay, and vanilla `Mob.aiStep()` ignores item entities whose `hasPickUpDelay()` is true. Do not add a custom reserved-item entity, pickup event interceptor, ownership capability, or collision rule for this.
+
+Deliver when the reel item comes within 1.5 blocks of the villager, or after 40 reel ticks as a fallback. On delivery, pass the entity's current stack through vanilla `SimpleContainer.addItem(...)`. If the returned remainder is empty, discard the reel entity. If inventory space is insufficient, keep only that returned remainder in the existing item entity, call `setNoPickUpDelay()`, clear reel tracking, and leave it as a normal world drop. This follows MCA's existing remainder-handling pattern and prevents either duplication or deletion. The task performs delivery explicitly; natural item pickup is never part of the protected reel path.
 
 Correctness rules:
 
 - if the reel entity was already removed before MCA delivery, do not generate or insert a replacement copy;
 - if fishing stops while the villager is still alive and the tracked reel item still exists, complete the transfer before cleanup so an earned catch is not lost;
-- if the villager dies or is removed during the reel, clear the reel item pickup delay and leave the real item in the world rather than duplicating it into an invalid inventory;
-- use a finite pickup delay so a reel item cannot become a permanently uncollectable world entity if task tracking is lost after unload/reload.
+- while the reel remains owned by a live fishing task, leave `setNeverPickUp()` in force so another player or mob entity cannot steal the catch in flight; vanilla also excludes `pickupDelay == 32767` items from normal item-entity merging;
+- if the villager dies or is removed during the reel, the item stops being MCA reel state: call vanilla `setNoPickUpDelay()`, clear task tracking, and leave the one real item in the world rather than duplicating or deleting it;
+- do not persist or reconstruct reel ownership across unload. If task tracking is lost because the owner/task disappears, release the surviving item to normal vanilla pickup rather than leaving a permanently uncollectable item.
 
-The 40-tick reel timeout is a delivery safety bound, not fishing gameplay timing. Live verification may justify a later spec change, but implementation of this spec uses 40 ticks and a 60-tick pickup delay.
+The 40-tick reel timeout is a delivery safety bound, not fishing gameplay timing.
 
 ## `FishingTask` orchestration
 
