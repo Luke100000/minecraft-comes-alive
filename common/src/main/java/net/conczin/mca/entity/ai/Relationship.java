@@ -18,6 +18,8 @@ import net.conczin.mca.server.world.data.GraveyardManager;
 import net.conczin.mca.util.WorldUtils;
 import net.conczin.mca.util.network.datasync.CDataManager;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.nbt.CompoundTag;
@@ -109,11 +111,26 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
     }
 
     private BlockState getConfiguredTombstoneState() {
-        Block block = BlocksMCA.BLOCKS.get(Config.getInstance().defaultHeadstoneType);
-        if (block instanceof TombstoneBlock) {
-            return block.defaultBlockState();
+        return configuredTombstoneState(Config.getInstance().defaultHeadstoneType);
+    }
+
+    static @Nullable Identifier configuredTombstoneId(@Nullable String configuredName) {
+        if (configuredName != null && !configuredName.contains(":")) {
+            configuredName = "mca:" + configuredName;
         }
-        return BlocksMCA.CROSS_HEADSTONE.defaultBlockState();
+        return configuredName == null ? null : Identifier.tryParse(configuredName);
+    }
+
+    static BlockState configuredTombstoneState(@Nullable String configuredName) {
+        Identifier location = configuredTombstoneId(configuredName);
+        Block block = location == null
+                ? null
+                : BuiltInRegistries.BLOCK.get(location).map(holder -> holder.value()).orElse(null);
+        return selectConfiguredTombstone(block, BlocksMCA.CROSS_HEADSTONE).defaultBlockState();
+    }
+
+    static Block selectConfiguredTombstone(@Nullable Block configuredBlock, Block fallback) {
+        return configuredBlock instanceof TombstoneBlock ? configuredBlock : fallback;
     }
 
     public void onDeath(DamageSource cause) {

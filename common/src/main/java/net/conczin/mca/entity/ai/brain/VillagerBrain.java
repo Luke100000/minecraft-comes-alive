@@ -166,11 +166,19 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         CompoundTag compoundTag = nbt.getCompound(player.getUUID().toString()).orElseGet(CompoundTag::new);
         Memories returnMemories = Memories.fromCNBT(entity, compoundTag);
         if (returnMemories == null) {
-            returnMemories = new Memories(this, player.level().getGameTime(), player.getUUID());
+            returnMemories = new Memories(
+                    this,
+                    memoryClockTime(player.level().getGameTime(), player.level().getOverworldClockTime()),
+                    player.getUUID()
+            );
             nbt.put(player.getUUID().toString(), returnMemories.toCNBT());
             entity.setTrackedValue(MEMORIES, nbt);
         }
         return returnMemories;
+    }
+
+    static long memoryClockTime(long gameTime, long overworldClockTime) {
+        return overworldClockTime;
     }
 
     public Personality getPersonality() {
