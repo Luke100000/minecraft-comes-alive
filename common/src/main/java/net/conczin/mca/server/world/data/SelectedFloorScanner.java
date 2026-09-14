@@ -65,7 +65,7 @@ final class SelectedFloorScanner {
     private static FloorGeometry attachConnectors(
             Level world, FloorGeometry floor, Collection<BlockPos> connectors) {
         return new FloorGeometry(
-                floor.cells(), StructureConnector.connectorTypesForFloor(world, connectors, floor));
+                floor.cells(), StructureConnector.connectorMarkersForFloor(world, connectors, floor));
     }
 
     private static List<FloorGeometry> connectedStoreyEvidence(
@@ -421,7 +421,9 @@ final class SelectedFloorScanner {
 
         while (!queue.isEmpty()) {
             SurfaceCell current = queue.removeFirst();
-            if (horizontalDistance(current.feet(), scanAnchor) >= maxRadius - 1) return true;
+            if (horizontalDistance(current.feet(), scanAnchor) >= maxRadius - 1) {
+                return true;
+            }
 
             for (PhysicalStep step : physicalSteps(world, new SurfaceProbe(current.feet(), current.surfaceY()))) {
                 if (step.connector() != null) continue;
@@ -431,7 +433,9 @@ final class SelectedFloorScanner {
                 SurfaceCell probe = new SurfaceCell(next, landing.surfaceY(), next.getY() + 2);
                 if (storeyRole(context, probe, provider) != StoreyRole.OWNED) continue;
                 OptionalInt ceiling = ceilings.ceilingY(next);
-                if (ceiling.isEmpty()) return true;
+                if (ceiling.isEmpty()) {
+                    return true;
+                }
                 SurfaceCell cell = new SurfaceCell(next, landing.surfaceY(), ceiling.getAsInt());
                 visited.add(next);
                 queue.addLast(cell);

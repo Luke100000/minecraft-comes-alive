@@ -675,9 +675,11 @@ public final class FloorScannerGameTests {
 
         BlockPos connector = lowerMin.offset(0, 0, 1);
         var level = helper.getLevel();
-        level.setBlock(connector, Blocks.LADDER.defaultBlockState(), 3);
-        level.setBlock(connector.above(), Blocks.LADDER.defaultBlockState(), 3);
-        level.setBlock(connector.above(2), Blocks.LADDER.defaultBlockState(), 3);
+        BlockState ladder = Blocks.LADDER.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.LadderBlock.FACING, Direction.WEST);
+        level.setBlock(connector, ladder, 3);
+        level.setBlock(connector.above(), ladder, 3);
+        level.setBlock(connector.above(2), ladder, 3);
         level.setBlock(connector.above(3), Blocks.OAK_TRAPDOOR.defaultBlockState(), 3);
 
         SelectedFloorScanner.Result lower = SelectedFloorScanner.scan(level, lowerMin.offset(2, 0, 2), 256, 16);
@@ -694,6 +696,12 @@ public final class FloorScannerGameTests {
                 .count();
         helper.assertTrue(lowerLadderMarkers == 1,
                 "one physical ladder column produced " + lowerLadderMarkers + " lower-floor connector markers");
+        BlockPos lowerLadderMarker = lower.floor().connectorMarkers().stream()
+                .filter(marker -> marker.type() == FloorConnector.Type.LADDER)
+                .findFirst().orElseThrow().pos();
+        helper.assertTrue(lowerLadderMarker.equals(connector),
+                "ladder marker was offset from physical ladder: marker=" + lowerLadderMarker
+                        + " ladder=" + connector);
         helper.assertTrue(upper.floor().connectorTypesByCell().values().stream()
                         .anyMatch(type -> type == FloorConnector.Type.LADDER || type == FloorConnector.Type.TRAPDOOR),
                 "upper floor lost vertical connector metadata");

@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -17,11 +18,17 @@ import java.util.stream.Collectors;
 final class FloorGeometry {
     private final Set<Cell> cells;
     private final Map<BlockPos, FloorConnector.Type> connectorTypesByCell;
+    private final Set<FloorConnector.Marker> connectorMarkers;
     private final Map<Long, List<Cell>> cellsByColumn;
     private final Map<BlockPos, Cell> cellsByPosition;
 
     FloorGeometry(Collection<Cell> cells,
                   Map<BlockPos, FloorConnector.Type> connectorTypesByCell) {
+        this(cells, markersFromTypes(connectorTypesByCell));
+    }
+
+    FloorGeometry(Collection<Cell> cells,
+                  Collection<FloorConnector.Marker> connectorMarkers) {
         LinkedHashMap<BlockPos, Cell> positions = new LinkedHashMap<>();
         for (Cell cell : cells) {
             Cell previous = positions.putIfAbsent(cell.feet(), cell);
@@ -32,12 +39,19 @@ final class FloorGeometry {
         this.cellsByPosition = Map.copyOf(positions);
         this.cells = Set.copyOf(positions.values());
 
-        Map<BlockPos, FloorConnector.Type> connectors = connectorTypesByCell == null
-                ? Map.of() : Map.copyOf(connectorTypesByCell);
-        if (!this.cellsByPosition.keySet().containsAll(connectors.keySet())) {
-            throw new IllegalArgumentException("Connector cell is not part of FloorGeometry");
+        LinkedHashMap<BlockPos, FloorConnector.Type> connectors = new LinkedHashMap<>();
+        LinkedHashSet<FloorConnector.Marker> markers = new LinkedHashSet<>();
+        Collection<FloorConnector.Marker> suppliedMarkers = connectorMarkers == null
+                ? List.of() : connectorMarkers;
+        for (FloorConnector.Marker marker : suppliedMarkers) {
+            if (!this.cellsByPosition.containsKey(marker.floorCell())) {
+                throw new IllegalArgumentException("Connector floor cell is not part of FloorGeometry");
+            }
+            connectors.putIfAbsent(marker.floorCell(), marker.type());
+            markers.add(marker);
         }
-        this.connectorTypesByCell = connectors;
+        this.connectorTypesByCell = Map.copyOf(connectors);
+        this.connectorMarkers = Set.copyOf(markers);
         this.cellsByColumn = indexColumns(this.cells);
     }
 
@@ -128,7 +142,7 @@ final class FloorGeometry {
     boolean sameExactGeometry(FloorGeometry other) {
         return other != null
                 && cells.equals(other.cells)
-                && connectorTypesByCell.equals(other.connectorTypesByCell);
+                && connectorMarkers.equals(other.connectorMarkers);
     }
 
     int footprintArea() {
@@ -148,12 +162,19 @@ final class FloorGeometry {
     }
 
     List<FloorConnector.Marker> connectorMarkers() {
-        return connectorTypesByCell.entrySet().stream()
-                .map(entry -> new FloorConnector.Marker(entry.getKey(), entry.getValue()))
+        return connectorMarkers.stream()
                 .sorted(Comparator.comparingInt((FloorConnector.Marker marker) -> marker.pos().getX())
                         .thenComparingInt(marker -> marker.pos().getZ())
                         .thenComparingInt(marker -> marker.pos().getY())
                         .thenComparing(marker -> marker.type().serializedName()))
+                .toList();
+    }
+
+    private static Collection<FloorConnector.Marker> markersFromTypes(
+            Map<BlockPos, FloorConnector.Type> connectorTypesByCell) {
+        if (connectorTypesByCell == null || connectorTypesByCell.isEmpty()) return List.of();
+        return connectorTypesByCell.entrySet().stream()
+                .map(entry -> new FloorConnector.Marker(entry.getKey(), entry.getValue()))
                 .toList();
     }
 

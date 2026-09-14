@@ -37,10 +37,10 @@ public final class TestStructureFloors {
                                         int floorNumber,
                                         BuildingFloorRegion region,
                                         Collection<FloorConnector.Marker> markers) {
-        Map<BlockPos, FloorConnector.Type> connectors = new LinkedHashMap<>();
-        for (FloorConnector.Marker marker : markers == null ? List.<FloorConnector.Marker>of() : markers) {
-            if (region.cells().contains(marker.pos())) connectors.put(marker.pos(), marker.type());
-        }
+        List<FloorConnector.Marker> connectors = (markers == null ? List.<FloorConnector.Marker>of() : markers)
+                .stream()
+                .filter(marker -> region.cells().contains(marker.floorCell()))
+                .toList();
         FloorGeometry geometry = new FloorGeometry(region.cells().stream()
                 .map(pos -> new FloorGeometry.Cell(pos, ceilingY))
                 .toList(), connectors);
