@@ -29,6 +29,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.particles.ItemParticleOption;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -47,6 +48,7 @@ import net.minecraft.stats.Stats;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.util.Mth;
 import net.minecraft.util.ProblemReporter;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.*;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -82,6 +84,7 @@ import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemStackTemplate;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.ProjectileWeaponItem;
 import net.minecraft.world.item.component.Consumable;
@@ -143,6 +146,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private boolean interactedWith;
     private int lastAppliedHealthLevel = Integer.MIN_VALUE;
     private double lastAppliedHealthBonus = Double.NaN;
+    private boolean recoveryFoodUseActive;
+    private boolean completingRecoveryFoodUse;
+    private boolean recoveryFoodFromInventory;
+    private int recoveryFoodUseTicks;
+    private ItemStack recoveryPreviousMainHand = ItemStack.EMPTY;
 
     @SuppressWarnings("deprecation")
     public static CompoundTag readMcaSaveData(ValueInput input) {
@@ -822,19 +830,13 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         if (!level().isClientSide()) {
+            tickRecoveryFoodUse();
+
             if (tickCount % 200 == 0
                     && getHealth() < getMaxHealth()
-                    && !getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)) {
-                // if the villager has food they should try to eat.
-                ItemStack food = getMainHandItem();
-                FoodProperties foodProperties = food.get(DataComponents.FOOD);
-                if (canEat(food, foodProperties)) {
-                    eat(food, foodProperties);
-                } else {
-                    //noinspection ConstantConditions
-                    if (!findAndEquipToMain(VillagerEntityMCA::canEat)) {
-                        heal(1); // natural regeneration
-                    }
+                    && canRecoverHealthNow()) {
+                if (!startRecoveryFoodUse()) {
+                    heal(1); // natural regeneration
                 }
             }
 
@@ -879,6 +881,116 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         return false;
+    }
+
+    public boolean isUsingRecoveryFood() {
+        return recoveryFoodUseActive;
+    }
+
+    private boolean canRecoverHealthNow() {
+        return !recoveryFoodUseActive && !isUsingItem() && canContinueRecoveryFoodUse();
+    }
+
+    private void tickRecoveryFoodUse() {
+        if (!recoveryFoodUseActive) {
+            return;
+        }
+
+        if (!canContinueRecoveryFoodUse()) {
+            stopUsingItem();
+            return;
+        }
+
+        recoveryFoodUseTicks++;
+        ItemStack food = getItemInHand(getDominantHand());
+        if (!food.isEmpty()
+                && level() instanceof ServerLevel serverLevel
+                && recoveryFoodUseTicks > food.getUseDuration(this) * 7 / 32
+                && recoveryFoodUseTicks % 4 == 0) {
+            spawnRecoveryFoodParticles(serverLevel, food, 4);
+        }
+    }
+
+    private boolean canContinueRecoveryFoodUse() {
+        return !isInRecoveryDanger();
+    }
+
+    private boolean isInRecoveryDanger() {
+        return getVillagerBrain().isPanicking()
+                || hasActiveRecoveryThreat(MemoryModuleType.ATTACK_TARGET)
+                || hasActiveRecoveryThreat(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY);
+    }
+
+    private boolean hasActiveRecoveryThreat(MemoryModuleType<? extends LivingEntity> memoryType) {
+        return getBrain().getMemoryInternal(memoryType)
+                .filter(entity -> entity.isAlive() && !entity.isRemoved())
+                .isPresent();
+    }
+
+    private boolean startRecoveryFoodUse() {
+        ItemStack mainHandFood = getMainHandItem();
+        FoodProperties mainHandFoodProperties = mainHandFood.get(DataComponents.FOOD);
+        if (canEat(mainHandFood, mainHandFoodProperties)) {
+            return startRecoveryFoodUse(mainHandFoodProperties, false, ItemStack.EMPTY);
+        }
+
+        int slot = InventoryUtils.getFirstSlotContainingItem(getInventory(), VillagerEntityMCA::canEat);
+        if (slot < 0) {
+            return false;
+        }
+
+        ItemStack food = getInventory().getItem(slot);
+        FoodProperties foodProperties = food.get(DataComponents.FOOD);
+        if (!canEat(food, foodProperties)) {
+            return false;
+        }
+
+        ItemStack previousMainHand = getMainHandItem().copy();
+        ItemStack replacement = food.split(1);
+        if (replacement.isEmpty()) {
+            return false;
+        }
+
+        setItemInHand(getDominantHand(), replacement);
+        return startRecoveryFoodUse(foodProperties, true, previousMainHand);
+    }
+
+    private boolean startRecoveryFoodUse(FoodProperties foodProperties, boolean fromInventory, ItemStack previousMainHand) {
+        if (foodProperties == null) {
+            return false;
+        }
+
+        recoveryFoodUseActive = true;
+        recoveryFoodFromInventory = fromInventory;
+        recoveryFoodUseTicks = 0;
+        recoveryPreviousMainHand = previousMainHand;
+        startUsingItem(getDominantHand());
+
+        if (!isUsingItem()) {
+            finishRecoveryFoodUse();
+            return false;
+        }
+
+        return true;
+    }
+
+    private void finishRecoveryFoodUse() {
+        if (recoveryFoodFromInventory) {
+            ItemStack remainder = getMainHandItem();
+            if (!remainder.isEmpty()) {
+                ItemStack leftover = getInventory().addItem(remainder);
+                if (!leftover.isEmpty()) {
+                    spawnAtLocation((ServerLevel) level(), leftover, 0.0F);
+                }
+            }
+            setItemInHand(getDominantHand(), recoveryPreviousMainHand);
+        }
+
+        recoveryFoodUseActive = false;
+        completingRecoveryFoodUse = false;
+        recoveryFoodFromInventory = false;
+        recoveryFoodUseTicks = 0;
+        recoveryPreviousMainHand = ItemStack.EMPTY;
     }
 
     @Override
@@ -981,9 +1093,67 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         this.setOnGround(oldOnGround);
     }
 
-    private void eat(ItemStack stack, FoodProperties foodProperties) {
-        heal(foodProperties.nutrition());
-        setItemInHand(getDominantHand(), stack.finishUsingItem(level(), this));
+    @Override
+    protected void completeUsingItem() {
+        boolean completedRecoveryFoodUse = recoveryFoodUseActive
+                && isUsingItem()
+                && getUsedItemHand() == getDominantHand();
+        FoodProperties recoveryFoodProperties = completedRecoveryFoodUse
+                ? getUseItem().get(DataComponents.FOOD)
+                : null;
+
+        completingRecoveryFoodUse = completedRecoveryFoodUse;
+        if (recoveryFoodProperties != null) {
+            heal(recoveryFoodProperties.nutrition());
+        }
+        super.completeUsingItem();
+        completingRecoveryFoodUse = false;
+
+        if (completedRecoveryFoodUse) {
+            finishRecoveryFoodUse();
+        }
+    }
+
+    @Override
+    public void stopUsingItem() {
+        boolean interruptedRecoveryFoodUse = recoveryFoodUseActive && !completingRecoveryFoodUse;
+        super.stopUsingItem();
+
+        if (interruptedRecoveryFoodUse) {
+            finishRecoveryFoodUse();
+        }
+    }
+
+    private void spawnRecoveryFoodParticles(ServerLevel level, ItemStack food, int count) {
+        RandomSource random = getRandom();
+        ItemParticleOption particle = new ItemParticleOption(ParticleTypes.ITEM, ItemStackTemplate.fromNonEmptyStack(food));
+
+        for (int i = 0; i < count; i++) {
+            Vec3 velocity = new Vec3(
+                    (random.nextFloat() - 0.5) * 0.1,
+                    random.nextFloat() * 0.1 + 0.1,
+                    0.0
+            );
+            velocity = velocity.xRot(-getXRot() * ((float) Math.PI / 180f));
+            velocity = velocity.yRot(-getYRot() * ((float) Math.PI / 180f));
+
+            Vec3 position = new Vec3(
+                    (random.nextFloat() - 0.5) * 0.3,
+                    -random.nextFloat() * 0.6 - 0.3,
+                    0.6
+            );
+            position = position.xRot(-getXRot() * ((float) Math.PI / 180f));
+            position = position.yRot(-getYRot() * ((float) Math.PI / 180f));
+            position = position.add(getX(), getEyeY(), getZ());
+
+            level.sendParticles(
+                    particle,
+                    position.x, position.y, position.z,
+                    1,
+                    velocity.x, velocity.y + 0.05, velocity.z,
+                    0.0
+            );
+        }
     }
 
     @Override

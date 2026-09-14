@@ -1,6 +1,7 @@
 package net.conczin.mca.neoforge.gametest;
 
 import net.conczin.mca.MCA;
+import net.conczin.mca.entity.VillagerRecoveryFoodGameTests;
 import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensorGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherCombatMovementGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.FishingTaskGameTests;
@@ -37,6 +38,7 @@ public final class McaGameTestRegistration {
     private static final Identifier LEGACY_AIR_TEMPLATE = Identifier.withDefaultNamespace("bastion/blocks/air");
     private static final Identifier ISOLATED_AIR_TEMPLATE = MCA.locate("ported_1_21_1/isolated_air");
     private static final List<Class<?>> TEST_CLASSES = List.of(
+            VillagerRecoveryFoodGameTests.class,
             GuardEnemiesSensorGameTests.class,
             ArcherCombatMovementGameTests.class,
             FishingTaskGameTests.class,
