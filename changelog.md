@@ -12,6 +12,13 @@
 * Improved HOME POI validation and repaired invalid resident-home assignments.
 * Improved compatibility with vanilla-style modded beds by registering them as HOME POIs when needed.
 * Fixed residents being assigned to the wrong building.
+* Improved the **Family Tree** and **Villager Tracker**.
+  * Added scroll-wheel zooming to the Family Tree, centred on the cursor, with improved deceased-villager tooltip visibility while zoomed.
+  * Family Tree and Villager Tracker searches now use the current player's name for their initial lookup when opened with an empty search, making it easier to jump straight to the player's own family tree.
+* Improved villager fishing.
+  * Fishing villagers now cast a visible bobber with a line attached to the rendered rod/hand and use vanilla-style lure, bite, splash and reel feedback.
+  * Successful catches visibly fly from the bobber to the villager before entering inventory, while preserving MCA's existing catch chance and preventing duplicate catches.
+  * Fishing chores no longer stop just because the generic chore timeout is reached.
 * Fixed villager age scaling at growth-stage boundaries.
 * Fixed babies sitting too low in cribs.
 * Fixed golden apples aging child villagers by the wrong amount.
