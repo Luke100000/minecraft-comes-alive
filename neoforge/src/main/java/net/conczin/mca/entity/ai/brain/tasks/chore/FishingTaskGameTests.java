@@ -12,6 +12,7 @@ import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
@@ -50,6 +51,32 @@ public final class FishingTaskGameTests {
                         + ", fluid=" + helper.getLevel().getFluidState(bobber.blockPosition())
         );
         helper.succeed();
+    }
+
+    @GameTest(
+            batch = "mca_fishing_bite",
+            templateNamespace = "minecraft",
+            template = "bastion/blocks/air",
+            timeoutTicks = 800
+    )
+    public static void bobberEventuallyEntersRealBiteWindow(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO);
+        ChunkPos tickingChunk = new ChunkPos(anchor);
+        BlockPos villagerPos = new BlockPos(
+                tickingChunk.getMinBlockX() + 3,
+                anchor.getY() + 2,
+                tickingChunk.getMinBlockZ() + 8
+        );
+        BlockPos water = villagerPos.east(2);
+        prepareBiteWater(helper, water);
+
+        VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
+        MCAFishingBobberEntity bobber = MCAFishingBobberEntity.cast(helper.getLevel(), villager, water);
+
+        helper.succeedWhen(() -> helper.assertTrue(
+                bobber.isBobbing() && bobber.isBiting(),
+                "bobber never reached the vanilla-shaped bite window"
+        ));
     }
 
     @GameTest(batch = "mca_fishing_timeout", templateNamespace = "minecraft", template = "bastion/blocks/air")
@@ -149,6 +176,17 @@ public final class FishingTaskGameTests {
     private static void prepareWater(GameTestHelper helper, BlockPos center) {
         for (int x = -1; x <= 1; x++) {
             for (int z = -1; z <= 1; z++) {
+                BlockPos water = center.offset(x, 0, z);
+                helper.getLevel().setBlock(water.below(), Blocks.STONE.defaultBlockState(), 3);
+                helper.getLevel().setBlock(water, Blocks.WATER.defaultBlockState(), 3);
+                helper.getLevel().setBlock(water.above(), Blocks.AIR.defaultBlockState(), 3);
+            }
+        }
+    }
+
+    private static void prepareBiteWater(GameTestHelper helper, BlockPos center) {
+        for (int x = -1; x <= 8; x++) {
+            for (int z = -2; z <= 2; z++) {
                 BlockPos water = center.offset(x, 0, z);
                 helper.getLevel().setBlock(water.below(), Blocks.STONE.defaultBlockState(), 3);
                 helper.getLevel().setBlock(water, Blocks.WATER.defaultBlockState(), 3);
