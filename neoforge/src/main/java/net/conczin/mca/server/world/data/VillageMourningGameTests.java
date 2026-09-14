@@ -310,9 +310,9 @@ public final class VillageMourningGameTests {
     public static void dueVillageReleasesOneSmallBurstAndSchedulesAnother(GameTestHelper helper) {
         BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
         occupyGrave(helper, grave);
+        setDayTime(helper.getLevel(), 6_000L);
         List<VillagerEntityMCA> residents = spawnResidents(helper, 10, "Burst Probe");
         long now = helper.getLevel().getGameTime();
-        setDayTime(helper.getLevel(), 6_000L);
         Village due = withNextMourningTime(villageWithGraveyard(helper, grave), now, helper.getLevel());
         residents.forEach(due::updateResident);
 
@@ -321,7 +321,7 @@ public final class VillageMourningGameTests {
         long nextBurst = due.getNextMourningTime();
 
         helper.assertTrue(firstCount >= 2 && firstCount <= 4,
-                "one due burst must select only two to four residents");
+                "one due burst must select only two to four residents; selected=" + firstCount);
         helper.assertTrue(nextBurst >= now + 4_000L && nextBurst <= now + 9_000L,
                 "one due burst must schedule one later random burst");
 

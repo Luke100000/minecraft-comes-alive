@@ -74,7 +74,9 @@ public final class VillagerRecoveryFoodGameTests {
     public static void activeGuardThreatPreventsRecoveryFromStarting(GameTestHelper helper) {
         VillagerEntityMCA villager = spawnRecoveringVillager(helper);
         Zombie threat = spawnThreat(helper, helper.absolutePos(new BlockPos(10, 2, 6)));
+        villager.setNoAi(true);
         villager.getBrain().setMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY, threat);
+        villager.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, threat);
         int[] ticks = {0};
 
         helper.onEachTick(() -> {
