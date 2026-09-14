@@ -185,13 +185,8 @@ public class Village implements Iterable<Building> {
         if (structure == null || structure.getId() < 0 || structure.getLogicalBuildingId() < 0) {
             throw new IllegalArgumentException("Structure requires valid canonical IDs");
         }
-        if (room == null || !room.isFunctionalRoom() || room.getId() < 0
-                || room.getStructureId() != structure.getId()) {
+        if (!roomReferencesStructure(structure, room)) {
             throw new IllegalArgumentException("Room does not reference the Structure being registered");
-        }
-        StructureFloor floor = structure.getFloor(room.getFloorId()).orElse(null);
-        if (floor == null || !floorContainsRoomCells(floor, room)) {
-            throw new IllegalArgumentException("Room references missing Structure/Floor ownership");
         }
         if (structures.containsKey(structure.getId())) {
             throw new IllegalArgumentException("Structure id is already registered: " + structure.getId());
@@ -1145,6 +1140,15 @@ public class Village implements Iterable<Building> {
     private static boolean floorContainsRoomCells(StructureFloor floor, Building room) {
         return !room.getFloorCells().isEmpty()
                 && room.getFloorCells().stream().allMatch(cell -> floor.geometry().cellAt(cell).isPresent());
+    }
+
+    private static boolean roomReferencesStructure(Structure structure, Building room) {
+        if (structure == null || room == null || !room.isFunctionalRoom() || room.getId() < 0
+                || room.getStructureId() != structure.getId()) {
+            return false;
+        }
+        StructureFloor floor = structure.getFloor(room.getFloorId()).orElse(null);
+        return floor != null && floorContainsRoomCells(floor, room);
     }
 
     record AttachmentTarget(int buildingId, int structureId, int floorId, int gap) {

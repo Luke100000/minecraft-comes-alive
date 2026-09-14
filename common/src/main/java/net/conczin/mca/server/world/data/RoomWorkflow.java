@@ -49,9 +49,19 @@ public final class RoomWorkflow {
 
         Structure candidate = structureScan.toStructure(-1);
         StructureFloor floor = candidate.getFloors().getFirst();
-        return scanResolvedRoom(village, candidate, structureScan.source(), -1,
-                floor, structureScan.scan())
-                .withPendingStructure(candidate);
+        SelectedFloorScanner.Result floorScan = structureScan.scan();
+        List<RoomPartitioner.Component> components = BuildingRoomScanner.components(world, floorScan);
+        RoomPartitioner.Component selectedComponent = RoomPartitioner.select(
+                structureScan.source(), floorScan.floor(), components);
+        BuildingRoomScanner.Result selectedGeometry = selectedComponent == null
+                ? BuildingRoomScanner.Result.failure(Building.validationResult.TOO_SMALL, structureScan.source())
+                : BuildingRoomScanner.materialize(
+                structureScan.source(), Config.getInstance().maxBuildingSize, floor.id(),
+                floorScan.floor(), components, selectedComponent);
+        BuildingScanResult selected = roomResultFromGeometry(
+                village, candidate, floor, selectedGeometry, -1);
+        if (selected.result() != Building.validationResult.SUCCESS) return selected;
+        return selected.withSource(source).withPendingStructure(candidate);
     }
 
     BuildingScanResult analyzeRoom(BlockPos source) {
@@ -109,7 +119,7 @@ public final class RoomWorkflow {
             BuildingRoomScanner.Result geometry = BuildingRoomScanner.materialize(
                     scanSeed, Config.getInstance().maxBuildingSize, floor.id(),
                     fresh.scannedFloor(), components, component);
-            BuildingScanResult componentScan = roomResultFromGeometry(
+            BuildingScanResult componentScan = materializeRoom(
                     village, refreshed, refreshedFloor, geometry, -1);
             if (componentScan.result() == Building.validationResult.SUCCESS) {
                 freshRooms.add(componentScan.building());
@@ -226,7 +236,7 @@ public final class RoomWorkflow {
         List<Building> freshComponents = BuildingRoomScanner.partition(
                         world, source, Config.getInstance().maxBuildingSize,
                         persistedFloor.id(), fresh.scan()).stream()
-                .map(geometry -> roomResultFromGeometry(
+                .map(geometry -> materializeRoom(
                         village, structure, persistedFloor, geometry, -1))
                 .filter(scan -> scan.result() == Building.validationResult.SUCCESS)
                 .map(BuildingScanResult::building)
@@ -294,18 +304,31 @@ public final class RoomWorkflow {
                                                       StructureFloor floor,
                                                       BuildingRoomScanner.Result geometry,
                                                       int existingRoomId) {
+        BuildingScanResult materialized = materializeRoom(
+                village, structure, floor, geometry, existingRoomId);
+        if (materialized.result() != Building.validationResult.SUCCESS) return materialized;
+
+        Building room = materialized.building();
+        List<String> types = village == null
+                ? room.getVisibleMatchingTypes().stream().map(BuildingType::name).toList()
+                : village.getMatchingRoomTypes(room).stream().map(BuildingType::name).toList();
+        return new BuildingScanResult(Building.validationResult.SUCCESS, room.getSourceBlock(), room,
+                types, village);
+    }
+
+    private BuildingScanResult materializeRoom(Village village,
+                                               Structure structure,
+                                               StructureFloor floor,
+                                               BuildingRoomScanner.Result geometry,
+                                               int existingRoomId) {
         Building room = new Building(geometry.seed());
         Building.validationResult result = room.applyRoomScan(world, geometry);
         if (result != Building.validationResult.SUCCESS) return failedRoom(result, geometry.seed(), village);
         room.setStructureId(structure.getId());
         room.setFloorId(floor.id());
         if (existingRoomId >= 0) room.setId(existingRoomId);
-
-        List<String> types = village == null
-                ? room.getVisibleMatchingTypes().stream().map(BuildingType::name).toList()
-                : village.getMatchingRoomTypes(room).stream().map(BuildingType::name).toList();
         return new BuildingScanResult(Building.validationResult.SUCCESS, room.getSourceBlock(), room,
-                types, village);
+                List.of(), village);
     }
 
     private static BuildingScanResult failedRoom(

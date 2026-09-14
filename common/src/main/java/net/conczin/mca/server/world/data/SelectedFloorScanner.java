@@ -422,8 +422,6 @@ final class SelectedFloorScanner {
         while (!queue.isEmpty()) {
             SurfaceCell current = queue.removeFirst();
             if (horizontalDistance(current.feet(), scanAnchor) >= maxRadius - 1) {
-                System.out.println("[MCA Floor Debug] exterior=radius anchor=" + scanAnchor
-                        + " start=" + start.feet() + " current=" + current.feet());
                 return true;
             }
 
@@ -436,9 +434,6 @@ final class SelectedFloorScanner {
                 if (storeyRole(context, probe, provider) != StoreyRole.OWNED) continue;
                 OptionalInt ceiling = ceilings.ceilingY(next);
                 if (ceiling.isEmpty()) {
-                    System.out.println("[MCA Floor Debug] exterior=open_sky anchor=" + scanAnchor
-                            + " start=" + start.feet() + " current=" + current.feet()
-                            + " next=" + next);
                     return true;
                 }
                 SurfaceCell cell = new SurfaceCell(next, landing.surfaceY(), ceiling.getAsInt());
