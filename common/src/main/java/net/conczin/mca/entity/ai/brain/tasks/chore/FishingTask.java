@@ -10,6 +10,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.FishingRodItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -25,10 +26,14 @@ import java.util.Comparator;
 import java.util.List;
 
 public class FishingTask extends AbstractChoreTask {
+    private static final int MAX_REEL_TICKS = 40;
+    private static final double REEL_DELIVERY_DISTANCE_SQR = 1.5 * 1.5;
 
     private BlockPos targetWater;
     private MCAFishingBobberEntity bobber;
-    private int ticks;
+    private ItemEntity reelItem;
+    private int reelTicks;
+    private boolean biteAttempted;
 
     public FishingTask() {
         super(ImmutableMap.of(MemoryModuleType.LOOK_TARGET, MemoryStatus.VALUE_ABSENT, MemoryModuleType.WALK_TARGET, MemoryStatus.VALUE_ABSENT));
@@ -60,6 +65,10 @@ public class FishingTask extends AbstractChoreTask {
     protected void tick(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.tick(world, villager, time);
 
+        if (tickReelItem(villager)) {
+            return;
+        }
+
         if (!equipFishingRod(villager)) {
             discardBobber();
             return;
@@ -68,7 +77,6 @@ public class FishingTask extends AbstractChoreTask {
         if (targetWater != null && !world.getBlockState(targetWater).is(Blocks.WATER)) {
             discardBobber();
             targetWater = null;
-            ticks = 0;
         }
 
         if (targetWater == null) {
@@ -87,30 +95,98 @@ public class FishingTask extends AbstractChoreTask {
             if (bobber == null || bobber.isRemoved()) {
                 villager.swing(villager.getDominantHand());
                 bobber = MCAFishingBobberEntity.cast(world, villager, targetWater);
-                ticks = 0;
             }
 
             if (!bobber.isBobbing()) {
                 return;
             }
 
-            ticks++;
-
-            if (ticks >= villager.getRandom().nextInt(200) + 200) {
-                if (villager.getRandom().nextFloat() >= 0.35F) {
-                    ItemStack stack = getFishingLoot(world, villager);
-
-                    villager.swing(villager.getDominantHand());
-                    discardBobber();
-                    villager.getInventory().addItem(stack);
-                    villager.getItemInHand(villager.getDominantHand()).hurtAndBreak(1, villager, villager.getDominantSlot());
+            if (!bobber.isBiting()) {
+                biteAttempted = false;
+            } else if (!biteAttempted) {
+                biteAttempted = true;
+                if (shouldReelBite(villager)) {
+                    beginReel(world, villager);
                 }
-                ticks = 0;
             }
         } else {
             villager.moveTowards(targetWater);
         }
 
+    }
+
+    boolean shouldReelBite(VillagerEntityMCA villager) {
+        return villager.getRandom().nextFloat() >= 0.35F;
+    }
+
+    private void beginReel(ServerLevel world, VillagerEntityMCA villager) {
+        ItemStack caught = getFishingLoot(world, villager);
+        villager.swing(villager.getDominantHand());
+
+        ItemEntity item = new ItemEntity(world, bobber.getX(), bobber.getY(), bobber.getZ(), caught);
+        item.setNeverPickUp();
+
+        double dx = villager.getX() - bobber.getX();
+        double dy = villager.getY() - bobber.getY();
+        double dz = villager.getZ() - bobber.getZ();
+        double distanceSqr = dx * dx + dy * dy + dz * dz;
+        item.setDeltaMovement(
+                dx * 0.1,
+                dy * 0.1 + Math.sqrt(Math.sqrt(distanceSqr)) * 0.08,
+                dz * 0.1
+        );
+
+        world.addFreshEntity(item);
+        reelItem = item;
+        reelTicks = 0;
+
+        discardBobber();
+        villager.getItemInHand(villager.getDominantHand())
+                .hurtAndBreak(1, villager, villager.getDominantSlot());
+    }
+
+    private boolean tickReelItem(VillagerEntityMCA villager) {
+        if (reelItem == null) {
+            return false;
+        }
+        if (reelItem.isRemoved()) {
+            clearReelReference();
+            return false;
+        }
+
+        reelTicks++;
+        if (reelItem.distanceToSqr(villager) <= REEL_DELIVERY_DISTANCE_SQR || reelTicks >= MAX_REEL_TICKS) {
+            finishReelItem(villager);
+        }
+        return true;
+    }
+
+    private void finishReelItem(VillagerEntityMCA villager) {
+        if (reelItem == null || reelItem.isRemoved()) {
+            clearReelReference();
+            return;
+        }
+
+        ItemStack remainder = villager.getInventory().addItem(reelItem.getItem());
+        if (remainder.isEmpty()) {
+            reelItem.discard();
+        } else {
+            reelItem.setItem(remainder);
+            reelItem.setNoPickUpDelay();
+        }
+        clearReelReference();
+    }
+
+    private void releaseReelItem() {
+        if (reelItem != null && !reelItem.isRemoved()) {
+            reelItem.setNoPickUpDelay();
+        }
+        clearReelReference();
+    }
+
+    private void clearReelReference() {
+        reelItem = null;
+        reelTicks = 0;
     }
 
     private boolean equipFishingRod(VillagerEntityMCA villager) {
@@ -152,13 +228,21 @@ public class FishingTask extends AbstractChoreTask {
             bobber.discard();
         }
         bobber = null;
+        biteAttempted = false;
     }
 
     @Override
     protected void stop(ServerLevel world, VillagerEntityMCA villager, long time) {
+        if (reelItem != null) {
+            if (villager.isAlive() && !villager.isRemoved()) {
+                finishReelItem(villager);
+            } else {
+                releaseReelItem();
+            }
+        }
+
         discardBobber();
         targetWater = null;
-        ticks = 0;
         clearChoreItem(villager);
     }
 }
