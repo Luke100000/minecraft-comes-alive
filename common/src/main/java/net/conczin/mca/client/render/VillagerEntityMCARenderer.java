@@ -5,6 +5,7 @@ import net.conczin.mca.client.render.layer.ClothingLayer;
 import net.conczin.mca.client.render.layer.FaceLayer;
 import net.conczin.mca.client.render.layer.HairLayer;
 import net.conczin.mca.client.render.layer.SkinLayer;
+import net.conczin.mca.client.render.layer.VillagerFishingLineLayer;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.minecraft.client.model.geom.ModelLayers;
 import net.minecraft.client.model.geom.builders.CubeDeformation;
@@ -21,6 +22,7 @@ public class VillagerEntityMCARenderer extends VillagerLikeEntityMCARenderer<Vil
         addLayer(new FaceLayer<>(this, createVisibleModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.01F))).hideWears(), "normal"));
         addLayer(new ClothingLayer<>(this, createVisibleModel(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.0625F))), "normal"));
         addLayer(new HairLayer<>(this, createVisibleModel(VillagerEntityModelMCA.hairData(new CubeDeformation(0.125F)))));
+        addLayer(new VillagerFishingLineLayer(this));
     }
 
     private static VillagerEntityModelMCA<VillagerEntityMCA> createAnimationModel(EntityRendererProvider.Context ctx) {
