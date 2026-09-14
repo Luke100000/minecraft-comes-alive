@@ -184,6 +184,26 @@ public final class VillageMourningGameTests {
     }
 
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void parentTragedyStartsExactMourningForChild(GameTestHelper helper) {
+        BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
+        VillagerEntityMCA deceasedParent = spawnVillager(helper, new BlockPos(6, 1, 1), "Parent Deceased Probe");
+        VillagerEntityMCA child = spawnVillager(helper, new BlockPos(3, 1, 1), "Child Mourner Probe");
+        boolean previous = Config.getInstance().enableMourning;
+        try {
+            Config.getInstance().enableMourning = true;
+            child.getRelationships().onTragedy(
+                    helper.getLevel().damageSources().generic(), grave, RelationshipType.PARENT, deceasedParent);
+
+            helper.assertTrue(child.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE)
+                            .filter(grave::equals).isPresent(),
+                    "a child should target their deceased parent's exact burial site");
+        } finally {
+            Config.getInstance().enableMourning = previous;
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void deceasedDoesNotMournOwnGrave(GameTestHelper helper) {
         BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
         VillagerEntityMCA deceased = spawnVillager(helper, new BlockPos(3, 1, 1), "Self Mourning Probe");

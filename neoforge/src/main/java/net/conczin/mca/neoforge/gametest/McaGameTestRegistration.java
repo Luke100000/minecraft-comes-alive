@@ -3,9 +3,11 @@ package net.conczin.mca.neoforge.gametest;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerRecoveryFoodGameTests;
 import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensorGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ArcherArrowFriendlyFireGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherCombatMovementGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.FishingTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.HarvestingTaskGameTests;
+import net.conczin.mca.entity.ai.navigation.FenceGateInteractionGameTests;
 import net.conczin.mca.server.world.data.FloorScannerGameTests;
 import net.conczin.mca.server.world.data.VillageMourningGameTests;
 import net.minecraft.core.Holder;
@@ -40,7 +42,9 @@ public final class McaGameTestRegistration {
     private static final List<Class<?>> TEST_CLASSES = List.of(
             VillagerRecoveryFoodGameTests.class,
             GuardEnemiesSensorGameTests.class,
+            ArcherArrowFriendlyFireGameTests.class,
             ArcherCombatMovementGameTests.class,
+            FenceGateInteractionGameTests.class,
             FishingTaskGameTests.class,
             HarvestingTaskGameTests.class,
             FloorScannerGameTests.class,

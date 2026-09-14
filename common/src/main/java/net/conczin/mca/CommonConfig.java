@@ -7,6 +7,16 @@ import java.util.Map;
 public class CommonConfig {
 
     /**
+     * If true, arrows fired by MCA archers pass through villagers instead of hitting them.
+     */
+    public boolean archerArrowsIgnoreVillagers = true;
+
+    /**
+     * If true, MCA villagers may path through and open or close fence gates.
+     */
+    public boolean villagersInteractWithFenceGates = true;
+
+    /**
      * Time (in ticks) until a baby grows up when held as an item.
      */
     public int babyItemGrowUpTime = 24000;
