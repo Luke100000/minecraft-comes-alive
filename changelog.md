@@ -5,11 +5,25 @@
 * Internal Changes: MCA Age is now calculated using GameTime instead of syncing every tick.
 * Improved villager bed pathfinding and sleeping reliability.
 * Improved ladder climbing and ladder-to-floor transitions.
+* Improved floor/storey scoping and enclosure filtering for irregular, stacked, and uneven buildings.
+* Reworked villager mourning so ambient groups respect work, rest, chore, follow/stay, danger, and loaded-grave constraints.
 * Fixed workplace assignment and job POI ownership.
 * Fixed duplicate villager residency and bed ownership.
 * Improved HOME POI validation and repaired invalid resident-home assignments.
+* Improved compatibility with vanilla-style modded beds by registering them as HOME POIs when needed.
 * Fixed residents being assigned to the wrong building.
+* Improved the **Family Tree** and **Villager Tracker**.
+  * Added scroll-wheel zooming to the Family Tree, centred on the cursor, with improved deceased-villager tooltip visibility while zoomed.
+  * Family Tree and Villager Tracker searches now use the current player's name for their initial lookup when opened with an empty search, making it easier to jump straight to the player's own family tree.
+* Improved villager fishing.
+  * Fishing villagers now cast a visible bobber with a line attached to the rendered rod/hand and use vanilla-style lure, bite, splash and reel feedback.
+  * Successful catches visibly fly from the bobber to the villager before entering inventory, while preserving MCA's existing catch chance and preventing duplicate catches.
+  * Fishing chores no longer stop just because the generic chore timeout is reached.
 * Fixed villager age scaling at growth-stage boundaries.
+* Fixed babies sitting too low in cribs.
+* Fixed golden apples aging child villagers by the wrong amount.
+* Preserved baby zombie villager age when converting to MCA zombie villagers.
+* Fixed flirty personality dialogue overriding parent/child dialogue for the player's children.
 
 # 8.1.11
 

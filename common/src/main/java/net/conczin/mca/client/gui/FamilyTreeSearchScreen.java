@@ -65,6 +65,8 @@ public class FamilyTreeSearchScreen extends Screen {
         }));
         buttonPage = addRenderableWidget(new ButtonWidget(width / 2 - 24, height / 2 + 60, 48, 20, Component.literal("1/1"), (b) -> {
         }));
+
+        searchVillager("");
     }
 
     @Override
@@ -113,9 +115,14 @@ public class FamilyTreeSearchScreen extends Screen {
         }
     }
 
-    private void searchVillager(String v) {
-        if (!MCA.isBlankString(v)) {
-            Network.sendToServer(new FamilyTreeUUIDLookup(v));
+    private void searchVillager(String value) {
+        String search = value;
+        if (MCA.isBlankString(search) && minecraft.player != null) {
+            search = minecraft.player.getName().getString();
+        }
+
+        if (!MCA.isBlankString(search)) {
+            Network.sendToServer(new FamilyTreeUUIDLookup(search));
         }
     }
 

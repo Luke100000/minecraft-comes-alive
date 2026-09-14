@@ -9,18 +9,31 @@ import net.minecraft.core.BlockPos;
 import net.conczin.mca.neoforge.gametest.GameTest;
 import net.conczin.mca.neoforge.gametest.GameTestHolder;
 import net.conczin.mca.neoforge.gametest.PrefixGameTestTemplate;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.FishingRodItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.storage.TagValueInput;
+import net.minecraft.world.level.storage.TagValueOutput;
+import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 @GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
@@ -50,6 +63,236 @@ public final class FishingTaskGameTests {
                         + ", fluid=" + helper.getLevel().getFluidState(bobber.blockPosition())
         );
         helper.succeed();
+    }
+
+    @GameTest(
+            batch = "mca_fishing_bite",
+            templateNamespace = "minecraft",
+            template = "bastion/blocks/air",
+            timeoutTicks = 800
+    )
+    public static void bobberEventuallyEntersRealBiteWindow(GameTestHelper helper) {
+        BlockPos villagerPos = biteCycleVillagerPos(helper);
+        BlockPos water = villagerPos.east(2);
+        prepareBiteWater(helper, water);
+
+        VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
+        MCAFishingBobberEntity bobber = MCAFishingBobberEntity.cast(helper.getLevel(), villager, water);
+
+        helper.succeedWhen(() -> helper.assertTrue(
+                bobber.isBobbing() && bobber.isBiting(),
+                "bobber never reached the vanilla-shaped bite window"
+        ));
+    }
+
+    @GameTest(
+            batch = "mca_fishing_reel",
+            templateNamespace = "minecraft",
+            template = "bastion/blocks/air",
+            timeoutTicks = 900
+    )
+    public static void biteReelsOneProtectedItemIntoInventory(GameTestHelper helper) {
+        BlockPos villagerPos = biteCycleVillagerPos(helper);
+        prepareBiteWater(helper, villagerPos.east(2));
+        VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
+        TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL), true);
+        Player thief = helper.makeMockPlayer(GameType.SURVIVAL);
+        Player reloadPicker = helper.makeMockPlayer(GameType.SURVIVAL);
+        AtomicBoolean sawProtectedReel = new AtomicBoolean();
+        AtomicBoolean sawReloadRelease = new AtomicBoolean();
+        AtomicBoolean delivered = new AtomicBoolean();
+        AtomicReference<ItemEntity> reelItem = new AtomicReference<>();
+        int startingLoot = countCaughtItems(villager);
+        int startingRodDamage = villager.getItemInHand(villager.getDominantHand()).getDamageValue();
+
+        task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
+        helper.onEachTick(() -> {
+            if (delivered.get()) {
+                return;
+            }
+
+            MCAFishingBobberEntity bobberBeforeTick = activeBobber(helper, villager);
+            int rollsBeforeTick = task.getBiteRollCount();
+            List<Integer> nearbyItemIds = bobberBeforeTick == null
+                    ? List.of()
+                    : helper.getLevel().getEntitiesOfClass(ItemEntity.class, bobberBeforeTick.getBoundingBox().inflate(1.5D))
+                    .stream()
+                    .map(ItemEntity::getId)
+                    .toList();
+
+            task.tick(helper.getLevel(), villager, helper.getLevel().getGameTime());
+
+            if (task.getBiteRollCount() > rollsBeforeTick && bobberBeforeTick != null) {
+                helper.getLevel().getEntitiesOfClass(ItemEntity.class, bobberBeforeTick.getBoundingBox().inflate(1.5D))
+                        .stream()
+                        .filter(item -> !nearbyItemIds.contains(item.getId()))
+                        .findFirst()
+                        .ifPresent(item -> reelItem.compareAndSet(null, item));
+            }
+
+            ItemEntity item = reelItem.get();
+            if (item != null && !item.isRemoved()) {
+                sawProtectedReel.set(true);
+                helper.assertTrue(item.hasPickUpDelay(), "reel item became naturally pickup-eligible in flight");
+                item.playerTouch(thief);
+                helper.assertTrue(!item.isRemoved(), "another player stole the protected reel item");
+
+                if (sawReloadRelease.compareAndSet(false, true)) {
+                    TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, helper.getLevel().registryAccess());
+                    item.saveWithoutId(output);
+                    CompoundTag saved = output.buildResult();
+                    ValueInput savedInput = TagValueInput.create(ProblemReporter.DISCARDING, helper.getLevel().registryAccess(), saved);
+                    helper.assertTrue(
+                            savedInput.read("Thrower", UUIDUtil.CODEC).filter(villager.getUUID()::equals).isPresent(),
+                            "protected reel item did not retain the villager as its vanilla thrower"
+                    );
+                    helper.assertTrue(
+                            savedInput.read("Owner", UUIDUtil.CODEC).filter(villager.getUUID()::equals).isPresent(),
+                            "protected reel item did not carry the villager reel target marker"
+                    );
+
+                    ItemEntity reloaded = new ItemEntity(EntityTypes.ITEM, helper.getLevel());
+                    reloaded.load(TagValueInput.create(ProblemReporter.DISCARDING, helper.getLevel().registryAccess(), saved));
+                    helper.assertTrue(!reloaded.hasPickUpDelay(), "reloaded orphan reel stayed pickup-protected");
+                    reloaded.playerTouch(reloadPicker);
+                    helper.assertTrue(reloaded.isRemoved(), "reloaded orphan reel stayed target-locked to the villager");
+                }
+            }
+
+            if (item != null && item.isRemoved() && countCaughtItems(villager) > startingLoot) {
+                delivered.set(true);
+            }
+        });
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(sawProtectedReel.get(), "no real reel ItemEntity was observed");
+            helper.assertTrue(sawReloadRelease.get(), "protected reel reload behavior was not exercised");
+            helper.assertTrue(delivered.get(), "protected reel item was not delivered into MCA inventory");
+            helper.assertTrue(thief.getInventory().isEmpty(), "protected reel item entered another player's inventory");
+            helper.assertTrue(countCaughtItems(villager) > startingLoot, "a real bite did not deliver a catch");
+            helper.assertTrue(task.getBiteRollCount() == 1, "successful bite rolled catch chance more than once");
+            helper.assertTrue(
+                    villager.getItemInHand(villager.getDominantHand()).getDamageValue() == startingRodDamage + 1,
+                    "one delivered bite did not damage the fishing rod exactly once"
+            );
+        });
+    }
+
+    @GameTest(
+            batch = "mca_fishing_miss",
+            templateNamespace = "minecraft",
+            template = "bastion/blocks/air",
+            timeoutTicks = 900
+    )
+    public static void failedOriginCatchRollLetsBiteExpireWithoutLoot(GameTestHelper helper) {
+        BlockPos villagerPos = biteCycleVillagerPos(helper);
+        prepareBiteWater(helper, villagerPos.east(2));
+        VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
+        TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL), false);
+        AtomicBoolean sawBite = new AtomicBoolean();
+        AtomicBoolean biteExpired = new AtomicBoolean();
+        AtomicBoolean spawnedReel = new AtomicBoolean();
+        int startingLoot = countCaughtItems(villager);
+        int startingRodDamage = villager.getItemInHand(villager.getDominantHand()).getDamageValue();
+
+        task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
+        helper.onEachTick(() -> {
+            if (biteExpired.get()) {
+                return;
+            }
+
+            MCAFishingBobberEntity bobberBeforeTick = activeBobber(helper, villager);
+            int nearbyItemsBefore = bobberBeforeTick == null
+                    ? 0
+                    : helper.getLevel().getEntitiesOfClass(ItemEntity.class, bobberBeforeTick.getBoundingBox().inflate(1.5D)).size();
+            int rollsBeforeTick = task.getBiteRollCount();
+            task.tick(helper.getLevel(), villager, helper.getLevel().getGameTime());
+
+            if (task.getBiteRollCount() > rollsBeforeTick && bobberBeforeTick != null) {
+                int nearbyItemsAfter = helper.getLevel()
+                        .getEntitiesOfClass(ItemEntity.class, bobberBeforeTick.getBoundingBox().inflate(1.5D))
+                        .size();
+                if (nearbyItemsAfter > nearbyItemsBefore) {
+                    spawnedReel.set(true);
+                }
+            }
+
+            MCAFishingBobberEntity active = activeBobber(helper, villager);
+            if (active != null && active.isBiting()) {
+                sawBite.set(true);
+            } else if (sawBite.get() && task.getBiteRollCount() > 0) {
+                biteExpired.set(true);
+            }
+        });
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(sawBite.get(), "forced miss never reached a real bite");
+            helper.assertTrue(biteExpired.get(), "failed bite did not expire back to waiting");
+            helper.assertTrue(task.getBiteRollCount() == 1, "failed bite rerolled catch chance before the bite expired");
+            helper.assertTrue(countCaughtItems(villager) == startingLoot, "failed origin catch roll produced loot");
+            helper.assertTrue(!spawnedReel.get(), "failed origin catch roll spawned a reel item");
+            helper.assertTrue(
+                    villager.getItemInHand(villager.getDominantHand()).getDamageValue() == startingRodDamage,
+                    "failed origin catch roll damaged the fishing rod"
+            );
+        });
+    }
+
+    @GameTest(
+            batch = "mca_fishing_reel_remainder",
+            templateNamespace = "minecraft",
+            template = "bastion/blocks/air",
+            timeoutTicks = 900
+    )
+    public static void fullInventoryReleasesOnlyTheRealReelRemainder(GameTestHelper helper) {
+        BlockPos villagerPos = biteCycleVillagerPos(helper);
+        prepareBiteWater(helper, villagerPos.east(2));
+        VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
+        for (int slot = 0; slot < villager.getInventory().getContainerSize(); slot++) {
+            villager.getInventory().setItem(slot, new ItemStack(Blocks.STONE, 64));
+        }
+
+        TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL), true);
+        AtomicBoolean reelFinished = new AtomicBoolean();
+        AtomicReference<ItemEntity> reelItem = new AtomicReference<>();
+        task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
+        helper.onEachTick(() -> {
+            if (reelFinished.get()) {
+                return;
+            }
+
+            MCAFishingBobberEntity bobberBeforeTick = activeBobber(helper, villager);
+            int rollsBeforeTick = task.getBiteRollCount();
+            List<Integer> nearbyItemIds = bobberBeforeTick == null
+                    ? List.of()
+                    : helper.getLevel().getEntitiesOfClass(ItemEntity.class, bobberBeforeTick.getBoundingBox().inflate(1.5D))
+                    .stream()
+                    .map(ItemEntity::getId)
+                    .toList();
+
+            task.tick(helper.getLevel(), villager, helper.getLevel().getGameTime());
+
+            if (task.getBiteRollCount() > rollsBeforeTick && bobberBeforeTick != null) {
+                helper.getLevel().getEntitiesOfClass(ItemEntity.class, bobberBeforeTick.getBoundingBox().inflate(1.5D))
+                        .stream()
+                        .filter(item -> !nearbyItemIds.contains(item.getId()))
+                        .findFirst()
+                        .ifPresent(item -> reelItem.compareAndSet(null, item));
+            }
+
+            ItemEntity item = reelItem.get();
+            if (item != null && !item.isRemoved() && !item.hasPickUpDelay()) {
+                reelFinished.set(true);
+            }
+        });
+
+        helper.succeedWhen(() -> {
+            ItemEntity remainder = reelItem.get();
+            helper.assertTrue(task.getBiteRollCount() == 1, "full-inventory bite rolled catch chance more than once");
+            helper.assertTrue(reelFinished.get(), "full inventory did not finish the reel as a world remainder");
+            helper.assertTrue(remainder != null && !remainder.isRemoved(), "full inventory did not preserve the real reel entity");
+            helper.assertTrue(!remainder.hasPickUpDelay(), "finished reel remainder stayed permanently protected");
+        });
     }
 
     @GameTest(batch = "mca_fishing_timeout", templateNamespace = "minecraft", template = "bastion/blocks/air")
@@ -146,6 +389,16 @@ public final class FishingTaskGameTests {
         return villager;
     }
 
+    private static BlockPos biteCycleVillagerPos(GameTestHelper helper) {
+        BlockPos anchor = helper.absolutePos(BlockPos.ZERO);
+        ChunkPos tickingChunk = ChunkPos.containing(anchor);
+        return new BlockPos(
+                tickingChunk.getMinBlockX() + 3,
+                anchor.getY() + 2,
+                tickingChunk.getMinBlockZ() + 8
+        );
+    }
+
     private static void prepareWater(GameTestHelper helper, BlockPos center) {
         for (int x = -1; x <= 1; x++) {
             for (int z = -1; z <= 1; z++) {
@@ -157,12 +410,51 @@ public final class FishingTaskGameTests {
         }
     }
 
+    private static void prepareBiteWater(GameTestHelper helper, BlockPos center) {
+        for (int x = -1; x <= 8; x++) {
+            for (int z = -2; z <= 2; z++) {
+                BlockPos water = center.offset(x, 0, z);
+                helper.getLevel().setBlock(water.below(), Blocks.STONE.defaultBlockState(), 3);
+                helper.getLevel().setBlock(water, Blocks.WATER.defaultBlockState(), 3);
+                helper.getLevel().setBlock(water.above(), Blocks.AIR.defaultBlockState(), 3);
+            }
+        }
+
+        BlockPos villagerPos = center.west(2);
+        for (int x = -1; x <= 1; x++) {
+            for (int z = -1; z <= 1; z++) {
+                BlockPos floor = villagerPos.offset(x, -1, z);
+                helper.getLevel().setBlock(floor, Blocks.STONE.defaultBlockState(), 3);
+                helper.getLevel().setBlock(floor.above(), Blocks.AIR.defaultBlockState(), 3);
+                helper.getLevel().setBlock(floor.above(2), Blocks.AIR.defaultBlockState(), 3);
+                helper.getLevel().setBlock(floor.above(3), Blocks.AIR.defaultBlockState(), 3);
+            }
+        }
+    }
+
     private static long activeBobberCount(GameTestHelper helper, VillagerEntityMCA villager) {
         return helper.getLevel()
                 .getEntitiesOfClass(MCAFishingBobberEntity.class, villager.getBoundingBox().inflate(32.0D))
                 .stream()
                 .filter(entity -> !entity.isRemoved())
                 .count();
+    }
+
+    private static MCAFishingBobberEntity activeBobber(GameTestHelper helper, VillagerEntityMCA villager) {
+        return helper.getLevel()
+                .getEntitiesOfClass(MCAFishingBobberEntity.class, villager.getBoundingBox().inflate(32.0D))
+                .stream()
+                .filter(entity -> !entity.isRemoved() && entity.getVillagerOwner() == villager)
+                .findFirst()
+                .orElse(null);
+    }
+
+    private static int countCaughtItems(VillagerEntityMCA villager) {
+        return villager.getInventory().getItems().stream()
+                .filter(stack -> !stack.isEmpty())
+                .filter(stack -> !(stack.getItem() instanceof FishingRodItem))
+                .mapToInt(ItemStack::getCount)
+                .sum();
     }
 
     private static void assertReadyToCast(GameTestHelper helper, VillagerEntityMCA villager) {
@@ -190,9 +482,22 @@ public final class FishingTaskGameTests {
 
     private static final class TestFishingTask extends FishingTask {
         private final Player assigningPlayer;
+        private final Boolean forcedBiteResult;
+        private int biteRollCount;
 
         private TestFishingTask(Player assigningPlayer) {
+            this(assigningPlayer, null);
+        }
+
+        private TestFishingTask(Player assigningPlayer, Boolean forcedBiteResult) {
             this.assigningPlayer = assigningPlayer;
+            this.forcedBiteResult = forcedBiteResult;
+        }
+
+        @Override
+        boolean shouldReelBite(VillagerEntityMCA villager) {
+            biteRollCount++;
+            return forcedBiteResult != null ? forcedBiteResult : super.shouldReelBite(villager);
         }
 
         @Override
@@ -207,6 +512,10 @@ public final class FishingTaskGameTests {
 
         private boolean isTimedOut(long time) {
             return timedOut(time);
+        }
+
+        private int getBiteRollCount() {
+            return biteRollCount;
         }
     }
 }
