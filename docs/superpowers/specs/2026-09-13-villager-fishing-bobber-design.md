@@ -139,24 +139,25 @@ Do not copy open-water scanning or entity-hooking code. The bobber needs only en
 
 ## Catch semantics
 
-Use vanilla retrieval semantics for catch success. Vanilla does not perform a second random success roll after a bite: `FishingHook.retrieve(...)` generates fishing loot only while `nibble > 0`. Reeling before the bite or after the nibble window expires produces no fishing loot.
+Keep origin/1.21.1's catch chance while using vanilla's bite window as the real opportunity to catch. Origin succeeds when `random.nextFloat() >= 0.35F`, so each genuine bite gets one 65% successful-reel chance and one 35% miss chance.
 
-Remove `FishingTask`'s independent `ticks` catch timer and the current hidden post-wait random miss. The current code succeeds when `random.nextFloat() >= 0.35F`, so it has a 35% miss / 65% catch roll. That roll must disappear from the new design.
+Remove `FishingTask`'s independent 200-399 tick catch timer, but preserve that exact `>= 0.35F` roll. Move it to the first tick of each real bite instead of running it on an unrelated chore timer.
 
-The bobber's biting/nibble state is the only catch trigger. MCA reels immediately when `isBiting()` becomes true, so under normal AI operation every real bite is successfully caught. If a bite expires before the reel for any reason, clear biting and return to the lure cycle without generating loot, matching vanilla's timing rule.
+The bobber's biting/nibble state is the only catch opportunity. When `isBiting()` first becomes true, `FishingTask` rolls once for that bite. On success, the villager reels during the active nibble window and vanilla retrieval semantics apply: loot is generated because retrieval happened while `nibble > 0`. On failure, mark that bite as already attempted and let the nibble window expire naturally without loot or rod damage. Do not reroll every tick of the same bite.
 
 The normal catch path is:
 
-1. `FishingTask` sees its owned bobber biting.
-2. The villager swings/reels immediately.
-3. `FishingTask` calls the existing MCA fishing-loot path exactly once.
+1. `FishingTask` sees its owned bobber enter a new bite.
+2. It rolls the origin/1.21.1 catch predicate exactly once: `random.nextFloat() >= 0.35F`.
+3. On success, the villager swings/reels immediately and `FishingTask` calls the existing MCA fishing-loot path exactly once.
 4. One real caught item is spawned at the bobber.
 5. The rod takes one point of durability damage.
 6. The bobber is removed.
 7. The caught item visibly flies toward the villager.
-8. After delivery, the next fishing cycle may cast again.
+8. On a failed roll, the bite simply expires with no loot or durability loss; the bobber then returns to the lure cycle.
+9. After a successful reel item is delivered, the next fishing cycle may cast again.
 
-Do not introduce a second success roll after the bite. Catch success comes from retrieving during the real nibble window, matching vanilla.
+There is exactly one origin chance roll per bite. A successful roll must reel while the vanilla-style nibble window is active; a failed roll must not retry until a later bite.
 
 ## Visible caught-item reel
 
@@ -196,6 +197,7 @@ private BlockPos targetWater;
 private MCAFishingBobberEntity bobber;
 private ItemEntity reelItem;
 private int reelTicks;
+private boolean biteAttempted;
 ```
 
 There is no independent catch timer.
@@ -209,9 +211,10 @@ While fishing:
 3. approach the target as today;
 4. when in cast range, stop navigation, face the target, and cast one bobber if none is active;
 5. let the bobber own waiting, approach particles, and biting;
-6. when `bobber.isBiting()` becomes true, reel exactly once;
-7. while `reelItem` exists, do not cast a second bobber;
-8. after the reel item is delivered/cleared, allow the next cast.
+6. when a new `bobber.isBiting()` window begins, roll the origin 65%/35% catch chance exactly once;
+7. on success, reel immediately; on failure, let that bite expire without rerolling;
+8. while `reelItem` exists, do not cast a second bobber;
+9. after the reel item is delivered/cleared, allow the next cast.
 
 One villager must never own multiple active bobbers or multiple in-flight reel items.
 
@@ -321,7 +324,8 @@ At minimum cover:
 - fishing remains active beyond the inherited 400-tick boundary;
 - one fishing villager cannot accumulate multiple bobbers;
 - the bobber reaches a bite and exposes biting state;
-- a bite causes exactly one loot generation/reel, with no post-bite random failure;
+- each bite receives exactly one origin/1.21.1 `>= 0.35F` catch roll;
+- a successful bite roll causes exactly one loot generation/reel, while a failed bite produces no loot or rod damage and cannot reroll during the same nibble window;
 - reel creation removes the bobber and damages the rod once;
 - a tracked reel item transfers exactly once to villager inventory and cannot duplicate if removed early;
 - stopping during bobbing cleans up the bobber;
@@ -340,7 +344,7 @@ Run live 1.21.1 checks on both Fabric and NeoForge:
 3. leave fishing active well beyond 400 ticks and confirm no periodic rod/bobber de-equip;
 4. verify waiting splashes occur before the visible approach trail;
 5. verify the paired fishing wake/bubble trail converges on the bobber;
-6. verify the bite visibly dips the bobber and immediately leads to a catch;
+6. verify the bite visibly dips the bobber; successful origin-chance rolls reel a catch, while failed rolls let that bite expire before the next lure cycle;
 7. verify the caught item visibly travels from hook toward villager and ends in MCA inventory once;
 8. verify rod durability decreases once per catch;
 9. test rod breakage and no-spare-rod abandonment;
@@ -378,8 +382,8 @@ Expected modifications:
   - synchronized biting state and bite dip
   - water-surface movement refinement
 - `common/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/FishingTask.java`
-  - remove independent catch timer/miss roll
-  - reel on real bite
+  - remove the independent catch timer while preserving origin's 65%/35% roll
+  - roll once per real bite and reel only successful bite attempts
   - real caught-item flight/delivery state
   - cleanup and durability integration
 - `common/src/main/java/net/conczin/mca/client/render/MCAFishingBobberRenderer.java`
@@ -405,8 +409,8 @@ The feature is complete on 1.21.1 only when all of the following are true:
 
 - cast remains targeted at MCA-selected water;
 - bobber shows vanilla-shaped wait/approach/bite feedback;
-- every real bite reeled by the villager generates exactly one catch;
-- there is no hidden post-bite miss roll;
+- every real bite gets exactly one origin/1.21.1 65% catch / 35% miss roll;
+- successful bite rolls generate exactly one catch, failed bite rolls generate none, and the same bite is never rerolled;
 - caught loot visibly flies from the bobber toward the villager as a real item and is delivered once;
 - the line visibly attaches to the rendered rod/hand for both arm sides and representative MCA scaling;
 - fishing no longer periodically de-equips at the inherited 400-tick boundary;

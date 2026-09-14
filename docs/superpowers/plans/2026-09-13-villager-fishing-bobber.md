@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Upgrade MCA 1.21.1 villager fishing so the bobber uses vanilla-shaped lure/bite feedback, every real bite produces one protected caught item that visibly reels to the villager, and the fishing line attaches to the actually rendered rod/hand.
+**Goal:** Upgrade MCA 1.21.1 villager fishing so the bobber uses vanilla-shaped lure/bite feedback, origin/1.21.1's 65% catch chance is applied once per real bite, successful catches visibly reel one protected item to the villager, and the fishing line attaches to the actually rendered rod/hand.
 
 **Architecture:** Keep the existing MCA-owned `MCAFishingBobberEntity` because vanilla `FishingHook` is player-bound, but reuse vanilla APIs and algorithms everywhere the ownership boundary allows it. The bobber owns vanilla-shaped bobbing/lure/bite state; `FishingTask` only orchestrates water, loot, reel delivery, durability, and cleanup; a villager render layer derives the line anchor from `HumanoidModel.translateToHand(...)` and vanilla `ItemInHandLayer` transforms; the bobber renderer becomes billboard-only.
 
@@ -18,7 +18,7 @@
 - Reuse vanilla generic APIs directly: inherited projectile ownership/movement, `SynchedEntityData`, `ParticleTypes`, `SoundEvents.FISHING_BOBBER_SPLASH`, `ItemEntity`, `ItemEntity.setNeverPickUp()`, `SimpleContainer.addItem(...)`, `HumanoidModel.translateToHand(...)`, vanilla held-item transforms, hook texture, and line geometry.
 - Adapt only the narrow vanilla logic that is private or player-bound. Do not add mixins/invokers solely to reach private fishing helpers.
 - Use vanilla base fishing timing ranges: lure wait 100-600 ticks, approach 20-80 ticks, bite window 20-40 ticks. Do not add vanilla open-water checks, rain/sky timing modifiers, Lure/Luck mechanics, hooked-entity behavior, player XP/stats/criteria, or fake players.
-- Use vanilla catch timing: fishing loot is produced only when the hook is retrieved during the active nibble/bite window. The villager reels immediately on `isBiting()`, so normal AI operation catches every real bite without a separate success roll. Remove the current independent 200-399 tick timer and hidden 35% miss / 65% catch roll.
+- Use vanilla catch timing for the real bite window, but preserve origin/1.21.1's catch chance: on the first tick of each bite, roll exactly once with `random.nextFloat() >= 0.35F`. Success reels during the nibble window; failure lets that bite expire without loot or rod damage. Remove only the independent 200-399 tick catch timer.
 - The in-flight caught stack exists in exactly one real `ItemEntity`; do not insert a duplicate into inventory while it is flying.
 - Call `ItemEntity.setNeverPickUp()` immediately when the reel item is created. While MCA owns that reel, player/mob pickup and normal item-entity merging must remain disabled by vanilla pickup-delay behavior.
 - Release pickup protection only when the reel has ended: inventory remainder, owner death/removal, or lost task ownership. Use `setNoPickUpDelay()` then leave the one real remainder as a normal world drop.
@@ -39,8 +39,8 @@
   - port the visible vanilla lure/approach/bite cycle
   - use vanilla-shaped bobbing stabilization and bite dip
 - `common/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/FishingTask.java`
-  - remove the independent timer and miss roll
-  - reel on `bobber.isBiting()`
+  - remove the independent timer and move origin's 65%/35% roll to real bites
+  - roll once per `bobber.isBiting()` window and reel successful attempts
   - create/protect/deliver one vanilla `ItemEntity`
   - keep catch cleanup and rod durability single-owned
 - `common/src/main/java/net/conczin/mca/client/render/MCAFishingBobberRenderer.java`
@@ -304,7 +304,7 @@ git commit -m "feat: add vanilla-style villager fishing bites"
 
 ---
 
-### Task 2: Reel every bite through one protected vanilla `ItemEntity`
+### Task 2: Apply origin catch chance to real bites and protect successful reel items
 
 **Files:**
 - Modify: `common/src/main/java/net/conczin/mca/entity/ai/brain/tasks/chore/FishingTask.java`
@@ -312,7 +312,7 @@ git commit -m "feat: add vanilla-style villager fishing bites"
 
 **Interfaces:**
 - Consumes: `MCAFishingBobberEntity.isBiting()` from Task 1
-- Produces task state: `ItemEntity reelItem`, `int reelTicks`
+- Produces task state: `ItemEntity reelItem`, `int reelTicks`, `boolean biteAttempted`
 - Preserves: `getFishingLoot(ServerLevel, VillagerEntityMCA)` and MCA loot context
 - Uses vanilla API: `ItemEntity.setNeverPickUp()`, `ItemEntity.setNoPickUpDelay()`, `SimpleContainer.addItem(...)`
 
@@ -331,7 +331,7 @@ public static void biteReelsOneProtectedItemIntoInventory(GameTestHelper helper)
     BlockPos villagerPos = helper.absolutePos(new BlockPos(3, 2, 3));
     prepareWater(helper, villagerPos.east(2));
     VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
-    TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL));
+    TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL), true);
     Player thief = helper.makeMockPlayer(GameType.SURVIVAL);
     AtomicBoolean sawProtectedReel = new AtomicBoolean();
     int startingLoot = countCaughtItems(villager);
@@ -377,7 +377,88 @@ private static int countCaughtItems(VillagerEntityMCA villager) {
 }
 ```
 
-This test exercises the real task/bobber path and directly calls vanilla `playerTouch(...)` on the in-flight item to prove the pickup delay protects it from a competing player.
+This test exercises the real task/bobber path with the origin chance forced to its successful branch and directly calls vanilla `playerTouch(...)` on the in-flight item to prove the pickup delay protects it from a competing player.
+
+Keep existing one-argument `TestFishingTask(...)` callers working, and add an optional deterministic catch-result override for the new success/miss regressions:
+
+```java
+private static final class TestFishingTask extends FishingTask {
+    private final Player assigningPlayer;
+    private final Boolean forcedBiteResult;
+
+    private TestFishingTask(Player assigningPlayer) {
+        this(assigningPlayer, null);
+    }
+
+    private TestFishingTask(Player assigningPlayer, Boolean forcedBiteResult) {
+        this.assigningPlayer = assigningPlayer;
+        this.forcedBiteResult = forcedBiteResult;
+    }
+
+    @Override
+    boolean shouldReelBite(VillagerEntityMCA villager) {
+        return forcedBiteResult != null ? forcedBiteResult : super.shouldReelBite(villager);
+    }
+
+    // Keep the existing getAssigningPlayer(), abandonJobWithMessage(...), and isTimedOut(...) overrides.
+}
+```
+
+The production method still uses the real origin predicate; this override exists only so GameTests can prove both sides without probabilistic flakes.
+
+Add a second regression for the 35% miss branch:
+
+```java
+@GameTest(
+        batch = "mca_fishing_miss",
+        templateNamespace = "minecraft",
+        template = "bastion/blocks/air",
+        timeoutTicks = 900
+)
+public static void failedOriginCatchRollLetsBiteExpireWithoutLoot(GameTestHelper helper) {
+    BlockPos villagerPos = helper.absolutePos(new BlockPos(3, 2, 3));
+    prepareWater(helper, villagerPos.east(2));
+    VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
+    TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL), false);
+    AtomicBoolean sawBite = new AtomicBoolean();
+    int startingLoot = countCaughtItems(villager);
+    int startingRodDamage = villager.getItemInHand(villager.getDominantHand()).getDamageValue();
+
+    task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
+    helper.onEachTick(() -> {
+        task.tick(helper.getLevel(), villager, helper.getLevel().getGameTime());
+        MCAFishingBobberEntity active = activeBobber(helper, villager);
+        if (active != null && active.isBiting()) {
+            sawBite.set(true);
+        }
+    });
+
+    helper.succeedWhen(() -> {
+        MCAFishingBobberEntity active = activeBobber(helper, villager);
+        helper.assertTrue(sawBite.get(), "forced miss never reached a real bite");
+        helper.assertTrue(active != null && !active.isBiting(), "failed bite did not expire back to waiting");
+        helper.assertTrue(countCaughtItems(villager) == startingLoot, "failed origin catch roll produced loot");
+        helper.assertTrue(activeReelItems(helper, villager).isEmpty(), "failed origin catch roll spawned a reel item");
+        helper.assertTrue(
+                villager.getItemInHand(villager.getDominantHand()).getDamageValue() == startingRodDamage,
+                "failed origin catch roll damaged the fishing rod"
+        );
+    });
+}
+```
+
+Add a small test helper that resolves the one owned active bobber without introducing production state:
+
+```java
+private static MCAFishingBobberEntity activeBobber(GameTestHelper helper, VillagerEntityMCA villager) {
+    return helper.getLevel()
+            .getEntitiesOfClass(MCAFishingBobberEntity.class, villager.getBoundingBox().inflate(32.0D))
+            .stream()
+            .filter(entity -> !entity.isRemoved() && entity.getVillagerOwner() == villager)
+            .findFirst()
+            .orElse(null);
+}
+```
 
 - [ ] **Step 2: Run the GameTest server and verify RED**
 
@@ -405,6 +486,7 @@ private static final double REEL_DELIVERY_DISTANCE_SQR = 1.5 * 1.5;
 
 private ItemEntity reelItem;
 private int reelTicks;
+private boolean biteAttempted;
 ```
 
 At the top of `tick(...)`, process an already-earned reel before checking for another rod/cast:
@@ -417,7 +499,7 @@ if (tickReelItem(villager)) {
 
 This ordering lets a bite that already earned loot finish even if that catch broke the villager's last rod. After the reel finishes, the normal next tick can equip a spare rod or abandon fishing.
 
-Delete all `ticks` resets and the current block containing:
+Delete all `ticks` resets and the current timer block containing:
 
 ```java
 if (ticks >= villager.level().random.nextInt(200) + 200) {
@@ -428,15 +510,40 @@ if (ticks >= villager.level().random.nextInt(200) + 200) {
 }
 ```
 
-Replace the bobbing decision with:
+Add the origin/1.21.1 catch predicate as one narrow method so GameTests can force each branch deterministically:
 
 ```java
-if (bobber.isBiting()) {
-    beginReel(world, villager);
+boolean shouldReelBite(VillagerEntityMCA villager) {
+    return villager.getRandom().nextFloat() >= 0.35F;
 }
 ```
 
-No second random success check is allowed after `isBiting()` becomes true. This mirrors vanilla `FishingHook.retrieve(...)`: fishing loot is created when retrieval happens during the active nibble window; an expired bite returns to the lure cycle without loot.
+Replace the bobbing decision with one roll per nibble window:
+
+```java
+if (!bobber.isBiting()) {
+    biteAttempted = false;
+} else if (!biteAttempted) {
+    biteAttempted = true;
+    if (shouldReelBite(villager)) {
+        beginReel(world, villager);
+    }
+}
+```
+
+This preserves origin's exact 65% success / 35% miss predicate while tying it to a real vanilla-style bite. A failed attempt leaves the hook in its current nibble window; `biteAttempted` prevents repeated rolls until biting clears and a later bite begins. Reset `biteAttempted` whenever the bobber is discarded/recast or task state is cleared.
+
+Update `discardBobber()` so ownership reset is explicit:
+
+```java
+private void discardBobber() {
+    if (bobber != null && !bobber.isRemoved()) {
+        bobber.discard();
+    }
+    bobber = null;
+    biteAttempted = false;
+}
+```
 
 - [ ] **Step 4: Spawn the caught item using vanilla `FishingHook.retrieve(...)` velocity and vanilla pickup protection**
 
@@ -562,7 +669,7 @@ public static void fullInventoryReleasesOnlyTheRealReelRemainder(GameTestHelper 
         villager.getInventory().setItem(slot, new ItemStack(Blocks.STONE, 64));
     }
 
-    TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL));
+    TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL), true);
     task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
     helper.onEachTick(() -> task.tick(helper.getLevel(), villager, helper.getLevel().getGameTime()));
 
@@ -585,7 +692,7 @@ Run:
 ./gradlew :neoforge:runGameTestServer --no-configuration-cache
 ```
 
-Expected: compilation succeeds; all GameTests pass; `mca_fishing_reel` observes a protected real item before inventory delivery; `mca_fishing_reel_remainder` leaves one normal remainder when inventory is full.
+Expected: compilation succeeds; all GameTests pass; `mca_fishing_reel` proves the forced-success branch creates one protected real item, `mca_fishing_miss` proves a forced miss produces no loot/item/durability and does not reroll the same bite, and `mca_fishing_reel_remainder` leaves one normal remainder when inventory is full.
 
 - [ ] **Step 9: Commit only Task 2 files**
 
