@@ -204,6 +204,30 @@ class RoomPartitionerTest {
     }
 
     @Test
+    void doorWithKnownFacingButSolidFacingSideUsesDeterministicAdjacentRoom() {
+        BlockPos door = new BlockPos(1, 64, 1);
+        BlockPos north = new BlockPos(1, 64, 0);
+        BlockPos south = new BlockPos(1, 64, 2);
+        FloorGeometry geometry = geometry(Set.of(
+                cell(0, 64, 0), cell(1, 64, 0), cell(2, 64, 0),
+                cell(1, 64, 1),
+                cell(0, 64, 2), cell(1, 64, 2), cell(2, 64, 2), cell(3, 64, 2)),
+                Map.of(door, FloorConnector.Type.DOOR));
+
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(
+                geometry, transitions(geometry), Map.of(door, Direction.WEST));
+        RoomPartitioner.Component owner = components.stream()
+                .filter(component -> component.contains(door))
+                .findFirst().orElseThrow();
+
+        assertEquals(2, components.size(),
+                "a real door whose FACING side is solid must not become a one-cell Room");
+        assertTrue(owner.contains(south),
+                "door should fall back to the larger adjacent Room when its FACING side is not a Floor cell");
+        assertFalse(owner.contains(north));
+    }
+
+    @Test
     void doorWithoutOwnerSideDoesNotFallBackToLargerAdjacentRoom() {
         BlockPos door = new BlockPos(2, 64, 0);
         FloorGeometry geometry = geometry(Set.of(

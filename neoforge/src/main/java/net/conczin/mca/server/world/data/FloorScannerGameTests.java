@@ -689,6 +689,11 @@ public final class FloorScannerGameTests {
                 "upper ladder floor scan failed: " + upper.result());
         helper.assertTrue(lower.floor().connectorTypesByCell().containsValue(FloorConnector.Type.LADDER),
                 "lower floor lost ladder connector metadata");
+        long lowerLadderMarkers = lower.floor().connectorTypesByCell().values().stream()
+                .filter(type -> type == FloorConnector.Type.LADDER)
+                .count();
+        helper.assertTrue(lowerLadderMarkers == 1,
+                "one physical ladder column produced " + lowerLadderMarkers + " lower-floor connector markers");
         helper.assertTrue(upper.floor().connectorTypesByCell().values().stream()
                         .anyMatch(type -> type == FloorConnector.Type.LADDER || type == FloorConnector.Type.TRAPDOOR),
                 "upper floor lost vertical connector metadata");
