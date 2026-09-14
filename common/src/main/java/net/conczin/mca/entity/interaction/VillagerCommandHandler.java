@@ -6,6 +6,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Chore;
 import net.conczin.mca.entity.ai.Memories;
 import net.conczin.mca.entity.ai.MoveState;
+import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.registry.CriterionMCA;
@@ -38,8 +39,25 @@ import java.util.Comparator;
 import java.util.Optional;
 
 public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityMCA> {
+    enum ProcreateDecision {
+        LOW_HEARTS,
+        INFERTILE,
+        TOO_SOON,
+        START
+    }
+
     public VillagerCommandHandler(VillagerEntityMCA entity) {
         super(entity);
+    }
+
+    static ProcreateDecision decideProcreation(int hearts, boolean infertile, boolean cooldownReady) {
+        if (hearts < 100) {
+            return ProcreateDecision.LOW_HEARTS;
+        }
+        if (infertile) {
+            return ProcreateDecision.INFERTILE;
+        }
+        return cooldownReady ? ProcreateDecision.START : ProcreateDecision.TOO_SOON;
     }
 
     private static boolean canRideMount(Entity mount) {
@@ -139,12 +157,17 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 entity.getRelationships().getFamilyEntry().replaceParents(parentNode, parentSpouse);
             }
             case "procreate" -> {
-                if (memory.getHearts() < 100) {
-                    entity.sendChatMessage(player, "interaction.procreate.fail.lowhearts");
-                } else if (entity.getRelationships().mayProcreateAgain(player.level().getGameTime())) {
-                    entity.getRelationships().startProcreating(player.level().getGameTime());
-                } else {
-                    entity.sendChatMessage(player, "interaction.procreate.fail.toosoon");
+                long gameTime = player.level().getGameTime();
+                ProcreateDecision decision = decideProcreation(
+                        memory.getHearts(),
+                        entity.getTraits().hasTrait(Traits.INFERTILE),
+                        entity.getRelationships().mayProcreateAgain(gameTime)
+                );
+                switch (decision) {
+                    case LOW_HEARTS -> entity.sendChatMessage(player, "interaction.procreate.fail.lowhearts");
+                    case INFERTILE -> entity.sendChatMessage(player, "interaction.procreate.fail.infertile");
+                    case TOO_SOON -> entity.sendChatMessage(player, "interaction.procreate.fail.toosoon");
+                    case START -> entity.getRelationships().startProcreating(gameTime);
                 }
                 return true;
             }
