@@ -5,11 +5,18 @@
 * Internal Changes: MCA Age is now calculated using GameTime instead of syncing every tick.
 * Improved villager bed pathfinding and sleeping reliability.
 * Improved ladder climbing and ladder-to-floor transitions.
+* Improved floor/storey scoping and enclosure filtering for irregular, stacked, and uneven buildings.
+* Reworked villager mourning so ambient groups respect work, rest, chore, follow/stay, danger, and loaded-grave constraints.
 * Fixed workplace assignment and job POI ownership.
 * Fixed duplicate villager residency and bed ownership.
 * Improved HOME POI validation and repaired invalid resident-home assignments.
+* Improved compatibility with vanilla-style modded beds by registering them as HOME POIs when needed.
 * Fixed residents being assigned to the wrong building.
 * Fixed villager age scaling at growth-stage boundaries.
+* Fixed babies sitting too low in cribs.
+* Fixed golden apples aging child villagers by the wrong amount.
+* Preserved baby zombie villager age when converting to MCA zombie villagers.
+* Fixed flirty personality dialogue overriding parent/child dialogue for the player's children.
 
 # 8.1.11
 
