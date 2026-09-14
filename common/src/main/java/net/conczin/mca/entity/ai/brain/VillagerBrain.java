@@ -19,15 +19,16 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.behavior.EntityTracker;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.schedule.Activity;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
-
-import static net.conczin.mca.entity.ai.MemoryModuleTypeMCA.LAST_GRIEVE;
 
 /**
  * Handles memory and complex bodily functions. Such as walking, and not being a nitwit.
@@ -44,9 +45,6 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
 
     private static final int PANIC_ANIMATION_HOLD_TICKS = 20;
     private static final float PANIC_ANIMATION_STEP = 0.25F;
-    private static final long GRIEVE_COOLDOWN = 24000 * 7;
-    private static final long GRIEVE_RETRY_DELAY = 1200L;
-    private final Random random = new Random();
     private final E entity;
     private int panicAnimationHoldTicks;
     private float panicAnimationProgress;
@@ -171,11 +169,19 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         CompoundTag compoundTag = nbt.getCompound(player.getUUID().toString()).orElseGet(CompoundTag::new);
         Memories returnMemories = Memories.fromCNBT(entity, compoundTag);
         if (returnMemories == null) {
-            returnMemories = new Memories(this, player.level().getGameTime(), player.getUUID());
+            returnMemories = new Memories(
+                    this,
+                    memoryClockTime(player.level().getGameTime(), player.level().getOverworldClockTime()),
+                    player.getUUID()
+            );
             nbt.put(player.getUUID().toString(), returnMemories.toCNBT());
             entity.setTrackedValue(MEMORIES, nbt);
         }
         return returnMemories;
+    }
+
+    static long memoryClockTime(long gameTime, long overworldClockTime) {
+        return overworldClockTime;
     }
 
     public Personality getPersonality() {
@@ -235,6 +241,8 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     }
 
     public void setMoveState(MoveState state, @Nullable Player leader) {
+        Optional<LivingEntity> combatWalkTarget = getCombatWalkTargetToRestore(state);
+        boolean refreshBrain = true;
         entity.setTrackedValue(MOVE_STATE, state);
         if (state == MoveState.MOVE) {
             entity.getBrain().eraseMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING);
@@ -248,9 +256,26 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
             entity.getBrain().setMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING, leader);
             entity.getBrain().eraseMemory(MemoryModuleTypeMCA.STAYING);
             abandonJob();
+            refreshBrain = false;
         }
 
-        resetsBrain();
+        if (refreshBrain) {
+            resetsBrain();
+        }
+        combatWalkTarget.ifPresent(this::restoreCombatWalkTarget);
+    }
+
+    private Optional<LivingEntity> getCombatWalkTargetToRestore(MoveState state) {
+        if (state == MoveState.FOLLOW && entity.asEntity() instanceof VillagerEntityMCA villager && villager.isGuard()) {
+            return villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET)
+                    .filter(target -> target.isAlive() && target.level() == villager.level());
+        }
+        return Optional.empty();
+    }
+
+    private void restoreCombatWalkTarget(LivingEntity target) {
+        entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
+        entity.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(new EntityTracker(target, false), 0.75F, 0));
     }
 
     private void resetsBrain() {
@@ -265,28 +290,6 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
 
     public void setArmorWear(boolean s) {
         entity.setTrackedValue(WEAR_ARMOR, s);
-    }
-
-    public void setGrieving() {
-        entity.getBrain().setMemory(LAST_GRIEVE, -GRIEVE_COOLDOWN);
-    }
-
-    public void retryGrievingLater() {
-        entity.getBrain().setMemory(LAST_GRIEVE, entity.level().getGameTime() - GRIEVE_COOLDOWN + GRIEVE_RETRY_DELAY);
-    }
-
-    public void justGrieved() {
-        entity.getBrain().setMemory(LAST_GRIEVE, entity.level().getGameTime());
-    }
-
-    public boolean shouldGrieve() {
-        Optional<Long> memory = entity.getBrain().getMemoryInternal(LAST_GRIEVE);
-        if (memory.isPresent()) {
-            return entity.level().getGameTime() - memory.get() > GRIEVE_COOLDOWN;
-        } else {
-            entity.getBrain().setMemory(LAST_GRIEVE, entity.level().getGameTime() - random.nextLong(GRIEVE_COOLDOWN));
-            return false;
-        }
     }
 
     /**

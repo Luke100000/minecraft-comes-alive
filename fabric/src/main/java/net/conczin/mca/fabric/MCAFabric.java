@@ -80,6 +80,7 @@ public final class MCAFabric implements ModInitializer {
         FabricEntityDataRegistry.register(MCAEntityDataSerializers.COMPOUND_TAG_ID, MCAEntityDataSerializers.COMPOUND_TAG);
         FabricEntityDataRegistry.register(MCAEntityDataSerializers.OPTIONAL_UUID_ID, MCAEntityDataSerializers.OPTIONAL_UUID);
 
+        BedPoiCompatibilityFabric.init();
         registerHelper(BuiltInRegistries.ITEM, ItemsMCA::registerItems);
         registerHelper(BuiltInRegistries.BLOCK, BlocksMCA::registerBlocks);
         registerHelper(BuiltInRegistries.SOUND_EVENT, SoundsMCA::registerSounds);

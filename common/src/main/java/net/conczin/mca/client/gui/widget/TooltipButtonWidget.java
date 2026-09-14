@@ -3,14 +3,13 @@ package net.conczin.mca.client.gui.widget;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
 
 public class TooltipButtonWidget extends ButtonWidget {
     public TooltipButtonWidget(int x, int y, int width, int height, String message, OnPress onPress) {
         super(x, y, width, height, Component.translatable(message), onPress, Component.translatable(message + ".tooltip"));
     }
 
-    public TooltipButtonWidget(int x, int y, int width, int height, MutableComponent message, MutableComponent tooltip, OnPress onPress) {
+    public TooltipButtonWidget(int x, int y, int width, int height, Component message, Component tooltip, OnPress onPress) {
         super(x, y, width, height, message, onPress, tooltip);
     }
 

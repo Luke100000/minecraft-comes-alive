@@ -3,6 +3,7 @@ package net.conczin.mca.registry;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.CribEntity;
 import net.conczin.mca.entity.GrimReaperEntity;
+import net.conczin.mca.entity.MCAFishingBobberEntity;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ZombieVillagerEntityMCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
@@ -48,6 +49,14 @@ public interface EntitiesMCA {
             .of(CribEntity::new, MobCategory.MISC)
             .sized(1.2F, 1.0F)
             .fireImmune()
+    );
+    EntityType<MCAFishingBobberEntity> FISHING_BOBBER = register("fishing_bobber", EntityType.Builder
+            .<MCAFishingBobberEntity>of(MCAFishingBobberEntity::new, MobCategory.MISC)
+            .noSave()
+            .noSummon()
+            .sized(0.25F, 0.25F)
+            .clientTrackingRange(4)
+            .updateInterval(5)
     );
 
     static <T extends LivingEntity> EntityType<T> register(String name, EntityType.Builder<T> builder, Supplier<AttributeSupplier.Builder> attributes) {

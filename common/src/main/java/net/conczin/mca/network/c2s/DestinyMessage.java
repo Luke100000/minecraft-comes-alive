@@ -27,6 +27,7 @@ import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.level.storage.WritableLevelData;
 
 public record DestinyMessage(String location, boolean isClosing) implements HandleablePayload {
+    private static final TicketType DESTINY_TELEPORT_TICKET = new TicketType(5L, TicketType.FLAG_LOADING);
     public static final CustomPacketPayload.Type<DestinyMessage> TYPE = new CustomPacketPayload.Type<>(MCA.locate("destiny_message"));
     public static final StreamCodec<FriendlyByteBuf, DestinyMessage> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.STRING_UTF8, DestinyMessage::location,
@@ -63,6 +64,10 @@ public record DestinyMessage(String location, boolean isClosing) implements Hand
         return "somewhere".equals(location);
     }
 
+    static TicketType destinyTeleportTicket() {
+        return DESTINY_TELEPORT_TICKET;
+    }
+
     private void handleBlockPos(ServerPlayer player, BlockPos pos) {
         ServerLevel level = player.level();
         level.getChunkAt(pos);
@@ -78,7 +83,7 @@ public record DestinyMessage(String location, boolean isClosing) implements Hand
             return;
         }
         ChunkPos chunkPos = ChunkPos.containing(pos);
-        level.getChunkSource().addTicketWithRadius(TicketType.PLAYER_LOADING, chunkPos, 1);
+        level.getChunkSource().addTicketWithRadius(DESTINY_TELEPORT_TICKET, chunkPos, 1);
         player.connection.teleport(pos.getX(), pos.getY(), pos.getZ(), player.getYRot(), player.getXRot());
         player.setRespawnPosition(new ServerPlayer.RespawnConfig(LevelData.RespawnData.of(player.level().dimension(), pos, 0.0f, 0.0f), true), false);
         if (level.getServer().isSingleplayerOwner(player.nameAndId()) && level.getLevelData() instanceof WritableLevelData levelData) {

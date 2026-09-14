@@ -1,6 +1,7 @@
 package net.conczin.mca.client.gui;
 
 import com.google.common.collect.Lists;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
@@ -9,7 +10,11 @@ import java.util.List;
 
 public class ExtendedScreen extends Screen {
     protected ExtendedScreen(Component title) {
-        super(title);
+        this(Minecraft.getInstance(), title);
+    }
+
+    private ExtendedScreen(Minecraft minecraft, Component title) {
+        super(minecraft, minecraft == null ? null : minecraft.font, title);
     }
 
     public int getTooltipWidth(List<Component> lines_) {

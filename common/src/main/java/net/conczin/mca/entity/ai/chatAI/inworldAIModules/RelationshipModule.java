@@ -4,6 +4,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.entity.ai.chatAI.inworldAIModules.api.Interaction;
 import net.conczin.mca.entity.ai.chatAI.inworldAIModules.api.TriggerEvent;
+import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
@@ -22,18 +23,18 @@ public class RelationshipModule {
      */
     public void updateRelationship(Interaction interaction, ServerPlayer player, VillagerEntityMCA villager) {
         Interaction.RelationshipUpdate update = interaction.relationshipUpdate();
+        AgeState ageState = villager.getAgeState();
+        boolean suppressRomanticFields = ageState == AgeState.BABY
+                || ageState == AgeState.TODDLER
+                || ageState == AgeState.CHILD
+                || Relationship.IS_RELATIVE.test(villager, player);
+        villager.getVillagerBrain().rewardHearts(player, calculateHeartDelta(update, suppressRomanticFields));
+    }
 
-        // Get total, with different weights applied to different relationship values
-        // Can be customized if certain parameters seem more important for heart levels
-        int weightedTotal = update.trust()
-                            + update.respect()
-                            + update.familiar()
-                            + update.flirtatious()
-                            + update.attraction();
-
-        int heartsUpdate = weightedTotal / 10;
-
-        villager.getVillagerBrain().rewardHearts(player, heartsUpdate);
+    static int calculateHeartDelta(Interaction.RelationshipUpdate update, boolean suppressRomanticFields) {
+        int flirtatious = suppressRomanticFields ? 0 : update.flirtatious();
+        int attraction = suppressRomanticFields ? 0 : update.attraction();
+        return (update.trust() + update.respect() + update.familiar() + flirtatious + attraction) / 10;
     }
 
     /**
