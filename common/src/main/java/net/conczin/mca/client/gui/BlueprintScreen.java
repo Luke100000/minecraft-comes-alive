@@ -651,9 +651,8 @@ public class BlueprintScreen extends ExtendedScreen {
         Integer selectedFloor = selectedFloorOrdinal;
 
         if (!village.isAutoScan() && structureCount <= 1) {
-            int hintY = floorOrdinals.size() > 1 ? height / 2 + 134 : height / 2 + 90;
             context.drawCenteredString(font, Component.translatable("gui.blueprint.autoScanDisabled"),
-                    width / 2, hintY, 0xaaffffff);
+                    width / 2, height / 2 - 112, 0xaaffffff);
         }
 
         LocalPlayer player = minecraft == null ? null : minecraft.player;

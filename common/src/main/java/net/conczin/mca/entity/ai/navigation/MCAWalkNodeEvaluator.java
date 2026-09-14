@@ -244,7 +244,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         }
 
         BlockState state = context.getBlockState(this.climbablePos.set(x, y, z));
-        if (PathingBlockInteraction.isFenceGate(state)
+        if (PathingBlockInteraction.canInteractWithFenceGate(state)
                 && !state.getValue(BlockStateProperties.OPEN)) {
             // Vanilla treats closed fence gates as FENCE, so a path can never contain
             // the gate node for SmarterOpenDoorsTask to open. Treat hand-operated gates

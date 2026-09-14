@@ -4,7 +4,8 @@
 * Major building, floor and room detection improvements.
   * Reworked buildings around exact floor cells for more reliable multi-floor, stacked-floor, partial-height and irregular layouts.
   * Improved stairs, ladders, vertical connectors, doors, room splits/expansions, rescanning and external floor attachments.
-  * Fixed rooms and floors being attached to the wrong storey, overlapping unrelated floors or disappearing during updates.
+  * Floors and rooms now stay scoped to their exact storey during scans and updates, preventing unrelated floors from being merged together.
+  * Improved enclosure filtering so scans retain enclosed rooms while excluding exterior-connected areas and better separate uneven or stacked storeys.
   * Existing 7.7.36 building data is migrated to the new floor/room format when loaded.
   * Added an explicit **Remove Floor** action for empty floors.
   * Admin building-type changes now target the exact physical room the player is standing in.
@@ -21,6 +22,12 @@
   * Improved long-distance walking and transitions between floors.
   * Villagers now use exact room membership when deciding whether they have entered a target or favored building.
   * Smarter door/gate handling is now part of the normal pathfinding behaviour.
+* Reworked villager mourning at graveyards.
+  * Added the `enableMourning` config option to disable personal and ambient mourning entirely.
+  * Ambient mourning now happens in small groups of 2-4 villagers at random daytime intervals instead of large village-wide gatherings.
+  * Villagers will not abandon work, rest, chores, following/staying orders, danger responses or an existing mourning assignment for ambient mourning.
+  * Villagers who have not mourned recently are preferred, and only occupied graves in loaded chunks are considered so mourning does not force-load distant graveyards.
+  * Close family mourning remains tied to the deceased villager's exact grave, allowing family members to mourn together after a death.
 * Fixed the harvesting chore so villagers prioritise mature crops instead of wandering toward empty farmland.
   * Immature crops can be targeted for bonemeal before villagers move on to planting empty farmland.
   * Empty farmland is now only targeted when the villager actually has plantable seeds.
@@ -28,6 +35,7 @@
 * Fixed workplace assignment and job POI ownership.
 * Fixed duplicate villager residency and bed ownership.
 * Improved HOME POI validation and repaired invalid resident-home assignments.
+* Improved compatibility with vanilla-style modded beds by registering them as HOME POIs on Fabric and NeoForge when needed.
 * Fixed residents being assigned to the wrong building.
 * Improved **Set Home** so villagers can switch to an available bed near the player while safely retaining their existing bed when no new bed is available.
 * Improved archer combat movement.
@@ -41,6 +49,7 @@
   * AI requests now run asynchronously with request timeouts so remote calls do not block the server thread.
 * Improved Villager Editor profession changes so the edited villager data and profession are applied together and refreshed consistently.
 * Fixed villager age scaling at growth-stage boundaries.
+* Fixed babies sitting too low in cribs.
 * Fixed golden apples aging child villagers by the wrong amount; they now advance age by the intended 20 minutes.
 * Preserved baby zombie villager age when vanilla baby zombies are converted to MCA zombie villagers.
 * Fixed flirty personality dialogue overriding parent/child dialogue for the player's children.
