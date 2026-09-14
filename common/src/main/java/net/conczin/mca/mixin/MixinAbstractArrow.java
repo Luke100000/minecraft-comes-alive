@@ -1,12 +1,15 @@
 package net.conczin.mca.mixin;
 
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.registry.ProfessionsMCA;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -14,6 +17,13 @@ import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin(AbstractArrow.class)
 abstract class MixinAbstractArrow {
+    @ModifyReturnValue(method = "canHitEntity", at = @At("RETURN"))
+    private boolean mca$ignoreVillagersForArcherArrows(boolean original, Entity target) {
+        return original && !(Config.getServerConfig().archerArrowsIgnoreVillagers
+                && target instanceof Villager
+                && mca$getMcaArcherOwner() != null);
+    }
+
     @WrapOperation(
             method = "onHitEntity",
             at = @At(
