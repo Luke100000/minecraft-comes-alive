@@ -215,7 +215,7 @@ final class BlueprintMapGeometry {
                     for (StructureFloor floor : structure.getFloors()) {
                         if (floor.floorNumber() != selectedFloor) continue;
                         for (FloorConnector.Marker marker : floor.connectors()) {
-                            if (!ownedCells.contains(marker.pos())) continue;
+                            if (!ownedCells.contains(marker.floorCell())) continue;
                             ConnectorLayerKey key = new ConnectorLayerKey(
                                     logicalBuildingId, marker.pos().getX(), marker.pos().getZ(), marker.type());
                             layers.putIfAbsent(key, new MapConnectorLayer(logicalBuildingId, marker));

@@ -68,12 +68,12 @@ final class StructureConnector {
         return Map.copyOf(ownerSides);
     }
 
-    /** Returns connector metadata keyed only by exact cells already owned by this Floor. */
-    static Map<BlockPos, FloorConnector.Type> connectorTypesForFloor(
+    /** Returns physical connector markers together with the exact Floor cells that own them. */
+    static List<FloorConnector.Marker> connectorMarkersForFloor(
             Level world, Collection<BlockPos> connectors, FloorGeometry geometry) {
-        if (connectors.isEmpty() || geometry.cells().isEmpty()) return Map.of();
+        if (connectors.isEmpty() || geometry.cells().isEmpty()) return List.of();
 
-        LinkedHashMap<BlockPos, FloorConnector.Type> result = new LinkedHashMap<>();
+        LinkedHashMap<BlockPos, FloorConnector.Marker> result = new LinkedHashMap<>();
         for (BlockPos rawConnector : connectors) {
             BlockState rawState = world.getBlockState(rawConnector);
             BlockPos connector = normalize(rawConnector, rawState);
@@ -82,12 +82,36 @@ final class StructureConnector {
             if (type == null) continue;
             if (type.vertical()) {
                 verticalFloorMembershipCells(connector, state, geometry)
-                        .forEach(floorCell -> result.putIfAbsent(floorCell, type));
+                        .forEach(floorCell -> {
+                            FloorConnector.Marker candidate = new FloorConnector.Marker(
+                                    connector, type, floorCell);
+                            FloorConnector.Marker existing = result.get(floorCell);
+                            if (existing == null || closerToFloorCell(candidate, existing)) {
+                                result.put(floorCell, candidate);
+                            }
+                        });
             } else if (geometry.cellAt(connector).isPresent()) {
-                result.putIfAbsent(connector.immutable(), type);
+                result.putIfAbsent(connector.immutable(), new FloorConnector.Marker(connector, type));
             }
         }
+        return List.copyOf(result.values());
+    }
+
+    static Map<BlockPos, FloorConnector.Type> connectorTypesForFloor(
+            Level world, Collection<BlockPos> connectors, FloorGeometry geometry) {
+        LinkedHashMap<BlockPos, FloorConnector.Type> result = new LinkedHashMap<>();
+        for (FloorConnector.Marker marker : connectorMarkersForFloor(world, connectors, geometry)) {
+            result.putIfAbsent(marker.floorCell(), marker.type());
+        }
         return Map.copyOf(result);
+    }
+
+    private static boolean closerToFloorCell(FloorConnector.Marker candidate,
+                                             FloorConnector.Marker existing) {
+        int candidateDistance = Math.abs(candidate.pos().getY() - candidate.floorCell().getY());
+        int existingDistance = Math.abs(existing.pos().getY() - existing.floorCell().getY());
+        return candidateDistance < existingDistance
+                || candidateDistance == existingDistance && candidate.pos().getY() < existing.pos().getY();
     }
 
     private static Set<BlockPos> verticalFloorMembershipCells(
@@ -232,7 +256,10 @@ final class StructureConnector {
         LinkedHashSet<VerticalConnection> connections = new LinkedHashSet<>();
         for (FloorConnector.Marker marker : candidate.connectors()) {
             if (!marker.type().vertical()) continue;
-            List<BlockPos> column = verticalColumnAtFloorCell(world, candidate, marker.pos());
+            List<BlockPos> column = verticalColumnFromConnector(world, marker.pos());
+            if (column.isEmpty()) {
+                column = verticalColumnAtFloorCell(world, candidate, marker.floorCell());
+            }
             if (column.isEmpty()) continue;
             BlockPos connector = column.getFirst();
             long columnKey = FloorGeometry.columnKey(connector.getX(), connector.getZ());
