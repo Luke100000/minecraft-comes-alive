@@ -100,8 +100,8 @@ public class SpawnQueue {
         if (entity.isPersistenceRequired()) {
             villager.setPersistenceRequired();
         }
-        if (entity.isInvulnerable()) {
-            villager.setInvulnerable(true);
+        if (entity.isPermanentlyInvulnerable()) {
+            villager.setPermanentlyInvulnerable(true);
         }
         if (entity.isNoAi()) {
             villager.setNoAi(true);

@@ -134,7 +134,7 @@ public interface WorldUtils {
     }
 
     static boolean isChunkLoaded(ServerLevel world, Vec3i pos) {
-        return isChunkLoaded(world, new BlockPos(pos));
+        return isChunkLoaded(world, new BlockPos(pos.getX(), pos.getY(), pos.getZ()));
     }
 
     static boolean isChunkLoaded(ServerLevel world, BlockPos pos) {

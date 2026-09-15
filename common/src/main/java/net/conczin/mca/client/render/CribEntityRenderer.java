@@ -82,18 +82,18 @@ public class CribEntityRenderer extends EntityRenderer<CribEntity, CribEntityRen
 
         poseStack.pushPose();
         poseStack.translate(0.0, 0.375, 0.0);
-        poseStack.mulPose(Axis.YP.rotationDegrees(180.0F - state.yRot));
+        poseStack.rotateDegrees(Axis.YP, 180.0F - state.yRot);
         poseStack.scale(-1.0F, -1.0F, 1.0F);
-        poseStack.mulPose(Axis.YP.rotationDegrees(90.0F));
+        poseStack.rotateDegrees(Axis.YP, 90.0F);
 
         this.model.setupAnim(state);
-        submitNodeCollector.submitModel(this.model, state, poseStack, texture, state.lightCoords, OverlayTexture.NO_OVERLAY, state.outlineColor, null);
+        submitNodeCollector.submitModel(this.model, state, poseStack, texture, state.lightCoords, OverlayTexture.NO_OVERLAY, state.outlineColor);
 
         ItemStack babyItem = crib.getBabyItem();
         if (!babyItem.equals(ItemStack.EMPTY) && !state.babyItem.isEmpty()) {
             poseStack.translate(0.0F, 0.05F, 0.0F);
-            poseStack.mulPose(Axis.XP.rotationDegrees(-90.0F));
-            poseStack.mulPose(Axis.ZP.rotationDegrees(180.0F));
+            poseStack.rotateDegrees(Axis.XP, -90.0F);
+            poseStack.rotateDegrees(Axis.ZP, 180.0F);
             poseStack.scale(0.75F, 0.75F, 0.75F);
             state.babyItem.submit(poseStack, submitNodeCollector, state.lightCoords, OverlayTexture.NO_OVERLAY, state.outlineColor);
         }

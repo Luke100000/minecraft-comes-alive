@@ -21,6 +21,7 @@ import net.minecraft.world.phys.AABB;
 
 import java.util.*;
 import java.util.function.LongFunction;
+import java.util.stream.StreamSupport;
 
 /**
  * Tracks the positions where a tombstone may be found and whether it is filled or empty.
@@ -125,7 +126,7 @@ public class GraveyardManager extends SavedData {
             return getChunk(state, getChunkPos(pos), ChunkBase::empty).findNearest(pos, mutable).or(() -> {
                 // then we iterate outwards checking surrounding chunks
                 BlockPos center = new BlockPos(SectionPos.blockToSectionCoord(pos.getX()), 0, SectionPos.blockToSectionCoord(pos.getZ()));
-                return BlockPos.withinManhattanStream(center, maxChunkRange, 0, maxChunkRange)
+                return StreamSupport.stream(BlockPos.withinBoxByManhattanDistance(center, maxChunkRange, 0, maxChunkRange).spliterator(), false)
                         .mapToLong(chunkPos -> ChunkPos.pack(chunkPos.getX(), chunkPos.getZ()))
                         .mapToObj(chunk -> getChunk(state, chunk, ChunkBase::empty).findNearest(pos, mutable))
                         .flatMap(Optional::stream)

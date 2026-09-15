@@ -3,12 +3,10 @@ package net.conczin.mca.mixin;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import net.conczin.mca.Config;
 import net.minecraft.advancements.AdvancementRewards;
-import net.minecraft.resources.ResourceKey;
+import net.minecraft.core.HolderSet;
 import net.minecraft.world.level.storage.loot.LootTable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-
-import java.util.List;
 
 @Mixin(AdvancementRewards.class)
 public class MixinAdvancementRewards {
@@ -16,17 +14,19 @@ public class MixinAdvancementRewards {
             method = "grant",
             at = @At(
                     value = "FIELD",
-                    target = "Lnet/minecraft/advancements/AdvancementRewards;loot:Ljava/util/List;"
+                    target = "Lnet/minecraft/advancements/AdvancementRewards;loot:Lnet/minecraft/core/HolderSet;"
             )
     )
-    private List<ResourceKey<LootTable>> mca$filterAdvancementBooks(List<ResourceKey<LootTable>> original) {
+    private HolderSet<LootTable> mca$filterAdvancementBooks(HolderSet<LootTable> original) {
         if (Config.getInstance().giveAdvancementBooks) {
             return original;
         }
 
-        return original.stream()
-                .filter(key -> !key.identifier().getNamespace().equals("mca")
-                        || !key.identifier().getPath().startsWith("books/"))
-                .toList();
+        return HolderSet.direct(original.stream()
+                .filter(holder -> holder.unwrapKey()
+                        .map(key -> !key.identifier().getNamespace().equals("mca")
+                                || !key.identifier().getPath().startsWith("books/"))
+                        .orElse(true))
+                .toList());
     }
 }

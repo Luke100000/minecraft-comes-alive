@@ -13,10 +13,6 @@ extendable method net/minecraft/world/entity/AgeableMob setBaby (Z)V
 accessible method net/minecraft/world/entity/npc/villager/Villager startTrading (Lnet/minecraft/world/entity/player/Player;)V
 accessible method net/minecraft/world/entity/npc/villager/Villager setUnhappy ()V
 
-# Widen AdvancementRewards.loot to allow temporary modification without an accessor mixin.
-accessible field net/minecraft/advancements/AdvancementRewards loot Ljava/util/List;
-mutable field net/minecraft/advancements/AdvancementRewards loot Ljava/util/List;
-
 # Widen MoveControl.rotlerp for task usage
 accessible method net/minecraft/world/entity/ai/control/MoveControl rotlerp (FFF)F
 

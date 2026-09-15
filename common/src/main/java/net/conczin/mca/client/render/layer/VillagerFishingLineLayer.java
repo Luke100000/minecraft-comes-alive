@@ -44,8 +44,8 @@ public final class VillagerFishingLineLayer extends RenderLayer<VillagerRenderSt
         PoseStack handPose = new PoseStack();
         HumanoidArm arm = state.mainArm;
         getParentModel().translateToHand(state, arm, handPose);
-        handPose.mulPose(Axis.XP.rotationDegrees(-90.0F));
-        handPose.mulPose(Axis.YP.rotationDegrees(180.0F));
+        handPose.rotateDegrees(Axis.XP, -90.0F);
+        handPose.rotateDegrees(Axis.YP, 180.0F);
 
         boolean babyOffset = state.isBaby && state.entityType != EntityTypes.ARMOR_STAND;
         float offsetX = babyOffset ? 0.0F : 1.0F;

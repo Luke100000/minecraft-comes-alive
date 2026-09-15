@@ -131,7 +131,7 @@ public class GrimReaperMeleeGoal extends Goal {
 
             //attack
             if (reaper.distanceToSqr(entityToAttack) <= 1.0D) {
-                reaper.swing(InteractionHand.MAIN_HAND);
+                reaper.swingForAttack(InteractionHand.MAIN_HAND);
                 attackDuration = 0;
 
                 entityToAttack.hurt(reaper.level().damageSources().mobAttack(reaper), (float) reaper.getAttributeValue(Attributes.ATTACK_DAMAGE));

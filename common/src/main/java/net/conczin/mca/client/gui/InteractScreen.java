@@ -23,7 +23,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.player.Player;
 import org.joml.Matrix3x2fStack;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -131,7 +131,7 @@ public class InteractScreen extends AbstractDynamicScreen {
     @Override
     public boolean keyPressed(KeyEvent event) {
         // Hotkey to leave gift mode
-        if (event.key() == GLFW.GLFW_KEY_ESCAPE) {
+        if (event.key() == InputConstants.KEY_ESCAPE) {
             if (inGiftMode) {
                 inGiftMode = false;
                 setLayout("interact");

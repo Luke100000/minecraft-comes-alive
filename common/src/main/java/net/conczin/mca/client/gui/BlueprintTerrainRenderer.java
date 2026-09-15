@@ -14,6 +14,7 @@ import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.ColorResolver;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.MapColor;
@@ -482,7 +483,7 @@ final class BlueprintTerrainRenderer {
                     int sectionIndex = chunk.getSectionIndex(y);
                     if (sectionIndex < 0
                             || sectionIndex >= chunk.getSectionsCount()
-                            || !chunk.getSection(sectionIndex).maybeHas(BlockState::blocksMotion)) {
+                            || !chunk.getSection(sectionIndex).maybeHas(BlueprintTerrainRenderer::blocksMotion)) {
                         y = sectionMinY - 1;
                         continue;
                     }
@@ -491,7 +492,7 @@ final class BlueprintTerrainRenderer {
                     while (y >= scanMinY) {
                         surfacePos.set(sampleX, y, sampleZ);
                         BlockState candidate = chunk.getBlockState(surfacePos);
-                        if (candidate.blocksMotion()) {
+                        if (blocksMotion(candidate)) {
                             groundState = candidate;
                             break;
                         }
@@ -534,5 +535,11 @@ final class BlueprintTerrainRenderer {
         private static int unblendedBiomeColor(ClientLevel level, BlockPos pos, ColorResolver resolver) {
             return resolver.getColor(level.getBiome(pos).value(), pos.getX(), pos.getZ());
         }
+    }
+
+    private static boolean blocksMotion(BlockState state) {
+        return state.getBlock() != Blocks.COBWEB
+                && state.getBlock() != Blocks.BAMBOO_SAPLING
+                && state.isSolid();
     }
 }

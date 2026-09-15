@@ -23,15 +23,15 @@ public final class MCAFishingBobberRenderer extends EntityRenderer<MCAFishingBob
     }
 
     @Override
-    public boolean shouldRender(MCAFishingBobberEntity bobber, Frustum culler, double camX, double camY, double camZ) {
-        return super.shouldRender(bobber, culler, camX, camY, camZ) && bobber.getVillagerOwner() != null;
+    public boolean shouldRender(MCAFishingBobberEntity bobber, Frustum culler, double camX, double camY, double camZ, float partialTicks) {
+        return super.shouldRender(bobber, culler, camX, camY, camZ, partialTicks) && bobber.getVillagerOwner() != null;
     }
 
     @Override
     public void submit(FishingHookRenderState state, PoseStack poseStack, SubmitNodeCollector submitNodeCollector, CameraRenderState camera) {
         poseStack.pushPose();
         poseStack.scale(0.5F, 0.5F, 0.5F);
-        poseStack.mulPose(camera.orientation);
+        poseStack.rotate(camera.orientation);
         submitNodeCollector.submitCustomGeometry(poseStack, RENDER_TYPE, (pose, buffer) -> {
             vertex(buffer, pose, state.lightCoords, 0.0F, 0, 0, 1);
             vertex(buffer, pose, state.lightCoords, 1.0F, 0, 1, 1);

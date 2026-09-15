@@ -102,7 +102,7 @@ public class ScytheItem extends Item {
         }
 
         if (selected) {
-            if (living.swingTime == -1) {
+            if (living.getCurrentSwing() != null && living.getSwingAnimation(0.0F) == 0.0F) {
                 world.playSound(null, entity.blockPosition(), SoundsMCA.REAPER_SCYTHE_SWING, entity.getSoundSource(), 0.25F, 1);
             }
         }

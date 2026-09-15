@@ -4,10 +4,12 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.util.recipes.CribRecipeProvider;
 import net.fabricmc.fabric.api.datagen.v1.FabricPackOutput;
 import net.fabricmc.fabric.api.datagen.v1.provider.FabricRecipeProvider;
+import net.minecraft.advancements.Advancement;
 import net.minecraft.core.HolderLookup;
-import net.minecraft.data.recipes.RecipeOutput;
 import net.minecraft.data.recipes.RecipeProvider;
+import net.minecraft.data.worldgen.BootstrapContext;
 import net.minecraft.resources.Identifier;
+import net.minecraft.world.item.crafting.Recipe;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -27,8 +29,10 @@ public class FabricCribRecipeProvider extends FabricRecipeProvider {
     }
 
     @Override
-    protected RecipeProvider createRecipeProvider(HolderLookup.Provider registries, RecipeOutput recipeOutput) {
-        return new RecipeProvider(registries, recipeOutput) {
+    protected RecipeProvider createRecipeProvider(HolderLookup.Provider registries,
+                                                   BootstrapContext<Recipe<?>> recipeOutput,
+                                                   BootstrapContext<Advancement> advancementOutput) {
+        return new RecipeProvider(recipeOutput, advancementOutput) {
             @Override
             public void buildRecipes() {
                 CribRecipeProvider.generate(this.output, registries);

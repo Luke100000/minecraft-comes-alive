@@ -1,10 +1,10 @@
 package net.conczin.mca.entity.ai;
 
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.item.AxeItem;
-import net.minecraft.world.item.FishingRodItem;
-import net.minecraft.world.item.HoeItem;
+import net.minecraft.tags.ItemTags;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Locale;
@@ -15,12 +15,12 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public enum Chore {
-    NONE("none", null),
-    PROSPECT("prospecting", Item.class),
-    HARVEST("harvesting", HoeItem.class),
-    CHOP("chopping", AxeItem.class),
-    HUNT("hunting", Item.class),
-    FISH("fishing", FishingRodItem.class);
+    NONE("none"),
+    PROSPECT("prospecting"),
+    HARVEST("harvesting", ItemTags.HOES),
+    CHOP("chopping", ItemTags.AXES),
+    HUNT("hunting"),
+    FISH("fishing");
 
     private static final Chore[] VALUES = values();
     private static final Map<String, Chore> REGISTRY = Stream.of(VALUES).collect(Collectors.toMap(
@@ -31,11 +31,15 @@ public enum Chore {
     private final String friendlyName;
 
     @Nullable
-    private final Class<?> toolType;
+    private final TagKey<Item> toolTag;
 
-    Chore(String friendlyName, @Nullable Class<?> toolType) {
+    Chore(String friendlyName) {
+        this(friendlyName, null);
+    }
+
+    Chore(String friendlyName, @Nullable TagKey<Item> toolTag) {
         this.friendlyName = friendlyName;
-        this.toolType = toolType;
+        this.toolTag = toolTag;
     }
 
     public static Optional<Chore> byCommand(String action) {
@@ -53,9 +57,8 @@ public enum Chore {
         return Component.translatable("gui.label." + friendlyName);
     }
 
-    @Nullable
-    public Class<?> getToolType() {
-        return toolType;
+    public boolean matchesTool(ItemStack stack) {
+        return toolTag != null && stack.is(toolTag);
     }
 }
 

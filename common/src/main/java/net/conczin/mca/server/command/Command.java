@@ -20,6 +20,7 @@ import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.ChatFormatting;
 import net.minecraft.util.Util;
+import net.minecraft.util.Prediction;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
@@ -240,7 +241,7 @@ public class Command {
         PlayerSaveData data = PlayerSaveData.get(player);
         if (data.hasMail()) {
             while (data.hasMail()) {
-                player.getInventory().placeItemBackInInventory(data.getMail());
+                player.getInventory().placeItemBackInInventory(data.getMail(), Prediction.SERVER_ONLY);
             }
         } else {
             sendMessage(ctx, "command.no_mail");

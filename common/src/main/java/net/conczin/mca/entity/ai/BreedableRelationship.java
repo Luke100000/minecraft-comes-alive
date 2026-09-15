@@ -17,6 +17,7 @@ import net.conczin.mca.util.network.datasync.CDataParameter;
 import net.conczin.mca.util.network.datasync.CParameter;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.ItemTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.AgeableMob;
@@ -132,9 +133,9 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
             float satisfaction = tool != null ? tool.defaultMiningSpeed() : 0.0F;
             satisfaction = (float) (Math.pow(satisfaction, 1.25) * 2);
             return Optional.of(new GiftType(item, (int) satisfaction, MCA.locate(
-                    item instanceof AxeItem ? "swords" :
-                            item instanceof HoeItem ? "hoes" :
-                                    item instanceof ShovelItem ? "shovels" :
+                    stack.is(ItemTags.AXES) ? "swords" :
+                            stack.is(ItemTags.HOES) ? "hoes" :
+                                    stack.is(ItemTags.SHOVELS) ? "shovels" :
                                             "pickaxes"
             )));
         }

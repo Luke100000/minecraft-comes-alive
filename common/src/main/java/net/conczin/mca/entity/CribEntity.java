@@ -118,12 +118,12 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity> {
 
     private void setEntityOccupant(VillagerEntityMCA occupant) {
         infant = occupant;
-        infant.setInvulnerable(true);
+        infant.setPermanentlyInvulnerable(true);
     }
 
     private void unsetEntityOccupant() {
         if (infant != null) {
-            infant.setInvulnerable(false);
+            infant.setPermanentlyInvulnerable(false);
             infant = null;
         }
     }

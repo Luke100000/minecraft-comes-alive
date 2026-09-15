@@ -8,6 +8,7 @@ import net.conczin.mca.entity.ai.brain.tasks.ArcherCombatMovementGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.FishingTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.HarvestingTaskGameTests;
 import net.conczin.mca.entity.ai.navigation.FenceGateInteractionGameTests;
+import net.conczin.mca.server.world.data.CopiedOpenHouseGameTests;
 import net.conczin.mca.server.world.data.FloorScannerGameTests;
 import net.conczin.mca.server.world.data.VillageMourningGameTests;
 import net.minecraft.core.Holder;
@@ -20,6 +21,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Rotation;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -47,6 +49,7 @@ public final class McaGameTestRegistration {
             FenceGateInteractionGameTests.class,
             FishingTaskGameTests.class,
             HarvestingTaskGameTests.class,
+            CopiedOpenHouseGameTests.class,
             FloorScannerGameTests.class,
             VillageMourningGameTests.class
     );
@@ -89,6 +92,7 @@ public final class McaGameTestRegistration {
                         : sourceStructure;
                 TestData<Holder<TestEnvironmentDefinition<?>>> data = new TestData<>(
                         environment,
+                        Level.OVERWORLD,
                         structure,
                         metadata.timeoutTicks(),
                         Math.toIntExact(metadata.setupTicks()),
