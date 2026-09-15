@@ -164,8 +164,7 @@ public final class RoomWorkflow {
             return failedRoom(Building.validationResult.NOT_IN_BUILDING, source, village);
         }
 
-        StructureScanner.Result structureScan = StructureScanner.scanPlannedStructure(
-                world, plan, village.getStructures().values());
+        StructureScanner.Result structureScan = resolvePlannedAttachmentScan(village, plan);
         if (structureScan.result() != Building.validationResult.SUCCESS) {
             return failedRoom(structureScan.result(), source, village);
         }
@@ -178,7 +177,7 @@ public final class RoomWorkflow {
         Structure candidate = structureScan.toStructure(-1);
         StructureFloor attachmentFloor = candidate.getFloor(scannedFloor.id()).orElse(null);
         if (attachmentFloor == null || !validAttachment(
-                village, candidate, attachmentFloor, structureScan.connectedFloors(),
+                village, candidate, attachmentFloor, structureScan.directlyConnectedFloors(),
                 plan.targetBuildingId(), requestedMode)) {
             return failedRoom(Building.validationResult.NOT_IN_BUILDING, source, village);
         }
@@ -188,6 +187,45 @@ public final class RoomWorkflow {
                 attachmentFloor, structureScan.scan())
                 .withSource(source)
                 .withPendingStructure(candidate);
+    }
+
+    private StructureScanner.Result resolvePlannedAttachmentScan(Village village, RoomScanPlan plan) {
+        StructureFloor plannedFloor = plan.selectedAttachmentFloor();
+        if (plannedFloor == null) {
+            return StructureScanner.Result.failure(
+                    Building.validationResult.NOT_IN_BUILDING, plan.interactionSource());
+        }
+
+        Collection<Structure> existing = village.getStructures().values();
+        StructureScanner.FloorObservation observation = StructureScanner.observeFloor(
+                world, plan.interactionSource(), existing).orElse(null);
+        if (observation == null) {
+            return StructureScanner.Result.failure(
+                    Building.validationResult.NOT_IN_BUILDING, plan.interactionSource());
+        }
+
+        // Re-observe for freshness, but keep the exact prospective Floor identity chosen by the plan.
+        for (SelectedFloorScanner.Result storeyScan : observation.scan().storeyScans(plan.scanSeed())) {
+            if (storeyScan.floor() == null
+                    || !plannedFloor.geometry().sameCellPositions(storeyScan.floor())) {
+                continue;
+            }
+            StructureScanner.Result candidateScan = StructureScanner.resultFromObservedStorey(
+                    plan.scanSeed(), storeyScan, existing, plan.targetBuildingId());
+            if (candidateScan.result() != Building.validationResult.SUCCESS) continue;
+
+            Structure candidate = candidateScan.toStructure(-1);
+            StructureFloor floor = candidate.getFloors().getFirst();
+            if (!validAttachment(village, candidate, floor, candidateScan.directlyConnectedFloors(),
+                    plan.targetBuildingId(), plan.mode())) {
+                continue;
+            }
+            int floorNumber = village.prospectiveFloorNumber(plan.targetBuildingId(), candidate, floor);
+            if (floorNumber != plan.prospectiveFloorNumber()) continue;
+            return candidateScan;
+        }
+        return StructureScanner.Result.failure(
+                Building.validationResult.NOT_IN_BUILDING, plan.interactionSource());
     }
 
     private boolean validAttachment(Village village,

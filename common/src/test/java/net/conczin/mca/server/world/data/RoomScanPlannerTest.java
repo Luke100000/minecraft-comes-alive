@@ -21,7 +21,7 @@ class RoomScanPlannerTest {
     }
 
     @Test
-    void sameStoreyObservationUpdatesExistingRoomWithoutAnotherWorldScan() {
+    void freshSameStoreyOverlapDoesNotInventRegisteredRoomIdentity() {
         Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
         Building room = room(100, 20, 0, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
@@ -33,12 +33,14 @@ class RoomScanPlannerTest {
 
         RoomScanPlan plan = RoomScanPlanner.planFresh(village, source, observation);
 
-        assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
-        assertEquals(room, plan.currentRoom().orElseThrow());
+        assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
+        assertTrue(plan.currentRoom().isEmpty());
+        assertEquals(20, plan.targetStructureId());
+        assertEquals(0, plan.targetFloorId());
     }
 
     @Test
-    void staircaseTransitionComponentStillResolvesTheRegisteredRoom() {
+    void staircaseTransitionOverlapDoesNotInventRegisteredRoomIdentity() {
         Structure persisted = structure(20, 20, floor(0, 88, 91, 0, 3));
         Building room = room(100, 20, 0, Set.of(
                 new BlockPos(0, 88, 0), new BlockPos(1, 88, 0),
@@ -52,8 +54,10 @@ class RoomScanPlannerTest {
         RoomScanPlan plan = RoomScanPlanner.planFresh(
                 village, source, observation(source, fresh, List.of()));
 
-        assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
-        assertEquals(room, plan.currentRoom().orElseThrow());
+        assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
+        assertTrue(plan.currentRoom().isEmpty());
+        assertEquals(20, plan.targetStructureId());
+        assertEquals(0, plan.targetFloorId());
     }
 
     @Test
@@ -212,6 +216,72 @@ class RoomScanPlannerTest {
     }
 
     @Test
+    void lowerTransitionOutsidePersistedFloorUsesConnectedBasementInsteadOfSameStoreyExpansion() {
+        Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
+        Building room = room(100, 20, 0, Set.of(
+                new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
+                new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
+        Village village = village(persisted, room);
+        BlockPos source = new BlockPos(4, 63, 0);
+        FloorGeometry primary = scannedFloor(63, 68, 0, 4);
+        FloorGeometry lower = scannedFloor(60, 64, 0, 4);
+        FloorGeometry upper = scannedFloor(69, 73, 0, 4);
+
+        RoomScanPlan plan = RoomScanPlanner.planFresh(
+                village, source, observation(source, primary, List.of(primary, lower, upper)));
+
+        assertEquals(Village.RoomScanMode.ADD_BASEMENT, plan.mode());
+        assertEquals(20, plan.targetBuildingId());
+        assertEquals(-1, plan.prospectiveFloorNumber());
+        assertTrue(plan.selectedAttachmentFloor() != null
+                && plan.selectedAttachmentFloor().geometry().sameCellPositions(lower));
+    }
+
+    @Test
+    void upperTransitionOutsidePersistedFloorUsesConnectedFloorInsteadOfSameStoreyExpansion() {
+        Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
+        Building room = room(100, 20, 0, Set.of(
+                new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
+                new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
+        Village village = village(persisted, room);
+        BlockPos source = new BlockPos(4, 67, 0);
+        FloorGeometry primary = scannedFloor(65, 69, 0, 4);
+        FloorGeometry lower = scannedFloor(59, 63, 0, 4);
+        FloorGeometry upper = scannedFloor(69, 73, 0, 4);
+
+        RoomScanPlan plan = RoomScanPlanner.planFresh(
+                village, source, observation(source, primary, List.of(primary, lower, upper)));
+
+        assertEquals(Village.RoomScanMode.ADD_FLOOR, plan.mode());
+        assertEquals(20, plan.targetBuildingId());
+        assertEquals(1, plan.prospectiveFloorNumber());
+    }
+
+    @Test
+    void lowerTransitionUsesDirectCanonicalNeighbourNotTransitiveBasement() {
+        Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
+        Building room = room(100, 20, 0, Set.of(
+                new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
+                new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
+        Village village = village(persisted, room);
+        BlockPos source = new BlockPos(4, 63, 0);
+        FloorGeometry primary = scannedFloor(63, 68, 0, 4);
+        FloorGeometry directLower = scannedFloor(55, 59, 0, 4);
+        FloorGeometry transitiveCloser = scannedFloor(60, 64, 0, 4);
+        List<SelectedFloorScanner.StoreyLink> links = List.of(
+                new SelectedFloorScanner.StoreyLink(primary, directLower, new BlockPos(4, 58, 0)),
+                new SelectedFloorScanner.StoreyLink(directLower, transitiveCloser, new BlockPos(4, 57, 0)));
+
+        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
+                observation(source, primary, List.of(primary, directLower, transitiveCloser), links));
+
+        assertEquals(Village.RoomScanMode.ADD_BASEMENT, plan.mode());
+        assertTrue(plan.selectedAttachmentFloor() != null
+                && plan.selectedAttachmentFloor().geometry().sameCellPositions(directLower),
+                "attachment planning must use graph adjacency even when a transitive storey is vertically closer");
+    }
+
+    @Test
     void persistedInteractionPlanDoesNotRequireFreshWorldObservation() {
         Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
         Building room = room(100, 20, 0, Set.of(
@@ -256,9 +326,32 @@ class RoomScanPlannerTest {
     private static StructureScanner.FloorObservation observation(BlockPos source,
                                                                    FloorGeometry floor,
                                                                    List<FloorGeometry> connected) {
+        List<SelectedFloorScanner.StoreyLink> links = connected.stream()
+                .filter(candidate -> !candidate.sameCellPositions(floor))
+                .map(candidate -> new SelectedFloorScanner.StoreyLink(floor, candidate, source))
+                .toList();
+        return observation(source, floor, connected, links);
+    }
+
+    private static StructureScanner.FloorObservation observation(
+            BlockPos source,
+            FloorGeometry floor,
+            List<FloorGeometry> connected,
+            List<SelectedFloorScanner.StoreyLink> links) {
+        java.util.ArrayList<FloorGeometry> geometries = new java.util.ArrayList<>();
+        geometries.add(floor);
+        for (FloorGeometry candidate : connected) {
+            if (geometries.stream().noneMatch(existing -> existing.sameCellPositions(candidate))) {
+                geometries.add(candidate);
+            }
+        }
+        List<SelectedFloorScanner.DiscoveredStorey> storeys = geometries.stream()
+                .map(geometry -> new SelectedFloorScanner.DiscoveredStorey(
+                        geometry, transitions(geometry), Set.of(), Set.of()))
+                .toList();
         return new StructureScanner.FloorObservation(
                 source, new SelectedFloorScanner.Result(Building.validationResult.SUCCESS,
-                floor, source, source, transitions(floor), Set.of(), connected), List.of());
+                floor, source, source, transitions(floor), Set.of(), storeys, links), List.of());
     }
 
     private static Structure structure(int id, int logicalBuildingId, StructureFloor floor) {

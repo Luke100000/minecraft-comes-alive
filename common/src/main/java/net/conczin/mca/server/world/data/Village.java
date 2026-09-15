@@ -457,10 +457,13 @@ public class Village implements Iterable<Building> {
         for (StructureFloor candidateFloor : candidate.getFloors()) {
             for (Structure registered : structures.values()) {
                 for (StructureFloor registeredFloor : registered.getFloors()) {
-                    if (candidateFloor.geometry().cells().stream()
-                            .anyMatch(cell -> registeredFloor.geometry().cellAt(cell.feet()).isPresent())) {
-                        return true;
-                    }
+                    boolean exactCellOverlap = candidateFloor.geometry().cells().stream()
+                            .anyMatch(cell -> registeredFloor.geometry().cellAt(cell.feet()).isPresent());
+                    if (!exactCellOverlap) continue;
+                    boolean permittedAttachmentTransition = candidate.getLogicalBuildingId()
+                            == registered.getLogicalBuildingId()
+                            && !candidateFloor.sameSemanticBand(registeredFloor);
+                    if (!permittedAttachmentTransition) return true;
                 }
             }
         }

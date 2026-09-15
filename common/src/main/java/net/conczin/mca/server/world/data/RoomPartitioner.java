@@ -17,6 +17,8 @@ import java.util.stream.Collectors;
 
 /** Pure Room topology over one exact FloorGeometry. */
 final class RoomPartitioner {
+    static final int MIN_ROOM_AREA = 4;
+
     private static final Comparator<BlockPos> CELL_ORDER = Comparator
             .comparingInt((BlockPos pos) -> pos.getX())
             .thenComparingInt(pos -> pos.getZ())
@@ -78,10 +80,68 @@ final class RoomPartitioner {
 
         List<Component> result = assignBoundaryClusters(
                 geometry, connectorBoundaryCells, openComponents, transitionNeighbors, ownerSides);
-        result = assignBoundaryClusters(
-                geometry, storeyBoundaryCells, result, transitionNeighbors, Map.of());
+        result = assignStoreyBoundaryClusters(
+                geometry, storeyBoundaryCells, result, transitionNeighbors);
         result.sort(COMPONENT_ORDER);
         return List.copyOf(result);
+    }
+
+    private static List<Component> assignStoreyBoundaryClusters(
+            FloorGeometry geometry,
+            Set<BlockPos> boundaryCells,
+            List<Component> openComponents,
+            Map<BlockPos, List<BlockPos>> transitionNeighbors) {
+        if (boundaryCells.isEmpty()) return new ArrayList<>(openComponents);
+
+        List<Set<FloorGeometry.Cell>> clusters = boundaryClusters(
+                geometry, boundaryCells, transitionNeighbors);
+        Map<BlockPos, Component> componentByCell = new HashMap<>();
+        for (Component component : openComponents) {
+            for (FloorGeometry.Cell cell : component.cells()) componentByCell.put(cell.feet(), component);
+        }
+
+        Map<Component, LinkedHashSet<FloorGeometry.Cell>> additions = new HashMap<>();
+        Map<Component, LinkedHashSet<Component>> fragmentOwners = new HashMap<>();
+        List<Component> unowned = new ArrayList<>();
+        for (Set<FloorGeometry.Cell> cluster : clusters) {
+            LinkedHashSet<Component> adjacent = adjacentComponents(
+                    cluster, componentByCell, transitionNeighbors);
+            Component owner = owner(adjacent);
+            if (owner == null) {
+                unowned.add(new Component(cluster));
+                continue;
+            }
+
+            additions.computeIfAbsent(owner, ignored -> new LinkedHashSet<>()).addAll(cluster);
+            List<Component> validAdjacent = adjacent.stream()
+                    .filter(component -> component.area() >= MIN_ROOM_AREA)
+                    .toList();
+            if (validAdjacent.size() != 1) continue;
+
+            Component validOwner = validAdjacent.getFirst();
+            for (Component component : adjacent) {
+                if (component == validOwner || component.area() >= MIN_ROOM_AREA) continue;
+                fragmentOwners.computeIfAbsent(component, ignored -> new LinkedHashSet<>()).add(validOwner);
+            }
+        }
+
+        Set<Component> absorbed = new HashSet<>();
+        fragmentOwners.forEach((fragment, owners) -> {
+            if (owners.size() != 1) return;
+            Component owner = owners.iterator().next();
+            additions.computeIfAbsent(owner, ignored -> new LinkedHashSet<>()).addAll(fragment.cells());
+            absorbed.add(fragment);
+        });
+
+        List<Component> result = new ArrayList<>();
+        for (Component component : openComponents) {
+            if (absorbed.contains(component)) continue;
+            LinkedHashSet<FloorGeometry.Cell> cells = new LinkedHashSet<>(component.cells());
+            cells.addAll(additions.getOrDefault(component, new LinkedHashSet<>()));
+            result.add(new Component(cells));
+        }
+        result.addAll(unowned);
+        return result;
     }
 
     private static List<Component> assignBoundaryClusters(FloorGeometry geometry,
@@ -100,13 +160,8 @@ final class RoomPartitioner {
         Map<Component, LinkedHashSet<FloorGeometry.Cell>> additions = new HashMap<>();
         List<Component> unowned = new ArrayList<>();
         for (Set<FloorGeometry.Cell> cluster : clusters) {
-            LinkedHashSet<Component> adjacent = new LinkedHashSet<>();
-            for (FloorGeometry.Cell cell : cluster) {
-                for (BlockPos neighbor : transitionNeighbors.getOrDefault(cell.feet(), List.of())) {
-                    Component component = componentByCell.get(neighbor);
-                    if (component != null) adjacent.add(component);
-                }
-            }
+            LinkedHashSet<Component> adjacent = adjacentComponents(
+                    cluster, componentByCell, transitionNeighbors);
             boolean containsDoor = cluster.stream().anyMatch(cell ->
                     geometry.connectorTypesByCell().get(cell.feet()) == FloorConnector.Type.DOOR);
             Component owner = containsDoor
@@ -132,6 +187,20 @@ final class RoomPartitioner {
         }
         result.addAll(unowned);
         return result;
+    }
+
+    private static LinkedHashSet<Component> adjacentComponents(
+            Set<FloorGeometry.Cell> cluster,
+            Map<BlockPos, Component> componentByCell,
+            Map<BlockPos, List<BlockPos>> transitionNeighbors) {
+        LinkedHashSet<Component> adjacent = new LinkedHashSet<>();
+        for (FloorGeometry.Cell cell : cluster) {
+            for (BlockPos neighbor : transitionNeighbors.getOrDefault(cell.feet(), List.of())) {
+                Component component = componentByCell.get(neighbor);
+                if (component != null) adjacent.add(component);
+            }
+        }
+        return adjacent;
     }
 
     private static Component doorOwner(Set<FloorGeometry.Cell> cluster,
@@ -235,15 +304,9 @@ final class RoomPartitioner {
         List<FloorGeometry.Cell> column = geometry.cellsAtColumn(source.getX(), source.getZ());
         if (column.isEmpty()) return null;
 
-        FloorGeometry.Cell interior = column.stream()
+        return column.stream()
                 .filter(cell -> cell.feet().getY() <= source.getY() && source.getY() < cell.ceilingY())
                 .max(Comparator.comparingInt(cell -> cell.feet().getY()))
-                .orElse(null);
-        if (interior != null) return interior;
-
-        return column.stream()
-                .min(Comparator.comparingInt((FloorGeometry.Cell cell) -> Math.abs(cell.feet().getY() - source.getY()))
-                .thenComparingInt(cell -> cell.feet().getY()))
                 .orElse(null);
     }
 

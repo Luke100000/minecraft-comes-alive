@@ -8,8 +8,6 @@ import java.util.Set;
 
 /** Materializes Room geometry from one exact selected FloorGeometry. */
 final class BuildingRoomScanner {
-    private static final int MIN_INTERIOR_AREA = 4;
-
     private BuildingRoomScanner() {
     }
 
@@ -65,7 +63,9 @@ final class BuildingRoomScanner {
             RoomPartitioner.Component component) {
         Set<BlockPos> floorCells = component.floorCells();
         if (floorCells.size() > maxSize) return Result.failure(Building.validationResult.BLOCK_LIMIT, source);
-        if (floorCells.size() < MIN_INTERIOR_AREA) return Result.failure(Building.validationResult.TOO_SMALL, source);
+        if (floorCells.size() < RoomPartitioner.MIN_ROOM_AREA) {
+            return Result.failure(Building.validationResult.TOO_SMALL, source);
+        }
 
         BlockPos seed = component.nearestCell(source);
         Set<BlockPos> poi = RoomPoiEvidence.candidates(components, component);

@@ -103,6 +103,29 @@ class RoomPartitionerTest {
     }
 
     @Test
+    void storeyEdgeDoesNotOrphanUndersizedStairFragment() {
+        BlockPos room = new BlockPos(0, 64, 0);
+        BlockPos edge = new BlockPos(1, 65, 0);
+        BlockPos stairFragment = new BlockPos(2, 64, 0);
+        FloorGeometry geometry = geometry(Set.of(
+                cell(0, 64, 0), cell(0, 64, 1), cell(0, 64, 2), cell(0, 64, 3),
+                cell(1, 65, 0), cell(2, 64, 0)), Map.of());
+        Set<SelectedFloorScanner.Transition> transitions = Set.of(
+                new SelectedFloorScanner.Transition(room, edge),
+                new SelectedFloorScanner.Transition(edge, stairFragment),
+                new SelectedFloorScanner.Transition(new BlockPos(0, 64, 0), new BlockPos(0, 64, 1)),
+                new SelectedFloorScanner.Transition(new BlockPos(0, 64, 1), new BlockPos(0, 64, 2)),
+                new SelectedFloorScanner.Transition(new BlockPos(0, 64, 2), new BlockPos(0, 64, 3)));
+
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(
+                geometry, transitions, Map.of(), Set.of(edge));
+
+        assertEquals(1, components.size(),
+                "a storey boundary must not turn a transition-only stair fragment into a Room");
+        assertEquals(geometry.cells().size(), components.getFirst().area());
+    }
+
+    @Test
     void adjacentColumnChoosesAllStepCompatibleCellsInsteadOfOneColumnRepresentative() {
         FloorGeometry.Cell start = cell(0, 90, 0);
         FloorGeometry.Cell tooLow = cell(1, 88, 0);
@@ -135,6 +158,17 @@ class RoomPartitionerTest {
 
         assertTrue(RoomPartitioner.select(new BlockPos(0, 91, 0), geometry, components)
                 .contains(upper.feet()));
+    }
+
+    @Test
+    void selectionDoesNotSnapVerticalGapToNearestStackedCell() {
+        FloorGeometry.Cell lower = new FloorGeometry.Cell(new BlockPos(0, 64, 0), 67);
+        FloorGeometry.Cell upper = new FloorGeometry.Cell(new BlockPos(0, 70, 0), 74);
+        FloorGeometry geometry = geometry(Set.of(lower, upper), Map.of());
+        List<RoomPartitioner.Component> components = RoomPartitioner.partition(geometry, transitions(geometry));
+
+        assertNull(RoomPartitioner.select(new BlockPos(0, 68, 0), geometry, components),
+                "a source between stacked exact cells must not snap to the nearest Room");
     }
 
     @Test

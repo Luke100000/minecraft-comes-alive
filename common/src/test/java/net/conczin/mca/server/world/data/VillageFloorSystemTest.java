@@ -495,6 +495,34 @@ class VillageFloorSystemTest {
     }
 
     @Test
+    void duplicateCheckAllowsSharedTransitionCellAcrossStoreysOfSameLogicalBuilding() {
+        Village village = new Village(1, null);
+        BlockPos sharedTransition = new BlockPos(2, 67, 0);
+        FloorGeometry lowerGeometry = new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(new BlockPos(0, 64, 0), 68),
+                new FloorGeometry.Cell(new BlockPos(1, 64, 0), 68),
+                new FloorGeometry.Cell(new BlockPos(0, 64, 1), 68),
+                new FloorGeometry.Cell(new BlockPos(1, 64, 1), 68),
+                new FloorGeometry.Cell(sharedTransition, 72)), Map.of());
+        FloorGeometry upperGeometry = new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(new BlockPos(0, 69, 0), 73),
+                new FloorGeometry.Cell(new BlockPos(1, 69, 0), 73),
+                new FloorGeometry.Cell(new BlockPos(0, 69, 1), 73),
+                new FloorGeometry.Cell(new BlockPos(1, 69, 1), 73),
+                new FloorGeometry.Cell(sharedTransition, 72)), Map.of());
+        registerStructure(village, structure(10, 10,
+                new StructureFloor(0, 0, lowerGeometry)), room(100, 10, 0, true));
+
+        Structure attachedUpper = structure(-1, 10,
+                new StructureFloor(0, 1, upperGeometry));
+        Structure unrelatedUpper = structure(-1, 20,
+                new StructureFloor(0, 1, upperGeometry));
+
+        assertFalse(village.hasRegisteredFloorOverlap(attachedUpper));
+        assertTrue(village.hasRegisteredFloorOverlap(unrelatedUpper));
+    }
+
+    @Test
     void floorAttachmentRejectsExistingGroundFloorEvenWhenBasementWouldAcceptIt() {
         Village village = new Village(1, null);
         StructureFloor groundFloor = TestStructureFloors.create(0, 64, 68, 0, region(64), List.of(

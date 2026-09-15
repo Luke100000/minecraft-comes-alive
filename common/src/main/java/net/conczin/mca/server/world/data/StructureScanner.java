@@ -58,11 +58,22 @@ final class StructureScanner {
         return Result.failure(exact.result(), source);
     }
 
-    static Result scanPlannedStructure(Level world,
-                                       RoomScanPlan plan,
-                                       Collection<Structure> existing) {
-        return scanAtSeed(world, plan.interactionSource(), plan.scanSeed(), existing, -1,
-                plan.targetBuildingId());
+    static Result resultFromObservedStorey(BlockPos source,
+                                           SelectedFloorScanner.Result selected,
+                                           Collection<Structure> existing,
+                                           int attachmentBuildingId) {
+        if (selected == null || selected.result() != Building.validationResult.SUCCESS
+                || selected.floor() == null) {
+            return Result.failure(selected == null
+                    ? Building.validationResult.NOT_IN_BUILDING : selected.result(), source);
+        }
+        StructureFloor floor = new StructureFloor(0, 0, selected.floor());
+        Structure candidate = new Structure(-1, source.immutable(), List.of(floor));
+        Building.validationResult validation = validateCandidate(
+                candidate, floor, existing, -1, attachmentBuildingId);
+        return validation == Building.validationResult.SUCCESS
+                ? new Result(Building.validationResult.SUCCESS, source.immutable(), selected)
+                : Result.failure(validation, source);
     }
 
     static Result scanExistingFloor(Level world,
@@ -279,6 +290,12 @@ final class StructureScanner {
             seed = seed.immutable();
             verticalConnections = verticalConnections == null ? List.of() : List.copyOf(verticalConnections);
         }
+
+        List<FloorGeometry> directlyConnectedFloors() {
+            return scan == null || scan.floor() == null
+                    ? List.of()
+                    : scan.directlyConnectedFloors(scan.floor());
+        }
     }
 
     record Result(Building.validationResult result,
@@ -290,6 +307,12 @@ final class StructureScanner {
 
         List<FloorGeometry> connectedFloors() {
             return scan == null ? List.of() : scan.connectedFloors();
+        }
+
+        List<FloorGeometry> directlyConnectedFloors() {
+            return scan == null || scan.floor() == null
+                    ? List.of()
+                    : scan.directlyConnectedFloors(scan.floor());
         }
 
         BlockPos min() {
