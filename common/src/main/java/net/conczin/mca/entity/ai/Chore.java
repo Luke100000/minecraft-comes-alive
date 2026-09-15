@@ -1,26 +1,26 @@
 package net.conczin.mca.entity.ai;
 
+import net.conczin.mca.util.InventoryUtils;
 import net.minecraft.network.chat.Component;
 import net.minecraft.tags.ItemTags;
-import net.minecraft.tags.TagKey;
-import net.minecraft.world.item.Item;
+import net.minecraft.world.item.FishingRodItem;
 import net.minecraft.world.item.ItemStack;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public enum Chore {
     NONE("none"),
     PROSPECT("prospecting"),
-    HARVEST("harvesting", ItemTags.HOES),
-    CHOP("chopping", ItemTags.AXES),
-    HUNT("hunting"),
-    FISH("fishing");
+    HARVEST("harvesting", stack -> stack.is(ItemTags.HOES)),
+    CHOP("chopping", stack -> stack.is(ItemTags.AXES)),
+    HUNT("hunting", InventoryUtils::isWeapon),
+    FISH("fishing", stack -> stack.getItem() instanceof FishingRodItem);
 
     private static final Chore[] VALUES = values();
     private static final Map<String, Chore> REGISTRY = Stream.of(VALUES).collect(Collectors.toMap(
@@ -29,17 +29,15 @@ public enum Chore {
     );
 
     private final String friendlyName;
-
-    @Nullable
-    private final TagKey<Item> toolTag;
+    private final Predicate<ItemStack> toolMatcher;
 
     Chore(String friendlyName) {
-        this(friendlyName, null);
+        this(friendlyName, stack -> false);
     }
 
-    Chore(String friendlyName, @Nullable TagKey<Item> toolTag) {
+    Chore(String friendlyName, Predicate<ItemStack> toolMatcher) {
         this.friendlyName = friendlyName;
-        this.toolTag = toolTag;
+        this.toolMatcher = toolMatcher;
     }
 
     public static Optional<Chore> byCommand(String action) {
@@ -58,7 +56,7 @@ public enum Chore {
     }
 
     public boolean matchesTool(ItemStack stack) {
-        return toolTag != null && stack.is(toolTag);
+        return toolMatcher.test(stack);
     }
 }
 
