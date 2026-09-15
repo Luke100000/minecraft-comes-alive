@@ -13,7 +13,7 @@
     },
     "has_the_recipe": {
       "conditions": {
-        "recipe": "mca:magenta_crimson_crib"
+        "recipes": "mca:magenta_crimson_crib"
       },
       "trigger": "minecraft:recipe_unlocked"
     }

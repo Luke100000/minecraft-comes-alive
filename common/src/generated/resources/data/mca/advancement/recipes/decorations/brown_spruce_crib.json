@@ -13,7 +13,7 @@
     },
     "has_the_recipe": {
       "conditions": {
-        "recipe": "mca:brown_spruce_crib"
+        "recipes": "mca:brown_spruce_crib"
       },
       "trigger": "minecraft:recipe_unlocked"
     }

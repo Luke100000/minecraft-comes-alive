@@ -3,7 +3,7 @@
   "criteria": {
     "has_the_recipe": {
       "conditions": {
-        "recipe": "mca:brown_warped_crib"
+        "recipes": "mca:brown_warped_crib"
       },
       "trigger": "minecraft:recipe_unlocked"
     },

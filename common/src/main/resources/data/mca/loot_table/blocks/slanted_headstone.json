@@ -10,26 +10,32 @@
             {
               "type": "minecraft:item",
               "name": "mca:slanted_headstone",
-              "conditions": [
-                {
-                  "condition": "minecraft:match_tool",
-                  "predicate": {
-                    "enchantments": [
-                      {"enchantment": "minecraft:silk_touch", "levels": {"min": 1}}
+              "condition": {
+                "type": "minecraft:match_tool",
+                "predicate": {
+                  "predicates": {
+                    "minecraft:enchantments": [
+                      {
+                        "enchantments": "minecraft:silk_touch",
+                        "levels": {
+                          "min": 1
+                        }
+                      }
                     ]
                   }
                 }
-              ]
+              }
             },
             {
               "type": "minecraft:item",
               "name": "minecraft:cobblestone",
-              "conditions": [
-                {"condition": "minecraft:survives_explosion"}
-              ],
-              "functions": [
-                {"function": "minecraft:set_count", "count": 4}
-              ]
+              "condition": {
+                "type": "minecraft:survives_explosion"
+              },
+              "modifier": {
+                "type": "minecraft:set_count",
+                "count": 4
+              }
             }
           ]
         }
@@ -41,39 +47,60 @@
         {
           "type": "minecraft:item",
           "name": "minecraft:skeleton_skull",
-          "conditions": [
-            {
-              "condition": "minecraft:table_bonus",
-              "enchantment": "minecraft:fortune",
-              "chances": [0.2, 0.4, 0.5, 0.7, 1]
-            },
-            {"condition": "minecraft:survives_explosion"}
-          ],
-          "functions": [
-            {"function": "minecraft:set_count", "count": {"min": 3, "max": 8}}
-          ]
+          "condition": {
+            "type": "minecraft:all_of",
+            "terms": [
+              {
+                "type": "minecraft:table_bonus",
+                "enchantment": "minecraft:fortune",
+                "chances": [
+                  0.2,
+                  0.4,
+                  0.5,
+                  0.7,
+                  1
+                ]
+              },
+              {
+                "type": "minecraft:survives_explosion"
+              }
+            ]
+          },
+          "modifier": {
+            "type": "minecraft:set_count",
+            "count": {
+              "type": "minecraft:uniform",
+              "min": 3,
+              "max": 8
+            }
+          }
         },
         {
           "type": "minecraft:item",
           "name": "minecraft:bone",
-          "conditions": [
-            {"condition": "minecraft:survives_explosion"}
-          ]
+          "condition": {
+            "type": "minecraft:survives_explosion"
+          }
         }
       ],
-      "conditions": [
-        {
-          "condition": "minecraft:inverted",
-          "term": {
-            "condition": "minecraft:match_tool",
-            "predicate": {
-              "enchantments": [
-                {"enchantment": "minecraft:silk_touch", "levels": {"min": 1}}
+      "condition": {
+        "type": "minecraft:inverted",
+        "term": {
+          "type": "minecraft:match_tool",
+          "predicate": {
+            "predicates": {
+              "minecraft:enchantments": [
+                {
+                  "enchantments": "minecraft:silk_touch",
+                  "levels": {
+                    "min": 1
+                  }
+                }
               ]
             }
           }
         }
-      ]
+      }
     }
   ]
 }

@@ -13,7 +13,7 @@
     },
     "has_the_recipe": {
       "conditions": {
-        "recipe": "mca:cyan_jungle_crib"
+        "recipes": "mca:cyan_jungle_crib"
       },
       "trigger": "minecraft:recipe_unlocked"
     }

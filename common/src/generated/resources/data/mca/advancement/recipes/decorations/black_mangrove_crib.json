@@ -13,7 +13,7 @@
     },
     "has_the_recipe": {
       "conditions": {
-        "recipe": "mca:black_mangrove_crib"
+        "recipes": "mca:black_mangrove_crib"
       },
       "trigger": "minecraft:recipe_unlocked"
     }

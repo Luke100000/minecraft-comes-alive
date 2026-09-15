@@ -13,7 +13,7 @@
     },
     "has_the_recipe": {
       "conditions": {
-        "recipe": "mca:orange_acacia_crib"
+        "recipes": "mca:orange_acacia_crib"
       },
       "trigger": "minecraft:recipe_unlocked"
     }

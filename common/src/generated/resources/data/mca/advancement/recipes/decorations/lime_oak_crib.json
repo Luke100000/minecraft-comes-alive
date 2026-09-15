@@ -13,7 +13,7 @@
     },
     "has_the_recipe": {
       "conditions": {
-        "recipe": "mca:lime_oak_crib"
+        "recipes": "mca:lime_oak_crib"
       },
       "trigger": "minecraft:recipe_unlocked"
     }

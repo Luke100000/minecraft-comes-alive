@@ -13,7 +13,7 @@
     },
     "has_the_recipe": {
       "conditions": {
-        "recipe": "mca:red_dark_oak_crib"
+        "recipes": "mca:red_dark_oak_crib"
       },
       "trigger": "minecraft:recipe_unlocked"
     }

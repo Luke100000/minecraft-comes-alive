@@ -13,7 +13,7 @@
     },
     "has_the_recipe": {
       "conditions": {
-        "recipe": "mca:red_cherry_crib"
+        "recipes": "mca:red_cherry_crib"
       },
       "trigger": "minecraft:recipe_unlocked"
     }

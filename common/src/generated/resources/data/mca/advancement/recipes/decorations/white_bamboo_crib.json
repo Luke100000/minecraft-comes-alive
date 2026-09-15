@@ -13,7 +13,7 @@
     },
     "has_the_recipe": {
       "conditions": {
-        "recipe": "mca:white_bamboo_crib"
+        "recipes": "mca:white_bamboo_crib"
       },
       "trigger": "minecraft:recipe_unlocked"
     }

@@ -13,7 +13,7 @@
     },
     "has_the_recipe": {
       "conditions": {
-        "recipe": "mca:light_gray_jungle_crib"
+        "recipes": "mca:light_gray_jungle_crib"
       },
       "trigger": "minecraft:recipe_unlocked"
     }

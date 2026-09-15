@@ -13,7 +13,7 @@
     },
     "has_the_recipe": {
       "conditions": {
-        "recipe": "mca:light_blue_birch_crib"
+        "recipes": "mca:light_blue_birch_crib"
       },
       "trigger": "minecraft:recipe_unlocked"
     }

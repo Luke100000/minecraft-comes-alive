@@ -21,7 +21,7 @@
     "has_the_recipe": {
       "trigger": "minecraft:recipe_unlocked",
       "conditions": {
-        "recipe": "mca:rose_gold_ingot"
+        "recipes": "mca:rose_gold_ingot"
       }
     }
   },

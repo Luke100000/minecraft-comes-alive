@@ -22,15 +22,13 @@
     "killed_reaper": {
       "trigger": "minecraft:player_killed_entity",
       "conditions": {
-        "entity": [
-          {
-            "condition": "minecraft:entity_properties",
-            "predicate": {
-              "entity_type": "mca:grim_reaper"
-            },
-            "entity": "this"
+        "entity": {
+          "type": "minecraft:entity_properties",
+          "entity": "this",
+          "predicate": {
+            "minecraft:entity_type": "mca:grim_reaper"
           }
-        ]
+        }
       }
     }
   }

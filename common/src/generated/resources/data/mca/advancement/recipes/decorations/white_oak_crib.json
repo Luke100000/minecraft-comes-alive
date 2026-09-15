@@ -13,7 +13,7 @@
     },
     "has_the_recipe": {
       "conditions": {
-        "recipe": "mca:white_oak_crib"
+        "recipes": "mca:white_oak_crib"
       },
       "trigger": "minecraft:recipe_unlocked"
     }

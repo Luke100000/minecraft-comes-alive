@@ -20,8 +20,12 @@
       "trigger": "minecraft:location",
       "conditions": {
         "player": {
-          "location": {
-            "structures": "#minecraft:village"
+          "type": "minecraft:entity_properties",
+          "entity": "this",
+          "predicate": {
+            "minecraft:location": {
+              "structures": "#minecraft:village"
+            }
           }
         }
       }

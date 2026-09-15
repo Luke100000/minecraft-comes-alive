@@ -24,7 +24,7 @@
     "has_the_recipe": {
       "trigger": "minecraft:recipe_unlocked",
       "conditions": {
-        "recipe": "mca:rose_gold_ingot_smelting"
+        "recipes": "mca:rose_gold_ingot_smelting"
       }
     }
   },
