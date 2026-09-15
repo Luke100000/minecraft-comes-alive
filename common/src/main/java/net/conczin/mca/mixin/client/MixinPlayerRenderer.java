@@ -27,8 +27,8 @@ import net.minecraft.client.renderer.entity.player.AvatarRenderer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
-import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.client.renderer.texture.UvMapping;
 import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.LivingEntity;
@@ -154,7 +154,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
             method = "renderHand",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/client/renderer/SubmitNodeCollector;submitModelPart(Lnet/minecraft/client/model/geom/ModelPart;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/rendertype/RenderType;IILnet/minecraft/client/renderer/texture/TextureAtlasSprite;)V"
+                    target = "Lnet/minecraft/client/renderer/SubmitNodeCollector;submitModelPart(Lnet/minecraft/client/model/geom/ModelPart;Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/rendertype/RenderType;IILnet/minecraft/client/renderer/texture/UvMapping;)V"
             )
     )
     private void mca$submitCustomFirstPersonHand(
@@ -164,7 +164,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
             RenderType renderType,
             int lightCoords,
             int overlayCoords,
-            TextureAtlasSprite sprite,
+            UvMapping uvMapping,
             Operation<Void> original,
             PoseStack methodPoseStack,
             SubmitNodeCollector methodSubmitNodeCollector,
@@ -176,7 +176,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
         AbstractClientPlayer player = Minecraft.getInstance().player;
         boolean rightArm = arm == model.rightArm;
         if (player == null || !mca$renderCustomFirstPersonArm(player, arm)) {
-            original.call(submitNodeCollector, originalArm, poseStack, renderType, lightCoords, overlayCoords, sprite);
+            original.call(submitNodeCollector, originalArm, poseStack, renderType, lightCoords, overlayCoords, uvMapping);
             return;
         }
 
@@ -189,7 +189,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
                 arm,
                 hasSleeve
         )) {
-            original.call(submitNodeCollector, originalArm, poseStack, renderType, lightCoords, overlayCoords, sprite);
+            original.call(submitNodeCollector, originalArm, poseStack, renderType, lightCoords, overlayCoords, uvMapping);
         }
     }
 
@@ -273,7 +273,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
 
         int color = layer.getColor(visuals, 0.0F);
         var arm = rightArm ? model.rightArm : model.leftArm;
-        submitNodeCollector.submitModelPart(arm, poseStack, RenderTypes.entityCutout(texture), lightCoords, OverlayTexture.NO_OVERLAY, null, color, null);
+        submitNodeCollector.submitModelPart(arm, poseStack, RenderTypes.entityCutout(texture), lightCoords, OverlayTexture.NO_OVERLAY, null, color, 0);
         return true;
     }
 
@@ -294,7 +294,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
         }
 
         var arm = rightArm ? model.rightArm : model.leftArm;
-        submitNodeCollector.submitModelPart(arm, poseStack, RenderTypes.entityCutout(texture), lightCoords, OverlayTexture.NO_OVERLAY, null, 0xFFFFFFFF, null);
+        submitNodeCollector.submitModelPart(arm, poseStack, RenderTypes.entityCutout(texture), lightCoords, OverlayTexture.NO_OVERLAY, null, 0xFFFFFFFF, 0);
         return true;
     }
 

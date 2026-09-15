@@ -4,8 +4,8 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.conczin.mca.registry.CriterionMCA;
 import net.conczin.mca.resources.Rank;
-import net.minecraft.advancements.predicates.ContextAwarePredicate;
-import net.minecraft.advancements.predicates.entity.EntityPredicate;
+import net.minecraft.core.Holder;
+import net.minecraft.world.level.storage.loot.predicates.LootItemCondition;
 import net.minecraft.advancements.triggers.Criterion;
 import net.minecraft.advancements.triggers.SimpleCriterionTrigger;
 import net.minecraft.server.level.ServerPlayer;
@@ -21,11 +21,11 @@ public class RankCriterion extends SimpleCriterionTrigger<RankCriterion.TriggerI
         trigger(player, (conditions) -> conditions.test(rank));
     }
 
-    public record TriggerInstance(Optional<ContextAwarePredicate> player,
+    public record TriggerInstance(Optional<Holder<LootItemCondition>> player,
                                   Rank rank) implements SimpleCriterionTrigger.SimpleInstance {
         public static final Codec<TriggerInstance> CODEC = RecordCodecBuilder.create((instance) ->
                 instance.group(
-                        EntityPredicate.ADVANCEMENT_CODEC.optionalFieldOf("player").forGetter(TriggerInstance::player),
+                        LootItemCondition.CODEC.optionalFieldOf("player").forGetter(TriggerInstance::player),
                         Codec.STRING.xmap(Rank::fromName, Rank::name).fieldOf("rank").forGetter(TriggerInstance::rank)
                 ).apply(instance, TriggerInstance::new)
         );

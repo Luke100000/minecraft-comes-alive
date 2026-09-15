@@ -14,7 +14,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import org.joml.Matrix3x2fStack;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -58,7 +58,7 @@ public class DestinyScreen extends VillagerEditorScreen {
 
     @Override
     public boolean keyPressed(KeyEvent event) {
-        if (event.key() == GLFW.GLFW_KEY_ESCAPE) {
+        if (event.key() == InputConstants.KEY_ESCAPE) {
             if (page.equals("presets") || page.equals("skin")) {
                 setPage("general");
                 return true;

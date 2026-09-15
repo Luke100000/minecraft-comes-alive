@@ -539,7 +539,7 @@ public class Village implements Iterable<Building> {
         int radius = (int) Math.sqrt(dimensions.getX() * dimensions.getX()
                 + dimensions.getY() * dimensions.getY() + dimensions.getZ() * dimensions.getZ());
         beds = (int) world.getPoiManager().findAll(entry -> entry.is(PoiTypes.HOME), this::isPositionValidBed,
-                new BlockPos(getCenter()), radius + BORDER_MARGIN, PoiManager.Occupancy.ANY).count();
+                new BlockPos(getCenter().getX(), getCenter().getY(), getCenter().getZ()), radius + BORDER_MARGIN, PoiManager.Occupancy.ANY).count();
     }
 
     public int getMaxPopulation() {

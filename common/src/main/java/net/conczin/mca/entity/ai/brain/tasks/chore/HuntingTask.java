@@ -101,7 +101,7 @@ public class HuntingTask extends AbstractChoreTask {
                 target = null;
             } else if (villager.distanceToSqr(target) <= 12.25F) {
                 villager.moveTowards(target.blockPosition());
-                villager.swing(villager.getDominantHand());
+                villager.swingForAttack(villager.getDominantHand());
                 target.hurt(world.damageSources().mobAttack(villager), 6.0F);
                 villager.getMainHandItem().hurtAndBreak(1, villager, EquipmentSlot.MAINHAND);
             }

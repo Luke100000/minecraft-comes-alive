@@ -182,7 +182,7 @@ public class HarvestingTask extends AbstractChoreTask {
         if (villager.distanceToSqr(Vec3.atBottomCenterOf(currentPos)) <= 6) {
             workingTick++;
             if (workingTick % 5 == 0) {
-                villager.swing(villager.getDominantHand());
+                villager.swingForAttack(villager.getDominantHand());
             }
             if (workingTick > 40) { //todo magic number
                 plantable.remove(currentPos);
@@ -250,8 +250,8 @@ public class HarvestingTask extends AbstractChoreTask {
 
         stack.ifPresentOrElse(s -> {
             world.setBlock(hitResult.getBlockPos(), ((BlockItem) s.getItem()).getBlock().defaultBlockState(), Block.UPDATE_ALL);
+            villager.swing(villager.getDominantHand(), s.getInteractAnimation());
             s.shrink(1);
-            villager.swing(villager.getDominantHand());
             bonemealable.add(target);
         }, () -> {
             getAssigningPlayer().ifPresent(p -> villager.sendChatMessage(p, "chore.harvesting.noseed"));
@@ -260,8 +260,12 @@ public class HarvestingTask extends AbstractChoreTask {
 
     @SuppressWarnings("deprecation")
     private void bonemealCrop(ServerLevel world, VillagerEntityMCA villager, BlockPos pos) {
-        if (swapItem(stack -> stack.getItem() instanceof BoneMealItem) == ITEM_READY && BoneMealItem.growCrop(villager.getItemBySlot(villager.getDominantSlot()), world, pos)) {
-            villager.swing(villager.getDominantHand());
+        if (swapItem(stack -> stack.getItem() instanceof BoneMealItem) == ITEM_READY) {
+            ItemStack boneMeal = villager.getItemBySlot(villager.getDominantSlot());
+            var animation = boneMeal.getInteractAnimation();
+            if (BoneMealItem.growCrop(boneMeal, world, pos)) {
+                villager.swing(villager.getDominantHand(), animation);
+            }
         }
     }
 

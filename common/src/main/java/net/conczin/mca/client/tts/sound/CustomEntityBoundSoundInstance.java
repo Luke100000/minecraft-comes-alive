@@ -17,7 +17,8 @@ public class CustomEntityBoundSoundInstance extends EntityBoundSoundInstance {
     }
 
     @Override
-    public WeighedSoundEvents resolve(SoundManager soundManager) {
+    public WeighedSoundEvents getOrResolve(SoundManager soundManager) {
+        this.soundEvent = weighedSoundEvents;
         this.sound = weighedSoundEvents.getSound();
         return weighedSoundEvents;
     }

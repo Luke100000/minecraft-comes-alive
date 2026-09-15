@@ -103,7 +103,7 @@ public class ChoppingTask extends AbstractChoreTask {
 
         BlockState state = world.getBlockState(targetTree);
         if (state.is(BlockTags.LOGS)) {
-            villager.swing(villager.getDominantHand());
+            villager.swingForAttack(villager.getDominantHand());
             chopTicks++;
 
             // cut down a tree every few seconds, dependent on config + the mining speed multiplier

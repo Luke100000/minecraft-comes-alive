@@ -56,12 +56,12 @@ public class TombstoneBlockEntityRenderer implements BlockEntityRenderer<Tombsto
         matrices.translate(0.5, 0.5, 0.5);
 
         Direction facing = blockState.getValue(BlockStateProperties.HORIZONTAL_FACING).getOpposite();
-        matrices.mulPose(Axis.YP.rotationDegrees(-facing.toYRot()));
+        matrices.rotateDegrees(Axis.YP, -facing.toYRot());
         matrices.scale(0.010416667F, 0.010416667F, 0.010416667F);
-        matrices.mulPose(Axis.ZP.rotationDegrees(180));
+        matrices.rotateDegrees(Axis.ZP, 180.0F);
 
         TombstoneBlock block = (TombstoneBlock) blockState.getBlock();
-        matrices.mulPose(Axis.XP.rotationDegrees(block.getRotation()));
+        matrices.rotateDegrees(Axis.XP, block.getRotation());
 
         Vec3 offset = block.getNameplateOffset();
         matrices.translate(offset.x(), offset.y(), offset.z());

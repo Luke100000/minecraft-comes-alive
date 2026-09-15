@@ -817,8 +817,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void aiStep() {
-        updateSwingTime();
-
         super.aiStep();
 
         burned--;

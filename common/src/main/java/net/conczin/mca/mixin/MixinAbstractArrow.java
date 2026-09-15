@@ -42,7 +42,7 @@ abstract class MixinAbstractArrow {
             return true;
         }
 
-        livingTarget.invulnerableTime = 0;
+        livingTarget.setInvulnerableTime(0);
         boolean hurt = original.call(target, source, damage);
         if (hurt) {
             archer.onRangedAttackLanded(target);

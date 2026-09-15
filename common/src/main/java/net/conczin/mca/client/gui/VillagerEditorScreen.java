@@ -59,7 +59,7 @@ import org.jetbrains.annotations.NotNull;
 import org.joml.Matrix3x2fStack;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
-import org.lwjgl.glfw.GLFW;
+import com.mojang.blaze3d.platform.InputConstants;
 
 import java.io.File;
 import java.io.IOException;
@@ -1696,15 +1696,15 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     @Override
     public boolean keyPressed(KeyEvent event) {
         if (acceptsPreviewRotationInput()) {
-            if (event.key() == GLFW.GLFW_KEY_A || event.key() == GLFW.GLFW_KEY_LEFT) {
+            if (event.key() == InputConstants.KEY_A || event.key() == InputConstants.KEY_LEFT) {
                 rotatePreviewLeft = true;
                 return true;
             }
-            if (event.key() == GLFW.GLFW_KEY_D || event.key() == GLFW.GLFW_KEY_RIGHT) {
+            if (event.key() == InputConstants.KEY_D || event.key() == InputConstants.KEY_RIGHT) {
                 rotatePreviewRight = true;
                 return true;
             }
-            if (event.key() == GLFW.GLFW_KEY_R) {
+            if (event.key() == InputConstants.KEY_R) {
                 double mouseX = minecraft.mouseHandler.xpos() * width / minecraft.getWindow().getWidth();
                 double mouseY = minecraft.mouseHandler.ypos() * height / minecraft.getWindow().getHeight();
                 if (isMouseOverPreview(mouseX, mouseY)) {
@@ -1719,9 +1719,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     @Override
     public boolean keyReleased(KeyEvent event) {
-        if (event.key() == GLFW.GLFW_KEY_A || event.key() == GLFW.GLFW_KEY_LEFT) {
+        if (event.key() == InputConstants.KEY_A || event.key() == InputConstants.KEY_LEFT) {
             rotatePreviewLeft = false;
-        } else if (event.key() == GLFW.GLFW_KEY_D || event.key() == GLFW.GLFW_KEY_RIGHT) {
+        } else if (event.key() == InputConstants.KEY_D || event.key() == InputConstants.KEY_RIGHT) {
             rotatePreviewRight = false;
         }
         return super.keyReleased(event);

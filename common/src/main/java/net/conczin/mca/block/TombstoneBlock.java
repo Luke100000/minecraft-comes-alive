@@ -1,6 +1,5 @@
 package net.conczin.mca.block;
 
-import com.mojang.serialization.MapCodec;
 import net.conczin.mca.entity.Infectable;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
@@ -72,7 +71,6 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
             Block.box(2, 2, 7, 14, 15, 9),
             Block.box(1, 0, 6, 15, 2, 10)
     );
-    public static final MapCodec<TombstoneBlock> CODEC = simpleCodec(TombstoneBlock::new);
     public static final VoxelShape CROSS_SHAPE = Shapes.or(
             Block.box(6, 0, 2, 10, 28, 4),
             Block.box(-1, 18, 2, 17, 21, 4)
@@ -143,11 +141,6 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
         }
 
         return shapes.getOrDefault(state.getValue(BlockStateProperties.HORIZONTAL_FACING), Shapes.block());
-    }
-
-    @Override
-    protected MapCodec<? extends BaseEntityBlock> codec() {
-        return CODEC;
     }
 
     @Override

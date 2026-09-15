@@ -175,7 +175,7 @@ public abstract class VillagerLayer<S extends HumanoidRenderState, M extends Hum
             return;
         }
 
-        submitNodeCollector.submitModel(model, state, poseStack, layer, lightCoords, overlay, color, null, state.outlineColor, null);
+        submitNodeCollector.submitModel(model, state, poseStack, layer, lightCoords, overlay, color, null, state.outlineColor);
     }
 
     public final boolean canUse(Identifier texture) {

@@ -50,7 +50,7 @@ public class WidgetUtils {
     public static void drawTooltip(GuiGraphicsExtractor context, Font font, List<Component> text, int x, int y) {
         List<FormattedCharSequence> lines = text.stream().map(Component::getVisualOrderText).toList();
         List<ClientTooltipComponent> components = lines.stream().map(ClientTooltipComponent::create).toList();
-        context.tooltip(font, components, x, y, DefaultTooltipPositioner.INSTANCE, null);
+        context.tooltip(font, components, x, y, DefaultTooltipPositioner.INSTANCE, null, false);
     }
 
     /**

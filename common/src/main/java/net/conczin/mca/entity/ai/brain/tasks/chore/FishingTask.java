@@ -92,7 +92,8 @@ public class FishingTask extends AbstractChoreTask {
             villager.lookAt(targetWater);
 
             if (bobber == null || bobber.isRemoved()) {
-                villager.swing(villager.getDominantHand());
+                ItemStack fishingRod = villager.getItemInHand(villager.getDominantHand());
+                villager.swing(villager.getDominantHand(), fishingRod.getInteractAnimation());
                 bobber = MCAFishingBobberEntity.cast(world, villager, targetWater);
             }
 
@@ -120,7 +121,8 @@ public class FishingTask extends AbstractChoreTask {
 
     private void beginReel(ServerLevel world, VillagerEntityMCA villager) {
         ItemStack caught = getFishingLoot(world, villager);
-        villager.swing(villager.getDominantHand());
+        ItemStack fishingRod = villager.getItemInHand(villager.getDominantHand());
+        villager.swing(villager.getDominantHand(), fishingRod.getInteractAnimation());
 
         ItemEntity item = new ItemEntity(world, bobber.getX(), bobber.getY(), bobber.getZ(), caught);
         item.setThrower(villager);

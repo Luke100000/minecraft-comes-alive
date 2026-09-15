@@ -9,6 +9,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Predicate;
+import java.util.stream.StreamSupport;
 
 public interface TaskUtils {
     /**
@@ -29,7 +30,7 @@ public interface TaskUtils {
     }
 
     static List<BlockPos> getNearbyBlocks(BlockPos origin, Level world, @Nullable Predicate<BlockState> filter, int xzDist, int yDist) {
-        return BlockPos.withinManhattanStream(origin, xzDist, yDist, xzDist)
+        return StreamSupport.stream(BlockPos.withinBoxByManhattanDistance(origin, xzDist, yDist, xzDist).spliterator(), false)
                 .filter(pos -> !origin.equals(pos) && (filter == null || filter.test(world.getBlockState(pos))))
                 .map(BlockPos::immutable)
                 .toList();
