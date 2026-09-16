@@ -1,11 +1,11 @@
 package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.neoforge.gametest.GameTest;
+import net.conczin.mca.neoforge.gametest.GameTestHolder;
+import net.conczin.mca.neoforge.gametest.PrefixGameTestTemplate;
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.ArrayList;
 import java.util.HashSet;
