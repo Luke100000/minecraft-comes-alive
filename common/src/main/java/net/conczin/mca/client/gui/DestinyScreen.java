@@ -10,32 +10,63 @@ import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.DestinyMessage;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.conczin.mca.util.localization.FlowingText;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class DestinyScreen extends VillagerEditorScreen {
     private static final ResourceLocation LOGO_TEXTURE = MCA.locate("textures/banner.png");
+    private static final boolean USE_TEMPORARY_DESTINY_UI_MOCKS = false;
+    private static final ResourceKey<Level> MOCK_SKY_ISLANDS_DIMENSION = ResourceKey.create(
+            Registries.DIMENSION,
+            MCA.locate("sky_islands")
+    );
+    private static final List<DestinyDestination> TEMPORARY_DESTINY_UI_MOCKS = List.of(
+            new DestinyDestination("somewhere", Optional.empty()),
+            new DestinyDestination("minecraft:village_plains", Optional.of(Level.OVERWORLD)),
+            new DestinyDestination("minecraft:village_desert", Optional.of(Level.OVERWORLD)),
+            new DestinyDestination("minecraft:village_savanna", Optional.of(Level.OVERWORLD)),
+            new DestinyDestination("minecraft:village_snowy", Optional.of(Level.OVERWORLD)),
+            new DestinyDestination("minecraft:village_taiga", Optional.of(Level.OVERWORLD)),
+            new DestinyDestination("ctov:village_plains", Optional.of(Level.OVERWORLD)),
+            new DestinyDestination("ctov:village_desert", Optional.of(Level.OVERWORLD)),
+            new DestinyDestination("towns_and_towers:village_mediterranean", Optional.of(Level.OVERWORLD)),
+            new DestinyDestination("better_villages:forest_village", Optional.of(Level.OVERWORLD)),
+            new DestinyDestination("mock:cliffside_village", Optional.of(Level.OVERWORLD)),
+            new DestinyDestination("mock:nether_village", Optional.of(Level.NETHER)),
+            new DestinyDestination("mock:crimson_colony", Optional.of(Level.NETHER)),
+            new DestinyDestination("mock:warped_settlement", Optional.of(Level.NETHER)),
+            new DestinyDestination("mock:basalt_town", Optional.of(Level.NETHER)),
+            new DestinyDestination("mock:end_village", Optional.of(Level.END)),
+            new DestinyDestination("mock:chorus_settlement", Optional.of(Level.END)),
+            new DestinyDestination("mock:void_outpost", Optional.of(Level.END)),
+            new DestinyDestination("mock:sky_harbor", Optional.of(MOCK_SKY_ISLANDS_DIMENSION)),
+            new DestinyDestination("mock:cloud_village", Optional.of(MOCK_SKY_ISLANDS_DIMENSION)),
+            new DestinyDestination("mock:floating_ruins", Optional.of(MOCK_SKY_ISLANDS_DIMENSION))
+    );
     private static final int DESTINY_COLUMNS = 3;
     private static final int DESTINY_ROWS = 3;
     private static final int DESTINY_LOCATIONS_PER_PAGE = DESTINY_COLUMNS * DESTINY_ROWS;
     private static final int DESTINY_BUTTON_GAP = 4;
     private static final int DESTINY_BUTTON_HORIZONTAL_PADDING = 16;
+    private static final int DESTINY_DIMENSION_SELECTOR_MAX_WIDTH = 400;
     private final LinkedList<Component> story = new LinkedList<>();
     private final boolean allowTeleportation;
     private DestinyDestination destination;
-    private Component destinyCategoryTitle;
+    private ResourceKey<Level> selectedDestinyDimension;
     private boolean teleported = false;
     private ButtonWidget acceptWidget;
     private int destinyPage;
@@ -108,12 +139,8 @@ public class DestinyScreen extends VillagerEditorScreen {
                 context.blit(LOGO_TEXTURE, width * 2 - 512, -40, 0, 0, 1024, 512, 1024, 512);
                 matrices.popPose();
             }
-            case "destiny" -> {
-                drawScaledText(context, Component.translatable("gui.destiny.journey"), width / 2, height / 2 - 48, 1.5f);
-                if (destinyCategoryTitle != null) {
-                    drawScaledText(context, destinyCategoryTitle, width / 2, height / 2 - 4, 1.0f);
-                }
-            }
+            case "destiny" ->
+                    drawScaledText(context, Component.translatable("gui.destiny.journey"), width / 2, height / 2 - 48, 1.5f);
             case "story" -> {
                 List<Component> text = FlowingText.wrap(story.getFirst(), 256);
                 int y = (int) (height / 2.0 - 20 - 7.5f * text.size());
@@ -136,6 +163,9 @@ public class DestinyScreen extends VillagerEditorScreen {
     }
 
     private List<DestinyDestination> getDestinyDestinations() {
+        if (USE_TEMPORARY_DESTINY_UI_MOCKS) {
+            return TEMPORARY_DESTINY_UI_MOCKS;
+        }
         return MCAClient.getDestinyManager().getDestinations();
     }
 
@@ -173,20 +203,39 @@ public class DestinyScreen extends VillagerEditorScreen {
 
     private void drawDestinyLocations(List<DestinyDestination> destinations) {
         List<DestinyDestination> globalDestinations = getGlobalDestinations(destinations);
-        List<DestinyPage> pages = buildDestinyPages(destinations);
-        int pageCount = pages.size();
-        destinyPage = pageCount == 0 ? 0 : Math.max(0, Math.min(destinyPage, pageCount - 1));
-        destinyCategoryTitle = pageCount == 0 ? null : getDimensionName(pages.get(destinyPage).dimension());
+        Map<ResourceKey<Level>, List<DestinyDestination>> byDimension = groupDestinationsByDimension(destinations);
+
+        if (!byDimension.isEmpty()) {
+            ensureSelectedDimension(List.copyOf(byDimension.keySet()));
+            boolean showDimensionSelector = byDimension.size() > 1;
+            if (showDimensionSelector) {
+                drawDimensionSelector(List.copyOf(byDimension.keySet()));
+            }
+
+            List<DestinyDestination> dimensionDestinations = byDimension.get(selectedDestinyDimension);
+            int pageCount = Math.max(
+                    1,
+                    (dimensionDestinations.size() + DESTINY_LOCATIONS_PER_PAGE - 1) / DESTINY_LOCATIONS_PER_PAGE
+            );
+            destinyPage = Math.max(0, Math.min(destinyPage, pageCount - 1));
+
+            int start = destinyPage * DESTINY_LOCATIONS_PER_PAGE;
+            int end = Math.min(start + DESTINY_LOCATIONS_PER_PAGE, dimensionDestinations.size());
+            drawDestinationGrid(
+                    dimensionDestinations.subList(start, end),
+                    showDimensionSelector ? height / 2 + 2 : height / 2 - 10
+            );
+
+            if (pageCount > 1) {
+                drawDestinyPagination(pageCount, showDimensionSelector ? height / 2 + 76 : height / 2 + 68);
+            }
+        }
 
         if (!globalDestinations.isEmpty()) {
-            drawDestinationRow(globalDestinations, height / 2 - 28);
-        }
-        if (pageCount > 0) {
-            drawDestinationGrid(pages.get(destinyPage).destinations());
-        }
-
-        if (pageCount > 1) {
-            drawDestinyPagination(pageCount);
+            int buttonY = byDimension.isEmpty()
+                    ? height / 2 + 4
+                    : height / 2 + (byDimension.size() > 1 ? 100 : 92);
+            drawDestinationRow(globalDestinations, buttonY);
         }
     }
 
@@ -208,15 +257,21 @@ public class DestinyScreen extends VillagerEditorScreen {
                 ));
     }
 
-    private List<DestinyPage> buildDestinyPages(List<DestinyDestination> destinations) {
-        List<DestinyPage> pages = new ArrayList<>();
-        groupDestinationsByDimension(destinations).forEach((dimension, dimensionDestinations) -> {
-            for (int start = 0; start < dimensionDestinations.size(); start += DESTINY_LOCATIONS_PER_PAGE) {
-                int end = Math.min(start + DESTINY_LOCATIONS_PER_PAGE, dimensionDestinations.size());
-                pages.add(new DestinyPage(dimension, dimensionDestinations.subList(start, end)));
-            }
-        });
-        return List.copyOf(pages);
+    private void ensureSelectedDimension(List<ResourceKey<Level>> dimensions) {
+        if (selectedDestinyDimension != null && dimensions.contains(selectedDestinyDimension)) {
+            return;
+        }
+
+        Minecraft minecraft = Minecraft.getInstance();
+        ResourceKey<Level> currentDimension = minecraft.level == null ? null : minecraft.level.dimension();
+        if (currentDimension != null && dimensions.contains(currentDimension)) {
+            selectedDestinyDimension = currentDimension;
+        } else if (dimensions.contains(Level.OVERWORLD)) {
+            selectedDestinyDimension = Level.OVERWORLD;
+        } else {
+            selectedDestinyDimension = dimensions.getFirst();
+        }
+        destinyPage = 0;
     }
 
     private Component getDimensionName(ResourceKey<Level> dimension) {
@@ -225,6 +280,35 @@ public class DestinyScreen extends VillagerEditorScreen {
                 "dimension." + id.getNamespace() + "." + id.getPath(),
                 prettifyIdentifier(id.getPath())
         );
+    }
+
+    private void drawDimensionSelector(List<ResourceKey<Level>> dimensions) {
+        int selectorWidth = Math.min(DESTINY_DIMENSION_SELECTOR_MAX_WIDTH, width) - 28;
+        int buttonWidth = selectorWidth / dimensions.size();
+        int buttonX = (width - buttonWidth * dimensions.size()) / 2;
+        int buttonY = height / 2 - 28;
+
+        for (ResourceKey<Level> dimension : dimensions) {
+            ButtonWidget button = addRenderableWidget(new ButtonWidget(
+                    buttonX,
+                    buttonY,
+                    buttonWidth,
+                    20,
+                    getDimensionName(dimension),
+                    sender -> selectDimension(dimension)
+            ));
+            button.active = !dimension.equals(selectedDestinyDimension);
+            buttonX += buttonWidth;
+        }
+    }
+
+    private void selectDimension(ResourceKey<Level> dimension) {
+        if (dimension.equals(selectedDestinyDimension)) {
+            return;
+        }
+        selectedDestinyDimension = dimension;
+        destinyPage = 0;
+        setPage("destiny");
     }
 
     private void drawDestinationRow(List<DestinyDestination> destinations, int buttonY) {
@@ -246,7 +330,7 @@ public class DestinyScreen extends VillagerEditorScreen {
         }
     }
 
-    private void drawDestinationGrid(List<DestinyDestination> visibleDestinations) {
+    private void drawDestinationGrid(List<DestinyDestination> visibleDestinations, int firstRowY) {
         int rows = (int) Math.ceil(visibleDestinations.size() / (float) DESTINY_COLUMNS);
         float offsetY = Math.max(0, DESTINY_ROWS - rows) / 2.0f;
 
@@ -266,7 +350,7 @@ public class DestinyScreen extends VillagerEditorScreen {
             }
 
             int buttonX = width / 2 - rowWidth / 2;
-            int buttonY = (int) (height / 2.0f + 10 + (row + offsetY) * 24);
+            int buttonY = (int) (firstRowY + (row + offsetY) * 24);
             for (int column = 0; column < entriesInRow; column++) {
                 DestinyDestination destination = visibleDestinations.get(rowStart + column);
                 addDestinationButton(destination, buttonX, buttonY, buttonWidths[column], names[column]);
@@ -289,8 +373,7 @@ public class DestinyScreen extends VillagerEditorScreen {
         addRenderableWidget(button);
     }
 
-    private void drawDestinyPagination(int pageCount) {
-        int paginationY = height / 2 + 86;
+    private void drawDestinyPagination(int pageCount, int paginationY) {
         ButtonWidget previous = addRenderableWidget(new ButtonWidget(
                 width / 2 - 68, paginationY, 40, 20, Component.literal("<"),
                 sender -> {
@@ -384,11 +467,5 @@ public class DestinyScreen extends VillagerEditorScreen {
         story.add(Component.translatableWithFallback("destiny.story." + getPath(location), getLocationName(location).getString()));
         this.destination = destination;
         setPage("story");
-    }
-
-    private record DestinyPage(ResourceKey<Level> dimension, List<DestinyDestination> destinations) {
-        private DestinyPage {
-            destinations = List.copyOf(destinations);
-        }
     }
 }
