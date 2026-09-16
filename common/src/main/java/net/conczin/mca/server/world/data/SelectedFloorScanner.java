@@ -28,6 +28,7 @@ import java.util.Set;
 /** Discovers one exact integer storey while using Minecraft surface heights only for movement. */
 final class SelectedFloorScanner {
     private static final double MAX_STEP_HEIGHT = 1.125D;
+    private static final int STOREY_HEIGHT_RADIUS = 2;
     // Full-block stairs have no block metadata marking where the staircase ends. Two stable
     // same-height exits are enough evidence that the cell is a landing/plateau, not the stair tip.
     private static final int MIN_STABLE_LANDING_PEERS = 2;
@@ -229,12 +230,12 @@ final class SelectedFloorScanner {
 
     private static Optional<SurfaceCell> adjacentTraversalSeed(
             Level world, BlockPos membershipCell, FloorCeilingResolver ceilings) {
-        OptionalDouble membershipSurface = interactionMembershipSurface(world, membershipCell, ceilings);
-        if (membershipSurface.isEmpty()) return Optional.empty();
+        OptionalDouble membershipHandoffY = interactionMembershipHandoffY(world, membershipCell, ceilings);
+        if (membershipHandoffY.isEmpty()) return Optional.empty();
 
         for (Direction direction : HORIZONTAL) {
             BlockPos horizontal = membershipCell.relative(direction);
-            for (SurfaceProbe landing : findLandings(world, membershipSurface.getAsDouble(), horizontal)) {
+            for (SurfaceProbe landing : findLandings(world, membershipHandoffY.getAsDouble(), horizontal)) {
                 OptionalInt ceiling = ceilings.ceilingY(landing.feet());
                 if (ceiling.isPresent()) {
                     return Optional.of(new SurfaceCell(
@@ -476,11 +477,11 @@ final class SelectedFloorScanner {
 
                 for (int yOffset : LANDING_Y_OFFSETS) {
                     BlockPos candidate = new BlockPos(x, source.feet().getY() + yOffset, z);
-                    OptionalDouble candidateSurface = yOffset == 0 || isVerticalConnectorTopExit(world, candidate)
-                            ? interactionMembershipSurface(world, candidate, ceilings)
-                            : interiorMembershipSurface(world, candidate, ceilings);
-                    if (candidateSurface.isEmpty()
-                            || !canStep(sourceSurface.getAsDouble(), candidateSurface.getAsDouble())) continue;
+                    OptionalDouble candidateHandoffY = yOffset == 0 || isVerticalConnectorTopExit(world, candidate)
+                            ? interactionMembershipHandoffY(world, candidate, ceilings)
+                            : interiorMembershipHandoffY(world, candidate, ceilings);
+                    if (candidateHandoffY.isEmpty()
+                            || !canStep(sourceSurface.getAsDouble(), candidateHandoffY.getAsDouble())) continue;
 
                     FloorGeometry.Cell existing = cells.get(candidate);
                     int ceilingY = existing == null
@@ -586,7 +587,7 @@ final class SelectedFloorScanner {
     private static boolean descendsFullStoreyFromStair(
             Level world, SurfaceCell start, StepProvider provider) {
         if (!isStairOccupancy(world, start.feet())) return false;
-        int boundaryY = start.feet().getY() - StructureFloor.BAND_TOLERANCE;
+        int boundaryY = start.feet().getY() - STOREY_HEIGHT_RADIUS;
         ArrayDeque<SurfaceCell> queue = new ArrayDeque<>();
         Set<BlockPos> visited = new HashSet<>();
         queue.addLast(start);
@@ -827,21 +828,21 @@ final class SelectedFloorScanner {
                 || StructureConnector.isHorizontalBoundary(state);
     }
 
-    private static OptionalDouble interiorMembershipSurface(
+    private static OptionalDouble interiorMembershipHandoffY(
             Level world, BlockPos pos, FloorCeilingResolver ceilings) {
         if (!isInteriorMembershipOccupancy(world, pos)) return OptionalDouble.empty();
-        return membershipSurface(world, pos, ceilings);
+        return membershipHandoffY(world, pos, ceilings);
     }
 
-    private static OptionalDouble interactionMembershipSurface(
+    private static OptionalDouble interactionMembershipHandoffY(
             Level world, BlockPos pos, FloorCeilingResolver ceilings) {
         if (!isInteriorMembershipOccupancy(world, pos)
                 && !isSingleOpenLayerMembership(world, pos)
                 && !isVerticalConnectorTopExit(world, pos)) return OptionalDouble.empty();
-        return membershipSurface(world, pos, ceilings);
+        return membershipHandoffY(world, pos, ceilings);
     }
 
-    private static OptionalDouble membershipSurface(
+    private static OptionalDouble membershipHandoffY(
             Level world, BlockPos pos, FloorCeilingResolver ceilings) {
         if (inspectSurfaceCell(world, pos.above(), ceilings).isPresent()) return OptionalDouble.empty();
         OptionalDouble supported = supportedFloorLevel(world, pos);
@@ -952,11 +953,11 @@ final class SelectedFloorScanner {
 
     private record StoreyContext(int anchorY) {
         int minOwnedY() {
-            return anchorY - StructureFloor.BAND_TOLERANCE;
+            return anchorY - STOREY_HEIGHT_RADIUS;
         }
 
         int maxOwnedY() {
-            return anchorY + StructureFloor.BAND_TOLERANCE;
+            return anchorY + STOREY_HEIGHT_RADIUS;
         }
     }
 

@@ -920,6 +920,9 @@ public final class FloorScannerGameTests {
                 "upper ladder storey scan failed: " + upperScan.result());
         helper.assertTrue(upperScan.floor().cellAt(topExit).isPresent(),
                 "ladder top exit was not assigned to the upper canonical Floor");
+        helper.assertTrue(SelectedFloorScanner.inspectSurfaceCell(
+                        helper.getLevel(), topExit, new FloorCeilingResolver(helper.getLevel())).isEmpty(),
+                "ladder top exit was treated as physically supported instead of semantic Floor membership");
 
         Set<FloorGeometry.Cell> persistedCells = upperScan.floor().cells().stream()
                 .filter(cell -> !cell.feet().equals(topExit))
