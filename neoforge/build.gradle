@@ -16,10 +16,11 @@ dependencies {
         }
     }
     runtimeOnly "maven.modrinth:sodium:${sodium_neoforge_version}"
-    runtimeOnly "maven.modrinth:jei:${jei_neoforge_version}"
+    // No 26.3-compatible NeoForge builds are published yet for these dev-only helpers.
+    //runtimeOnly "maven.modrinth:jei:${jei_neoforge_version}"
     //runtimeOnly "maven.modrinth:iris:${iris_neoforge_version}"
-    runtimeOnly "maven.modrinth:ferrite-core:${ferritecore_neoforge_version}"
-    runtimeOnly "maven.modrinth:immediatelyfast:${immediatelyfast_neoforge_version}"
+    //runtimeOnly "maven.modrinth:ferrite-core:${ferritecore_neoforge_version}"
+    //runtimeOnly "maven.modrinth:immediatelyfast:${immediatelyfast_neoforge_version}"
     runtimeOnly "maven.modrinth:packet-fixer:${packetfixer_neoforge_version}"
 }
 
