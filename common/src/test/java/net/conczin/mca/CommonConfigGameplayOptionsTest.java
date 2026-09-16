@@ -37,14 +37,18 @@ class CommonConfigGameplayOptionsTest {
 
         assertTrue(config.autoDiscoverDestinyLocations);
         assertEquals(java.util.List.of(), config.destinySpawnLocationBlacklist);
+        assertFalse(config.destinyOverworldOnly);
+        assertEquals(java.util.List.of(), config.destinyDimensionBlacklist);
     }
 
     @Test
-    void destinyDiscoveryAndBlacklistCanBeConfigured() {
+    void destinyDiscoveryAndBlacklistsCanBeConfigured() {
         CommonConfig config = GSON.fromJson("""
                 {
                   "autoDiscoverDestinyLocations": false,
-                  "destinySpawnLocationBlacklist": ["ctov:*", "othermod:*large*"]
+                  "destinySpawnLocationBlacklist": ["ctov:*", "othermod:*large*"],
+                  "destinyOverworldOnly": true,
+                  "destinyDimensionBlacklist": ["minecraft:the_nether", "some_mod:*"]
                 }
                 """, CommonConfig.class);
 
@@ -52,6 +56,11 @@ class CommonConfigGameplayOptionsTest {
         assertEquals(
                 java.util.List.of("ctov:*", "othermod:*large*"),
                 config.destinySpawnLocationBlacklist
+        );
+        assertTrue(config.destinyOverworldOnly);
+        assertEquals(
+                java.util.List.of("minecraft:the_nether", "some_mod:*"),
+                config.destinyDimensionBlacklist
         );
     }
 }

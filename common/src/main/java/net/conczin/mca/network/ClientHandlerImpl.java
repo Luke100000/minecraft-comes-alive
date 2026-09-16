@@ -231,7 +231,7 @@ public class ClientHandlerImpl implements ClientHandler {
 
     @Override
     public void handleDestinyGuiRequest(OpenDestinyGuiRequest message) {
-        MCAClient.getDestinyManager().requestOpen(message.allowTeleportation());
+        MCAClient.getDestinyManager().requestOpen(message.allowTeleportation(), message.destinations());
     }
 
     @Override

@@ -5,8 +5,6 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.ConfigResponse;
-import net.conczin.mca.server.DestinyLocationResolver;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -18,11 +16,7 @@ public record ConfigRequest() implements HandleablePayload {
 
     @Override
     public void handleServer(ServerPlayer player) {
-        var structures = player.serverLevel().registryAccess().registryOrThrow(Registries.STRUCTURE);
-        Network.sendToPlayer(
-                new ConfigResponse(Config.getInstance(), DestinyLocationResolver.resolve(Config.getInstance(), structures)),
-                player
-        );
+        Network.sendToPlayer(new ConfigResponse(Config.getInstance()), player);
     }
 
     @Override

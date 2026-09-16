@@ -79,6 +79,18 @@ public class CommonConfig {
     public List<String> destinySpawnLocationBlacklist = List.of();
 
     /**
+     * Restricts dimension-bound Destiny destinations to the Overworld.
+     * Dimensionless choices such as "somewhere" remain available.
+     */
+    public boolean destinyOverworldOnly = false;
+
+    /**
+     * Removes Destiny destinations from matching dimensions after Minecraft determines where they can generate.
+     * Supports simple '*' wildcards, including whole namespaces such as "some_mod:*".
+     */
+    public List<String> destinyDimensionBlacklist = List.of();
+
+    /**
      * Maps Destiny locations to translation keys for UI text.
      */
     public Map<String, String> destinyLocationsToTranslationMap = Map.of(
