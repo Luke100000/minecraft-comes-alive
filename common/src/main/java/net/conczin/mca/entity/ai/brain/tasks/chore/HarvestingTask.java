@@ -67,6 +67,8 @@ public class HarvestingTask extends AbstractChoreTask {
             villager.setItemInHand(villager.getDominantHand(), ItemStack.EMPTY);
         }
 
+        workingTick = 0;
+
         if (currentPos != null) {
             plantable.remove(currentPos);
             harvestable.remove(currentPos);

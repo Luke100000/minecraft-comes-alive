@@ -67,6 +67,18 @@ public class CommonConfig {
     );
 
     /**
+     * Automatically adds registered village structures to the Destiny screen.
+     * Disable this to use {@link #destinySpawnLocations} as the complete manual list.
+     */
+    public boolean autoDiscoverDestinyLocations = true;
+
+    /**
+     * Removes matching locations from the Destiny screen after manual and automatic locations are combined.
+     * Supports simple '*' wildcards, including whole namespaces such as "ctov:*".
+     */
+    public List<String> destinySpawnLocationBlacklist = List.of();
+
+    /**
      * Maps Destiny locations to translation keys for UI text.
      */
     public Map<String, String> destinyLocationsToTranslationMap = Map.of(

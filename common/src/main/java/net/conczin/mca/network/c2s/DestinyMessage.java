@@ -3,6 +3,7 @@ package net.conczin.mca.network.c2s;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.network.HandleablePayload;
+import net.conczin.mca.server.DestinyLocationResolver;
 import net.conczin.mca.util.WorldUtils;
 import net.conczin.mca.util.compat.ExtendedFuzzyPositions;
 import net.minecraft.ChatFormatting;
@@ -40,6 +41,15 @@ public record DestinyMessage(String location, boolean isClosing) implements Hand
         if (isClosing) {
             sp.removeEffect(MobEffects.INVISIBILITY);
             sp.removeEffect(MobEffects.HEALTH_BOOST);
+            return;
+        }
+        if (location.length() > 128) {
+            return;
+        }
+        var structures = sp.serverLevel().registryAccess().registryOrThrow(Registries.STRUCTURE);
+        if (!DestinyLocationResolver.resolve(Config.getInstance(), structures).contains(location)) {
+            notifyDestinationNotFound(sp);
+            return;
         }
         if (Config.getInstance().allowDestinyTeleportation && !location.isEmpty() && !isNoTeleportLocation()) {
             MCA.executorService.execute(() -> {

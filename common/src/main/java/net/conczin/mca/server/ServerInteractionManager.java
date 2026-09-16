@@ -80,15 +80,25 @@ public class ServerInteractionManager {
             PlayerSaveData.showMailNotification(player);
         }
 
-        if (Config.getInstance().scalePlayerHitboxWithSizeAndWidth) {
-            PlayerDimensions.debugRefresh(player, "before server join refresh");
-            player.refreshDimensions();
-            PlayerDimensions.debugRefresh(player, "after server join refresh");
-            if (playerData.isEntityDataSet()) {
-                player.serverLevel().players().forEach(p ->
-                        Network.sendToPlayer(new PlayerDataMessage(player.getUUID(), playerData.getEntityData()), p)
-                );
-            }
+        refreshAndSyncPlayerDimensions(player, playerData, "server join refresh");
+    }
+
+    public void onPlayerRespawn(ServerPlayer player) {
+        refreshAndSyncPlayerDimensions(player, PlayerSaveData.get(player), "server respawn refresh");
+    }
+
+    private void refreshAndSyncPlayerDimensions(ServerPlayer player, PlayerSaveData playerData, String reason) {
+        if (!Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
+            return;
+        }
+
+        PlayerDimensions.debugRefresh(player, "before " + reason);
+        player.refreshDimensions();
+        PlayerDimensions.debugRefresh(player, "after " + reason);
+        if (playerData.isEntityDataSet()) {
+            player.serverLevel().players().forEach(p ->
+                    Network.sendToPlayer(new PlayerDataMessage(player.getUUID(), playerData.getEntityData()), p)
+            );
         }
     }
 

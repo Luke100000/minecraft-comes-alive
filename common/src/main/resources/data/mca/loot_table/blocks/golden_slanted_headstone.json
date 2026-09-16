@@ -9,26 +9,28 @@
           "children": [
             {
               "type": "minecraft:item",
-              "name": "mca:cobblestone_slanted_headstone",
+              "name": "mca:golden_slanted_headstone",
               "conditions": [
                 {
                   "condition": "minecraft:match_tool",
                   "predicate": {
-                    "enchantments": [
-                      {"enchantment": "minecraft:silk_touch", "levels": {"min": 1}}
-                    ]
+                    "predicates": {
+                      "minecraft:enchantments": [
+                        {"enchantments": "minecraft:silk_touch", "levels": {"min": 1}}
+                      ]
+                    }
                   }
                 }
               ]
             },
             {
               "type": "minecraft:item",
-              "name": "minecraft:cobblestone",
+              "name": "minecraft:gold_nugget",
               "conditions": [
                 {"condition": "minecraft:survives_explosion"}
               ],
               "functions": [
-                {"function": "minecraft:set_count", "count": 4}
+                {"function": "minecraft:set_count", "count": 1}
               ]
             }
           ]
@@ -67,9 +69,11 @@
           "term": {
             "condition": "minecraft:match_tool",
             "predicate": {
-              "enchantments": [
-                {"enchantment": "minecraft:silk_touch", "levels": {"min": 1}}
-              ]
+              "predicates": {
+                "minecraft:enchantments": [
+                  {"enchantments": "minecraft:silk_touch", "levels": {"min": 1}}
+                ]
+              }
             }
           }
         }

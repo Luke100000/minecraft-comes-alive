@@ -9,14 +9,16 @@
           "children": [
             {
               "type": "minecraft:item",
-              "name": "mca:wall_headstone",
+              "name": "mca:cobblestone_slanted_headstone",
               "conditions": [
                 {
                   "condition": "minecraft:match_tool",
                   "predicate": {
-                    "enchantments": [
-                      {"enchantment": "minecraft:silk_touch", "levels": {"min": 1}}
-                    ]
+                    "predicates": {
+                      "minecraft:enchantments": [
+                        {"enchantments": "minecraft:silk_touch", "levels": {"min": 1}}
+                      ]
+                    }
                   }
                 }
               ]
@@ -28,7 +30,7 @@
                 {"condition": "minecraft:survives_explosion"}
               ],
               "functions": [
-                {"function": "minecraft:set_count", "count": 3}
+                {"function": "minecraft:set_count", "count": 4}
               ]
             }
           ]
@@ -67,9 +69,11 @@
           "term": {
             "condition": "minecraft:match_tool",
             "predicate": {
-              "enchantments": [
-                {"enchantment": "minecraft:silk_touch", "levels": {"min": 1}}
-              ]
+              "predicates": {
+                "minecraft:enchantments": [
+                  {"enchantments": "minecraft:silk_touch", "levels": {"min": 1}}
+                ]
+              }
             }
           }
         }

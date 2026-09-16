@@ -9,21 +9,23 @@
           "children": [
             {
               "type": "minecraft:item",
-              "name": "mca:deepslate_slanted_headstone",
+              "name": "mca:cross_headstone",
               "conditions": [
                 {
                   "condition": "minecraft:match_tool",
                   "predicate": {
-                    "enchantments": [
-                      {"enchantment": "minecraft:silk_touch", "levels": {"min": 1}}
-                    ]
+                    "predicates": {
+                      "minecraft:enchantments": [
+                        {"enchantments": "minecraft:silk_touch", "levels": {"min": 1}}
+                      ]
+                    }
                   }
                 }
               ]
             },
             {
               "type": "minecraft:item",
-              "name": "minecraft:deepslate",
+              "name": "minecraft:cobblestone",
               "conditions": [
                 {"condition": "minecraft:survives_explosion"}
               ],
@@ -67,9 +69,11 @@
           "term": {
             "condition": "minecraft:match_tool",
             "predicate": {
-              "enchantments": [
-                {"enchantment": "minecraft:silk_touch", "levels": {"min": 1}}
-              ]
+              "predicates": {
+                "minecraft:enchantments": [
+                  {"enchantments": "minecraft:silk_touch", "levels": {"min": 1}}
+                ]
+              }
             }
           }
         }

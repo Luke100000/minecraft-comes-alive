@@ -11,6 +11,7 @@
     "MixinCrossbowAttack",
     "MixinEntityType",
     "MixinGoat",
+    "MixinHopperBlockEntity",
     "MixinInventory",
     "MixinItemEntity",
     "MixinIronGolem",

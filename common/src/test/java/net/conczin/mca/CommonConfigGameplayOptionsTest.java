@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CommonConfigGameplayOptionsTest {
@@ -28,5 +29,29 @@ class CommonConfigGameplayOptionsTest {
 
         assertFalse(config.archerArrowsIgnoreVillagers);
         assertFalse(config.villagersInteractWithFenceGates);
+    }
+
+    @Test
+    void destinyDiscoveryDefaultsToAutomaticWithNoBlacklist() {
+        CommonConfig config = new CommonConfig();
+
+        assertTrue(config.autoDiscoverDestinyLocations);
+        assertEquals(java.util.List.of(), config.destinySpawnLocationBlacklist);
+    }
+
+    @Test
+    void destinyDiscoveryAndBlacklistCanBeConfigured() {
+        CommonConfig config = GSON.fromJson("""
+                {
+                  "autoDiscoverDestinyLocations": false,
+                  "destinySpawnLocationBlacklist": ["ctov:*", "othermod:*large*"]
+                }
+                """, CommonConfig.class);
+
+        assertFalse(config.autoDiscoverDestinyLocations);
+        assertEquals(
+                java.util.List.of("ctov:*", "othermod:*large*"),
+                config.destinySpawnLocationBlacklist
+        );
     }
 }

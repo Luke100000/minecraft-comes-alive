@@ -1,6 +1,5 @@
 package net.conczin.mca.client.gui;
 
-import com.mojang.blaze3d.platform.Window;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
@@ -22,7 +21,6 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.sounds.SoundEvents;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
-import org.lwjgl.opengl.GL11;
 
 import java.util.*;
 
@@ -140,17 +138,7 @@ public class FamilyTreeScreen extends Screen {
         focused = null;
         showDeceasedTooltip = false;
 
-        Window window = Minecraft.getInstance().getWindow();
-        double f = window.getGuiScale();
-        int windowHeight = (int) Math.round(window.getGuiScaledHeight() * f);
-
-        int x = 0;
-        int y = (int) (30 * f);
-        int w = (int) (width * f);
-        int h = (int) ((height - 60) * f);
-
-        GL11.glScissor(x, windowHeight - h - y, w, h);
-        GL11.glEnable(GL11.GL_SCISSOR_TEST);
+        context.enableScissor(0, 30, width, height - 30);
 
         final PoseStack matrices = context.pose();
         matrices.pushPose();
@@ -167,7 +155,7 @@ public class FamilyTreeScreen extends Screen {
         tree.render(context, (int) adjustedMouseX, (int) adjustedMouseY);
         matrices.popPose();
 
-        GL11.glDisable(GL11.GL_SCISSOR_TEST);
+        context.disableScissor();
 
         if (showDeceasedTooltip) {
             context.renderTooltip(font, Component.translatable("gui.family_tree.label.deceased"), mouseX, mouseY);

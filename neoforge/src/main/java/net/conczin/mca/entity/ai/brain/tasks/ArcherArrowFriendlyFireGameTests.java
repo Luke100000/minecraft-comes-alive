@@ -14,6 +14,7 @@ import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -24,8 +25,10 @@ public final class ArcherArrowFriendlyFireGameTests {
     private ArcherArrowFriendlyFireGameTests() {
     }
 
-    @GameTest(batch = "mca_archer_arrow_friendly_fire", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    @GameTest(batch = "mca_archer_arrow_friendly_fire", templateNamespace = "minecraft", template = "bastion/hoglin_stable/air_base", timeoutTicks = 80)
     public static void arrowPassesThroughVillagerAndHitsHostile(GameTestHelper helper) {
+        clearArrowLane(helper);
+
         BlockPos archerPos = helper.absolutePos(new BlockPos(2, 2, 4));
         BlockPos villagerPos = helper.absolutePos(new BlockPos(5, 2, 4));
         BlockPos targetPos = helper.absolutePos(new BlockPos(8, 2, 4));
@@ -38,6 +41,7 @@ public final class ArcherArrowFriendlyFireGameTests {
         }
         target.absMoveTo(targetPos.getX() + 0.5D, targetPos.getY(), targetPos.getZ() + 0.5D);
         target.setNoAi(true);
+        target.setNoGravity(true);
         helper.getLevel().addFreshEntity(target);
 
         float bystanderHealth = bystander.getHealth();
@@ -60,6 +64,16 @@ public final class ArcherArrowFriendlyFireGameTests {
         });
     }
 
+    private static void clearArrowLane(GameTestHelper helper) {
+        for (int x = 1; x <= 9; x++) {
+            for (int y = 2; y <= 3; y++) {
+                for (int z = 3; z <= 5; z++) {
+                    helper.setBlock(new BlockPos(x, y, z), Blocks.AIR);
+                }
+            }
+        }
+    }
+
     private static VillagerEntityMCA spawnVillager(GameTestHelper helper, BlockPos pos, boolean archer) {
         helper.getLevel().getChunk(pos);
         var builder = VillagerFactory.newVillager(helper.getLevel())
@@ -70,6 +84,7 @@ public final class ArcherArrowFriendlyFireGameTests {
         }
         VillagerEntityMCA villager = builder.spawn(MobSpawnType.STRUCTURE);
         villager.setNoAi(true);
+        villager.setNoGravity(true);
         return villager;
     }
 }

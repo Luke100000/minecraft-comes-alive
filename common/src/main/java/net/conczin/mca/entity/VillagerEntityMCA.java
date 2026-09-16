@@ -1034,16 +1034,18 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             boolean head = passengers.size() > 2 && passengers.get(2) == this;
 
             Vec3 offset = head ? new Vec3(0, 0.55f, 0) : new Vec3(left ? 0.4F : -0.4F, 0.05f, 0).yRot(yaw);
+            Vec3 pos = this.position();
 
-            // todo currently only client side
+            // Keep the physical carry position identical on both sides so the bounding box follows the passenger.
+            this.setPos(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
+
+            // Player genetics rendering is client-only. Preserve its original visual adjustment without moving the physical box.
             if (isClientSide() && MCAClient.useGeneticsRenderer(vehicle.getUUID())) {
                 float height = CommonVillagerModel.getVillager(vehicle).getRawVerticalScaleFactor();
                 offset = offset.multiply(1.0f, height, 1.0f);
                 offset = offset.add(0, (height - 1) * 1.5 - 0.7, 0);
+                this.setPosRaw(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
             }
-
-            Vec3 pos = this.position();
-            this.setPosRaw(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
 
             if (vehicle.isShiftKeyDown()) {
                 stopRiding();
@@ -1274,7 +1276,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public float getVoicePitch() {
         float r = (random.nextFloat() - 0.5f) * 0.05f;
         float g = (genetics.getGene(Genetics.VOICE) - 0.5f) * 0.3f;
-        float a = Mth.lerp(AgeState.getDelta(tickCount), getAgeState().getPitch(), getAgeState().getNext().getPitch());
+        float a = Mth.lerp(AgeState.getDelta(getTrackedValue(GROWTH_AMOUNT)), getAgeState().getPitch(), getAgeState().getNext().getPitch());
         return a + r + g;
     }
 

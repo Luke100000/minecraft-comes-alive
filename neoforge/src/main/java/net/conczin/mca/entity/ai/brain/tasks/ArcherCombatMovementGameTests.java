@@ -17,6 +17,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -1425,7 +1426,7 @@ public final class ArcherCombatMovementGameTests {
     }
 
     @GameTest(batch = "mca_archer_reaction_time", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
-    public static void stableVisibleTargetBeginsStrafeAfterVanillaVisibilityDelay(GameTestHelper helper) {
+    public static void stableVisibleTargetBeginsStrafeAfterActiveHoldDelay(GameTestHelper helper) {
         cleanupTestEntities();
         BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
         prepareFlatArea(helper, start, 12);
@@ -1438,13 +1439,20 @@ public final class ArcherCombatMovementGameTests {
         long gameTime = helper.getLevel().getGameTime();
         task.start(helper.getLevel(), archer, gameTime);
 
-        for (int tick = 1; tick <= 20; tick++) {
+        for (int tick = 1; tick < 10; tick++) {
             task.tick(helper.getLevel(), archer, gameTime + tick);
         }
 
         helper.assertTrue(
+                RangedCombatState.current(archer).orElse(null) == RangedCombatState.HOLD,
+                "stable visible target strafed before the active 10-tick hold delay; state="
+                        + RangedCombatState.current(archer).orElse(null)
+        );
+
+        task.tick(helper.getLevel(), archer, gameTime + 10);
+        helper.assertTrue(
                 RangedCombatState.current(archer).orElse(null) == RangedCombatState.STRAFE,
-                "stable visible target was still waiting after the vanilla 20-tick visibility delay; state="
+                "stable visible target did not strafe after the active 10-tick hold delay; state="
                         + RangedCombatState.current(archer).orElse(null)
         );
         helper.succeed();
@@ -1484,6 +1492,72 @@ public final class ArcherCombatMovementGameTests {
                 "HOLD retained a pre-combat WALK_TARGET"
         );
         helper.assertTrue(archer.getNavigation().isDone(), "HOLD left pre-combat navigation running underneath direct movement");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_hold_handoff", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void holdDoesNotContinuouslyEraseLaterMovementIntent(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        prepareFlatArea(helper, start, 12);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        Zombie target = spawnTarget(helper, start.east(10));
+        archer.setNoAi(true);
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+
+        ArcherMovementTask<VillagerEntityMCA> movement = new ArcherMovementTask<>(24);
+        long gameTime = helper.getLevel().getGameTime();
+        movement.start(helper.getLevel(), archer, gameTime);
+        movement.tick(helper.getLevel(), archer, gameTime + 1);
+
+        helper.assertTrue(
+                RangedCombatState.current(archer).orElse(null) == RangedCombatState.HOLD,
+                "stable target did not enter HOLD before handoff; state=" + RangedCombatState.current(archer).orElse(null)
+        );
+
+        WalkTarget laterMovementIntent = new WalkTarget(Vec3.atBottomCenterOf(start.north(6)), 0.5F, 0);
+        archer.getBrain().setMemory(MemoryModuleType.WALK_TARGET, laterMovementIntent);
+        movement.tick(helper.getLevel(), archer, gameTime + 2);
+
+        helper.assertTrue(
+                archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null) == laterMovementIntent,
+                "stable HOLD repeatedly erased movement intent published after direct movement was claimed"
+        );
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_kite_handoff", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void kiteDoesNotOverwriteLaterMovementIntent(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        prepareFlatArea(helper, start, 12);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        Zombie target = spawnTarget(helper, start.east(5));
+        archer.setNoAi(true);
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+
+        ArcherMovementTask<VillagerEntityMCA> movement = new ArcherMovementTask<>(24);
+        long gameTime = helper.getLevel().getGameTime();
+        movement.start(helper.getLevel(), archer, gameTime);
+        movement.tick(helper.getLevel(), archer, gameTime + 1);
+
+        helper.assertTrue(
+                RangedCombatState.current(archer).orElse(null) == RangedCombatState.KITE,
+                "close target did not enter KITE before handoff; state=" + RangedCombatState.current(archer).orElse(null)
+        );
+        helper.assertTrue(
+                archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).isPresent(),
+                "KITE did not publish its initial combat WALK_TARGET"
+        );
+
+        WalkTarget laterMovementIntent = new WalkTarget(Vec3.atBottomCenterOf(start.north(6)), 0.5F, 0);
+        archer.getBrain().setMemory(MemoryModuleType.WALK_TARGET, laterMovementIntent);
+        movement.tick(helper.getLevel(), archer, gameTime + 2);
+
+        helper.assertTrue(
+                archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null) == laterMovementIntent,
+                "stable KITE overwrote movement intent published by another owner"
+        );
         helper.succeed();
     }
 
