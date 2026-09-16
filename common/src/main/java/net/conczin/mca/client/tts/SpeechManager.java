@@ -55,7 +55,29 @@ public class SpeechManager {
     }
 
     public void playSound(float pitch, Entity entity, Identifier soundLocation) {
-        client.execute(() -> client.getSoundManager().play(SpeechManager.INSTANCE.getSound(pitch, entity, soundLocation)));
+        client.execute(() -> {
+            EntityBoundSoundInstance sound = SpeechManager.INSTANCE.getSound(pitch, entity, soundLocation);
+            playAndTrack(entity.getUUID(), sound);
+        });
+    }
+
+    /**
+     * Stops any currently playing voice line for the given villager and starts the new, given, voice line.
+     */
+    private void playAndTrack(UUID uuid, EntityBoundSoundInstance sound) {
+        stopTrackedSound(uuid);
+        currentlyPlaying.put(uuid, sound);
+        client.getSoundManager().play(sound);
+    }
+
+    /**
+     * Stops any currently playing voice line for the given villager.
+     */
+    private void stopTrackedSound(UUID uuid) {
+        EntityBoundSoundInstance sound = currentlyPlaying.remove(uuid);
+        if (sound != null) {
+            client.getSoundManager().stop(sound);
+        }
     }
 
     public void playPreview(VillagerEntityMCA villager) {
@@ -73,10 +95,7 @@ public class SpeechManager {
     }
 
     public void stopPreview(VillagerEntityMCA villager) {
-        EntityBoundSoundInstance sound = currentlyPlaying.remove(villager.getUUID());
-        if (sound != null) {
-            client.getSoundManager().stop(sound);
-        }
+        stopTrackedSound(villager.getUUID());
     }
 
     public void onChatMessage(Component message, UUID sender) {
@@ -102,9 +121,13 @@ public class SpeechManager {
     private void speak(String phrase, UUID sender, boolean translatable) {
         Minecraft client = Minecraft.getInstance();
         if (client.level == null) return;
-        if (currentlyPlaying.containsKey(sender) && client.getSoundManager().isActive(currentlyPlaying.get(sender))) {
-            return;
-        }
+
+        // Note: we intentionally do NOT skip this when a voice line is already playing for this
+        // villager. Instead, whichever voice line becomes ready to play first (offline pack
+        // sounds play instantly, online TTS may take a moment to download) will stop whatever
+        // is currently playing for that villager before starting, via playAndTrack/tryPlayVoicePackSound.
+        // This ensures a new voice line always cuts off the previous one instead of either
+        // overlapping with it or being silently dropped.
 
         VillagerEntityMCA villager = getSpeaker(client, sender);
         if (villager == null) return;
@@ -163,8 +186,7 @@ public class SpeechManager {
         }
 
         EntityBoundSoundInstance instance = new EntityBoundSoundInstance(SoundEvent.createVariableRangeEvent(sound), SoundSource.NEUTRAL, 1.0f, pitch, villager, threadSafeRandom.nextLong());
-        currentlyPlaying.put(sender, instance);
-        client.getSoundManager().play(instance);
+        playAndTrack(sender, instance);
         return true;
     }
 
