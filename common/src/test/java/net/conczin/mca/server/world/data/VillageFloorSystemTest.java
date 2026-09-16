@@ -396,6 +396,24 @@ class VillageFloorSystemTest {
     }
 
     @Test
+    void provenBuildingAttachmentAllowsDistinctBandOverlapWithinSameLogicalBuilding() {
+        Village village = new Village(1, null);
+        StructureFloor mainFloor = TestStructureFloors.create(0, 64, 68, 0, region(64));
+        StructureFloor upperFloor = TestStructureFloors.create(0, 68, 72, 1, region(68));
+        Structure mainStructure = structure(10, 10, mainFloor);
+        Structure upperStructure = structure(11, 10, upperFloor);
+        registerStructure(village, mainStructure, room(100, 10, 0, true));
+        registerStructure(village, upperStructure, room(101, 11, 0, false));
+
+        StructureFloor basementTransition = TestStructureFloors.create(1, 62, 70, -1, region(62));
+        StructureConnector.VerticalConnection connection = new StructureConnector.VerticalConnection(
+                mainStructure, mainFloor);
+
+        assertEquals(10, village.selectAttachmentTarget(basementTransition, List.of(connection))
+                .orElseThrow().buildingId());
+    }
+
+    @Test
     void floorAttachmentRejectsAnOverlappingCopyOfTheRegisteredFloor() {
         Village village = new Village(1, null);
         StructureFloor existingFloor = TestStructureFloors.create(0, 64, 68, 0, region(64), List.of(

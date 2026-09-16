@@ -238,6 +238,30 @@ class RoomScanPlannerTest {
     }
 
     @Test
+    void interactionBelowAnchorStaysOnCanonicalUpperStorey() {
+        Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
+        Building room = room(100, 20, 0, Set.of(
+                new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
+                new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
+        Village village = village(persisted, room);
+        BlockPos source = new BlockPos(4, 63, 0);
+        FloorGeometry primary = new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(new BlockPos(0, 64, 0), 68),
+                new FloorGeometry.Cell(new BlockPos(1, 64, 0), 68),
+                new FloorGeometry.Cell(new BlockPos(2, 64, 0), 68),
+                new FloorGeometry.Cell(new BlockPos(3, 64, 0), 68),
+                new FloorGeometry.Cell(source, 68)), Map.of());
+        FloorGeometry lower = scannedFloor(60, 64, 0, 4);
+
+        RoomScanPlan plan = RoomScanPlanner.planFresh(
+                village, source, observation(source, primary, List.of(primary, lower)));
+
+        assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
+        assertEquals(20, plan.targetStructureId());
+        assertEquals(0, plan.targetFloorId());
+    }
+
+    @Test
     void upperTransitionOutsidePersistedFloorUsesConnectedFloorInsteadOfSameStoreyExpansion() {
         Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
         Building room = room(100, 20, 0, Set.of(

@@ -126,6 +126,7 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
+        tag.putInt("floorNumber", floorNumber);
         tag.put("cells", NbtHelper.fromList(geometry.cells().stream()
                 .sorted(Comparator
                         .comparingInt((FloorGeometry.Cell cell) -> cell.feet().getX())
@@ -144,7 +145,8 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
         }
         List<FloorGeometry.Cell> cells = NbtHelper.toList(
                 tag.getList("cells", Tag.TAG_COMPOUND), value -> loadCell((CompoundTag) value));
-        return new StructureFloor(tag.getInt("id"), 0,
+        int floorNumber = tag.contains("floorNumber", Tag.TAG_INT) ? tag.getInt("floorNumber") : 0;
+        return new StructureFloor(tag.getInt("id"), floorNumber,
                 new FloorGeometry(cells, loadMarkers(tag).stream()
                         .filter(marker -> cells.stream()
                                 .anyMatch(cell -> cell.feet().equals(marker.floorCell())))

@@ -2,6 +2,7 @@ package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
 
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -35,6 +36,23 @@ public record RoomScanPlan(Optional<Building> currentRoom,
         currentRoom = currentRoom == null ? Optional.empty() : currentRoom;
         interactionSource = interactionSource.immutable();
         scanSeed = scanSeed.immutable();
+        Objects.requireNonNull(mode, "mode");
+        boolean existingFloor = targetStructureId >= 0 && targetFloorId >= 0;
+        boolean noExistingFloor = targetStructureId == NO_INTERACTION_STRUCTURE
+                && targetFloorId == NO_INTERACTION_FLOOR;
+        boolean noAttachment = targetBuildingId == NO_TARGET_BUILDING
+                && prospectiveFloorNumber == NO_PROSPECTIVE_FLOOR && selectedAttachmentFloor == null;
+        boolean valid = switch (mode) {
+            case ADD_BUILDING -> currentRoom.isEmpty() && noExistingFloor && noAttachment;
+            case ADD_ROOM -> currentRoom.isEmpty() && existingFloor && noAttachment;
+            case UPDATE_ROOM -> currentRoom.filter(room -> room.getStructureId() == targetStructureId
+                    && room.getFloorId() == targetFloorId).isPresent() && existingFloor && noAttachment;
+            case ADD_FLOOR, ADD_BASEMENT -> currentRoom.isEmpty() && noExistingFloor
+                    && targetBuildingId >= 0 && selectedAttachmentFloor != null
+                    && prospectiveFloorNumber != NO_PROSPECTIVE_FLOOR
+                    && (mode == Village.RoomScanMode.ADD_BASEMENT) == (prospectiveFloorNumber < 0);
+        };
+        if (!valid) throw new IllegalArgumentException("Inconsistent Room scan target for " + mode);
     }
 
     public RoomScanPlan(Optional<Building> currentRoom,

@@ -15,6 +15,7 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -27,6 +28,9 @@ import java.util.Set;
 /** Discovers one exact integer storey while using Minecraft surface heights only for movement. */
 final class SelectedFloorScanner {
     private static final double MAX_STEP_HEIGHT = 1.125D;
+    // Full-block stairs have no block metadata marking where the staircase ends. Two stable
+    // same-height exits are enough evidence that the cell is a landing/plateau, not the stair tip.
+    private static final int MIN_STABLE_LANDING_PEERS = 2;
     private static final Comparator<BlockPos> CELL_ORDER = Comparator
             .comparingInt((BlockPos pos) -> pos.getX())
             .thenComparingInt(BlockPos::getZ)
@@ -39,70 +43,56 @@ final class SelectedFloorScanner {
     private SelectedFloorScanner() {
     }
 
+    /** Resolves the selected Floor and explicitly explores its connected storeys. */
     static Result scan(Level world, BlockPos seed, int maxSize, int maxRadius) {
-        FloorCeilingResolver ceilings = new FloorCeilingResolver(world);
-        Map<BlockPos, List<HorizontalStep>> stepsByCell = new HashMap<>();
-        StepProvider provider = cell -> stepsByCell.computeIfAbsent(
-                cell.feet(), ignored -> worldSteps(world, cell, ceilings));
-        StoreyResolution resolution = resolveCanonicalStorey(
-                world, seed, ceilings, provider, maxSize, maxRadius);
-        if (resolution.result() != Building.validationResult.SUCCESS || resolution.storey() == null) {
-            return Result.failure(resolution.result(), seed);
+        return new Observation(world, maxSize, maxRadius).connected(seed);
+    }
+
+    static Result scanSelected(Level world, BlockPos seed, int maxSize, int maxRadius) {
+        return new Observation(world, maxSize, maxRadius).selected(seed);
+    }
+
+    /** All discovery evidence lives for one operation; none is retained across world changes. */
+    static final class Observation {
+        private final Level world;
+        private final int maxSize;
+        private final int maxRadius;
+        private final FloorCeilingResolver ceilings;
+        private final StepProvider provider;
+        private final Map<BlockPos, StoreyResolution> resolutions = new HashMap<>();
+
+        Observation(Level world, int maxSize, int maxRadius) {
+            this.world = world;
+            this.maxSize = maxSize;
+            this.maxRadius = maxRadius;
+            this.ceilings = new FloorCeilingResolver(world);
+            Map<BlockPos, List<HorizontalStep>> steps = new HashMap<>();
+            this.provider = cell -> steps.computeIfAbsent(
+                    cell.feet(), ignored -> worldSteps(world, cell, ceilings));
         }
-        ConnectedStoreys connected = discoverConnectedStoreys(
-                world, resolution.storey(), ceilings, provider, maxSize, maxRadius);
-        return success(seed, resolution.storey(), connected);
+
+        private StoreyResolution resolve(BlockPos seed) {
+            return resolutions.computeIfAbsent(seed.immutable(), pos -> resolveCanonicalStorey(
+                    world, pos, ceilings, provider, maxSize, maxRadius));
+        }
+
+        Result selected(BlockPos seed) {
+            StoreyResolution resolution = resolve(seed);
+            return resolution.storey() == null ? Result.failure(resolution.result(), seed)
+                    : success(seed, resolution.storey(), new ConnectedStoreys(List.of(resolution.storey()), List.of()));
+        }
+
+        Result connected(BlockPos seed) {
+            StoreyResolution resolution = resolve(seed);
+            if (resolution.storey() == null) return Result.failure(resolution.result(), seed);
+            return success(seed, resolution.storey(), discoverConnectedStoreys(resolution.storey(), this));
+        }
     }
 
     private static FloorGeometry attachConnectors(
             Level world, FloorGeometry floor, Collection<BlockPos> connectors) {
         return new FloorGeometry(
                 floor.cells(), StructureConnector.connectorMarkersForFloor(world, connectors, floor));
-    }
-
-    private static StoreyCandidate scanStoreyCandidate(
-            Level world,
-            BlockPos requestedSeed,
-            FloorCeilingResolver ceilings,
-            StepProvider provider,
-            int maxSize,
-            int maxRadius) {
-        SeedResolution seedResolution = resolveScanSeed(world, requestedSeed, ceilings).orElse(null);
-        if (seedResolution == null) {
-            return StoreyCandidate.failure(Building.validationResult.NOT_IN_BUILDING, requestedSeed);
-        }
-
-        SurfaceCell traversalSeed = resolveStoreyAnchor(world, seedResolution.traversalSeed(), provider);
-        StoreyClassifier classifier = new StoreyClassifier(
-                new StoreyContext(traversalSeed.feet().getY()), provider);
-        StoreyScan scan = traverseStorey(
-                world, traversalSeed, ceilings, maxSize, maxRadius, provider, classifier);
-        if (scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) {
-            return StoreyCandidate.failure(scan.result(), requestedSeed);
-        }
-        scan = retainEnclosedRegions(
-                world, traversalSeed, scan, ceilings, maxRadius, provider, classifier);
-        if (scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) {
-            return StoreyCandidate.failure(scan.result(), requestedSeed);
-        }
-
-        BlockPos membershipSeed = seedResolution.membershipSeed();
-        if (membershipSeed != null && scan.floor().cellAt(membershipSeed).isEmpty()) {
-            return StoreyCandidate.failure(Building.validationResult.NOT_IN_BUILDING, requestedSeed);
-        }
-
-        LinkedHashSet<BlockPos> connectors = new LinkedHashSet<>(scan.connectors());
-        for (FloorGeometry.Cell cell : scan.floor().cells()) {
-            collectVerticalConnectors(world, cell, connectors);
-        }
-        if (scan.floor().cells().size() + connectors.size() > maxSize) {
-            return StoreyCandidate.failure(Building.validationResult.BLOCK_LIMIT, requestedSeed);
-        }
-        FloorGeometry floor = attachConnectors(world, scan.floor(), connectors);
-        DiscoveredStorey storey = new DiscoveredStorey(
-                floor, scan.transitions(), scan.storeyEdgeCells(), scan.transitionSeeds());
-        BlockPos ownershipSeed = membershipSeed == null ? traversalSeed.feet() : membershipSeed;
-        return StoreyCandidate.success(requestedSeed, traversalSeed, ownershipSeed, storey);
     }
 
     private static StoreyResolution resolveCanonicalStorey(
@@ -112,26 +102,50 @@ final class SelectedFloorScanner {
             StepProvider provider,
             int maxSize,
             int maxRadius) {
-        StoreyCandidate candidate = scanStoreyCandidate(
-                world, requestedSeed, ceilings, provider, maxSize, maxRadius);
-        if (candidate.result() != Building.validationResult.SUCCESS || candidate.storey() == null) {
-            return StoreyResolution.failure(candidate.result());
+        SeedResolution seedResolution = resolveScanSeed(world, requestedSeed, ceilings).orElse(null);
+        if (seedResolution == null) {
+            return StoreyResolution.failure(Building.validationResult.NOT_IN_BUILDING);
         }
-        return StoreyResolution.success(candidate.storey());
+
+        SurfaceCell traversalSeed = resolveStoreyAnchor(world, seedResolution.traversalSeed(), provider);
+        StoreyClassifier classifier = new StoreyClassifier(
+                world, new StoreyContext(traversalSeed.feet().getY()), provider);
+        StoreyScan scan = traverseStorey(
+                world, traversalSeed, ceilings, maxSize, maxRadius, provider, classifier);
+        if (scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) {
+            return StoreyResolution.failure(scan.result());
+        }
+        scan = retainEnclosedRegions(
+                world, traversalSeed, scan, ceilings, maxRadius, provider, classifier);
+        if (scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) {
+            return StoreyResolution.failure(scan.result());
+        }
+
+        BlockPos membershipSeed = seedResolution.membershipSeed();
+        if (membershipSeed != null && scan.floor().cellAt(membershipSeed).isEmpty()) {
+            return StoreyResolution.failure(Building.validationResult.NOT_IN_BUILDING);
+        }
+
+        LinkedHashSet<BlockPos> connectors = new LinkedHashSet<>(scan.connectors());
+        for (FloorGeometry.Cell cell : scan.floor().cells()) {
+            collectVerticalConnectors(world, cell, connectors);
+        }
+        if (scan.floor().cells().size() + connectors.size() > maxSize) {
+            return StoreyResolution.failure(Building.validationResult.BLOCK_LIMIT);
+        }
+        FloorGeometry floor = attachConnectors(world, scan.floor(), connectors);
+        DiscoveredStorey storey = new DiscoveredStorey(
+                floor, scan.transitions(), scan.storeyEdgeCells(), scan.transitionSeeds());
+        return StoreyResolution.success(storey);
     }
 
     private static ConnectedStoreys discoverConnectedStoreys(
-            Level world,
             DiscoveredStorey selected,
-            FloorCeilingResolver ceilings,
-            StepProvider provider,
-            int maxSize,
-            int maxRadius) {
+            Observation observation) {
         List<DiscoveredStorey> storeys = new ArrayList<>();
         List<StoreyLink> links = new ArrayList<>();
         ArrayDeque<PendingTransition> queue = new ArrayDeque<>();
-        Set<PendingTransition> visitedTransitions = new HashSet<>();
-        Map<BlockPos, StoreyResolution> resolutionsBySeed = new HashMap<>();
+        Map<DiscoveredStorey, Set<BlockPos>> visitedTransitions = new IdentityHashMap<>();
         Map<BlockPos, DiscoveredStorey> storeysByCell = new HashMap<>();
         storeys.add(selected);
         indexStorey(storeysByCell, selected);
@@ -141,25 +155,15 @@ final class SelectedFloorScanner {
 
         while (!queue.isEmpty()) {
             PendingTransition pending = queue.removeFirst();
-            if (!visitedTransitions.add(pending)) continue;
+            if (!visitedTransitions.computeIfAbsent(pending.from(), ignored -> new HashSet<>())
+                    .add(pending.seed())) continue;
 
             DiscoveredStorey knownStorey = storeysByCell.get(pending.seed());
             StoreyResolution resolution = knownStorey == null
-                    ? resolutionsBySeed.computeIfAbsent(pending.seed(), seed -> resolveCanonicalStorey(
-                    world, seed, ceilings, provider, maxSize, maxRadius))
+                    ? observation.resolve(pending.seed())
                     : StoreyResolution.success(knownStorey);
             if (resolution.result() != Building.validationResult.SUCCESS || resolution.storey() == null) continue;
             DiscoveredStorey resolved = resolution.storey();
-
-            if (StructureFloor.sameSemanticBand(
-                    pending.from().floor().anchorY(), resolved.floor().anchorY())) {
-                if (pending.from().floor().sameCellPositions(resolved.floor())) continue;
-                DiscoveredStorey from = pending.from();
-                resolved.transitionSeeds().stream().sorted(CELL_ORDER)
-                        .map(seed -> new PendingTransition(from, seed))
-                        .forEach(queue::addLast);
-                continue;
-            }
 
             DiscoveredStorey canonical = storeys.stream()
                     .filter(existing -> existing.floor().sameCellPositions(resolved.floor()))
@@ -209,12 +213,6 @@ final class SelectedFloorScanner {
             if (underlying.isPresent()) return underlying;
         }
         return inspectSurfaceCell(world, seed, ceilings);
-    }
-
-    static boolean usesInteriorMembershipSeed(Level world, BlockPos seed) {
-        if (world == null || seed == null) return false;
-        SeedResolution resolution = resolveScanSeed(world, seed, new FloorCeilingResolver(world)).orElse(null);
-        return resolution != null && resolution.membershipSeed() != null;
     }
 
     private static Optional<SeedResolution> resolveScanSeed(
@@ -349,12 +347,15 @@ final class SelectedFloorScanner {
     private static boolean isDescendingTransitionSeed(
             Level world, SurfaceCell cell, StepProvider provider) {
         if (isStairOccupancy(world, cell.feet())) return true;
-        if (!hasDescendingStep(cell, provider)
-                || !descendsBelowOwnedBand(
-                cell, new StoreyContext(cell.feet().getY()), provider)) {
-            return false;
-        }
-        return stableSameHeightPeerCount(cell, provider) <= 1;
+        return isDescendingStoreyTransition(
+                cell, new StoreyContext(cell.feet().getY()), provider);
+    }
+
+    private static boolean isDescendingStoreyTransition(
+            SurfaceCell cell, StoreyContext context, StepProvider provider) {
+        return hasDescendingStep(cell, provider)
+                && descendsBelowOwnedBand(cell, context, provider)
+                && stableSameHeightPeerCount(cell, provider) < MIN_STABLE_LANDING_PEERS;
     }
 
     private static boolean isStairOccupancy(Level world, BlockPos feet) {
@@ -475,7 +476,7 @@ final class SelectedFloorScanner {
 
                 for (int yOffset : LANDING_Y_OFFSETS) {
                     BlockPos candidate = new BlockPos(x, source.feet().getY() + yOffset, z);
-                    OptionalDouble candidateSurface = yOffset == 0
+                    OptionalDouble candidateSurface = yOffset == 0 || isVerticalConnectorTopExit(world, candidate)
                             ? interactionMembershipSurface(world, candidate, ceilings)
                             : interiorMembershipSurface(world, candidate, ceilings);
                     if (candidateSurface.isEmpty()
@@ -566,16 +567,42 @@ final class SelectedFloorScanner {
         return Set.copyOf(connected);
     }
 
-    private static StoreyRole storeyRole(StoreyContext context,
+    private static StoreyRole storeyRole(Level world,
+                                         StoreyContext context,
                                          SurfaceCell candidate,
                                          StepProvider provider) {
         int y = candidate.feet().getY();
         if (y < context.minOwnedY()
                 || y > context.maxOwnedY() + 1) return StoreyRole.OTHER;
         if (y == context.maxOwnedY() + 1) return StoreyRole.EDGE;
-        if (y == context.anchorY() && hasDescendingStep(candidate, provider)
-                && descendsBelowOwnedBand(candidate, context, provider)) return StoreyRole.OTHER;
+        if (y == context.maxOwnedY()
+                && descendsFullStoreyFromStair(world, candidate, provider)) return StoreyRole.EDGE;
+        if (y == context.anchorY()
+                && (isDescendingStoreyTransition(candidate, context, provider)
+                || descendsFullStoreyFromStair(world, candidate, provider))) return StoreyRole.OTHER;
         return StoreyRole.OWNED;
+    }
+
+    private static boolean descendsFullStoreyFromStair(
+            Level world, SurfaceCell start, StepProvider provider) {
+        if (!isStairOccupancy(world, start.feet())) return false;
+        int boundaryY = start.feet().getY() - StructureFloor.BAND_TOLERANCE;
+        ArrayDeque<SurfaceCell> queue = new ArrayDeque<>();
+        Set<BlockPos> visited = new HashSet<>();
+        queue.addLast(start);
+        visited.add(start.feet());
+        while (!queue.isEmpty()) {
+            SurfaceCell current = queue.removeFirst();
+            for (HorizontalStep step : provider.steps(current)) {
+                if (step.connector() != null) continue;
+                SurfaceCell next = step.landing();
+                int nextY = next.feet().getY();
+                if (nextY >= current.feet().getY()) continue;
+                if (nextY <= boundaryY) return true;
+                if (visited.add(next.feet())) queue.addLast(next);
+            }
+        }
+        return false;
     }
 
     private static boolean descendsBelowOwnedBand(
@@ -678,6 +705,8 @@ final class SelectedFloorScanner {
             int maxRadius,
             StepProvider provider,
             StoreyClassifier classifier) {
+        Boolean known = classifier.exterior.get(start.feet());
+        if (known != null) return known;
         ArrayDeque<SurfaceCell> queue = new ArrayDeque<>();
         Set<BlockPos> visited = new HashSet<>();
         queue.addLast(start);
@@ -686,8 +715,15 @@ final class SelectedFloorScanner {
         while (!queue.isEmpty()) {
             SurfaceCell current = queue.removeFirst();
             if (horizontalDistance(current.feet(), scanAnchor) >= maxRadius - 1) {
+                classifier.exterior.put(start.feet(), true);
                 return true;
             }
+            Boolean reachable = classifier.exterior.get(current.feet());
+            if (Boolean.TRUE.equals(reachable)) {
+                classifier.exterior.put(start.feet(), true);
+                return true;
+            }
+            if (Boolean.FALSE.equals(reachable)) continue;
 
             for (PhysicalStep step : physicalSteps(world, new SurfaceProbe(current.feet(), current.surfaceY()))) {
                 if (step.connector() != null) continue;
@@ -698,6 +734,8 @@ final class SelectedFloorScanner {
                 if (classifier.role(probe) != StoreyRole.OWNED) continue;
                 OptionalInt ceiling = ceilings.ceilingY(next);
                 if (ceiling.isEmpty()) {
+                    // Edges can be directional: only the start is proven to reach this exit.
+                    classifier.exterior.put(start.feet(), true);
                     return true;
                 }
                 SurfaceCell cell = new SurfaceCell(next, landing.surfaceY(), ceiling.getAsInt());
@@ -705,6 +743,8 @@ final class SelectedFloorScanner {
                 queue.addLast(cell);
             }
         }
+        // Exhausting the traversal proves every visited cell has no route outside.
+        visited.forEach(cell -> classifier.exterior.put(cell, false));
         return false;
     }
 
@@ -796,14 +836,27 @@ final class SelectedFloorScanner {
     private static OptionalDouble interactionMembershipSurface(
             Level world, BlockPos pos, FloorCeilingResolver ceilings) {
         if (!isInteriorMembershipOccupancy(world, pos)
-                && !isSingleOpenLayerMembership(world, pos)) return OptionalDouble.empty();
+                && !isSingleOpenLayerMembership(world, pos)
+                && !isVerticalConnectorTopExit(world, pos)) return OptionalDouble.empty();
         return membershipSurface(world, pos, ceilings);
     }
 
     private static OptionalDouble membershipSurface(
             Level world, BlockPos pos, FloorCeilingResolver ceilings) {
         if (inspectSurfaceCell(world, pos.above(), ceilings).isPresent()) return OptionalDouble.empty();
-        return supportedFloorLevel(world, pos);
+        OptionalDouble supported = supportedFloorLevel(world, pos);
+        if (supported.isPresent()) return supported;
+        return isVerticalConnectorTopExit(world, pos)
+                ? OptionalDouble.of(pos.getY())
+                : OptionalDouble.empty();
+    }
+
+    private static boolean isVerticalConnectorTopExit(Level world, BlockPos pos) {
+        if (!isOpen(world, pos)) return false;
+        BlockPos connector = StructureConnector.verticalInteractionConnector(world, pos);
+        return connector != null
+                && connector.equals(pos.below())
+                && StructureConnector.isVertical(world, connector);
     }
 
     private static boolean hasInteriorHeadroom(Level world, BlockPos feet) {
@@ -908,18 +961,21 @@ final class SelectedFloorScanner {
     }
 
     private static final class StoreyClassifier {
+        private final Level world;
         private final StoreyContext context;
         private final StepProvider provider;
         private final Map<BlockPos, StoreyRole> roles = new HashMap<>();
+        private final Map<BlockPos, Boolean> exterior = new HashMap<>();
 
-        private StoreyClassifier(StoreyContext context, StepProvider provider) {
+        private StoreyClassifier(Level world, StoreyContext context, StepProvider provider) {
+            this.world = world;
             this.context = context;
             this.provider = provider;
         }
 
         private StoreyRole role(SurfaceCell cell) {
             return roles.computeIfAbsent(
-                    cell.feet(), ignored -> storeyRole(context, cell, provider));
+                    cell.feet(), ignored -> storeyRole(world, context, cell, provider));
         }
     }
 
@@ -960,29 +1016,6 @@ final class SelectedFloorScanner {
     }
 
     private record SeedResolution(SurfaceCell traversalSeed, BlockPos membershipSeed) {
-    }
-
-    private record StoreyCandidate(Building.validationResult result,
-                                   BlockPos requestedSeed,
-                                   SurfaceCell traversalSeed,
-                                   BlockPos ownershipSeed,
-                                   DiscoveredStorey storey) {
-        StoreyCandidate {
-            requestedSeed = requestedSeed == null ? null : requestedSeed.immutable();
-            ownershipSeed = ownershipSeed == null ? null : ownershipSeed.immutable();
-        }
-
-        static StoreyCandidate success(BlockPos requestedSeed,
-                                       SurfaceCell traversalSeed,
-                                       BlockPos ownershipSeed,
-                                       DiscoveredStorey storey) {
-            return new StoreyCandidate(Building.validationResult.SUCCESS,
-                    requestedSeed, traversalSeed, ownershipSeed, storey);
-        }
-
-        static StoreyCandidate failure(Building.validationResult result, BlockPos requestedSeed) {
-            return new StoreyCandidate(result, requestedSeed, null, null, null);
-        }
     }
 
     private record StoreyResolution(Building.validationResult result,

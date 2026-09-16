@@ -159,7 +159,7 @@ class RoomDFUTest {
         assertFalse(structureTag.contains("mainRoomId"));
         assertFalse(structureTag.contains("mainRoomAutomatic"));
         assertFalse(structureTag.contains("surfaceReferenceY"));
-        assertFalse(floorTag.contains("floorNumber"));
+        assertTrue(floorTag.contains("floorNumber", net.minecraft.nbt.Tag.TAG_INT));
         assertTrue(logicalTag.contains("mainRoomId"));
         assertTrue(logicalTag.contains("inheritanceEnabled"));
         assertFalse(logicalTag.contains("groundStructureId"));
@@ -171,7 +171,7 @@ class RoomDFUTest {
         BuildingFloorRegion footprint = BuildingFloorRegion.fromFootprint(64, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
                 new BlockPos(0, 64, 1), new BlockPos(1, 64, 1)));
-        StructureFloor floor = TestStructureFloors.create(0, 64, 70, 0, footprint);
+        StructureFloor floor = TestStructureFloors.create(0, 64, 70, -2, footprint);
         Structure structure = new Structure(20, new BlockPos(0, 64, 0), List.of(floor));
         structure.setLogicalBuildingId(77);
 

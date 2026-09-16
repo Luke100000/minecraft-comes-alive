@@ -8,43 +8,60 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
-/** Pure planning over one already-observed fresh Floor. */
+/** Captures fresh Floor evidence once and plans the requested Room operation from it. */
 final class RoomScanPlanner {
     private RoomScanPlanner() {
     }
 
     static RoomScanPlan plan(Village village, Level level, BlockPos pos) {
+        return analyze(village, level, pos).plan();
+    }
+
+    static Analysis analyze(Village village, Level level, BlockPos pos) {
         BlockPos source = pos == null ? BlockPos.ZERO : pos.immutable();
-        if (village == null || pos == null) return RoomScanPlan.addBuilding(source);
+        if (village == null || pos == null) return new Analysis(RoomScanPlan.addBuilding(source));
 
         Village.ResolvedInteraction resolved = village.resolveInteractionPosition(pos).orElse(null);
         RoomScanPlan persistedFloorPlan = null;
         if (resolved != null) {
             Building room = resolved.position().room();
-            if (room != null) return RoomScanPlan.updateRoom(room, source);
+            if (room != null) return new Analysis(RoomScanPlan.updateRoom(room, source));
             persistedFloorPlan = RoomScanPlan.addRoom(
                     resolved.structure().getId(), resolved.position().floor().id(), source);
         }
 
         if (level == null) {
-            return persistedFloorPlan == null ? RoomScanPlan.addBuilding(source) : persistedFloorPlan;
+            return new Analysis(persistedFloorPlan == null ? RoomScanPlan.addBuilding(source) : persistedFloorPlan);
         }
         StructureScanner.FloorObservation observation = StructureScanner.observeFloor(
                 level, source, village.getStructures().values()).orElse(null);
         if (observation == null) {
-            return persistedFloorPlan == null ? RoomScanPlan.addBuilding(source) : persistedFloorPlan;
+            return new Analysis(persistedFloorPlan == null ? RoomScanPlan.addBuilding(source) : persistedFloorPlan);
         }
         List<RoomPartitioner.Component> components = BuildingRoomScanner.components(level, observation.scan());
         RoomScanPlan freshPlan = planFresh(village, level, source, observation, components);
         if (persistedFloorPlan == null) {
-            return freshPlan;
+            return new Analysis(freshPlan, observation, components);
         }
         if (freshPlan.mode() == Village.RoomScanMode.ADD_ROOM
                 && freshPlan.targetStructureId() == persistedFloorPlan.targetStructureId()
                 && freshPlan.targetFloorId() == persistedFloorPlan.targetFloorId()) {
-            return freshPlan;
+            return new Analysis(freshPlan, observation, components);
         }
-        return persistedFloorPlan;
+        // A rejected fresh plan cannot supply geometry for the persisted target.
+        return new Analysis(persistedFloorPlan);
+    }
+
+    record Analysis(RoomScanPlan plan,
+                    StructureScanner.FloorObservation observation,
+                    List<RoomPartitioner.Component> components) {
+        Analysis {
+            components = List.copyOf(components);
+        }
+
+        Analysis(RoomScanPlan plan) {
+            this(plan, null, List.of());
+        }
     }
 
     static RoomScanPlan planFresh(Village village,
@@ -75,10 +92,6 @@ final class RoomScanPlanner {
             RoomPartitioner.Component selected = selectFreshComponent(
                     observation.scan().floor(), observation.seed(), components);
             if (selected != null) {
-                Building anchoredRoom = level != null && SelectedFloorScanner.usesInteriorMembershipSeed(level, source)
-                        ? registeredRoomBySource(village, expansion, selected).orElse(null)
-                        : null;
-                if (anchoredRoom != null) return RoomScanPlan.updateRoom(anchoredRoom, source);
                 return RoomScanPlan.addRoom(
                         expansion.structureId(), expansion.floorId(), source, selected.nearestCell(observation.seed()));
             }
@@ -96,8 +109,7 @@ final class RoomScanPlanner {
                 candidateFloor, observation.verticalConnections(), observation.directlyConnectedFloors()).orElse(null);
         if (target == null) return Optional.empty();
 
-        Structure candidate = new Structure(-1, observation.seed(), List.of(candidateFloor));
-        int floorNumber = village.prospectiveFloorNumber(target.buildingId(), candidate, candidateFloor);
+        int floorNumber = adjacentFloorNumber(village, target, candidateFloor);
         if (floorNumber == Integer.MIN_VALUE) return Optional.empty();
         return Optional.of(RoomScanPlan.attachment(
                 target.buildingId(), floorNumber, source, observation.seed(), candidateFloor));
@@ -126,15 +138,14 @@ final class RoomScanPlanner {
             return Optional.empty();
         }
 
-        int direction = Integer.compare(source.getY(), referenceFloor.anchorY());
+        int direction = Integer.compare(observation.scan().floor().anchorY(), referenceFloor.anchorY());
         if (direction == 0) return Optional.empty();
 
         int buildingId = referenceStructure.getLogicalBuildingId();
         List<ConnectedAttachment> candidates = new ArrayList<>();
         for (FloorGeometry geometry : observation.directlyConnectedFloors()) {
             StructureFloor candidateFloor = new StructureFloor(0, 0, geometry);
-            if (referenceFloor.sameSemanticBand(candidateFloor)
-                    || Integer.compare(candidateFloor.anchorY(), referenceFloor.anchorY()) != direction) {
+            if (Integer.compare(candidateFloor.anchorY(), referenceFloor.anchorY()) != direction) {
                 continue;
             }
 
@@ -144,8 +155,7 @@ final class RoomScanPlanner {
 
             BlockPos scanSeed = nearestScanSeed(level, geometry, source).orElse(null);
             if (scanSeed == null) continue;
-            Structure candidate = new Structure(-1, scanSeed, List.of(candidateFloor));
-            int floorNumber = village.prospectiveFloorNumber(buildingId, candidate, candidateFloor);
+            int floorNumber = adjacentFloorNumber(village, target, candidateFloor);
             if (floorNumber == Integer.MIN_VALUE) continue;
             candidates.add(new ConnectedAttachment(candidateFloor, floorNumber, scanSeed));
         }
@@ -166,16 +176,29 @@ final class RoomScanPlanner {
                 buildingId, selected.floorNumber(), source, selected.scanSeed(), selected.floor()));
     }
 
+    private static int adjacentFloorNumber(
+            Village village, Village.AttachmentTarget target, StructureFloor candidate) {
+        Structure structure = village.getStructure(target.structureId()).orElse(null);
+        StructureFloor reference = structure == null
+                ? null : structure.getFloor(target.floorId()).orElse(null);
+        if (reference == null) return Integer.MIN_VALUE;
+        int direction = Integer.compare(candidate.anchorY(), reference.anchorY());
+        return direction == 0 ? Integer.MIN_VALUE : reference.floorNumber() + direction;
+    }
+
     private static Optional<BlockPos> nearestScanSeed(Level level, FloorGeometry geometry, BlockPos source) {
         if (geometry == null || source == null) return Optional.empty();
+        FloorCeilingResolver ceilings = level == null ? null : new FloorCeilingResolver(level);
         return geometry.cells().stream()
                 .map(FloorGeometry.Cell::feet)
-                .filter(candidate -> level == null || StructureScanner.isWalkableAnchor(level, candidate))
-                .min(Comparator
+                .sorted(Comparator
                         .comparingInt((BlockPos candidate) -> distance(candidate, source))
                         .thenComparingInt(BlockPos::getY)
                         .thenComparingInt(BlockPos::getX)
-                        .thenComparingInt(BlockPos::getZ));
+                        .thenComparingInt(BlockPos::getZ))
+                .filter(candidate -> level == null
+                        || SelectedFloorScanner.inspectSurfaceCell(level, candidate, ceilings).isPresent())
+                .findFirst();
     }
 
     private static int distance(BlockPos first, BlockPos second) {
@@ -187,8 +210,9 @@ final class RoomScanPlanner {
     private static boolean validExpansion(Village village,
                                           StructureScanner.FloorObservation observation,
                                           FloorTarget target) {
+        Structure structure = village.getStructure(target.structureId()).orElseThrow();
         return StructureScanner.validateObservation(
-                observation, village.getStructures().values(), target.structureId(), -1)
+                observation, village.getStructures().values(), target.structureId(), structure.getLogicalBuildingId())
                 == Building.validationResult.SUCCESS;
     }
 
@@ -209,21 +233,6 @@ final class RoomScanPlanner {
             List<RoomPartitioner.Component> components) {
         if (floor == null || scanSeed == null) return null;
         return RoomPartitioner.select(scanSeed, floor, components);
-    }
-
-    private static Optional<Building> registeredRoomBySource(
-            Village village,
-            FloorTarget target,
-            RoomPartitioner.Component component) {
-        if (village == null || target == null || component == null) return Optional.empty();
-        List<Building> matches = village.getRooms()
-                .filter(Building::isFunctionalRoom)
-                .filter(room -> room.getStructureId() == target.structureId())
-                .filter(room -> room.getFloorId() == target.floorId())
-                .filter(room -> component.contains(room.getSourceBlock()))
-                .limit(2)
-                .toList();
-        return matches.size() == 1 ? Optional.of(matches.getFirst()) : Optional.empty();
     }
 
     private record FloorTarget(int structureId, int floorId) {
