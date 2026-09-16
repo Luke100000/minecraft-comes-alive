@@ -8,7 +8,6 @@ import net.conczin.mca.entity.ai.brain.tasks.ArcherCombatMovementGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.FishingTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.HarvestingTaskGameTests;
 import net.conczin.mca.entity.ai.navigation.FenceGateInteractionGameTests;
-import net.conczin.mca.server.world.data.CopiedOpenHouseGameTests;
 import net.conczin.mca.server.world.data.FloorScannerGameTests;
 import net.conczin.mca.server.world.data.VillageMourningGameTests;
 import net.minecraft.core.Holder;
@@ -48,7 +47,6 @@ public final class McaGameTestRegistration {
             FenceGateInteractionGameTests.class,
             FishingTaskGameTests.class,
             HarvestingTaskGameTests.class,
-            CopiedOpenHouseGameTests.class,
             FloorScannerGameTests.class,
             VillageMourningGameTests.class
     );

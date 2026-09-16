@@ -126,6 +126,7 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
+        tag.putInt("floorNumber", floorNumber);
         tag.put("cells", NbtHelper.fromList(geometry.cells().stream()
                 .sorted(Comparator
                         .comparingInt((FloorGeometry.Cell cell) -> cell.feet().getX())
@@ -144,7 +145,8 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
         }
         List<FloorGeometry.Cell> cells = NbtHelper.toList(
                 tag.getList("cells").orElseGet(net.minecraft.nbt.ListTag::new), value -> loadCell((CompoundTag) value));
-        return new StructureFloor(tag.getInt("id").orElse(0), 0,
+        int floorNumber = tag.getInt("floorNumber").orElse(0);
+        return new StructureFloor(tag.getInt("id").orElse(0), floorNumber,
                 new FloorGeometry(cells, loadMarkers(tag).stream()
                         .filter(marker -> cells.stream()
                                 .anyMatch(cell -> cell.feet().equals(marker.floorCell())))

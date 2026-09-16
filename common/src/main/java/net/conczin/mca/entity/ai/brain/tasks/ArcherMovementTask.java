@@ -249,14 +249,14 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
                     trackTarget(entity, target);
                     publishKiteAway(
                             entity,
-                            RangedCombatPositioning.nearbyMovementThreats(entity, movementThreat),
+                            movementThreat,
                             targetChanged || stateChanged
                     );
                 }
                 case EMERGENCY_FLEE -> {
                     publishEmergencyAway(
                             entity,
-                            RangedCombatPositioning.nearbyMovementThreats(entity, target),
+                            target,
                             targetChanged || stateChanged
                     );
                     trackEscapeOrTarget(entity, target);
@@ -268,6 +268,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
                     entity,
                     target,
                     currentState,
+                    targetChanged,
                     visible,
                     inRange,
                     closeThreat
@@ -298,11 +299,14 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             E entity,
             LivingEntity target,
             RangedCombatState currentState,
+            boolean targetChanged,
             boolean visible,
             boolean inRange,
             boolean closeThreat
     ) {
-        claimDirectMovement(entity);
+        if (targetChanged || (currentState != RangedCombatState.HOLD && currentState != RangedCombatState.STRAFE)) {
+            claimDirectMovement(entity);
+        }
         trackTarget(entity, target);
 
         if (currentState == RangedCombatState.STRAFE) {
@@ -424,24 +428,32 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         logMovementIntent(entity, "walk", "reposition_firing_position", walkTarget);
     }
 
-    private void publishKiteAway(E entity, List<LivingEntity> threats, boolean force) {
+    private void publishKiteAway(E entity, LivingEntity fallbackThreat, boolean force) {
         if (!canPublishCombatWalkTarget(entity, force)) {
             return;
         }
         publishGroupAway(
                 entity,
-                RangedCombatPositioning.findGroupEscapePosition(entity, threats, KITE_SAFE_DISTANCE),
+                RangedCombatPositioning.findGroupEscapePosition(
+                        entity,
+                        RangedCombatPositioning.nearbyMovementThreats(entity, fallbackThreat),
+                        KITE_SAFE_DISTANCE
+                ),
                 SPEED_MODIFIER
         );
     }
 
-    private void publishEmergencyAway(E entity, List<LivingEntity> threats, boolean force) {
+    private void publishEmergencyAway(E entity, LivingEntity fallbackThreat, boolean force) {
         if (!canPublishCombatWalkTarget(entity, force)) {
             return;
         }
         publishGroupAway(
                 entity,
-                RangedCombatPositioning.findEmergencyEscapePosition(entity, threats, EMERGENCY_SAFE_DISTANCE),
+                RangedCombatPositioning.findEmergencyEscapePosition(
+                        entity,
+                        RangedCombatPositioning.nearbyMovementThreats(entity, fallbackThreat),
+                        EMERGENCY_SAFE_DISTANCE
+                ),
                 EMERGENCY_SPEED_MODIFIER
         );
     }
@@ -475,12 +487,8 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         if (force) {
             return true;
         }
-
-        WalkTarget current = entity.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
-        if (current == null) {
-            return this.walkTargetRetryCooldown <= 0;
-        }
-        return current != this.combatWalkTarget;
+        return !entity.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                && this.walkTargetRetryCooldown <= 0;
     }
 
     private void setCombatWalkTarget(E entity, WalkTarget walkTarget) {

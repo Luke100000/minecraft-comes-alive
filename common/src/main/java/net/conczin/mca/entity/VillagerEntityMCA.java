@@ -1175,21 +1175,21 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             boolean head = passengers.size() > 2 && passengers.get(2) == this;
 
             Vec3 offset = head ? new Vec3(0, 0.55f, 0) : new Vec3(left ? 0.4F : -0.4F, 0.05f, 0).yRot(yaw);
+            Vec3 pos = this.position();
 
-            // todo currently only client side
-            if (isClientSide()) {
+            // Keep the physical carry position identical on both sides so the bounding box follows the passenger.
+            this.setPos(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
+
+            // Player genetics rendering is client-only. Preserve its original visual adjustment without moving the physical box.
+            if (isClientSide() && MCAClient.useGeneticsRenderer(vehicle.getUUID())) {
                 VillagerLike<?> playerData = MCAClient.getGeneticsRendererData(vehicle.getUUID()).orElse(null);
                 if (playerData != null) {
                     float height = playerData.getRawVerticalScaleFactor();
                     offset = offset.multiply(1.0f, height, 1.0f);
-                    offset = offset.add(0, (height - 1) * 1.5, 0);
+                    offset = offset.add(0, (height - 1) * 1.5 - 0.7, 0);
+                    this.setPosRaw(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
                 }
             }
-
-            offset = offset.add(0, -0.7, 0);
-
-            Vec3 pos = this.position();
-            this.setPos(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
 
             if (vehicle.isShiftKeyDown()) {
                 stopRiding();

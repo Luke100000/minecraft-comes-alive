@@ -456,10 +456,13 @@ public class Village implements Iterable<Building> {
         for (StructureFloor candidateFloor : candidate.getFloors()) {
             for (Structure registered : structures.values()) {
                 for (StructureFloor registeredFloor : registered.getFloors()) {
-                    if (candidateFloor.geometry().cells().stream()
-                            .anyMatch(cell -> registeredFloor.geometry().cellAt(cell.feet()).isPresent())) {
-                        return true;
-                    }
+                    boolean exactCellOverlap = candidateFloor.geometry().cells().stream()
+                            .anyMatch(cell -> registeredFloor.geometry().cellAt(cell.feet()).isPresent());
+                    if (!exactCellOverlap) continue;
+                    boolean permittedAttachmentTransition = candidate.getLogicalBuildingId()
+                            == registered.getLogicalBuildingId()
+                            && !candidateFloor.sameSemanticBand(registeredFloor);
+                    if (!permittedAttachmentTransition) return true;
                 }
             }
         }
@@ -740,15 +743,6 @@ public class Village implements Iterable<Building> {
         return RoomScanPlanner.plan(this, level, pos);
     }
 
-    Optional<AttachmentTarget> resolveAttachmentTarget(
-            Level level,
-            StructureFloor candidate,
-            Collection<FloorGeometry> connectedFloors) {
-        return selectAttachmentTarget(candidate,
-                StructureConnector.verticalConnections(level, candidate, structures.values()),
-                connectedFloors);
-    }
-
     Optional<AttachmentTarget> selectAttachmentTarget(
             StructureFloor candidate,
             Collection<StructureConnector.VerticalConnection> connections) {
@@ -760,6 +754,10 @@ public class Village implements Iterable<Building> {
             Collection<StructureConnector.VerticalConnection> verticalConnections,
             Collection<FloorGeometry> connectedFloors) {
         if (candidate == null) return Optional.empty();
+        boolean alreadyRegistered = structures.values().stream()
+                .flatMap(structure -> structure.getFloors().stream())
+                .anyMatch(floor -> floor.geometry().sameCellPositions(candidate.geometry()));
+        if (alreadyRegistered) return Optional.empty();
         Set<StructureConnector.VerticalConnection> connections = attachmentConnections(
                 candidate, verticalConnections, connectedFloors);
         if (hasUnprovenAttachmentOverlap(candidate, connections)) return Optional.empty();
@@ -769,7 +767,8 @@ public class Village implements Iterable<Building> {
             for (StructureConnector.VerticalConnection connection : connections) {
                 Structure structure = connection.structure();
                 StructureFloor floor = connection.floor();
-                addAttachmentTarget(nearestByBuilding, structure, floor, candidate.attachmentGapTo(floor));
+                addAttachmentTarget(nearestByBuilding, structure, floor,
+                        Math.max(0, candidate.verticalGapTo(floor)));
             }
         } else {
             for (Structure structure : structures.values()) {
@@ -843,7 +842,6 @@ public class Village implements Iterable<Building> {
         if (connectedFloors == null) return Set.copyOf(connections);
 
         for (FloorGeometry connected : connectedFloors) {
-            if (StructureFloor.sameSemanticBand(candidate.anchorY(), connected.anchorY())) continue;
             for (Structure structure : structures.values()) {
                 for (StructureFloor floor : structure.getFloors()) {
                     if (floor.overlapsSemanticStorey(connected)) {
@@ -858,11 +856,18 @@ public class Village implements Iterable<Building> {
     private boolean hasUnprovenAttachmentOverlap(
             StructureFloor candidate,
             Set<StructureConnector.VerticalConnection> connections) {
+        Set<Integer> provenBuildingIds = connections.stream()
+                .map(connection -> connection.structure().getLogicalBuildingId())
+                .collect(Collectors.toSet());
         for (Structure structure : structures.values()) {
             for (StructureFloor floor : structure.getFloors()) {
                 if (!candidate.overlapsFootprint(floor) || candidate.verticalGapTo(floor) >= 0) continue;
-                if (candidate.sameSemanticBand(floor)
-                        || !connections.contains(new StructureConnector.VerticalConnection(structure, floor))) {
+                boolean directlyProven = connections.contains(
+                        new StructureConnector.VerticalConnection(structure, floor));
+                boolean belongsToProvenBuilding = provenBuildingIds.size() == 1
+                        && provenBuildingIds.contains(structure.getLogicalBuildingId())
+                        && !candidate.sameSemanticBand(floor);
+                if (!directlyProven && !belongsToProvenBuilding) {
                     return true;
                 }
             }
@@ -1053,8 +1058,20 @@ public class Village implements Iterable<Building> {
         StructureFloor ground = groundFloor(logical).orElse(null);
         if (ground == null) return;
         List<Structure> members = getBuildingStructures(logical.id());
+        List<StructureFloor> floors = members.stream()
+                .flatMap(structure -> structure.getFloors().stream())
+                .toList();
+        if (floors.stream().anyMatch(floor -> floor.floorNumber() != 0)) {
+            int groundNumber = ground.floorNumber();
+            for (Structure structure : members) {
+                for (StructureFloor floor : structure.getFloors()) {
+                    structure.setFloorNumber(floor.id(), floor.floorNumber() - groundNumber);
+                }
+            }
+            return;
+        }
         Map<StructureFloor, Integer> numbers = StructureFloor.floorNumbers(
-                members.stream().flatMap(structure -> structure.getFloors().stream()).toList(), ground);
+                floors, ground);
         for (Structure structure : members) {
             for (StructureFloor floor : structure.getFloors()) {
                 Integer number = numbers.get(floor);
@@ -1159,22 +1176,6 @@ public class Village implements Iterable<Building> {
         public boolean isAttachment() {
             return this == ADD_FLOOR || this == ADD_BASEMENT;
         }
-    }
-
-    int prospectiveFloorNumber(int buildingId,
-                               Structure candidate,
-                               StructureFloor candidateFloor) {
-        List<Structure> members = new ArrayList<>(getBuildingStructures(buildingId));
-        LogicalBuilding logical = logicalBuildings.get(buildingId);
-        if (members.isEmpty() || logical == null || candidate == null || candidateFloor == null) {
-            return Integer.MIN_VALUE;
-        }
-        members.add(candidate);
-        StructureFloor ground = groundFloor(logical).orElse(null);
-        if (ground == null) return Integer.MIN_VALUE;
-        return StructureFloor.floorNumbers(
-                        members.stream().flatMap(structure -> structure.getFloors().stream()).toList(), ground)
-                .getOrDefault(candidateFloor, Integer.MIN_VALUE);
     }
 
     private Optional<StructureFloor> groundFloor(LogicalBuilding logical) {

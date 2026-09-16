@@ -447,7 +447,7 @@ class BlueprintScreenMapInteractionTest {
         registerStructure(village, structure, main);
 
         RoomScanPlan plan = new RoomScanPlan(Optional.empty(), Village.RoomScanMode.ADD_BASEMENT,
-                10, -1, BlockPos.ZERO, BlockPos.ZERO, -1, -1);
+                10, -1, BlockPos.ZERO, BlockPos.ZERO, -1, -1, structure.getFloor(0).orElseThrow());
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, -1);
 
         assertFalse(state.visible());

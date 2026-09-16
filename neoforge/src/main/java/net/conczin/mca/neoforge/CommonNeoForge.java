@@ -159,6 +159,13 @@ public final class CommonNeoForge {
     }
 
     @SubscribeEvent
+    public static void onPlayerRespawnEvent(PlayerEvent.PlayerRespawnEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            ServerInteractionManager.getInstance().onPlayerRespawn(player);
+        }
+    }
+
+    @SubscribeEvent
     public static void createDefaultAttributes(EntityAttributeCreationEvent event) {
         EntitiesMCA.registerAttributes((type, supplier) -> event.put(type, supplier.build()));
     }

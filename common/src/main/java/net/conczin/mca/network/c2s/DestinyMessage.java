@@ -2,92 +2,178 @@ package net.conczin.mca.network.c2s;
 
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
+import net.conczin.mca.destiny.DestinyDestination;
 import net.conczin.mca.network.HandleablePayload;
-import net.conczin.mca.util.WorldUtils;
+import net.conczin.mca.server.DestinyLocationResolver;
 import net.conczin.mca.util.compat.ExtendedFuzzyPositions;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.TicketType;
-import net.minecraft.tags.TagKey;
 import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.Relative;
 import net.minecraft.world.entity.ai.util.RandomPos;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.level.storage.WritableLevelData;
 
-public record DestinyMessage(String location, boolean isClosing) implements HandleablePayload {
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+
+public record DestinyMessage(Optional<DestinyDestination> destination) implements HandleablePayload {
     private static final TicketType DESTINY_TELEPORT_TICKET = new TicketType(5L, TicketType.FLAG_LOADING);
     public static final CustomPacketPayload.Type<DestinyMessage> TYPE = new CustomPacketPayload.Type<>(MCA.locate("destiny_message"));
     public static final StreamCodec<FriendlyByteBuf, DestinyMessage> STREAM_CODEC = StreamCodec.composite(
-            ByteBufCodecs.STRING_UTF8, DestinyMessage::location,
-            ByteBufCodecs.BOOL, DestinyMessage::isClosing,
+            DestinyDestination.STREAM_CODEC.apply(ByteBufCodecs::optional), DestinyMessage::destination,
             DestinyMessage::new
     );
 
+    public DestinyMessage {
+        Objects.requireNonNull(destination, "destination");
+    }
+
+    public static DestinyMessage select(DestinyDestination destination) {
+        return new DestinyMessage(Optional.of(destination));
+    }
+
+    public static DestinyMessage close() {
+        return new DestinyMessage(Optional.empty());
+    }
+
     @Override
     public void handle(Player player) {
-        if (!(player instanceof ServerPlayer sp)) return;
-        if (isClosing) {
-            sp.removeEffect(MobEffects.INVISIBILITY);
-            sp.removeEffect(MobEffects.HEALTH_BOOST);
+        if (!(player instanceof ServerPlayer serverPlayer)) {
+            return;
         }
-        if (Config.getInstance().allowDestinyTeleportation && !location.isEmpty() && !isNoTeleportLocation()) {
-            MCA.executorService.execute(() -> {
-                if (location.charAt(0) == '#') {
-                    String tagId = location.substring(1);
-                    WorldUtils.getClosestStructurePosition(sp.level(), sp.blockPosition(), TagKey.create(Registries.STRUCTURE, Identifier.parse(tagId)), 128)
-                            .ifPresentOrElse(pos -> sp.level().getServer().execute(() -> handleBlockPos(sp, pos)), () -> notifyDestinationNotFound(sp));
-                } else {
-                    WorldUtils.getClosestStructurePosition(sp.level(), sp.blockPosition(), Identifier.parse(location), 128)
-                            .ifPresentOrElse(pos -> sp.level().getServer().execute(() -> handleBlockPos(sp, pos)), () -> notifyDestinationNotFound(sp));
-                }
-            });
+
+        if (destination.isEmpty()) {
+            serverPlayer.removeEffect(MobEffects.INVISIBILITY);
+            serverPlayer.removeEffect(MobEffects.HEALTH_BOOST);
+            return;
         }
+
+        DestinyDestination selectedDestination = destination.get();
+        var server = serverPlayer.level().getServer();
+        List<DestinyDestination> allowedDestinations = DestinyLocationResolver.resolve(
+                server,
+                Config.getInstance()
+        );
+        if (!allowedDestinations.contains(selectedDestination)) {
+            notifyDestinationNotFound(serverPlayer);
+            return;
+        }
+
+        if (!Config.getInstance().allowDestinyTeleportation || selectedDestination.dimension().isEmpty()) {
+            return;
+        }
+
+        ResourceKey<Level> targetDimension = selectedDestination.dimension().orElseThrow();
+        ServerLevel targetLevel = server.getLevel(targetDimension);
+        if (targetLevel == null) {
+            notifyDestinationNotFound(serverPlayer);
+            return;
+        }
+
+        BlockPos searchOrigin = getSearchOrigin(serverPlayer, targetLevel);
+        MCA.executorService.execute(() -> {
+            Optional<BlockPos> result = DestinyLocationResolver.findNearest(
+                    targetLevel,
+                    searchOrigin,
+                    selectedDestination,
+                    128
+            );
+            result.ifPresentOrElse(
+                    pos -> server.execute(() -> handleBlockPos(
+                            serverPlayer,
+                            targetLevel,
+                            selectedDestination.location(),
+                            pos
+                    )),
+                    () -> notifyDestinationNotFound(serverPlayer)
+            );
+        });
     }
 
-    private void notifyDestinationNotFound(ServerPlayer player) {
-        player.level().getServer().execute(() -> player.sendSystemMessage(Component.translatable("destiny.teleport.failed").withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)));
+    private static BlockPos getSearchOrigin(ServerPlayer player, ServerLevel targetLevel) {
+        double scale = DimensionType.getTeleportationScale(
+                player.level().dimensionType(),
+                targetLevel.dimensionType()
+        );
+        return targetLevel.getWorldBorder().clampToBounds(
+                player.getX() * scale,
+                player.getY(),
+                player.getZ() * scale
+        );
     }
 
-    private boolean isNoTeleportLocation() {
-        return "somewhere".equals(location);
+    private static void notifyDestinationNotFound(ServerPlayer player) {
+        player.level().getServer().execute(() -> player.sendSystemMessage(
+                Component.translatable("destiny.teleport.failed").withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)
+        ));
     }
 
     static TicketType destinyTeleportTicket() {
         return DESTINY_TELEPORT_TICKET;
     }
 
-    private void handleBlockPos(ServerPlayer player, BlockPos pos) {
-        ServerLevel level = player.level();
-        level.getChunkAt(pos);
+    private static void handleBlockPos(
+            ServerPlayer player,
+            ServerLevel targetLevel,
+            String location,
+            BlockPos pos
+    ) {
+        targetLevel.getChunkAt(pos);
         if (location.equals("minecraft:ancient_city")) {
             pos = new BlockPos(pos.getX(), -50, pos.getZ());
         } else {
-            pos = level.getHeightmapPos(Heightmap.Types.WORLD_SURFACE, pos);
+            pos = targetLevel.getHeightmapPos(Heightmap.Types.WORLD_SURFACE, pos);
         }
-        pos = RandomPos.moveUpOutOfSolid(pos, level.getHeight(), p -> level.getBlockState(p).isSuffocating(level, p));
-        pos = ExtendedFuzzyPositions.downWhile(pos, 1, p -> !level.getBlockState(p.below()).isCollisionShapeFullBlock(level, p));
-        if (!level.isInWorldBounds(pos) || !level.getWorldBorder().isWithinBounds(pos)) {
+        pos = RandomPos.moveUpOutOfSolid(
+                pos,
+                targetLevel.getHeight(),
+                candidate -> targetLevel.getBlockState(candidate).isSuffocating(targetLevel, candidate)
+        );
+        pos = ExtendedFuzzyPositions.downWhile(
+                pos,
+                1,
+                candidate -> !targetLevel.getBlockState(candidate.below()).isCollisionShapeFullBlock(targetLevel, candidate)
+        );
+        if (!targetLevel.isInWorldBounds(pos) || !targetLevel.getWorldBorder().isWithinBounds(pos)) {
             notifyDestinationNotFound(player);
             return;
         }
-        ChunkPos chunkPos = ChunkPos.containing(pos);
-        level.getChunkSource().addTicketWithRadius(DESTINY_TELEPORT_TICKET, chunkPos, 1);
-        player.connection.teleport(pos.getX(), pos.getY(), pos.getZ(), player.getYRot(), player.getXRot());
-        player.setRespawnPosition(new ServerPlayer.RespawnConfig(LevelData.RespawnData.of(player.level().dimension(), pos, 0.0f, 0.0f), true), false);
-        if (level.getServer().isSingleplayerOwner(player.nameAndId()) && level.getLevelData() instanceof WritableLevelData levelData) {
-            levelData.setSpawn(LevelData.RespawnData.of(player.level().dimension(), pos, 0.0f, 0.0f));
+
+        targetLevel.getChunkSource().addTicketWithRadius(DESTINY_TELEPORT_TICKET, ChunkPos.containing(pos), 1);
+        player.teleportTo(
+                targetLevel,
+                pos.getX(),
+                pos.getY(),
+                pos.getZ(),
+                Set.<Relative>of(),
+                player.getYRot(),
+                player.getXRot(),
+                false
+        );
+        player.setRespawnPosition(new ServerPlayer.RespawnConfig(
+                LevelData.RespawnData.of(targetLevel.dimension(), pos, 0.0F, 0.0F),
+                true
+        ), false);
+        if (targetLevel.getServer().isSingleplayerOwner(player.nameAndId())
+                && targetLevel.getLevelData() instanceof WritableLevelData levelData) {
+            levelData.setSpawn(LevelData.RespawnData.of(targetLevel.dimension(), pos, 0.0F, 0.0F));
         }
     }
 

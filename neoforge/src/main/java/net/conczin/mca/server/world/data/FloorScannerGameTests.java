@@ -367,7 +367,7 @@ public final class FloorScannerGameTests {
 
     @GameTest(batch = "mca_floor_stale_door_owner", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 140)
-    public static void stalePersistedDoorOwnershipUsesFreshPartitionBeforeAddingRoom(GameTestHelper helper) {
+    public static void stalePersistedDoorOwnershipDoesNotInventRegisteredRoomIdentity(GameTestHelper helper) {
         BlockPos firstMin = helper.absolutePos(new BlockPos(5, 2, 5));
         BlockPos secondMin = firstMin.offset(3, 0, 0);
         buildClosedRoom(helper, firstMin, 2, 5);
@@ -397,10 +397,57 @@ public final class FloorScannerGameTests {
 
         RoomScanPlan plan = RoomScanPlanner.plan(village, helper.getLevel(), doorway);
 
-        helper.assertTrue(plan.mode() == Village.RoomScanMode.UPDATE_ROOM,
-                "fresh doorway ownership was ignored and produced " + plan.mode());
-        helper.assertTrue(plan.currentRoom().orElse(null) == existing,
-                "fresh doorway partition did not recover the registered Room identity");
+        helper.assertTrue(plan.mode() == Village.RoomScanMode.ADD_ROOM,
+                "unowned persisted doorway should remain ADD_ROOM but produced " + plan.mode());
+        helper.assertTrue(plan.currentRoom().isEmpty(),
+                "fresh doorway overlap invented a registered Room identity");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_unowned_stair_identity", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void unownedStairCellDoesNotBorrowRegisteredRoomIdentity(GameTestHelper helper) {
+        BlockPos roomMin = helper.absolutePos(new BlockPos(5, 2, 5));
+        buildClosedRoom(helper, roomMin, 5, 4);
+        BlockPos roomSeed = roomMin.offset(1, 0, 1);
+        BlockPos stairCell = roomMin.offset(2, 0, 1);
+
+        SelectedFloorScanner.Result baseline = SelectedFloorScanner.scan(
+                helper.getLevel(), roomSeed, 128, 16);
+        helper.assertTrue(baseline.result() == Building.validationResult.SUCCESS,
+                "baseline room scan failed: " + baseline.result());
+
+        Set<FloorGeometry.Cell> persistedCells = baseline.floor().cells().stream()
+                .filter(cell -> !cell.feet().equals(stairCell))
+                .collect(Collectors.toSet());
+        FloorGeometry persistedGeometry = new FloorGeometry(persistedCells, Map.of());
+        StructureFloor floor = new StructureFloor(0, 0, persistedGeometry);
+        Structure structure = new Structure(20, roomSeed, List.of(floor));
+        structure.setLogicalBuildingId(20);
+        Set<BlockPos> roomCells = persistedCells.stream()
+                .map(FloorGeometry.Cell::feet)
+                .collect(Collectors.toSet());
+        Building room = new Building(roomSeed);
+        room.setId(100);
+        room.setStructureId(20);
+        room.setFloorId(0);
+        room.setGeometry(baseline.min(), baseline.max(), roomCells);
+        Village village = new Village(1, helper.getLevel());
+        village.registerStructure(structure, room);
+
+        helper.getLevel().setBlock(stairCell, Blocks.STONE_BRICK_STAIRS.defaultBlockState()
+                .setValue(StairBlock.FACING, Direction.EAST), 3);
+        helper.assertTrue(village.resolveInteractionPosition(stairCell).isEmpty(),
+                "fixture stair unexpectedly had persisted Floor ownership");
+
+        RoomScanPlan plan = RoomScanPlanner.plan(village, helper.getLevel(), stairCell);
+
+        helper.assertTrue(plan.mode() == Village.RoomScanMode.ADD_ROOM,
+                "unowned stair cell borrowed registered Room identity: " + plan.mode());
+        helper.assertTrue(plan.currentRoom().isEmpty(),
+                "unowned stair cell resolved a registered Room");
+        helper.assertTrue(plan.targetStructureId() == structure.getId() && plan.targetFloorId() == floor.id(),
+                "unowned stair cell did not retain the existing Floor as its Add Room target");
         helper.succeed();
     }
 
@@ -520,11 +567,117 @@ public final class FloorScannerGameTests {
                 "upper staircase changed storey anchor to " + upper.floor().anchorY());
         helper.assertTrue(upper.floor().cellAt(topStair).isEmpty(),
                 "upper storey reclaimed the lower-owned top staircase transition");
-        helper.assertTrue(lower.connectedFloors().stream()
+        helper.assertTrue(connectedFloors(lower).stream()
                         .anyMatch(floor -> floor.anchorY() == floorY + 3),
                 "stair attachment evidence was lost");
         helper.assertTrue(BuildingRoomScanner.components(helper.getLevel(), lower).size() == 1,
                 "storey-edge top stair split the legitimate lower Room instead of remaining owned by it");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_flat_landing_descent", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void flatUpperLandingBesideDescentRemainsFloorCell(GameTestHelper helper) {
+        BlockPos origin = helper.absolutePos(new BlockPos(3, 2, 3));
+        buildFlatUpperLandingStaircase(helper, origin);
+
+        BlockPos upperSeed = origin.offset(9, 3, 1);
+        BlockPos landing = origin.offset(7, 3, 1);
+        SelectedFloorScanner.Result upper = SelectedFloorScanner.scan(
+                helper.getLevel(), upperSeed, 256, 24);
+
+        helper.assertTrue(upper.result() == Building.validationResult.SUCCESS,
+                "flat upper landing scan failed: " + upper.result());
+        helper.assertTrue(helper.getLevel().getBlockState(landing.below()).is(Blocks.STONE),
+                "fixture landing is not supported by ordinary stone");
+        helper.assertTrue(upper.floor().cellAt(landing).isPresent(),
+                "ordinary flat landing beside a descending stair was dropped from Floor geometry");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_two_block_stair_storey", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void twoBlockStaircaseSeparatesBroadStoreys(GameTestHelper helper) {
+        BlockPos origin = helper.absolutePos(new BlockPos(3, 2, 3));
+        buildTwoBlockStairStoreys(helper, origin);
+
+        BlockPos lowerSeed = origin.offset(1, 0, 1);
+        BlockPos upperSeed = origin.offset(9, 2, 1);
+        SelectedFloorScanner.Result lower = SelectedFloorScanner.scan(
+                helper.getLevel(), lowerSeed, 256, 24);
+        SelectedFloorScanner.Result upper = SelectedFloorScanner.scan(
+                helper.getLevel(), upperSeed, 256, 24);
+
+        helper.assertTrue(lower.result() == Building.validationResult.SUCCESS,
+                "two-block lower storey scan failed: " + lower.result());
+        helper.assertTrue(upper.result() == Building.validationResult.SUCCESS,
+                "two-block upper storey scan failed: " + upper.result());
+        helper.assertTrue(lower.floor().anchorY() == lowerSeed.getY(),
+                "two-block lower storey anchored at " + lower.floor().anchorY());
+        helper.assertTrue(upper.floor().anchorY() == upperSeed.getY(),
+                "two-block upper storey anchored at " + upper.floor().anchorY());
+        helper.assertTrue(lower.floor().cellAt(upperSeed).isEmpty(),
+                "lower storey absorbed the upper plateau through its staircase");
+        helper.assertTrue(upper.floor().cellAt(lowerSeed).isEmpty(),
+                "upper storey absorbed the lower plateau through its staircase");
+        helper.assertTrue(connectedFloors(lower).stream()
+                        .anyMatch(floor -> floor.sameCellPositions(upper.floor())),
+                "two-block staircase lost the direct storey connection");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_canonical_storey_chain", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void connectedStoreyDiscoveryCanonicalizesDeepStairChain(GameTestHelper helper) {
+        BlockPos origin = helper.absolutePos(new BlockPos(3, 2, 3));
+        int lowerY = origin.getY();
+        buildFourStoreyStaircase(helper, origin);
+
+        List<BlockPos> seeds = List.of(
+                origin.offset(1, 0, 1),
+                origin.offset(9, 3, 1),
+                origin.offset(17, 6, 1),
+                origin.offset(25, 9, 1));
+        List<SelectedFloorScanner.Result> direct = seeds.stream()
+                .map(seed -> SelectedFloorScanner.scan(helper.getLevel(), seed, 512, 40))
+                .toList();
+        direct.forEach(scan -> helper.assertTrue(
+                scan.result() == Building.validationResult.SUCCESS,
+                "deep-chain direct storey scan failed: " + scan.result()));
+        for (int i = 0; i < direct.size(); i++) {
+            int expectedAnchor = lowerY + i * 3;
+            helper.assertTrue(direct.get(i).floor().anchorY() == expectedAnchor,
+                    "deep-chain storey " + i + " anchor was " + direct.get(i).floor().anchorY()
+                            + " instead of " + expectedAnchor);
+        }
+
+        SelectedFloorScanner.Result fromTop = direct.getLast();
+        for (SelectedFloorScanner.Result expected : direct) {
+            helper.assertTrue(connectedFloors(fromTop).stream()
+                            .anyMatch(candidate -> candidate.sameCellPositions(expected.floor())),
+                    "deep chain did not retain canonical storey anchor=" + expected.floor().anchorY());
+        }
+        helper.assertTrue(connectedFloors(fromTop).size() == 4,
+                "deep chain exposed " + connectedFloors(fromTop).size()
+                        + " identities instead of four canonical storeys");
+        helper.assertTrue(connectedFloors(fromTop).stream()
+                        .map(FloorGeometry::anchorY).collect(Collectors.toSet())
+                        .equals(Set.of(lowerY, lowerY + 3, lowerY + 6, lowerY + 9)),
+                "deep chain produced competing pseudo-storeys: "
+                        + connectedFloors(fromTop).stream().map(FloorGeometry::anchorY).sorted().toList());
+
+        List<BlockPos> descendingTransitions = List.of(
+                origin.offset(7, 3, 1),
+                origin.offset(15, 6, 1),
+                origin.offset(23, 9, 1));
+        for (int i = 0; i < descendingTransitions.size(); i++) {
+            SelectedFloorScanner.Result fromTransition = SelectedFloorScanner.scan(
+                    helper.getLevel(), descendingTransitions.get(i), 512, 40);
+            helper.assertTrue(fromTransition.result() == Building.validationResult.SUCCESS,
+                    "deep-chain transition scan failed at " + descendingTransitions.get(i));
+            helper.assertTrue(fromTransition.floor().sameCellPositions(direct.get(i).floor()),
+                    "deep-chain transition resolved a different lower storey at index " + i);
+        }
         helper.succeed();
     }
 
@@ -720,6 +873,81 @@ public final class FloorScannerGameTests {
         helper.assertTrue(RoomPartitioner.partition(new FloorGeometry(combinedCells, java.util.Map.of()),
                         combinedTransitions).size() == 2,
                 "vertical connector merged lower and upper Room components");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_ladder_top_exit", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void airAboveLadderIsFloorMembershipCell(GameTestHelper helper) {
+        BlockPos roomMin = helper.absolutePos(new BlockPos(4, 2, 4));
+        buildClosedRoom(helper, roomMin, 5, 4);
+
+        BlockPos interaction = roomMin.offset(2, 0, 2);
+        BlockPos ladder = interaction.below();
+        helper.getLevel().setBlock(ladder, Blocks.LADDER.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.LadderBlock.FACING, Direction.WEST), 3);
+
+        SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(
+                helper.getLevel(), interaction, 128, 16);
+
+        helper.assertTrue(scan.result() == Building.validationResult.SUCCESS,
+                "air above ladder did not resolve to its room Floor: " + scan.result());
+        helper.assertTrue(scan.floor().cellAt(interaction).isPresent(),
+                "air above ladder was not retained as Floor membership");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_ladder_top_exit_ownership", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void ladderTopExitStaysOnUpperStorey(GameTestHelper helper) {
+        BlockPos lowerMin = helper.absolutePos(new BlockPos(4, 2, 4));
+        BlockPos upperMin = lowerMin.above(3);
+        buildClosedRoom(helper, lowerMin, 5, 4);
+        buildClosedRoom(helper, upperMin, 5, 4);
+
+        BlockPos topExit = upperMin.offset(2, -1, 2);
+        BlockPos lowerLadder = topExit.below(2);
+        BlockState ladder = Blocks.LADDER.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.LadderBlock.FACING, Direction.WEST);
+        helper.getLevel().setBlock(lowerLadder, ladder, 3);
+        helper.getLevel().setBlock(lowerLadder.above(), ladder, 3);
+        helper.getLevel().setBlock(topExit, Blocks.AIR.defaultBlockState(), 3);
+
+        BlockPos upperSeed = upperMin.offset(1, 0, 1);
+        SelectedFloorScanner.Result upperScan = SelectedFloorScanner.scan(
+                helper.getLevel(), upperSeed, 256, 16);
+        helper.assertTrue(upperScan.result() == Building.validationResult.SUCCESS,
+                "upper ladder storey scan failed: " + upperScan.result());
+        helper.assertTrue(upperScan.floor().cellAt(topExit).isPresent(),
+                "ladder top exit was not assigned to the upper canonical Floor");
+        helper.assertTrue(SelectedFloorScanner.inspectSurfaceCell(
+                        helper.getLevel(), topExit, new FloorCeilingResolver(helper.getLevel())).isEmpty(),
+                "ladder top exit was treated as physically supported instead of semantic Floor membership");
+
+        Set<FloorGeometry.Cell> persistedCells = upperScan.floor().cells().stream()
+                .filter(cell -> !cell.feet().equals(topExit))
+                .collect(Collectors.toSet());
+        FloorGeometry persistedGeometry = new FloorGeometry(persistedCells, Map.of());
+        StructureFloor persistedFloor = new StructureFloor(0, 0, persistedGeometry);
+        Structure structure = new Structure(10, upperSeed, List.of(persistedFloor));
+        structure.setLogicalBuildingId(10);
+        Building room = new Building(upperSeed);
+        room.setId(100);
+        room.setStructureId(10);
+        room.setFloorId(0);
+        Set<BlockPos> roomCells = persistedCells.stream()
+                .map(FloorGeometry.Cell::feet)
+                .collect(Collectors.toSet());
+        room.setGeometry(upperScan.min(), upperScan.max(), roomCells);
+        Village village = new Village(1, helper.getLevel());
+        village.registerStructure(structure, room);
+
+        RoomScanPlan plan = village.getRoomScanPlan(helper.getLevel(), topExit);
+        helper.assertTrue(plan.mode() == Village.RoomScanMode.ADD_ROOM,
+                "upper ladder top exit was redirected to " + plan.mode());
+        helper.assertTrue(plan.targetStructureId() == structure.getId()
+                        && plan.targetFloorId() == persistedFloor.id(),
+                "upper ladder top exit did not stay on the registered upper Floor");
         helper.succeed();
     }
 
@@ -934,8 +1162,10 @@ public final class FloorScannerGameTests {
                         + " canopyCeiling=" + ceilings.ceilingY(canopyStart)
                         + " components=" + components.size());
 
-        BuildingRoomScanner.Result room = BuildingRoomScanner.scan(
-                level, roomSeed, 128, 0, fromRoom);
+        RoomPartitioner.Component selected = RoomPartitioner.select(roomSeed, fromRoom.floor(), components);
+        helper.assertTrue(selected != null, "bedroom component was not selected after pruning exterior canopy");
+        BuildingRoomScanner.Result room = BuildingRoomScanner.materialize(
+                roomSeed, 128, 0, fromRoom.floor(), components, selected);
         helper.assertTrue(room.status() == Building.validationResult.SUCCESS,
                 "bedroom did not materialize after pruning exterior canopy: " + room.status());
         helper.assertTrue(room.poiCells().contains(bedFoot),
@@ -1467,6 +1697,124 @@ public final class FloorScannerGameTests {
         buildFullBlockSteps(helper, origin.offset(4, 0, 1), 4);
     }
 
+    private static void buildFlatUpperLandingStaircase(GameTestHelper helper, BlockPos origin) {
+        var level = helper.getLevel();
+        int y = origin.getY();
+        for (int x = -1; x <= 11; x++) {
+            for (int z = -1; z <= 3; z++) {
+                for (int dy = -1; dy <= 6; dy++) {
+                    level.setBlock(new BlockPos(origin.getX() + x, y + dy, origin.getZ() + z),
+                            Blocks.AIR.defaultBlockState(), 3);
+                }
+                if (x == -1 || x == 11 || z == -1 || z == 3) {
+                    for (int dy = 0; dy <= 5; dy++) {
+                        level.setBlock(new BlockPos(origin.getX() + x, y + dy, origin.getZ() + z),
+                                Blocks.STONE.defaultBlockState(), 3);
+                    }
+                }
+                level.setBlock(new BlockPos(origin.getX() + x, y + 6, origin.getZ() + z),
+                        Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int x = 0; x <= 3; x++) {
+            for (int z = 0; z <= 2; z++) {
+                level.setBlock(origin.offset(x, -1, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int x = 7; x <= 10; x++) {
+            for (int z = 0; z <= 2; z++) {
+                level.setBlock(origin.offset(x, 2, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        buildFullBlockSteps(helper, origin.offset(4, 0, 1), 3);
+    }
+
+    private static void buildTwoBlockStairStoreys(GameTestHelper helper, BlockPos origin) {
+        var level = helper.getLevel();
+        int y = origin.getY();
+        for (int x = -1; x <= 11; x++) {
+            for (int z = -1; z <= 3; z++) {
+                for (int dy = -1; dy <= 6; dy++) {
+                    level.setBlock(new BlockPos(origin.getX() + x, y + dy, origin.getZ() + z),
+                            Blocks.AIR.defaultBlockState(), 3);
+                }
+                if (x == -1 || x == 11 || z == -1 || z == 3) {
+                    for (int dy = 0; dy <= 5; dy++) {
+                        level.setBlock(new BlockPos(origin.getX() + x, y + dy, origin.getZ() + z),
+                                Blocks.STONE.defaultBlockState(), 3);
+                    }
+                }
+                level.setBlock(new BlockPos(origin.getX() + x, y + 6, origin.getZ() + z),
+                        Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int x = 0; x <= 3; x++) {
+            for (int z = 0; z <= 2; z++) {
+                level.setBlock(origin.offset(x, -1, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int x = 7; x <= 10; x++) {
+            for (int z = 0; z <= 2; z++) {
+                level.setBlock(origin.offset(x, 1, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int step = 0; step < 3; step++) {
+            BlockPos feet = origin.offset(4 + step, step, 1);
+            level.setBlock(feet.below(), Blocks.STONE_BRICK_STAIRS.defaultBlockState()
+                    .setValue(StairBlock.FACING, Direction.EAST), 3);
+            level.setBlock(feet, Blocks.AIR.defaultBlockState(), 3);
+            level.setBlock(feet.above(), Blocks.AIR.defaultBlockState(), 3);
+        }
+    }
+
+    private static void buildFourStoreyStaircase(GameTestHelper helper, BlockPos origin) {
+        var level = helper.getLevel();
+        int y = origin.getY();
+        for (int x = -1; x <= 28; x++) {
+            for (int z = -1; z <= 3; z++) {
+                for (int dy = -1; dy <= 12; dy++) {
+                    level.setBlock(new BlockPos(origin.getX() + x, y + dy, origin.getZ() + z),
+                            Blocks.AIR.defaultBlockState(), 3);
+                }
+            }
+        }
+        for (int x = -1; x <= 28; x++) {
+            for (int z = -1; z <= 3; z++) {
+                if (x == -1 || x == 28 || z == -1 || z == 3) {
+                    for (int dy = 0; dy <= 11; dy++) {
+                        level.setBlock(new BlockPos(origin.getX() + x, y + dy, origin.getZ() + z),
+                                Blocks.STONE.defaultBlockState(), 3);
+                    }
+                }
+                level.setBlock(new BlockPos(origin.getX() + x, y + 12, origin.getZ() + z),
+                        Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int x = 0; x <= 3; x++) {
+            for (int z = 0; z <= 2; z++) {
+                level.setBlock(origin.offset(x, -1, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int x = 8; x <= 11; x++) {
+            for (int z = 0; z <= 2; z++) {
+                level.setBlock(origin.offset(x, 2, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int x = 16; x <= 19; x++) {
+            for (int z = 0; z <= 2; z++) {
+                level.setBlock(origin.offset(x, 5, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int x = 24; x <= 27; x++) {
+            for (int z = 0; z <= 2; z++) {
+                level.setBlock(origin.offset(x, 8, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        buildFullBlockSteps(helper, origin.offset(4, 0, 1), 4);
+        buildFullBlockSteps(helper, origin.offset(12, 3, 1), 4);
+        buildFullBlockSteps(helper, origin.offset(20, 6, 1), 4);
+    }
+
     private static BlockPos buildFullBlockSteps(GameTestHelper helper, BlockPos startFeet, int count) {
         var level = helper.getLevel();
         BlockPos top = startFeet;
@@ -1478,6 +1826,10 @@ public final class FloorScannerGameTests {
             top = feet;
         }
         return top.immutable();
+    }
+
+    private static List<FloorGeometry> connectedFloors(SelectedFloorScanner.Result scan) {
+        return scan.connectedStoreys().stream().map(SelectedFloorScanner.DiscoveredStorey::floor).toList();
     }
 
     private static void openUpperStorey(GameTestHelper helper, BlockPos origin) {

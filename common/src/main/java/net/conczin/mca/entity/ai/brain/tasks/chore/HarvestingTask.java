@@ -64,6 +64,8 @@ public class HarvestingTask extends AbstractChoreTask {
     protected void stop(ServerLevel world, VillagerEntityMCA villager, long time) {
         clearChoreItem(villager);
 
+        workingTick = 0;
+
         if (currentPos != null) {
             plantable.remove(currentPos);
             harvestable.remove(currentPos);
