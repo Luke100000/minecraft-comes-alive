@@ -19,11 +19,17 @@
     "village": {
       "trigger": "minecraft:location",
       "conditions": {
-        "player": {
-          "location": {
-            "structures": "#minecraft:village"
+        "player": [
+          {
+            "condition": "minecraft:entity_properties",
+            "entity": "this",
+            "predicate": {
+              "location": {
+                "structures": "#minecraft:village"
+              }
+            }
           }
-        }
+        ]
       }
     }
   },

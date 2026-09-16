@@ -187,6 +187,24 @@ class BlueprintMapGeometryTest {
     }
 
     @Test
+    void verticalConnectorRendersAtPhysicalBlockWhileOwnershipUsesFloorCell() throws Exception {
+        Village village = new Village(1, null);
+        BlockPos floorCell = new BlockPos(0, 64, 0);
+        BlockPos ladder = new BlockPos(1, 64, 0);
+        Structure structure = structure(10, 10, 64, 0,
+                new FloorConnector.Marker(ladder, FloorConnector.Type.LADDER, floorCell));
+        Building room = room(1, 10, 0, floorCell);
+        setRoomFootprint(room, Set.of(floorCell));
+        registerStructure(village, structure, room);
+
+        BlueprintMapGeometry.MapGeometry ground = BlueprintMapGeometry.build(village, null).get(0);
+
+        assertEquals(1, ground.connectorLayers().size());
+        assertEquals(ladder, ground.connectorLayers().getFirst().marker().pos());
+        assertEquals(floorCell, ground.connectorLayers().getFirst().marker().floorCell());
+    }
+
+    @Test
     void connectorOwnedByRoomIsPartOfBlueprintFloorShade() throws Exception {
         Village village = new Village(1, null);
         Structure structure = structure(10, 10, 64, 0,
@@ -251,7 +269,7 @@ class BlueprintMapGeometryTest {
         cells.add(new BlockPos(1, anchorY, 0));
         cells.add(new BlockPos(2, anchorY, 0));
         for (FloorConnector.Marker connector : connectors) {
-            cells.add(connector.pos());
+            cells.add(connector.floorCell());
         }
         return (BuildingFloorRegion) fromFootprint.invoke(null, anchorY,
                 cells);

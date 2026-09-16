@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 
@@ -67,12 +68,12 @@ final class StructureConnector {
         return Map.copyOf(ownerSides);
     }
 
-    /** Returns connector metadata keyed only by exact cells already owned by this Floor. */
-    static Map<BlockPos, FloorConnector.Type> connectorTypesForFloor(
+    /** Returns physical connector markers together with the exact Floor cells that own them. */
+    static List<FloorConnector.Marker> connectorMarkersForFloor(
             Level world, Collection<BlockPos> connectors, FloorGeometry geometry) {
-        if (connectors.isEmpty() || geometry.cells().isEmpty()) return Map.of();
+        if (connectors.isEmpty() || geometry.cells().isEmpty()) return List.of();
 
-        LinkedHashMap<BlockPos, FloorConnector.Type> result = new LinkedHashMap<>();
+        LinkedHashMap<BlockPos, FloorConnector.Marker> result = new LinkedHashMap<>();
         for (BlockPos rawConnector : connectors) {
             BlockState rawState = world.getBlockState(rawConnector);
             BlockPos connector = normalize(rawConnector, rawState);
@@ -80,23 +81,64 @@ final class StructureConnector {
             FloorConnector.Type type = FloorConnector.Type.fromBlockState(state);
             if (type == null) continue;
             if (type.vertical()) {
-                verticalFloorMembershipCells(connector, geometry)
-                        .forEach(floorCell -> result.putIfAbsent(floorCell, type));
+                verticalFloorMembershipCells(connector, state, geometry)
+                        .forEach(floorCell -> {
+                            FloorConnector.Marker candidate = new FloorConnector.Marker(
+                                    connector, type, floorCell);
+                            FloorConnector.Marker existing = result.get(floorCell);
+                            if (existing == null || closerToFloorCell(candidate, existing)) {
+                                result.put(floorCell, candidate);
+                            }
+                        });
             } else if (geometry.cellAt(connector).isPresent()) {
-                result.putIfAbsent(connector.immutable(), type);
+                result.putIfAbsent(connector.immutable(), new FloorConnector.Marker(connector, type));
             }
+        }
+        return List.copyOf(result.values());
+    }
+
+    static Map<BlockPos, FloorConnector.Type> connectorTypesForFloor(
+            Level world, Collection<BlockPos> connectors, FloorGeometry geometry) {
+        LinkedHashMap<BlockPos, FloorConnector.Type> result = new LinkedHashMap<>();
+        for (FloorConnector.Marker marker : connectorMarkersForFloor(world, connectors, geometry)) {
+            result.putIfAbsent(marker.floorCell(), marker.type());
         }
         return Map.copyOf(result);
     }
 
-    private static Set<BlockPos> verticalFloorMembershipCells(BlockPos connector, FloorGeometry geometry) {
+    private static boolean closerToFloorCell(FloorConnector.Marker candidate,
+                                             FloorConnector.Marker existing) {
+        int candidateDistance = Math.abs(candidate.pos().getY() - candidate.floorCell().getY());
+        int existingDistance = Math.abs(existing.pos().getY() - existing.floorCell().getY());
+        return candidateDistance < existingDistance
+                || candidateDistance == existingDistance && candidate.pos().getY() < existing.pos().getY();
+    }
+
+    private static Set<BlockPos> verticalFloorMembershipCells(
+            BlockPos connector, BlockState state, FloorGeometry geometry) {
         LinkedHashSet<BlockPos> cells = new LinkedHashSet<>();
         for (BlockPos handoff : handoffs(connector)) {
             geometry.interactionCellAt(handoff.getX(), handoff.getY(), handoff.getZ())
                     .map(FloorGeometry.Cell::feet)
                     .ifPresent(cells::add);
         }
-        return Set.copyOf(cells);
+        if (cells.isEmpty()) return Set.of();
+
+        Direction preferredSide = state.getBlock() instanceof LadderBlock
+                ? state.getValue(LadderBlock.FACING)
+                : null;
+        BlockPos preferredColumn = preferredSide == null ? null : connector.relative(preferredSide);
+        BlockPos selected = cells.stream().min(Comparator
+                .comparingInt((BlockPos cell) -> preferredColumn != null
+                        && cell.getX() == preferredColumn.getX()
+                        && cell.getZ() == preferredColumn.getZ() ? 0 : 1)
+                .thenComparingInt(cell -> Math.abs(cell.getY() - connector.getY()))
+                .thenComparingInt(cell -> Math.abs(cell.getX() - connector.getX())
+                        + Math.abs(cell.getZ() - connector.getZ()))
+                .thenComparingInt(BlockPos::getX)
+                .thenComparingInt(BlockPos::getZ)
+                .thenComparingInt(BlockPos::getY)).orElseThrow();
+        return Set.of(selected.immutable());
     }
 
     /** Returns the vertical connector column for an occupied connector or its immediate open top-exit cell. */
@@ -214,7 +256,10 @@ final class StructureConnector {
         LinkedHashSet<VerticalConnection> connections = new LinkedHashSet<>();
         for (FloorConnector.Marker marker : candidate.connectors()) {
             if (!marker.type().vertical()) continue;
-            List<BlockPos> column = verticalColumnAtFloorCell(world, candidate, marker.pos());
+            List<BlockPos> column = verticalColumnFromConnector(world, marker.pos());
+            if (column.isEmpty()) {
+                column = verticalColumnAtFloorCell(world, candidate, marker.floorCell());
+            }
             if (column.isEmpty()) continue;
             BlockPos connector = column.getFirst();
             long columnKey = FloorGeometry.columnKey(connector.getX(), connector.getZ());

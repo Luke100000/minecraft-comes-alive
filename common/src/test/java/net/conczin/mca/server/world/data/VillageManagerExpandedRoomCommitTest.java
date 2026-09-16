@@ -81,6 +81,28 @@ class VillageManagerExpandedRoomCommitTest {
     }
 
     @Test
+    void floorRefreshAllowsUnregisteredRoomComponents() {
+        Village village = new Village(1, null);
+        BuildingFloorRegion oldRegion = region(64, 0, 1);
+        Structure current = new Structure(10, BlockPos.ZERO, List.of(
+                TestStructureFloors.create(0, 64, 68, 0, oldRegion)));
+        Building main = room(100, 10, 0, oldRegion);
+        village.registerStructure(current, main);
+
+        Structure refreshed = current.copy();
+        assertTrue(refreshed.replaceFloorGeometry(0,
+                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 3))));
+
+        assertTrue(village.publishFloorRefresh(refreshed, 0, List.of(main)),
+                "fresh Floor cells may remain unregistered until the player adds those Rooms");
+        assertEquals(region(64, 0, 3).cells(), village.getStructure(10).orElseThrow()
+                .getFloor(0).orElseThrow().geometry().cells().stream()
+                .map(FloorGeometry.Cell::feet)
+                .collect(java.util.stream.Collectors.toSet()));
+        assertEquals(oldRegion.cells(), village.getBuilding(100).orElseThrow().getFloorCells());
+    }
+
+    @Test
     void stalePendingFloorRefreshFailsWithoutRegisteringANewStructure() {
         Village village = new Village(1, null);
         Structure refreshed = new Structure(10, BlockPos.ZERO, List.of(
@@ -121,4 +143,5 @@ class VillageManagerExpandedRoomCommitTest {
                 new BlockPos(maxX, region.anchorY() + 3, 0), region);
         return room;
     }
+
 }

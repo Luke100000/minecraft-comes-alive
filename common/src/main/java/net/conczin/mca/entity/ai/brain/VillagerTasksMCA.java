@@ -645,10 +645,10 @@ public class VillagerTasksMCA {
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getChorePackage() {
         return ImmutableList.of(
-                Pair.of(0, new ChoppingTask()),
-                Pair.of(0, new FishingTask()),
-                Pair.of(0, new HarvestingTask()),
-                Pair.of(0, new HuntingTask())
+                Pair.of(5, new ChoppingTask()),
+                Pair.of(5, new FishingTask()),
+                Pair.of(5, new HarvestingTask()),
+                Pair.of(5, new HuntingTask())
         );
     }
 

@@ -396,6 +396,24 @@ class VillageFloorSystemTest {
     }
 
     @Test
+    void provenBuildingAttachmentAllowsDistinctBandOverlapWithinSameLogicalBuilding() {
+        Village village = new Village(1, null);
+        StructureFloor mainFloor = TestStructureFloors.create(0, 64, 68, 0, region(64));
+        StructureFloor upperFloor = TestStructureFloors.create(0, 68, 72, 1, region(68));
+        Structure mainStructure = structure(10, 10, mainFloor);
+        Structure upperStructure = structure(11, 10, upperFloor);
+        registerStructure(village, mainStructure, room(100, 10, 0, true));
+        registerStructure(village, upperStructure, room(101, 11, 0, false));
+
+        StructureFloor basementTransition = TestStructureFloors.create(1, 62, 70, -1, region(62));
+        StructureConnector.VerticalConnection connection = new StructureConnector.VerticalConnection(
+                mainStructure, mainFloor);
+
+        assertEquals(10, village.selectAttachmentTarget(basementTransition, List.of(connection))
+                .orElseThrow().buildingId());
+    }
+
+    @Test
     void floorAttachmentRejectsAnOverlappingCopyOfTheRegisteredFloor() {
         Village village = new Village(1, null);
         StructureFloor existingFloor = TestStructureFloors.create(0, 64, 68, 0, region(64), List.of(
@@ -492,6 +510,34 @@ class VillageFloorSystemTest {
                 TestStructureFloors.create(0, 90, 92, 0, region(90)));
 
         assertFalse(village.hasRegisteredFloorOverlap(touchingAbove));
+    }
+
+    @Test
+    void duplicateCheckAllowsSharedTransitionCellAcrossStoreysOfSameLogicalBuilding() {
+        Village village = new Village(1, null);
+        BlockPos sharedTransition = new BlockPos(2, 67, 0);
+        FloorGeometry lowerGeometry = new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(new BlockPos(0, 64, 0), 68),
+                new FloorGeometry.Cell(new BlockPos(1, 64, 0), 68),
+                new FloorGeometry.Cell(new BlockPos(0, 64, 1), 68),
+                new FloorGeometry.Cell(new BlockPos(1, 64, 1), 68),
+                new FloorGeometry.Cell(sharedTransition, 72)), Map.of());
+        FloorGeometry upperGeometry = new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(new BlockPos(0, 69, 0), 73),
+                new FloorGeometry.Cell(new BlockPos(1, 69, 0), 73),
+                new FloorGeometry.Cell(new BlockPos(0, 69, 1), 73),
+                new FloorGeometry.Cell(new BlockPos(1, 69, 1), 73),
+                new FloorGeometry.Cell(sharedTransition, 72)), Map.of());
+        registerStructure(village, structure(10, 10,
+                new StructureFloor(0, 0, lowerGeometry)), room(100, 10, 0, true));
+
+        Structure attachedUpper = structure(-1, 10,
+                new StructureFloor(0, 1, upperGeometry));
+        Structure unrelatedUpper = structure(-1, 20,
+                new StructureFloor(0, 1, upperGeometry));
+
+        assertFalse(village.hasRegisteredFloorOverlap(attachedUpper));
+        assertTrue(village.hasRegisteredFloorOverlap(unrelatedUpper));
     }
 
     @Test

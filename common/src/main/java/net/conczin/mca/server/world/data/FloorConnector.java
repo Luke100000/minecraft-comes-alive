@@ -56,16 +56,22 @@ public final class FloorConnector {
         }
     }
 
-    public record Marker(BlockPos pos, Type type) {
+    public record Marker(BlockPos pos, Type type, BlockPos floorCell) {
+        public Marker(BlockPos pos, Type type) {
+            this(pos, type, pos);
+        }
+
         public Marker {
             pos = pos.immutable();
             Objects.requireNonNull(type, "type");
+            floorCell = Objects.requireNonNull(floorCell, "floorCell").immutable();
         }
 
         CompoundTag save() {
             CompoundTag tag = new CompoundTag();
             tag.put("pos", NbtHelper.encodeBlockPos(pos));
             tag.putString("type", type.serializedName());
+            if (!floorCell.equals(pos)) tag.put("floorCell", NbtHelper.encodeBlockPos(floorCell));
             return tag;
         }
 
@@ -73,7 +79,11 @@ public final class FloorConnector {
             if (!tag.contains("pos") || !tag.contains("type")) return null;
             BlockPos pos = NbtHelper.decodeBlockPos(tag.get("pos"));
             Type type = Type.fromSerializedName(tag.getString("type").orElse(""));
-            return pos == null || type == null ? null : new Marker(pos, type);
+            BlockPos floorCell = tag.contains("floorCell")
+                    ? NbtHelper.decodeBlockPos(tag.get("floorCell"))
+                    : pos;
+            return pos == null || type == null || floorCell == null
+                    ? null : new Marker(pos, type, floorCell);
         }
     }
 }

@@ -8,27 +8,7 @@ import java.util.Set;
 
 /** Materializes Room geometry from one exact selected FloorGeometry. */
 final class BuildingRoomScanner {
-    private static final int MIN_INTERIOR_AREA = 4;
-
     private BuildingRoomScanner() {
-    }
-
-    static Result scan(Level world,
-                       BlockPos source,
-                       int maxSize,
-                       int floorId,
-                       SelectedFloorScanner.Result scan) {
-        if (scan == null) return Result.failure(Building.validationResult.TOO_SMALL, source);
-        FloorGeometry floor = scan.floor();
-        if (floor == null || floor.cells().isEmpty()) {
-            return Result.failure(Building.validationResult.TOO_SMALL, source);
-        }
-        List<RoomPartitioner.Component> components = components(world, scan);
-        RoomPartitioner.Component selected = RoomPartitioner.select(source, floor, components);
-        return selected == null
-                ? Result.failure(Building.validationResult.TOO_SMALL, source)
-                : materialize(source, maxSize,
-                floorId, floor, components, selected);
     }
 
     /** Materializes every fresh topology component without assigning persistence identity. */
@@ -65,7 +45,9 @@ final class BuildingRoomScanner {
             RoomPartitioner.Component component) {
         Set<BlockPos> floorCells = component.floorCells();
         if (floorCells.size() > maxSize) return Result.failure(Building.validationResult.BLOCK_LIMIT, source);
-        if (floorCells.size() < MIN_INTERIOR_AREA) return Result.failure(Building.validationResult.TOO_SMALL, source);
+        if (floorCells.size() < RoomPartitioner.MIN_ROOM_AREA) {
+            return Result.failure(Building.validationResult.TOO_SMALL, source);
+        }
 
         BlockPos seed = component.nearestCell(source);
         Set<BlockPos> poi = RoomPoiEvidence.candidates(components, component);

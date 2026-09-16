@@ -126,6 +126,7 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
+        tag.putInt("floorNumber", floorNumber);
         tag.put("cells", NbtHelper.fromList(geometry.cells().stream()
                 .sorted(Comparator
                         .comparingInt((FloorGeometry.Cell cell) -> cell.feet().getX())
@@ -144,8 +145,12 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
         }
         List<FloorGeometry.Cell> cells = NbtHelper.toList(
                 tag.getList("cells").orElseGet(net.minecraft.nbt.ListTag::new), value -> loadCell((CompoundTag) value));
-        return new StructureFloor(tag.getInt("id").orElse(0), 0,
-                new FloorGeometry(cells, connectorMap(tag, cells)));
+        int floorNumber = tag.getInt("floorNumber").orElse(0);
+        return new StructureFloor(tag.getInt("id").orElse(0), floorNumber,
+                new FloorGeometry(cells, loadMarkers(tag).stream()
+                        .filter(marker -> cells.stream()
+                                .anyMatch(cell -> cell.feet().equals(marker.floorCell())))
+                        .toList()));
     }
 
     public StructureFloor withFloorNumber(int newFloorNumber) {
@@ -166,17 +171,6 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
             throw new IllegalArgumentException("FloorGeometry cell is missing ceilingY");
         }
         return new FloorGeometry.Cell(pos, tag.getInt("ceilingY").orElse(pos.getY() + 1));
-    }
-
-    private static Map<BlockPos, FloorConnector.Type> connectorMap(CompoundTag tag,
-                                                                   Collection<FloorGeometry.Cell> cells) {
-        Set<BlockPos> positions = cells.stream().map(FloorGeometry.Cell::feet)
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        Map<BlockPos, FloorConnector.Type> result = new LinkedHashMap<>();
-        for (FloorConnector.Marker marker : loadMarkers(tag)) {
-            if (positions.contains(marker.pos())) result.put(marker.pos(), marker.type());
-        }
-        return Map.copyOf(result);
     }
 
     private static List<FloorConnector.Marker> loadMarkers(CompoundTag tag) {

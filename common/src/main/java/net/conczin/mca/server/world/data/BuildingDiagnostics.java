@@ -156,9 +156,7 @@ public final class BuildingDiagnostics {
         BlockState clickedState = world.getBlockState(pos);
         BlockPos connectorPos = StructureConnector.normalize(pos, clickedState);
         BlockState connectorState = world.getBlockState(connectorPos);
-        FloorConnector.Type persistedType = floor == null
-                ? null
-                : floor.geometry().connectorTypesByCell().get(connectorPos);
+        FloorConnector.Type persistedType = persistedConnectorType(floor, connectorPos);
         FloorConnector.Type worldType = FloorConnector.Type.fromBlockState(connectorState);
         Direction doorFacing = connectorState.getBlock() instanceof DoorBlock
                 ? connectorState.getValue(DoorBlock.FACING)
@@ -174,6 +172,15 @@ public final class BuildingDiagnostics {
 
     private static String value(Object value) {
         return value == null ? "none" : value.toString();
+    }
+
+    static FloorConnector.Type persistedConnectorType(StructureFloor floor, BlockPos connectorPos) {
+        if (floor == null || connectorPos == null) return null;
+        return floor.connectors().stream()
+                .filter(marker -> marker.pos().equals(connectorPos))
+                .map(FloorConnector.Marker::type)
+                .findFirst()
+                .orElse(null);
     }
 
     static PlanAttempt planAttempt(Supplier<RoomScanPlan> supplier) {
