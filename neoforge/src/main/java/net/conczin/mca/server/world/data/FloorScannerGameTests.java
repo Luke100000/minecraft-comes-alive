@@ -567,7 +567,7 @@ public final class FloorScannerGameTests {
                 "upper staircase changed storey anchor to " + upper.floor().anchorY());
         helper.assertTrue(upper.floor().cellAt(topStair).isEmpty(),
                 "upper storey reclaimed the lower-owned top staircase transition");
-        helper.assertTrue(lower.connectedFloors().stream()
+        helper.assertTrue(connectedFloors(lower).stream()
                         .anyMatch(floor -> floor.anchorY() == floorY + 3),
                 "stair attachment evidence was lost");
         helper.assertTrue(BuildingRoomScanner.components(helper.getLevel(), lower).size() == 1,
@@ -620,7 +620,7 @@ public final class FloorScannerGameTests {
                 "lower storey absorbed the upper plateau through its staircase");
         helper.assertTrue(upper.floor().cellAt(lowerSeed).isEmpty(),
                 "upper storey absorbed the lower plateau through its staircase");
-        helper.assertTrue(lower.connectedFloors().stream()
+        helper.assertTrue(connectedFloors(lower).stream()
                         .anyMatch(floor -> floor.sameCellPositions(upper.floor())),
                 "two-block staircase lost the direct storey connection");
         helper.succeed();
@@ -653,18 +653,18 @@ public final class FloorScannerGameTests {
 
         SelectedFloorScanner.Result fromTop = direct.getLast();
         for (SelectedFloorScanner.Result expected : direct) {
-            helper.assertTrue(fromTop.connectedFloors().stream()
+            helper.assertTrue(connectedFloors(fromTop).stream()
                             .anyMatch(candidate -> candidate.sameCellPositions(expected.floor())),
                     "deep chain did not retain canonical storey anchor=" + expected.floor().anchorY());
         }
-        helper.assertTrue(fromTop.connectedFloors().size() == 4,
-                "deep chain exposed " + fromTop.connectedFloors().size()
+        helper.assertTrue(connectedFloors(fromTop).size() == 4,
+                "deep chain exposed " + connectedFloors(fromTop).size()
                         + " identities instead of four canonical storeys");
-        helper.assertTrue(fromTop.connectedFloors().stream()
+        helper.assertTrue(connectedFloors(fromTop).stream()
                         .map(FloorGeometry::anchorY).collect(Collectors.toSet())
                         .equals(Set.of(lowerY, lowerY + 3, lowerY + 6, lowerY + 9)),
                 "deep chain produced competing pseudo-storeys: "
-                        + fromTop.connectedFloors().stream().map(FloorGeometry::anchorY).sorted().toList());
+                        + connectedFloors(fromTop).stream().map(FloorGeometry::anchorY).sorted().toList());
 
         List<BlockPos> descendingTransitions = List.of(
                 origin.offset(7, 3, 1),
@@ -1162,8 +1162,10 @@ public final class FloorScannerGameTests {
                         + " canopyCeiling=" + ceilings.ceilingY(canopyStart)
                         + " components=" + components.size());
 
-        BuildingRoomScanner.Result room = BuildingRoomScanner.scan(
-                level, roomSeed, 128, 0, fromRoom);
+        RoomPartitioner.Component selected = RoomPartitioner.select(roomSeed, fromRoom.floor(), components);
+        helper.assertTrue(selected != null, "bedroom component was not selected after pruning exterior canopy");
+        BuildingRoomScanner.Result room = BuildingRoomScanner.materialize(
+                roomSeed, 128, 0, fromRoom.floor(), components, selected);
         helper.assertTrue(room.status() == Building.validationResult.SUCCESS,
                 "bedroom did not materialize after pruning exterior canopy: " + room.status());
         helper.assertTrue(room.poiCells().contains(bedFoot),
@@ -1824,6 +1826,10 @@ public final class FloorScannerGameTests {
             top = feet;
         }
         return top.immutable();
+    }
+
+    private static List<FloorGeometry> connectedFloors(SelectedFloorScanner.Result scan) {
+        return scan.connectedStoreys().stream().map(SelectedFloorScanner.DiscoveredStorey::floor).toList();
     }
 
     private static void openUpperStorey(GameTestHelper helper, BlockPos origin) {

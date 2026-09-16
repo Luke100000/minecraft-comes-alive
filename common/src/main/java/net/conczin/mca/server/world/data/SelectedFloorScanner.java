@@ -90,12 +90,6 @@ final class SelectedFloorScanner {
         }
     }
 
-    private static FloorGeometry attachConnectors(
-            Level world, FloorGeometry floor, Collection<BlockPos> connectors) {
-        return new FloorGeometry(
-                floor.cells(), StructureConnector.connectorMarkersForFloor(world, connectors, floor));
-    }
-
     private static StoreyResolution resolveCanonicalStorey(
             Level world,
             BlockPos requestedSeed,
@@ -134,7 +128,8 @@ final class SelectedFloorScanner {
         if (scan.floor().cells().size() + connectors.size() > maxSize) {
             return StoreyResolution.failure(Building.validationResult.BLOCK_LIMIT);
         }
-        FloorGeometry floor = attachConnectors(world, scan.floor(), connectors);
+        FloorGeometry floor = new FloorGeometry(scan.floor().cells(),
+                StructureConnector.connectorMarkersForFloor(world, connectors, scan.floor()));
         DiscoveredStorey storey = new DiscoveredStorey(
                 floor, scan.transitions(), scan.storeyEdgeCells(), scan.transitionSeeds());
         return StoreyResolution.success(storey);
@@ -331,7 +326,7 @@ final class SelectedFloorScanner {
         Set<BlockPos> visited = new HashSet<>();
         while (visited.add(current.feet())
                 && (isDescendingTransitionSeed(world, current, provider)
-                || !hasStableSameHeightPeer(current, provider))) {
+                || stableSameHeightPeerCount(current, provider) == 0)) {
             int currentY = current.feet().getY();
             SurfaceCell next = provider.steps(current).stream()
                     .filter(step -> step.connector() == null)
@@ -362,10 +357,6 @@ final class SelectedFloorScanner {
     private static boolean isStairOccupancy(Level world, BlockPos feet) {
         return world.getBlockState(feet).getBlock() instanceof StairBlock
                 || world.getBlockState(feet.below()).getBlock() instanceof StairBlock;
-    }
-
-    private static boolean hasStableSameHeightPeer(SurfaceCell cell, StepProvider provider) {
-        return stableSameHeightPeerCount(cell, provider) > 0;
     }
 
     private static long stableSameHeightPeerCount(SurfaceCell cell, StepProvider provider) {
@@ -417,7 +408,7 @@ final class SelectedFloorScanner {
 
         Set<BlockPos> allowed = new HashSet<>(floorCells);
         allowed.removeAll(exteriorCells);
-        Set<BlockPos> reachable = reachableCells(seed.feet(), allowed, neighbors);
+        Set<BlockPos> reachable = connectedCells(seed.feet(), allowed, neighbors, new HashSet<>());
         if (reachable.isEmpty()) {
             return StoreyScan.failure(Building.validationResult.NOT_IN_BUILDING);
         }
@@ -540,13 +531,6 @@ final class SelectedFloorScanner {
             if (!region.isEmpty()) regions.add(region);
         }
         return List.copyOf(regions);
-    }
-
-    private static Set<BlockPos> reachableCells(
-            BlockPos seed,
-            Set<BlockPos> allowed,
-            Map<BlockPos, List<BlockPos>> neighbors) {
-        return connectedCells(seed, allowed, neighbors, new HashSet<>());
     }
 
     private static Set<BlockPos> connectedCells(
@@ -1082,10 +1066,6 @@ final class SelectedFloorScanner {
             storeyLinks = storeyLinks == null ? List.of() : List.copyOf(storeyLinks);
         }
 
-        List<FloorGeometry> connectedFloors() {
-            return connectedStoreys.stream().map(DiscoveredStorey::floor).toList();
-        }
-
         List<FloorGeometry> directlyConnectedFloors(FloorGeometry selected) {
             List<FloorGeometry> direct = new ArrayList<>();
             for (StoreyLink link : storeyLinks) {
@@ -1098,14 +1078,17 @@ final class SelectedFloorScanner {
             return List.copyOf(direct);
         }
 
-        List<Result> storeyScans(BlockPos seed) {
+        Optional<Result> storeyScan(BlockPos seed, FloorGeometry target) {
+            if (target == null) return Optional.empty();
             if (connectedStoreys.isEmpty()) {
-                return floor == null ? List.of() : List.of(this);
+                return floor != null && floor.sameCellPositions(target)
+                        ? Optional.of(this) : Optional.empty();
             }
             ConnectedStoreys connected = new ConnectedStoreys(connectedStoreys, storeyLinks);
             return connectedStoreys.stream()
-                    .map(storey -> success(seed, storey, connected))
-                    .toList();
+                    .filter(storey -> storey.floor().sameCellPositions(target))
+                    .findFirst()
+                    .map(storey -> success(seed, storey, connected));
         }
 
         static Result failure(Building.validationResult result, BlockPos source) {

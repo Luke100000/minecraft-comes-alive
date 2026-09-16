@@ -11,24 +11,6 @@ final class BuildingRoomScanner {
     private BuildingRoomScanner() {
     }
 
-    static Result scan(Level world,
-                       BlockPos source,
-                       int maxSize,
-                       int floorId,
-                       SelectedFloorScanner.Result scan) {
-        if (scan == null) return Result.failure(Building.validationResult.TOO_SMALL, source);
-        FloorGeometry floor = scan.floor();
-        if (floor == null || floor.cells().isEmpty()) {
-            return Result.failure(Building.validationResult.TOO_SMALL, source);
-        }
-        List<RoomPartitioner.Component> components = components(world, scan);
-        RoomPartitioner.Component selected = RoomPartitioner.select(source, floor, components);
-        return selected == null
-                ? Result.failure(Building.validationResult.TOO_SMALL, source)
-                : materialize(source, maxSize,
-                floorId, floor, components, selected);
-    }
-
     /** Materializes every fresh topology component without assigning persistence identity. */
     static List<Result> partition(Level world,
                                   BlockPos source,

@@ -200,7 +200,7 @@ final class StructureScanner {
      * Fresh discovery still needs an open feet cell, so normalize that interaction to the supported
      * cell immediately above without teaching the scanner about individual block classes.
      */
-    static Optional<BlockPos> resolveStandingSurfaceSeed(Level world, BlockPos source) {
+    private static Optional<BlockPos> resolveStandingSurfaceSeed(Level world, BlockPos source) {
         if (isWalkableAnchor(world, source)) return Optional.of(source.immutable());
         if (world.getBlockState(source).getCollisionShape(world, source).isEmpty()) return Optional.empty();
 
@@ -300,16 +300,6 @@ final class StructureScanner {
                   SelectedFloorScanner.Result scan) {
         FloorGeometry scannedFloor() {
             return scan == null ? null : scan.floor();
-        }
-
-        List<FloorGeometry> connectedFloors() {
-            return scan == null ? List.of() : scan.connectedFloors();
-        }
-
-        List<FloorGeometry> directlyConnectedFloors() {
-            return scan == null || scan.floor() == null
-                    ? List.of()
-                    : scan.directlyConnectedFloors(scan.floor());
         }
 
         BlockPos min() {
