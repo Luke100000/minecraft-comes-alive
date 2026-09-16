@@ -10,11 +10,11 @@ dependencies {
 
     localRuntime "maven.modrinth:sodium:${sodium_fabric_version}"
     //localRuntime "maven.modrinth:iris:${iris_fabric_version}"
+    //localRuntime "maven.modrinth:packet-fixer:${packetfixer_fabric_version}"
     // No 26.3-compatible Fabric builds are published yet for these dev-only helpers.
     //localRuntime "maven.modrinth:jei:${jei_fabric_version}"
     //localRuntime "maven.modrinth:ferrite-core:${ferritecore_fabric_version}"
     //localRuntime "maven.modrinth:immediatelyfast:${immediatelyfast_fabric_version}"
-    //localRuntime "maven.modrinth:packet-fixer:${packetfixer_fabric_version}"
 }
 
 def devUsername = providers.gradleProperty('mca_dev_username').orElse('Dev').get()
