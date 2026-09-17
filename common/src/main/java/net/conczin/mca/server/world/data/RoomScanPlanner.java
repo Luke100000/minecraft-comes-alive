@@ -3,8 +3,6 @@ package net.conczin.mca.server.world.data;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -39,7 +37,7 @@ final class RoomScanPlanner {
             return new Analysis(persistedFloorPlan == null ? RoomScanPlan.addBuilding(source) : persistedFloorPlan);
         }
         List<RoomPartitioner.Component> components = BuildingRoomScanner.components(level, observation.scan());
-        RoomScanPlan freshPlan = planFresh(village, level, source, observation, components);
+        RoomScanPlan freshPlan = planFresh(village, source, observation, components);
         if (persistedFloorPlan == null) {
             return new Analysis(freshPlan, observation, components);
         }
@@ -70,11 +68,10 @@ final class RoomScanPlanner {
         List<RoomPartitioner.Component> components = observation == null
                 ? List.of()
                 : BuildingRoomScanner.components(null, observation.scan());
-        return planFresh(village, null, source, observation, components);
+        return planFresh(village, source, observation, components);
     }
 
     private static RoomScanPlan planFresh(Village village,
-                                          Level level,
                                           BlockPos source,
                                           StructureScanner.FloorObservation observation,
                                           List<RoomPartitioner.Component> components) {
@@ -84,10 +81,6 @@ final class RoomScanPlanner {
         if (attachment != null) return attachment;
 
         FloorTarget expansion = selectSameStoreyTarget(village, observation.scan().floor()).orElse(null);
-        RoomScanPlan transitionAttachment = connectedTransitionAttachmentPlan(
-                village, level, source, observation, expansion).orElse(null);
-        if (transitionAttachment != null) return transitionAttachment;
-
         if (expansion != null && validExpansion(village, observation, expansion)) {
             RoomPartitioner.Component selected = selectFreshComponent(
                     observation.scan().floor(), observation.seed(), components);
@@ -106,74 +99,13 @@ final class RoomScanPlanner {
         if (village == null || observation == null) return Optional.empty();
         StructureFloor candidateFloor = new StructureFloor(0, 0, observation.scan().floor());
         Village.AttachmentTarget target = village.selectAttachmentTarget(
-                candidateFloor, observation.verticalConnections(), observation.directlyConnectedFloors()).orElse(null);
+                candidateFloor, observation.verticalConnections(), observation.scan().transitionSeeds()).orElse(null);
         if (target == null) return Optional.empty();
 
         int floorNumber = adjacentFloorNumber(village, target, candidateFloor);
         if (floorNumber == Integer.MIN_VALUE) return Optional.empty();
         return Optional.of(RoomScanPlan.attachment(
                 target.buildingId(), floorNumber, source, observation.seed(), candidateFloor));
-    }
-
-    /**
-     * A stair landing can produce a successful fresh scan in the semantic band of an existing Floor
-     * even though the persisted exact Floor does not own the interaction position. In that case the
-     * persisted geometry remains authoritative and the already-discovered connected storeys decide
-     * whether the interaction is actually entering the next Floor above or below.
-     */
-    private static Optional<RoomScanPlan> connectedTransitionAttachmentPlan(
-            Village village,
-            Level level,
-            BlockPos source,
-            StructureScanner.FloorObservation observation,
-            FloorTarget expansion) {
-        if (village == null || source == null || observation == null || expansion == null) {
-            return Optional.empty();
-        }
-        Structure referenceStructure = village.getStructure(expansion.structureId()).orElse(null);
-        StructureFloor referenceFloor = referenceStructure == null
-                ? null : referenceStructure.getFloor(expansion.floorId()).orElse(null);
-        if (referenceFloor == null || referenceFloor.geometry().interactionCellAt(
-                source.getX(), source.getY(), source.getZ()).isPresent()) {
-            return Optional.empty();
-        }
-
-        int direction = Integer.compare(observation.scan().floor().anchorY(), referenceFloor.anchorY());
-        if (direction == 0) return Optional.empty();
-
-        int buildingId = referenceStructure.getLogicalBuildingId();
-        List<ConnectedAttachment> candidates = new ArrayList<>();
-        for (FloorGeometry geometry : observation.directlyConnectedFloors()) {
-            StructureFloor candidateFloor = new StructureFloor(0, 0, geometry);
-            if (Integer.compare(candidateFloor.anchorY(), referenceFloor.anchorY()) != direction) {
-                continue;
-            }
-
-            Village.AttachmentTarget target = village.selectAttachmentTarget(
-                    candidateFloor, List.of(), observation.scan().directlyConnectedFloors(geometry)).orElse(null);
-            if (target == null || target.buildingId() != buildingId) continue;
-
-            BlockPos scanSeed = nearestScanSeed(level, geometry, source).orElse(null);
-            if (scanSeed == null) continue;
-            int floorNumber = adjacentFloorNumber(village, target, candidateFloor);
-            if (floorNumber == Integer.MIN_VALUE) continue;
-            candidates.add(new ConnectedAttachment(candidateFloor, floorNumber, scanSeed));
-        }
-        if (candidates.isEmpty()) return Optional.empty();
-
-        int nearestAnchor = candidates.stream()
-                .map(ConnectedAttachment::floor)
-                .mapToInt(StructureFloor::anchorY)
-                .reduce(direction < 0 ? Integer.MIN_VALUE : Integer.MAX_VALUE,
-                        direction < 0 ? Math::max : Math::min);
-        List<ConnectedAttachment> nearest = candidates.stream()
-                .filter(candidate -> Math.abs(candidate.floor().anchorY() - nearestAnchor)
-                        <= StructureFloor.BAND_TOLERANCE)
-                .toList();
-        if (nearest.size() != 1) return Optional.empty();
-        ConnectedAttachment selected = nearest.getFirst();
-        return Optional.of(RoomScanPlan.attachment(
-                buildingId, selected.floorNumber(), source, selected.scanSeed(), selected.floor()));
     }
 
     private static int adjacentFloorNumber(
@@ -184,27 +116,6 @@ final class RoomScanPlanner {
         if (reference == null) return Integer.MIN_VALUE;
         int direction = Integer.compare(candidate.anchorY(), reference.anchorY());
         return direction == 0 ? Integer.MIN_VALUE : reference.floorNumber() + direction;
-    }
-
-    private static Optional<BlockPos> nearestScanSeed(Level level, FloorGeometry geometry, BlockPos source) {
-        if (geometry == null || source == null) return Optional.empty();
-        FloorCeilingResolver ceilings = level == null ? null : new FloorCeilingResolver(level);
-        return geometry.cells().stream()
-                .map(FloorGeometry.Cell::feet)
-                .sorted(Comparator
-                        .comparingInt((BlockPos candidate) -> distance(candidate, source))
-                        .thenComparingInt(BlockPos::getY)
-                        .thenComparingInt(BlockPos::getX)
-                        .thenComparingInt(BlockPos::getZ))
-                .filter(candidate -> level == null
-                        || SelectedFloorScanner.inspectSurfaceCell(level, candidate, ceilings).isPresent())
-                .findFirst();
-    }
-
-    private static int distance(BlockPos first, BlockPos second) {
-        return Math.abs(first.getX() - second.getX())
-                + Math.abs(first.getY() - second.getY())
-                + Math.abs(first.getZ() - second.getZ());
     }
 
     private static boolean validExpansion(Village village,
@@ -238,6 +149,4 @@ final class RoomScanPlanner {
     private record FloorTarget(int structureId, int floorId) {
     }
 
-    private record ConnectedAttachment(StructureFloor floor, int floorNumber, BlockPos scanSeed) {
-    }
 }

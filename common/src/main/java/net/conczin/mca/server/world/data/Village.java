@@ -753,14 +753,14 @@ public class Village implements Iterable<Building> {
     Optional<AttachmentTarget> selectAttachmentTarget(
             StructureFloor candidate,
             Collection<StructureConnector.VerticalConnection> verticalConnections,
-            Collection<FloorGeometry> connectedFloors) {
+            Collection<BlockPos> stairTransitions) {
         if (candidate == null) return Optional.empty();
         boolean alreadyRegistered = structures.values().stream()
                 .flatMap(structure -> structure.getFloors().stream())
                 .anyMatch(floor -> floor.geometry().sameCellPositions(candidate.geometry()));
         if (alreadyRegistered) return Optional.empty();
         Set<StructureConnector.VerticalConnection> connections = attachmentConnections(
-                candidate, verticalConnections, connectedFloors);
+                candidate, verticalConnections, stairTransitions);
         if (hasUnprovenAttachmentOverlap(candidate, connections)) return Optional.empty();
 
         Map<Integer, AttachmentTarget> nearestByBuilding = new HashMap<>();
@@ -837,15 +837,16 @@ public class Village implements Iterable<Building> {
     private Set<StructureConnector.VerticalConnection> attachmentConnections(
             StructureFloor candidate,
             Collection<StructureConnector.VerticalConnection> verticalConnections,
-            Collection<FloorGeometry> connectedFloors) {
+            Collection<BlockPos> stairTransitions) {
         LinkedHashSet<StructureConnector.VerticalConnection> connections = new LinkedHashSet<>();
         if (verticalConnections != null) connections.addAll(verticalConnections);
-        if (connectedFloors == null) return Set.copyOf(connections);
+        if (stairTransitions == null) return Set.copyOf(connections);
 
-        for (FloorGeometry connected : connectedFloors) {
+        for (BlockPos transition : stairTransitions) {
             for (Structure structure : structures.values()) {
                 for (StructureFloor floor : structure.getFloors()) {
-                    if (floor.overlapsSemanticStorey(connected)) {
+                    if (floor.geometry().interactionCellAt(
+                            transition.getX(), transition.getY(), transition.getZ()).isPresent()) {
                         connections.add(new StructureConnector.VerticalConnection(structure, floor));
                     }
                 }

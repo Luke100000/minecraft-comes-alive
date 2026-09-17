@@ -14,7 +14,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
-/** Validates selected Floors and explicitly gathers connected-storey evidence for attachment planning. */
+/** Validates one selected Floor and gathers only local attachment evidence. */
 final class StructureScanner {
     private static final Direction[] HORIZONTAL = {
             Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
@@ -101,19 +101,19 @@ final class StructureScanner {
         Config config = Config.getInstance();
         SelectedFloorScanner.Observation observation = new SelectedFloorScanner.Observation(
                 world, config.maxBuildingSize, config.maxBuildingRadius);
-        SelectedFloorScanner.Result exact = observation.connected(source);
+        SelectedFloorScanner.Result exact = observation.selected(source);
         if (exact.result() == Building.validationResult.SUCCESS && exact.floor() != null) {
             BlockPos resolvedSeed = resolveFloorSeed(world, exact.floor(), source).orElse(source);
             return Optional.of(new FloorHandoff(resolvedSeed, exact));
         }
 
         Optional<FloorHandoff> vertical = resolveFloorHandoff(world, source,
-                StructureConnector.verticalHandoffCandidates(world, source), observation::connected);
+                StructureConnector.verticalHandoffCandidates(world, source), observation::selected);
         if (vertical.isPresent()) return vertical;
 
         BlockPos standingSeed = resolveStandingSurfaceSeed(world, source).orElse(null);
         if (standingSeed != null && !standingSeed.equals(source)) {
-            SelectedFloorScanner.Result standing = observation.connected(standingSeed);
+            SelectedFloorScanner.Result standing = observation.selected(standingSeed);
             if (standing.result() == Building.validationResult.SUCCESS && standing.floor() != null) {
                 return Optional.of(new FloorHandoff(standingSeed, standing));
             }
@@ -124,7 +124,7 @@ final class StructureScanner {
                     world,
                     source,
                     java.util.Arrays.stream(HORIZONTAL).map(source::relative).toList(),
-                    observation::connected);
+                    observation::selected);
             if (adjacent.isPresent()) return adjacent;
         }
 
@@ -134,7 +134,7 @@ final class StructureScanner {
             BlockState state = world.getBlockState(connector);
             if (!StructureConnector.isHorizontalBoundary(state)) continue;
             BlockPos candidate = StructureConnector.normalize(connector, state).relative(direction);
-            SelectedFloorScanner.Result scan = observation.connected(candidate);
+            SelectedFloorScanner.Result scan = observation.selected(candidate);
             if (scan.result() == Building.validationResult.SUCCESS && scan.floor() != null) {
                 candidates.add(new FloorHandoff(candidate, scan));
             }
@@ -227,7 +227,7 @@ final class StructureScanner {
                                      int ignoredStructureId,
                                      int attachmentBuildingId) {
         Config config = Config.getInstance();
-        SelectedFloorScanner.Result selected = SelectedFloorScanner.scanSelected(
+        SelectedFloorScanner.Result selected = SelectedFloorScanner.scan(
                 world, scanSeed, config.maxBuildingSize, config.maxBuildingRadius);
         Result result = resultFromObservedStorey(
                 scanSeed, selected, existing, ignoredStructureId, attachmentBuildingId);
@@ -255,9 +255,9 @@ final class StructureScanner {
     private static boolean hasDirectStoreyConnection(
             SelectedFloorScanner.Result selected, StructureFloor candidate, Structure structure) {
         if (selected == null || candidate == null || structure == null) return false;
-        return selected.directlyConnectedFloors(candidate.geometry()).stream()
-                .anyMatch(connected -> structure.getFloors().stream()
-                        .anyMatch(floor -> floor.overlapsSemanticStorey(connected)));
+        return selected.transitionSeeds().stream().anyMatch(seed ->
+                structure.getFloors().stream().anyMatch(floor ->
+                        floor.geometry().interactionCellAt(seed.getX(), seed.getY(), seed.getZ()).isPresent()));
     }
 
     private static boolean hasSameBandOverlap(StructureFloor candidate, Structure structure) {
@@ -311,12 +311,6 @@ final class StructureScanner {
         FloorObservation {
             seed = seed.immutable();
             verticalConnections = verticalConnections == null ? List.of() : List.copyOf(verticalConnections);
-        }
-
-        List<FloorGeometry> directlyConnectedFloors() {
-            return scan == null || scan.floor() == null
-                    ? List.of()
-                    : scan.directlyConnectedFloors(scan.floor());
         }
     }
 

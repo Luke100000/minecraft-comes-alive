@@ -13,7 +13,6 @@ import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -44,12 +43,8 @@ final class SelectedFloorScanner {
     private SelectedFloorScanner() {
     }
 
-    /** Resolves the selected Floor and explicitly explores its connected storeys. */
+    /** Resolves exactly one selected Floor. */
     static Result scan(Level world, BlockPos seed, int maxSize, int maxRadius) {
-        return new Observation(world, maxSize, maxRadius).connected(seed);
-    }
-
-    static Result scanSelected(Level world, BlockPos seed, int maxSize, int maxRadius) {
         return new Observation(world, maxSize, maxRadius).selected(seed);
     }
 
@@ -60,7 +55,7 @@ final class SelectedFloorScanner {
         private final int maxRadius;
         private final FloorCeilingResolver ceilings;
         private final StepProvider provider;
-        private final Map<BlockPos, StoreyResolution> resolutions = new HashMap<>();
+        private final Map<BlockPos, Result> resolutions = new HashMap<>();
         private final Map<BlockPos, EnclosedVolume> volumesBySeed = new HashMap<>();
 
         Observation(Level world, int maxSize, int maxRadius) {
@@ -73,16 +68,16 @@ final class SelectedFloorScanner {
                     cell.feet(), ignored -> worldSteps(world, cell, ceilings));
         }
 
-        private StoreyResolution resolve(BlockPos seed) {
+        private Result resolve(BlockPos seed) {
             return resolutions.computeIfAbsent(seed.immutable(), requested -> {
                 SurfaceCell traversalSeed = resolveScanSeed(world, requested, ceilings).orElse(null);
                 if (traversalSeed == null) {
-                    return StoreyResolution.failure(Building.validationResult.NOT_IN_BUILDING);
+                    return Result.failure(Building.validationResult.NOT_IN_BUILDING, requested);
                 }
 
                 EnclosedVolume volume = enclosedVolume(traversalSeed.feet());
                 if (volume.result() != Building.validationResult.SUCCESS) {
-                    return StoreyResolution.failure(volume.result());
+                    return Result.failure(volume.result(), requested);
                 }
 
                 return resolveCanonicalStorey(
@@ -96,19 +91,11 @@ final class SelectedFloorScanner {
         }
 
         Result selected(BlockPos seed) {
-            StoreyResolution resolution = resolve(seed);
-            return resolution.storey() == null ? Result.failure(resolution.result(), seed)
-                    : success(seed, resolution.storey(), new ConnectedStoreys(List.of(resolution.storey()), List.of()));
-        }
-
-        Result connected(BlockPos seed) {
-            StoreyResolution resolution = resolve(seed);
-            if (resolution.storey() == null) return Result.failure(resolution.result(), seed);
-            return success(seed, resolution.storey(), discoverConnectedStoreys(resolution.storey(), this));
+            return resolve(seed);
         }
     }
 
-    private static StoreyResolution resolveCanonicalStorey(
+    private static Result resolveCanonicalStorey(
             Level world,
             SurfaceCell requestedSeed,
             EnclosedVolume volume,
@@ -119,7 +106,7 @@ final class SelectedFloorScanner {
         StepProvider enclosedSteps = withinVolume(provider, volume);
         SurfaceCell traversalSeed = volume.supportedCells().get(requestedSeed.feet());
         if (traversalSeed == null) {
-            return StoreyResolution.failure(Building.validationResult.NOT_IN_BUILDING);
+            return Result.failure(Building.validationResult.NOT_IN_BUILDING, requestedSeed.feet());
         }
 
         traversalSeed = resolveStoreyAnchor(world, traversalSeed, enclosedSteps);
@@ -128,12 +115,12 @@ final class SelectedFloorScanner {
         StoreyScan scan = traverseStorey(
                 world, traversalSeed, ceilings, maxSize, maxRadius, enclosedSteps, classifier);
         if (scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) {
-            return StoreyResolution.failure(scan.result());
+            return Result.failure(scan.result(), requestedSeed.feet());
         }
         scan = retainEnclosedRegions(
                 world, traversalSeed, scan, ceilings, maxRadius, provider, classifier);
         if (scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) {
-            return StoreyResolution.failure(scan.result());
+            return Result.failure(scan.result(), requestedSeed.feet());
         }
 
         LinkedHashSet<BlockPos> connectors = new LinkedHashSet<>(scan.connectors());
@@ -141,79 +128,12 @@ final class SelectedFloorScanner {
             collectVerticalConnectors(world, cell, connectors);
         }
         if (scan.floor().cells().size() + connectors.size() > maxSize) {
-            return StoreyResolution.failure(Building.validationResult.BLOCK_LIMIT);
+            return Result.failure(Building.validationResult.BLOCK_LIMIT, requestedSeed.feet());
         }
         FloorGeometry floor = new FloorGeometry(scan.floor().cells(),
                 StructureConnector.connectorMarkersForFloor(world, connectors, scan.floor()));
-        DiscoveredStorey storey = new DiscoveredStorey(
-                floor, scan.transitions(), scan.storeyEdgeCells(), scan.transitionSeeds());
-        return StoreyResolution.success(storey);
-    }
-
-    private static ConnectedStoreys discoverConnectedStoreys(
-            DiscoveredStorey selected,
-            Observation observation) {
-        List<DiscoveredStorey> storeys = new ArrayList<>();
-        List<StoreyLink> links = new ArrayList<>();
-        ArrayDeque<PendingTransition> queue = new ArrayDeque<>();
-        Map<DiscoveredStorey, Set<BlockPos>> visitedTransitions = new IdentityHashMap<>();
-        Map<BlockPos, DiscoveredStorey> storeysByCell = new HashMap<>();
-        storeys.add(selected);
-        indexStorey(storeysByCell, selected);
-        selected.transitionSeeds().stream().sorted(CELL_ORDER)
-                .map(seed -> new PendingTransition(selected, seed))
-                .forEach(queue::addLast);
-
-        while (!queue.isEmpty()) {
-            PendingTransition pending = queue.removeFirst();
-            if (!visitedTransitions.computeIfAbsent(pending.from(), ignored -> new HashSet<>())
-                    .add(pending.seed())) continue;
-
-            DiscoveredStorey knownStorey = storeysByCell.get(pending.seed());
-            StoreyResolution resolution = knownStorey == null
-                    ? observation.resolve(pending.seed())
-                    : StoreyResolution.success(knownStorey);
-            if (resolution.result() != Building.validationResult.SUCCESS || resolution.storey() == null) continue;
-            DiscoveredStorey resolved = resolution.storey();
-
-            DiscoveredStorey canonical = storeys.stream()
-                    .filter(existing -> existing.floor().sameCellPositions(resolved.floor()))
-                    .findFirst().orElse(null);
-            boolean newlyDiscovered = canonical == null;
-            if (newlyDiscovered) {
-                canonical = resolved;
-                storeys.add(canonical);
-                indexStorey(storeysByCell, canonical);
-            }
-            DiscoveredStorey canonicalStorey = canonical;
-
-            if (!pending.from().floor().sameCellPositions(canonicalStorey.floor())
-                    && links.stream().noneMatch(link ->
-                    sameLink(link, pending.from().floor(), canonicalStorey.floor()))) {
-                links.add(new StoreyLink(
-                        pending.from().floor(), canonicalStorey.floor(), pending.seed()));
-            }
-            if (newlyDiscovered) {
-                DiscoveredStorey from = canonicalStorey;
-                canonicalStorey.transitionSeeds().stream().sorted(CELL_ORDER)
-                        .map(seed -> new PendingTransition(from, seed))
-                        .forEach(queue::addLast);
-            }
-        }
-        storeys.sort(Comparator.comparingInt(storey -> storey.floor().anchorY()));
-        return new ConnectedStoreys(storeys, links);
-    }
-
-    private static void indexStorey(
-            Map<BlockPos, DiscoveredStorey> storeysByCell, DiscoveredStorey storey) {
-        for (FloorGeometry.Cell cell : storey.floor().cells()) {
-            storeysByCell.putIfAbsent(cell.feet(), storey);
-        }
-    }
-
-    private static boolean sameLink(StoreyLink link, FloorGeometry first, FloorGeometry second) {
-        return link.from().sameCellPositions(first) && link.to().sameCellPositions(second)
-                || link.from().sameCellPositions(second) && link.to().sameCellPositions(first);
+        return success(requestedSeed.feet(), floor,
+                scan.transitions(), scan.storeyEdgeCells(), scan.transitionSeeds());
     }
 
     private static Optional<SurfaceCell> resolveSeedCell(
@@ -851,9 +771,10 @@ final class SelectedFloorScanner {
     }
 
     private static Result success(BlockPos seed,
-                                  DiscoveredStorey selected,
-                                  ConnectedStoreys connected) {
-        FloorGeometry geometry = selected.floor();
+                                  FloorGeometry geometry,
+                                  Set<Transition> transitions,
+                                  Set<BlockPos> storeyEdgeCells,
+                                  Set<BlockPos> transitionSeeds) {
         Set<BlockPos> footprint = geometry.projection().cells();
         int minX = footprint.stream().mapToInt(BlockPos::getX).min().orElse(seed.getX());
         int minZ = footprint.stream().mapToInt(BlockPos::getZ).min().orElse(seed.getZ());
@@ -865,8 +786,7 @@ final class SelectedFloorScanner {
                 .max().orElse(seed.getY());
         return new Result(Building.validationResult.SUCCESS, geometry,
                 new BlockPos(minX, minY, minZ), new BlockPos(maxX, maxY, maxZ),
-                selected.transitions(), selected.storeyEdgeCells(),
-                connected.storeys(), connected.links());
+                transitions, storeyEdgeCells, transitionSeeds);
     }
 
     record SurfaceCell(BlockPos feet, double surfaceY, int ceilingY) {
@@ -996,97 +916,22 @@ final class SelectedFloorScanner {
         }
     }
 
-    private record StoreyResolution(Building.validationResult result,
-                                    DiscoveredStorey storey) {
-        static StoreyResolution success(DiscoveredStorey storey) {
-            return new StoreyResolution(Building.validationResult.SUCCESS, storey);
-        }
-
-        static StoreyResolution failure(Building.validationResult result) {
-            return new StoreyResolution(result, null);
-        }
-    }
-
-    private record PendingTransition(DiscoveredStorey from, BlockPos seed) {
-        PendingTransition {
-            seed = seed.immutable();
-        }
-    }
-
-    record StoreyLink(FloorGeometry from, FloorGeometry to, BlockPos transitionSeed) {
-        StoreyLink {
-            transitionSeed = transitionSeed.immutable();
-        }
-
-        FloorGeometry other(FloorGeometry floor) {
-            if (from.sameCellPositions(floor)) return to;
-            if (to.sameCellPositions(floor)) return from;
-            return null;
-        }
-    }
-
-    private record ConnectedStoreys(List<DiscoveredStorey> storeys,
-                                    List<StoreyLink> links) {
-        ConnectedStoreys {
-            storeys = List.copyOf(storeys);
-            links = List.copyOf(links);
-        }
-    }
-
-    record DiscoveredStorey(FloorGeometry floor,
-                            Set<Transition> transitions,
-                            Set<BlockPos> storeyEdgeCells,
-                            Set<BlockPos> transitionSeeds) {
-        DiscoveredStorey {
-            transitions = transitions == null ? Set.of() : Set.copyOf(transitions);
-            storeyEdgeCells = storeyEdgeCells == null ? Set.of() : Set.copyOf(storeyEdgeCells);
-            transitionSeeds = transitionSeeds == null ? Set.of() : Set.copyOf(transitionSeeds);
-        }
-    }
-
     record Result(Building.validationResult result,
                   FloorGeometry floor,
                   BlockPos min,
                   BlockPos max,
                   Set<Transition> transitions,
                   Set<BlockPos> storeyEdgeCells,
-                  List<DiscoveredStorey> connectedStoreys,
-                  List<StoreyLink> storeyLinks) {
+                  Set<BlockPos> transitionSeeds) {
         Result {
             transitions = transitions == null ? Set.of() : Set.copyOf(transitions);
             storeyEdgeCells = storeyEdgeCells == null ? Set.of() : Set.copyOf(storeyEdgeCells);
-            connectedStoreys = connectedStoreys == null ? List.of() : List.copyOf(connectedStoreys);
-            storeyLinks = storeyLinks == null ? List.of() : List.copyOf(storeyLinks);
-        }
-
-        List<FloorGeometry> directlyConnectedFloors(FloorGeometry selected) {
-            List<FloorGeometry> direct = new ArrayList<>();
-            for (StoreyLink link : storeyLinks) {
-                FloorGeometry other = link.other(selected);
-                if (other != null && direct.stream()
-                        .noneMatch(existing -> existing.sameCellPositions(other))) {
-                    direct.add(other);
-                }
-            }
-            return List.copyOf(direct);
-        }
-
-        Optional<Result> storeyScan(BlockPos seed, FloorGeometry target) {
-            if (target == null) return Optional.empty();
-            if (connectedStoreys.isEmpty()) {
-                return floor != null && floor.sameCellPositions(target)
-                        ? Optional.of(this) : Optional.empty();
-            }
-            ConnectedStoreys connected = new ConnectedStoreys(connectedStoreys, storeyLinks);
-            return connectedStoreys.stream()
-                    .filter(storey -> storey.floor().sameCellPositions(target))
-                    .findFirst()
-                    .map(storey -> success(seed, storey, connected));
+            transitionSeeds = transitionSeeds == null ? Set.of() : Set.copyOf(transitionSeeds);
         }
 
         static Result failure(Building.validationResult result, BlockPos source) {
             return new Result(result, null, source, source,
-                    Set.of(), Set.of(), List.of(), List.of());
+                    Set.of(), Set.of(), Set.of());
         }
     }
 }

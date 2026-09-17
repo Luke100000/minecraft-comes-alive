@@ -624,8 +624,7 @@ public final class FloorScannerGameTests {
                 "upper staircase changed storey anchor to " + upper.floor().anchorY());
         helper.assertTrue(upper.floor().cellAt(topStair).isEmpty(),
                 "upper storey reclaimed the lower-owned top staircase transition");
-        helper.assertTrue(connectedFloors(lower).stream()
-                        .anyMatch(floor -> floor.anchorY() == floorY + 3),
+        helper.assertTrue(!lower.transitionSeeds().isEmpty(),
                 "stair attachment evidence was lost");
         helper.assertTrue(BuildingRoomScanner.components(helper.getLevel(), lower).size() == 1,
                 "storey-edge top stair split the legitimate lower Room instead of remaining owned by it");
@@ -677,9 +676,8 @@ public final class FloorScannerGameTests {
                 "lower storey absorbed the upper plateau through its staircase");
         helper.assertTrue(upper.floor().cellAt(lowerSeed).isEmpty(),
                 "upper storey absorbed the lower plateau through its staircase");
-        helper.assertTrue(connectedFloors(lower).stream()
-                        .anyMatch(floor -> floor.sameCellPositions(upper.floor())),
-                "two-block staircase lost the direct storey connection");
+        helper.assertTrue(!lower.transitionSeeds().isEmpty(),
+                "two-block staircase lost its local transition evidence");
         helper.succeed();
     }
 
@@ -709,10 +707,10 @@ public final class FloorScannerGameTests {
         }
 
         SelectedFloorScanner.Result fromTop = direct.getLast();
-        helper.assertTrue(fromTop.connectedStoreys().size() == 1
-                        && fromTop.connectedStoreys().getFirst().floor().sameCellPositions(fromTop.floor()),
-                "one selected-Floor scan recursively exposed " + fromTop.connectedStoreys().size()
-                        + " storeys instead of only the selected storey");
+        for (int i = 0; i < seeds.size() - 1; i++) {
+            helper.assertTrue(fromTop.floor().cellAt(seeds.get(i)).isEmpty(),
+                    "selected top-floor scan absorbed lower storey seed " + i);
+        }
 
         List<BlockPos> descendingTransitions = List.of(
                 origin.offset(7, 3, 1),
@@ -1892,10 +1890,6 @@ public final class FloorScannerGameTests {
             top = feet;
         }
         return top.immutable();
-    }
-
-    private static List<FloorGeometry> connectedFloors(SelectedFloorScanner.Result scan) {
-        return scan.connectedStoreys().stream().map(SelectedFloorScanner.DiscoveredStorey::floor).toList();
     }
 
     private static void openUpperStorey(GameTestHelper helper, BlockPos origin) {

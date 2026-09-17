@@ -49,14 +49,6 @@ public final class CopiedOpenHouseGameTests {
                 failures.add(relativeSeed + "=" + scan.result());
                 continue;
             }
-            SelectedFloorScanner.Result selectedOnly = SelectedFloorScanner.scanSelected(
-                    helper.getLevel(), seed, config.maxBuildingSize, config.maxBuildingRadius);
-            helper.assertTrue(selectedOnly.result() == Building.validationResult.SUCCESS
-                            && selectedOnly.floor().sameCellPositions(scan.floor()),
-                    "selected-only scan changed Floor membership at " + relativeSeed);
-            helper.assertTrue(selectedOnly.directlyConnectedFloors(selectedOnly.floor()).isEmpty(),
-                    "selected-only scan explored connected storeys at " + relativeSeed);
-
             List<RoomPartitioner.Component> components = BuildingRoomScanner.components(helper.getLevel(), scan);
             helper.assertTrue(!components.isEmpty(),
                     "copied house scan from " + relativeSeed + " produced no Room components");

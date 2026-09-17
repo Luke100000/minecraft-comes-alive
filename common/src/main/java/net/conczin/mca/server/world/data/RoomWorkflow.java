@@ -232,14 +232,13 @@ public final class RoomWorkflow {
                     Building.validationResult.NOT_IN_BUILDING, plan.interactionSource());
         }
 
-        // Planning and materialization consume the same fresh observation and exact selected Floor.
-        SelectedFloorScanner.Result storeyScan = observation.scan()
-                .storeyScan(plan.scanSeed(), plannedFloor.geometry()).orElse(null);
-        return storeyScan == null
-                ? StructureScanner.Result.failure(
-                        Building.validationResult.NOT_IN_BUILDING, plan.interactionSource())
-                : StructureScanner.resultFromObservedStorey(
-                        plan.scanSeed(), storeyScan, existing, -1, plan.targetBuildingId());
+        // Planning and materialization consume the same one selected-Floor observation.
+        if (!observation.scan().floor().sameCellPositions(plannedFloor.geometry())) {
+            return StructureScanner.Result.failure(
+                    Building.validationResult.NOT_IN_BUILDING, plan.interactionSource());
+        }
+        return StructureScanner.resultFromObservedStorey(
+                plan.scanSeed(), observation.scan(), existing, -1, plan.targetBuildingId());
     }
 
     RegisteredRoomUpdate analyzeRegisteredRoomUpdate(Village village, int roomId, BlockPos source) {
