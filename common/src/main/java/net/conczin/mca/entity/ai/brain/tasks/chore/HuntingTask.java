@@ -12,7 +12,6 @@ import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.SwordItem;
 
 import java.util.Comparator;
 
@@ -48,7 +47,7 @@ public class HuntingTask extends AbstractChoreTask {
         super.start(world, villager, time);
 
         if (!villager.hasItemInSlot(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), stack -> stack.getItem() instanceof SwordItem);
+            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), Chore.HUNT::matchesTool);
             if (i == -1) {
                 abandonJobWithMessage("chore.hunting.nosword");
             } else {
@@ -62,10 +61,10 @@ public class HuntingTask extends AbstractChoreTask {
     protected void tick(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.tick(world, villager, time);
 
-        if (!InventoryUtils.contains(villager.getInventory(), SwordItem.class) && !villager.hasItemInSlot(villager.getDominantSlot())) {
+        if (!InventoryUtils.contains(villager.getInventory(), Chore.HUNT::matchesTool) && !villager.hasItemInSlot(villager.getDominantSlot())) {
             abandonJobWithMessage("chore.hunting.nosword");
         } else if (!villager.hasItemInSlot(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), stack -> stack.getItem() instanceof SwordItem);
+            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), Chore.HUNT::matchesTool);
             ItemStack stack = villager.getInventory().getItem(i);
             villager.setItemInHand(villager.getDominantHand(), stack);
         }

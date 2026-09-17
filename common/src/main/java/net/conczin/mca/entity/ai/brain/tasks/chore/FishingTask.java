@@ -13,7 +13,6 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.item.FishingRodItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
@@ -268,11 +267,11 @@ public class FishingTask extends AbstractChoreTask {
 
     private boolean equipFishingRod(VillagerEntityMCA villager) {
         ItemStack heldStack = villager.getItemInHand(villager.getDominantHand());
-        if (heldStack.getItem() instanceof FishingRodItem) {
+        if (Chore.FISH.matchesTool(heldStack)) {
             return true;
         }
 
-        int slot = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), stack -> stack.getItem() instanceof FishingRodItem);
+        int slot = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), Chore.FISH::matchesTool);
         if (slot == -1) {
             abandonJobWithMessage("chore.fishing.norod");
             return false;
@@ -332,7 +331,7 @@ public class FishingTask extends AbstractChoreTask {
         }
 
         ItemStack stack = villager.getItemInHand(villager.getDominantHand());
-        if (stack.getItem() instanceof FishingRodItem) {
+        if (Chore.FISH.matchesTool(stack)) {
             villager.setItemInHand(villager.getDominantHand(), ItemStack.EMPTY);
         }
     }

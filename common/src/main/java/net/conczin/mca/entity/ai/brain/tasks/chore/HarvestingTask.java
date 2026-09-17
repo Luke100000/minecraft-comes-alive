@@ -13,7 +13,6 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.BoneMealItem;
-import net.minecraft.world.item.HoeItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.*;
 import net.minecraft.world.level.block.state.BlockState;
@@ -82,7 +81,7 @@ public class HarvestingTask extends AbstractChoreTask {
         super.start(world, villager, time);
 
         if (!villager.hasItemInSlot(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), stack -> stack.getItem() instanceof HoeItem);
+            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), Chore.HARVEST::matchesTool);
             if (i == -1) {
                 abandonJobWithMessage("chore.harvesting.nohoe");
             } else {
@@ -96,10 +95,10 @@ public class HarvestingTask extends AbstractChoreTask {
         }
 
         // equip hoe
-        if (!InventoryUtils.contains(villager.getInventory(), HoeItem.class) && !villager.hasItemInSlot(villager.getDominantSlot())) {
+        if (!InventoryUtils.contains(villager.getInventory(), Chore.HARVEST::matchesTool) && !villager.hasItemInSlot(villager.getDominantSlot())) {
             abandonJobWithMessage("chore.harvesting.nohoe");
         } else if (!villager.hasItemInSlot(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), stack -> stack.getItem() instanceof HoeItem);
+            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), Chore.HARVEST::matchesTool);
             ItemStack stack = villager.getInventory().getItem(i);
             villager.setItemInHand(villager.getDominantHand(), stack);
         }
