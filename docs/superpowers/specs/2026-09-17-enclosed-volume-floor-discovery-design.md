@@ -76,7 +76,9 @@ Do not special-case beds, shelves, hoppers, stairs or slabs by block class merel
 
 The fill must not silently turn outside space into a room.
 
-Use cached ceiling/roof checks and bounded exterior detection. A region is enclosed only when the reachable interior cannot escape through a passable route to unroofed/out-of-bounds space.
+Use cached ceiling/roof checks while collecting the 3D interior candidates, then keep the existing selected-storey exterior validation as the final enclosure proof. A selected storey/Room-boundary region is enclosed only when it cannot escape through a passable route to unroofed/out-of-bounds space.
+
+Enclosure is deliberately not one global boolean for every vertically connected cell. An open upper storey must not invalidate an otherwise enclosed lower storey, and an exterior door may border a roofed-but-open canopy without making the enclosed Room behind the door exterior. The 3D observation supplies candidate interior cells; the selected-storey enclosure check decides which of those candidates survive into `FloorGeometry`.
 
 Leaves alone do not count as a roof, matching the useful behavior from `origin/1.21.1`.
 
@@ -193,7 +195,7 @@ This design keeps the strongest rules from:
 - `2026-09-16-floor-ownership-consistency-design.md`: `SelectedFloorScanner` owns fresh storey membership and downstream layers consume it;
 - `origin/1.21.1` `Building.validateBuilding`: bounded flood fill with cached roof checks.
 
-Where this design differs is the order of discovery: first establish the enclosed 3D interior, then derive supported floor candidates from that same observation.
+Where this design differs is the order of discovery: first establish the roof-bounded 3D interior candidates, derive supported floor candidates from that same observation, then apply the selected-storey exterior check before producing final `FloorGeometry`.
 
 This document supersedes the generic post-traversal interior-membership expansion described/implemented after the September 8 model. It does not supersede persistence, action-planning or logical-building rules from the September 16 ownership spec.
 
@@ -215,6 +217,8 @@ The implementation must preserve or prove all of these cases:
 12. Successive lower storeys and the basement in `CopiedOpenHouseGameTests` remain one logical building through the real staircase chain.
 13. Caves/uneven enclosed terrain are not split solely because supported cells use nearby Y values.
 14. Scan size/radius limits still fail safely rather than allowing an unbounded flood fill.
+15. An open upper storey does not invalidate an enclosed lower storey merely because stairs connect them.
+16. A roofed but open-sided canopy beyond an exterior door is pruned without invalidating the enclosed Room behind the door.
 
 ## 10. Implementation constraints
 
