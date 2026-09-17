@@ -83,7 +83,14 @@ Remove normal workflow dependence on:
 - `Result.storeyScan(...)` as a way to retrieve recursively pre-scanned storeys;
 - `directlyConnectedFloors(...)` derived from that recursive graph.
 
-The implementation may retain a narrow connector query that proves an attachment to an already-registered Floor, but it must not recursively world-scan another storey merely because a stair/ladder is reachable.
+The implementation may retain narrow local attachment evidence that proves an attachment to an already-registered Floor, but it must not recursively world-scan another storey merely because a stair/ladder is reachable.
+
+There are two different kinds of local vertical evidence and they must not be conflated:
+
+- ladders/trapdoors use persisted `FloorConnector` markers and physical connector columns;
+- ordinary stairs have no `FloorConnector.Type`, so the selected scan's local `transitionSeeds` (or an equivalent selected-storey boundary position) may be matched directly against already-persisted Floor geometry.
+
+A stair transition position may identify an existing registered Floor; it must not be used as a request to scan/discover that other Floor. If the local evidence matches more than one logical target, attachment is ambiguous and must fail rather than guess.
 
 ### Why
 
@@ -113,7 +120,7 @@ Stairs serve two separate purposes:
 
 The scanner does not need to walk an arbitrarily deep stair chain looking for every storey.
 
-Remove or simplify code whose only purpose is discovering/canonicalizing recursively connected storeys. Keep only the local storey-boundary behavior still required to stop one selected Floor absorbing the stable floor above/below.
+Remove or simplify code whose only purpose is discovering/canonicalizing recursively connected storeys. Keep the local storey-boundary behavior required to stop one selected Floor absorbing the stable floor above/below, and keep enough local transition positions to prove a normal staircase reaches an already-registered adjacent Floor.
 
 Tests for exotic staircase inference should be removed or rewritten when they no longer represent supported product behavior. Normal straight/L/U stairs and sensible landings remain required.
 
@@ -183,6 +190,10 @@ Replace that with a local operation:
 5. verify that it does not conflict with registered Rooms;
 6. persist the selected Room and refreshed Floor only if existing Room ownership remains valid.
 
+Choice 7B is about persistence/reconciliation, not about inventing a second selected-only topology algorithm. `RoomPartitioner` may still compute the transient component list once when that shared view is needed for deterministic door/boundary or POI-perimeter ownership. What must disappear is materializing sibling components as replacement Rooms and reconciling their persistent identities merely because one Room was selected.
+
+If `BuildingRoomScanner.materialize(...)` still needs the full transient component list for `RoomPoiEvidence`, pass that one partition through. Do not duplicate partitioning or add a parallel selected-component flood fill merely to avoid constructing a transient list.
+
 ### Safety rule
 
 Add Room must not silently mutate existing Rooms.
@@ -228,10 +239,13 @@ The existing `Village.selectAttachmentTarget(...)` already has the right directi
 
 Keep deterministic structural evidence. Do not replace it with distance-only or "nearest house" heuristics.
 
-After recursive connected-storey discovery is removed, attachment evidence should come from either:
+After recursive connected-storey discovery is removed, attachment evidence should come from one of:
 
-1. an explicit local stair/ladder/vertical connector to an already-registered Floor; or
-2. strict direct vertical structural evidence for an external Floor.
+1. a selected-scan stair transition position that uniquely falls on an already-registered adjacent Floor;
+2. an explicit ladder/trapdoor connector column that uniquely connects to an already-registered Floor; or
+3. strict direct vertical structural evidence for an external Floor.
+
+The stair case is deliberately persisted-geometry matching, not a scan of the adjacent storey. This preserves normal stair attachment while still honoring choice 2B.
 
 ## 10. Interaction handoff remains narrow and deterministic
 

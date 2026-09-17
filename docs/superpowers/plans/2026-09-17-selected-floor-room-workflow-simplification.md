@@ -64,17 +64,22 @@ public static void selectedFloorScanDoesNotRecursivelyDiscoverDeepStairChain(Gam
 
 The exact public assertion should use the post-refactor API, not preserve `connectedStoreys()` just for the test.
 
+Update `CopiedOpenHouseGameTests.everyCopiedHouseRoomComponentValidates` too: once selected-only scanning is the sole normal API, remove the duplicate `scanSelected(...)` call and the `directlyConnectedFloors(...)` assertion. Scanning each explicit `STOREY_SEEDS` entry should continue to prove that every selected Floor independently produces valid Room topology.
+
 ### 1.2 Keep normal stair/uneven-Floor contracts
 
 Retain as required behavior:
 
 - `staircaseKeepsUpperRoomOutOfLowerStorey`
+- `twoBlockStaircaseSeparatesBroadStoreys`
 - `flatUpperLandingBesideDescentRemainsFloorCell`
 - `slabAndStairUseTransientSurfaceEvidence`
 - `unevenThreeArmRoomIsSourceIndependent`
 - `interiorFloorHoleDoesNotInvalidateRemainingRoom`
 
 If an existing test only exists to prove exotic recursive staircase inference, rewrite/remove that requirement rather than reintroducing complexity.
+
+`staircaseKeepsUpperRoomOutOfLowerStorey` and `twoBlockStaircaseSeparatesBroadStoreys` currently end with `connectedFloors(...)` assertions. Preserve their selected-Floor separation/edge assertions, but replace the recursive-graph assertion with local stair-transition evidence or with the explicit attachment-planning test in Task 3. After those callers are converted, delete the test-only `connectedFloors(...)` helper.
 
 ### 1.3 Keep enclosure and geometry contracts
 
@@ -122,6 +127,8 @@ Change `scan(...)` and `Observation` so normal fresh scanning resolves one canon
 
 Prefer one obvious API rather than keeping `scan`, `scanSelected`, `selected`, and `connected` variants if they become aliases.
 
+Update `StructureScanner.resolveAttachmentSeed(...)` at the same time: its exact, vertical-handoff, standing-surface, sub-full-block, and doorway candidate scans should all resolve the candidate's selected Floor only. Replace the current `observation.connected(...)` calls rather than leaving a hidden recursive entry point behind.
+
 Target shape:
 
 ```text
@@ -150,21 +157,26 @@ When callers no longer need it, remove:
 
 Do not retain dead fields "for future use".
 
-### 2.3 Keep local connector evidence only
+### 2.3 Keep local attachment evidence only
 
-`DiscoveredStorey.transitionSeeds` or equivalent local evidence may remain if it is needed to prove an explicit next-Floor attachment. It must not trigger recursive scanning.
+Keep `DiscoveredStorey.transitionSeeds` (or a smaller equivalent selected-storey boundary value) as local stair evidence if required. Stairs are not `FloorConnector` types, so these positions are the clean way to prove that the selected Floor reaches an already-registered adjacent Floor.
 
-If a smaller representation is enough (for example connector positions/markers already present in `FloorGeometry`), reuse it instead of retaining a second topology structure.
+The consumer may compare a transition position with persisted `StructureFloor.geometry()` / interaction geometry. It must not call `Observation.resolve(...)`, `scanSelected(...)`, or another fresh world scan for that adjacent Floor. Multiple matching registered targets are ambiguous and must be rejected.
+
+For ladders/trapdoors, reuse connector positions/markers already present in `FloorGeometry` rather than retaining a second topology structure.
 
 ### 2.4 Simplify `StructureScanner.FloorObservation`
 
 Remove `directlyConnectedFloors()` if it exists only to expose recursive results.
 
+`StructureScanner.hasDirectStoreyConnection(...)` also currently depends on `Result.directlyConnectedFloors(...)`. Remove or rewrite that caller before deleting the API. Prefer rejecting same-semantic-band overlap unless the new local stair/ladder attachment evidence already proves the intended registered target; do not recreate a recursively discovered Floor graph just to preserve this validation helper.
+
 Keep:
 
 - one canonical scan seed;
 - one selected `Result`/`FloorGeometry`;
-- vertical connector evidence to already-registered Floors;
+- local stair transition positions needed to match already-registered Floors;
+- ladder/trapdoor connector evidence to already-registered Floors;
 - interaction handoff.
 
 ### 2.5 Verify focused Floor tests
@@ -187,28 +199,36 @@ git commit -m "refactor: scan only selected floor"
 
 - Modify: `common/src/main/java/net/conczin/mca/server/world/data/RoomScanPlanner.java`
 - Modify: `common/src/main/java/net/conczin/mca/server/world/data/StructureScanner.java`
+- Modify: `common/src/main/java/net/conczin/mca/server/world/data/RoomWorkflow.java`
 - Modify if required: `common/src/main/java/net/conczin/mca/server/world/data/StructureConnector.java`
 - Modify if required: `common/src/main/java/net/conczin/mca/server/world/data/Village.java`
 - Test: `neoforge/src/main/java/net/conczin/mca/server/world/data/FloorScannerGameTests.java`
 - Test: `neoforge/src/main/java/net/conczin/mca/server/world/data/CopiedOpenHouseGameTests.java`
 
-### 3.1 Preserve three explicit attachment cases
+### 3.1 Preserve four explicit attachment cases
 
 Planning should distinguish only:
 
 1. **same registered Floor** — interaction resolves to a persisted/fresh matching Floor and mode is Add/Update Room;
-2. **local connector attachment** — explicit stair/ladder/trapdoor evidence connects the selected new Floor to one registered Floor;
-3. **strict external vertical attachment** — no connector, but `Village.selectAttachmentTarget(...)` proves direct vertical structural contact through exact overlapping columns.
+2. **local stair attachment** — a selected-scan transition position uniquely matches one already-registered adjacent Floor; no scan of that adjacent Floor occurs;
+3. **local ladder/trapdoor attachment** — `FloorConnector` marker/column evidence connects the selected new Floor to one registered Floor;
+4. **strict external vertical attachment** — no connector, but `Village.selectAttachmentTarget(...)` proves direct vertical structural contact through exact overlapping columns.
 
 No recursive scan of intermediate/remote storeys.
 
 ### 3.2 Replace `connectedTransitionAttachmentPlan(...)`
 
-Delete it if the selected scan plus local connector evidence can directly identify the target registered Floor.
+Delete it once the selected scan can directly identify the target registered Floor from either local stair-transition evidence or ladder/trapdoor connector evidence.
 
 Do not replace it with another multi-storey search helper.
 
-If one small helper is required, name it by the physical evidence it checks (for example `connectorAttachmentPlan`) rather than by recursive "connected storey" semantics.
+If small helpers are required, name them by the evidence they check (for example `stairAttachmentTarget` and `connectorAttachmentTarget`) rather than by recursive "connected storey" semantics.
+
+For stairs, consume `transitionSeeds` only as coordinates to query persisted Floors. Do not resolve those seeds through `SelectedFloorScanner.Observation`; doing so would quietly reintroduce choice 2A under a different name.
+
+The candidate Floor stored in the attachment plan must now be the same Floor as `analysis.observation().scan().floor()`. Remove the old possibility where planning selects a recursively discovered `connectedStorey` as the candidate.
+
+Update `RoomWorkflow.resolvePlannedAttachmentScan(...)` accordingly: validate/materialize the already-observed selected scan with `StructureScanner.resultFromObservedStorey(...)`. Do not call the removed `Result.storeyScan(...)` and do not fresh-scan a second storey to satisfy the plan.
 
 ### 3.3 Keep external basement evidence strict
 
@@ -233,6 +253,8 @@ Required green:
 
 The unsupported ladder exit must remain absent from `FloorGeometry`.
 
+Also retain/add a normal-stair test proving a newly selected adjacent Floor can attach to an already-registered Floor using local transition evidence alone, while a single scan still does not return/pre-scan the registered neighbor.
+
 ### 3.5 Copied-house acceptance
 
 Re-evaluate these under explicit one-Floor-at-a-time behavior:
@@ -249,6 +271,7 @@ Commit after green:
 ```powershell
 git add common/src/main/java/net/conczin/mca/server/world/data/RoomScanPlanner.java \
         common/src/main/java/net/conczin/mca/server/world/data/StructureScanner.java \
+        common/src/main/java/net/conczin/mca/server/world/data/RoomWorkflow.java \
         common/src/main/java/net/conczin/mca/server/world/data/StructureConnector.java \
         common/src/main/java/net/conczin/mca/server/world/data/Village.java \
         neoforge/src/main/java/net/conczin/mca/server/world/data/FloorScannerGameTests.java \
@@ -299,6 +322,8 @@ partition Floor
   -> validate against existing registered Rooms
   -> produce one pending Room addition + optional Floor refresh
 ```
+
+Keep the single transient full-Floor partition if `RoomPoiEvidence.candidates(...)` still needs all components to resolve perimeter ownership. Choice 7B removes sibling Room materialization/persistence reconciliation; it does not justify a second special selected-only topology traversal. Only replace the full partition with a selected-component traversal if the same door/boundary/POI ownership semantics can be proven with less code.
 
 Delete the loop that materializes every component solely for reconciliation.
 
@@ -367,6 +392,8 @@ Instead:
 4. require no stable overlap with other registered Rooms;
 5. materialize one replacement Room;
 6. preserve the expected Room's ID/type/forced/contributes-to-main metadata.
+
+As in Add Room, the transient component list may remain because materialization/POI perimeter ownership currently consumes shared component context. Do not materialize sibling components just to feed identity reconciliation, and do not add a duplicate selected-only partition path unless it actually replaces the existing topology pipeline cleanly.
 
 If interaction selection is impossible, fall back only to a unique highest stable overlap with the expected Room. Equal/ambiguous overlap fails rather than guessing.
 
@@ -462,13 +489,25 @@ Do not remove storey separation that prevents a normal staircase from merging tw
 
 ### 7.1 Freeze the final Java diff
 
-Before cleanup:
+Follow the cleanup skill's diff-selection rule first:
 
 ```powershell
-git diff HEAD~N..HEAD -- common/src/main/java neoforge/src/main/java
+# If staged changes exist:
+git diff HEAD -- common/src/main/java neoforge/src/main/java
+
+# Otherwise, if unstaged changes exist:
+git diff -- common/src/main/java neoforge/src/main/java
 ```
 
-Use the same Java file set for all review lenses.
+If the worktree is clean because the implementation tasks were committed incrementally, record the implementation-base commit before Task 1 and use:
+
+```powershell
+git diff <implementation-base>..HEAD -- common/src/main/java neoforge/src/main/java
+```
+
+Freeze the exact diff text/file list chosen by that rule and use the same set for every review lens. Do not let later findings silently widen the review scope except where nearby code is required to understand a changed path.
+
+When delegation is available, run the reuse, quality, correctness/Minecraft-owner, and efficiency passes as four read-only reviews in parallel. If delegation is unavailable, run the same four lenses locally against the frozen diff before fixing anything.
 
 ### 7.2 Reuse lens
 
