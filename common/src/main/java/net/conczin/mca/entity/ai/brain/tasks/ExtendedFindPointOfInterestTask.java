@@ -10,16 +10,12 @@ import net.minecraft.core.GlobalPos;
 import net.minecraft.core.Holder;
 import net.minecraft.network.protocol.game.DebugPackets;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.tags.BlockTags;
 import net.minecraft.util.RandomSource;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.entity.ai.village.poi.PoiType;
-import net.minecraft.world.level.block.BedBlock;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Path;
 
 import java.util.Optional;
@@ -92,9 +88,6 @@ public class ExtendedFindPointOfInterestTask extends Behavior<VillagerEntityMCA>
                 }
                 retryMarker.setAttemptTime(l);
             }
-            if (isBedOccupiedByOthers(serverWorld, blockPos, villager)) {
-                return false;
-            }
             return this.predicate.test(villager, blockPos);
         };
         Set<Pair<Holder<PoiType>, BlockPos>> set = pointOfInterestStorage.findAllClosestFirstWithType(this.poiType, predicate, villager.blockPosition(), POI_SORTING_RADIUS, PoiManager.Occupancy.HAS_SPACE).limit(MAX_POSITIONS_PER_RUN).collect(Collectors.toSet());
@@ -123,12 +116,6 @@ public class ExtendedFindPointOfInterestTask extends Behavior<VillagerEntityMCA>
 
     static void finishClaim(Optional<BlockPos> claimedPosition, Consumer<BlockPos> onClaimed) {
         claimedPosition.ifPresent(onClaimed);
-    }
-
-    //todo this check is not necessary in vanilla, but since the 1.19.2 port of 7.4.0 it is requires as occupied beds are used
-    private boolean isBedOccupiedByOthers(ServerLevel world, BlockPos pos, LivingEntity entity) {
-        BlockState blockState = world.getBlockState(pos);
-        return blockState.is(BlockTags.BEDS) && blockState.getValue(BedBlock.OCCUPIED) && !entity.isSleeping();
     }
 
     static class RetryMarker {
