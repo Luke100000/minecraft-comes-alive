@@ -1,8 +1,13 @@
-# Alpha Branch Note:
+# Beta Branch Note:
 
 * Incompatible with previous builds
 * Backup your world before using.
 * Some addons may not work/crash, if so either use 7.6.28-beta or 7.7.0-beta.2
+
+# 7.7.1-beta.1
+
+* Performance improvements.
+
 # 7.7.1-alpha.3
 
 * Fixed bug with not being able to add a Room building type category if you have overlapping structures.
