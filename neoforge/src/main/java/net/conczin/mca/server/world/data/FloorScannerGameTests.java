@@ -154,6 +154,23 @@ public final class FloorScannerGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_floor_high_ceiling_limit", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void highCeilingDoesNotConsumeFloorBlockLimit(GameTestHelper helper) {
+        BlockPos roomMin = helper.absolutePos(new BlockPos(4, 2, 4));
+        buildClosedRoom(helper, roomMin, 5, 4);
+        raiseClosedRoomRoof(helper, roomMin, 5, 4, 28);
+
+        SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(
+                helper.getLevel(), roomMin.offset(2, 0, 2), 32, 16);
+
+        helper.assertTrue(scan.result() == Building.validationResult.SUCCESS,
+                "legal 20-cell Floor consumed its block limit on enclosed air: " + scan.result());
+        helper.assertTrue(scan.floor().cells().size() == 20,
+                "high-ceiling Floor changed physical membership: " + scan.floor().cells().size());
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_floor_carpet_footprint", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 80)
     public static void carpetDoesNotChangeIntegerRoomMembership(GameTestHelper helper) {

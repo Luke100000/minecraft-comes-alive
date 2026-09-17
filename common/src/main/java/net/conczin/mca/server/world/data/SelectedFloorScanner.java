@@ -75,6 +75,8 @@ final class SelectedFloorScanner {
                     return Result.failure(Building.validationResult.NOT_IN_BUILDING, requested);
                 }
 
+                traversalSeed = resolveStoreyAnchor(world, traversalSeed, provider);
+
                 EnclosedVolume volume = enclosedVolume(traversalSeed.feet());
                 if (volume.result() != Building.validationResult.SUCCESS) {
                     return Result.failure(volume.result(), requested);
@@ -109,7 +111,6 @@ final class SelectedFloorScanner {
             return Result.failure(Building.validationResult.NOT_IN_BUILDING, requestedSeed.feet());
         }
 
-        traversalSeed = resolveStoreyAnchor(world, traversalSeed, enclosedSteps);
         StoreyClassifier classifier = new StoreyClassifier(
                 world, new StoreyContext(traversalSeed.feet().getY()), provider);
         StoreyScan scan = traverseStorey(
@@ -186,6 +187,9 @@ final class SelectedFloorScanner {
         LinkedHashSet<BlockPos> cells = new LinkedHashSet<>();
         long volumeCellLimit = (long) maxSize * VOLUME_CELL_LIMIT_MULTIPLIER;
         BlockPos immutableSeed = seed.immutable();
+        // Enclosure is local evidence for this storey; high ceilings and other storeys
+        // must not consume the selected Floor's block budget.
+        StoreyContext context = new StoreyContext(seed.getY());
         queue.addLast(immutableSeed);
         cells.add(immutableSeed);
 
@@ -195,6 +199,8 @@ final class SelectedFloorScanner {
             for (Direction direction : VOLUME_DIRECTIONS) {
                 BlockPos next = current.relative(direction);
                 if (horizontalDistance(next, immutableSeed) > maxRadius) continue;
+                if (next.getY() < context.minOwnedY()
+                        || next.getY() > context.maxOwnedY() + 1) continue;
                 if (cells.contains(next) || !isInteriorVolumeCell(world, next)) continue;
                 if (ceilings.ceilingY(next).isEmpty()) continue;
 
