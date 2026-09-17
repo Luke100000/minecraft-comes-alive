@@ -44,7 +44,7 @@ public class HuntingTask extends AbstractChoreTask {
         super.start(world, villager, time);
 
         if (!villager.hasItemInSlot(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), InventoryUtils::isWeapon);
+            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), Chore.HUNT::matchesTool);
             if (i == -1) {
                 abandonJobWithMessage("chore.hunting.nosword");
             } else {
@@ -59,10 +59,10 @@ public class HuntingTask extends AbstractChoreTask {
     protected void tick(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.tick(world, villager, time);
 
-        if (!InventoryUtils.stream(villager.getInventory()).anyMatch(InventoryUtils::isWeapon) && !villager.hasItemInSlot(villager.getDominantSlot())) {
+        if (!InventoryUtils.stream(villager.getInventory()).anyMatch(Chore.HUNT::matchesTool) && !villager.hasItemInSlot(villager.getDominantSlot())) {
             abandonJobWithMessage("chore.hunting.nosword");
         } else if (!villager.hasItemInSlot(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), InventoryUtils::isWeapon);
+            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), Chore.HUNT::matchesTool);
             ItemStack stack = villager.getInventory().getItem(i);
             villager.setItemInHand(villager.getDominantHand(), stack);
         }

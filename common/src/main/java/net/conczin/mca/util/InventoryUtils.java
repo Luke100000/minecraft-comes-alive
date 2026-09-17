@@ -41,11 +41,13 @@ public interface InventoryUtils {
     }
 
     static boolean contains(Container inv, Class<?> clazz) {
+        return contains(inv, stack -> stack.getItem().getClass() == clazz);
+    }
+
+    static boolean contains(Container inv, Predicate<ItemStack> predicate) {
         for (int i = 0; i < inv.getContainerSize(); ++i) {
             final ItemStack stack = inv.getItem(i);
-            final Item item = stack.getItem();
-
-            if (item.getClass() == clazz) return true;
+            if (predicate.test(stack)) return true;
         }
         return false;
     }
