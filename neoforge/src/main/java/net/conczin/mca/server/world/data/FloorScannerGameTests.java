@@ -685,7 +685,7 @@ public final class FloorScannerGameTests {
 
     @GameTest(batch = "mca_floor_canonical_storey_chain", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 120)
-    public static void connectedStoreyDiscoveryCanonicalizesDeepStairChain(GameTestHelper helper) {
+    public static void selectedFloorScanDoesNotRecursivelyDiscoverDeepStairChain(GameTestHelper helper) {
         BlockPos origin = helper.absolutePos(new BlockPos(3, 2, 3));
         int lowerY = origin.getY();
         buildFourStoreyStaircase(helper, origin);
@@ -709,19 +709,10 @@ public final class FloorScannerGameTests {
         }
 
         SelectedFloorScanner.Result fromTop = direct.getLast();
-        for (SelectedFloorScanner.Result expected : direct) {
-            helper.assertTrue(connectedFloors(fromTop).stream()
-                            .anyMatch(candidate -> candidate.sameCellPositions(expected.floor())),
-                    "deep chain did not retain canonical storey anchor=" + expected.floor().anchorY());
-        }
-        helper.assertTrue(connectedFloors(fromTop).size() == 4,
-                "deep chain exposed " + connectedFloors(fromTop).size()
-                        + " identities instead of four canonical storeys");
-        helper.assertTrue(connectedFloors(fromTop).stream()
-                        .map(FloorGeometry::anchorY).collect(Collectors.toSet())
-                        .equals(Set.of(lowerY, lowerY + 3, lowerY + 6, lowerY + 9)),
-                "deep chain produced competing pseudo-storeys: "
-                        + connectedFloors(fromTop).stream().map(FloorGeometry::anchorY).sorted().toList());
+        helper.assertTrue(fromTop.connectedStoreys().size() == 1
+                        && fromTop.connectedStoreys().getFirst().floor().sameCellPositions(fromTop.floor()),
+                "one selected-Floor scan recursively exposed " + fromTop.connectedStoreys().size()
+                        + " storeys instead of only the selected storey");
 
         List<BlockPos> descendingTransitions = List.of(
                 origin.offset(7, 3, 1),
