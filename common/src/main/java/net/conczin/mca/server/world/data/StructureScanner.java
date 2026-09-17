@@ -103,7 +103,8 @@ final class StructureScanner {
                 world, config.maxBuildingSize, config.maxBuildingRadius);
         SelectedFloorScanner.Result exact = observation.connected(source);
         if (exact.result() == Building.validationResult.SUCCESS && exact.floor() != null) {
-            return Optional.of(new FloorHandoff(source, exact));
+            BlockPos resolvedSeed = resolveFloorSeed(world, exact.floor(), source).orElse(source);
+            return Optional.of(new FloorHandoff(resolvedSeed, exact));
         }
 
         Optional<FloorHandoff> vertical = resolveFloorHandoff(world, source,
@@ -116,6 +117,15 @@ final class StructureScanner {
             if (standing.result() == Building.validationResult.SUCCESS && standing.floor() != null) {
                 return Optional.of(new FloorHandoff(standingSeed, standing));
             }
+        }
+
+        if (isSubFullInteraction(world, source)) {
+            Optional<FloorHandoff> adjacent = resolveFloorHandoff(
+                    world,
+                    source,
+                    java.util.Arrays.stream(HORIZONTAL).map(source::relative).toList(),
+                    observation::connected);
+            if (adjacent.isPresent()) return adjacent;
         }
 
         List<FloorHandoff> candidates = new ArrayList<>();
@@ -257,12 +267,18 @@ final class StructureScanner {
 
     private static Optional<BlockPos> resolveExistingSeed(
             Level world, StructureFloor floor, BlockPos source) {
-        if (isWalkableAnchor(world, source)
-                && floor.contains(source.getX(), source.getZ())) {
+        return floor == null ? Optional.empty() : resolveFloorSeed(world, floor.geometry(), source);
+    }
+
+    private static Optional<BlockPos> resolveFloorSeed(
+            Level world, FloorGeometry geometry, BlockPos source) {
+        if (geometry == null || source == null) return Optional.empty();
+        if (geometry.physicalCellAt(source.getX(), source.getY(), source.getZ()).isPresent()
+                && isWalkableAnchor(world, source)) {
             return Optional.of(source.immutable());
         }
 
-        return floor.geometry().cells().stream()
+        return geometry.cells().stream()
                 .map(FloorGeometry.Cell::feet)
                 .sorted(Comparator
                         .comparingInt((BlockPos candidate) -> manhattanDistance(candidate, source))
@@ -272,6 +288,15 @@ final class StructureScanner {
                 .filter(candidate -> isWalkableAnchor(world, candidate))
                 .map(BlockPos::immutable)
                 .findFirst();
+    }
+
+    private static boolean isSubFullInteraction(Level world, BlockPos source) {
+        BlockState state = world.getBlockState(source);
+        if (!state.getFluidState().isEmpty()) return false;
+        var shape = state.getCollisionShape(world, source);
+        return !shape.isEmpty()
+                && shape.max(Direction.Axis.Y) <= 1.0D
+                && !state.isCollisionShapeFullBlock(world, source);
     }
 
     private static int manhattanDistance(BlockPos first, BlockPos second) {

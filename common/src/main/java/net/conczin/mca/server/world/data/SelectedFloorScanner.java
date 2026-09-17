@@ -2,9 +2,7 @@ package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
@@ -29,6 +27,7 @@ import java.util.Set;
 final class SelectedFloorScanner {
     private static final double MAX_STEP_HEIGHT = 1.125D;
     private static final int STOREY_HEIGHT_RADIUS = 2;
+    private static final int VOLUME_CELL_LIMIT_MULTIPLIER = 16;
     // Full-block stairs have no block metadata marking where the staircase ends. Two stable
     // same-height exits are enough evidence that the cell is a landing/plateau, not the stair tip.
     private static final int MIN_STABLE_LANDING_PEERS = 2;
@@ -39,6 +38,7 @@ final class SelectedFloorScanner {
     private static final Direction[] HORIZONTAL = {
             Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
     };
+    private static final Direction[] VOLUME_DIRECTIONS = Direction.values();
     private static final int[] LANDING_Y_OFFSETS = {0, 1, -1};
 
     private SelectedFloorScanner() {
@@ -61,6 +61,7 @@ final class SelectedFloorScanner {
         private final FloorCeilingResolver ceilings;
         private final StepProvider provider;
         private final Map<BlockPos, StoreyResolution> resolutions = new HashMap<>();
+        private final Map<BlockPos, EnclosedVolume> volumesBySeed = new HashMap<>();
 
         Observation(Level world, int maxSize, int maxRadius) {
             this.world = world;
@@ -73,8 +74,25 @@ final class SelectedFloorScanner {
         }
 
         private StoreyResolution resolve(BlockPos seed) {
-            return resolutions.computeIfAbsent(seed.immutable(), pos -> resolveCanonicalStorey(
-                    world, pos, ceilings, provider, maxSize, maxRadius));
+            return resolutions.computeIfAbsent(seed.immutable(), requested -> {
+                SurfaceCell traversalSeed = resolveScanSeed(world, requested, ceilings).orElse(null);
+                if (traversalSeed == null) {
+                    return StoreyResolution.failure(Building.validationResult.NOT_IN_BUILDING);
+                }
+
+                EnclosedVolume volume = enclosedVolume(traversalSeed.feet());
+                if (volume.result() != Building.validationResult.SUCCESS) {
+                    return StoreyResolution.failure(volume.result());
+                }
+
+                return resolveCanonicalStorey(
+                        world, traversalSeed, volume, ceilings, provider, maxSize, maxRadius);
+            });
+        }
+
+        private EnclosedVolume enclosedVolume(BlockPos seed) {
+            return volumesBySeed.computeIfAbsent(seed.immutable(), ignored ->
+                    discoverEnclosedVolume(world, seed, ceilings, maxSize, maxRadius));
         }
 
         Result selected(BlockPos seed) {
@@ -92,21 +110,23 @@ final class SelectedFloorScanner {
 
     private static StoreyResolution resolveCanonicalStorey(
             Level world,
-            BlockPos requestedSeed,
+            SurfaceCell requestedSeed,
+            EnclosedVolume volume,
             FloorCeilingResolver ceilings,
             StepProvider provider,
             int maxSize,
             int maxRadius) {
-        SeedResolution seedResolution = resolveScanSeed(world, requestedSeed, ceilings).orElse(null);
-        if (seedResolution == null) {
+        StepProvider enclosedSteps = withinVolume(provider, volume);
+        SurfaceCell traversalSeed = volume.supportedCells().get(requestedSeed.feet());
+        if (traversalSeed == null) {
             return StoreyResolution.failure(Building.validationResult.NOT_IN_BUILDING);
         }
 
-        SurfaceCell traversalSeed = resolveStoreyAnchor(world, seedResolution.traversalSeed(), provider);
+        traversalSeed = resolveStoreyAnchor(world, traversalSeed, enclosedSteps);
         StoreyClassifier classifier = new StoreyClassifier(
                 world, new StoreyContext(traversalSeed.feet().getY()), provider);
         StoreyScan scan = traverseStorey(
-                world, traversalSeed, ceilings, maxSize, maxRadius, provider, classifier);
+                world, traversalSeed, ceilings, maxSize, maxRadius, enclosedSteps, classifier);
         if (scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) {
             return StoreyResolution.failure(scan.result());
         }
@@ -114,11 +134,6 @@ final class SelectedFloorScanner {
                 world, traversalSeed, scan, ceilings, maxRadius, provider, classifier);
         if (scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) {
             return StoreyResolution.failure(scan.result());
-        }
-
-        BlockPos membershipSeed = seedResolution.membershipSeed();
-        if (membershipSeed != null && scan.floor().cellAt(membershipSeed).isEmpty()) {
-            return StoreyResolution.failure(Building.validationResult.NOT_IN_BUILDING);
         }
 
         LinkedHashSet<BlockPos> connectors = new LinkedHashSet<>(scan.connectors());
@@ -211,26 +226,22 @@ final class SelectedFloorScanner {
         return inspectSurfaceCell(world, seed, ceilings);
     }
 
-    private static Optional<SeedResolution> resolveScanSeed(
+    private static Optional<SurfaceCell> resolveScanSeed(
             Level world, BlockPos seed, FloorCeilingResolver ceilings) {
         SurfaceCell traversalSeed = resolveSeedCell(world, seed, ceilings).orElse(null);
-        if (traversalSeed != null) return Optional.of(new SeedResolution(traversalSeed, null));
+        if (traversalSeed != null) return Optional.of(traversalSeed);
 
-        BlockPos membershipSeed = seed.immutable();
-        traversalSeed = adjacentTraversalSeed(world, membershipSeed, ceilings).orElse(null);
-        return traversalSeed == null
-                ? Optional.empty()
-                : Optional.of(new SeedResolution(traversalSeed, membershipSeed));
+        return adjacentTraversalSeed(world, seed, ceilings);
     }
 
     private static Optional<SurfaceCell> adjacentTraversalSeed(
             Level world, BlockPos membershipCell, FloorCeilingResolver ceilings) {
-        OptionalDouble membershipHandoffY = interactionMembershipHandoffY(world, membershipCell, ceilings);
-        if (membershipHandoffY.isEmpty()) return Optional.empty();
+        OptionalDouble handoffY = interactionHandoffY(world, membershipCell, ceilings);
+        if (handoffY.isEmpty()) return Optional.empty();
 
         for (Direction direction : HORIZONTAL) {
             BlockPos horizontal = membershipCell.relative(direction);
-            for (SurfaceProbe landing : findLandings(world, membershipHandoffY.getAsDouble(), horizontal)) {
+            for (SurfaceProbe landing : findLandings(world, handoffY.getAsDouble(), horizontal)) {
                 OptionalInt ceiling = ceilings.ceilingY(landing.feet());
                 if (ceiling.isPresent()) {
                     return Optional.of(new SurfaceCell(
@@ -239,6 +250,68 @@ final class SelectedFloorScanner {
             }
         }
         return Optional.empty();
+    }
+
+    private static EnclosedVolume discoverEnclosedVolume(
+            Level world,
+            BlockPos seed,
+            FloorCeilingResolver ceilings,
+            int maxSize,
+            int maxRadius) {
+        if (!isInteriorVolumeCell(world, seed)) {
+            return EnclosedVolume.failure(Building.validationResult.NOT_IN_BUILDING);
+        }
+
+        ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+        LinkedHashSet<BlockPos> cells = new LinkedHashSet<>();
+        long volumeCellLimit = (long) maxSize * VOLUME_CELL_LIMIT_MULTIPLIER;
+        BlockPos immutableSeed = seed.immutable();
+        queue.addLast(immutableSeed);
+        cells.add(immutableSeed);
+
+        while (!queue.isEmpty()) {
+            BlockPos current = queue.removeFirst();
+
+            for (Direction direction : VOLUME_DIRECTIONS) {
+                BlockPos next = current.relative(direction);
+                if (horizontalDistance(next, immutableSeed) > maxRadius) continue;
+                if (cells.contains(next) || !isInteriorVolumeCell(world, next)) continue;
+                if (ceilings.ceilingY(next).isEmpty()) continue;
+
+                BlockPos immutable = next.immutable();
+                cells.add(immutable);
+                queue.addLast(immutable);
+                if (cells.size() > volumeCellLimit) {
+                    return EnclosedVolume.failure(Building.validationResult.BLOCK_LIMIT);
+                }
+            }
+        }
+
+        return EnclosedVolume.success(cells, supportedCellsInVolume(world, cells, ceilings));
+    }
+
+    private static Map<BlockPos, SurfaceCell> supportedCellsInVolume(
+            Level world, Set<BlockPos> volume, FloorCeilingResolver ceilings) {
+        LinkedHashMap<BlockPos, SurfaceCell> supported = new LinkedHashMap<>();
+        for (BlockPos cell : volume.stream().sorted(CELL_ORDER).toList()) {
+            BlockPos below = cell.below();
+            if (volume.contains(below)
+                    && isLowObstacle(world, below)
+                    && inspectSurfaceCell(world, below, ceilings).isPresent()) continue;
+
+            SurfaceCell surface = inspectSurfaceCell(world, cell, ceilings).orElse(null);
+            if (surface != null) supported.put(cell.immutable(), surface);
+        }
+        return Map.copyOf(supported);
+    }
+
+    private static StepProvider withinVolume(StepProvider physical, EnclosedVolume volume) {
+        return cell -> physical.steps(cell).stream()
+                .filter(step -> volume.supportedCells().containsKey(step.landing().feet()))
+                .map(step -> new HorizontalStep(
+                        volume.supportedCells().get(step.landing().feet()), step.connector()))
+                .sorted(HorizontalStep.ORDER)
+                .toList();
     }
 
     private static StoreyScan traverseStorey(Level world,
@@ -436,62 +509,7 @@ final class SelectedFloorScanner {
                 storeyEdgeCells,
                 alternateSeeds,
                 connectors);
-        return includeInteriorMembership(world, retainedStorey, ceilings);
-    }
-
-    /**
-     * Room membership is derived from the already-proven enclosed storey. Non-traversable columns
-     * do not become traversal nodes; they only inherit membership from an adjacent traversable cell.
-     */
-    private static StoreyScan includeInteriorMembership(
-            Level world, StoreyScan storey, FloorCeilingResolver ceilings) {
-        List<FloorGeometry.Cell> traversableCells = storey.floor().cells().stream()
-                .sorted(Comparator.comparingInt((FloorGeometry.Cell cell) -> cell.feet().getX())
-                        .thenComparingInt(cell -> cell.feet().getZ())
-                        .thenComparingInt(cell -> cell.feet().getY()))
-                .toList();
-        Set<Long> traversableColumns = traversableCells.stream()
-                .map(cell -> FloorGeometry.columnKey(cell.feet().getX(), cell.feet().getZ()))
-                .collect(java.util.stream.Collectors.toUnmodifiableSet());
-        LinkedHashMap<BlockPos, FloorGeometry.Cell> cells = new LinkedHashMap<>();
-        traversableCells.forEach(cell -> cells.put(cell.feet(), cell));
-        LinkedHashSet<Transition> transitions = new LinkedHashSet<>(storey.transitions());
-
-        for (FloorGeometry.Cell source : traversableCells) {
-            OptionalDouble sourceSurface = supportedFloorLevel(world, source.feet());
-            if (sourceSurface.isEmpty()) continue;
-
-            for (Direction direction : HORIZONTAL) {
-                int x = source.feet().getX() + direction.getStepX();
-                int z = source.feet().getZ() + direction.getStepZ();
-                if (traversableColumns.contains(FloorGeometry.columnKey(x, z))) continue;
-
-                for (int yOffset : LANDING_Y_OFFSETS) {
-                    BlockPos candidate = new BlockPos(x, source.feet().getY() + yOffset, z);
-                    if (yOffset != 0 && !isVerticalConnectorTopExit(world, candidate)) continue;
-                    OptionalDouble candidateHandoffY = interactionMembershipHandoffY(world, candidate, ceilings);
-                    if (candidateHandoffY.isEmpty()
-                            || !canStep(sourceSurface.getAsDouble(), candidateHandoffY.getAsDouble())) continue;
-
-                    FloorGeometry.Cell existing = cells.get(candidate);
-                    int ceilingY = existing == null
-                            ? source.ceilingY()
-                            : Math.min(existing.ceilingY(), source.ceilingY());
-                    cells.put(candidate.immutable(), new FloorGeometry.Cell(candidate, ceilingY));
-                    transitions.add(new Transition(source.feet(), candidate));
-                    break;
-                }
-            }
-        }
-
-        if (cells.size() == traversableCells.size()) return storey;
-        return new StoreyScan(
-                storey.result(),
-                new FloorGeometry(Set.copyOf(cells.values()), Map.of()),
-                transitions,
-                storey.storeyEdgeCells(),
-                storey.transitionSeeds(),
-                storey.connectors());
+        return retainedStorey;
     }
 
     private static Set<BlockPos> alternateSeedsForRetainedFloor(
@@ -770,6 +788,16 @@ final class SelectedFloorScanner {
         return OptionalDouble.of(WalkNodeEvaluator.getFloorLevel(world, feet));
     }
 
+    private static boolean isInteriorVolumeCell(Level world, BlockPos pos) {
+        BlockState state = world.getBlockState(pos);
+        if (!state.getFluidState().isEmpty()) return false;
+        if (StructureConnector.isHorizontalBoundary(state)
+                || StructureConnector.isVertical(world, pos)) return true;
+
+        var shape = state.getCollisionShape(world, pos);
+        return shape.isEmpty() || shape.max(Direction.Axis.Y) < 1.0D;
+    }
+
     /** Traversal may cross open cells and low furniture without redefining the structural floor. */
     private static boolean isTraversalOccupancyAllowed(Level world, BlockPos pos) {
         BlockState state = world.getBlockState(pos);
@@ -779,54 +807,11 @@ final class SelectedFloorScanner {
         return shape.isEmpty() || shape.max(Direction.Axis.Y) < 1.0D;
     }
 
-    private static boolean isInteriorMembershipOccupancy(Level world, BlockPos pos) {
-        if (!isInteriorMembershipCandidatePair(world, pos)) return false;
-        BlockState state = world.getBlockState(pos);
-        if (isOpen(world, pos) || isOpen(world, pos.above())) return false;
-        return !state.getCollisionShape(world, pos).isEmpty()
-                && !state.isCollisionShapeFullBlock(world, pos);
-    }
-
-    private static boolean isSingleOpenLayerMembership(Level world, BlockPos pos) {
-        if (!isInteriorMembershipCandidatePair(world, pos)) return false;
-        return isOpen(world, pos) != isOpen(world, pos.above());
-    }
-
-    private static boolean isInteriorMembershipCandidatePair(Level world, BlockPos pos) {
-        BlockState state = world.getBlockState(pos);
-        BlockPos above = pos.above();
-        BlockState aboveState = world.getBlockState(above);
-        return state.getFluidState().isEmpty()
-                && aboveState.getFluidState().isEmpty()
-                && !isInteriorMembershipBoundary(state)
-                && !isInteriorMembershipBoundary(aboveState)
-                && !state.isCollisionShapeFullBlock(world, pos)
-                && !aboveState.isCollisionShapeFullBlock(world, above);
-    }
-
-    private static boolean isInteriorMembershipBoundary(BlockState state) {
-        return state.is(BlockTags.FENCES)
-                || state.is(BlockTags.WALLS)
-                || state.is(Blocks.IRON_BARS)
-                || StructureConnector.isHorizontalBoundary(state);
-    }
-
-    private static OptionalDouble interactionMembershipHandoffY(
+    private static OptionalDouble interactionHandoffY(
             Level world, BlockPos pos, FloorCeilingResolver ceilings) {
-        if (!isInteriorMembershipOccupancy(world, pos)
-                && !isSingleOpenLayerMembership(world, pos)
-                && !isVerticalConnectorTopExit(world, pos)) return OptionalDouble.empty();
-        return membershipHandoffY(world, pos, ceilings);
-    }
-
-    private static OptionalDouble membershipHandoffY(
-            Level world, BlockPos pos, FloorCeilingResolver ceilings) {
+        if (!isVerticalConnectorTopExit(world, pos)) return OptionalDouble.empty();
         if (inspectSurfaceCell(world, pos.above(), ceilings).isPresent()) return OptionalDouble.empty();
-        OptionalDouble supported = supportedFloorLevel(world, pos);
-        if (supported.isPresent()) return supported;
-        return isVerticalConnectorTopExit(world, pos)
-                ? OptionalDouble.of(pos.getY())
-                : OptionalDouble.empty();
+        return OptionalDouble.of(pos.getY());
     }
 
     private static boolean isVerticalConnectorTopExit(Level world, BlockPos pos) {
@@ -993,7 +978,22 @@ final class SelectedFloorScanner {
     private record SurfaceProbe(BlockPos feet, double surfaceY) {
     }
 
-    private record SeedResolution(SurfaceCell traversalSeed, BlockPos membershipSeed) {
+    private record EnclosedVolume(
+            Building.validationResult result,
+            Set<BlockPos> cells,
+            Map<BlockPos, SurfaceCell> supportedCells) {
+
+        private static EnclosedVolume failure(Building.validationResult result) {
+            return new EnclosedVolume(result, Set.of(), Map.of());
+        }
+
+        private static EnclosedVolume success(
+                Set<BlockPos> cells, Map<BlockPos, SurfaceCell> supportedCells) {
+            return new EnclosedVolume(
+                    Building.validationResult.SUCCESS,
+                    Set.copyOf(cells),
+                    Map.copyOf(supportedCells));
+        }
     }
 
     private record StoreyResolution(Building.validationResult result,
