@@ -234,33 +234,18 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return Building.validationResult.SUCCESS;
     }
 
-    static boolean lineageOverlapsRegisteredRooms(
-            Collection<RegisteredRoomReconciler.Assignment> assignments,
-            Collection<Building> otherRooms,
-            FloorGeometry floor) {
-        if (floor == null) return true;
-        for (RegisteredRoomReconciler.Assignment assignment : assignments) {
-            Building component = assignment.component();
-            for (Building other : otherRooms) {
-                if (RegisteredRoomReconciler.hasIdentityOverlap(component, other, floor)) return true;
-            }
-        }
-        return false;
-    }
-
     public Building.validationResult commitRoomAddition(BuildingScanResult scan, String forcedType) {
         if (scan == null || scan.result() != Building.validationResult.SUCCESS) return scan == null
                 ? Building.validationResult.TOO_SMALL : scan.result();
         if (forcedType != null && !scan.matchesType(forcedType)) return Building.validationResult.INVALID_TYPE;
         if (forcedType == null && scan.isAmbiguous()) return Building.validationResult.INVALID_TYPE;
-        BuildingScanResult.PendingFloorRefresh floorRefresh = scan.pendingFloorRefresh();
-        if (floorRefresh != null) return commitExpandedRoom(scan, forcedType);
-
         Structure pending = scan.pendingStructure();
         if (pending != null) {
             Village village = scan.village();
-            if (village != null && pending.getId() >= 0 && village.getStructure(pending.getId()).isPresent()) {
-                return commitExpandedRoom(scan, forcedType);
+            if (pending.getId() >= 0) {
+                return village != null && village.getStructure(pending.getId()).isPresent()
+                        ? commitExpandedRoom(scan, forcedType)
+                        : Building.validationResult.NOT_IN_BUILDING;
             }
             return commitInitialRoom(scan, forcedType);
         }
@@ -283,8 +268,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     private Building.validationResult commitExpandedRoom(BuildingScanResult scan, String forcedType) {
         Village village = scan.village();
-        BuildingScanResult.PendingFloorRefresh floorRefresh = scan.pendingFloorRefresh();
-        Structure refreshed = floorRefresh == null ? scan.pendingStructure() : floorRefresh.structure();
+        Structure refreshed = scan.pendingStructure();
         Building room = scan.building();
         if (village == null || refreshed == null || room == null) {
             return Building.validationResult.NOT_IN_BUILDING;
@@ -306,15 +290,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         committed.setId(lastBuildingId);
         committed.setType(category);
         committed.setTypeForced(forcedType != null);
-        boolean published;
-        if (floorRefresh == null) {
-            published = village.replaceStructureAndRegisterRoom(refreshed, committed);
-        } else {
-            List<Building> replacementRooms = new ArrayList<>(floorRefresh.existingRooms());
-            replacementRooms.add(committed);
-            published = village.publishFloorRefresh(refreshed, committed.getFloorId(), replacementRooms);
-        }
-        if (!published) {
+        if (!village.replaceStructureAndRegisterRoom(refreshed, committed)) {
             return Building.validationResult.OVERLAP;
         }
         lastBuildingId++;
@@ -389,7 +365,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (forcedType != null && !update.matchesType(forcedType)) {
             return Building.validationResult.INVALID_TYPE;
         }
-        if (requireTypeChoice && forcedType == null && update.isAmbiguous()) {
+        if (requireTypeChoice && forcedType == null && update.requiresTypeSelection()) {
             return Building.validationResult.INVALID_TYPE;
         }
 
@@ -401,176 +377,59 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
         if (update.refreshedStructure() == null
                 || update.refreshedStructure().getId() != update.structureId()
-                || update.refreshedStructure().getFloor(update.floorId()).isEmpty()
-                || !update.previousRoomIds().equals(List.of(update.expectedPlayerRoomId()))) {
-            return Building.validationResult.OVERLAP;
-        }
-        List<Building> currentFloorRooms = village.getRooms()
-                .filter(room -> room.getStructureId() == update.structureId())
-                .filter(room -> room.getFloorId() == update.floorId())
-                .sorted(Comparator.comparingInt(Building::getId))
-                .toList();
-        Building playerRoom = village.getBuilding(update.expectedPlayerRoomId()).orElse(null);
-        if (playerRoom == null || !currentFloorRooms.contains(playerRoom)) {
-            return Building.validationResult.OVERLAP;
-        }
-        Building playerComponent = update.playerComponent();
-        if (playerComponent == null) {
+                || update.refreshedStructure().getFloor(update.floorId()).isEmpty()) {
             return Building.validationResult.OVERLAP;
         }
 
-        List<RegisteredRoomReconciler.Assignment> assignments = update.assignments();
+        Building current = village.getBuilding(update.expectedRoomId()).orElse(null);
+        if (current == null || current.getStructureId() != update.structureId()
+                || current.getFloorId() != update.floorId()) {
+            return Building.validationResult.OVERLAP;
+        }
+        Building replacement = update.replacementRoom() == null ? null : update.replacementRoom().copy();
         StructureFloor refreshedFloor = update.refreshedStructure().getFloor(update.floorId()).orElse(null);
-        Building.validationResult assignmentValidation = validateRoomAssignments(
-                assignments, playerRoom, currentFloorRooms,
-                refreshedFloor == null ? null : refreshedFloor.geometry());
-        if (assignmentValidation != Building.validationResult.SUCCESS) {
-            return assignmentValidation;
-        }
-
-        OptionalInt nextRoomId = assignRoomIdentities(update, village, playerRoom, assignments);
-        if (nextRoomId.isEmpty()) {
+        if (replacement == null || refreshedFloor == null
+                || replacement.getId() != current.getId()
+                || replacement.getStructureId() != current.getStructureId()
+                || replacement.getFloorId() != current.getFloorId()
+                || refreshedFloor.geometry().roomIdentityOverlapCount(
+                current.getFloorCells(), replacement.getFloorCells()) == 0) {
             return Building.validationResult.OVERLAP;
         }
 
-        Building.validationResult typeResolution = resolveRoomTypes(
-                update, forcedType, village, structure, assignments);
-        if (typeResolution != Building.validationResult.SUCCESS) {
-            return typeResolution;
-        }
-
-        if (!applyRoomAssignments(update, village, assignments, nextRoomId.getAsInt())) {
-            return Building.validationResult.OVERLAP;
-        }
-        return Building.validationResult.SUCCESS;
-    }
-
-    private static Building.validationResult validateRoomAssignments(
-            List<RegisteredRoomReconciler.Assignment> assignments,
-            Building playerRoom,
-            List<Building> currentFloorRooms,
-            FloorGeometry floor) {
-        long previousAssignments = assignments.stream()
-                .filter(assignment -> assignment.previous() != null)
-                .count();
-        if (previousAssignments != 1
-                || assignments.stream().noneMatch(assignment -> assignment.previous() == playerRoom)) {
-            return Building.validationResult.OVERLAP;
-        }
-        List<Building> otherRooms = currentFloorRooms.stream()
-                .filter(room -> room != playerRoom)
-                .toList();
-        if (lineageOverlapsRegisteredRooms(assignments, otherRooms, floor)) {
-            return Building.validationResult.OVERLAP;
-        }
-        return Building.validationResult.SUCCESS;
-    }
-
-    private OptionalInt assignRoomIdentities(RegisteredRoomUpdate update,
-                                             Village village,
-                                             Building playerRoom,
-                                             List<RegisteredRoomReconciler.Assignment> assignments) {
-        int nextRoomId = lastBuildingId;
-        for (RegisteredRoomReconciler.Assignment assignment : assignments) {
-            Building component = assignment.component();
-            if (component.getStructureId() != update.structureId()
-                    || component.getFloorId() != update.floorId()
-                    || component.getFloorFootprintArea() <= 0) {
-                return OptionalInt.empty();
-            }
-            int roomId = assignment.createsRoom() ? nextRoomId++ : assignment.roomId();
-            Building previous = assignment.previous();
-            if (previous != null && village.getBuilding(roomId).orElse(null) != previous) {
-                return OptionalInt.empty();
-            }
-            component.setId(roomId);
-            component.setStructureId(update.structureId());
-            component.setFloorId(update.floorId());
-            if (previous != null) {
-                RegisteredRoomReconciler.preserveIdentity(component, previous);
-            } else {
-                component.setContributesToMain(playerRoom.contributesToMain());
-            }
-        }
-        List<Building> components = assignments.stream()
-                .map(RegisteredRoomReconciler.Assignment::component)
-                .toList();
-        for (int i = 0; i < components.size(); i++) {
-            for (int j = i + 1; j < components.size(); j++) {
-                if (components.get(i).getFloorFootprintIntersectionArea(components.get(j)) > 0) {
-                    return OptionalInt.empty();
-                }
-            }
-        }
-        return OptionalInt.of(nextRoomId);
-    }
-
-    private Building.validationResult resolveRoomTypes(RegisteredRoomUpdate update,
-                                                        String forcedType,
-                                                        Village village,
-                                                        Structure structure,
-                                                        List<RegisteredRoomReconciler.Assignment> assignments) {
-        Building playerComponent = update.playerComponent();
-        List<Building> components = assignments.stream()
-                .map(RegisteredRoomReconciler.Assignment::component)
-                .toList();
-        Set<Integer> removedRoomIds = new HashSet<>(update.previousRoomIds());
-        assignments.stream()
-                .map(RegisteredRoomReconciler.Assignment::roomId)
-                .filter(id -> id >= 0)
-                .forEach(removedRoomIds::remove);
-        int mainRoomId = village.getMainRoom(structure).map(Building::getId).orElse(-1);
-        Building replacementMain = removedRoomIds.contains(mainRoomId) ? playerComponent : null;
-        List<Building> prospectiveRooms = village.getRooms()
-                .filter(room -> !update.previousRoomIds().contains(room.getId()))
-                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
-        prospectiveRooms.addAll(components);
-        Building prospectiveMain = prospectiveRooms.stream()
-                .filter(room -> room.getId() == mainRoomId)
-                .findFirst().orElse(replacementMain);
-        RoomTypeResolver resolver = RoomTypeResolver.create(village, prospectiveRooms);
-
-        if (forcedType != null) {
-            String selectedType = resolver.resolve(playerComponent, prospectiveMain).updatedType(forcedType);
-            if (selectedType == null) return Building.validationResult.INVALID_TYPE;
-            playerComponent.setType(selectedType);
-            playerComponent.setTypeForced(true);
-        } else if (!update.requiresTypeSelection()) {
-            String selectedType = resolver.resolve(playerComponent, prospectiveMain).updatedType(null);
-            if (selectedType == null) return Building.validationResult.INVALID_TYPE;
-            playerComponent.setType(selectedType);
-            playerComponent.setTypeForced(false);
-        }
-        for (RegisteredRoomReconciler.Assignment assignment : assignments) {
-            if (!assignment.createsRoom()) continue;
-            Building component = assignment.component();
-            String type = resolver.resolve(component, prospectiveMain).updatedType(null);
-            if (type == null) return Building.validationResult.INVALID_TYPE;
-            component.setType(type);
-            component.setTypeForced(false);
-        }
-        return Building.validationResult.SUCCESS;
-    }
-
-    private boolean applyRoomAssignments(RegisteredRoomUpdate update,
-                                         Village village,
-                                         List<RegisteredRoomReconciler.Assignment> assignments,
-                                         int nextRoomId) {
-        Set<Integer> replacedRoomIds = new HashSet<>(update.previousRoomIds());
-        List<Building> replacementRooms = village.getRooms()
+        List<Building> siblingRooms = village.getRooms()
                 .filter(room -> room.getStructureId() == update.structureId())
                 .filter(room -> room.getFloorId() == update.floorId())
-                .filter(room -> !replacedRoomIds.contains(room.getId()))
-                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
-        replacementRooms.addAll(assignments.stream()
-                .map(RegisteredRoomReconciler.Assignment::component)
-                .toList());
-        if (!village.publishFloorRefresh(
-                update.refreshedStructure(), update.floorId(), replacementRooms)) {
-            return false;
+                .filter(room -> room.getId() != current.getId())
+                .toList();
+        if (siblingRooms.stream().anyMatch(room -> refreshedFloor.geometry().roomIdentityOverlapCount(
+                room.getFloorCells(), replacement.getFloorCells()) > 0)) {
+            return Building.validationResult.OVERLAP;
         }
-        lastBuildingId = nextRoomId;
-        return true;
+        if (forcedType != null) {
+            replacement.setType(forcedType);
+            replacement.setTypeForced(true);
+        } else if (current.isTypeForced()) {
+            replacement.setType(current.getType());
+            replacement.setTypeForced(true);
+        } else {
+            List<Building> prospectiveRooms = village.getRooms()
+                    .filter(room -> room.getId() != current.getId())
+                    .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+            prospectiveRooms.add(replacement);
+            String resolvedType = RoomTypeResolver.create(village, prospectiveRooms)
+                    .resolve(replacement).updatedType(null);
+            if (resolvedType == null) return Building.validationResult.INVALID_TYPE;
+            replacement.setType(resolvedType);
+            replacement.setTypeForced(false);
+        }
+        replacement.setContributesToMain(current.contributesToMain());
+
+        List<Building> replacementRooms = new ArrayList<>(siblingRooms);
+        replacementRooms.add(replacement);
+        return village.publishFloorRefresh(update.refreshedStructure(), update.floorId(), replacementRooms)
+                ? Building.validationResult.SUCCESS
+                : Building.validationResult.OVERLAP;
     }
 
     private static String chooseRoomCategory(BuildingScanResult scan, String forcedType) {

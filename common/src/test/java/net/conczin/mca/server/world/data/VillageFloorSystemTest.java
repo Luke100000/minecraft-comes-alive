@@ -449,17 +449,15 @@ class VillageFloorSystemTest {
     }
 
     @Test
-    void walkableStoreyEvidenceCanProveStairFloorAttachment() {
+    void persistedStairTransitionCanProveFloorAttachment() {
         Village village = new Village(1, null);
         StructureFloor lower = TestStructureFloors.create(0, 88, 91, 0, region(88));
         registerStructure(village, structure(10, 10, lower), room(100, 10, 0, true));
 
-        StructureFloor upper = TestStructureFloors.create(1, 91, 94, 0, region(91));
-        List<FloorGeometry> connectedFloors = List.of(
-                scannedFloor(region(88)),
-                scannedFloor(region(91)));
+        StructureFloor upper = TestStructureFloors.create(1, 92, 95, 0, region(92));
 
-        assertEquals(10, village.selectAttachmentTarget(upper, List.of(), connectedFloors)
+        assertEquals(10, village.selectAttachmentTarget(
+                        upper, List.of(), List.of(new BlockPos(0, 90, 0)))
                 .orElseThrow().buildingId());
     }
 

@@ -24,6 +24,16 @@ class RegisteredRoomUpdateTest {
     }
 
     @Test
+    void forcedRoomKeepsItsTypeWithoutPolymorphReview() {
+        Building replacement = new Building(BlockPos.ZERO);
+        replacement.setTypeForced(true);
+        RegisteredRoomUpdate update = updateWithTypes(
+                replacement, List.of("music_store", "workshop"));
+
+        assertFalse(update.requiresTypeSelection());
+    }
+
+    @Test
     void noEligibleTypesCanContinueWithoutPolymorphReview() {
         RegisteredRoomUpdate update = updateWithTypes(List.of());
 
@@ -31,6 +41,10 @@ class RegisteredRoomUpdateTest {
     }
 
     private static RegisteredRoomUpdate updateWithTypes(List<String> matchingTypes) {
+        return updateWithTypes(new Building(BlockPos.ZERO), matchingTypes);
+    }
+
+    private static RegisteredRoomUpdate updateWithTypes(Building replacement, List<String> matchingTypes) {
         return new RegisteredRoomUpdate(
                 Building.validationResult.SUCCESS,
                 BlockPos.ZERO,
@@ -39,9 +53,7 @@ class RegisteredRoomUpdateTest {
                 10,
                 0,
                 20,
-                List.of(20),
-                List.of(),
-                new Building(BlockPos.ZERO),
+                replacement,
                 matchingTypes);
     }
 }

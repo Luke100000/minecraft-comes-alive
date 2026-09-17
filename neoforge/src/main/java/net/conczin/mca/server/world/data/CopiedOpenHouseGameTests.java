@@ -219,7 +219,7 @@ public final class CopiedOpenHouseGameTests {
             RegisteredRoomUpdate update = workflow.analyzeRegisteredRoomUpdate(village, roomIds.get(i), source);
             helper.assertTrue(update.result() == Building.validationResult.SUCCESS,
                     "refresh rejected attached Room at " + registeredSeeds.get(i) + ": " + update.result());
-            String type = update.requiresTypeSelection() ? update.playerMatchingTypes().getFirst() : null;
+            String type = update.requiresTypeSelection() ? update.matchingTypes().getFirst() : null;
             helper.assertTrue(manager.commitRegisteredRoomUpdate(update, type) == Building.validationResult.SUCCESS,
                     "refresh could not commit attached Room at " + registeredSeeds.get(i));
         }

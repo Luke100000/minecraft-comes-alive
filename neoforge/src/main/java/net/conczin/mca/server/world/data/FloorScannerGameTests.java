@@ -383,6 +383,73 @@ public final class FloorScannerGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_floor_add_room_stale_identity_overlap", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 140)
+    public static void addRoomRejectsFreshComponentOverlappingRegisteredIdentity(GameTestHelper helper) {
+        BlockPos roomMin = helper.absolutePos(new BlockPos(5, 2, 5));
+        buildClosedRoom(helper, roomMin, 5, 5);
+        BlockPos seed = roomMin.offset(1, 0, 1);
+        VillageManager manager = new VillageManager(helper.getLevel());
+        RoomWorkflow workflow = new RoomWorkflow(manager, helper.getLevel());
+
+        BuildingScanResult initialScan = workflow.analyzeBuildingAddition(seed);
+        String initialType = initialScan.isAmbiguous() ? initialScan.matchingTypes().getFirst() : null;
+        helper.assertTrue(workflow.commitAddition(initialScan, initialType).status() == RoomWorkflow.Status.COMMITTED,
+                "initial room was not committed");
+
+        Village village = manager.findNearestVillage(seed, Village.MERGE_MARGIN).orElseThrow();
+        Building existing = village.getRooms().findFirst().orElseThrow();
+        BlockPos staleGap = roomMin.offset(3, 0, 3);
+        Set<BlockPos> staleCells = new HashSet<>(existing.getFloorCells());
+        staleCells.remove(staleGap);
+        existing.setGeometry(existing.getRawPos0(), existing.getRawPos1(), staleCells);
+        helper.assertTrue(RoomScanPlanner.plan(village, helper.getLevel(), staleGap).mode()
+                        == Village.RoomScanMode.ADD_ROOM,
+                "fixture did not expose the stale unowned cell as ADD_ROOM");
+
+        BuildingScanResult addition = workflow.analyzeRoom(staleGap);
+
+        helper.assertTrue(addition.result() == Building.validationResult.OVERLAP,
+                "fresh component overlapping registered identity was accepted as " + addition.result());
+        helper.assertTrue(existing.getFloorCells().equals(staleCells),
+                "failed Add Room rewrote the existing Room");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_add_room_invalidates_registered_cell", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 160)
+    public static void addRoomRejectsFloorRefreshThatDropsRegisteredRoomCell(GameTestHelper helper) {
+        BlockPos firstMin = helper.absolutePos(new BlockPos(5, 2, 5));
+        BlockPos secondMin = firstMin.offset(3, 0, 0);
+        buildClosedRoom(helper, firstMin, 2, 5);
+        buildClosedRoom(helper, secondMin, 3, 5);
+        BlockPos doorway = firstMin.offset(2, 0, 2);
+        placeDoor(helper, doorway, Direction.WEST);
+
+        VillageManager manager = new VillageManager(helper.getLevel());
+        RoomWorkflow workflow = new RoomWorkflow(manager, helper.getLevel());
+        BlockPos firstSeed = firstMin.offset(1, 0, 1);
+        BuildingScanResult initialScan = workflow.analyzeBuildingAddition(firstSeed);
+        String initialType = initialScan.isAmbiguous() ? initialScan.matchingTypes().getFirst() : null;
+        helper.assertTrue(workflow.commitAddition(initialScan, initialType).status() == RoomWorkflow.Status.COMMITTED,
+                "initial room was not committed");
+
+        Village village = manager.findNearestVillage(firstSeed, Village.MERGE_MARGIN).orElseThrow();
+        Building existing = village.getRooms().findFirst().orElseThrow();
+        BlockPos removedCell = firstMin.offset(1, 0, 4);
+        helper.assertTrue(existing.getFloorCells().contains(removedCell),
+                "fixture cell was not owned by the registered Room");
+        helper.getLevel().setBlock(removedCell.below(), Blocks.AIR.defaultBlockState(), 3);
+
+        BuildingScanResult addition = workflow.analyzeRoom(secondMin.offset(1, 0, 1));
+
+        helper.assertTrue(addition.result() == Building.validationResult.OVERLAP,
+                "Floor refresh dropping an existing Room cell was accepted as " + addition.result());
+        helper.assertTrue(existing.getFloorCells().contains(removedCell),
+                "failed Add Room mutated registered Room ownership");
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_floor_initial_door_owner", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 140)
     public static void initialBuildingOwnsDoorOnFacingSide(GameTestHelper helper) {
@@ -1458,6 +1525,11 @@ public final class FloorScannerGameTests {
                 "three-door fixture did not retain all three connector cells");
         helper.assertTrue(village.getRooms().count() == 1,
                 "initial registration unexpectedly persisted unselected Rooms");
+        Building firstRoom = village.findInteractionRoomAt(firstSeed).orElseThrow();
+        int firstRoomId = firstRoom.getId();
+        String firstRoomType = firstRoom.getType();
+        boolean firstRoomForced = firstRoom.isTypeForced();
+        Set<BlockPos> firstRoomCells = Set.copyOf(firstRoom.getFloorCells());
 
         BlockPos secondSeed = secondMin.offset(2, 0, 2);
         BuildingScanResult additionScan = workflow.analyzeRoom(secondSeed);
@@ -1469,6 +1541,148 @@ public final class FloorScannerGameTests {
                 "three-door Floor failed to commit selected Room: " + added.result());
         helper.assertTrue(village.getRooms().count() == 2,
                 "three-door Floor did not persist exactly the selected two Rooms");
+        Building unchangedFirst = village.getBuilding(firstRoomId).orElseThrow();
+        helper.assertTrue(unchangedFirst.getType().equals(firstRoomType)
+                        && unchangedFirst.isTypeForced() == firstRoomForced
+                        && unchangedFirst.getFloorCells().equals(firstRoomCells),
+                "adding Room B changed registered Room A");
+        helper.assertTrue(village.findInteractionRoomAt(secondSeed).isPresent(),
+                "selected Room B was not registered");
+        helper.assertTrue(village.findInteractionRoomAt(thirdMin.offset(2, 0, 2)).isEmpty(),
+                "unselected Room C was registered as a side effect");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_update_room_moved_wall", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 160)
+    public static void selectedRoomUpdateKeepsIdWhenWallMoves(GameTestHelper helper) {
+        BlockPos roomMin = helper.absolutePos(new BlockPos(5, 2, 5));
+        buildClosedRoom(helper, roomMin, 4, 4);
+        BlockPos seed = roomMin.offset(1, 0, 1);
+        VillageManager manager = new VillageManager(helper.getLevel());
+        RoomWorkflow workflow = new RoomWorkflow(manager, helper.getLevel());
+        BuildingScanResult initialScan = workflow.analyzeBuildingAddition(seed);
+        String initialType = initialScan.isAmbiguous() ? initialScan.matchingTypes().getFirst() : null;
+        helper.assertTrue(workflow.commitAddition(initialScan, initialType).status() == RoomWorkflow.Status.COMMITTED,
+                "initial room was not committed");
+
+        Village village = manager.findNearestVillage(seed, Village.MERGE_MARGIN).orElseThrow();
+        Building before = village.findInteractionRoomAt(seed).orElseThrow();
+        int roomId = before.getId();
+        Set<BlockPos> oldCells = Set.copyOf(before.getFloorCells());
+        buildClosedRoom(helper, roomMin, 5, 4);
+
+        RegisteredRoomUpdate update = workflow.analyzeRegisteredRoomUpdate(village, roomId, seed);
+        helper.assertTrue(update.result() == Building.validationResult.SUCCESS,
+                "moved-wall update analysis failed: " + update.result());
+        String type = update.requiresTypeSelection() ? update.matchingTypes().getFirst() : null;
+        helper.assertTrue(manager.commitRegisteredRoomUpdate(update, type) == Building.validationResult.SUCCESS,
+                "moved-wall update commit failed");
+
+        Building after = village.getBuilding(roomId).orElseThrow();
+        helper.assertTrue(after.getId() == roomId, "selected Room ID changed after moving its wall");
+        helper.assertTrue(!after.getFloorCells().equals(oldCells),
+                "moved wall did not refresh selected Room geometry");
+        helper.assertTrue(after.getFloorCells().contains(roomMin.offset(4, 0, 2)),
+                "expanded Room did not gain cells behind the moved wall");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_update_room_selected_split", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 200)
+    public static void selectedRoomSplitReplacesOnlySelectedComponentAndLeavesSiblingUntouched(GameTestHelper helper) {
+        BlockPos firstMin = helper.absolutePos(new BlockPos(4, 2, 5));
+        BlockPos secondMin = firstMin.offset(6, 0, 0);
+        buildClosedRoom(helper, firstMin, 5, 4);
+        buildClosedRoom(helper, secondMin, 4, 4);
+        BlockPos outerDoor = firstMin.offset(5, 0, 1);
+        placeDoor(helper, outerDoor, Direction.EAST);
+
+        VillageManager manager = new VillageManager(helper.getLevel());
+        RoomWorkflow workflow = new RoomWorkflow(manager, helper.getLevel());
+        BlockPos leftSeed = firstMin.offset(1, 0, 1);
+        BlockPos siblingSeed = secondMin.offset(2, 0, 2);
+        BuildingScanResult initialScan = workflow.analyzeBuildingAddition(leftSeed);
+        String initialType = initialScan.isAmbiguous() ? initialScan.matchingTypes().getFirst() : null;
+        helper.assertTrue(workflow.commitAddition(initialScan, initialType).status() == RoomWorkflow.Status.COMMITTED,
+                "initial selected Room was not committed");
+        BuildingScanResult siblingScan = workflow.analyzeRoom(siblingSeed);
+        String siblingType = siblingScan.isAmbiguous() ? siblingScan.matchingTypes().getFirst() : null;
+        helper.assertTrue(workflow.commitAddition(siblingScan, siblingType).status() == RoomWorkflow.Status.COMMITTED,
+                "sibling Room was not committed");
+
+        Village village = manager.findNearestVillage(leftSeed, Village.MERGE_MARGIN).orElseThrow();
+        Building selectedBefore = village.findInteractionRoomAt(leftSeed).orElseThrow();
+        Building siblingBefore = village.findInteractionRoomAt(siblingSeed).orElseThrow();
+        int selectedId = selectedBefore.getId();
+        int siblingId = siblingBefore.getId();
+        String siblingPersistedType = siblingBefore.getType();
+        Set<BlockPos> siblingCells = Set.copyOf(siblingBefore.getFloorCells());
+
+        for (int z = 0; z < 4; z++) {
+            BlockPos wall = firstMin.offset(2, 0, z);
+            helper.getLevel().setBlock(wall, Blocks.STONE.defaultBlockState(), 3);
+            helper.getLevel().setBlock(wall.above(), Blocks.STONE.defaultBlockState(), 3);
+        }
+        BlockPos internalDoor = firstMin.offset(2, 0, 1);
+        placeDoor(helper, internalDoor, Direction.WEST);
+        BlockPos unselectedSplitSeed = firstMin.offset(4, 0, 2);
+
+        RegisteredRoomUpdate update = workflow.analyzeRegisteredRoomUpdate(village, selectedId, leftSeed);
+        helper.assertTrue(update.result() == Building.validationResult.SUCCESS,
+                "selected split update analysis failed: " + update.result());
+        String type = update.requiresTypeSelection() ? update.matchingTypes().getFirst() : null;
+        helper.assertTrue(manager.commitRegisteredRoomUpdate(update, type) == Building.validationResult.SUCCESS,
+                "selected split update commit failed");
+
+        Building selectedAfter = village.getBuilding(selectedId).orElseThrow();
+        helper.assertTrue(selectedAfter.getFloorCells().contains(leftSeed),
+                "selected split component was not retained");
+        helper.assertTrue(!selectedAfter.getFloorCells().contains(unselectedSplitSeed),
+                "unselected split component remained part of selected Room");
+        helper.assertTrue(village.findInteractionRoomAt(unselectedSplitSeed).isEmpty(),
+                "unselected split component was registered as a new Room");
+        Building siblingAfter = village.getBuilding(siblingId).orElseThrow();
+        helper.assertTrue(siblingAfter.getType().equals(siblingPersistedType)
+                        && siblingAfter.getFloorCells().equals(siblingCells),
+                "selected update changed the registered sibling Room");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_update_room_rejects_sibling_overlap", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 180)
+    public static void selectedRoomUpdateRejectsFreshComponentOverlappingSibling(GameTestHelper helper) {
+        BlockPos firstMin = helper.absolutePos(new BlockPos(5, 2, 5));
+        BlockPos secondMin = firstMin.offset(5, 0, 0);
+        buildClosedRoom(helper, firstMin, 4, 4);
+        buildClosedRoom(helper, secondMin, 4, 4);
+        BlockPos doorway = firstMin.offset(4, 0, 1);
+        placeDoor(helper, doorway, Direction.EAST);
+
+        VillageManager manager = new VillageManager(helper.getLevel());
+        RoomWorkflow workflow = new RoomWorkflow(manager, helper.getLevel());
+        BlockPos firstSeed = firstMin.offset(1, 0, 1);
+        BlockPos secondSeed = secondMin.offset(2, 0, 2);
+        BuildingScanResult initialScan = workflow.analyzeBuildingAddition(firstSeed);
+        String initialType = initialScan.isAmbiguous() ? initialScan.matchingTypes().getFirst() : null;
+        helper.assertTrue(workflow.commitAddition(initialScan, initialType).status() == RoomWorkflow.Status.COMMITTED,
+                "initial Room was not committed");
+        BuildingScanResult secondScan = workflow.analyzeRoom(secondSeed);
+        String secondType = secondScan.isAmbiguous() ? secondScan.matchingTypes().getFirst() : null;
+        helper.assertTrue(workflow.commitAddition(secondScan, secondType).status() == RoomWorkflow.Status.COMMITTED,
+                "sibling Room was not committed");
+
+        Village village = manager.findNearestVillage(firstSeed, Village.MERGE_MARGIN).orElseThrow();
+        Building first = village.findInteractionRoomAt(firstSeed).orElseThrow();
+        helper.getLevel().setBlock(doorway, Blocks.AIR.defaultBlockState(), 3);
+        helper.getLevel().setBlock(doorway.above(), Blocks.AIR.defaultBlockState(), 3);
+
+        RegisteredRoomUpdate update = workflow.analyzeRegisteredRoomUpdate(village, first.getId(), firstSeed);
+
+        helper.assertTrue(update.result() == Building.validationResult.OVERLAP,
+                "merged fresh component overlapping sibling was accepted as " + update.result());
+        helper.assertTrue(village.getRooms().count() == 2,
+                "failed update changed registered Room count");
         helper.succeed();
     }
 

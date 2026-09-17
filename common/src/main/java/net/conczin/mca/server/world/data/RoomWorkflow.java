@@ -114,30 +114,15 @@ public final class RoomWorkflow {
             return addition.withSource(source);
         }
 
-        List<Building> freshRooms = new ArrayList<>();
-        for (RoomPartitioner.Component component : components) {
-            if (component == selectedComponent) {
-                freshRooms.add(addition.building());
-                continue;
-            }
-            BuildingRoomScanner.Result geometry = BuildingRoomScanner.materialize(
-                    scanSeed, Config.getInstance().maxBuildingSize, floor.id(),
-                    fresh.scannedFloor(), components, component);
-            BuildingScanResult componentScan = materializeRoom(
-                    village, refreshed, refreshedFloor, geometry);
-            if (componentScan.result() == Building.validationResult.SUCCESS) {
-                freshRooms.add(componentScan.building());
-            }
-        }
-        List<Building> previousRooms = village.getRooms()
+        List<Building> existingRooms = village.getRooms()
                 .filter(room -> room.getStructureId() == structure.getId())
                 .filter(room -> room.getFloorId() == floor.id())
                 .toList();
-        return RegisteredRoomReconciler.reconcileAddition(
-                        previousRooms, freshRooms, addition.building(), fresh.scannedFloor())
-                .map(existingReplacements -> addition.withSource(source)
-                        .withPendingFloorRefresh(refreshed, existingReplacements))
-                .orElseGet(() -> failedRoom(Building.validationResult.OVERLAP, source, village));
+        if (hasRegisteredRoomConflict(
+                fresh.scannedFloor(), addition.building(), existingRooms)) {
+            return failedRoom(Building.validationResult.OVERLAP, source, village);
+        }
+        return addition.withSource(source).withPendingStructure(refreshed);
     }
 
     BuildingScanResult analyzeAttachedRoom(BlockPos source,
@@ -268,16 +253,32 @@ public final class RoomWorkflow {
             return RegisteredRoomUpdate.failure(fresh.result(), source, village);
         }
 
-        List<Building> freshComponents = BuildingRoomScanner.partition(
-                        world, source, Config.getInstance().maxBuildingSize,
-                        persistedFloor.id(), fresh.scan()).stream()
-                .map(geometry -> materializeRoom(
-                        village, structure, persistedFloor, geometry))
-                .filter(scan -> scan.result() == Building.validationResult.SUCCESS)
-                .map(BuildingScanResult::building)
-                .toList();
-        if (freshComponents.isEmpty()) {
+        List<RoomPartitioner.Component> components = BuildingRoomScanner.components(world, fresh.scan());
+        RoomPartitioner.Component selectedComponent = RoomPartitioner.select(
+                fresh.source(), fresh.scannedFloor(), components);
+        if (selectedComponent == null) {
             return RegisteredRoomUpdate.failure(Building.validationResult.TOO_SMALL, source, village);
+        }
+
+        Structure refreshed = refreshedStructure(structure, persistedFloor.id(), fresh.floor());
+        StructureFloor refreshedFloor = refreshed == null
+                ? null : refreshed.getFloor(persistedFloor.id()).orElse(null);
+        if (refreshedFloor == null) {
+            return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, source, village);
+        }
+
+        BuildingRoomScanner.Result geometry = BuildingRoomScanner.materialize(
+                fresh.source(), Config.getInstance().maxBuildingSize, persistedFloor.id(),
+                fresh.scannedFloor(), components, selectedComponent);
+        BuildingScanResult selected = materializeRoom(village, refreshed, refreshedFloor, geometry);
+        if (selected.result() != Building.validationResult.SUCCESS) {
+            return RegisteredRoomUpdate.failure(selected.result(), source, village);
+        }
+
+        Building replacement = selected.building();
+        if (fresh.scannedFloor().roomIdentityOverlapCount(
+                expected.getFloorCells(), replacement.getFloorCells()) == 0) {
+            return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, source, village);
         }
 
         List<Building> otherRooms = village.getRooms()
@@ -285,34 +286,30 @@ public final class RoomWorkflow {
                 .filter(room -> room.getFloorId() == persistedFloor.id())
                 .filter(room -> room.getId() != expected.getId())
                 .toList();
-
-        List<Building> lineage = RegisteredRoomReconciler
-                .updateLineage(expected, freshComponents, otherRooms, fresh.scannedFloor()).orElse(null);
-        if (lineage == null || lineage.isEmpty()) {
+        if (hasRegisteredRoomConflict(fresh.scannedFloor(), replacement, otherRooms)) {
             return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, source, village);
         }
 
-        int mainRoomId = village.getMainRoom(structure).map(Building::getId).orElse(-1);
-        RegisteredRoomReconciler.Result reconciled = RegisteredRoomReconciler.reconcile(
-                source, expected.getId(), mainRoomId, List.of(expected), lineage,
-                fresh.scannedFloor()).orElse(null);
-        if (reconciled == null) {
-            return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, source, village);
-        }
-
-        Structure refreshed = refreshedStructure(structure, persistedFloor.id(), fresh.floor());
-        if (refreshed == null) {
-            return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, source, village);
-        }
-
-        Building playerComponent = reconciled.playerComponent();
-        List<String> matchingTypes = village.getMatchingRoomTypes(playerComponent).stream()
+        replacement.setId(expected.getId());
+        replacement.setStructureId(expected.getStructureId());
+        replacement.setFloorId(expected.getFloorId());
+        replacement.setType(expected.getType());
+        replacement.setTypeForced(expected.isTypeForced());
+        replacement.setContributesToMain(expected.contributesToMain());
+        List<String> matchingTypes = village.getMatchingRoomTypes(replacement).stream()
                 .map(BuildingType::name)
                 .toList();
         return new RegisteredRoomUpdate(Building.validationResult.SUCCESS, source, village,
                 refreshed, structure.getId(), persistedFloor.id(), expected.getId(),
-                reconciled.previousRoomIds(), reconciled.assignments(),
-                playerComponent, matchingTypes);
+                replacement, matchingTypes);
+    }
+
+    private static boolean hasRegisteredRoomConflict(
+            FloorGeometry floor, Building candidate, Collection<Building> registeredRooms) {
+        return registeredRooms.stream().anyMatch(room ->
+                floor.roomIdentityOverlapCount(room.getFloorCells(), candidate.getFloorCells()) > 0)
+                || registeredRooms.stream().flatMap(room -> room.getFloorCells().stream())
+                .anyMatch(cell -> floor.cellAt(cell).isEmpty());
     }
 
     private static Structure refreshedStructure(Structure structure,
@@ -377,7 +374,7 @@ public final class RoomWorkflow {
         }
         if (selectedType == null && update.requiresTypeSelection()) {
             return Outcome.requiresTypeSelection(
-                    update.source(), update.playerMatchingTypes(), room.getId());
+                    update.source(), update.matchingTypes(), room.getId());
         }
         return committed(manager.commitRegisteredRoomUpdate(update, selectedType), update.source(), room.getId());
     }
