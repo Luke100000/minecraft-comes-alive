@@ -92,6 +92,8 @@ There are two different kinds of local vertical evidence and they must not be co
 
 A stair transition position may identify an existing registered Floor; it must not be used as a request to scan/discover that other Floor. If the local evidence matches more than one logical target, attachment is ambiguous and must fail rather than guess.
 
+Once recursion is gone, do not preserve `DiscoveredStorey`/`StoreyResolution` as ceremonial wrapper records if they no longer own a distinct invariant. The selected scan result should carry the selected Floor and whatever local transition/boundary evidence is actually consumed.
+
 ### Why
 
 Adding a downstairs Room should not silently scan the first floor, second floor and basement. The player can explicitly add another Floor from that Floor. This removes a substantial graph/discovery layer while making UI actions easier to explain.
@@ -194,6 +196,10 @@ Choice 7B is about persistence/reconciliation, not about inventing a second sele
 
 If `BuildingRoomScanner.materialize(...)` still needs the full transient component list for `RoomPoiEvidence`, pass that one partition through. Do not duplicate partitioning or add a parallel selected-component flood fill merely to avoid constructing a transient list.
 
+For persistence, reuse `Village.replaceStructureAndRegisterRoom(...)` as the narrow owner when its existing validation fits the selected Add Room operation. It already carries current sibling Rooms through unchanged and publishes the refreshed Floor atomically; do not create a second selected-Room persistence pipeline for the same job.
+
+Because the current `PendingFloorRefresh` value exists only to carry the whole-Floor Add Room reconciliation result, remove that alternate pending-mutation representation once reconciliation is gone. One refreshed `pendingStructure` path is enough for Add Room.
+
 ### Safety rule
 
 Add Room must not silently mutate existing Rooms.
@@ -221,6 +227,8 @@ The update path should:
 Do not create new sibling Rooms merely because an edited Room split into several fresh components. Those components can be added explicitly later.
 
 Do not globally reassign unrelated Room IDs.
+
+Do not use "largest overlap" or nearest-component ranking as a backup selector when interaction/handoff does not identify one component. The interaction path selects; stable identity overlap only validates that the selected replacement is still Room `#12`. Ambiguity fails rather than guessing.
 
 This makes `RoomIdentityPolicy` and most/all of `RegisteredRoomReconciler` unnecessary. Delete them if no supported workflow still needs them after the focused tests are green.
 

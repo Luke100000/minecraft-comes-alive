@@ -105,8 +105,7 @@ Do not weaken enclosure/uneven-floor guards to make the new test pass.
 Stage only the test file(s):
 
 ```powershell
-git add neoforge/src/main/java/net/conczin/mca/server/world/data/FloorScannerGameTests.java \
-        neoforge/src/main/java/net/conczin/mca/server/world/data/CopiedOpenHouseGameTests.java
+git add neoforge/src/main/java/net/conczin/mca/server/world/data/FloorScannerGameTests.java neoforge/src/main/java/net/conczin/mca/server/world/data/CopiedOpenHouseGameTests.java
 git commit -m "test: define selected floor workflow"
 ```
 
@@ -157,9 +156,11 @@ When callers no longer need it, remove:
 
 Do not retain dead fields "for future use".
 
+After those recursive users are removed, re-check `DiscoveredStorey` and `StoreyResolution`. If each has become only a one-to-one wrapper around the single selected `Result`/Floor state, collapse it instead of preserving names and records whose only purpose was the old graph traversal. Keep a record only when it still represents a distinct invariant or materially simplifies the selected-scan cache.
+
 ### 2.3 Keep local attachment evidence only
 
-Keep `DiscoveredStorey.transitionSeeds` (or a smaller equivalent selected-storey boundary value) as local stair evidence if required. Stairs are not `FloorConnector` types, so these positions are the clean way to prove that the selected Floor reaches an already-registered adjacent Floor.
+Keep the selected scan's `transitionSeeds` (or a smaller equivalent selected-storey boundary value) as local stair evidence if required. Stairs are not `FloorConnector` types, so these positions are the clean way to prove that the selected Floor reaches an already-registered adjacent Floor. Do not retain `DiscoveredStorey` merely as a container for this set if `Result` can own it directly.
 
 The consumer may compare a transition position with persisted `StructureFloor.geometry()` / interaction geometry. It must not call `Observation.resolve(...)`, `scanSelected(...)`, or another fresh world scan for that adjacent Floor. Multiple matching registered targets are ambiguous and must be rejected.
 
@@ -186,8 +187,7 @@ Run the full NeoForge GameTest server; inspect failures specifically around Floo
 Commit after green:
 
 ```powershell
-git add common/src/main/java/net/conczin/mca/server/world/data/SelectedFloorScanner.java \
-        common/src/main/java/net/conczin/mca/server/world/data/StructureScanner.java
+git add common/src/main/java/net/conczin/mca/server/world/data/SelectedFloorScanner.java common/src/main/java/net/conczin/mca/server/world/data/StructureScanner.java
 git commit -m "refactor: scan only selected floor"
 ```
 
@@ -269,13 +269,7 @@ The important contract is that each explicitly selected lower/upper Floor attach
 Commit after green:
 
 ```powershell
-git add common/src/main/java/net/conczin/mca/server/world/data/RoomScanPlanner.java \
-        common/src/main/java/net/conczin/mca/server/world/data/StructureScanner.java \
-        common/src/main/java/net/conczin/mca/server/world/data/RoomWorkflow.java \
-        common/src/main/java/net/conczin/mca/server/world/data/StructureConnector.java \
-        common/src/main/java/net/conczin/mca/server/world/data/Village.java \
-        neoforge/src/main/java/net/conczin/mca/server/world/data/FloorScannerGameTests.java \
-        neoforge/src/main/java/net/conczin/mca/server/world/data/CopiedOpenHouseGameTests.java
+git add common/src/main/java/net/conczin/mca/server/world/data/RoomScanPlanner.java common/src/main/java/net/conczin/mca/server/world/data/StructureScanner.java common/src/main/java/net/conczin/mca/server/world/data/RoomWorkflow.java common/src/main/java/net/conczin/mca/server/world/data/StructureConnector.java common/src/main/java/net/conczin/mca/server/world/data/Village.java neoforge/src/main/java/net/conczin/mca/server/world/data/FloorScannerGameTests.java neoforge/src/main/java/net/conczin/mca/server/world/data/CopiedOpenHouseGameTests.java
 git commit -m "refactor: simplify floor attachment planning"
 ```
 
@@ -288,8 +282,10 @@ Stage only changed files in the actual commit.
 **Files:**
 
 - Modify: `common/src/main/java/net/conczin/mca/server/world/data/RoomWorkflow.java`
-- Modify if required: `common/src/main/java/net/conczin/mca/server/world/data/VillageManager.java`
+- Modify: `common/src/main/java/net/conczin/mca/server/world/data/BuildingScanResult.java`
+- Modify: `common/src/main/java/net/conczin/mca/server/world/data/VillageManager.java`
 - Modify/delete after callers are gone: `common/src/main/java/net/conczin/mca/server/world/data/RegisteredRoomReconciler.java`
+- Reuse unchanged unless tests prove otherwise: `Village.replaceStructureAndRegisterRoom(...)` and its `publishFloorRefresh(...)` owner path
 - Test: `neoforge/src/main/java/net/conczin/mca/server/world/data/FloorScannerGameTests.java`
 - Test: `neoforge/src/main/java/net/conczin/mca/server/world/data/CopiedOpenHouseGameTests.java`
 
@@ -341,14 +337,19 @@ Reuse the existing identity-overlap primitive rather than duplicating boundary-c
 
 ### 4.4 Persist without rewriting siblings
 
-The commit path should add only the selected Room and update Floor geometry atomically enough to avoid a half-published state.
+Reuse the existing narrow atomic owner: `Village.replaceStructureAndRegisterRoom(...)` already gathers current sibling Rooms unchanged, validates all of them against the refreshed Floor, appends the one new Room, and delegates to `publishFloorRefresh(...)` without mutating Village state first.
 
-If current `publishFloorRefresh(...)` requires a complete replacement list, either:
+The selected Add Room analysis should therefore return the refreshed Structure as the normal pending Structure mutation once its local conflict checks pass, allowing the existing `VillageManager.commitExpandedRoom(...)` branch to call `replaceStructureAndRegisterRoom(...)`.
 
-- pass the existing sibling Room instances unchanged plus the new selected Room; or
-- introduce a narrower selected-Room/Floor mutation method if that removes assignment/replacement complexity.
+`RoomWorkflow.analyzeRoom(...)` is currently the only producer of `withPendingFloorRefresh(...)`. Once its whole-Floor reconciliation path is removed, delete the now-dead `BuildingScanResult.PendingFloorRefresh` model rather than keeping two representations for the same pending Structure refresh:
 
-Do not clone/re-materialize sibling Rooms merely to satisfy the API.
+- remove `pendingFloorRefresh` from `BuildingScanResult`;
+- remove `withPendingFloorRefresh(...)`;
+- make `targetBuildingId()` read only `pendingStructure`;
+- remove the `pendingFloorRefresh` dispatch branch from `VillageManager.commitRoomAddition(...)`;
+- simplify `commitExpandedRoom(...)` to consume `pendingStructure` and call `replaceStructureAndRegisterRoom(...)` directly.
+
+Do not introduce another persistence helper, clone/re-materialize sibling Rooms, or pass a manually rebuilt sibling list when the existing owner already does that work.
 
 Commit after focused + full floor tests are green:
 
@@ -395,7 +396,7 @@ Instead:
 
 As in Add Room, the transient component list may remain because materialization/POI perimeter ownership currently consumes shared component context. Do not materialize sibling components just to feed identity reconciliation, and do not add a duplicate selected-only partition path unless it actually replaces the existing topology pipeline cleanly.
 
-If interaction selection is impossible, fall back only to a unique highest stable overlap with the expected Room. Equal/ambiguous overlap fails rather than guessing.
+If canonical interaction/handoff cannot select one component, fail instead of adding a second overlap-ranking heuristic. Stable identity overlap is a validation rule after deterministic selection, not an alternate selection engine.
 
 ### 5.3 Shrink `RegisteredRoomUpdate`
 
