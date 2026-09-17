@@ -118,6 +118,42 @@ public final class FloorScannerGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_floor_partial_obstacle", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void fullHeightPartialObstacleDoesNotBecomeFloorCell(GameTestHelper helper) {
+        BlockPos roomMin = helper.absolutePos(new BlockPos(4, 2, 4));
+        buildClosedRoom(helper, roomMin, 5, 4);
+        BlockPos blocked = roomMin.offset(1, 0, 1);
+        helper.getLevel().setBlock(blocked, Blocks.HOPPER.defaultBlockState(), 3);
+
+        SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(
+                helper.getLevel(), roomMin.offset(3, 0, 2), 128, 16);
+
+        helper.assertTrue(scan.result() == Building.validationResult.SUCCESS,
+                "room scan failed: " + scan.result());
+        helper.assertTrue(scan.floor().cellAt(blocked).isEmpty(),
+                "full-height partial obstacle became ordinary Floor geometry");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_high_ceiling", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void highCeilingDoesNotCreateExtraFloorLayers(GameTestHelper helper) {
+        BlockPos roomMin = helper.absolutePos(new BlockPos(4, 2, 4));
+        buildClosedRoom(helper, roomMin, 5, 4);
+        raiseClosedRoomRoof(helper, roomMin, 5, 4, 5);
+
+        SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(
+                helper.getLevel(), roomMin.offset(2, 0, 2), 256, 16);
+
+        helper.assertTrue(scan.result() == Building.validationResult.SUCCESS,
+                "high-ceiling room scan failed: " + scan.result());
+        helper.assertTrue(scan.floor().cells().stream()
+                        .allMatch(cell -> cell.feet().getY() == roomMin.getY()),
+                "high ceiling created Floor cells above the supported room layer");
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_floor_carpet_footprint", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 80)
     public static void carpetDoesNotChangeIntegerRoomMembership(GameTestHelper helper) {
@@ -899,7 +935,7 @@ public final class FloorScannerGameTests {
 
     @GameTest(batch = "mca_floor_ladder_top_exit", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 100)
-    public static void airAboveLadderIsFloorMembershipCell(GameTestHelper helper) {
+    public static void airAboveLadderResolvesFloorWithoutInventingSupport(GameTestHelper helper) {
         BlockPos roomMin = helper.absolutePos(new BlockPos(4, 2, 4));
         buildClosedRoom(helper, roomMin, 5, 4);
 
@@ -913,8 +949,10 @@ public final class FloorScannerGameTests {
 
         helper.assertTrue(scan.result() == Building.validationResult.SUCCESS,
                 "air above ladder did not resolve to its room Floor: " + scan.result());
-        helper.assertTrue(scan.floor().cellAt(interaction).isPresent(),
-                "air above ladder was not retained as Floor membership");
+        helper.assertTrue(scan.floor().cellAt(interaction).isEmpty(),
+                "unsupported ladder exit became ordinary Floor geometry");
+        helper.assertTrue(scan.floor().cellAt(roomMin.offset(1, 0, 2)).isPresent(),
+                "ladder exit did not resolve to the supported room Floor");
         helper.succeed();
     }
 
@@ -939,8 +977,8 @@ public final class FloorScannerGameTests {
                 helper.getLevel(), upperSeed, 256, 16);
         helper.assertTrue(upperScan.result() == Building.validationResult.SUCCESS,
                 "upper ladder storey scan failed: " + upperScan.result());
-        helper.assertTrue(upperScan.floor().cellAt(topExit).isPresent(),
-                "ladder top exit was not assigned to the upper canonical Floor");
+        helper.assertTrue(upperScan.floor().cellAt(topExit).isEmpty(),
+                "unsupported ladder top exit became ordinary Floor geometry");
         helper.assertTrue(SelectedFloorScanner.inspectSurfaceCell(
                         helper.getLevel(), topExit, new FloorCeilingResolver(helper.getLevel())).isEmpty(),
                 "ladder top exit was treated as physically supported instead of semantic Floor membership");
@@ -1542,6 +1580,22 @@ public final class FloorScannerGameTests {
                     helper.getLevel().setBlock(column.above(), Blocks.AIR.defaultBlockState(), 3);
                     helper.getLevel().setBlock(column.above(2), Blocks.STONE.defaultBlockState(), 3);
                 }
+            }
+        }
+    }
+
+    private static void raiseClosedRoomRoof(
+            GameTestHelper helper, BlockPos min, int width, int depth, int roofOffset) {
+        var level = helper.getLevel();
+        for (int x = -1; x <= width; x++) {
+            for (int z = -1; z <= depth; z++) {
+                BlockPos column = min.offset(x, 0, z);
+                boolean wall = x == -1 || x == width || z == -1 || z == depth;
+                for (int y = 2; y < roofOffset; y++) {
+                    level.setBlock(column.above(y),
+                            wall ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 3);
+                }
+                level.setBlock(column.above(roofOffset), Blocks.STONE.defaultBlockState(), 3);
             }
         }
     }
