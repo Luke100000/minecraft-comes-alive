@@ -647,6 +647,44 @@ public final class FloorScannerGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_floor_stair_top_exit_ownership", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void stairTopExitResolvesUpperRegisteredRoom(GameTestHelper helper) {
+        BlockPos origin = helper.absolutePos(new BlockPos(3, 2, 3));
+        buildTwoBlockStairStoreys(helper, origin);
+
+        BlockPos upperSeed = origin.offset(9, 2, 1);
+        BlockPos topStairFeet = origin.offset(6, 2, 1);
+        BlockPos topStairBlock = topStairFeet.below();
+        var level = helper.getLevel();
+        helper.assertTrue(level.getBlockState(topStairBlock).getBlock() instanceof StairBlock,
+                "fixture top transition is not supported by a stair block");
+
+        SelectedFloorScanner.Result upper = SelectedFloorScanner.scan(level, upperSeed, 256, 24);
+        helper.assertTrue(upper.result() == Building.validationResult.SUCCESS,
+                "upper stair storey scan failed: " + upper.result());
+        helper.assertTrue(upper.floor().cellAt(topStairFeet).isPresent(),
+                "upper Floor did not own the stair-supported top exit");
+
+        StructureFloor upperFloor = new StructureFloor(0, 1, upper.floor());
+        Structure structure = new Structure(10, upperSeed, List.of(upperFloor));
+        structure.setLogicalBuildingId(10);
+        Set<BlockPos> roomCells = upper.floor().cells().stream()
+                .map(FloorGeometry.Cell::feet)
+                .collect(Collectors.toSet());
+        Building room = new Building(upperSeed);
+        room.setId(100);
+        room.setStructureId(10);
+        room.setFloorId(upperFloor.id());
+        room.setGeometry(upper.min(), upper.max(), roomCells);
+        Village village = new Village(1, level);
+        village.registerStructure(structure, room);
+
+        helper.assertTrue(village.findInteractionRoomAt(topStairBlock).orElse(null) == room,
+                "standing on the top stair did not resolve the registered upper Room");
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_floor_canonical_storey_chain", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 120)
     public static void connectedStoreyDiscoveryCanonicalizesDeepStairChain(GameTestHelper helper) {

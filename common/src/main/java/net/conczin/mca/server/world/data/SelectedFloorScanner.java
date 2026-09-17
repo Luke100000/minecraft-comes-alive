@@ -470,6 +470,9 @@ final class SelectedFloorScanner {
                     BlockPos candidate = new BlockPos(x, source.feet().getY() + yOffset, z);
                     if (yOffset != 0 && !isVerticalConnectorTopExit(world, candidate)) continue;
                     OptionalDouble candidateHandoffY = interactionMembershipHandoffY(world, candidate, ceilings);
+                    if (candidateHandoffY.isEmpty() && yOffset == 0) {
+                        candidateHandoffY = stairSupportedMembershipHandoffY(world, candidate);
+                    }
                     if (candidateHandoffY.isEmpty()
                             || !canStep(sourceSurface.getAsDouble(), candidateHandoffY.getAsDouble())) continue;
 
@@ -817,6 +820,13 @@ final class SelectedFloorScanner {
                 && !isSingleOpenLayerMembership(world, pos)
                 && !isVerticalConnectorTopExit(world, pos)) return OptionalDouble.empty();
         return membershipHandoffY(world, pos, ceilings);
+    }
+
+    private static OptionalDouble stairSupportedMembershipHandoffY(Level world, BlockPos pos) {
+        if (!(world.getBlockState(pos.below()).getBlock() instanceof StairBlock)
+                || !isTraversalOccupancyAllowed(world, pos)
+                || !hasInteriorHeadroom(world, pos)) return OptionalDouble.empty();
+        return supportedFloorLevel(world, pos);
     }
 
     private static OptionalDouble membershipHandoffY(
