@@ -468,9 +468,8 @@ final class SelectedFloorScanner {
 
                 for (int yOffset : LANDING_Y_OFFSETS) {
                     BlockPos candidate = new BlockPos(x, source.feet().getY() + yOffset, z);
-                    OptionalDouble candidateHandoffY = yOffset == 0 || isVerticalConnectorTopExit(world, candidate)
-                            ? interactionMembershipHandoffY(world, candidate, ceilings)
-                            : interiorMembershipHandoffY(world, candidate, ceilings);
+                    if (yOffset != 0 && !isVerticalConnectorTopExit(world, candidate)) continue;
+                    OptionalDouble candidateHandoffY = interactionMembershipHandoffY(world, candidate, ceilings);
                     if (candidateHandoffY.isEmpty()
                             || !canStep(sourceSurface.getAsDouble(), candidateHandoffY.getAsDouble())) continue;
 
@@ -810,12 +809,6 @@ final class SelectedFloorScanner {
                 || state.is(BlockTags.WALLS)
                 || state.is(Blocks.IRON_BARS)
                 || StructureConnector.isHorizontalBoundary(state);
-    }
-
-    private static OptionalDouble interiorMembershipHandoffY(
-            Level world, BlockPos pos, FloorCeilingResolver ceilings) {
-        if (!isInteriorMembershipOccupancy(world, pos)) return OptionalDouble.empty();
-        return membershipHandoffY(world, pos, ceilings);
     }
 
     private static OptionalDouble interactionMembershipHandoffY(

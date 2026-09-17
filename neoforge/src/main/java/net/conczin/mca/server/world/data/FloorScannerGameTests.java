@@ -97,6 +97,27 @@ public final class FloorScannerGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_floor_raised_partial_obstacle", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void raisedFullHeightPartialObstacleDoesNotBecomeFloorMembership(GameTestHelper helper) {
+        BlockPos roomMin = helper.absolutePos(new BlockPos(4, 2, 4));
+        buildClosedRoom(helper, roomMin, 5, 4);
+        BlockPos raised = roomMin.offset(1, 0, 1);
+        var level = helper.getLevel();
+        level.setBlock(raised, Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(raised.above(), Blocks.HOPPER.defaultBlockState(), 3);
+        level.setBlock(raised.above(2), Blocks.HOPPER.defaultBlockState(), 3);
+
+        SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(
+                level, roomMin.offset(3, 0, 2), 128, 16);
+
+        helper.assertTrue(scan.result() == Building.validationResult.SUCCESS,
+                "room scan failed: " + scan.result());
+        helper.assertTrue(scan.floor().cellAt(raised.above()).isEmpty(),
+                "raised full-height partial obstacle became lower-Floor membership");
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_floor_carpet_footprint", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 80)
     public static void carpetDoesNotChangeIntegerRoomMembership(GameTestHelper helper) {
