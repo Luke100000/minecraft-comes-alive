@@ -139,11 +139,11 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
         var resource = Minecraft.getInstance().getResourceManager().getResource(id).orElseThrow(() -> new IllegalStateException("Missing eye texture " + id));
         try (InputStream stream = resource.open(); NativeImage image = NativeImage.read(stream)) {
             EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(image);
-            return generateLayers(id, image, bounds, EyeTextureLayers.hasExplicitTintMarker(image));
+            return generateLayers(id, image, bounds);
         }
     }
 
-    private EyeLayerTextures generateLayers(ResourceLocation id, NativeImage source, EyeTextureLayers.Bounds bounds, boolean explicitTintMarkers) {
+    private EyeLayerTextures generateLayers(ResourceLocation id, NativeImage source, EyeTextureLayers.Bounds bounds) {
         List<NativeImage> images = new ArrayList<>();
         List<ResourceLocation> registered = new ArrayList<>();
         try {
@@ -153,7 +153,7 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
             NativeImage[] left = {image(images, width, height), image(images, width, height), image(images, width, height)};
             NativeImage[] right = {image(images, width, height), image(images, width, height), image(images, width, height)};
             for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
-                EyeTextureLayers.DecodedPixel decoded = EyeTextureLayers.decodePixel(source.getPixelRGBA(x, y), explicitTintMarkers);
+                EyeTextureLayers.DecodedPixel decoded = EyeTextureLayers.decodePixel(source.getPixelRGBA(x, y));
                 if (decoded == null) {
                     continue;
                 }

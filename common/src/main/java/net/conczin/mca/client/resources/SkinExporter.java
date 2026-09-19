@@ -236,7 +236,6 @@ public class SkinExporter {
 
         try {
             EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(face);
-            boolean explicitTintMarkers = EyeTextureLayers.hasExplicitTintMarker(face);
             int splitX = bounds.minX() + bounds.width() / 2;
             boolean heterochromia = villager.getTraits().hasTrait(Traits.HETEROCHROMIA);
             EyeDefinition.Tones rightTones = getEyeTones(villager, false, definition);
@@ -247,7 +246,7 @@ public class SkinExporter {
             for (int x = 0; x < width; x++) {
                 EyeDefinition.Tones tones = heterochromia && x >= splitX ? leftTones : rightTones;
                 for (int y = 0; y < height; y++) {
-                    EyeTextureLayers.DecodedPixel decoded = EyeTextureLayers.decodePixel(face.getPixelRGBA(x, y), explicitTintMarkers);
+                    EyeTextureLayers.DecodedPixel decoded = EyeTextureLayers.decodePixel(face.getPixelRGBA(x, y));
                     if (decoded == null) {
                         continue;
                     }
