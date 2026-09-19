@@ -62,7 +62,11 @@ public class EyeCatalog extends SimplePreparableReloadListener<Map<ResourceLocat
         List<EyeDefinition> enabled = entries.stream()
                 .filter(entry -> !disabled.contains(entry.id()))
                 .toList();
-        active = enabled.isEmpty() ? entries : enabled;
+        List<EyeDefinition> selected = new ArrayList<>(enabled.isEmpty() ? entries : enabled);
+        ensureGenderFallback(selected, entries, Gender.MALE);
+        ensureGenderFallback(selected, entries, Gender.FEMALE);
+        selected.sort((a, b) -> SkinListEntry.compareIdentifiers(a.id().toString(), b.id().toString()));
+        active = List.copyOf(selected);
 
         if (active.isEmpty()) {
             EyeDefinition fallback = new EyeDefinition(
@@ -87,6 +91,12 @@ public class EyeCatalog extends SimplePreparableReloadListener<Map<ResourceLocat
         EyeDefinition current = activeDefinitions.get(eye);
         if (current != null && SkinSelection.matchesGender(current.gender(), gender)) {
             return eye;
+        }
+
+        ResourceLocation counterpart = EyeStyles.forGender(eye, gender);
+        EyeDefinition counterpartDefinition = activeDefinitions.get(counterpart);
+        if (counterpartDefinition != null && SkinSelection.matchesGender(counterpartDefinition.gender(), gender)) {
+            return counterpart;
         }
 
         List<EyeDefinition> candidates = candidates(gender);
@@ -119,6 +129,20 @@ public class EyeCatalog extends SimplePreparableReloadListener<Map<ResourceLocat
         return active.stream()
                 .filter(entry -> SkinSelection.matchesGender(entry.gender(), gender))
                 .toList();
+    }
+
+    private static void ensureGenderFallback(List<EyeDefinition> selected, List<EyeDefinition> all, Gender gender) {
+        if (selected.stream().anyMatch(entry -> SkinSelection.matchesGender(entry.gender(), gender))) {
+            return;
+        }
+
+        all.stream()
+                .filter(entry -> SkinSelection.matchesGender(entry.gender(), gender))
+                .findFirst()
+                .ifPresent(entry -> {
+                    selected.add(entry);
+                    MCA.LOGGER.warn("All eye textures compatible with {} were disabled; keeping {} as a fallback", gender, entry.id());
+                });
     }
 
     public Map<ResourceLocation, EyeDefinition> effectiveDefinitions() {

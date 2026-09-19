@@ -95,6 +95,12 @@ public final class ClientAppearanceCatalog {
             return eye;
         }
 
+        ResourceLocation counterpart = EyeStyles.forGender(eye, gender);
+        EyeDefinition counterpartDefinition = eyes.get(counterpart);
+        if (counterpartDefinition != null && SkinSelection.matchesGender(counterpartDefinition.gender(), gender)) {
+            return counterpart;
+        }
+
         int candidateCount = 0;
         for (ResourceLocation candidate : eyeIds) {
             if (SkinSelection.matchesGender(eyes.get(candidate).gender(), gender)) {
