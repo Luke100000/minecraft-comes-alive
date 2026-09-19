@@ -128,6 +128,9 @@ final class SelectedFloorScanner {
 
     private static Optional<SurfaceCell> resolveScanSeed(
             Level world, BlockPos seed, FloorCeilingResolver ceilings) {
+        if (isVerticalConnectorTopExit(world, seed)) {
+            return adjacentTraversalSeed(world, seed, ceilings);
+        }
         SurfaceCell traversalSeed = resolveSeedCell(world, seed, ceilings).orElse(null);
         if (traversalSeed != null) return Optional.of(traversalSeed);
 

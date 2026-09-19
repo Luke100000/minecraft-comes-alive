@@ -8,6 +8,7 @@ import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.StairBlock;
+import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
@@ -765,6 +766,44 @@ public final class FloorScannerGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_floor_stair_top_exit_handoff", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void stairTopExitHandsOffToUpperRegisteredRoom(GameTestHelper helper) {
+        BlockPos origin = helper.absolutePos(new BlockPos(3, 2, 3));
+        buildTwoBlockStairStoreys(helper, origin);
+
+        BlockPos upperSeed = origin.offset(9, 2, 1);
+        BlockPos topStairFeet = origin.offset(6, 2, 1);
+        BlockPos topStairBlock = topStairFeet.below();
+        var level = helper.getLevel();
+        SelectedFloorScanner.Result upper = SelectedFloorScanner.scan(level, upperSeed, 256, 24);
+        helper.assertTrue(upper.result() == Building.validationResult.SUCCESS,
+                "upper stair Floor scan failed: " + upper.result());
+        helper.assertTrue(upper.floor().cellAt(topStairFeet).isEmpty(),
+                "fixture no longer exercises interaction-only stair handoff");
+
+        StructureFloor upperFloor = new StructureFloor(0, 1, upper.floor());
+        Structure structure = new Structure(10, upperSeed, List.of(upperFloor));
+        structure.setLogicalBuildingId(10);
+        Set<BlockPos> roomCells = upper.floor().cells().stream()
+                .map(FloorGeometry.Cell::feet)
+                .collect(Collectors.toSet());
+        Building room = new Building(upperSeed);
+        room.setId(100);
+        room.setStructureId(10);
+        room.setFloorId(upperFloor.id());
+        room.setGeometry(upper.min(), upper.max(), roomCells);
+        Village village = new Village(1, level);
+        village.registerStructure(structure, room);
+
+        RoomScanPlan plan = RoomScanPlanner.plan(village, level, topStairBlock);
+        helper.assertTrue(plan.mode() == Village.RoomScanMode.UPDATE_ROOM,
+                "top stair selected " + plan.mode() + " instead of the upper registered Room");
+        helper.assertTrue(plan.currentRoom().orElse(null) == room,
+                "top stair handoff lost the upper registered Room identity");
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_floor_canonical_storey_chain", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 120)
     public static void selectedFloorScanDoesNotRecursivelyDiscoverDeepStairChain(GameTestHelper helper) {
@@ -925,6 +964,7 @@ public final class FloorScannerGameTests {
         level.setBlock(connector.above(2), ladder, 3);
         BlockPos trapdoor = connector.above(3);
         level.setBlock(trapdoor, Blocks.OAK_TRAPDOOR.defaultBlockState(), 3);
+        level.setBlock(trapdoor.above(), Blocks.AIR.defaultBlockState(), 3);
 
         BlockPos upperSeed = upperMin.offset(2, 0, 2);
         SelectedFloorScanner.Result upper = SelectedFloorScanner.scan(level, upperSeed, 256, 24);
@@ -957,11 +997,19 @@ public final class FloorScannerGameTests {
         helper.assertTrue(room.ownsFloorCell(observation.seed()),
                 "trapdoor handoff did not land in the registered Room: " + observation.seed());
 
-        RoomScanPlan trapdoorPlan = RoomScanPlanner.plan(village, level, trapdoor);
-        helper.assertTrue(trapdoorPlan.mode() == Village.RoomScanMode.UPDATE_ROOM,
-                "unpersisted trapdoor handoff selected " + trapdoorPlan.mode());
-        helper.assertTrue(trapdoorPlan.currentRoom().orElse(null) == room,
-                "unpersisted trapdoor handoff lost the existing Room identity");
+        for (boolean open : List.of(false, true)) {
+            level.setBlock(trapdoor, Blocks.OAK_TRAPDOOR.defaultBlockState()
+                    .setValue(TrapDoorBlock.OPEN, open), 3);
+            for (BlockPos interaction : List.of(trapdoor, trapdoor.above())) {
+                RoomScanPlan trapdoorPlan = RoomScanPlanner.plan(village, level, interaction);
+                helper.assertTrue(trapdoorPlan.mode() == Village.RoomScanMode.UPDATE_ROOM,
+                        (open ? "open" : "closed") + " trapdoor interaction at " + interaction
+                                + " selected " + trapdoorPlan.mode());
+                helper.assertTrue(trapdoorPlan.currentRoom().orElse(null) == room,
+                        (open ? "open" : "closed") + " trapdoor interaction at " + interaction
+                                + " lost the existing Room identity");
+            }
+        }
 
         level.setBlock(trapdoor, ladder, 3);
         helper.assertTrue(StructureConnector.isVertical(level, trapdoor),
