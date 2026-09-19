@@ -26,7 +26,6 @@ import java.util.Set;
 final class SelectedFloorScanner {
     private static final double MAX_STEP_HEIGHT = 1.125D;
     private static final int FLOOR_BAND_RADIUS = 2;
-    private static final int VOLUME_CELL_LIMIT_MULTIPLIER = 16;
     // Full-block stairs have no block metadata marking where the staircase ends. Two stable
     // same-height exits are enough evidence that the cell is a landing/plateau, not the stair tip.
     private static final int MIN_STABLE_LANDING_PEERS = 2;
@@ -37,7 +36,6 @@ final class SelectedFloorScanner {
     private static final Direction[] HORIZONTAL = {
             Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
     };
-    private static final Direction[] VOLUME_DIRECTIONS = Direction.values();
     private static final int[] LANDING_Y_OFFSETS = {0, 1, -1};
 
     private SelectedFloorScanner() {
@@ -56,7 +54,6 @@ final class SelectedFloorScanner {
         private final FloorCeilingResolver ceilings;
         private final StepProvider provider;
         private final Map<BlockPos, Result> resolutions = new HashMap<>();
-        private final Map<BlockPos, EnclosedVolume> volumesBySeed = new HashMap<>();
 
         Observation(Level world, int maxSize, int maxRadius) {
             this.world = world;
@@ -76,20 +73,9 @@ final class SelectedFloorScanner {
                 }
 
                 traversalSeed = resolveSelectedFloorAnchor(world, traversalSeed, provider);
-
-                EnclosedVolume volume = enclosedVolume(traversalSeed.feet());
-                if (volume.result() != Building.validationResult.SUCCESS) {
-                    return Result.failure(volume.result(), requested);
-                }
-
                 return resolveSelectedFloor(
-                        world, traversalSeed, volume, ceilings, provider, maxSize, maxRadius);
+                        world, traversalSeed, ceilings, provider, maxSize, maxRadius);
             });
-        }
-
-        private EnclosedVolume enclosedVolume(BlockPos seed) {
-            return volumesBySeed.computeIfAbsent(seed.immutable(), ignored ->
-                    discoverEnclosedVolume(world, seed, ceilings, maxSize, maxRadius));
         }
 
         Result selected(BlockPos seed) {
@@ -99,29 +85,22 @@ final class SelectedFloorScanner {
 
     private static Result resolveSelectedFloor(
             Level world,
-            SurfaceCell requestedSeed,
-            EnclosedVolume volume,
+            SurfaceCell traversalSeed,
             FloorCeilingResolver ceilings,
             StepProvider provider,
             int maxSize,
             int maxRadius) {
-        StepProvider enclosedSteps = withinVolume(provider, volume);
-        SurfaceCell traversalSeed = volume.supportedCells().get(requestedSeed.feet());
-        if (traversalSeed == null) {
-            return Result.failure(Building.validationResult.NOT_IN_BUILDING, requestedSeed.feet());
-        }
-
         FloorBandClassifier classifier = new FloorBandClassifier(
                 world, new FloorBand(traversalSeed.feet().getY()), provider);
         SelectedFloorScan scan = traverseSelectedFloor(
-                world, traversalSeed, ceilings, maxSize, maxRadius, enclosedSteps, classifier);
+                world, traversalSeed, ceilings, maxSize, maxRadius, provider, classifier);
         if (scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) {
-            return Result.failure(scan.result(), requestedSeed.feet());
+            return Result.failure(scan.result(), traversalSeed.feet());
         }
         scan = retainEnclosedRegions(
                 world, traversalSeed, scan, ceilings, maxRadius, provider, classifier);
         if (scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) {
-            return Result.failure(scan.result(), requestedSeed.feet());
+            return Result.failure(scan.result(), traversalSeed.feet());
         }
 
         LinkedHashSet<BlockPos> connectors = new LinkedHashSet<>(scan.connectors());
@@ -129,11 +108,11 @@ final class SelectedFloorScanner {
             collectVerticalConnectors(world, cell, connectors);
         }
         if (scan.floor().cells().size() + connectors.size() > maxSize) {
-            return Result.failure(Building.validationResult.BLOCK_LIMIT, requestedSeed.feet());
+            return Result.failure(Building.validationResult.BLOCK_LIMIT, traversalSeed.feet());
         }
         FloorGeometry floor = new FloorGeometry(scan.floor().cells(),
                 StructureConnector.connectorMarkersForFloor(world, connectors, scan.floor()));
-        return success(requestedSeed.feet(), floor,
+        return success(traversalSeed.feet(), floor,
                 scan.transitions(), scan.verticalBoundaryCells(), scan.adjacentFloorSeeds());
     }
 
@@ -171,73 +150,6 @@ final class SelectedFloorScanner {
             }
         }
         return Optional.empty();
-    }
-
-    private static EnclosedVolume discoverEnclosedVolume(
-            Level world,
-            BlockPos seed,
-            FloorCeilingResolver ceilings,
-            int maxSize,
-            int maxRadius) {
-        if (!isInteriorVolumeCell(world, seed)) {
-            return EnclosedVolume.failure(Building.validationResult.NOT_IN_BUILDING);
-        }
-
-        ArrayDeque<BlockPos> queue = new ArrayDeque<>();
-        LinkedHashSet<BlockPos> cells = new LinkedHashSet<>();
-        long volumeCellLimit = (long) maxSize * VOLUME_CELL_LIMIT_MULTIPLIER;
-        BlockPos immutableSeed = seed.immutable();
-        // Enclosure is local evidence for this Floor; high ceilings and nearby Floors
-        // must not consume the selected Floor's block budget.
-        FloorBand band = new FloorBand(seed.getY());
-        queue.addLast(immutableSeed);
-        cells.add(immutableSeed);
-
-        while (!queue.isEmpty()) {
-            BlockPos current = queue.removeFirst();
-
-            for (Direction direction : VOLUME_DIRECTIONS) {
-                BlockPos next = current.relative(direction);
-                if (horizontalDistance(next, immutableSeed) > maxRadius) continue;
-                if (next.getY() < band.minOwnedY()
-                        || next.getY() > band.maxOwnedY() + 1) continue;
-                if (cells.contains(next) || !isInteriorVolumeCell(world, next)) continue;
-                if (ceilings.ceilingY(next).isEmpty()) continue;
-
-                BlockPos immutable = next.immutable();
-                cells.add(immutable);
-                queue.addLast(immutable);
-                if (cells.size() > volumeCellLimit) {
-                    return EnclosedVolume.failure(Building.validationResult.BLOCK_LIMIT);
-                }
-            }
-        }
-
-        return EnclosedVolume.success(cells, supportedCellsInVolume(world, cells, ceilings));
-    }
-
-    private static Map<BlockPos, SurfaceCell> supportedCellsInVolume(
-            Level world, Set<BlockPos> volume, FloorCeilingResolver ceilings) {
-        LinkedHashMap<BlockPos, SurfaceCell> supported = new LinkedHashMap<>();
-        for (BlockPos cell : volume.stream().sorted(CELL_ORDER).toList()) {
-            BlockPos below = cell.below();
-            if (volume.contains(below)
-                    && isLowObstacle(world, below)
-                    && inspectSurfaceCell(world, below, ceilings).isPresent()) continue;
-
-            SurfaceCell surface = inspectSurfaceCell(world, cell, ceilings).orElse(null);
-            if (surface != null) supported.put(cell.immutable(), surface);
-        }
-        return Map.copyOf(supported);
-    }
-
-    private static StepProvider withinVolume(StepProvider physical, EnclosedVolume volume) {
-        return cell -> physical.steps(cell).stream()
-                .filter(step -> volume.supportedCells().containsKey(step.landing().feet()))
-                .map(step -> new HorizontalStep(
-                        volume.supportedCells().get(step.landing().feet()), step.connector()))
-                .sorted(HorizontalStep.ORDER)
-                .toList();
     }
 
     private static SelectedFloorScan traverseSelectedFloor(Level world,
@@ -652,6 +564,10 @@ final class SelectedFloorScanner {
                 return true;
             }
             if (Boolean.FALSE.equals(reachable)) continue;
+            if (hasOpenAirEscape(world, current, scanAnchor, maxRadius)) {
+                classifier.exterior.put(start.feet(), true);
+                return true;
+            }
 
             for (PhysicalStep step : physicalSteps(world, new SurfaceProbe(current.feet(), current.surfaceY()))) {
                 if (step.connector() != null) continue;
@@ -674,6 +590,34 @@ final class SelectedFloorScanner {
         // Exhausting the traversal proves every visited cell has no route outside.
         visited.forEach(cell -> classifier.exterior.put(cell, false));
         return false;
+    }
+
+    private static boolean hasOpenAirEscape(
+            Level world, SurfaceCell current, BlockPos scanAnchor, int maxRadius) {
+        ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+        Set<BlockPos> visited = new HashSet<>();
+        for (Direction direction : HORIZONTAL) {
+            BlockPos opening = current.feet().relative(direction);
+            if (!findLandings(world, current.surfaceY(), opening).isEmpty()) continue;
+            if (isOpenPassage(world, opening) && visited.add(opening)) queue.addLast(opening);
+        }
+
+        while (!queue.isEmpty()) {
+            BlockPos open = queue.removeFirst();
+            if (horizontalDistance(open, scanAnchor) >= maxRadius - 1) return true;
+            for (Direction direction : HORIZONTAL) {
+                BlockPos next = open.relative(direction);
+                if (visited.contains(next) || !isOpenPassage(world, next)) continue;
+                if (horizontalDistance(next, scanAnchor) >= maxRadius) continue;
+                visited.add(next);
+                queue.addLast(next);
+            }
+        }
+        return false;
+    }
+
+    private static boolean isOpenPassage(Level world, BlockPos feet) {
+        return isOpen(world, feet) && isOpen(world, feet.above());
     }
 
     private static void collectVerticalConnectors(
@@ -712,16 +656,6 @@ final class SelectedFloorScanner {
         double depth = shape.max(Direction.Axis.Z) - shape.min(Direction.Axis.Z);
         if (width * depth < 0.25D) return OptionalDouble.empty();
         return OptionalDouble.of(WalkNodeEvaluator.getFloorLevel(world, feet));
-    }
-
-    private static boolean isInteriorVolumeCell(Level world, BlockPos pos) {
-        BlockState state = world.getBlockState(pos);
-        if (!state.getFluidState().isEmpty()) return false;
-        if (StructureConnector.isHorizontalBoundary(state)
-                || StructureConnector.isVertical(world, pos)) return true;
-
-        var shape = state.getCollisionShape(world, pos);
-        return shape.isEmpty() || shape.max(Direction.Axis.Y) < 1.0D;
     }
 
     /** Traversal may cross open cells and low furniture without redefining the structural floor. */
@@ -902,24 +836,6 @@ final class SelectedFloorScanner {
     }
 
     private record SurfaceProbe(BlockPos feet, double surfaceY) {
-    }
-
-    private record EnclosedVolume(
-            Building.validationResult result,
-            Set<BlockPos> cells,
-            Map<BlockPos, SurfaceCell> supportedCells) {
-
-        private static EnclosedVolume failure(Building.validationResult result) {
-            return new EnclosedVolume(result, Set.of(), Map.of());
-        }
-
-        private static EnclosedVolume success(
-                Set<BlockPos> cells, Map<BlockPos, SurfaceCell> supportedCells) {
-            return new EnclosedVolume(
-                    Building.validationResult.SUCCESS,
-                    Set.copyOf(cells),
-                    Map.copyOf(supportedCells));
-        }
     }
 
     record Result(Building.validationResult result,
