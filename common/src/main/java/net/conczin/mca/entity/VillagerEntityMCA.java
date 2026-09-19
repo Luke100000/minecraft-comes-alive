@@ -1625,10 +1625,12 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             ItemStack arrow = this.getProjectile(weaponStack);
             AbstractArrow persistentProjectileEntity = ProjectileUtil.getMobArrow(this, arrow, pullProgress, weaponStack);
             double x = target.getX() - this.getX();
-            double y = target.getY(0.3333333333333333D) - persistentProjectileEntity.getY();
             double z = target.getZ() - this.getZ();
-            double vel = Math.sqrt(x * x + z * z);
-            persistentProjectileEntity.shoot(x, y + vel * 0.20000000298023224D, z, 1.6F, 3);
+            double horizontalDistance = Math.sqrt(x * x + z * z);
+            double flightTicks = horizontalDistance / 1.6D;
+            double gravityCompensation = 0.025D * flightTicks * Math.max(0.0D, flightTicks - 1.0D);
+            double y = target.getY(0.5D) - persistentProjectileEntity.getY() + gravityCompensation;
+            persistentProjectileEntity.shoot(x, y, z, 1.6F, 3);
             this.playSound(SoundEvents.SKELETON_SHOOT, 1.0F, 1.0F / (this.getRandom().nextFloat() * 0.4F + 0.8F));
             this.level().addFreshEntity(persistentProjectileEntity);
         }

@@ -26,7 +26,7 @@ public record OpenDestinyGuiRequest(boolean allowTeleportation, List<DestinyDest
     public OpenDestinyGuiRequest(ServerPlayer player) {
         this(
                 Config.getInstance().allowDestinyTeleportation,
-                DestinyLocationResolver.resolve(player.server, Config.getInstance())
+                DestinyLocationResolver.getCachedDestinations(player.server)
         );
     }
 

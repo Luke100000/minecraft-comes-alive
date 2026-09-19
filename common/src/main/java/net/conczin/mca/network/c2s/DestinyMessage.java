@@ -61,10 +61,8 @@ public record DestinyMessage(Optional<DestinyDestination> destination) implement
         }
 
         DestinyDestination selectedDestination = destination.get();
-        List<DestinyDestination> allowedDestinations = DestinyLocationResolver.resolve(
-                serverPlayer.server,
-                Config.getInstance()
-        );
+        List<DestinyDestination> allowedDestinations =
+                DestinyLocationResolver.getCachedDestinations(serverPlayer.server);
         if (!allowedDestinations.contains(selectedDestination)) {
             notifyDestinationNotFound(serverPlayer);
             return;

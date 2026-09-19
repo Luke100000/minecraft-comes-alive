@@ -2,6 +2,7 @@ package net.conczin.mca.server;
 
 import com.google.gson.Gson;
 import net.conczin.mca.CommonConfig;
+import net.conczin.mca.Config;
 import net.conczin.mca.destiny.DestinyDestination;
 import net.minecraft.core.Holder;
 import net.minecraft.core.Registry;
@@ -130,6 +131,33 @@ public final class DestinyLocationResolverGameTests {
                 !destinations.contains(new DestinyDestination("minecraft:bastion_remnant", Optional.of(Level.NETHER))),
                 "Overworld-only mode should remove non-Overworld destinations"
         );
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_destiny_dimensions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void cachedDestinationsStayStableUntilExplicitRefresh(GameTestHelper helper) {
+        CommonConfig config = new CommonConfig();
+        config.destinySpawnLocations = List.of("somewhere");
+        config.autoDiscoverDestinyLocations = false;
+
+        var server = helper.getLevel().getServer();
+        try {
+            DestinyLocationResolver.refreshCachedDestinations(server, config);
+            List<DestinyDestination> cached = DestinyLocationResolver.getCachedDestinations(server);
+
+            config.destinySpawnLocations = List.of("minecraft:village_plains");
+
+            helper.assertTrue(
+                    cached.equals(DestinyLocationResolver.getCachedDestinations(server)),
+                    "cached Destiny destinations should not be recomputed when config changes"
+            );
+            helper.assertTrue(
+                    cached.equals(List.of(new DestinyDestination("somewhere", Optional.empty()))),
+                    "cached Destiny destinations should preserve the startup snapshot"
+            );
+        } finally {
+            DestinyLocationResolver.refreshCachedDestinations(server, Config.getInstance());
+        }
         helper.succeed();
     }
 }

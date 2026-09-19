@@ -21,9 +21,10 @@ public final class CopiedOpenHouseGameTests {
     private static final String TEMPLATE = "gametest/copied_open_house";
     private static final BlockPos LOWER_STOREY_SEED = new BlockPos(23, 6, 12);
     private static final BlockPos MAIN_STOREY_SEED = new BlockPos(15, 12, 12);
+    private static final BlockPos MAIN_STOREY_STAIR_EXIT = new BlockPos(12, 11, 11);
     private static final BlockPos UPPER_STOREY_SEED = new BlockPos(11, 16, 13);
     private static final List<BlockPos> LOWER_STAIR_SEEDS = List.of(
-            new BlockPos(10, 10, 13), new BlockPos(12, 11, 11), new BlockPos(10, 10, 12));
+            new BlockPos(10, 10, 13), new BlockPos(11, 10, 11), new BlockPos(10, 10, 12));
 
     // The structure block itself sits one block below the template in 1.21.1,
     // so helper-relative Y is template-NBT Y + 1.
@@ -236,6 +237,26 @@ public final class CopiedOpenHouseGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_copied_open_house_stair_exit", templateNamespace = "mca",
+            template = TEMPLATE, timeoutTicks = 280, skyAccess = true)
+    public static void topStairExitSelectsRegisteredMainRoom(GameTestHelper helper) {
+        BlockPos main = helper.absolutePos(MAIN_STOREY_SEED);
+        VillageManager manager = new VillageManager(helper.getLevel());
+        RoomWorkflow workflow = new RoomWorkflow(manager, helper.getLevel());
+        commit(helper, workflow, workflow.analyzeBuildingAddition(main));
+
+        Village village = manager.findNearestVillage(main, Village.MERGE_MARGIN).orElseThrow();
+        Building mainRoom = village.findInteractionRoomAt(main).orElseThrow();
+        BlockPos stairExit = helper.absolutePos(MAIN_STOREY_STAIR_EXIT);
+        RoomScanPlan plan = village.getRoomScanPlan(helper.getLevel(), stairExit);
+
+        helper.assertTrue(plan.mode() == Village.RoomScanMode.UPDATE_ROOM,
+                "top stair exit selected " + plan.mode() + " instead of the registered main Room");
+        helper.assertTrue(plan.currentRoom().orElse(null) == mainRoom,
+                "top stair exit lost the registered main Room identity");
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_copied_open_house_lower_chain", templateNamespace = "mca",
             template = TEMPLATE, timeoutTicks = 320, skyAccess = true)
     public static void successiveLowerStairRoomsAttachOneLevelAtATime(GameTestHelper helper) {
@@ -443,4 +464,5 @@ public final class CopiedOpenHouseGameTests {
                 "adding the basement broke the upper fresh Floor scan: " + upperScan.result());
         helper.succeed();
     }
+
 }

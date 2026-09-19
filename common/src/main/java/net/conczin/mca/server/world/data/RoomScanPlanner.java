@@ -67,13 +67,8 @@ final class RoomScanPlanner {
                 level, source, observation).orElse(null);
         if (handoff == null) return null;
 
-        List<Building> registeredLandings = handoff.candidates().stream()
-                .map(village::findPhysicalRoomAt)
-                .flatMap(Optional::stream)
-                .toList();
-        if (registeredLandings.size() != 1) return null;
-
-        Building room = registeredLandings.getFirst();
+        Building room = village.findPhysicalRoomAt(handoff.target()).orElse(null);
+        if (room == null) return null;
         if (handoff.kind() != StructureScanner.HandoffKind.VERTICAL_CONNECTOR) return room;
         if (freshPlan.mode() != Village.RoomScanMode.ADD_ROOM) return null;
         return room.getStructureId() == freshPlan.targetStructureId()

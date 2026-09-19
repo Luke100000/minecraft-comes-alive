@@ -772,6 +772,14 @@ public final class FloorScannerGameTests {
         BlockPos origin = helper.absolutePos(new BlockPos(3, 2, 3));
         buildTwoBlockStairStoreys(helper, origin);
 
+        for (int step = 0; step < 3; step++) {
+            BlockPos feet = origin.offset(4 + step, step, 2);
+            helper.getLevel().setBlock(feet.below(), Blocks.STONE_BRICK_STAIRS.defaultBlockState()
+                    .setValue(StairBlock.FACING, Direction.EAST), 3);
+            helper.getLevel().setBlock(feet, Blocks.AIR.defaultBlockState(), 3);
+            helper.getLevel().setBlock(feet.above(), Blocks.AIR.defaultBlockState(), 3);
+        }
+
         BlockPos upperSeed = origin.offset(9, 2, 1);
         BlockPos topStairFeet = origin.offset(6, 2, 1);
         BlockPos topStairBlock = topStairFeet.below();
@@ -795,6 +803,15 @@ public final class FloorScannerGameTests {
         room.setGeometry(upper.min(), upper.max(), roomCells);
         Village village = new Village(1, level);
         village.registerStructure(structure, room);
+
+        StructureScanner.FloorObservation observation = StructureScanner.observeFloor(
+                level, topStairBlock, village.getStructures().values()).orElseThrow();
+        long registeredLandingCells = observation.scan().adjacentFloorSeeds().stream()
+                .filter(seed -> seed.getY() == observation.seed().getY())
+                .filter(seed -> village.findPhysicalRoomAt(seed).orElse(null) == room)
+                .count();
+        helper.assertTrue(registeredLandingCells > 1,
+                "fixture does not expose a wide upper landing: " + registeredLandingCells);
 
         RoomScanPlan plan = RoomScanPlanner.plan(village, level, topStairBlock);
         helper.assertTrue(plan.mode() == Village.RoomScanMode.UPDATE_ROOM,

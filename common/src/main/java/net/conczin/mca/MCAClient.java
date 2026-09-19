@@ -75,7 +75,7 @@ public class MCAClient {
     }
 
     public static void tickClient(Minecraft client) {
-        BlueprintScreen.maintainTerrainCache(client);
+        BlueprintScreen.maintainSessionState(client);
         destinyManager.tick(client);
 
         if (KeyBindings.SKIN_LIBRARY.consumeClick()) {

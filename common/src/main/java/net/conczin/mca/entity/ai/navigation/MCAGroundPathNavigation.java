@@ -6,11 +6,15 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathFinder;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.phys.Vec3;
 
 public class MCAGroundPathNavigation extends GroundPathNavigation {
+    private static final int FALL_RESYNC_LOOKAHEAD = 2;
+    private static final int FALL_RESYNC_HORIZONTAL_DISTANCE = 2;
+    private static final int FALL_RESYNC_MIN_VERTICAL_DROP = 2;
     private final ClimbTraversal climbTraversal;
 
     public MCAGroundPathNavigation(Mob mob, Level level) {
@@ -83,12 +87,57 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             return;
         }
 
+        resynchronizeGroundedPathAfterFall();
+        if (this.path == null || this.path.isDone()) {
+            return;
+        }
+
         Vec3 position = this.getTempMobPos();
         if (!this.climbTraversal.followPath(this.path)) {
             super.followThePath();
             return;
         }
         this.doStuckDetection(position);
+    }
+
+    private void resynchronizeGroundedPathAfterFall() {
+        Path path = this.path;
+        if (path == null
+                || path.isDone()
+                || !this.mob.onGround()
+                || this.mob.onClimbable()
+                || this.climbTraversal.ownsMovement(path, this.tick)) {
+            return;
+        }
+
+        int currentIndex = path.getNextNodeIndex();
+        int feetY = this.mob.blockPosition().getY();
+        if (path.getNodePos(currentIndex).getY() - feetY < FALL_RESYNC_MIN_VERTICAL_DROP) {
+            return;
+        }
+
+        BlockPos feet = this.mob.blockPosition();
+        int maxIndex = Math.min(path.getNodeCount() - 1, currentIndex + FALL_RESYNC_LOOKAHEAD);
+        for (int index = currentIndex + 1; index <= maxIndex; index++) {
+            BlockPos candidate = path.getNodePos(index);
+            if (candidate.getY() <= feetY + 1 && isHorizontallyNear(feet, candidate)) {
+                path.setNextNodeIndex(index);
+                return;
+            }
+        }
+
+        for (int index = currentIndex; index < path.getNodeCount(); index++) {
+            if (path.getNodePos(index).getY() <= feetY + 1) {
+                return;
+            }
+        }
+        this.stop();
+    }
+
+    private static boolean isHorizontallyNear(BlockPos first, BlockPos second) {
+        int dx = first.getX() - second.getX();
+        int dz = first.getZ() - second.getZ();
+        return dx * dx + dz * dz <= FALL_RESYNC_HORIZONTAL_DISTANCE * FALL_RESYNC_HORIZONTAL_DISTANCE;
     }
 
     @Override

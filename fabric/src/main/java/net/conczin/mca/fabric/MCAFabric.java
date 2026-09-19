@@ -1,5 +1,6 @@
 package net.conczin.mca.fabric;
 
+import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.block.BlockEntityTypesMCA;
 import net.conczin.mca.entity.ai.ActivitiesMCA;
@@ -15,6 +16,7 @@ import net.conczin.mca.resources.BodySkinList;
 import net.conczin.mca.resources.HairStyleList;
 import net.conczin.mca.resources.LayeredHairList;
 import net.conczin.mca.server.ServerInteractionManager;
+import net.conczin.mca.server.DestinyLocationResolver;
 import net.conczin.mca.server.command.AdminCommand;
 import net.conczin.mca.server.command.Command;
 import net.conczin.mca.server.world.data.VillageManager;
@@ -136,7 +138,18 @@ public final class MCAFabric implements ModInitializer {
 
         // Register events
         ServerLifecycleEvents.SERVER_STARTING.register(server -> MCA.startExecutorService());
-        ServerLifecycleEvents.SERVER_STOPPING.register(server -> MCA.shutdownExecutorService());
+        ServerLifecycleEvents.SERVER_STARTED.register(server ->
+                DestinyLocationResolver.refreshCachedDestinations(server, Config.getInstance())
+        );
+        ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((server, resourceManager, success) -> {
+            if (success) {
+                DestinyLocationResolver.refreshCachedDestinations(server, Config.getInstance());
+            }
+        });
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+            DestinyLocationResolver.clearCachedDestinations(server);
+            MCA.shutdownExecutorService();
+        });
         ServerTickEvents.END_WORLD_TICK.register(w -> VillageManager.get(w).tick());
         ServerTickEvents.END_SERVER_TICK.register(s -> ServerInteractionManager.getInstance().tick());
         ServerTickEvents.END_SERVER_TICK.register(MCA::setServer);

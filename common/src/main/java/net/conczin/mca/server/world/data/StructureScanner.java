@@ -7,6 +7,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Half;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -201,15 +202,9 @@ final class StructureScanner {
             Level world, BlockPos source, FloorObservation observation) {
         if (world == null || source == null || observation == null) return Optional.empty();
 
-        if (isStairInteraction(world, source)) {
-            int landingY = observation.seed().getY();
-            List<BlockPos> candidates = observation.scan().adjacentFloorSeeds().stream()
-                    .filter(seed -> seed.getY() == landingY)
-                    .map(BlockPos::immutable)
-                    .toList();
-            return candidates.isEmpty()
-                    ? Optional.empty()
-                    : Optional.of(new InteractionHandoff(HandoffKind.STAIR_EXIT, candidates));
+        BlockPos stairExit = resolveStairTopExit(world, source, observation);
+        if (stairExit != null) {
+            return Optional.of(new InteractionHandoff(HandoffKind.STAIR_TOP_EXIT, stairExit));
         }
 
         BlockPos connector = StructureConnector.verticalInteractionConnector(world, source);
@@ -218,19 +213,28 @@ final class StructureScanner {
         }
         if (connector.equals(source)) {
             return Optional.of(new InteractionHandoff(
-                    HandoffKind.VERTICAL_CONNECTOR, List.of(observation.seed())));
+                    HandoffKind.VERTICAL_CONNECTOR, observation.seed()));
         }
         if (connector.equals(source.below())
                 && world.getBlockState(connector).getBlock() instanceof TrapDoorBlock) {
             return Optional.of(new InteractionHandoff(
-                    HandoffKind.TRAPDOOR_TOP_EXIT, List.of(observation.seed())));
+                    HandoffKind.TRAPDOOR_TOP_EXIT, observation.seed()));
         }
         return Optional.empty();
     }
 
-    private static boolean isStairInteraction(Level world, BlockPos source) {
-        return world.getBlockState(source).getBlock() instanceof StairBlock
-                || world.getBlockState(source.below()).getBlock() instanceof StairBlock;
+    private static BlockPos resolveStairTopExit(
+            Level world, BlockPos source, FloorObservation observation) {
+        BlockPos stairPos = world.getBlockState(source).getBlock() instanceof StairBlock
+                ? source : source.below();
+        BlockState stairState = world.getBlockState(stairPos);
+        if (!(stairState.getBlock() instanceof StairBlock)
+                || stairState.getValue(StairBlock.HALF) != Half.BOTTOM) {
+            return null;
+        }
+
+        BlockPos exit = stairPos.above().relative(stairState.getValue(StairBlock.FACING));
+        return observation.scan().adjacentFloorSeeds().contains(exit) ? exit.immutable() : null;
     }
 
     static Building.validationResult validateObservation(FloorObservation observation,
@@ -357,14 +361,14 @@ final class StructureScanner {
     }
 
     enum HandoffKind {
-        STAIR_EXIT,
+        STAIR_TOP_EXIT,
         TRAPDOOR_TOP_EXIT,
         VERTICAL_CONNECTOR
     }
 
-    record InteractionHandoff(HandoffKind kind, List<BlockPos> candidates) {
+    record InteractionHandoff(HandoffKind kind, BlockPos target) {
         InteractionHandoff {
-            candidates = List.copyOf(candidates);
+            target = target.immutable();
         }
     }
 

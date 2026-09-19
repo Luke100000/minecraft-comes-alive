@@ -28,8 +28,29 @@ import java.util.stream.Collectors;
 
 public final class DestinyLocationResolver {
     private static final String SOMEWHERE = "somewhere";
+    private static MinecraftServer cachedServer;
+    private static List<DestinyDestination> cachedDestinations = List.of();
 
     private DestinyLocationResolver() {
+    }
+
+    public static synchronized void refreshCachedDestinations(MinecraftServer server, CommonConfig config) {
+        cachedDestinations = resolve(server, config);
+        cachedServer = server;
+    }
+
+    public static synchronized List<DestinyDestination> getCachedDestinations(MinecraftServer server) {
+        if (cachedServer != server) {
+            throw new IllegalStateException("Destiny destinations are not initialized for this server");
+        }
+        return cachedDestinations;
+    }
+
+    public static synchronized void clearCachedDestinations(MinecraftServer server) {
+        if (cachedServer == server) {
+            cachedServer = null;
+            cachedDestinations = List.of();
+        }
     }
 
     public static List<DestinyDestination> resolve(MinecraftServer server, CommonConfig config) {

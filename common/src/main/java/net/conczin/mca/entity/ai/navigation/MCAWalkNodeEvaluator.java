@@ -88,7 +88,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         double modeledFloor = this.getFloorLevel(mobPos);
         if (!selectedStart.asBlockPos().equals(mobPos)
             && startBox.minY > modeledFloor + RAISED_START_EPSILON
-            && !canSweepStartBoxTo(selectedStart, startBox)) {
+            && !canSweepBoxTo(selectedStart, startBox)) {
             // Vanilla can choose a raised bounding-box corner as the start node on partial blocks. If the mob's
             // real raised box cannot physically sweep to that corner, start from the mob cell so A* can evaluate
             // the real exits instead of accepting an impossible first transition.
@@ -121,6 +121,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     public int getNeighbors(Node[] nodes, Node origin) {
         int nodeCount = super.getNeighbors(nodes, origin);
         nodeCount = rejectBlockedRaisedStartTransitions(nodes, nodeCount, origin);
+        nodeCount = rejectBlockedRaisedBarrierTransitions(nodes, nodeCount, origin);
         if (!isClimbable(origin.x, origin.y, origin.z)) {
             return addDescendingClimbableEntries(nodes, nodeCount, origin.asBlockPos());
         }
@@ -179,7 +180,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         int writeIndex = 0;
         for (int readIndex = 0; readIndex < nodeCount; readIndex++) {
             Node candidate = nodes[readIndex];
-            if (candidate != null && canSweepStartBoxTo(candidate, startBox)) {
+            if (candidate != null && canSweepBoxTo(candidate, startBox)) {
                 nodes[writeIndex++] = candidate;
             }
         }
@@ -188,6 +189,39 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             nodes[index] = null;
         }
         return writeIndex;
+    }
+
+    private int rejectBlockedRaisedBarrierTransitions(Node[] nodes, int nodeCount, Node origin) {
+        AABB originBox = getMobBoxAt(origin);
+        int writeIndex = 0;
+        for (int readIndex = 0; readIndex < nodeCount; readIndex++) {
+            Node candidate = nodes[readIndex];
+            if (candidate == null) {
+                continue;
+            }
+
+            AABB destinationBox = getMobBoxAt(candidate);
+            BlockState support = this.currentContext.getBlockState(
+                    this.collisionPos.set(candidate.x, candidate.y - 1, candidate.z)
+            );
+            boolean raisedBarrierTop = destinationBox.minY > originBox.minY + RAISED_START_EPSILON
+                    && isBarrierSupport(support);
+            if (!raisedBarrierTop || canSweepBoxTo(candidate, originBox)) {
+                nodes[writeIndex++] = candidate;
+            }
+        }
+
+        for (int index = writeIndex; index < nodeCount; index++) {
+            nodes[index] = null;
+        }
+        return writeIndex;
+    }
+
+    private static boolean isBarrierSupport(BlockState state) {
+        if (PathingBlockInteraction.isFenceGate(state)) {
+            return !state.getValue(BlockStateProperties.OPEN);
+        }
+        return state.is(BlockTags.FENCES) || state.is(BlockTags.WALLS);
     }
 
     private int removeLargeVerticalTransitions(Node[] nodes, int nodeCount, Node origin) {
@@ -357,7 +391,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         );
     }
 
-    private boolean canSweepStartBoxTo(Node candidate, AABB startBox) {
+    private boolean canSweepBoxTo(Node candidate, AABB startBox) {
         AABB destinationBox = getMobBoxAt(candidate);
         AABB sweepBox = startBox;
         double rise = destinationBox.minY - startBox.minY;
