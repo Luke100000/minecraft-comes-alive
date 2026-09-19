@@ -697,22 +697,20 @@ public final class FloorScannerGameTests {
                 "lower staircase scan failed: " + lower.result());
         helper.assertTrue(lower.floor().anchorY() == floorY,
                 "lower staircase changed storey anchor to " + lower.floor().anchorY());
-        helper.assertTrue(lower.floor().cellAt(topStair).isPresent(),
-                "lower storey lost its top staircase transition");
-        helper.assertTrue(lower.verticalBoundaryCells().contains(topStair),
-                "lower storey did not mark the top stair as vertical Room-partition boundary evidence");
+        helper.assertTrue(lower.floor().cellAt(topStair).isEmpty(),
+                "lower storey claimed the upper-owned top stair");
         helper.assertTrue(lower.floor().cellAt(upperRoom).isEmpty(),
                 "lower storey absorbed the upper room");
         helper.assertTrue(upper.result() == Building.validationResult.SUCCESS,
                 "upper staircase scan failed: " + upper.result());
         helper.assertTrue(upper.floor().anchorY() == floorY + 3,
                 "upper staircase changed storey anchor to " + upper.floor().anchorY());
-        helper.assertTrue(upper.floor().cellAt(topStair).isEmpty(),
-                "upper storey reclaimed the lower-owned top staircase transition");
-        helper.assertTrue(!lower.adjacentFloorSeeds().isEmpty(),
-                "stair attachment evidence was lost");
+        helper.assertTrue(upper.floor().cellAt(topStair).isPresent(),
+                "upper storey omitted its supported top stair");
+        helper.assertTrue(lower.adjacentFloorSeeds().contains(topStair),
+                "lower storey lost the upper stair transition evidence");
         helper.assertTrue(BuildingRoomScanner.components(helper.getLevel(), lower).size() == 1,
-                "vertical-boundary top stair split the legitimate lower Room instead of remaining owned by it");
+                "stair transition split the legitimate lower Room");
         helper.succeed();
     }
 
@@ -757,6 +755,11 @@ public final class FloorScannerGameTests {
                 "two-block lower storey anchored at " + lower.floor().anchorY());
         helper.assertTrue(upper.floor().anchorY() == upperSeed.getY(),
                 "two-block upper storey anchored at " + upper.floor().anchorY());
+        BlockPos topStair = origin.offset(6, 2, 1);
+        helper.assertTrue(lower.floor().cellAt(topStair).isEmpty(),
+                "two-block lower storey claimed the upper-owned top stair");
+        helper.assertTrue(upper.floor().cellAt(topStair).isPresent(),
+                "two-block upper storey omitted its supported top stair");
         helper.assertTrue(lower.floor().cellAt(upperSeed).isEmpty(),
                 "lower storey absorbed the upper plateau through its staircase");
         helper.assertTrue(upper.floor().cellAt(lowerSeed).isEmpty(),
@@ -766,9 +769,9 @@ public final class FloorScannerGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "mca_floor_stair_top_exit_handoff", templateNamespace = "minecraft",
+    @GameTest(batch = "mca_floor_stair_top_exit_geometry", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 120)
-    public static void stairTopExitHandsOffToUpperRegisteredRoom(GameTestHelper helper) {
+    public static void stairTopExitUsesUpperRegisteredGeometry(GameTestHelper helper) {
         BlockPos origin = helper.absolutePos(new BlockPos(3, 2, 3));
         buildTwoBlockStairStoreys(helper, origin);
 
@@ -787,8 +790,8 @@ public final class FloorScannerGameTests {
         SelectedFloorScanner.Result upper = SelectedFloorScanner.scan(level, upperSeed, 256, 24);
         helper.assertTrue(upper.result() == Building.validationResult.SUCCESS,
                 "upper stair Floor scan failed: " + upper.result());
-        helper.assertTrue(upper.floor().cellAt(topStairFeet).isEmpty(),
-                "fixture no longer exercises interaction-only stair handoff");
+        helper.assertTrue(upper.floor().cellAt(topStairFeet).isPresent(),
+                "upper Floor omitted the supported top stair");
 
         StructureFloor upperFloor = new StructureFloor(0, 1, upper.floor());
         Structure structure = new Structure(10, upperSeed, List.of(upperFloor));
@@ -804,20 +807,14 @@ public final class FloorScannerGameTests {
         Village village = new Village(1, level);
         village.registerStructure(structure, room);
 
-        StructureScanner.FloorObservation observation = StructureScanner.observeFloor(
-                level, topStairBlock, village.getStructures().values()).orElseThrow();
-        long registeredLandingCells = observation.scan().adjacentFloorSeeds().stream()
-                .filter(seed -> seed.getY() == observation.seed().getY())
-                .filter(seed -> village.findPhysicalRoomAt(seed).orElse(null) == room)
-                .count();
-        helper.assertTrue(registeredLandingCells > 1,
-                "fixture does not expose a wide upper landing: " + registeredLandingCells);
+        helper.assertTrue(village.findInteractionRoomAt(topStairBlock).orElse(null) == room,
+                "persisted upper Floor geometry did not resolve the stair interaction");
 
         RoomScanPlan plan = RoomScanPlanner.plan(village, level, topStairBlock);
         helper.assertTrue(plan.mode() == Village.RoomScanMode.UPDATE_ROOM,
                 "top stair selected " + plan.mode() + " instead of the upper registered Room");
         helper.assertTrue(plan.currentRoom().orElse(null) == room,
-                "top stair handoff lost the upper registered Room identity");
+                "top stair lost the upper registered Room identity");
         helper.succeed();
     }
 
@@ -861,8 +858,8 @@ public final class FloorScannerGameTests {
                     helper.getLevel(), descendingTransitions.get(i), 512, 40);
             helper.assertTrue(fromTransition.result() == Building.validationResult.SUCCESS,
                     "deep-chain transition scan failed at " + descendingTransitions.get(i));
-            helper.assertTrue(fromTransition.floor().sameCellPositions(direct.get(i).floor()),
-                    "deep-chain transition resolved a different lower storey at index " + i);
+            helper.assertTrue(fromTransition.floor().sameCellPositions(direct.get(i + 1).floor()),
+                    "deep-chain top transition did not resolve its upper-owned storey at index " + i);
         }
         helper.succeed();
     }
@@ -890,10 +887,19 @@ public final class FloorScannerGameTests {
 
         helper.assertTrue(lower.result() == Building.validationResult.SUCCESS,
                 "full-block lower staircase scan failed: " + lower.result());
-        helper.assertTrue(lower.verticalBoundaryCells().contains(topTransition),
-                "full-block descent did not retain its top transition as vertical-boundary evidence");
+        helper.assertTrue(lower.floor().cellAt(topTransition).isEmpty(),
+                "full-block lower Floor claimed the upper-owned top transition");
+        helper.assertTrue(lower.adjacentFloorSeeds().contains(topTransition),
+                "full-block descent lost its top transition evidence");
         helper.assertTrue(lower.floor().cellAt(upperSeed).isEmpty(),
                 "lower Floor absorbed the upper room through the full-block staircase");
+
+        SelectedFloorScanner.Result upper = SelectedFloorScanner.scan(
+                helper.getLevel(), upperSeed, 256, 24);
+        helper.assertTrue(upper.result() == Building.validationResult.SUCCESS,
+                "full-block upper staircase scan failed: " + upper.result());
+        helper.assertTrue(upper.floor().cellAt(topTransition).isPresent(),
+                "full-block upper Floor omitted its supported top transition");
 
         List<RoomPartitioner.Component> rooms = BuildingRoomScanner.components(helper.getLevel(), lower);
         helper.assertTrue(rooms.size() == 2,
@@ -964,9 +970,9 @@ public final class FloorScannerGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "mca_floor_unpersisted_vertical_connector_handoff", templateNamespace = "minecraft",
+    @GameTest(batch = "mca_floor_unpersisted_vertical_connector", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 120)
-    public static void verticalConnectorWithoutPersistedMarkerHandsOffToExistingRoom(GameTestHelper helper) {
+    public static void unpersistedVerticalConnectorDoesNotClaimExistingRoom(GameTestHelper helper) {
         BlockPos lowerMin = helper.absolutePos(new BlockPos(4, 2, 4));
         BlockPos upperMin = lowerMin.above(4);
         buildClosedRoom(helper, lowerMin, 4, 4);
@@ -1009,22 +1015,17 @@ public final class FloorScannerGameTests {
                 trapdoor.getX(), trapdoor.getY(), trapdoor.getZ()).isEmpty(),
                 "trapdoor unexpectedly resolved through direct Floor geometry");
 
-        StructureScanner.FloorObservation observation = StructureScanner.observeFloor(
-                level, trapdoor, village.getStructures().values()).orElseThrow();
-        helper.assertTrue(room.ownsFloorCell(observation.seed()),
-                "trapdoor handoff did not land in the registered Room: " + observation.seed());
-
         for (boolean open : List.of(false, true)) {
             level.setBlock(trapdoor, Blocks.OAK_TRAPDOOR.defaultBlockState()
                     .setValue(TrapDoorBlock.OPEN, open), 3);
             for (BlockPos interaction : List.of(trapdoor, trapdoor.above())) {
                 RoomScanPlan trapdoorPlan = RoomScanPlanner.plan(village, level, interaction);
-                helper.assertTrue(trapdoorPlan.mode() == Village.RoomScanMode.UPDATE_ROOM,
+                helper.assertTrue(trapdoorPlan.mode() != Village.RoomScanMode.UPDATE_ROOM,
                         (open ? "open" : "closed") + " trapdoor interaction at " + interaction
-                                + " selected " + trapdoorPlan.mode());
-                helper.assertTrue(trapdoorPlan.currentRoom().orElse(null) == room,
+                                + " impersonated the existing Room");
+                helper.assertTrue(trapdoorPlan.currentRoom().orElse(null) != room,
                         (open ? "open" : "closed") + " trapdoor interaction at " + interaction
-                                + " lost the existing Room identity");
+                                + " recovered Room identity without persisted ownership");
             }
         }
 
@@ -1032,10 +1033,10 @@ public final class FloorScannerGameTests {
         helper.assertTrue(StructureConnector.isVertical(level, trapdoor),
                 "top ladder was not recognized as part of the vertical connector column");
         RoomScanPlan ladderPlan = RoomScanPlanner.plan(village, level, trapdoor);
-        helper.assertTrue(ladderPlan.mode() == Village.RoomScanMode.UPDATE_ROOM,
-                "unpersisted ladder handoff selected " + ladderPlan.mode());
-        helper.assertTrue(ladderPlan.currentRoom().orElse(null) == room,
-                "unpersisted ladder handoff lost the existing Room identity");
+        helper.assertTrue(ladderPlan.mode() != Village.RoomScanMode.UPDATE_ROOM,
+                "unpersisted ladder impersonated the existing Room");
+        helper.assertTrue(ladderPlan.currentRoom().orElse(null) != room,
+                "unpersisted ladder recovered Room identity without persisted ownership");
         helper.succeed();
     }
 

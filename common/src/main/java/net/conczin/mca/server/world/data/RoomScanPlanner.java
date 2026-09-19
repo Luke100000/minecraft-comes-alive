@@ -38,13 +38,6 @@ final class RoomScanPlanner {
         }
         List<RoomPartitioner.Component> components = BuildingRoomScanner.components(level, observation.scan());
         RoomScanPlan freshPlan = planFresh(village, source, observation, components);
-        if (resolved == null) {
-            Building handoffRoom = resolveInteractionHandoffRoom(
-                    village, level, source, observation, freshPlan);
-            if (handoffRoom != null) {
-                return new Analysis(RoomScanPlan.updateRoom(handoffRoom, source), observation, components);
-            }
-        }
         if (persistedFloorPlan == null) {
             return new Analysis(freshPlan, observation, components);
         }
@@ -55,25 +48,6 @@ final class RoomScanPlanner {
         }
         // A rejected fresh plan cannot supply geometry for the persisted target.
         return new Analysis(persistedFloorPlan);
-    }
-
-    private static Building resolveInteractionHandoffRoom(
-            Village village,
-            Level level,
-            BlockPos source,
-            StructureScanner.FloorObservation observation,
-            RoomScanPlan freshPlan) {
-        StructureScanner.InteractionHandoff handoff = StructureScanner.resolveInteractionHandoff(
-                level, source, observation).orElse(null);
-        if (handoff == null) return null;
-
-        Building room = village.findPhysicalRoomAt(handoff.target()).orElse(null);
-        if (room == null) return null;
-        if (handoff.kind() != StructureScanner.HandoffKind.VERTICAL_CONNECTOR) return room;
-        if (freshPlan.mode() != Village.RoomScanMode.ADD_ROOM) return null;
-        return room.getStructureId() == freshPlan.targetStructureId()
-                && room.getFloorId() == freshPlan.targetFloorId()
-                ? room : null;
     }
 
     record Analysis(RoomScanPlan plan,
