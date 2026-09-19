@@ -116,6 +116,29 @@ class StructureFloorResolutionTest {
     }
 
     @Test
+    void physicalTrapdoorOutsideFloorColumnResolvesThroughItsOwningFloorCell() {
+        BlockPos floorCell = new BlockPos(0, 64, 0);
+        BlockPos trapdoor = new BlockPos(1, 63, 0);
+        StructureFloor floor = TestStructureFloors.create(0, 64, 68, 0,
+                BuildingFloorRegion.fromFootprint(64, Set.of(floorCell)),
+                List.of(new FloorConnector.Marker(
+                        trapdoor, FloorConnector.Type.TRAPDOOR, floorCell)));
+        Structure structure = new Structure(10, floorCell, List.of(floor));
+        Building room = room(100, 10, 0, Set.of(floorCell));
+        Village village = new Village(1, null);
+        village.registerStructure(structure, room);
+
+        Structure.InteractionPosition interaction = structure.resolveInteractionPosition(
+                trapdoor, List.of(room)).orElseThrow();
+        RoomScanPlan plan = village.getRoomScanPlan(null, trapdoor);
+
+        assertEquals(floor, interaction.floor());
+        assertEquals(room, interaction.room());
+        assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
+        assertEquals(room, plan.currentRoom().orElseThrow());
+    }
+
+    @Test
     void persistedConnectorColumnKeepsRoomPlanOnExistingBuilding() {
         BlockPos connector = new BlockPos(0, 64, 0);
         FloorGeometry geometry = new FloorGeometry(Set.of(

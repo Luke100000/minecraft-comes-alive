@@ -101,6 +101,12 @@
 * Fixed golden apples aging child villagers by the wrong amount; they now advance age by the intended 20 minutes.
 * Baby zombie villagers now keep their age when converted from vanilla baby zombie villagers.
 * Fixed flirty personality dialogue overriding parent/child dialogue for the player's children.
+* Restored legacy Family Tree migration and fixed Destiny teleport chunks remaining loaded indefinitely.
+* Fixed greeting history timing and restored support for configured namespaced/custom tombstones.
+* Restored child/relative relationship safeguards and infertility checks for player-triggered procreation.
+* Fixed villager brain refreshes losing live memories, including guard combat state when switching to Follow.
+* Fixed recovery food replacing or deleting a villager's held weapon/tool, with proper eating and cancellation behavior.
+* Fixed scaled player hitboxes not being refreshed and synchronized when joining a server.
 
 # 8.1.11
 

@@ -97,13 +97,13 @@ class RoomPartitionerTest {
                 geometry, transitions, Map.of(), Set.of(topStair));
 
         assertEquals(2, components.size(),
-                "a storey-edge stair cell must not bridge otherwise separate lower Rooms");
+                "a Floor-edge stair cell must not bridge otherwise separate lower Rooms");
         assertEquals(1, components.stream().filter(component -> component.contains(topStair)).count());
         assertEquals(geometry.cells().size(), components.stream().mapToInt(RoomPartitioner.Component::area).sum());
     }
 
     @Test
-    void storeyEdgeDoesNotOrphanUndersizedStairFragment() {
+    void floorEdgeDoesNotOrphanUndersizedStairFragment() {
         BlockPos room = new BlockPos(0, 64, 0);
         BlockPos edge = new BlockPos(1, 65, 0);
         BlockPos stairFragment = new BlockPos(2, 64, 0);
@@ -121,7 +121,7 @@ class RoomPartitionerTest {
                 geometry, transitions, Map.of(), Set.of(edge));
 
         assertEquals(1, components.size(),
-                "a storey boundary must not turn a transition-only stair fragment into a Room");
+                "a Floor boundary must not turn a transition-only stair fragment into a Room");
         assertEquals(geometry.cells().size(), components.getFirst().area());
     }
 

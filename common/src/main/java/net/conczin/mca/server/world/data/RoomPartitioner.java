@@ -46,7 +46,7 @@ final class RoomPartitioner {
     static List<Component> partition(FloorGeometry geometry,
                                      Collection<SelectedFloorScanner.Transition> transitions,
                                      Map<BlockPos, Direction> doorOwnerSides,
-                                     Collection<BlockPos> storeyEdgeCells) {
+                                     Collection<BlockPos> verticalBoundaryCells) {
         Collection<SelectedFloorScanner.Transition> acceptedTransitions =
                 transitions == null ? List.of() : transitions;
         Map<BlockPos, Direction> ownerSides = doorOwnerSides == null
@@ -56,14 +56,14 @@ final class RoomPartitioner {
         Set<BlockPos> connectorBoundaryCells = geometry.connectorTypesByCell().keySet().stream()
                 .filter(geometry::isRoomBoundaryCell)
                 .collect(Collectors.toSet());
-        Set<BlockPos> storeyBoundaryCells = storeyEdgeCells == null
+        Set<BlockPos> acceptedVerticalBoundaries = verticalBoundaryCells == null
                 ? Set.of()
-                : storeyEdgeCells.stream()
+                : verticalBoundaryCells.stream()
                 .filter(pos -> geometry.cellAt(pos).isPresent())
                 .filter(pos -> !connectorBoundaryCells.contains(pos))
                 .collect(Collectors.toSet());
         Set<BlockPos> boundaryCells = new HashSet<>(connectorBoundaryCells);
-        boundaryCells.addAll(storeyBoundaryCells);
+        boundaryCells.addAll(acceptedVerticalBoundaries);
         Set<BlockPos> visited = new HashSet<>();
         List<Component> openComponents = new ArrayList<>();
 
@@ -80,13 +80,13 @@ final class RoomPartitioner {
 
         List<Component> result = assignBoundaryClusters(
                 geometry, connectorBoundaryCells, openComponents, transitionNeighbors, ownerSides);
-        result = assignStoreyBoundaryClusters(
-                geometry, storeyBoundaryCells, result, transitionNeighbors);
+        result = assignVerticalBoundaryClusters(
+                geometry, acceptedVerticalBoundaries, result, transitionNeighbors);
         result.sort(COMPONENT_ORDER);
         return List.copyOf(result);
     }
 
-    private static List<Component> assignStoreyBoundaryClusters(
+    private static List<Component> assignVerticalBoundaryClusters(
             FloorGeometry geometry,
             Set<BlockPos> boundaryCells,
             List<Component> openComponents,
