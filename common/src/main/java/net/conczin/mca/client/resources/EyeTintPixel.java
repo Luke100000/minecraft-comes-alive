@@ -12,6 +12,16 @@ public final class EyeTintPixel {
         return alpha == IRIS_MARKER_ALPHA;
     }
 
+    public static boolean isValidIrisMarker(int packedColor) {
+        if (!isIrisMarker(FastColor.ABGR32.alpha(packedColor))) {
+            return false;
+        }
+        int red = FastColor.ABGR32.red(packedColor);
+        int green = FastColor.ABGR32.green(packedColor);
+        int blue = FastColor.ABGR32.blue(packedColor);
+        return activeChannels(red, green, blue) == 1;
+    }
+
     public static Mask decodeMarkedMask(int packedColor) {
         int alpha = FastColor.ABGR32.alpha(packedColor);
         if (!isIrisMarker(alpha)) {
@@ -20,8 +30,7 @@ public final class EyeTintPixel {
         int red = FastColor.ABGR32.red(packedColor);
         int green = FastColor.ABGR32.green(packedColor);
         int blue = FastColor.ABGR32.blue(packedColor);
-        int active = (red > 0 ? 1 : 0) + (green > 0 ? 1 : 0) + (blue > 0 ? 1 : 0);
-        if (active != 1) {
+        if (activeChannels(red, green, blue) != 1) {
             throw new IllegalArgumentException(
                     "Eye tint mask pixel must have exactly one active RGB channel: "
                             + red + "," + green + "," + blue
@@ -35,6 +44,10 @@ public final class EyeTintPixel {
             return new Mask(Tone.PRIMARY, green);
         }
         return new Mask(Tone.HIGHLIGHT, blue);
+    }
+
+    private static int activeChannels(int red, int green, int blue) {
+        return (red > 0 ? 1 : 0) + (green > 0 ? 1 : 0) + (blue > 0 ? 1 : 0);
     }
 
     public enum Tone {

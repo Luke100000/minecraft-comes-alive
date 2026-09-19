@@ -63,6 +63,13 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
     private static final float MAX_PREVIEW_ZOOM = 1.4F;
     private static final int VOICE_PREVIEW_BUTTON_WIDTH = 22;
     private static final int STEVE_PROPORTIONS_BUTTON_WIDTH = 22;
+    private static final int SELECTION_GENDER_BUTTON_WIDTH = 60;
+    private static final List<Gender> SELECTION_GENDER_FILTERS = List.of(
+            Gender.UNASSIGNED,
+            Gender.NEUTRAL,
+            Gender.FEMALE,
+            Gender.MALE
+    );
     private static final float STEVE_RAW_WIDTH_SCALE = 1.0F;
     private static final float STEVE_RAW_HEIGHT_SCALE = 0.9F;
     private static final ResourceLocation PREVIEW_MOUSE_FOLLOW_TEXTURE = MCA.locate("textures/gui/preview_mouse_follow.png");
@@ -78,9 +85,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
     private final ColorSelector color = new ColorSelector();
     protected String page;
     protected CompoundTag villagerData;
-    ButtonWidget widgetAll;
-    ButtonWidget widgetMasculine;
-    ButtonWidget widgetFeminine;
+    private final EnumMap<Gender, ButtonWidget> selectionGenderWidgets = new EnumMap<>(Gender.class);
     private int villagerBreedingAge;
     private int traitPage = 0;
     private EditBox villagerNameField;
@@ -98,7 +103,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
     private List<String> filteredBodySkins = new LinkedList<>();
     private List<String> filteredLayeredHair = new LinkedList<>();
     private List<ResourceLocation> filteredEyes = List.of();
-    private Gender filterGender = Gender.NEUTRAL;
+    private Gender filterGender = Gender.UNASSIGNED;
     private String searchString = "";
     private int hoveredClothingId;
     private ButtonWidget villagerSkinWidget;
@@ -816,7 +821,9 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
                         Minecraft.getInstance().setScreen(new SkinLibraryScreen(this, villagerVisualization));
                     }));
                 }
-                addSelectionGenderFilterWidgets(y);
+                if (!page.equals("eyes_catalog")) {
+                    addSelectionGenderFilterWidgets(y);
+                }
                 filter();
             }
             case "presets" -> {
@@ -1040,7 +1047,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
 
     private int addEyeTextureChanger(int y) {
         int bw = 22;
-        List<ResourceLocation> catalog = ClientAppearanceCatalog.eyeIds(villager.getGenetics().getGender());
+        List<ResourceLocation> catalog = ClientAppearanceCatalog.eyeIdsForGender(villager.getGenetics().getGender());
         if (catalog.isEmpty()) {
             addRenderableWidget(new ButtonWidget(
                     width / 2,
@@ -1054,7 +1061,10 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
             return y + 22;
         }
 
-        ResourceLocation selected = ClientAppearanceCatalog.resolveEye(villager.getEyeTexture());
+        ResourceLocation selected = ClientAppearanceCatalog.resolveEye(
+                villager.getEyeTexture(),
+                villager.getGenetics().getGender()
+        );
         int currentIndex = Math.max(0, catalog.indexOf(selected));
 
         addRenderableWidget(new ButtonWidget(width / 2, y, bw, 20, Component.literal("<"), b -> {
@@ -1253,6 +1263,10 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
     private void refreshAppearanceForCurrentGender() {
         SkinSelection.pickWeightedId(getBodySkinChoices()).ifPresent(villager::setSkin);
         SkinSelection.pickWeightedId(getRandomClothingChoices()).ifPresent(villager::setClothes);
+        villager.setEyeTexture(ClientAppearanceCatalog.resolveEye(
+                villager.getEyeTexture(),
+                villager.getGenetics().getGender()
+        ));
     }
 
     private void randomLayeredHair() {
@@ -1403,7 +1417,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
 
     private void filter() {
         if (Objects.equals(page, "eyes_catalog")) {
-            filteredEyes = ClientAppearanceCatalog.eyeIds(filterGender).stream()
+            filteredEyes = ClientAppearanceCatalog.eyeIdsForEditor(filterGender).stream()
                     .filter(id -> MCA.isBlankString(searchString) || id.toString().contains(searchString))
                     .toList();
 
@@ -1429,7 +1443,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
 
     private <T extends SkinListEntry> List<String> filter(Map<String, T> map) {
         List<String> filtered = map.entrySet().stream()
-                .filter(v -> SkinSelection.matchesGender(v.getValue().getGender(), filterGender))
+                .filter(v -> SkinSelection.matchesEditorGender(v.getValue().getGender(), filterGender))
                 .filter(v -> {
                     if (v.getValue() instanceof Clothing c) {
                         return !c.exclude;
@@ -1452,12 +1466,65 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
     }
 
     private void addSelectionGenderFilterWidgets(int y) {
-        int buttonWidth = 60;
-        int x = width / 2 - 64 - buttonWidth * 3;
-        widgetAll = addRenderableWidget(new ButtonWidget(x, y, buttonWidth, 20, Component.translatable("gui.villager_editor.all"), b -> setSelectionGenderFilter(Gender.NEUTRAL)));
-        widgetMasculine = addRenderableWidget(new ButtonWidget(x + buttonWidth, y, buttonWidth, 20, Component.translatable("gui.villager_editor.masculine"), b -> setSelectionGenderFilter(Gender.MALE)));
-        widgetFeminine = addRenderableWidget(new ButtonWidget(x + buttonWidth * 2, y, buttonWidth, 20, Component.translatable("gui.villager_editor.feminine"), b -> setSelectionGenderFilter(Gender.FEMALE)));
+        List<Gender> filters = SELECTION_GENDER_FILTERS.stream()
+                .filter(gender -> gender == Gender.UNASSIGNED || hasSelectionGender(gender))
+                .toList();
+
+        if (!filters.contains(filterGender)) {
+            filterGender = Gender.UNASSIGNED;
+        }
+
+        int regionLeft = 4;
+        int regionRight = width / 2 - 64;
+        int regionWidth = Math.max(filters.size(), regionRight - regionLeft);
+        int buttonWidth = Math.min(SELECTION_GENDER_BUTTON_WIDTH, regionWidth / filters.size());
+        int rowWidth = buttonWidth * filters.size();
+        int x = regionLeft + (regionWidth - rowWidth) / 2;
+        selectionGenderWidgets.clear();
+        for (int i = 0; i < filters.size(); i++) {
+            Gender gender = filters.get(i);
+            Component label = gender == Gender.UNASSIGNED
+                    ? Component.translatable("gui.villager_editor.all")
+                    : Gender.getText(gender);
+            ButtonWidget widget = addRenderableWidget(new ButtonWidget(
+                    x + buttonWidth * i,
+                    y,
+                    buttonWidth,
+                    20,
+                    label,
+                    b -> setSelectionGenderFilter(gender)
+            ));
+            selectionGenderWidgets.put(gender, widget);
+        }
         updateSelectionGenderFilterWidgets();
+    }
+
+    private boolean hasSelectionGender(Gender gender) {
+        if (page.equals("eyes_catalog")) {
+            return !ClientAppearanceCatalog.eyeIdsForEditor(gender).isEmpty();
+        }
+        if (page.equals("clothing")) {
+            return ClientAppearanceCatalog.clothing().values().stream()
+                    .filter(entry -> !entry.exclude)
+                    .anyMatch(entry -> SkinSelection.matchesEditorGender(entry.getGender(), gender));
+        }
+        if (page.equals("hair")) {
+            return hasSelectionGender(ClientAppearanceCatalog.hairStyles().values(), gender);
+        }
+        if (page.equals("skin")) {
+            return hasSelectionGender(ClientAppearanceCatalog.bodySkins().values(), gender);
+        }
+        if (isLayeredHairPage()) {
+            LayeredHair.Category category = getLayeredHairCategory();
+            return ClientAppearanceCatalog.layeredHair().values().stream()
+                    .filter(entry -> entry.getCategory() == category)
+                    .anyMatch(entry -> SkinSelection.matchesEditorGender(entry.getGender(), gender));
+        }
+        return false;
+    }
+
+    private static boolean hasSelectionGender(Collection<? extends SkinListEntry> entries, Gender gender) {
+        return entries.stream().anyMatch(entry -> SkinSelection.matchesEditorGender(entry.getGender(), gender));
     }
 
     private void setSelectionGenderFilter(Gender gender) {
@@ -1468,15 +1535,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
     }
 
     private void updateSelectionGenderFilterWidgets() {
-        if (widgetAll != null) {
-            widgetAll.active = filterGender != Gender.NEUTRAL;
-        }
-        if (widgetMasculine != null) {
-            widgetMasculine.active = filterGender != Gender.MALE;
-        }
-        if (widgetFeminine != null) {
-            widgetFeminine.active = filterGender != Gender.FEMALE;
-        }
+        selectionGenderWidgets.forEach((gender, widget) -> widget.active = filterGender != gender);
     }
 
     protected String[] getPages() {
@@ -2175,6 +2234,10 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
 
     @Override
     public void appearanceCatalogUpdated() {
+        villager.setEyeTexture(ClientAppearanceCatalog.resolveEye(
+                villager.getEyeTexture(),
+                villager.getGenetics().getGender()
+        ));
         filter();
         rebuildCurrentPageFromData();
     }

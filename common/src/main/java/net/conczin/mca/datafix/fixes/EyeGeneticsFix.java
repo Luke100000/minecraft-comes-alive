@@ -8,6 +8,7 @@ import com.mojang.serialization.Dynamic;
 import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.EyeStyles;
+import net.minecraft.resources.ResourceLocation;
 
 /**
  * Splits the legacy FACE gene into the two eye traits that replaced it:
@@ -17,6 +18,7 @@ public final class EyeGeneticsFix extends DataFix {
     private static final String FACE_GENE = "GeneFace";
     private static final String EYE_COLOR_GENE = "GeneEyeColor";
     private static final String EYE_TEXTURE = "EyeTexture";
+    private static final String LEGACY_EYE_COLOR = "EyeColor";
     private static final String GENDER = "Gender";
 
     public EyeGeneticsFix(Schema outputSchema) {
@@ -44,10 +46,18 @@ public final class EyeGeneticsFix extends DataFix {
         }
 
         if (root.get(EYE_TEXTURE).result().isEmpty()) {
-            Gender gender = Gender.byId(root.get(GENDER).asInt(Gender.UNASSIGNED.getId()));
+            ResourceLocation eyeTexture;
+            if (root.get(LEGACY_EYE_COLOR).result().isPresent()) {
+                // 7.7.18+ saves used the twelve-entry 0..10 + blink catalogue.
+                eyeTexture = EyeStyles.fromTwelveEntryFace(face.floatValue());
+            } else {
+                // Earlier saves used twenty-two gendered textures split into two shapes.
+                Gender gender = Gender.byId(root.get(GENDER).asInt(Gender.UNASSIGNED.getId()));
+                eyeTexture = EyeStyles.fromTwentyTwoEntryFace(face.floatValue(), gender);
+            }
             updated = updated.set(
                     EYE_TEXTURE,
-                    root.createString(EyeStyles.fromLegacyFace(face.floatValue(), gender).toString())
+                    root.createString(eyeTexture.toString())
             );
         }
 

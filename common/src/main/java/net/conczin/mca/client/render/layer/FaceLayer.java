@@ -64,7 +64,7 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
 
         if (canUse(skin)) {
             EyeDefinition definition = ClientAppearanceCatalog.eyeDefinition(skin);
-            EyeLayerTextures layers = getOrGenerateEyeLayers(skin, definition);
+            EyeLayerTextures layers = getOrGenerateEyeLayers(skin);
             renderEyes(transform, provider, light, villager, tickDelta, visible, glowing, overlay, definition, layers);
         }
 
@@ -100,7 +100,7 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
     @Override
     public ResourceLocation getSkin(T villager) {
         VillagerLike<?> villagerLike = getVillager(villager);
-        return ClientAppearanceCatalog.resolveEye(villagerLike.getEyeTexture());
+        return ClientAppearanceCatalog.resolveEye(villagerLike.getEyeTexture(), villagerLike.getGenetics().getGender());
     }
 
     private ResourceLocation getBlinkSkin() {
@@ -122,28 +122,28 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
         EYE_TEXTURE_CACHE.clear();
     }
 
-    private EyeLayerTextures getOrGenerateEyeLayers(ResourceLocation id, EyeDefinition definition) {
-        return EYE_TEXTURE_CACHE.computeIfAbsent(id, key -> generateEyeLayers(key, definition));
+    private EyeLayerTextures getOrGenerateEyeLayers(ResourceLocation id) {
+        return EYE_TEXTURE_CACHE.computeIfAbsent(id, this::generateEyeLayers);
     }
 
-    private EyeLayerTextures generateEyeLayers(ResourceLocation id, EyeDefinition definition) {
+    private EyeLayerTextures generateEyeLayers(ResourceLocation id) {
         try {
-            return generateSingle(id, definition);
+            return generateSingle(id);
         } catch (Exception exception) {
             MCA.LOGGER.warn("Failed to generate eye texture layers for {}", id, exception);
             return EyeLayerTextures.invalid();
         }
     }
 
-    private EyeLayerTextures generateSingle(ResourceLocation id, EyeDefinition definition) throws Exception {
+    private EyeLayerTextures generateSingle(ResourceLocation id) throws Exception {
         var resource = Minecraft.getInstance().getResourceManager().getResource(id).orElseThrow(() -> new IllegalStateException("Missing eye texture " + id));
         try (InputStream stream = resource.open(); NativeImage image = NativeImage.read(stream)) {
             EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(image);
-            return generateLayers(id, image, bounds);
+            return generateLayers(id, image, bounds, EyeTextureLayers.hasExplicitTintMarker(image));
         }
     }
 
-    private EyeLayerTextures generateLayers(ResourceLocation id, NativeImage source, EyeTextureLayers.Bounds bounds) {
+    private EyeLayerTextures generateLayers(ResourceLocation id, NativeImage source, EyeTextureLayers.Bounds bounds, boolean explicitTintMarkers) {
         List<NativeImage> images = new ArrayList<>();
         List<ResourceLocation> registered = new ArrayList<>();
         try {
@@ -153,7 +153,7 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
             NativeImage[] left = {image(images, width, height), image(images, width, height), image(images, width, height)};
             NativeImage[] right = {image(images, width, height), image(images, width, height), image(images, width, height)};
             for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
-                EyeTextureLayers.DecodedPixel decoded = EyeTextureLayers.decodePixel(source.getPixelRGBA(x, y));
+                EyeTextureLayers.DecodedPixel decoded = EyeTextureLayers.decodePixel(source.getPixelRGBA(x, y), explicitTintMarkers);
                 if (decoded == null) {
                     continue;
                 }

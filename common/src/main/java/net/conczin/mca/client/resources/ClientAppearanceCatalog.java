@@ -73,24 +73,45 @@ public final class ClientAppearanceCatalog {
         return hairStyles;
     }
 
-    public static List<ResourceLocation> eyeIds() {
-        return eyeIds;
-    }
-
-    public static List<ResourceLocation> eyeIds(Gender gender) {
+    public static List<ResourceLocation> eyeIdsForGender(Gender gender) {
         return eyeIds.stream()
                 .filter(id -> SkinSelection.matchesGender(eyes.get(id).gender(), gender))
                 .toList();
     }
 
+    public static List<ResourceLocation> eyeIdsForEditor(Gender filterGender) {
+        return eyeIds.stream()
+                .filter(id -> SkinSelection.matchesEditorGender(eyes.get(id).gender(), filterGender))
+                .toList();
+    }
+
     public static ResourceLocation resolveEye(ResourceLocation eye) {
-        if (eyeIds.isEmpty()) {
-            return EyeStyles.DEFAULT;
-        }
-        if (eyes.containsKey(eye)) {
+        return resolveEye(eye, Gender.NEUTRAL);
+    }
+
+    public static ResourceLocation resolveEye(ResourceLocation eye, Gender gender) {
+        EyeDefinition current = eyes.get(eye);
+        if (current != null && SkinSelection.matchesGender(current.gender(), gender)) {
             return eye;
         }
-        return eyeIds.get(Math.floorMod(eye.hashCode(), eyeIds.size()));
+
+        int candidateCount = 0;
+        for (ResourceLocation candidate : eyeIds) {
+            if (SkinSelection.matchesGender(eyes.get(candidate).gender(), gender)) {
+                candidateCount++;
+            }
+        }
+        if (candidateCount == 0) {
+            return EyeStyles.DEFAULT;
+        }
+
+        int index = Math.floorMod(eye.hashCode(), candidateCount);
+        for (ResourceLocation candidate : eyeIds) {
+            if (SkinSelection.matchesGender(eyes.get(candidate).gender(), gender) && index-- == 0) {
+                return candidate;
+            }
+        }
+        return EyeStyles.DEFAULT;
     }
 
     public static EyeDefinition eyeDefinition(ResourceLocation id) {

@@ -80,25 +80,25 @@ public class EyeCatalog extends SimplePreparableReloadListener<Map<ResourceLocat
     }
 
     public ResourceLocation resolve(ResourceLocation eye) {
-        if (active.isEmpty()) {
-            return EyeStyles.DEFAULT;
-        }
-        if (activeDefinitions.containsKey(eye)) {
+        return resolve(eye, Gender.NEUTRAL);
+    }
+
+    public ResourceLocation resolve(ResourceLocation eye, Gender gender) {
+        EyeDefinition current = activeDefinitions.get(eye);
+        if (current != null && SkinSelection.matchesGender(current.gender(), gender)) {
             return eye;
         }
-        return active.get(Math.floorMod(eye.hashCode(), active.size())).id();
+
+        List<EyeDefinition> candidates = candidates(gender);
+        return candidates.isEmpty()
+                ? EyeStyles.DEFAULT
+                : candidates.get(Math.floorMod(eye.hashCode(), candidates.size())).id();
     }
 
     public ResourceLocation pick(Gender gender) {
-        if (active.isEmpty()) {
-            return EyeStyles.DEFAULT;
-        }
-
-        List<EyeDefinition> candidates = active.stream()
-                .filter(entry -> SkinSelection.matchesGender(entry.gender(), gender))
-                .toList();
+        List<EyeDefinition> candidates = candidates(gender);
         if (candidates.isEmpty()) {
-            candidates = active;
+            return EyeStyles.DEFAULT;
         }
 
         WeightedPool.Mutable<ResourceLocation> pool = new WeightedPool.Mutable<>(EyeStyles.DEFAULT);
@@ -110,15 +110,27 @@ public class EyeCatalog extends SimplePreparableReloadListener<Map<ResourceLocat
         return activeDefinitions.containsKey(eye);
     }
 
+    public boolean contains(ResourceLocation eye, Gender gender) {
+        EyeDefinition definition = activeDefinitions.get(eye);
+        return definition != null && SkinSelection.matchesGender(definition.gender(), gender);
+    }
+
+    private List<EyeDefinition> candidates(Gender gender) {
+        return active.stream()
+                .filter(entry -> SkinSelection.matchesGender(entry.gender(), gender))
+                .toList();
+    }
+
     public Map<ResourceLocation, EyeDefinition> effectiveDefinitions() {
         return Map.copyOf(activeDefinitions);
     }
 
     public void repair(VillagerLike<?> villager) {
         ResourceLocation stored = villager.getEyeTexture();
-        ResourceLocation resolved = resolve(stored);
+        ResourceLocation resolved = resolve(stored, villager.getGenetics().getGender());
         if (!stored.equals(resolved)) {
-            MCA.LOGGER.info("Villager eye texture {} does not exist; replacing it with {}", stored, resolved);
+            MCA.LOGGER.info("Villager eye texture {} is not valid for {}; replacing it with {}",
+                    stored, villager.getGenetics().getGender(), resolved);
             villager.setEyeTexture(resolved);
         }
     }

@@ -28,6 +28,10 @@ public final class SkinSelection {
         return entryGender == Gender.NEUTRAL || entryGender == Gender.UNASSIGNED || gender == Gender.NEUTRAL || gender == Gender.UNASSIGNED || entryGender == gender;
     }
 
+    public static boolean matchesEditorGender(Gender entryGender, Gender filterGender) {
+        return filterGender == Gender.UNASSIGNED || entryGender == filterGender;
+    }
+
     public static List<Clothing> editorClothing(Collection<Clothing> available, Gender gender) {
         return available.stream()
                 .filter(clothing -> matchesGender(clothing, gender))

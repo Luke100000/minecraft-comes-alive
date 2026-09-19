@@ -194,7 +194,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         CompoundTag fallbackData = GetVillagerRequest.getVillagerData(entity);
         CompoundTag fallback = fallbackData == null ? new CompoundTag() : fallbackData;
         Gender gender = getGender(villagerData);
-        clearInvalidIdentifier(villagerData, fallback, "EyeTexture", SkinVisualIds::isEyeTexture);
+        clearInvalidIdentifier(villagerData, fallback, "EyeTexture", identifier -> SkinVisualIds.isEyeTexture(identifier, gender));
         clearInvalidIdentifier(villagerData, fallback, "Skin", identifier -> SkinVisualIds.isBodySkin(identifier, gender));
         clearInvalidIdentifier(villagerData, fallback, "Clothes", identifier -> SkinVisualIds.isClothing(identifier, gender));
         clearInvalidIdentifier(villagerData, fallback, "Hair", identifier -> SkinVisualIds.isHairStyle(identifier, gender));

@@ -1,7 +1,6 @@
 {
   "replace": false,
   "textures": [
-    "mca:skins/face/normal/1.png",
     {
       "id": "mca:skins/face/normal/female/0.png",
       "tone_overrides": {

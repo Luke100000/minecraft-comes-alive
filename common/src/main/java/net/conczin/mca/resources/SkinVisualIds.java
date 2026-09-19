@@ -25,9 +25,13 @@ public final class SkinVisualIds {
     }
 
     public static boolean isEyeTexture(String identifier) {
+        return isEyeTexture(identifier, Gender.NEUTRAL);
+    }
+
+    public static boolean isEyeTexture(String identifier, Gender gender) {
         ResourceLocation id = ResourceLocation.tryParse(identifier);
         EyeCatalog list = EyeCatalog.getInstance();
-        return isEyeTexturePath(id) && list != null && list.contains(id);
+        return isEyeTexturePath(id) && list != null && list.contains(id, gender);
     }
 
     public static boolean isEyeTexturePath(ResourceLocation id) {

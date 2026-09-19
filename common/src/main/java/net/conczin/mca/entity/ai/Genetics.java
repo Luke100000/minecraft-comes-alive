@@ -9,6 +9,7 @@ import net.conczin.mca.util.network.datasync.CDataManager;
 import net.conczin.mca.util.network.datasync.CDataParameter;
 import net.conczin.mca.util.network.datasync.CEnumParameter;
 import net.conczin.mca.util.network.datasync.CParameter;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
@@ -134,9 +135,11 @@ public class Genetics implements Iterable<Genetics.Gene> {
             getGenome(type).mutate(mother, father);
         }
 
-        entity.setEyeTexture(random.nextBoolean()
+        ResourceLocation inheritedEye = random.nextBoolean()
                 ? mother.entity.getEyeTexture()
-                : father.entity.getEyeTexture());
+                : father.entity.getEyeTexture();
+        EyeCatalog eyes = EyeCatalog.getInstance();
+        entity.setEyeTexture(eyes == null ? inheritedEye : eyes.resolve(inheritedEye, getGender()));
     }
 
     public void combine(Genetics mother, Genetics father, long seed) {

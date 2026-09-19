@@ -11,6 +11,10 @@ import net.minecraft.world.entity.animal.Sheep;
 import net.minecraft.world.item.DyeColor;
 
 public final class EyeTextureLayers {
+    private static final int SCLERA_MIN_CHANNEL = 160;
+    private static final int SCLERA_MAX_CHANNEL_SPREAD = 32;
+    private static final int IRIS_MIN_CHANNEL = 32;
+    private static final int DETAILS_TINT = 0xFF808080;
     private static final int NATURAL_DYE = 0xFFFFFFFF;
 
     private static final int ALBINISM_EYE_COLOR = 0xFFE8A0A0;
@@ -62,16 +66,59 @@ public final class EyeTextureLayers {
         return FastColor.ARGB32.lerp((eyeColor - 0.70F) / 0.30F, HAZEL_EYE_COLOR, BROWN_EYE_COLOR);
     }
 
-    public static DecodedPixel decodePixel(int pixel) {
+    public static boolean hasExplicitTintMarker(NativeImage image) {
+        for (int x = 0; x < image.getWidth(); x++) {
+            for (int y = 0; y < image.getHeight(); y++) {
+                if (EyeTintPixel.isValidIrisMarker(image.getPixelRGBA(x, y))) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public static DecodedPixel decodePixel(int pixel, boolean explicitTintMarkers) {
         int alpha = FastColor.ABGR32.alpha(pixel);
         if (alpha == 0) {
             return null;
         }
-        if (EyeTintPixel.isIrisMarker(alpha)) {
-            EyeTintPixel.Mask mask = EyeTintPixel.decodeMarkedMask(pixel);
-            return DecodedPixel.tint(mask.tone(), EyeToneRendering.neutralMaskPixel(mask));
+
+        if (explicitTintMarkers) {
+            if (EyeTintPixel.isValidIrisMarker(pixel)) {
+                EyeTintPixel.Mask mask = EyeTintPixel.decodeMarkedMask(pixel);
+                return DecodedPixel.tint(mask.tone(), EyeToneRendering.neutralMaskPixel(mask));
+            }
+            return DecodedPixel.fixed(pixel);
         }
-        return DecodedPixel.fixed(pixel);
+
+        if (isLegacyScleraPixel(pixel)) {
+            return DecodedPixel.fixed(pixel);
+        }
+
+        int max = Math.max(
+                FastColor.ABGR32.red(pixel),
+                Math.max(FastColor.ABGR32.green(pixel), FastColor.ABGR32.blue(pixel))
+        );
+        return max >= IRIS_MIN_CHANNEL
+                ? DecodedPixel.tint(EyeTintPixel.Tone.PRIMARY, pixel)
+                : DecodedPixel.fixed(EyeToneRendering.multiplyPixel(pixel, DETAILS_TINT));
+    }
+
+    private static boolean isLegacyScleraPixel(int pixel) {
+        int alpha = FastColor.ABGR32.alpha(pixel);
+        if (alpha == 1) {
+            return true;
+        }
+        if (alpha != 255) {
+            return false;
+        }
+
+        int red = FastColor.ABGR32.red(pixel);
+        int green = FastColor.ABGR32.green(pixel);
+        int blue = FastColor.ABGR32.blue(pixel);
+        int min = Math.min(red, Math.min(green, blue));
+        int max = Math.max(red, Math.max(green, blue));
+        return min >= SCLERA_MIN_CHANNEL && max - min <= SCLERA_MAX_CHANNEL_SPREAD;
     }
 
     public static Bounds findBounds(NativeImage image) {
