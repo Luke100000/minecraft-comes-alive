@@ -4,6 +4,10 @@
 * Backup your world before using.
 * Some addons may not work/crash, if so either use 7.6.28-beta or 7.7.0-beta.2
 
+# 7.7.1-beta.2
+
+* Fixed Sinytra Connector crashes.
+
 # 7.7.1-beta.1
 
 * Performance improvements.

@@ -14,12 +14,11 @@ import net.conczin.mca.resources.FaceList;
 import net.conczin.mca.resources.Supporters;
 import net.minecraft.client.renderer.ItemBlockRenderTypes;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.blockentity.BlockEntityRenderers;
-import net.minecraft.client.renderer.entity.EntityRenderers;
 import net.minecraft.client.renderer.entity.VillagerRenderer;
 import net.minecraft.client.renderer.entity.ZombieVillagerRenderer;
 import net.minecraft.client.renderer.item.ItemProperties;
 import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.client.event.EntityRenderersEvent;
 import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
 import net.minecraftforge.client.event.RegisterParticleProvidersEvent;
@@ -42,30 +41,35 @@ public final class MCAForgeClient {
     }
 
     @SubscribeEvent
-    @SuppressWarnings("removal")
-    public static void setup(FMLClientSetupEvent event) {
+    public static void onRegisterRenderers(EntityRenderersEvent.RegisterRenderers event) {
         if (Config.getInstance().useSquidwardModels) {
-            EntityRenderers.register(EntitiesMCA.MALE_VILLAGER.get(), VillagerRenderer::new);
-            EntityRenderers.register(EntitiesMCA.FEMALE_VILLAGER.get(), VillagerRenderer::new);
+            event.registerEntityRenderer(EntitiesMCA.MALE_VILLAGER.get(), VillagerRenderer::new);
+            event.registerEntityRenderer(EntitiesMCA.FEMALE_VILLAGER.get(), VillagerRenderer::new);
 
-            EntityRenderers.register(EntitiesMCA.MALE_ZOMBIE_VILLAGER.get(), ZombieVillagerRenderer::new);
-            EntityRenderers.register(EntitiesMCA.FEMALE_ZOMBIE_VILLAGER.get(), ZombieVillagerRenderer::new);
+            event.registerEntityRenderer(EntitiesMCA.MALE_ZOMBIE_VILLAGER.get(), ZombieVillagerRenderer::new);
+            event.registerEntityRenderer(EntitiesMCA.FEMALE_ZOMBIE_VILLAGER.get(), ZombieVillagerRenderer::new);
         } else {
-            EntityRenderers.register(EntitiesMCA.MALE_VILLAGER.get(), net.conczin.mca.client.render.VillagerEntityMCARenderer::new);
-            EntityRenderers.register(EntitiesMCA.FEMALE_VILLAGER.get(), net.conczin.mca.client.render.VillagerEntityMCARenderer::new);
+            event.registerEntityRenderer(EntitiesMCA.MALE_VILLAGER.get(), net.conczin.mca.client.render.VillagerEntityMCARenderer::new);
+            event.registerEntityRenderer(EntitiesMCA.FEMALE_VILLAGER.get(), net.conczin.mca.client.render.VillagerEntityMCARenderer::new);
 
-            EntityRenderers.register(EntitiesMCA.MALE_ZOMBIE_VILLAGER.get(), net.conczin.mca.client.render.ZombieVillagerEntityMCARenderer::new);
-            EntityRenderers.register(EntitiesMCA.FEMALE_ZOMBIE_VILLAGER.get(), net.conczin.mca.client.render.ZombieVillagerEntityMCARenderer::new);
+            event.registerEntityRenderer(EntitiesMCA.MALE_ZOMBIE_VILLAGER.get(), net.conczin.mca.client.render.ZombieVillagerEntityMCARenderer::new);
+            event.registerEntityRenderer(EntitiesMCA.FEMALE_ZOMBIE_VILLAGER.get(), net.conczin.mca.client.render.ZombieVillagerEntityMCARenderer::new);
         }
 
-        EntityRenderers.register(EntitiesMCA.GRIM_REAPER.get(), net.conczin.mca.client.render.GrimReaperRenderer::new);
-        EntityRenderers.register(EntitiesMCA.CRIB.get(), net.conczin.mca.client.render.CribEntityRenderer::new);
+        event.registerEntityRenderer(EntitiesMCA.GRIM_REAPER.get(), net.conczin.mca.client.render.GrimReaperRenderer::new);
+        event.registerEntityRenderer(EntitiesMCA.CRIB.get(), net.conczin.mca.client.render.CribEntityRenderer::new);
 
-        BlockEntityRenderers.register(BlockEntityTypesMCA.TOMBSTONE.get(), TombstoneBlockEntityRenderer::new);
+        event.registerBlockEntityRenderer(BlockEntityTypesMCA.TOMBSTONE.get(), TombstoneBlockEntityRenderer::new);
+    }
 
-        net.conczin.mca.ModelPredicatesMCA.setup(ItemProperties::register);
+    @SubscribeEvent
+    @SuppressWarnings("removal")
+    public static void setup(FMLClientSetupEvent event) {
+        event.enqueueWork(() -> {
+            net.conczin.mca.ModelPredicatesMCA.setup(ItemProperties::register);
 
-        ItemBlockRenderTypes.setRenderLayer(BlocksMCA.INFERNAL_FLAME.get(), RenderType.cutout());
+            ItemBlockRenderTypes.setRenderLayer(BlocksMCA.INFERNAL_FLAME.get(), RenderType.cutout());
+        });
     }
 
     @SubscribeEvent
