@@ -2,8 +2,6 @@ package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.StairBlock;
-import net.minecraft.world.level.block.TrapDoorBlock;
 
 import java.util.List;
 import java.util.Optional;
@@ -41,23 +39,9 @@ final class RoomScanPlanner {
         List<RoomPartitioner.Component> components = BuildingRoomScanner.components(level, observation.scan());
         RoomScanPlan freshPlan = planFresh(village, source, observation, components);
         if (resolved == null) {
-            Building stairHandoff = resolveStairTopExitRoom(village, level, source, observation);
-            if (stairHandoff != null) {
-                return new Analysis(RoomScanPlan.updateRoom(stairHandoff, source), observation, components);
-            }
-            Building trapdoorHandoff = resolveTrapdoorTopExitRoom(village, level, source, observation);
-            if (trapdoorHandoff != null) {
-                return new Analysis(RoomScanPlan.updateRoom(trapdoorHandoff, source), observation, components);
-            }
-        }
-        if (resolved == null
-                && freshPlan.mode() == Village.RoomScanMode.ADD_ROOM
-                && !observation.seed().equals(source)
-                && StructureConnector.isVertical(level, source)) {
-            Building handoffRoom = village.findPhysicalRoomAt(observation.seed()).orElse(null);
-            if (handoffRoom != null
-                    && handoffRoom.getStructureId() == freshPlan.targetStructureId()
-                    && handoffRoom.getFloorId() == freshPlan.targetFloorId()) {
+            Building handoffRoom = resolveInteractionHandoffRoom(
+                    village, level, source, observation, freshPlan);
+            if (handoffRoom != null) {
                 return new Analysis(RoomScanPlan.updateRoom(handoffRoom, source), observation, components);
             }
         }
@@ -73,45 +57,28 @@ final class RoomScanPlanner {
         return new Analysis(persistedFloorPlan);
     }
 
-    /**
-     * A stair interaction can normalize onto the lower Floor even when the stair ends beside an
-     * already-registered upper Room. Only hand off when scanner topology exposes exactly one
-     * same-height adjacent Floor seed with registered physical Room ownership. Wider or otherwise
-     * ambiguous landings deliberately retain normal attachment planning.
-     */
-    private static Building resolveStairTopExitRoom(
+    private static Building resolveInteractionHandoffRoom(
             Village village,
             Level level,
             BlockPos source,
-            StructureScanner.FloorObservation observation) {
-        if (!isStairInteraction(level, source)) return null;
-        int landingY = observation.seed().getY();
-        List<Building> registeredLandings = observation.scan().adjacentFloorSeeds().stream()
-                .filter(seed -> seed.getY() == landingY)
+            StructureScanner.FloorObservation observation,
+            RoomScanPlan freshPlan) {
+        StructureScanner.InteractionHandoff handoff = StructureScanner.resolveInteractionHandoff(
+                level, source, observation).orElse(null);
+        if (handoff == null) return null;
+
+        List<Building> registeredLandings = handoff.candidates().stream()
                 .map(village::findPhysicalRoomAt)
                 .flatMap(Optional::stream)
                 .toList();
-        return registeredLandings.size() == 1 ? registeredLandings.getFirst() : null;
-    }
+        if (registeredLandings.size() != 1) return null;
 
-    private static boolean isStairInteraction(Level level, BlockPos source) {
-        return level.getBlockState(source).getBlock() instanceof StairBlock
-                || level.getBlockState(source.below()).getBlock() instanceof StairBlock;
-    }
-
-    private static Building resolveTrapdoorTopExitRoom(
-            Village village,
-            Level level,
-            BlockPos source,
-            StructureScanner.FloorObservation observation) {
-        BlockPos connector = StructureConnector.verticalInteractionConnector(level, source);
-        if (connector == null
-                || !connector.equals(source.below())
-                || !(level.getBlockState(connector).getBlock() instanceof TrapDoorBlock)
-                || !StructureConnector.isVertical(level, connector)) {
-            return null;
-        }
-        return village.findPhysicalRoomAt(observation.seed()).orElse(null);
+        Building room = registeredLandings.getFirst();
+        if (handoff.kind() != StructureScanner.HandoffKind.VERTICAL_CONNECTOR) return room;
+        if (freshPlan.mode() != Village.RoomScanMode.ADD_ROOM) return null;
+        return room.getStructureId() == freshPlan.targetStructureId()
+                && room.getFloorId() == freshPlan.targetFloorId()
+                ? room : null;
     }
 
     record Analysis(RoomScanPlan plan,
