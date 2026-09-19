@@ -21,7 +21,7 @@ class RoomScanPlannerTest {
     }
 
     @Test
-    void freshSameStoreyOverlapDoesNotInventRegisteredRoomIdentity() {
+    void freshSameFloorOverlapDoesNotInventRegisteredRoomIdentity() {
         Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
         Building room = room(100, 20, 0, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
@@ -61,7 +61,7 @@ class RoomScanPlannerTest {
     }
 
     @Test
-    void sameStoreyObservationAddsRoomAcrossDoorBoundary() {
+    void sameFloorObservationAddsRoomAcrossDoorBoundary() {
         Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
         Building room = room(100, 20, 0, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
@@ -145,7 +145,7 @@ class RoomScanPlannerTest {
     }
 
     @Test
-    void ambiguousSameStoreyOverlapAcrossStructuresDoesNotPickOne() {
+    void ambiguousSameFloorOverlapAcrossStructuresDoesNotPickOne() {
         Structure first = structure(20, 20, floor(0, 64, 68, 0, 1));
         Structure second = structure(30, 30, floor(0, 64, 68, 2, 3));
         Building firstRoom = room(100, 20, 0, Set.of(
@@ -164,7 +164,7 @@ class RoomScanPlannerTest {
     }
 
     @Test
-    void overlappingDifferentStoreyWithoutConnectorEvidenceUsesAttachmentFallback() {
+    void overlappingDifferentFloorWithoutConnectorEvidenceUsesAttachmentFallback() {
         Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
         Building room = room(100, 20, 0, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
@@ -181,7 +181,7 @@ class RoomScanPlannerTest {
     }
 
     @Test
-    void adjacentDifferentStoreyWithoutConnectorEvidenceRemainsAddBuilding() {
+    void adjacentDifferentFloorWithoutConnectorEvidenceRemainsAddBuilding() {
         Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
         Building room = room(100, 20, 0, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
@@ -215,7 +215,7 @@ class RoomScanPlannerTest {
     }
 
     @Test
-    void lowerTransitionOutsidePersistedFloorUsesPersistedFloorEvidenceInsteadOfSameStoreyExpansion() {
+    void lowerTransitionOutsidePersistedFloorUsesPersistedFloorEvidenceInsteadOfSameFloorExpansion() {
         Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
         Building room = room(100, 20, 0, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
@@ -235,7 +235,7 @@ class RoomScanPlannerTest {
     }
 
     @Test
-    void interactionBelowAnchorStaysOnCanonicalUpperStorey() {
+    void interactionBelowAnchorStaysOnCanonicalUpperFloor() {
         Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
         Building room = room(100, 20, 0, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
@@ -259,7 +259,7 @@ class RoomScanPlannerTest {
     }
 
     @Test
-    void upperTransitionOutsidePersistedFloorUsesPersistedFloorEvidenceInsteadOfSameStoreyExpansion() {
+    void upperTransitionOutsidePersistedFloorUsesPersistedFloorEvidenceInsteadOfSameFloorExpansion() {
         Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
         Building room = room(100, 20, 0, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
@@ -292,7 +292,7 @@ class RoomScanPlannerTest {
         assertEquals(Village.RoomScanMode.ADD_BASEMENT, plan.mode());
         assertTrue(plan.selectedAttachmentFloor() != null
                 && plan.selectedAttachmentFloor().geometry().sameCellPositions(primary),
-                "attachment planning must keep the selected Floor instead of substituting another scanned storey");
+                "attachment planning must keep the selected Floor instead of substituting another scanned Floor");
     }
 
     @Test

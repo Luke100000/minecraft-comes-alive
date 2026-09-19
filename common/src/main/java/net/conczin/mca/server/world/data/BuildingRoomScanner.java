@@ -51,16 +51,9 @@ final class BuildingRoomScanner {
 
         BlockPos seed = component.nearestCell(source);
         Set<BlockPos> poi = RoomPoiEvidence.candidates(components, component);
-        int minX = floorCells.stream().mapToInt(BlockPos::getX).min().orElse(source.getX());
-        int minY = floorCells.stream().mapToInt(BlockPos::getY).min().orElse(source.getY());
-        int minZ = floorCells.stream().mapToInt(BlockPos::getZ).min().orElse(source.getZ());
-        int maxX = floorCells.stream().mapToInt(BlockPos::getX).max().orElse(source.getX());
-        int maxZ = floorCells.stream().mapToInt(BlockPos::getZ).max().orElse(source.getZ());
-        int maxY = component.cells().stream().mapToInt(cell -> cell.ceilingY() - 1)
-                .max().orElse(floor.maxPhysicalCeilingY() - 1);
+        FloorGeometry.Bounds bounds = FloorGeometry.bounds(component.cells(), 0);
         return new Result(Building.validationResult.SUCCESS, seed, floorId, floor.anchorY(), floorCells, poi,
-                new BlockPos(minX, minY, minZ),
-                new BlockPos(maxX, maxY, maxZ));
+                bounds.min(), bounds.max());
     }
 
     record Result(Building.validationResult status,

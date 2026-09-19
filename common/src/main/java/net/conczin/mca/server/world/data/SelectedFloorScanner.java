@@ -715,17 +715,9 @@ final class SelectedFloorScanner {
                                   Set<Transition> transitions,
                                   Set<BlockPos> verticalBoundaryCells,
                                   Set<BlockPos> adjacentFloorSeeds) {
-        Set<BlockPos> footprint = geometry.projection().cells();
-        int minX = footprint.stream().mapToInt(BlockPos::getX).min().orElse(seed.getX());
-        int minZ = footprint.stream().mapToInt(BlockPos::getZ).min().orElse(seed.getZ());
-        int maxX = footprint.stream().mapToInt(BlockPos::getX).max().orElse(seed.getX());
-        int maxZ = footprint.stream().mapToInt(BlockPos::getZ).max().orElse(seed.getZ());
-        int minY = geometry.cells().stream().mapToInt(cell -> cell.feet().getY() - 1)
-                .min().orElse(seed.getY() - 1);
-        int maxY = geometry.cells().stream().mapToInt(cell -> cell.ceilingY() - 1)
-                .max().orElse(seed.getY());
+        FloorGeometry.Bounds bounds = FloorGeometry.bounds(geometry.cells(), -1);
         return new Result(Building.validationResult.SUCCESS, geometry,
-                new BlockPos(minX, minY, minZ), new BlockPos(maxX, maxY, maxZ),
+                bounds.min(), bounds.max(),
                 transitions, verticalBoundaryCells, adjacentFloorSeeds);
     }
 

@@ -511,7 +511,7 @@ class VillageFloorSystemTest {
     }
 
     @Test
-    void duplicateCheckAllowsSharedTransitionCellAcrossStoreysOfSameLogicalBuilding() {
+    void duplicateCheckAllowsSharedTransitionCellAcrossFloorsOfSameLogicalBuilding() {
         Village village = new Village(1, null);
         BlockPos sharedTransition = new BlockPos(2, 67, 0);
         FloorGeometry lowerGeometry = new FloorGeometry(Set.of(

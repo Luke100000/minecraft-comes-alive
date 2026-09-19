@@ -29,25 +29,25 @@ final class StructureScanner {
         Config config = Config.getInstance();
         SelectedFloorScanner.Observation observation = new SelectedFloorScanner.Observation(
                 world, config.maxBuildingSize, config.maxBuildingRadius);
-        Result exact = resultFromObservedStorey(source, observation.selected(source), existing, -1, -1);
+        Result exact = resultFromObservedFloor(source, observation.selected(source), existing, -1, -1);
         if (exact.result() == Building.validationResult.SUCCESS) return exact;
 
         FloorHandoff handoff = resolveFloorHandoff(world, source,
                 StructureConnector.verticalHandoffCandidates(world, source), observation::selected).orElse(null);
         if (handoff != null) {
-            return resultFromObservedStorey(handoff.seed(), handoff.scan(), existing, -1, -1);
+            return resultFromObservedFloor(handoff.seed(), handoff.scan(), existing, -1, -1);
         }
 
         handoff = resolveFloorHandoff(world, source,
                 StructureConnector.horizontalHandoffCandidates(world, source), observation::selected).orElse(null);
         if (handoff != null) {
-            return resultFromObservedStorey(handoff.seed(), handoff.scan(), existing, -1, -1);
+            return resultFromObservedFloor(handoff.seed(), handoff.scan(), existing, -1, -1);
         }
 
         BlockPos standingSeed = resolveStandingSurfaceSeed(world, source).orElse(null);
         return standingSeed == null || standingSeed.equals(source)
                 ? exact
-                : resultFromObservedStorey(standingSeed, observation.selected(standingSeed), existing, -1, -1);
+                : resultFromObservedFloor(standingSeed, observation.selected(standingSeed), existing, -1, -1);
     }
 
     static Result scanReportedStructure(Level world,
@@ -64,11 +64,11 @@ final class StructureScanner {
         return Result.failure(exact.result(), source);
     }
 
-    static Result resultFromObservedStorey(BlockPos source,
-                                           SelectedFloorScanner.Result selected,
-                                           Collection<Structure> existing,
-                                           int ignoredStructureId,
-                                           int attachmentBuildingId) {
+    static Result resultFromObservedFloor(BlockPos source,
+                                          SelectedFloorScanner.Result selected,
+                                          Collection<Structure> existing,
+                                          int ignoredStructureId,
+                                          int attachmentBuildingId) {
         if (selected == null || selected.result() != Building.validationResult.SUCCESS
                 || selected.floor() == null) {
             return Result.failure(selected == null
@@ -196,7 +196,7 @@ final class StructureScanner {
                                                           int ignoredStructureId,
                                                           int attachmentBuildingId) {
         if (observation == null) return Building.validationResult.NOT_IN_BUILDING;
-        return resultFromObservedStorey(observation.seed(), observation.scan(),
+        return resultFromObservedFloor(observation.seed(), observation.scan(),
                 existing, ignoredStructureId, attachmentBuildingId).result();
     }
 
@@ -229,7 +229,7 @@ final class StructureScanner {
         Config config = Config.getInstance();
         SelectedFloorScanner.Result selected = SelectedFloorScanner.scan(
                 world, scanSeed, config.maxBuildingSize, config.maxBuildingRadius);
-        Result result = resultFromObservedStorey(
+        Result result = resultFromObservedFloor(
                 scanSeed, selected, existing, ignoredStructureId, attachmentBuildingId);
         return result.result() == Building.validationResult.SUCCESS
                 ? result : Result.failure(result.result(), interactionSource);

@@ -85,7 +85,7 @@ public final class RoomWorkflow {
         BlockPos scanSeed = plan.scanSeed();
         StructureScanner.Result fresh = analysis.observation() == null
                 ? StructureScanner.scanExistingFloor(world, structure, floor, scanSeed, village.getStructures().values())
-                : StructureScanner.resultFromObservedStorey(scanSeed, analysis.observation().scan(),
+                : StructureScanner.resultFromObservedFloor(scanSeed, analysis.observation().scan(),
                         village.getStructures().values(), structure.getId(), structure.getLogicalBuildingId());
         if (fresh.result() != Building.validationResult.SUCCESS) {
             return failedRoom(fresh.result(), source, village);
@@ -222,7 +222,7 @@ public final class RoomWorkflow {
             return StructureScanner.Result.failure(
                     Building.validationResult.NOT_IN_BUILDING, plan.interactionSource());
         }
-        return StructureScanner.resultFromObservedStorey(
+        return StructureScanner.resultFromObservedFloor(
                 plan.scanSeed(), observation.scan(), existing, -1, plan.targetBuildingId());
     }
 

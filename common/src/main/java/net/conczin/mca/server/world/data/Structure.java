@@ -96,7 +96,7 @@ public final class Structure implements VillageBuilding {
     }
 
     /**
-     * Semantic storey boundary. Non-top Floors end at the next semantic Floor anchor;
+     * Semantic Floor boundary. Non-top Floors end at the next semantic Floor anchor;
      * the top Floor ends at the highest physical ceiling observed in its exact geometry.
      */
     int semanticCeilingY(StructureFloor floor) {
@@ -207,16 +207,9 @@ public final class Structure implements VillageBuilding {
         List<FloorGeometry.Cell> cells = current.stream()
                 .flatMap(floor -> floor.geometry().cells().stream())
                 .toList();
-        if (cells.isEmpty()) return;
-
-        int minX = cells.stream().mapToInt(cell -> cell.feet().getX()).min().orElse(source.getX());
-        int minZ = cells.stream().mapToInt(cell -> cell.feet().getZ()).min().orElse(source.getZ());
-        int maxX = cells.stream().mapToInt(cell -> cell.feet().getX()).max().orElse(source.getX());
-        int maxZ = cells.stream().mapToInt(cell -> cell.feet().getZ()).max().orElse(source.getZ());
-        int minY = cells.stream().mapToInt(cell -> cell.feet().getY()).min().orElse(source.getY());
-        int maxY = cells.stream().mapToInt(cell -> cell.ceilingY() - 1).max().orElse(source.getY());
-        min = new BlockPos(minX, minY, minZ);
-        max = new BlockPos(maxX, maxY, maxZ);
+        FloorGeometry.Bounds bounds = FloorGeometry.bounds(cells, 0);
+        min = bounds.min();
+        max = bounds.max();
     }
 
 

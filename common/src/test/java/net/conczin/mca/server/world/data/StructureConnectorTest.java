@@ -49,7 +49,7 @@ class StructureConnectorTest {
     }
 
     @Test
-    void connectorEndingOneBlockBelowUpperFloorStillConnectsStoreys() {
+    void connectorEndingOneBlockBelowUpperFloorStillConnectsFloors() {
         StructureFloor lower = floor(64, 68);
         StructureFloor upper = floor(69, 73);
         List<BlockPos> connectorColumn = List.of(
