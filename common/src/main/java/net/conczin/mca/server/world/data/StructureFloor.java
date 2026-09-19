@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-/** Stable persisted identity for one semantic storey around exact 3D geometry. */
+/** Stable persisted identity for one semantic Floor around exact 3D geometry. */
 public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
     static final int BAND_TOLERANCE = 2;
 
@@ -90,11 +90,11 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
     }
 
     boolean overlapsSameSemanticBand(StructureFloor other) {
-        return other != null && overlapsSemanticStorey(other.geometry);
+        return other != null && overlapsSameSemanticBand(other.geometry);
     }
 
     /** Persisted-Floor candidate overlap for a freshly observed exact geometry. */
-    boolean overlapsSemanticStorey(FloorGeometry other) {
+    boolean overlapsSameSemanticBand(FloorGeometry other) {
         return other != null
                 && sameSemanticBand(anchorY(), other.anchorY())
                 && geometry.footprintIntersectionArea(other) > 0;

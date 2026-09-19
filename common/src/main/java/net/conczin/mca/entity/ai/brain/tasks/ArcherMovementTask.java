@@ -23,7 +23,7 @@ import java.util.Optional;
 
 public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E> {
     private static final double SPEED_MODIFIER = 0.5D;
-    private static final double EMERGENCY_SPEED_MODIFIER = 0.9D;
+    private static final double EMERGENCY_SPEED_MODIFIER = 1.2D;
     private static final float LOOK_SPEED = 30.0F;
     private static final int LOST_SIGHT_BEFORE_REPOSITION = 10;
     private static final int DEBUG_LOG_INTERVAL_TICKS = 20;

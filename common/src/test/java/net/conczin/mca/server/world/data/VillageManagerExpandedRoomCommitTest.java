@@ -103,7 +103,7 @@ class VillageManagerExpandedRoomCommitTest {
     }
 
     @Test
-    void stalePendingFloorRefreshFailsWithoutRegisteringANewStructure() {
+    void stalePendingStructureRefreshFailsWithoutRegisteringANewStructure() {
         Village village = new Village(1, null);
         Structure refreshed = new Structure(10, BlockPos.ZERO, List.of(
                 TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 3))));
@@ -113,7 +113,7 @@ class VillageManagerExpandedRoomCommitTest {
                 new BlockPos(2, 64, 0),
                 added,
                 List.of("building"),
-                village).withPendingFloorRefresh(refreshed, List.of());
+                village).withPendingStructure(refreshed);
         VillageManager manager = new VillageManager(null);
 
         Building.validationResult result = assertDoesNotThrow(
@@ -123,6 +123,65 @@ class VillageManagerExpandedRoomCommitTest {
         assertEquals(Building.validationResult.NOT_IN_BUILDING, result);
         assertEquals(0, village.getStructures().size());
         assertEquals(0, village.getRooms().count());
+    }
+
+    @Test
+    void selectedRoomUpdatePreservesForcedTypeAndSibling() {
+        Village village = new Village(1, null);
+        Structure current = new Structure(10, BlockPos.ZERO, List.of(
+                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 3))));
+        Building selected = room(100, 10, 0, region(64, 0, 1));
+        selected.setType("workshop");
+        selected.setTypeForced(true);
+        Building sibling = room(101, 10, 0, region(64, 3, 3));
+        sibling.setType("building");
+        village.registerStructure(current, selected);
+        village.registerRoom(sibling);
+
+        Structure refreshed = current.copy();
+        Building replacement = room(100, 10, 0, region(64, 0, 2));
+        replacement.setType("workshop");
+        replacement.setTypeForced(true);
+        RegisteredRoomUpdate update = new RegisteredRoomUpdate(
+                Building.validationResult.SUCCESS, BlockPos.ZERO, village, refreshed,
+                10, 0, 100, replacement, List.of("music_store", "workshop"));
+        VillageManager manager = new VillageManager(null);
+        Set<BlockPos> siblingCells = Set.copyOf(sibling.getFloorCells());
+
+        assertFalse(update.requiresTypeSelection());
+        assertEquals(Building.validationResult.SUCCESS,
+                manager.commitRegisteredRoomUpdate(update, null));
+        Building committed = village.getBuilding(100).orElseThrow();
+        assertEquals("workshop", committed.getType());
+        assertTrue(committed.isTypeForced());
+        Building untouchedSibling = village.getBuilding(101).orElseThrow();
+        assertEquals("building", untouchedSibling.getType());
+        assertEquals(siblingCells, untouchedSibling.getFloorCells());
+    }
+
+    @Test
+    void selectedNonForcedRoomUsesAutomaticTypeResolution() {
+        Village village = new Village(1, null);
+        Structure current = new Structure(10, BlockPos.ZERO, List.of(
+                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 1))));
+        Building selected = room(100, 10, 0, region(64, 0, 1));
+        selected.setType("workshop");
+        selected.setTypeForced(false);
+        village.registerStructure(current, selected);
+
+        Building replacement = room(100, 10, 0, region(64, 0, 1));
+        replacement.setType("workshop");
+        replacement.setTypeForced(false);
+        RegisteredRoomUpdate update = new RegisteredRoomUpdate(
+                Building.validationResult.SUCCESS, BlockPos.ZERO, village, current.copy(),
+                10, 0, 100, replacement, List.of());
+        VillageManager manager = new VillageManager(null);
+
+        assertEquals(Building.validationResult.SUCCESS,
+                manager.commitRegisteredRoomUpdate(update, null));
+        Building committed = village.getBuilding(100).orElseThrow();
+        assertEquals("house", committed.getType());
+        assertFalse(committed.isTypeForced());
     }
 
     private static BuildingFloorRegion region(int y, int minX, int maxX) {

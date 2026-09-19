@@ -17,6 +17,7 @@ import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Constructor;
@@ -39,6 +40,11 @@ class BlueprintScreenMapInteractionTest {
         Bootstrap.bootStrap();
     }
 
+    @BeforeEach
+    void resetBlueprintSessionState() {
+        BlueprintScreen.onClientLevelChanged(new Object());
+    }
+
     @Test
     void freshGameSessionDefaultsBlueprintToGroundFloor() throws Exception {
         Field selectedFloor = BlueprintScreen.class.getDeclaredField("selectedFloorOrdinal");
@@ -49,17 +55,84 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
-    void selectedFloorAndPlayerCenteringAreLocalToEachBlueprintScreen() throws Exception {
+    void reopeningBlueprintKeepsMapUiStateForTheClientSession() throws Exception {
         BlueprintScreen first = new BlueprintScreen();
-        BlueprintScreen second = new BlueprintScreen();
-
         setField(first, "selectedFloorOrdinal", 2);
+        setField(first, "mapScaleFit", false);
+        setField(first, "mapScale", 2.36F);
         setField(first, "playerCentered", true);
+        setField(first, "showPlayerHead", false);
+        setField(first, "showTerrain", false);
+        setField(first, "showBuildingIcons", false);
+        setField(first, "mapCenterVillageId", 7);
+        setField(first, "mapCenterAutomatic", false);
+        setField(first, "mapCenterX", 123.25D);
+        setField(first, "mapCenterZ", -45.75D);
+        first.removed();
 
-        assertEquals(2, getField(first, "selectedFloorOrdinal"));
-        assertEquals(0, getField(second, "selectedFloorOrdinal"));
-        assertEquals(true, getField(first, "playerCentered"));
-        assertEquals(false, getField(second, "playerCentered"));
+        BlueprintScreen reopened = new BlueprintScreen();
+
+        assertEquals(2, getField(reopened, "selectedFloorOrdinal"));
+        assertEquals(false, getField(reopened, "mapScaleFit"));
+        assertEquals(2.36F, getField(reopened, "mapScale"));
+        assertEquals(true, getField(reopened, "playerCentered"));
+        assertEquals(false, getField(reopened, "showPlayerHead"));
+        assertEquals(false, getField(reopened, "showTerrain"));
+        assertEquals(false, getField(reopened, "showBuildingIcons"));
+        assertEquals(7, getField(reopened, "mapCenterVillageId"));
+        assertEquals(false, getField(reopened, "mapCenterAutomatic"));
+        assertEquals(123.25D, getDoubleField(reopened, "mapCenterX"), 0.0000001D);
+        assertEquals(-45.75D, getDoubleField(reopened, "mapCenterZ"), 0.0000001D);
+    }
+
+    @Test
+    void changingClientLevelResetsRememberedBlueprintState() throws Exception {
+        BlueprintScreen first = new BlueprintScreen();
+        setField(first, "selectedFloorOrdinal", -2);
+        setField(first, "mapScaleFit", false);
+        setField(first, "mapScale", 3.0F);
+        setField(first, "playerCentered", true);
+        setField(first, "showPlayerHead", false);
+        setField(first, "showTerrain", false);
+        setField(first, "showBuildingIcons", false);
+        setField(first, "mapCenterVillageId", 7);
+        setField(first, "mapCenterAutomatic", false);
+        setField(first, "mapCenterX", 123.25D);
+        setField(first, "mapCenterZ", -45.75D);
+        first.removed();
+
+        BlueprintScreen.onClientLevelChanged(new Object());
+        BlueprintScreen fresh = new BlueprintScreen();
+
+        assertEquals(0, getField(fresh, "selectedFloorOrdinal"));
+        assertEquals(true, getField(fresh, "mapScaleFit"));
+        assertEquals(1.0F, getField(fresh, "mapScale"));
+        assertEquals(false, getField(fresh, "playerCentered"));
+        assertEquals(true, getField(fresh, "showPlayerHead"));
+        assertEquals(true, getField(fresh, "showTerrain"));
+        assertEquals(true, getField(fresh, "showBuildingIcons"));
+        assertEquals(null, getField(fresh, "mapCenterVillageId"));
+        assertEquals(true, getField(fresh, "mapCenterAutomatic"));
+        assertEquals(0.0D, getDoubleField(fresh, "mapCenterX"), 0.0000001D);
+        assertEquals(0.0D, getDoubleField(fresh, "mapCenterZ"), 0.0000001D);
+    }
+
+    @Test
+    void rememberedMapCenterIsNotReusedForAnotherVillage() throws Exception {
+        BlueprintScreen first = new BlueprintScreen();
+        setField(first, "mapCenterVillageId", 7);
+        setField(first, "mapCenterAutomatic", false);
+        setField(first, "mapCenterX", 123.25D);
+        setField(first, "mapCenterZ", -45.75D);
+        first.removed();
+
+        BlueprintScreen reopened = new BlueprintScreen();
+        setField(reopened, "page", "map");
+        reopened.setVillage(villageWithStructures(8, List.of(new BlockPos(40, 64, 10))));
+
+        assertEquals(40.5D, getDoubleField(reopened, "mapCenterX"), 0.0000001D);
+        assertEquals(10.5D, getDoubleField(reopened, "mapCenterZ"), 0.0000001D);
+        assertEquals(true, getField(reopened, "mapCenterAutomatic"));
     }
 
     @Test

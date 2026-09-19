@@ -19,14 +19,14 @@ import java.util.stream.Collectors;
 @PrefixGameTestTemplate(false)
 public final class CopiedOpenHouseGameTests {
     private static final String TEMPLATE = "gametest/copied_open_house";
-    private static final BlockPos LOWER_STOREY_SEED = new BlockPos(23, 6, 12);
-    private static final BlockPos MAIN_STOREY_SEED = new BlockPos(15, 12, 12);
-    private static final BlockPos UPPER_STOREY_SEED = new BlockPos(11, 16, 13);
+    private static final BlockPos LOWER_STOREY_SEED = new BlockPos(23, 5, 12);
+    private static final BlockPos MAIN_STOREY_SEED = new BlockPos(15, 11, 12);
+    private static final BlockPos MAIN_STOREY_STAIR_EXIT = new BlockPos(12, 10, 11);
+    private static final BlockPos UPPER_STOREY_SEED = new BlockPos(11, 15, 13);
     private static final List<BlockPos> LOWER_STAIR_SEEDS = List.of(
-            new BlockPos(10, 10, 13), new BlockPos(12, 11, 11), new BlockPos(10, 10, 12));
+            new BlockPos(10, 9, 13), new BlockPos(11, 9, 11), new BlockPos(10, 9, 12));
 
-    // The structure block itself sits one block below the template in 1.21.1,
-    // so helper-relative Y is template-NBT Y + 1.
+    // The 26.x GameTest bridge places template coordinates directly at helper-relative Y.
     private static final List<BlockPos> STOREY_SEEDS = List.of(
             LOWER_STOREY_SEED,
             MAIN_STOREY_SEED,
@@ -49,14 +49,6 @@ public final class CopiedOpenHouseGameTests {
                 failures.add(relativeSeed + "=" + scan.result());
                 continue;
             }
-            SelectedFloorScanner.Result selectedOnly = SelectedFloorScanner.scanSelected(
-                    helper.getLevel(), seed, config.maxBuildingSize, config.maxBuildingRadius);
-            helper.assertTrue(selectedOnly.result() == Building.validationResult.SUCCESS
-                            && selectedOnly.floor().sameCellPositions(scan.floor()),
-                    "selected-only scan changed Floor membership at " + relativeSeed);
-            helper.assertTrue(selectedOnly.directlyConnectedFloors(selectedOnly.floor()).isEmpty(),
-                    "selected-only scan explored connected storeys at " + relativeSeed);
-
             List<RoomPartitioner.Component> components = BuildingRoomScanner.components(helper.getLevel(), scan);
             helper.assertTrue(!components.isEmpty(),
                     "copied house scan from " + relativeSeed + " produced no Room components");
@@ -227,7 +219,7 @@ public final class CopiedOpenHouseGameTests {
             RegisteredRoomUpdate update = workflow.analyzeRegisteredRoomUpdate(village, roomIds.get(i), source);
             helper.assertTrue(update.result() == Building.validationResult.SUCCESS,
                     "refresh rejected attached Room at " + registeredSeeds.get(i) + ": " + update.result());
-            String type = update.requiresTypeSelection() ? update.playerMatchingTypes().getFirst() : null;
+            String type = update.requiresTypeSelection() ? update.matchingTypes().getFirst() : null;
             helper.assertTrue(manager.commitRegisteredRoomUpdate(update, type) == Building.validationResult.SUCCESS,
                     "refresh could not commit attached Room at " + registeredSeeds.get(i));
         }
@@ -244,6 +236,26 @@ public final class CopiedOpenHouseGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_copied_open_house_stair_exit", templateNamespace = "mca",
+            template = TEMPLATE, timeoutTicks = 280, skyAccess = true)
+    public static void topStairExitSelectsRegisteredMainRoom(GameTestHelper helper) {
+        BlockPos main = helper.absolutePos(MAIN_STOREY_SEED);
+        VillageManager manager = new VillageManager(helper.getLevel());
+        RoomWorkflow workflow = new RoomWorkflow(manager, helper.getLevel());
+        commit(helper, workflow, workflow.analyzeBuildingAddition(main));
+
+        Village village = manager.findNearestVillage(main, Village.MERGE_MARGIN).orElseThrow();
+        Building mainRoom = village.findInteractionRoomAt(main).orElseThrow();
+        BlockPos stairExit = helper.absolutePos(MAIN_STOREY_STAIR_EXIT);
+        RoomScanPlan plan = village.getRoomScanPlan(helper.getLevel(), stairExit);
+
+        helper.assertTrue(plan.mode() == Village.RoomScanMode.UPDATE_ROOM,
+                "top stair exit selected " + plan.mode() + " instead of the registered main Room");
+        helper.assertTrue(plan.currentRoom().orElse(null) == mainRoom,
+                "top stair exit lost the registered main Room identity");
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_copied_open_house_lower_chain", templateNamespace = "mca",
             template = TEMPLATE, timeoutTicks = 320, skyAccess = true)
     public static void successiveLowerStairRoomsAttachOneLevelAtATime(GameTestHelper helper) {
@@ -256,9 +268,9 @@ public final class CopiedOpenHouseGameTests {
         Building mainRoom = village.findInteractionRoomAt(main).orElseThrow();
         int buildingId = village.getStructureFor(mainRoom).orElseThrow().getLogicalBuildingId();
         List<BlockPos> lowerRooms = List.of(
-                new BlockPos(9, 9, 11),
-                new BlockPos(15, 7, 16),
-                new BlockPos(22, 5, 9));
+                new BlockPos(9, 8, 11),
+                new BlockPos(15, 6, 16),
+                new BlockPos(22, 4, 9));
         List<FloorGeometry> attached = new ArrayList<>();
 
         for (int index = 0; index < lowerRooms.size(); index++) {
@@ -451,4 +463,5 @@ public final class CopiedOpenHouseGameTests {
                 "adding the basement broke the upper fresh Floor scan: " + upperScan.result());
         helper.succeed();
     }
+
 }

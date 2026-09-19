@@ -143,7 +143,8 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
     }
 
     private void makePathToggleablePassable(ServerLevel world, LivingEntity entity,
-                                            @Nullable Node pathNode, @Nullable Node adjacentNode) {
+                                            @Nullable Node pathNode, @Nullable Node adjacentNode,
+                                            boolean rememberIfAlreadyOpen) {
         if (pathNode == null) {
             return;
         }
@@ -162,8 +163,11 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
                 blockState,
                 getHorizontalMovementAxis(pathNode, adjacentNode)
         );
-        if (PathingBlockInteraction.setOpen(entity, world, blockState, blockPos, shouldBeOpen)
-                && shouldBeOpen) {
+        boolean wasAlreadyOpen = PathingBlockInteraction.isOpenable(blockState)
+                && blockState.hasProperty(BlockStateProperties.OPEN)
+                && blockState.getValue(BlockStateProperties.OPEN);
+        boolean changed = PathingBlockInteraction.setOpen(entity, world, blockState, blockPos, shouldBeOpen);
+        if (shouldBeOpen && (changed || (rememberIfAlreadyOpen && wasAlreadyOpen))) {
             this.rememberToCloseToggleable(world, entity, blockPos);
         }
     }
@@ -226,8 +230,11 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
         // can be opened and immediately closed again in this same invocation.
         closeDoors(world, entity, previousNode, nextNode);
 
-        makePathToggleablePassable(world, entity, previousNode, nextNode);
-        makePathToggleablePassable(world, entity, nextNode, previousNode);
+        // Vanilla remembers a door after the mob has passed through it even when
+        // that door was already open. It only remembers the upcoming door when it
+        // actually had to open it.
+        makePathToggleablePassable(world, entity, previousNode, nextNode, true);
+        makePathToggleablePassable(world, entity, nextNode, previousNode, false);
         openToggleablesBetweenPathNodes(world, entity, previousNode, nextNode);
         openToggleablesBetweenPathNodes(world, entity, nextNode, followingNode);
     }

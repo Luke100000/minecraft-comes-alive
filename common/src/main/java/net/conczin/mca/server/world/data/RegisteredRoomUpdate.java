@@ -4,7 +4,7 @@ import net.minecraft.core.BlockPos;
 
 import java.util.List;
 
-/** Detached, fully analyzed update for one selected registered Room lineage. */
+/** Detached, fully analyzed replacement for one selected registered Room. */
 public record RegisteredRoomUpdate(
         Building.validationResult result,
         BlockPos source,
@@ -12,34 +12,33 @@ public record RegisteredRoomUpdate(
         Structure refreshedStructure,
         int structureId,
         int floorId,
-        int expectedPlayerRoomId,
-        List<Integer> previousRoomIds,
-        List<RegisteredRoomReconciler.Assignment> assignments,
-        Building playerComponent,
-        List<String> playerMatchingTypes
+        int expectedRoomId,
+        Building replacementRoom,
+        List<String> matchingTypes
 ) {
     public RegisteredRoomUpdate {
-        previousRoomIds = List.copyOf(previousRoomIds);
-        assignments = List.copyOf(assignments);
-        playerMatchingTypes = playerMatchingTypes == null ? List.of() : List.copyOf(playerMatchingTypes);
+        matchingTypes = matchingTypes == null ? List.of() : List.copyOf(matchingTypes);
     }
 
     static RegisteredRoomUpdate failure(Building.validationResult result,
                                         BlockPos source,
                                         Village village) {
         return new RegisteredRoomUpdate(result, source, village, null, -1, -1, -1,
-                List.of(), List.of(), null, List.of());
+                null, List.of());
     }
 
     public boolean isAmbiguous() {
-        return RoomTypeResolver.requiresTypeChoice(playerMatchingTypes);
+        return RoomTypeResolver.requiresTypeChoice(matchingTypes);
     }
 
     public boolean requiresTypeSelection() {
-        return result == Building.validationResult.SUCCESS && isAmbiguous();
+        return result == Building.validationResult.SUCCESS
+                && replacementRoom != null
+                && !replacementRoom.isTypeForced()
+                && isAmbiguous();
     }
 
     public boolean matchesType(String type) {
-        return RoomTypeResolver.matchesTypeChoice(playerMatchingTypes, type);
+        return RoomTypeResolver.matchesTypeChoice(matchingTypes, type);
     }
 }

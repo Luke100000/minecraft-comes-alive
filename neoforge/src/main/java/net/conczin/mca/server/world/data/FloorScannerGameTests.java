@@ -10,6 +10,7 @@ import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.StairBlock;
+import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
@@ -115,6 +116,59 @@ public final class FloorScannerGameTests {
                 "room scan failed: " + scan.result());
         helper.assertTrue(scan.floor().cellAt(raised.above()).isEmpty(),
                 "raised full-height partial obstacle became lower-Floor membership");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_partial_obstacle", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void fullHeightPartialObstacleDoesNotBecomeFloorCell(GameTestHelper helper) {
+        BlockPos roomMin = helper.absolutePos(new BlockPos(4, 2, 4));
+        buildClosedRoom(helper, roomMin, 5, 4);
+        BlockPos blocked = roomMin.offset(1, 0, 1);
+        helper.getLevel().setBlock(blocked, Blocks.HOPPER.defaultBlockState(), 3);
+
+        SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(
+                helper.getLevel(), roomMin.offset(3, 0, 2), 128, 16);
+
+        helper.assertTrue(scan.result() == Building.validationResult.SUCCESS,
+                "room scan failed: " + scan.result());
+        helper.assertTrue(scan.floor().cellAt(blocked).isEmpty(),
+                "full-height partial obstacle became ordinary Floor geometry");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_high_ceiling", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void highCeilingDoesNotCreateExtraFloorLayers(GameTestHelper helper) {
+        BlockPos roomMin = helper.absolutePos(new BlockPos(4, 2, 4));
+        buildClosedRoom(helper, roomMin, 5, 4);
+        raiseClosedRoomRoof(helper, roomMin, 5, 4, 5);
+
+        SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(
+                helper.getLevel(), roomMin.offset(2, 0, 2), 256, 16);
+
+        helper.assertTrue(scan.result() == Building.validationResult.SUCCESS,
+                "high-ceiling room scan failed: " + scan.result());
+        helper.assertTrue(scan.floor().cells().stream()
+                        .allMatch(cell -> cell.feet().getY() == roomMin.getY()),
+                "high ceiling created Floor cells above the supported room layer");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_high_ceiling_limit", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void highCeilingDoesNotConsumeFloorBlockLimit(GameTestHelper helper) {
+        BlockPos roomMin = helper.absolutePos(new BlockPos(4, 2, 4));
+        buildClosedRoom(helper, roomMin, 5, 4);
+        raiseClosedRoomRoof(helper, roomMin, 5, 4, 28);
+
+        SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(
+                helper.getLevel(), roomMin.offset(2, 0, 2), 32, 16);
+
+        helper.assertTrue(scan.result() == Building.validationResult.SUCCESS,
+                "legal 20-cell Floor consumed its block limit on enclosed air: " + scan.result());
+        helper.assertTrue(scan.floor().cells().size() == 20,
+                "high-ceiling Floor changed physical membership: " + scan.floor().cells().size());
         helper.succeed();
     }
 
@@ -344,6 +398,73 @@ public final class FloorScannerGameTests {
 
         helper.assertTrue(additionScan.result() == Building.validationResult.SUCCESS,
                 "unregistered side of doorway was rejected as " + additionScan.result());
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_add_room_stale_identity_overlap", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 140)
+    public static void addRoomRejectsFreshComponentOverlappingRegisteredIdentity(GameTestHelper helper) {
+        BlockPos roomMin = helper.absolutePos(new BlockPos(5, 2, 5));
+        buildClosedRoom(helper, roomMin, 5, 5);
+        BlockPos seed = roomMin.offset(1, 0, 1);
+        VillageManager manager = new VillageManager(helper.getLevel());
+        RoomWorkflow workflow = new RoomWorkflow(manager, helper.getLevel());
+
+        BuildingScanResult initialScan = workflow.analyzeBuildingAddition(seed);
+        String initialType = initialScan.isAmbiguous() ? initialScan.matchingTypes().getFirst() : null;
+        helper.assertTrue(workflow.commitAddition(initialScan, initialType).status() == RoomWorkflow.Status.COMMITTED,
+                "initial room was not committed");
+
+        Village village = manager.findNearestVillage(seed, Village.MERGE_MARGIN).orElseThrow();
+        Building existing = village.getRooms().findFirst().orElseThrow();
+        BlockPos staleGap = roomMin.offset(3, 0, 3);
+        Set<BlockPos> staleCells = new HashSet<>(existing.getFloorCells());
+        staleCells.remove(staleGap);
+        existing.setGeometry(existing.getRawPos0(), existing.getRawPos1(), staleCells);
+        helper.assertTrue(RoomScanPlanner.plan(village, helper.getLevel(), staleGap).mode()
+                        == Village.RoomScanMode.ADD_ROOM,
+                "fixture did not expose the stale unowned cell as ADD_ROOM");
+
+        BuildingScanResult addition = workflow.analyzeRoom(staleGap);
+
+        helper.assertTrue(addition.result() == Building.validationResult.OVERLAP,
+                "fresh component overlapping registered identity was accepted as " + addition.result());
+        helper.assertTrue(existing.getFloorCells().equals(staleCells),
+                "failed Add Room rewrote the existing Room");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_add_room_invalidates_registered_cell", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 160)
+    public static void addRoomRejectsFloorRefreshThatDropsRegisteredRoomCell(GameTestHelper helper) {
+        BlockPos firstMin = helper.absolutePos(new BlockPos(5, 2, 5));
+        BlockPos secondMin = firstMin.offset(3, 0, 0);
+        buildClosedRoom(helper, firstMin, 2, 5);
+        buildClosedRoom(helper, secondMin, 3, 5);
+        BlockPos doorway = firstMin.offset(2, 0, 2);
+        placeDoor(helper, doorway, Direction.WEST);
+
+        VillageManager manager = new VillageManager(helper.getLevel());
+        RoomWorkflow workflow = new RoomWorkflow(manager, helper.getLevel());
+        BlockPos firstSeed = firstMin.offset(1, 0, 1);
+        BuildingScanResult initialScan = workflow.analyzeBuildingAddition(firstSeed);
+        String initialType = initialScan.isAmbiguous() ? initialScan.matchingTypes().getFirst() : null;
+        helper.assertTrue(workflow.commitAddition(initialScan, initialType).status() == RoomWorkflow.Status.COMMITTED,
+                "initial room was not committed");
+
+        Village village = manager.findNearestVillage(firstSeed, Village.MERGE_MARGIN).orElseThrow();
+        Building existing = village.getRooms().findFirst().orElseThrow();
+        BlockPos removedCell = firstMin.offset(1, 0, 4);
+        helper.assertTrue(existing.getFloorCells().contains(removedCell),
+                "fixture cell was not owned by the registered Room");
+        helper.getLevel().setBlock(removedCell.below(), Blocks.AIR.defaultBlockState(), 3);
+
+        BuildingScanResult addition = workflow.analyzeRoom(secondMin.offset(1, 0, 1));
+
+        helper.assertTrue(addition.result() == Building.validationResult.OVERLAP,
+                "Floor refresh dropping an existing Room cell was accepted as " + addition.result());
+        helper.assertTrue(existing.getFloorCells().contains(removedCell),
+                "failed Add Room mutated registered Room ownership");
         helper.succeed();
     }
 
@@ -578,8 +699,8 @@ public final class FloorScannerGameTests {
                 "lower staircase changed storey anchor to " + lower.floor().anchorY());
         helper.assertTrue(lower.floor().cellAt(topStair).isPresent(),
                 "lower storey lost its top staircase transition");
-        helper.assertTrue(lower.storeyEdgeCells().contains(topStair),
-                "lower storey did not mark the top stair as storey-edge Room partition evidence");
+        helper.assertTrue(lower.verticalBoundaryCells().contains(topStair),
+                "lower storey did not mark the top stair as vertical Room-partition boundary evidence");
         helper.assertTrue(lower.floor().cellAt(upperRoom).isEmpty(),
                 "lower storey absorbed the upper room");
         helper.assertTrue(upper.result() == Building.validationResult.SUCCESS,
@@ -588,11 +709,10 @@ public final class FloorScannerGameTests {
                 "upper staircase changed storey anchor to " + upper.floor().anchorY());
         helper.assertTrue(upper.floor().cellAt(topStair).isEmpty(),
                 "upper storey reclaimed the lower-owned top staircase transition");
-        helper.assertTrue(connectedFloors(lower).stream()
-                        .anyMatch(floor -> floor.anchorY() == floorY + 3),
+        helper.assertTrue(!lower.adjacentFloorSeeds().isEmpty(),
                 "stair attachment evidence was lost");
         helper.assertTrue(BuildingRoomScanner.components(helper.getLevel(), lower).size() == 1,
-                "storey-edge top stair split the legitimate lower Room instead of remaining owned by it");
+                "vertical-boundary top stair split the legitimate lower Room instead of remaining owned by it");
         helper.succeed();
     }
 
@@ -641,15 +761,69 @@ public final class FloorScannerGameTests {
                 "lower storey absorbed the upper plateau through its staircase");
         helper.assertTrue(upper.floor().cellAt(lowerSeed).isEmpty(),
                 "upper storey absorbed the lower plateau through its staircase");
-        helper.assertTrue(connectedFloors(lower).stream()
-                        .anyMatch(floor -> floor.sameCellPositions(upper.floor())),
-                "two-block staircase lost the direct storey connection");
+        helper.assertTrue(!lower.adjacentFloorSeeds().isEmpty(),
+                "two-block staircase lost its local transition evidence");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_stair_top_exit_handoff", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void stairTopExitHandsOffToUpperRegisteredRoom(GameTestHelper helper) {
+        BlockPos origin = helper.absolutePos(new BlockPos(3, 2, 3));
+        buildTwoBlockStairStoreys(helper, origin);
+
+        for (int step = 0; step < 3; step++) {
+            BlockPos feet = origin.offset(4 + step, step, 2);
+            helper.getLevel().setBlock(feet.below(), Blocks.STONE_BRICK_STAIRS.defaultBlockState()
+                    .setValue(StairBlock.FACING, Direction.EAST), 3);
+            helper.getLevel().setBlock(feet, Blocks.AIR.defaultBlockState(), 3);
+            helper.getLevel().setBlock(feet.above(), Blocks.AIR.defaultBlockState(), 3);
+        }
+
+        BlockPos upperSeed = origin.offset(9, 2, 1);
+        BlockPos topStairFeet = origin.offset(6, 2, 1);
+        BlockPos topStairBlock = topStairFeet.below();
+        var level = helper.getLevel();
+        SelectedFloorScanner.Result upper = SelectedFloorScanner.scan(level, upperSeed, 256, 24);
+        helper.assertTrue(upper.result() == Building.validationResult.SUCCESS,
+                "upper stair Floor scan failed: " + upper.result());
+        helper.assertTrue(upper.floor().cellAt(topStairFeet).isEmpty(),
+                "fixture no longer exercises interaction-only stair handoff");
+
+        StructureFloor upperFloor = new StructureFloor(0, 1, upper.floor());
+        Structure structure = new Structure(10, upperSeed, List.of(upperFloor));
+        structure.setLogicalBuildingId(10);
+        Set<BlockPos> roomCells = upper.floor().cells().stream()
+                .map(FloorGeometry.Cell::feet)
+                .collect(Collectors.toSet());
+        Building room = new Building(upperSeed);
+        room.setId(100);
+        room.setStructureId(10);
+        room.setFloorId(upperFloor.id());
+        room.setGeometry(upper.min(), upper.max(), roomCells);
+        Village village = new Village(1, level);
+        village.registerStructure(structure, room);
+
+        StructureScanner.FloorObservation observation = StructureScanner.observeFloor(
+                level, topStairBlock, village.getStructures().values()).orElseThrow();
+        long registeredLandingCells = observation.scan().adjacentFloorSeeds().stream()
+                .filter(seed -> seed.getY() == observation.seed().getY())
+                .filter(seed -> village.findPhysicalRoomAt(seed).orElse(null) == room)
+                .count();
+        helper.assertTrue(registeredLandingCells > 1,
+                "fixture does not expose a wide upper landing: " + registeredLandingCells);
+
+        RoomScanPlan plan = RoomScanPlanner.plan(village, level, topStairBlock);
+        helper.assertTrue(plan.mode() == Village.RoomScanMode.UPDATE_ROOM,
+                "top stair selected " + plan.mode() + " instead of the upper registered Room");
+        helper.assertTrue(plan.currentRoom().orElse(null) == room,
+                "top stair handoff lost the upper registered Room identity");
         helper.succeed();
     }
 
     @GameTest(batch = "mca_floor_canonical_storey_chain", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 120)
-    public static void connectedStoreyDiscoveryCanonicalizesDeepStairChain(GameTestHelper helper) {
+    public static void selectedFloorScanDoesNotRecursivelyDiscoverDeepStairChain(GameTestHelper helper) {
         BlockPos origin = helper.absolutePos(new BlockPos(3, 2, 3));
         int lowerY = origin.getY();
         buildFourStoreyStaircase(helper, origin);
@@ -673,19 +847,10 @@ public final class FloorScannerGameTests {
         }
 
         SelectedFloorScanner.Result fromTop = direct.getLast();
-        for (SelectedFloorScanner.Result expected : direct) {
-            helper.assertTrue(connectedFloors(fromTop).stream()
-                            .anyMatch(candidate -> candidate.sameCellPositions(expected.floor())),
-                    "deep chain did not retain canonical storey anchor=" + expected.floor().anchorY());
+        for (int i = 0; i < seeds.size() - 1; i++) {
+            helper.assertTrue(fromTop.floor().cellAt(seeds.get(i)).isEmpty(),
+                    "selected top-floor scan absorbed lower storey seed " + i);
         }
-        helper.assertTrue(connectedFloors(fromTop).size() == 4,
-                "deep chain exposed " + connectedFloors(fromTop).size()
-                        + " identities instead of four canonical storeys");
-        helper.assertTrue(connectedFloors(fromTop).stream()
-                        .map(FloorGeometry::anchorY).collect(Collectors.toSet())
-                        .equals(Set.of(lowerY, lowerY + 3, lowerY + 6, lowerY + 9)),
-                "deep chain produced competing pseudo-storeys: "
-                        + connectedFloors(fromTop).stream().map(FloorGeometry::anchorY).sorted().toList());
 
         List<BlockPos> descendingTransitions = List.of(
                 origin.offset(7, 3, 1),
@@ -725,8 +890,8 @@ public final class FloorScannerGameTests {
 
         helper.assertTrue(lower.result() == Building.validationResult.SUCCESS,
                 "full-block lower staircase scan failed: " + lower.result());
-        helper.assertTrue(lower.storeyEdgeCells().contains(topTransition),
-                "full-block descent did not retain its top transition as storey-edge evidence");
+        helper.assertTrue(lower.verticalBoundaryCells().contains(topTransition),
+                "full-block descent did not retain its top transition as vertical-boundary evidence");
         helper.assertTrue(lower.floor().cellAt(upperSeed).isEmpty(),
                 "lower Floor absorbed the upper room through the full-block staircase");
 
@@ -796,6 +961,81 @@ public final class FloorScannerGameTests {
                 "exact persisted Room was overridden by fresh scan action " + plan.mode());
         helper.assertTrue(plan.currentRoom().orElse(null) == room,
                 "exact persisted Room identity was not preserved");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_unpersisted_vertical_connector_handoff", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void verticalConnectorWithoutPersistedMarkerHandsOffToExistingRoom(GameTestHelper helper) {
+        BlockPos lowerMin = helper.absolutePos(new BlockPos(4, 2, 4));
+        BlockPos upperMin = lowerMin.above(4);
+        buildClosedRoom(helper, lowerMin, 4, 4);
+        buildClosedRoom(helper, upperMin, 4, 4);
+
+        var level = helper.getLevel();
+        BlockPos connector = lowerMin.offset(-1, 0, 1);
+        BlockState ladder = Blocks.LADDER.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.LadderBlock.FACING, Direction.EAST);
+        level.setBlock(connector, ladder, 3);
+        level.setBlock(connector.above(), ladder, 3);
+        level.setBlock(connector.above(2), ladder, 3);
+        BlockPos trapdoor = connector.above(3);
+        level.setBlock(trapdoor, Blocks.OAK_TRAPDOOR.defaultBlockState(), 3);
+        level.setBlock(trapdoor.above(), Blocks.AIR.defaultBlockState(), 3);
+
+        BlockPos upperSeed = upperMin.offset(2, 0, 2);
+        SelectedFloorScanner.Result upper = SelectedFloorScanner.scan(level, upperSeed, 256, 24);
+        helper.assertTrue(upper.result() == Building.validationResult.SUCCESS,
+                "upper Room scan failed: " + upper.result());
+
+        FloorGeometry persistedGeometry = new FloorGeometry(upper.floor().cells(), List.of());
+        StructureFloor floor = new StructureFloor(0, 0, persistedGeometry);
+        Structure structure = new Structure(20, upperSeed, List.of(floor));
+        structure.setLogicalBuildingId(20);
+        Set<BlockPos> ownedCells = persistedGeometry.cells().stream()
+                .map(FloorGeometry.Cell::feet)
+                .collect(Collectors.toSet());
+        Building room = new Building(upperSeed);
+        room.setId(100);
+        room.setStructureId(20);
+        room.setFloorId(0);
+        room.setGeometry(structure.getRawPos0(), structure.getRawPos1(), ownedCells);
+        Village village = new Village(1, level);
+        village.registerStructure(structure, room);
+
+        helper.assertTrue(floor.connectors().isEmpty(),
+                "fixture unexpectedly persisted connector metadata");
+        helper.assertTrue(floor.geometry().interactionCellAt(
+                trapdoor.getX(), trapdoor.getY(), trapdoor.getZ()).isEmpty(),
+                "trapdoor unexpectedly resolved through direct Floor geometry");
+
+        StructureScanner.FloorObservation observation = StructureScanner.observeFloor(
+                level, trapdoor, village.getStructures().values()).orElseThrow();
+        helper.assertTrue(room.ownsFloorCell(observation.seed()),
+                "trapdoor handoff did not land in the registered Room: " + observation.seed());
+
+        for (boolean open : List.of(false, true)) {
+            level.setBlock(trapdoor, Blocks.OAK_TRAPDOOR.defaultBlockState()
+                    .setValue(TrapDoorBlock.OPEN, open), 3);
+            for (BlockPos interaction : List.of(trapdoor, trapdoor.above())) {
+                RoomScanPlan trapdoorPlan = RoomScanPlanner.plan(village, level, interaction);
+                helper.assertTrue(trapdoorPlan.mode() == Village.RoomScanMode.UPDATE_ROOM,
+                        (open ? "open" : "closed") + " trapdoor interaction at " + interaction
+                                + " selected " + trapdoorPlan.mode());
+                helper.assertTrue(trapdoorPlan.currentRoom().orElse(null) == room,
+                        (open ? "open" : "closed") + " trapdoor interaction at " + interaction
+                                + " lost the existing Room identity");
+            }
+        }
+
+        level.setBlock(trapdoor, ladder, 3);
+        helper.assertTrue(StructureConnector.isVertical(level, trapdoor),
+                "top ladder was not recognized as part of the vertical connector column");
+        RoomScanPlan ladderPlan = RoomScanPlanner.plan(village, level, trapdoor);
+        helper.assertTrue(ladderPlan.mode() == Village.RoomScanMode.UPDATE_ROOM,
+                "unpersisted ladder handoff selected " + ladderPlan.mode());
+        helper.assertTrue(ladderPlan.currentRoom().orElse(null) == room,
+                "unpersisted ladder handoff lost the existing Room identity");
         helper.succeed();
     }
 
@@ -899,7 +1139,7 @@ public final class FloorScannerGameTests {
 
     @GameTest(batch = "mca_floor_ladder_top_exit", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 100)
-    public static void airAboveLadderIsFloorMembershipCell(GameTestHelper helper) {
+    public static void airAboveLadderResolvesFloorWithoutInventingSupport(GameTestHelper helper) {
         BlockPos roomMin = helper.absolutePos(new BlockPos(4, 2, 4));
         buildClosedRoom(helper, roomMin, 5, 4);
 
@@ -913,8 +1153,10 @@ public final class FloorScannerGameTests {
 
         helper.assertTrue(scan.result() == Building.validationResult.SUCCESS,
                 "air above ladder did not resolve to its room Floor: " + scan.result());
-        helper.assertTrue(scan.floor().cellAt(interaction).isPresent(),
-                "air above ladder was not retained as Floor membership");
+        helper.assertTrue(scan.floor().cellAt(interaction).isEmpty(),
+                "unsupported ladder exit became ordinary Floor geometry");
+        helper.assertTrue(scan.floor().cellAt(roomMin.offset(1, 0, 2)).isPresent(),
+                "ladder exit did not resolve to the supported room Floor");
         helper.succeed();
     }
 
@@ -939,8 +1181,8 @@ public final class FloorScannerGameTests {
                 helper.getLevel(), upperSeed, 256, 16);
         helper.assertTrue(upperScan.result() == Building.validationResult.SUCCESS,
                 "upper ladder storey scan failed: " + upperScan.result());
-        helper.assertTrue(upperScan.floor().cellAt(topExit).isPresent(),
-                "ladder top exit was not assigned to the upper canonical Floor");
+        helper.assertTrue(upperScan.floor().cellAt(topExit).isEmpty(),
+                "unsupported ladder top exit became ordinary Floor geometry");
         helper.assertTrue(SelectedFloorScanner.inspectSurfaceCell(
                         helper.getLevel(), topExit, new FloorCeilingResolver(helper.getLevel())).isEmpty(),
                 "ladder top exit was treated as physically supported instead of semantic Floor membership");
@@ -1431,6 +1673,11 @@ public final class FloorScannerGameTests {
                 "three-door fixture did not retain all three connector cells");
         helper.assertTrue(village.getRooms().count() == 1,
                 "initial registration unexpectedly persisted unselected Rooms");
+        Building firstRoom = village.findInteractionRoomAt(firstSeed).orElseThrow();
+        int firstRoomId = firstRoom.getId();
+        String firstRoomType = firstRoom.getType();
+        boolean firstRoomForced = firstRoom.isTypeForced();
+        Set<BlockPos> firstRoomCells = Set.copyOf(firstRoom.getFloorCells());
 
         BlockPos secondSeed = secondMin.offset(2, 0, 2);
         BuildingScanResult additionScan = workflow.analyzeRoom(secondSeed);
@@ -1442,6 +1689,148 @@ public final class FloorScannerGameTests {
                 "three-door Floor failed to commit selected Room: " + added.result());
         helper.assertTrue(village.getRooms().count() == 2,
                 "three-door Floor did not persist exactly the selected two Rooms");
+        Building unchangedFirst = village.getBuilding(firstRoomId).orElseThrow();
+        helper.assertTrue(unchangedFirst.getType().equals(firstRoomType)
+                        && unchangedFirst.isTypeForced() == firstRoomForced
+                        && unchangedFirst.getFloorCells().equals(firstRoomCells),
+                "adding Room B changed registered Room A");
+        helper.assertTrue(village.findInteractionRoomAt(secondSeed).isPresent(),
+                "selected Room B was not registered");
+        helper.assertTrue(village.findInteractionRoomAt(thirdMin.offset(2, 0, 2)).isEmpty(),
+                "unselected Room C was registered as a side effect");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_update_room_moved_wall", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 160)
+    public static void selectedRoomUpdateKeepsIdWhenWallMoves(GameTestHelper helper) {
+        BlockPos roomMin = helper.absolutePos(new BlockPos(5, 2, 5));
+        buildClosedRoom(helper, roomMin, 4, 4);
+        BlockPos seed = roomMin.offset(1, 0, 1);
+        VillageManager manager = new VillageManager(helper.getLevel());
+        RoomWorkflow workflow = new RoomWorkflow(manager, helper.getLevel());
+        BuildingScanResult initialScan = workflow.analyzeBuildingAddition(seed);
+        String initialType = initialScan.isAmbiguous() ? initialScan.matchingTypes().getFirst() : null;
+        helper.assertTrue(workflow.commitAddition(initialScan, initialType).status() == RoomWorkflow.Status.COMMITTED,
+                "initial room was not committed");
+
+        Village village = manager.findNearestVillage(seed, Village.MERGE_MARGIN).orElseThrow();
+        Building before = village.findInteractionRoomAt(seed).orElseThrow();
+        int roomId = before.getId();
+        Set<BlockPos> oldCells = Set.copyOf(before.getFloorCells());
+        buildClosedRoom(helper, roomMin, 5, 4);
+
+        RegisteredRoomUpdate update = workflow.analyzeRegisteredRoomUpdate(village, roomId, seed);
+        helper.assertTrue(update.result() == Building.validationResult.SUCCESS,
+                "moved-wall update analysis failed: " + update.result());
+        String type = update.requiresTypeSelection() ? update.matchingTypes().getFirst() : null;
+        helper.assertTrue(manager.commitRegisteredRoomUpdate(update, type) == Building.validationResult.SUCCESS,
+                "moved-wall update commit failed");
+
+        Building after = village.getBuilding(roomId).orElseThrow();
+        helper.assertTrue(after.getId() == roomId, "selected Room ID changed after moving its wall");
+        helper.assertTrue(!after.getFloorCells().equals(oldCells),
+                "moved wall did not refresh selected Room geometry");
+        helper.assertTrue(after.getFloorCells().contains(roomMin.offset(4, 0, 2)),
+                "expanded Room did not gain cells behind the moved wall");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_update_room_selected_split", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 200)
+    public static void selectedRoomSplitReplacesOnlySelectedComponentAndLeavesSiblingUntouched(GameTestHelper helper) {
+        BlockPos firstMin = helper.absolutePos(new BlockPos(4, 2, 5));
+        BlockPos secondMin = firstMin.offset(6, 0, 0);
+        buildClosedRoom(helper, firstMin, 5, 4);
+        buildClosedRoom(helper, secondMin, 4, 4);
+        BlockPos outerDoor = firstMin.offset(5, 0, 1);
+        placeDoor(helper, outerDoor, Direction.EAST);
+
+        VillageManager manager = new VillageManager(helper.getLevel());
+        RoomWorkflow workflow = new RoomWorkflow(manager, helper.getLevel());
+        BlockPos leftSeed = firstMin.offset(1, 0, 1);
+        BlockPos siblingSeed = secondMin.offset(2, 0, 2);
+        BuildingScanResult initialScan = workflow.analyzeBuildingAddition(leftSeed);
+        String initialType = initialScan.isAmbiguous() ? initialScan.matchingTypes().getFirst() : null;
+        helper.assertTrue(workflow.commitAddition(initialScan, initialType).status() == RoomWorkflow.Status.COMMITTED,
+                "initial selected Room was not committed");
+        BuildingScanResult siblingScan = workflow.analyzeRoom(siblingSeed);
+        String siblingType = siblingScan.isAmbiguous() ? siblingScan.matchingTypes().getFirst() : null;
+        helper.assertTrue(workflow.commitAddition(siblingScan, siblingType).status() == RoomWorkflow.Status.COMMITTED,
+                "sibling Room was not committed");
+
+        Village village = manager.findNearestVillage(leftSeed, Village.MERGE_MARGIN).orElseThrow();
+        Building selectedBefore = village.findInteractionRoomAt(leftSeed).orElseThrow();
+        Building siblingBefore = village.findInteractionRoomAt(siblingSeed).orElseThrow();
+        int selectedId = selectedBefore.getId();
+        int siblingId = siblingBefore.getId();
+        String siblingPersistedType = siblingBefore.getType();
+        Set<BlockPos> siblingCells = Set.copyOf(siblingBefore.getFloorCells());
+
+        for (int z = 0; z < 4; z++) {
+            BlockPos wall = firstMin.offset(2, 0, z);
+            helper.getLevel().setBlock(wall, Blocks.STONE.defaultBlockState(), 3);
+            helper.getLevel().setBlock(wall.above(), Blocks.STONE.defaultBlockState(), 3);
+        }
+        BlockPos internalDoor = firstMin.offset(2, 0, 1);
+        placeDoor(helper, internalDoor, Direction.WEST);
+        BlockPos unselectedSplitSeed = firstMin.offset(4, 0, 2);
+
+        RegisteredRoomUpdate update = workflow.analyzeRegisteredRoomUpdate(village, selectedId, leftSeed);
+        helper.assertTrue(update.result() == Building.validationResult.SUCCESS,
+                "selected split update analysis failed: " + update.result());
+        String type = update.requiresTypeSelection() ? update.matchingTypes().getFirst() : null;
+        helper.assertTrue(manager.commitRegisteredRoomUpdate(update, type) == Building.validationResult.SUCCESS,
+                "selected split update commit failed");
+
+        Building selectedAfter = village.getBuilding(selectedId).orElseThrow();
+        helper.assertTrue(selectedAfter.getFloorCells().contains(leftSeed),
+                "selected split component was not retained");
+        helper.assertTrue(!selectedAfter.getFloorCells().contains(unselectedSplitSeed),
+                "unselected split component remained part of selected Room");
+        helper.assertTrue(village.findInteractionRoomAt(unselectedSplitSeed).isEmpty(),
+                "unselected split component was registered as a new Room");
+        Building siblingAfter = village.getBuilding(siblingId).orElseThrow();
+        helper.assertTrue(siblingAfter.getType().equals(siblingPersistedType)
+                        && siblingAfter.getFloorCells().equals(siblingCells),
+                "selected update changed the registered sibling Room");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_update_room_rejects_sibling_overlap", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 180)
+    public static void selectedRoomUpdateRejectsFreshComponentOverlappingSibling(GameTestHelper helper) {
+        BlockPos firstMin = helper.absolutePos(new BlockPos(5, 2, 5));
+        BlockPos secondMin = firstMin.offset(5, 0, 0);
+        buildClosedRoom(helper, firstMin, 4, 4);
+        buildClosedRoom(helper, secondMin, 4, 4);
+        BlockPos doorway = firstMin.offset(4, 0, 1);
+        placeDoor(helper, doorway, Direction.EAST);
+
+        VillageManager manager = new VillageManager(helper.getLevel());
+        RoomWorkflow workflow = new RoomWorkflow(manager, helper.getLevel());
+        BlockPos firstSeed = firstMin.offset(1, 0, 1);
+        BlockPos secondSeed = secondMin.offset(2, 0, 2);
+        BuildingScanResult initialScan = workflow.analyzeBuildingAddition(firstSeed);
+        String initialType = initialScan.isAmbiguous() ? initialScan.matchingTypes().getFirst() : null;
+        helper.assertTrue(workflow.commitAddition(initialScan, initialType).status() == RoomWorkflow.Status.COMMITTED,
+                "initial Room was not committed");
+        BuildingScanResult secondScan = workflow.analyzeRoom(secondSeed);
+        String secondType = secondScan.isAmbiguous() ? secondScan.matchingTypes().getFirst() : null;
+        helper.assertTrue(workflow.commitAddition(secondScan, secondType).status() == RoomWorkflow.Status.COMMITTED,
+                "sibling Room was not committed");
+
+        Village village = manager.findNearestVillage(firstSeed, Village.MERGE_MARGIN).orElseThrow();
+        Building first = village.findInteractionRoomAt(firstSeed).orElseThrow();
+        helper.getLevel().setBlock(doorway, Blocks.AIR.defaultBlockState(), 3);
+        helper.getLevel().setBlock(doorway.above(), Blocks.AIR.defaultBlockState(), 3);
+
+        RegisteredRoomUpdate update = workflow.analyzeRegisteredRoomUpdate(village, first.getId(), firstSeed);
+
+        helper.assertTrue(update.result() == Building.validationResult.OVERLAP,
+                "merged fresh component overlapping sibling was accepted as " + update.result());
+        helper.assertTrue(village.getRooms().count() == 2,
+                "failed update changed registered Room count");
         helper.succeed();
     }
 
@@ -1542,6 +1931,22 @@ public final class FloorScannerGameTests {
                     helper.getLevel().setBlock(column.above(), Blocks.AIR.defaultBlockState(), 3);
                     helper.getLevel().setBlock(column.above(2), Blocks.STONE.defaultBlockState(), 3);
                 }
+            }
+        }
+    }
+
+    private static void raiseClosedRoomRoof(
+            GameTestHelper helper, BlockPos min, int width, int depth, int roofOffset) {
+        var level = helper.getLevel();
+        for (int x = -1; x <= width; x++) {
+            for (int z = -1; z <= depth; z++) {
+                BlockPos column = min.offset(x, 0, z);
+                boolean wall = x == -1 || x == width || z == -1 || z == depth;
+                for (int y = 2; y < roofOffset; y++) {
+                    level.setBlock(column.above(y),
+                            wall ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 3);
+                }
+                level.setBlock(column.above(roofOffset), Blocks.STONE.defaultBlockState(), 3);
             }
         }
     }
@@ -1847,10 +2252,6 @@ public final class FloorScannerGameTests {
             top = feet;
         }
         return top.immutable();
-    }
-
-    private static List<FloorGeometry> connectedFloors(SelectedFloorScanner.Result scan) {
-        return scan.connectedStoreys().stream().map(SelectedFloorScanner.DiscoveredStorey::floor).toList();
     }
 
     private static void openUpperStorey(GameTestHelper helper, BlockPos origin) {
