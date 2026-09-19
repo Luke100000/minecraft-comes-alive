@@ -908,6 +908,72 @@ public final class FloorScannerGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_floor_unpersisted_vertical_connector_handoff", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void verticalConnectorWithoutPersistedMarkerHandsOffToExistingRoom(GameTestHelper helper) {
+        BlockPos lowerMin = helper.absolutePos(new BlockPos(4, 2, 4));
+        BlockPos upperMin = lowerMin.above(4);
+        buildClosedRoom(helper, lowerMin, 4, 4);
+        buildClosedRoom(helper, upperMin, 4, 4);
+
+        var level = helper.getLevel();
+        BlockPos connector = lowerMin.offset(-1, 0, 1);
+        BlockState ladder = Blocks.LADDER.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.LadderBlock.FACING, Direction.EAST);
+        level.setBlock(connector, ladder, 3);
+        level.setBlock(connector.above(), ladder, 3);
+        level.setBlock(connector.above(2), ladder, 3);
+        BlockPos trapdoor = connector.above(3);
+        level.setBlock(trapdoor, Blocks.OAK_TRAPDOOR.defaultBlockState(), 3);
+
+        BlockPos upperSeed = upperMin.offset(2, 0, 2);
+        SelectedFloorScanner.Result upper = SelectedFloorScanner.scan(level, upperSeed, 256, 24);
+        helper.assertTrue(upper.result() == Building.validationResult.SUCCESS,
+                "upper Room scan failed: " + upper.result());
+
+        FloorGeometry persistedGeometry = new FloorGeometry(upper.floor().cells(), List.of());
+        StructureFloor floor = new StructureFloor(0, 0, persistedGeometry);
+        Structure structure = new Structure(20, upperSeed, List.of(floor));
+        structure.setLogicalBuildingId(20);
+        Set<BlockPos> ownedCells = persistedGeometry.cells().stream()
+                .map(FloorGeometry.Cell::feet)
+                .collect(Collectors.toSet());
+        Building room = new Building(upperSeed);
+        room.setId(100);
+        room.setStructureId(20);
+        room.setFloorId(0);
+        room.setGeometry(structure.getRawPos0(), structure.getRawPos1(), ownedCells);
+        Village village = new Village(1, level);
+        village.registerStructure(structure, room);
+
+        helper.assertTrue(floor.connectors().isEmpty(),
+                "fixture unexpectedly persisted connector metadata");
+        helper.assertTrue(floor.geometry().interactionCellAt(
+                trapdoor.getX(), trapdoor.getY(), trapdoor.getZ()).isEmpty(),
+                "trapdoor unexpectedly resolved through direct Floor geometry");
+
+        StructureScanner.FloorObservation observation = StructureScanner.observeFloor(
+                level, trapdoor, village.getStructures().values()).orElseThrow();
+        helper.assertTrue(room.ownsFloorCell(observation.seed()),
+                "trapdoor handoff did not land in the registered Room: " + observation.seed());
+
+        RoomScanPlan trapdoorPlan = RoomScanPlanner.plan(village, level, trapdoor);
+        helper.assertTrue(trapdoorPlan.mode() == Village.RoomScanMode.UPDATE_ROOM,
+                "unpersisted trapdoor handoff selected " + trapdoorPlan.mode());
+        helper.assertTrue(trapdoorPlan.currentRoom().orElse(null) == room,
+                "unpersisted trapdoor handoff lost the existing Room identity");
+
+        level.setBlock(trapdoor, ladder, 3);
+        helper.assertTrue(StructureConnector.isVertical(level, trapdoor),
+                "top ladder was not recognized as part of the vertical connector column");
+        RoomScanPlan ladderPlan = RoomScanPlanner.plan(village, level, trapdoor);
+        helper.assertTrue(ladderPlan.mode() == Village.RoomScanMode.UPDATE_ROOM,
+                "unpersisted ladder handoff selected " + ladderPlan.mode());
+        helper.assertTrue(ladderPlan.currentRoom().orElse(null) == room,
+                "unpersisted ladder handoff lost the existing Room identity");
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_floor_slab_stair_transition", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 80)
     public static void slabAndStairUseTransientSurfaceEvidence(GameTestHelper helper) {

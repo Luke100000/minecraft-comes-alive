@@ -38,6 +38,17 @@ final class RoomScanPlanner {
         }
         List<RoomPartitioner.Component> components = BuildingRoomScanner.components(level, observation.scan());
         RoomScanPlan freshPlan = planFresh(village, source, observation, components);
+        if (resolved == null
+                && freshPlan.mode() == Village.RoomScanMode.ADD_ROOM
+                && !observation.seed().equals(source)
+                && StructureConnector.isVertical(level, source)) {
+            Building handoffRoom = village.findPhysicalRoomAt(observation.seed()).orElse(null);
+            if (handoffRoom != null
+                    && handoffRoom.getStructureId() == freshPlan.targetStructureId()
+                    && handoffRoom.getFloorId() == freshPlan.targetFloorId()) {
+                return new Analysis(RoomScanPlan.updateRoom(handoffRoom, source), observation, components);
+            }
+        }
         if (persistedFloorPlan == null) {
             return new Analysis(freshPlan, observation, components);
         }

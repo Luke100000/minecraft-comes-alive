@@ -10,6 +10,11 @@ import java.util.*;
 
 /** One persistent, independently rescannable physical section of a logical building. */
 public final class Structure implements VillageBuilding {
+    private static final Comparator<FloorCell> FLOOR_CELL_ORDER = Comparator
+            .comparingInt((FloorCell resolved) -> resolved.cell().feet().getY())
+            .thenComparingInt(resolved -> resolved.floor().anchorY())
+            .thenComparingInt(resolved -> resolved.floor().id());
+
     private int id;
     private int logicalBuildingId;
     private int nextFloorId;
@@ -111,13 +116,18 @@ public final class Structure implements VillageBuilding {
 
     private Optional<FloorCell> resolveInteractionFloorCell(BlockPos pos) {
         if (pos == null) return Optional.empty();
-        return getFloors().stream()
+        Optional<FloorCell> direct = getFloors().stream()
                 .flatMap(floor -> floor.geometry().interactionCellAt(pos.getX(), pos.getY(), pos.getZ())
                         .stream().map(cell -> new FloorCell(floor, cell)))
-                .max(Comparator
-                        .comparingInt((FloorCell resolved) -> resolved.cell().feet().getY())
-                        .thenComparingInt(resolved -> resolved.floor().anchorY())
-                        .thenComparingInt(resolved -> resolved.floor().id()));
+                .max(FLOOR_CELL_ORDER);
+        if (direct.isPresent()) return direct;
+
+        return getFloors().stream()
+                .flatMap(floor -> floor.connectors().stream()
+                        .filter(marker -> marker.pos().equals(pos))
+                        .flatMap(marker -> floor.geometry().cellAt(marker.floorCell())
+                                .stream().map(cell -> new FloorCell(floor, cell))))
+                .max(FLOOR_CELL_ORDER);
     }
 
     Optional<FloorCell> resolvePhysicalFloorCell(Vec3i pos) {
@@ -130,10 +140,7 @@ public final class Structure implements VillageBuilding {
         return getFloors().stream()
                 .flatMap(floor -> floor.geometry().physicalCellAt(pos.getX(), pos.getY(), pos.getZ())
                         .stream().map(cell -> new FloorCell(floor, cell)))
-                .max(Comparator
-                        .comparingInt((FloorCell resolved) -> resolved.cell().feet().getY())
-                        .thenComparingInt(resolved -> resolved.floor().anchorY())
-                        .thenComparingInt(resolved -> resolved.floor().id()));
+                .max(FLOOR_CELL_ORDER);
     }
 
     /** Exact physical membership resolves through exact Floor cells, never a 2D extrusion. */
