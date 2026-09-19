@@ -246,16 +246,16 @@ final class StructureScanner {
             boolean permittedAttachmentStack = attachmentBuildingId >= 0
                     && other.getLogicalBuildingId() == attachmentBuildingId
                     && (!hasSameBandOverlap(floor, other)
-                    || hasDirectStoreyConnection(selected, floor, other));
+                    || hasDirectFloorConnection(selected, floor, other));
             if (!permittedAttachmentStack) return Building.validationResult.OVERLAP;
         }
         return Building.validationResult.SUCCESS;
     }
 
-    private static boolean hasDirectStoreyConnection(
+    private static boolean hasDirectFloorConnection(
             SelectedFloorScanner.Result selected, StructureFloor candidate, Structure structure) {
         if (selected == null || candidate == null || structure == null) return false;
-        return selected.transitionSeeds().stream().anyMatch(seed ->
+        return selected.adjacentFloorSeeds().stream().anyMatch(seed ->
                 structure.getFloors().stream().anyMatch(floor ->
                         floor.geometry().interactionCellAt(seed.getX(), seed.getY(), seed.getZ()).isPresent()));
     }

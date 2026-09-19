@@ -33,7 +33,7 @@ final class BuildingRoomScanner {
         FloorGeometry floor = scan.floor();
         if (floor == null || floor.cells().isEmpty()) return List.of();
         return RoomPartitioner.partition(
-                floor, scan.transitions(), StructureConnector.doorOwnerSides(world, floor), scan.storeyEdgeCells());
+                floor, scan.transitions(), StructureConnector.doorOwnerSides(world, floor), scan.verticalBoundaryCells());
     }
 
     static Result materialize(

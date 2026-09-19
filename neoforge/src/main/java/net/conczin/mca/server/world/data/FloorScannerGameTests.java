@@ -698,8 +698,8 @@ public final class FloorScannerGameTests {
                 "lower staircase changed storey anchor to " + lower.floor().anchorY());
         helper.assertTrue(lower.floor().cellAt(topStair).isPresent(),
                 "lower storey lost its top staircase transition");
-        helper.assertTrue(lower.storeyEdgeCells().contains(topStair),
-                "lower storey did not mark the top stair as storey-edge Room partition evidence");
+        helper.assertTrue(lower.verticalBoundaryCells().contains(topStair),
+                "lower storey did not mark the top stair as vertical Room-partition boundary evidence");
         helper.assertTrue(lower.floor().cellAt(upperRoom).isEmpty(),
                 "lower storey absorbed the upper room");
         helper.assertTrue(upper.result() == Building.validationResult.SUCCESS,
@@ -708,10 +708,10 @@ public final class FloorScannerGameTests {
                 "upper staircase changed storey anchor to " + upper.floor().anchorY());
         helper.assertTrue(upper.floor().cellAt(topStair).isEmpty(),
                 "upper storey reclaimed the lower-owned top staircase transition");
-        helper.assertTrue(!lower.transitionSeeds().isEmpty(),
+        helper.assertTrue(!lower.adjacentFloorSeeds().isEmpty(),
                 "stair attachment evidence was lost");
         helper.assertTrue(BuildingRoomScanner.components(helper.getLevel(), lower).size() == 1,
-                "storey-edge top stair split the legitimate lower Room instead of remaining owned by it");
+                "vertical-boundary top stair split the legitimate lower Room instead of remaining owned by it");
         helper.succeed();
     }
 
@@ -760,7 +760,7 @@ public final class FloorScannerGameTests {
                 "lower storey absorbed the upper plateau through its staircase");
         helper.assertTrue(upper.floor().cellAt(lowerSeed).isEmpty(),
                 "upper storey absorbed the lower plateau through its staircase");
-        helper.assertTrue(!lower.transitionSeeds().isEmpty(),
+        helper.assertTrue(!lower.adjacentFloorSeeds().isEmpty(),
                 "two-block staircase lost its local transition evidence");
         helper.succeed();
     }
@@ -834,8 +834,8 @@ public final class FloorScannerGameTests {
 
         helper.assertTrue(lower.result() == Building.validationResult.SUCCESS,
                 "full-block lower staircase scan failed: " + lower.result());
-        helper.assertTrue(lower.storeyEdgeCells().contains(topTransition),
-                "full-block descent did not retain its top transition as storey-edge evidence");
+        helper.assertTrue(lower.verticalBoundaryCells().contains(topTransition),
+                "full-block descent did not retain its top transition as vertical-boundary evidence");
         helper.assertTrue(lower.floor().cellAt(upperSeed).isEmpty(),
                 "lower Floor absorbed the upper room through the full-block staircase");
 

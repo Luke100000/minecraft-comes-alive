@@ -91,7 +91,7 @@ final class RoomScanPlanner {
         RoomScanPlan attachment = attachmentPlan(village, source, observation).orElse(null);
         if (attachment != null) return attachment;
 
-        FloorTarget expansion = selectSameStoreyTarget(village, observation.scan().floor()).orElse(null);
+        FloorTarget expansion = selectSameFloorTarget(village, observation.scan().floor()).orElse(null);
         if (expansion != null && validExpansion(village, observation, expansion)) {
             RoomPartitioner.Component selected = selectFreshComponent(
                     observation.scan().floor(), observation.seed(), components);
@@ -110,7 +110,7 @@ final class RoomScanPlanner {
         if (village == null || observation == null) return Optional.empty();
         StructureFloor candidateFloor = new StructureFloor(0, 0, observation.scan().floor());
         Village.AttachmentTarget target = village.selectAttachmentTarget(
-                candidateFloor, observation.verticalConnections(), observation.scan().transitionSeeds()).orElse(null);
+                candidateFloor, observation.verticalConnections(), observation.scan().adjacentFloorSeeds()).orElse(null);
         if (target == null) return Optional.empty();
 
         int floorNumber = adjacentFloorNumber(village, target, candidateFloor);
@@ -138,7 +138,7 @@ final class RoomScanPlanner {
                 == Building.validationResult.SUCCESS;
     }
 
-    private static Optional<FloorTarget> selectSameStoreyTarget(Village village, FloorGeometry freshFloor) {
+    private static Optional<FloorTarget> selectSameFloorTarget(Village village, FloorGeometry freshFloor) {
         if (village == null || freshFloor == null) return Optional.empty();
         List<FloorTarget> matches = village.getStructures().values().stream()
                 .flatMap(structure -> structure.getFloors().stream()
