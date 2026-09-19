@@ -11,6 +11,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.spider.CaveSpider;
@@ -39,7 +40,7 @@ public final class ArcherSpiderCombatGameTests {
 
         VillagerEntityMCA archer = spawnArcher(helper, archerPos);
         archer.setNoAi(true);
-        Spider spider = spawnSpider(helper, EntityType.SPIDER, archerPos.east(10), true);
+        Spider spider = spawnSpider(helper, EntityTypes.SPIDER, archerPos.east(10), true);
         startCombat(archer, spider);
 
         requireBowTaskKill(helper, archer, spider, 300, "spider");
@@ -53,7 +54,7 @@ public final class ArcherSpiderCombatGameTests {
 
         VillagerEntityMCA archer = spawnArcher(helper, archerPos);
         archer.setNoAi(true);
-        CaveSpider spider = spawnSpider(helper, EntityType.CAVE_SPIDER, archerPos.east(10), true);
+        CaveSpider spider = spawnSpider(helper, EntityTypes.CAVE_SPIDER, archerPos.east(10), true);
         startCombat(archer, spider);
 
         requireBowTaskKill(helper, archer, spider, 300, "cave spider");
@@ -67,7 +68,7 @@ public final class ArcherSpiderCombatGameTests {
         buildCaveCorner(helper, archerPos);
 
         VillagerEntityMCA archer = spawnArcher(helper, archerPos);
-        Spider spider = spawnSpider(helper, EntityType.SPIDER, archerPos.east(2), false);
+        Spider spider = spawnSpider(helper, EntityTypes.SPIDER, archerPos.east(2), false);
         spider.setTarget(archer);
         startCombat(archer, spider);
 
@@ -135,7 +136,7 @@ public final class ArcherSpiderCombatGameTests {
 
         VillagerEntityMCA archer = spawnArcher(helper, archerPos);
         archer.setNoAi(true);
-        Spider spider = spawnSpider(helper, EntityType.SPIDER, archerPos.east(2), true);
+        Spider spider = spawnSpider(helper, EntityTypes.SPIDER, archerPos.east(2), true);
 
         Vec3 destination = RangedCombatPositioning.findEmergencyEscapePosition(
                 archer,
@@ -160,7 +161,7 @@ public final class ArcherSpiderCombatGameTests {
 
         VillagerEntityMCA archer = spawnArcher(helper, archerPos);
         archer.setNoAi(true);
-        Spider spider = spawnSpider(helper, EntityType.SPIDER, archerPos.east(2), true);
+        Spider spider = spawnSpider(helper, EntityTypes.SPIDER, archerPos.east(2), true);
 
         Vec3 destination = RangedCombatPositioning.findEmergencyEscapePosition(
                 archer,
