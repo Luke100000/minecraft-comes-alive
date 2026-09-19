@@ -1,12 +1,12 @@
 package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.gametest.framework.GameTest;
+import net.conczin.mca.neoforge.gametest.GameTest;
+import net.conczin.mca.neoforge.gametest.GameTestHolder;
+import net.conczin.mca.neoforge.gametest.PrefixGameTestTemplate;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.TrapDoorBlock;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.List;
 
@@ -111,8 +111,9 @@ public final class ReportedFloorInteractionGameTests {
     }
 
     private static BlockPos reportedPosition(GameTestHelper helper, int x, int y, int z) {
-        // The saved template starts at world Y=120; GameTest's structure block is below its origin.
-        return helper.absolutePos(new BlockPos(x, y - 120 + 1, z));
+        // The saved template starts at world Y=120. The 26.x GameTest bridge maps
+        // template coordinates directly to helper-relative coordinates.
+        return helper.absolutePos(new BlockPos(x, y - 120, z));
     }
 
     private static void commit(GameTestHelper helper, RoomWorkflow workflow, BuildingScanResult scan) {
