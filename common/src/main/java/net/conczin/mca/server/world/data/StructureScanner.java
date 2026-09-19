@@ -4,10 +4,7 @@ import net.conczin.mca.Config;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.StairBlock;
-import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.Half;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -194,49 +191,6 @@ final class StructureScanner {
                 StructureConnector.verticalConnections(world, candidate, existing)));
     }
 
-    /**
-     * Resolves unsupported transition interactions to supported Floor positions. Room ownership is
-     * deliberately left to {@link Village#findPhysicalRoomAt(net.minecraft.core.Vec3i)}.
-     */
-    static Optional<InteractionHandoff> resolveInteractionHandoff(
-            Level world, BlockPos source, FloorObservation observation) {
-        if (world == null || source == null || observation == null) return Optional.empty();
-
-        BlockPos stairExit = resolveStairTopExit(world, source, observation);
-        if (stairExit != null) {
-            return Optional.of(new InteractionHandoff(HandoffKind.STAIR_TOP_EXIT, stairExit));
-        }
-
-        BlockPos connector = StructureConnector.verticalInteractionConnector(world, source);
-        if (connector == null || !StructureConnector.isVertical(world, connector)) {
-            return Optional.empty();
-        }
-        if (connector.equals(source)) {
-            return Optional.of(new InteractionHandoff(
-                    HandoffKind.VERTICAL_CONNECTOR, observation.seed()));
-        }
-        if (connector.equals(source.below())
-                && world.getBlockState(connector).getBlock() instanceof TrapDoorBlock) {
-            return Optional.of(new InteractionHandoff(
-                    HandoffKind.TRAPDOOR_TOP_EXIT, observation.seed()));
-        }
-        return Optional.empty();
-    }
-
-    private static BlockPos resolveStairTopExit(
-            Level world, BlockPos source, FloorObservation observation) {
-        BlockPos stairPos = world.getBlockState(source).getBlock() instanceof StairBlock
-                ? source : source.below();
-        BlockState stairState = world.getBlockState(stairPos);
-        if (!(stairState.getBlock() instanceof StairBlock)
-                || stairState.getValue(StairBlock.HALF) != Half.BOTTOM) {
-            return null;
-        }
-
-        BlockPos exit = stairPos.above().relative(stairState.getValue(StairBlock.FACING));
-        return observation.scan().adjacentFloorSeeds().contains(exit) ? exit.immutable() : null;
-    }
-
     static Building.validationResult validateObservation(FloorObservation observation,
                                                           Collection<Structure> existing,
                                                           int ignoredStructureId,
@@ -319,9 +273,10 @@ final class StructureScanner {
     private static Optional<BlockPos> resolveFloorSeed(
             Level world, FloorGeometry geometry, BlockPos source) {
         if (geometry == null || source == null) return Optional.empty();
-        if (geometry.physicalCellAt(source.getX(), source.getY(), source.getZ()).isPresent()
-                && isWalkableAnchor(world, source)) {
-            return Optional.of(source.immutable());
+        FloorGeometry.Cell owned = geometry.interactionCellAt(
+                source.getX(), source.getY(), source.getZ()).orElse(null);
+        if (owned != null && isWalkableAnchor(world, owned.feet())) {
+            return Optional.of(owned.feet().immutable());
         }
 
         return geometry.cells().stream()
@@ -357,18 +312,6 @@ final class StructureScanner {
         FloorObservation {
             seed = seed.immutable();
             verticalConnections = verticalConnections == null ? List.of() : List.copyOf(verticalConnections);
-        }
-    }
-
-    enum HandoffKind {
-        STAIR_TOP_EXIT,
-        TRAPDOOR_TOP_EXIT,
-        VERTICAL_CONNECTOR
-    }
-
-    record InteractionHandoff(HandoffKind kind, BlockPos target) {
-        InteractionHandoff {
-            target = target.immutable();
         }
     }
 

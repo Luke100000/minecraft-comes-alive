@@ -14,6 +14,7 @@ import net.conczin.mca.entity.ai.navigation.FenceGateInteractionGameTests;
 import net.conczin.mca.entity.ai.navigation.StairWallPathfindingGameTests;
 import net.conczin.mca.server.world.data.CopiedOpenHouseGameTests;
 import net.conczin.mca.server.world.data.FloorScannerGameTests;
+import net.conczin.mca.server.world.data.ReportedFloorInteractionGameTests;
 import net.conczin.mca.server.world.data.VillageMourningGameTests;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
@@ -58,6 +59,7 @@ public final class McaGameTestRegistration {
             HarvestingTaskGameTests.class,
             CopiedOpenHouseGameTests.class,
             FloorScannerGameTests.class,
+            ReportedFloorInteractionGameTests.class,
             VillageMourningGameTests.class
     );
 
