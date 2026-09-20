@@ -7,6 +7,7 @@ import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.model.MCAModelLayers;
 import net.conczin.mca.client.model.MCAArmorModel;
+import net.conczin.mca.entity.VillagerLike;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -75,18 +76,21 @@ public abstract class MixinHumanoidArmorLayer<T extends LivingEntity, A extends 
             float headYaw,
             float headPitch
     ) {
-        if (entity instanceof Player && MCAClient.useGeneticsRenderer(entity.getUUID())) {
-            A model = mca$getModel(usesInnerModel(slot));
-            if (slot == EquipmentSlot.CHEST && model instanceof CommonVillagerModel<?> morphology) {
-                CommonVillagerModel.applyBreastDimensions(
-                        CommonVillagerModel.getVillager(entity),
-                        morphology.getBreastTransform(),
-                        morphology.getBreastPart(),
-                        morphology.getBreastParts()
-                );
-            }
-            return model;
+        boolean geneticsPlayer = entity instanceof Player && MCAClient.useGeneticsRenderer(entity.getUUID());
+        A model = geneticsPlayer
+                ? mca$getModel(usesInnerModel(slot))
+                : original.call(layer, slot);
+
+        if (slot == EquipmentSlot.CHEST
+                && (entity instanceof VillagerLike<?> || geneticsPlayer)
+                && model instanceof CommonVillagerModel<?> morphology) {
+            CommonVillagerModel.applyBreastDimensions(
+                    CommonVillagerModel.getVillager(entity),
+                    morphology.getBreastTransform(),
+                    morphology.getBreastPart(),
+                    morphology.getBreastParts()
+            );
         }
-        return original.call(layer, slot);
+        return model;
     }
 }
