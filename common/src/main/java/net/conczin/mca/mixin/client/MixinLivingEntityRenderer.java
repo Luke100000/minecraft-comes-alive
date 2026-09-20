@@ -37,10 +37,9 @@ public abstract class MixinLivingEntityRenderer {
             float animationProgress,
             float headYaw,
             float headPitch,
-            Operation<Void> original,
-            LivingEntity renderedEntity
+            Operation<Void> original
     ) {
-        if (!(renderedEntity instanceof AbstractClientPlayer player)
+        if (!(entity instanceof AbstractClientPlayer player)
                 || !(model instanceof PlayerModel<?> playerModel)) {
             original.call(model, entity, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
             return;
@@ -93,12 +92,7 @@ public abstract class MixinLivingEntityRenderer {
             int overlay,
             int color,
             Operation<Void> original,
-            LivingEntity entity,
-            float yaw,
-            float tickDelta,
-            PoseStack renderMatrices,
-            MultiBufferSource buffers,
-            int renderLight
+            LivingEntity entity
     ) {
         if (entity instanceof AbstractClientPlayer player && MCAClient.useVillagerRenderer(player.getUUID())) {
             color = FastColor.ARGB32.multiply(

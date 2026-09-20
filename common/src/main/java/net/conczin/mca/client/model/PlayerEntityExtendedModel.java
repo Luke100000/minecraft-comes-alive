@@ -1,7 +1,6 @@
 package net.conczin.mca.client.model;
 
 import com.google.common.collect.ImmutableList;
-import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
@@ -17,27 +16,11 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
     public final ModelPart breastsWear;
     private boolean wearsHidden;
 
-    public PlayerEntityExtendedModel(ModelPart root) {
-        this(root, false);
-    }
-
     public PlayerEntityExtendedModel(ModelPart root, boolean slim) {
         super(root, slim);
         breastTransform = body.getChild(BREAST_TRANSFORM);
         breasts = breastTransform.getChild(BREASTS);
         breastsWear = breastTransform.getChild(BREASTPLATE);
-    }
-
-    @Override
-    public void copyPropertiesTo(HumanoidModel<T> target) {
-        super.copyPropertiesTo(target);
-        if (target instanceof CommonVillagerModel<?> model) {
-            copyMorphologyTo(model);
-        }
-        if (target instanceof PlayerEntityExtendedModel<?> model) {
-            model.hat.copyFrom(model.head);
-            model.syncWearParts();
-        }
     }
 
     public PlayerEntityExtendedModel<T> hideWears() {
@@ -102,19 +85,6 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
     @Override
     public Iterable<ModelPart> getBreastParts() {
         return ImmutableList.of(breasts, breastsWear);
-    }
-
-    @Override
-    public void setupAnim(T entity, float limbAngle, float limbDistance, float animationProgress, float headYaw, float headPitch) {
-        var villager = CommonVillagerModel.getVillager(entity);
-        if (villager.getAgeState() == AgeState.BABY && !entity.isPassenger()) {
-            limbDistance = (float) Math.sin(entity.tickCount / 12F);
-            limbAngle = (float) Math.cos(entity.tickCount / 9F) * 3;
-            headYaw += (float) Math.sin(entity.tickCount / 2F);
-        }
-
-        super.setupAnim(entity, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
-        applyVillagerDimensions(villager);
     }
 
     @Override

@@ -16,10 +16,16 @@ public final class MCALayerDefinitions {
                 () -> LayerDefinition.create(VillagerEntityModelMCA.bodyData(CubeDeformation.NONE), 64, 64));
         register.accept(MCAModelLayers.VILLAGER_FACE,
                 () -> LayerDefinition.create(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.01F)), 64, 64));
+        register.accept(MCAModelLayers.VILLAGER_FACE_SLIM,
+                () -> LayerDefinition.create(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.01F), true), 64, 64));
         register.accept(MCAModelLayers.VILLAGER_CLOTHING,
                 () -> LayerDefinition.create(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.0625F)), 64, 64));
+        register.accept(MCAModelLayers.VILLAGER_CLOTHING_SLIM,
+                () -> LayerDefinition.create(VillagerEntityModelMCA.bodyData(new CubeDeformation(0.0625F), true), 64, 64));
         register.accept(MCAModelLayers.VILLAGER_HAIR,
                 () -> LayerDefinition.create(VillagerEntityModelMCA.hairData(new CubeDeformation(0.125F)), 64, 64));
+        register.accept(MCAModelLayers.VILLAGER_HAIR_SLIM,
+                () -> LayerDefinition.create(VillagerEntityModelMCA.hairData(new CubeDeformation(0.125F), true), 64, 64));
 
         register.accept(MCAModelLayers.ZOMBIE_VILLAGER,
                 () -> LayerDefinition.create(VillagerEntityModelMCA.bodyData(CubeDeformation.NONE), 64, 64));

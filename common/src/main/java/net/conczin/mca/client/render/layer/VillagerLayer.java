@@ -68,7 +68,12 @@ public abstract class VillagerLayer<T extends LivingEntity, M extends HumanoidMo
         // Primarily restores compatibility with Armourers Workshop.
         if (model instanceof CommonVillagerModel<?> layer) {
             if (!(getParentModel() instanceof CommonVillagerModel<?>)) {
-                layer.applyVillagerDimensions(CommonVillagerModel.getVillager(villager));
+                CommonVillagerModel.applyBreastDimensions(
+                        CommonVillagerModel.getVillager(villager),
+                        layer.getBreastTransform(),
+                        layer.getBreastPart(),
+                        layer.getBreastParts()
+                );
             }
             // Vanilla HumanoidModel.copyPropertiesTo only copies the canonical body
             // bones. MCA wear parts are separate bones, so resync them after the

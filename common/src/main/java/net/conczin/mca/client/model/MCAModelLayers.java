@@ -6,8 +6,11 @@ import net.minecraft.client.model.geom.ModelLayerLocation;
 public final class MCAModelLayers {
     public static final ModelLayerLocation VILLAGER = layer("villager", "main");
     public static final ModelLayerLocation VILLAGER_FACE = layer("villager", "face");
+    public static final ModelLayerLocation VILLAGER_FACE_SLIM = layer("villager", "face_slim");
     public static final ModelLayerLocation VILLAGER_CLOTHING = layer("villager", "clothing");
+    public static final ModelLayerLocation VILLAGER_CLOTHING_SLIM = layer("villager", "clothing_slim");
     public static final ModelLayerLocation VILLAGER_HAIR = layer("villager", "hair");
+    public static final ModelLayerLocation VILLAGER_HAIR_SLIM = layer("villager", "hair_slim");
     public static final ModelLayerLocation VILLAGER_INNER_ARMOR = layer("villager", "inner_armor");
     public static final ModelLayerLocation VILLAGER_OUTER_ARMOR = layer("villager", "outer_armor");
 

@@ -47,9 +47,10 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
     @Unique
     private static PlayerEntityExtendedModel<AbstractClientPlayer> mca$createVisibleModel(
             EntityRendererProvider.Context ctx,
-            ModelLayerLocation layer
+            ModelLayerLocation layer,
+            boolean slim
     ) {
-        return new PlayerEntityExtendedModel<>(ctx.bakeLayer(layer));
+        return new PlayerEntityExtendedModel<>(ctx.bakeLayer(layer), slim);
     }
 
     @Inject(method = "<init>(Lnet/minecraft/client/renderer/entity/EntityRendererProvider$Context;Z)V", at = @At("TAIL"))
@@ -60,16 +61,31 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
 
         addLayer(new FaceLayer<>(
                 this,
-                mca$createVisibleModel(ctx, MCAModelLayers.VILLAGER_FACE).hideWears(),
+                mca$createVisibleModel(
+                        ctx,
+                        slim ? MCAModelLayers.VILLAGER_FACE_SLIM : MCAModelLayers.VILLAGER_FACE,
+                        slim
+                ).hideWears(),
                 "normal"
         ));
         mca$clothingLayer = new ClothingLayer<>(
                 this,
-                mca$createVisibleModel(ctx, MCAModelLayers.VILLAGER_CLOTHING),
+                mca$createVisibleModel(
+                        ctx,
+                        slim ? MCAModelLayers.VILLAGER_CLOTHING_SLIM : MCAModelLayers.VILLAGER_CLOTHING,
+                        slim
+                ),
                 "normal"
         );
         addLayer(mca$clothingLayer);
-        addLayer(new HairLayer<>(this, mca$createVisibleModel(ctx, MCAModelLayers.VILLAGER_HAIR)));
+        addLayer(new HairLayer<>(
+                this,
+                mca$createVisibleModel(
+                        ctx,
+                        slim ? MCAModelLayers.VILLAGER_HAIR_SLIM : MCAModelLayers.VILLAGER_HAIR,
+                        slim
+                )
+        ));
         // Player morphology replaces geometry that used to render with the base model,
         // so keep it ahead of armor and the other player render layers.
         layers.add(0, new PlayerMorphologyLayer(this, ctx.bakeLayer(MCAModelLayers.PLAYER_ATTACHMENTS)));

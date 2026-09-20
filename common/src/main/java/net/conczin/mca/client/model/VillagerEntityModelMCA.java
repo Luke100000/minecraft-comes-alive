@@ -60,7 +60,11 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
     //    hood - 3 (clothing.hat 0.075 + 0.5 = 0.575)
 
     public static MeshDefinition hairData(CubeDeformation dilation) {
-        MeshDefinition modelData = bodyData(dilation);
+        return hairData(dilation, false);
+    }
+
+    public static MeshDefinition hairData(CubeDeformation dilation, boolean slim) {
+        MeshDefinition modelData = bodyData(dilation, slim);
         PartDefinition root = modelData.getRoot();
         root.addOrReplaceChild(PartNames.HAT, CubeListBuilder.create().texOffs(32, 0).addBox(-4, -8, -4, 8, 8, 8, dilation.extend(0.3F)), PartPose.ZERO);
         return modelData;
