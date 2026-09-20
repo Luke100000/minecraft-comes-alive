@@ -6,29 +6,20 @@ import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.world.entity.LivingEntity;
 
-import static net.conczin.mca.client.model.VillagerEntityBaseModelMCA.BREASTS;
-import static net.conczin.mca.client.model.VillagerEntityBaseModelMCA.BREAST_TRANSFORM;
-import static net.conczin.mca.client.model.VillagerEntityModelMCA.BREASTPLATE;
-
-public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerModel<T> implements CommonVillagerModel<T> {
-    public final ModelPart breastTransform;
-    public final ModelPart breasts;
-    public final ModelPart breastsWear;
+public final class VillagerOverlayModel<T extends LivingEntity> extends PlayerModel<T> implements CommonVillagerModel<T> {
+    private final ModelPart breastTransform;
+    private final ModelPart breasts;
+    private final ModelPart breastsWear;
     private boolean wearsHidden;
 
-    public PlayerEntityExtendedModel(ModelPart root, boolean slim) {
+    public VillagerOverlayModel(ModelPart root, boolean slim) {
         super(root, slim);
-        breastTransform = body.getChild(BREAST_TRANSFORM);
-        breasts = breastTransform.getChild(BREASTS);
-        breastsWear = breastTransform.getChild(BREASTPLATE);
+        breastTransform = body.getChild(MCAModelGeometry.BREAST_TRANSFORM);
+        breasts = breastTransform.getChild(MCAModelGeometry.BREASTS);
+        breastsWear = breastTransform.getChild(MCAModelGeometry.BREASTPLATE);
     }
 
-    public PlayerEntityExtendedModel<T> hideWears() {
-        hideWearsInternal();
-        return this;
-    }
-
-    private void hideWearsInternal() {
+    public VillagerOverlayModel<T> hideWears() {
         wearsHidden = true;
         jacket.visible = false;
         leftSleeve.visible = false;
@@ -36,6 +27,7 @@ public class PlayerEntityExtendedModel<T extends LivingEntity> extends PlayerMod
         leftPants.visible = false;
         rightPants.visible = false;
         breastsWear.visible = false;
+        return this;
     }
 
     @Override

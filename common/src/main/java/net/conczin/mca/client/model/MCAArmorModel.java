@@ -7,8 +7,8 @@ import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.world.entity.LivingEntity;
 
-import static net.conczin.mca.client.model.VillagerEntityBaseModelMCA.BREASTS;
-import static net.conczin.mca.client.model.VillagerEntityBaseModelMCA.BREAST_TRANSFORM;
+import static net.conczin.mca.client.model.MCAModelGeometry.BREASTS;
+import static net.conczin.mca.client.model.MCAModelGeometry.BREAST_TRANSFORM;
 
 /** Shared MCA humanoid armour model for villagers and genetics-enabled players. */
 public class MCAArmorModel<T extends LivingEntity> extends HumanoidModel<T> implements CommonVillagerModel<T> {

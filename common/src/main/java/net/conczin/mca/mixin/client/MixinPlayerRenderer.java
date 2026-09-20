@@ -8,7 +8,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.model.MCAModelLayers;
-import net.conczin.mca.client.model.PlayerEntityExtendedModel;
+import net.conczin.mca.client.model.VillagerOverlayModel;
 import net.conczin.mca.client.render.layer.ClothingLayer;
 import net.conczin.mca.client.render.layer.FaceLayer;
 import net.conczin.mca.client.render.layer.HairLayer;
@@ -44,12 +44,12 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
     }
 
     @Unique
-    private static PlayerEntityExtendedModel<AbstractClientPlayer> mca$createVisibleModel(
+    private static VillagerOverlayModel<AbstractClientPlayer> mca$createVisibleModel(
             EntityRendererProvider.Context ctx,
             ModelLayerLocation layer,
             boolean slim
     ) {
-        return new PlayerEntityExtendedModel<>(ctx.bakeLayer(layer), slim);
+        return new VillagerOverlayModel<>(ctx.bakeLayer(layer), slim);
     }
 
     @Inject(method = "<init>(Lnet/minecraft/client/renderer/entity/EntityRendererProvider$Context;Z)V", at = @At("TAIL"))

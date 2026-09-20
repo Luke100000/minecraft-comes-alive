@@ -10,9 +10,9 @@ import net.minecraft.world.entity.LivingEntity;
 
 import java.util.List;
 
-import static net.conczin.mca.client.model.VillagerEntityBaseModelMCA.BREASTS;
-import static net.conczin.mca.client.model.VillagerEntityBaseModelMCA.BREAST_TRANSFORM;
-import static net.conczin.mca.client.model.VillagerEntityModelMCA.BREASTPLATE;
+import static net.conczin.mca.client.model.MCAModelGeometry.BREASTPLATE;
+import static net.conczin.mca.client.model.MCAModelGeometry.BREASTS;
+import static net.conczin.mca.client.model.MCAModelGeometry.BREAST_TRANSFORM;
 
 /** MCA-only player geometry that follows, but never replaces, the renderer's player model. */
 public final class PlayerMorphologyModel {
