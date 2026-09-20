@@ -14,6 +14,7 @@ public final class MCAModelGeometry {
     public static final String BREAST_TRANSFORM = "breast_transform";
     public static final String BREASTS = "breasts";
     public static final String BREASTPLATE = "breastplate";
+    private static final float HAIR_BREAST_SEAM_OVERLAP = 0.125F;
 
     private MCAModelGeometry() {
     }
@@ -27,6 +28,11 @@ public final class MCAModelGeometry {
     public static MeshDefinition hairData(CubeDeformation dilation, boolean slim) {
         MeshDefinition mesh = overlayData(dilation, slim);
         PartDefinition root = mesh.getRoot();
+        addBreastParts(
+                root.getChild(PartNames.BODY),
+                dilation.extend(0.0F, HAIR_BREAST_SEAM_OVERLAP, 0.0F),
+                true
+        );
         root.addOrReplaceChild(
                 PartNames.HAT,
                 CubeListBuilder.create().texOffs(32, 0)
