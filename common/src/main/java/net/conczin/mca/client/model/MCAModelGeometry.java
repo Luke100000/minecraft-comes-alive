@@ -14,7 +14,8 @@ public final class MCAModelGeometry {
     public static final String BREAST_TRANSFORM = "breast_transform";
     public static final String BREASTS = "breasts";
     public static final String BREASTPLATE = "breastplate";
-    private static final float HAIR_BREAST_SEAM_OVERLAP = 0.125F;
+    private static final int BREAST_TEXTURE_Y = 21;
+    private static final int HAIR_BREAST_TEXTURE_Y = 18;
 
     private MCAModelGeometry() {
     }
@@ -30,8 +31,9 @@ public final class MCAModelGeometry {
         PartDefinition root = mesh.getRoot();
         addBreastParts(
                 root.getChild(PartNames.BODY),
-                dilation.extend(0.0F, HAIR_BREAST_SEAM_OVERLAP, 0.0F),
-                true
+                dilation,
+                true,
+                HAIR_BREAST_TEXTURE_Y
         );
         root.addOrReplaceChild(
                 PartNames.HAT,
@@ -75,25 +77,34 @@ public final class MCAModelGeometry {
             CubeDeformation dilation,
             boolean withBreastplate
     ) {
+        addBreastParts(body, dilation, withBreastplate, BREAST_TEXTURE_Y);
+    }
+
+    private static void addBreastParts(
+            PartDefinition body,
+            CubeDeformation dilation,
+            boolean withBreastplate,
+            int textureY
+    ) {
         PartDefinition transform = body.addOrReplaceChild(
                 BREAST_TRANSFORM,
                 CubeListBuilder.create(),
                 PartPose.ZERO
         );
-        transform.addOrReplaceChild(BREASTS, newBreasts(dilation, 0), PartPose.ZERO);
+        transform.addOrReplaceChild(BREASTS, newBreasts(dilation, textureY), PartPose.ZERO);
         if (withBreastplate) {
             transform.addOrReplaceChild(
                     BREASTPLATE,
-                    newBreasts(dilation.extend(0.1F), 16),
+                    newBreasts(dilation.extend(0.1F), textureY + 16),
                     PartPose.ZERO
             );
         }
     }
 
-    private static CubeListBuilder newBreasts(CubeDeformation dilation, int textureYOffset) {
+    private static CubeListBuilder newBreasts(CubeDeformation dilation, int textureY) {
         CubeListBuilder builder = CubeListBuilder.create();
         if (Config.getInstance().enableBoobs) {
-            builder.texOffs(18, 21 + textureYOffset)
+            builder.texOffs(18, textureY)
                     .addBox(-3.25F, -1.25F, -1.5F, 6, 3, 3, dilation);
         }
         return builder;
