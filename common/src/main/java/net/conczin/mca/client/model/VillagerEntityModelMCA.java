@@ -18,8 +18,6 @@ import net.minecraft.util.FastColor;
 import net.minecraft.world.entity.LivingEntity;
 import org.jetbrains.annotations.Nullable;
 
-import java.lang.ref.WeakReference;
-
 public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> extends VillagerEntityBaseModelMCA<T> {
     protected static final String BREASTPLATE = "breastplate";
 
@@ -34,8 +32,7 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
     @Nullable
     private final PlayerAnimationBridge<T> animationBridge;
     @Nullable
-    private WeakReference<T> currentVillager;
-    private int skinColor = 0xFFFFFFFF;
+    private T currentVillager;
 
     public VillagerEntityModelMCA(ModelPart tree) {
         this(tree, null);
@@ -108,20 +105,19 @@ public class VillagerEntityModelMCA<T extends LivingEntity & VillagerLike<T>> ex
         super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
         syncWearParts();
         if (animationBridge != null) {
-            currentVillager = new WeakReference<>(villager);
-            skinColor = SkinExporter.getSkinColor(villager);
+            currentVillager = villager;
         }
     }
 
     @Override
     public void renderToBuffer(PoseStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
-        T villager = currentVillager == null ? null : currentVillager.get();
+        T villager = currentVillager;
         try {
             if (animationBridge != null && villager != null) {
                 animationBridge.apply(this, matrices, light, overlay);
                 applyVillagerDimensions(villager);
                 syncWearParts();
-                color = FastColor.ARGB32.multiply(color, skinColor);
+                color = FastColor.ARGB32.multiply(color, SkinExporter.getSkinColor(villager));
             }
             super.renderToBuffer(matrices, vertices, light, overlay, color);
         } finally {

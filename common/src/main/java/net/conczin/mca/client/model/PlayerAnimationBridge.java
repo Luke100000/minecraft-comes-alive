@@ -19,11 +19,4 @@ public final class PlayerAnimationBridge<T extends LivingEntity> {
         source.copyPropertiesTo(target);
     }
 
-    public void applyArm(HumanoidModel<T> target, PoseStack matrices, int light, int overlay, boolean right) {
-        target.copyPropertiesTo(source);
-        var arm = right ? source.rightArm : source.leftArm;
-        arm.xRot = 0.0F;
-        McaModelAnimationDriver.animate(arm, matrices, light, overlay);
-        source.copyPropertiesTo(target);
-    }
 }

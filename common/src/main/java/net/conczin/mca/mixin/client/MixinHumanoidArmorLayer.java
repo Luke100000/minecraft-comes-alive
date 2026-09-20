@@ -4,6 +4,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCAClient;
+import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.model.MCAModelLayers;
 import net.conczin.mca.client.model.MCAArmorModel;
 import net.minecraft.client.Minecraft;
@@ -75,7 +76,16 @@ public abstract class MixinHumanoidArmorLayer<T extends LivingEntity, A extends 
             float headPitch
     ) {
         if (entity instanceof Player && MCAClient.useGeneticsRenderer(entity.getUUID())) {
-            return mca$getModel(usesInnerModel(slot));
+            A model = mca$getModel(usesInnerModel(slot));
+            if (slot == EquipmentSlot.CHEST && model instanceof CommonVillagerModel<?> morphology) {
+                CommonVillagerModel.applyBreastDimensions(
+                        CommonVillagerModel.getVillager(entity),
+                        morphology.getBreastTransform(),
+                        morphology.getBreastPart(),
+                        morphology.getBreastParts()
+                );
+            }
+            return model;
         }
         return original.call(layer, slot);
     }

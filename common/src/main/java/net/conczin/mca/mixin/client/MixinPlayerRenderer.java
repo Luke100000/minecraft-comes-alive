@@ -15,7 +15,6 @@ import net.conczin.mca.client.render.layer.HairLayer;
 import net.conczin.mca.client.render.layer.PlayerMorphologyLayer;
 import net.conczin.mca.client.render.layer.VillagerLayer;
 import net.conczin.mca.client.resources.SkinExporter;
-import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelLayerLocation;
@@ -109,9 +108,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
             Operation<Void> original
     ) {
         AbstractClientPlayer player = (AbstractClientPlayer) entity;
-        VillagerLike<?> villager = MCAClient.getGeneticsPlayerData(player.getUUID())
-                .orElse(null);
-        if (villager == null) {
+        if (!MCAClient.useGeneticsRenderer(player.getUUID())) {
             original.call(renderer, entity, yaw, tickDelta, matrices, buffers, light);
             return;
         }
@@ -125,19 +122,6 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
         float hatX = hat.xScale;
         float hatY = hat.yScale;
         float hatZ = hat.zScale;
-        boolean hideVanillaWears = villager.getPlayerModel() == VillagerLike.PlayerModel.VILLAGER;
-        boolean jacketVisible = false;
-        boolean leftSleeveVisible = false;
-        boolean rightSleeveVisible = false;
-        boolean leftPantsVisible = false;
-        boolean rightPantsVisible = false;
-        if (hideVanillaWears) {
-            jacketVisible = playerModel.jacket.visible;
-            leftSleeveVisible = playerModel.leftSleeve.visible;
-            rightSleeveVisible = playerModel.rightSleeve.visible;
-            leftPantsVisible = playerModel.leftPants.visible;
-            rightPantsVisible = playerModel.rightPants.visible;
-        }
         try {
             original.call(renderer, entity, yaw, tickDelta, matrices, buffers, light);
         } finally {
@@ -147,13 +131,6 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
             hat.xScale = hatX;
             hat.yScale = hatY;
             hat.zScale = hatZ;
-            if (hideVanillaWears) {
-                playerModel.jacket.visible = jacketVisible;
-                playerModel.leftSleeve.visible = leftSleeveVisible;
-                playerModel.rightSleeve.visible = rightSleeveVisible;
-                playerModel.leftPants.visible = leftPantsVisible;
-                playerModel.rightPants.visible = rightPantsVisible;
-            }
         }
     }
 

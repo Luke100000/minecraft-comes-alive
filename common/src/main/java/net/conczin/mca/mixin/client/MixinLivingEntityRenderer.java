@@ -40,7 +40,8 @@ public abstract class MixinLivingEntityRenderer {
             Operation<Void> original
     ) {
         if (!(entity instanceof AbstractClientPlayer player)
-                || !(model instanceof PlayerModel<?> playerModel)) {
+                || !(model instanceof PlayerModel<?> playerModel)
+                || !MCAClient.isPlayerRendererAllowed()) {
             original.call(model, entity, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
             return;
         }
