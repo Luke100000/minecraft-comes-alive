@@ -26,11 +26,23 @@ public final class MCAModelGeometry {
 
     public static MeshDefinition hairData(CubeDeformation dilation, boolean slim) {
         MeshDefinition mesh = overlayData(dilation, slim);
-        mesh.getRoot().addOrReplaceChild(
+        PartDefinition root = mesh.getRoot();
+        root.addOrReplaceChild(
                 PartNames.HAT,
                 CubeListBuilder.create().texOffs(32, 0)
                         .addBox(-4, -8, -4, 8, 8, 8, dilation.extend(0.3F)),
                 PartPose.ZERO
+        );
+        clearGeometry(
+                root,
+                PartNames.LEFT_ARM,
+                PartNames.RIGHT_ARM,
+                PartNames.LEFT_LEG,
+                PartNames.RIGHT_LEG,
+                "left_sleeve",
+                "right_sleeve",
+                "left_pants",
+                "right_pants"
         );
         return mesh;
     }
@@ -79,5 +91,11 @@ public final class MCAModelGeometry {
                     .addBox(-3.25F, -1.25F, -1.5F, 6, 3, 3, dilation);
         }
         return builder;
+    }
+
+    private static void clearGeometry(PartDefinition root, String... parts) {
+        for (String part : parts) {
+            root.addOrReplaceChild(part, CubeListBuilder.create(), PartPose.ZERO);
+        }
     }
 }

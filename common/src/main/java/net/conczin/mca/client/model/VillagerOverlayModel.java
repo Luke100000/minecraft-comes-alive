@@ -64,10 +64,6 @@ public final class VillagerOverlayModel<T extends LivingEntity> extends PlayerMo
         breastsWear.visible = !wearsHidden && breastTransform.visible;
     }
 
-    public void hideBreasts() {
-        breastParts.forEach(part -> part.visible = false);
-    }
-
     public void copyVisibility(HumanoidModel<?> model) {
         boolean showWears = !wearsHidden;
         head.visible = model.head.visible;

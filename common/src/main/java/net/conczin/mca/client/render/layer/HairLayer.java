@@ -26,11 +26,7 @@ public class HairLayer<T extends LivingEntity> extends VillagerLayer<T> {
 
     @Override
     protected void configureModel(T villager) {
-        model.leftLeg.visible = false;
-        model.rightLeg.visible = false;
-        model.leftPants.visible = false;
-        model.rightPants.visible = false;
-        model.hideBreasts();
+        model.applyMorphology(MCAClient.resolveVillager(villager));
     }
 
     @Override
