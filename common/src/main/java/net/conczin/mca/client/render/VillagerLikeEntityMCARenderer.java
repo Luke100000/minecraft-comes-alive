@@ -5,13 +5,13 @@ import net.conczin.mca.Config;
 import net.conczin.mca.client.gui.VillagerEditorScreen;
 import net.conczin.mca.client.model.MCAModelLayers;
 import net.conczin.mca.client.model.MCAArmorModel;
-import net.conczin.mca.client.model.VillagerEntityModelMCA;
 import net.conczin.mca.client.resources.SkinExporter;
 import net.conczin.mca.entity.Infectable;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.HumanoidMobRenderer;
@@ -24,10 +24,10 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 
-public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> extends HumanoidMobRenderer<T, VillagerEntityModelMCA<T>> {
+public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> extends HumanoidMobRenderer<T, PlayerModel<T>> {
     private static final double CARRIED_NAME_TAG_Y = 0.63;
 
-    public VillagerLikeEntityMCARenderer(EntityRendererProvider.Context ctx, VillagerEntityModelMCA<T> model) {
+    public VillagerLikeEntityMCARenderer(EntityRendererProvider.Context ctx, PlayerModel<T> model) {
         super(ctx, model, 0.5F);
         addLayer(new HumanoidArmorLayer<>(
                 this,

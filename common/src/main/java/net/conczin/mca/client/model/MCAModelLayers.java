@@ -4,7 +4,6 @@ import net.conczin.mca.MCA;
 import net.minecraft.client.model.geom.ModelLayerLocation;
 
 public final class MCAModelLayers {
-    public static final ModelLayerLocation VILLAGER = layer("villager", "main");
     public static final ModelLayerLocation VILLAGER_FACE = layer("villager", "face");
     public static final ModelLayerLocation VILLAGER_FACE_SLIM = layer("villager", "face_slim");
     public static final ModelLayerLocation VILLAGER_CLOTHING = layer("villager", "clothing");
@@ -14,7 +13,6 @@ public final class MCAModelLayers {
     public static final ModelLayerLocation VILLAGER_INNER_ARMOR = layer("villager", "inner_armor");
     public static final ModelLayerLocation VILLAGER_OUTER_ARMOR = layer("villager", "outer_armor");
 
-    public static final ModelLayerLocation ZOMBIE_VILLAGER = layer("zombie_villager", "main");
     public static final ModelLayerLocation ZOMBIE_VILLAGER_FACE = layer("zombie_villager", "face");
     public static final ModelLayerLocation ZOMBIE_VILLAGER_CLOTHING = layer("zombie_villager", "clothing");
     public static final ModelLayerLocation ZOMBIE_VILLAGER_HAIR = layer("zombie_villager", "hair");

@@ -12,8 +12,6 @@ public final class MCALayerDefinitions {
     }
 
     public static void register(BiConsumer<ModelLayerLocation, Supplier<LayerDefinition>> register) {
-        register.accept(MCAModelLayers.VILLAGER,
-                () -> LayerDefinition.create(MCAModelGeometry.overlayData(CubeDeformation.NONE, false), 64, 64));
         register.accept(MCAModelLayers.VILLAGER_FACE,
                 () -> LayerDefinition.create(MCAModelGeometry.overlayData(new CubeDeformation(0.01F), false), 64, 64));
         register.accept(MCAModelLayers.VILLAGER_FACE_SLIM,
@@ -27,8 +25,6 @@ public final class MCALayerDefinitions {
         register.accept(MCAModelLayers.VILLAGER_HAIR_SLIM,
                 () -> LayerDefinition.create(MCAModelGeometry.hairData(new CubeDeformation(0.125F), true), 64, 64));
 
-        register.accept(MCAModelLayers.ZOMBIE_VILLAGER,
-                () -> LayerDefinition.create(MCAModelGeometry.overlayData(CubeDeformation.NONE, false), 64, 64));
         register.accept(MCAModelLayers.ZOMBIE_VILLAGER_FACE,
                 () -> LayerDefinition.create(MCAModelGeometry.overlayData(new CubeDeformation(0.01F), false), 64, 64));
         register.accept(MCAModelLayers.ZOMBIE_VILLAGER_CLOTHING,
@@ -37,9 +33,9 @@ public final class MCALayerDefinitions {
                 () -> LayerDefinition.create(MCAModelGeometry.hairData(new CubeDeformation(0.1F), false), 64, 64));
 
         register.accept(MCAModelLayers.VILLAGER_INNER_ARMOR,
-                () -> LayerDefinition.create(VillagerEntityBaseModelMCA.getModelData(new CubeDeformation(0.3F)), 64, 32));
+                () -> LayerDefinition.create(MCAModelGeometry.armorData(new CubeDeformation(0.3F)), 64, 32));
         register.accept(MCAModelLayers.VILLAGER_OUTER_ARMOR,
-                () -> LayerDefinition.create(VillagerEntityBaseModelMCA.getModelData(new CubeDeformation(0.55F)), 64, 32));
+                () -> LayerDefinition.create(MCAModelGeometry.armorData(new CubeDeformation(0.55F)), 64, 32));
 
         register.accept(MCAModelLayers.PLAYER_ATTACHMENTS,
                 () -> LayerDefinition.create(MCAModelGeometry.attachmentData(CubeDeformation.NONE), 64, 64));
