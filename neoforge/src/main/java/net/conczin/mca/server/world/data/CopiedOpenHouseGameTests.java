@@ -399,6 +399,15 @@ public final class CopiedOpenHouseGameTests {
         Building mainRoom = village.findInteractionRoomAt(mainSeed).orElseThrow();
         Structure structure = village.getStructureFor(mainRoom).orElseThrow();
         int logicalBuildingId = structure.getLogicalBuildingId();
+        BlockPos upperSeed = helper.absolutePos(UPPER_STOREY_SEED);
+        var mainCellsAtUpperColumn = structure.getFloors().stream()
+                .flatMap(floor -> floor.geometry().cellsAtColumn(upperSeed.getX(), upperSeed.getZ()).stream())
+                .toList();
+        var mainColumnStates = mainCellsAtUpperColumn.stream()
+                .flatMap(cell -> java.util.stream.IntStream.rangeClosed(cell.feet().getY(), upperSeed.getY())
+                        .mapToObj(y -> y + "=" + helper.getLevel().getBlockState(
+                                new BlockPos(upperSeed.getX(), y, upperSeed.getZ())).getBlock()))
+                .toList();
 
         RoomScanPlan lowerPlan = village.getRoomScanPlan(
                 helper.getLevel(), helper.absolutePos(LOWER_STOREY_SEED));
@@ -408,9 +417,13 @@ public final class CopiedOpenHouseGameTests {
                 "copied lower storey targeted a different logical building");
 
         RoomScanPlan upperPlan = village.getRoomScanPlan(
-                helper.getLevel(), helper.absolutePos(UPPER_STOREY_SEED));
+                helper.getLevel(), upperSeed);
         helper.assertTrue(upperPlan.mode() == Village.RoomScanMode.ADD_FLOOR,
-                "copied upper storey should attach as floor, got " + upperPlan.mode());
+                "copied upper storey should attach as floor, got " + upperPlan.mode()
+                        + " upperSeed=" + upperSeed
+                        + " mainCellsAtUpperColumn=" + mainCellsAtUpperColumn
+                        + " mainColumnStates=" + mainColumnStates
+                        + " resolvedRoom=" + village.findInteractionRoomAt(upperSeed).map(Building::getId));
         helper.assertTrue(upperPlan.targetBuildingId() == logicalBuildingId,
                 "copied upper storey targeted a different logical building");
         helper.succeed();

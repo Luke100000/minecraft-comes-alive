@@ -7,6 +7,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.Brain;
 import net.minecraft.world.entity.ai.behavior.Behavior;
@@ -151,6 +152,10 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
 
         BlockPos blockPos = pathNode.asBlockPos();
         BlockState blockState = world.getBlockState(blockPos);
+        this.openFenceGatesInBodyClearance(world, entity, blockPos, rememberIfAlreadyOpen);
+        if (PathingBlockInteraction.canInteractWithFenceGate(blockState)) {
+            return;
+        }
         if (PathingBlockInteraction.isHandOpenableTrapDoor(blockState)
                 && (adjacentNode == null || adjacentNode.y == pathNode.y)) {
             // A closed trapdoor can be valid floor. Only open it when the path is
@@ -210,6 +215,23 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
         BlockState state = world.getBlockState(pos);
         if (PathingBlockInteraction.setOpen(entity, world, state, pos, true)) {
             this.rememberToCloseToggleable(world, entity, pos);
+        }
+    }
+
+    private void openFenceGatesInBodyClearance(ServerLevel world, LivingEntity entity, BlockPos pathPos,
+                                               boolean rememberIfAlreadyOpen) {
+        int bodyHeightBlocks = Mth.ceil(entity.getBbHeight());
+        for (int offset = 0; offset < bodyHeightBlocks; offset++) {
+            BlockPos pos = pathPos.above(offset);
+            BlockState state = world.getBlockState(pos);
+            if (!PathingBlockInteraction.canInteractWithFenceGate(state)) {
+                continue;
+            }
+            boolean wasAlreadyOpen = state.getValue(BlockStateProperties.OPEN);
+            boolean changed = PathingBlockInteraction.setOpen(entity, world, state, pos, true);
+            if (changed || (rememberIfAlreadyOpen && wasAlreadyOpen)) {
+                this.rememberToCloseToggleable(world, entity, pos);
+            }
         }
     }
 
