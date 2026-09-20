@@ -1,5 +1,7 @@
 package net.conczin.mca.neoforge;
 
+import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
+import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.block.BlockEntityTypesMCA;
 import net.conczin.mca.entity.ai.ActivitiesMCA;
@@ -13,6 +15,7 @@ import net.conczin.mca.network.Network;
 import net.conczin.mca.registry.*;
 import net.conczin.mca.resources.*;
 import net.conczin.mca.server.ServerInteractionManager;
+import net.conczin.mca.server.DestinyLocationResolver;
 import net.conczin.mca.server.command.AdminCommand;
 import net.conczin.mca.server.command.Command;
 import net.conczin.mca.server.world.data.VillageManager;
@@ -35,10 +38,12 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 import net.neoforged.neoforge.event.AddServerReloadListenersEvent;
+import net.neoforged.neoforge.event.OnDatapackSyncEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
@@ -147,7 +152,20 @@ public final class CommonNeoForge {
     }
 
     @SubscribeEvent
+    public static void onServerStarted(ServerStartedEvent event) {
+        DestinyLocationResolver.refreshCachedDestinations(event.getServer(), Config.getInstance());
+    }
+
+    @SubscribeEvent
+    public static void onDatapackSync(OnDatapackSyncEvent event) {
+        if (event.getPlayer() == null) {
+            DestinyLocationResolver.refreshCachedDestinations(event.getPlayerList().getServer(), Config.getInstance());
+        }
+    }
+
+    @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
+        DestinyLocationResolver.clearCachedDestinations(event.getServer());
         MCA.shutdownExecutorService();
     }
 
@@ -155,6 +173,13 @@ public final class CommonNeoForge {
     public static void onPlayerLoggedInEvent(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             ServerInteractionManager.getInstance().onPlayerJoin(player);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onPlayerRespawnEvent(PlayerEvent.PlayerRespawnEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            ServerInteractionManager.getInstance().onPlayerRespawn(player);
         }
     }
 

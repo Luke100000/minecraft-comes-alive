@@ -1,5 +1,7 @@
 package net.conczin.mca.client.gui;
 
+import com.mojang.blaze3d.platform.InputConstants;
+
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.widget.LegacyImageButton;
 import net.conczin.mca.client.gui.widget.TooltipButtonWidget;
@@ -48,8 +50,11 @@ import java.util.function.Consumer;
 
 @SuppressWarnings("deprecation")
 public class BlueprintScreen extends ExtendedScreen {
-    public static void maintainTerrainCache(Minecraft client) {
+    private static final BlueprintSessionState SESSION_STATE = new BlueprintSessionState();
+
+    public static void maintainSessionState(Minecraft client) {
         BlueprintTerrainRenderer.onClientLevelChanged(client.level);
+        SESSION_STATE.onClientLevelChanged(client.level);
     }
 
     //gui element Y positions
@@ -74,11 +79,11 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final double MAP_ZOOM_FACTOR = 1.1D;
     private static final double MAP_DRAG_THRESHOLD = 3.0D;
     private static final float[] MAP_SCALE_PRESETS = {0.5F, 1.0F, 2.0F, 3.0F, 4.0F};
-    private Integer selectedFloorOrdinal = 0;
-    private static boolean mapScaleFit = true;
-    private static float mapScale = 1.0F;
+    private Integer selectedFloorOrdinal;
+    private boolean mapScaleFit;
+    private float mapScale;
     private boolean playerCentered;
-    private static boolean showPlayerHead = true;
+    private boolean showPlayerHead;
     // 1.19.3: This needs to be the MC type, DO NOT TOUCH !!!
     private final List<net.minecraft.client.gui.components.Button> catalogButtons = new LinkedList<>();
     private Village village;
@@ -107,8 +112,8 @@ public class BlueprintScreen extends ExtendedScreen {
     private TooltipButtonWidget removeRoomButton;
     private ButtonWidget removeBuildingButton;
     private boolean selectPlayerFloorOnNextVillageResponse;
-    private boolean showBuildingIcons = true;
-    private boolean showTerrain = true;
+    private boolean showBuildingIcons;
+    private boolean showTerrain;
     private List<Integer> floorOrdinals = List.of();
     private int structureCount;
     private RoomTypeResolver roomTypeResolver = RoomTypeResolver.create(null);
@@ -117,7 +122,7 @@ public class BlueprintScreen extends ExtendedScreen {
     private final BlueprintMapRenderer mapRenderer = new BlueprintMapRenderer();
     private final MapPanState mapPanState = new MapPanState();
     private Integer mapCenterVillageId;
-    private boolean mapCenterAutomatic = true;
+    private boolean mapCenterAutomatic;
     private double mapCenterX;
     private double mapCenterZ;
     private BuildingType selectedBuilding;
@@ -132,6 +137,17 @@ public class BlueprintScreen extends ExtendedScreen {
 
     public BlueprintScreen() {
         super(Component.literal("Blueprint"));
+        SESSION_STATE.restore(this);
+    }
+
+    static void onClientLevelChanged(Object levelIdentity) {
+        SESSION_STATE.onClientLevelChanged(levelIdentity);
+    }
+
+    @Override
+    public void removed() {
+        SESSION_STATE.remember(this);
+        super.removed();
     }
 
     private void saveVillage() {
@@ -876,6 +892,69 @@ public class BlueprintScreen extends ExtendedScreen {
         }
     }
 
+    private static final class BlueprintSessionState {
+        private Object levelIdentity;
+        private Integer selectedFloorOrdinal = 0;
+        private boolean mapScaleFit = true;
+        private float mapScale = 1.0F;
+        private boolean playerCentered;
+        private boolean showPlayerHead = true;
+        private boolean showBuildingIcons = true;
+        private boolean showTerrain = true;
+        private Integer mapCenterVillageId;
+        private boolean mapCenterAutomatic = true;
+        private double mapCenterX;
+        private double mapCenterZ;
+
+        void onClientLevelChanged(Object levelIdentity) {
+            if (this.levelIdentity == levelIdentity) return;
+            this.levelIdentity = levelIdentity;
+            reset();
+        }
+
+        void restore(BlueprintScreen screen) {
+            screen.selectedFloorOrdinal = selectedFloorOrdinal;
+            screen.mapScaleFit = mapScaleFit;
+            screen.mapScale = mapScale;
+            screen.playerCentered = playerCentered;
+            screen.showPlayerHead = showPlayerHead;
+            screen.showBuildingIcons = showBuildingIcons;
+            screen.showTerrain = showTerrain;
+            screen.mapCenterVillageId = mapCenterVillageId;
+            screen.mapCenterAutomatic = mapCenterAutomatic;
+            screen.mapCenterX = mapCenterX;
+            screen.mapCenterZ = mapCenterZ;
+        }
+
+        void remember(BlueprintScreen screen) {
+            selectedFloorOrdinal = screen.selectedFloorOrdinal;
+            mapScaleFit = screen.mapScaleFit;
+            mapScale = screen.mapScale;
+            playerCentered = screen.playerCentered;
+            showPlayerHead = screen.showPlayerHead;
+            showBuildingIcons = screen.showBuildingIcons;
+            showTerrain = screen.showTerrain;
+            mapCenterVillageId = screen.mapCenterVillageId;
+            mapCenterAutomatic = screen.mapCenterAutomatic;
+            mapCenterX = screen.mapCenterX;
+            mapCenterZ = screen.mapCenterZ;
+        }
+
+        private void reset() {
+            selectedFloorOrdinal = 0;
+            mapScaleFit = true;
+            mapScale = 1.0F;
+            playerCentered = false;
+            showPlayerHead = true;
+            showBuildingIcons = true;
+            showTerrain = true;
+            mapCenterVillageId = null;
+            mapCenterAutomatic = true;
+            mapCenterX = 0.0D;
+            mapCenterZ = 0.0D;
+        }
+    }
+
     private void changeSelectedFloor(int direction) {
         List<Integer> ordinals = floorOrdinals;
         List<Integer> floors = getFloorNavigationOrder(ordinals);
@@ -1253,12 +1332,12 @@ public class BlueprintScreen extends ExtendedScreen {
         double mouseX = event.x();
         double mouseY = event.y();
         int button = event.button();
-        if (button == 0 && isMouseOverMap(mouseX, mouseY) && ("map".equals(page) || "advanced".equals(page))) {
+        if (button == InputConstants.MOUSE_BUTTON_LEFT && isMouseOverMap(mouseX, mouseY) && ("map".equals(page) || "advanced".equals(page))) {
             mapPanState.begin(mouseX, mouseY);
             return true;
         }
 
-        if (button == 1 && mapScaleButton != null && mapScaleButton.visible && mapScaleButton.active
+        if (button == InputConstants.MOUSE_BUTTON_RIGHT && mapScaleButton != null && mapScaleButton.visible && mapScaleButton.active
                 && mapScaleButton.isMouseOver(mouseX, mouseY)) {
             cycleMapScale(-1);
             return true;
@@ -1277,7 +1356,7 @@ public class BlueprintScreen extends ExtendedScreen {
         double mouseX = event.x();
         double mouseY = event.y();
         int button = event.button();
-        if (button == 0 && mapPanState.update(mouseX, mouseY)) {
+        if (button == InputConstants.MOUSE_BUTTON_LEFT && mapPanState.update(mouseX, mouseY)) {
             float scale = getMapScale();
             mapCenterX -= dragX / scale;
             mapCenterZ -= dragY / scale;
@@ -1291,7 +1370,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
-        if (event.button() == 0 && mapPanState.end()) return true;
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && mapPanState.end()) return true;
         return super.mouseReleased(event);
     }
 

@@ -65,12 +65,14 @@ class StructureFloorTest {
     }
 
     @Test
-    void loadedFloorNumberIsDerivedRatherThanRestoredFromPersistence() {
-        StructureFloor floor = TestStructureFloors.create(3, 64, 70, 0,
+    void floorNumberRoundTripsAndMissingLegacyValueDefaultsToGround() {
+        StructureFloor floor = TestStructureFloors.create(3, 64, 70, -2,
                 BuildingFloorRegion.fromFootprint(64, Set.of(new BlockPos(0, 64, 0))));
         CompoundTag saved = floor.save();
-        saved.putInt("floorNumber", 7);
 
+        assertEquals(-2, StructureFloor.load(saved).floorNumber());
+
+        saved.remove("floorNumber");
         assertEquals(0, StructureFloor.load(saved).floorNumber());
     }
 
@@ -136,21 +138,21 @@ class StructureFloorTest {
     }
 
     @Test
-    void persistedStoreyMatchOwnsBandAndFootprintPolicy() {
+    void persistedFloorMatchOwnsBandAndFootprintPolicy() {
         StructureFloor persisted = TestStructureFloors.create(0, 0, new FloorGeometry(Set.of(
                 new FloorGeometry.Cell(new BlockPos(0, 64, 0), 68),
                 new FloorGeometry.Cell(new BlockPos(1, 64, 0), 68)), java.util.Map.of()));
         FloorGeometry overlappingUneven = new FloorGeometry(Set.of(
                 new FloorGeometry.Cell(new BlockPos(1, 66, 0), 70),
                 new FloorGeometry.Cell(new BlockPos(2, 66, 0), 70)), java.util.Map.of());
-        FloorGeometry differentStorey = new FloorGeometry(Set.of(
+        FloorGeometry differentFloor = new FloorGeometry(Set.of(
                 new FloorGeometry.Cell(new BlockPos(1, 68, 0), 72)), java.util.Map.of());
         FloorGeometry disjoint = new FloorGeometry(Set.of(
                 new FloorGeometry.Cell(new BlockPos(4, 65, 0), 69)), java.util.Map.of());
 
-        assertTrue(persisted.overlapsSemanticStorey(overlappingUneven));
-        assertFalse(persisted.overlapsSemanticStorey(differentStorey));
-        assertFalse(persisted.overlapsSemanticStorey(disjoint));
+        assertTrue(persisted.overlapsSameSemanticBand(overlappingUneven));
+        assertFalse(persisted.overlapsSameSemanticBand(differentFloor));
+        assertFalse(persisted.overlapsSameSemanticBand(disjoint));
     }
 
     @Test

@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-/** Stable persisted identity for one semantic storey around exact 3D geometry. */
+/** Stable persisted identity for one semantic Floor around exact 3D geometry. */
 public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
     static final int BAND_TOLERANCE = 2;
 
@@ -90,11 +90,11 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
     }
 
     boolean overlapsSameSemanticBand(StructureFloor other) {
-        return other != null && overlapsSemanticStorey(other.geometry);
+        return other != null && overlapsSameSemanticBand(other.geometry);
     }
 
     /** Persisted-Floor candidate overlap for a freshly observed exact geometry. */
-    boolean overlapsSemanticStorey(FloorGeometry other) {
+    boolean overlapsSameSemanticBand(FloorGeometry other) {
         return other != null
                 && sameSemanticBand(anchorY(), other.anchorY())
                 && geometry.footprintIntersectionArea(other) > 0;
@@ -126,6 +126,7 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
+        tag.putInt("floorNumber", floorNumber);
         tag.put("cells", NbtHelper.fromList(geometry.cells().stream()
                 .sorted(Comparator
                         .comparingInt((FloorGeometry.Cell cell) -> cell.feet().getX())
@@ -144,7 +145,8 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
         }
         List<FloorGeometry.Cell> cells = NbtHelper.toList(
                 tag.getList("cells").orElseGet(net.minecraft.nbt.ListTag::new), value -> loadCell((CompoundTag) value));
-        return new StructureFloor(tag.getInt("id").orElse(0), 0,
+        int floorNumber = tag.getInt("floorNumber").orElse(0);
+        return new StructureFloor(tag.getInt("id").orElse(0), floorNumber,
                 new FloorGeometry(cells, loadMarkers(tag).stream()
                         .filter(marker -> cells.stream()
                                 .anyMatch(cell -> cell.feet().equals(marker.floorCell())))

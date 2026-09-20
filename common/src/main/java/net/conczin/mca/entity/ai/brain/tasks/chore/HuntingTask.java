@@ -59,7 +59,7 @@ public class HuntingTask extends AbstractChoreTask {
     protected void tick(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.tick(world, villager, time);
 
-        if (!InventoryUtils.stream(villager.getInventory()).anyMatch(Chore.HUNT::matchesTool) && !villager.hasItemInSlot(villager.getDominantSlot())) {
+        if (!InventoryUtils.contains(villager.getInventory(), Chore.HUNT::matchesTool) && !villager.hasItemInSlot(villager.getDominantSlot())) {
             abandonJobWithMessage("chore.hunting.nosword");
         } else if (!villager.hasItemInSlot(villager.getDominantSlot())) {
             int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), Chore.HUNT::matchesTool);

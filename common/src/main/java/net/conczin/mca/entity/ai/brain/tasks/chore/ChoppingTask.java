@@ -21,12 +21,15 @@ import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 public class ChoppingTask extends AbstractChoreTask {
+    private static final double MAX_WORK_DISTANCE_SQUARED = 6.0;
+
     private int chopTicks, targetTreeTicks;
     private BlockPos targetTree;
 
@@ -103,14 +106,16 @@ public class ChoppingTask extends AbstractChoreTask {
 
         BlockState state = world.getBlockState(targetTree);
         if (state.is(BlockTags.LOGS)) {
-            villager.swingForAttack(villager.getDominantHand());
-            chopTicks++;
+            if (villager.distanceToSqr(Vec3.atBottomCenterOf(targetTree)) <= MAX_WORK_DISTANCE_SQUARED) {
+                villager.swingForAttack(villager.getDominantHand());
+                chopTicks++;
 
-            // cut down a tree every few seconds, dependent on config + the mining speed multiplier
-            if (chopTicks >= targetTreeTicks) {
-                chopTicks = 0;
+                // cut down a tree every few seconds, dependent on config + the mining speed multiplier
+                if (chopTicks >= targetTreeTicks) {
+                    chopTicks = 0;
 
-                destroyTree(world, targetTree);
+                    destroyTree(world, targetTree);
+                }
             }
         } else {
             targetTree = null;

@@ -1678,7 +1678,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
         }
 
-        if (event.button() == 0 && isMouseOverMainPreview(event.x(), event.y())) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && isMouseOverMainPreview(event.x(), event.y())) {
             draggingPreview = true;
         }
 
@@ -1687,7 +1687,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
-        if (event.button() == 0) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
             draggingPreview = false;
         }
         return super.mouseReleased(event);
@@ -1757,7 +1757,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double deltaX, double deltaY) {
-        if (event.button() == 0 && draggingPreview) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && draggingPreview) {
             rotatePreview((float) -deltaX);
             return true;
         }

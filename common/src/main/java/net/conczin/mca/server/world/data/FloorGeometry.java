@@ -108,6 +108,26 @@ final class FloorGeometry {
         return cells.stream().mapToInt(cell -> cell.feet().getY()).min().orElse(anchorY());
     }
 
+    static Bounds bounds(Collection<Cell> cells, int minYOffset) {
+        var iterator = cells.iterator();
+        if (!iterator.hasNext()) throw new IllegalArgumentException("Floor bounds require non-empty cells");
+        Cell first = iterator.next();
+        BlockPos firstFeet = first.feet();
+        int minX = firstFeet.getX(), minY = firstFeet.getY() + minYOffset, minZ = firstFeet.getZ();
+        int maxX = minX, maxY = first.ceilingY() - 1, maxZ = minZ;
+        while (iterator.hasNext()) {
+            Cell cell = iterator.next();
+            BlockPos feet = cell.feet();
+            minX = Math.min(minX, feet.getX());
+            minY = Math.min(minY, feet.getY() + minYOffset);
+            minZ = Math.min(minZ, feet.getZ());
+            maxX = Math.max(maxX, feet.getX());
+            maxY = Math.max(maxY, cell.ceilingY() - 1);
+            maxZ = Math.max(maxZ, feet.getZ());
+        }
+        return new Bounds(new BlockPos(minX, minY, minZ), new BlockPos(maxX, maxY, maxZ));
+    }
+
     Optional<Cell> physicalCellAt(int x, int y, int z) {
         return cellsAtColumn(x, z).stream()
                 .filter(cell -> cell.feet().getY() <= y && y < cell.ceilingY())
@@ -203,4 +223,6 @@ final class FloorGeometry {
             feet = feet.immutable();
         }
     }
+
+    record Bounds(BlockPos min, BlockPos max) {}
 }

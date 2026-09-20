@@ -8,27 +8,7 @@ import java.util.Set;
 
 /** Materializes Room geometry from one exact selected FloorGeometry. */
 final class BuildingRoomScanner {
-    private static final int MIN_INTERIOR_AREA = 4;
-
     private BuildingRoomScanner() {
-    }
-
-    static Result scan(Level world,
-                       BlockPos source,
-                       int maxSize,
-                       int floorId,
-                       SelectedFloorScanner.Result scan) {
-        if (scan == null) return Result.failure(Building.validationResult.TOO_SMALL, source);
-        FloorGeometry floor = scan.floor();
-        if (floor == null || floor.cells().isEmpty()) {
-            return Result.failure(Building.validationResult.TOO_SMALL, source);
-        }
-        List<RoomPartitioner.Component> components = components(world, scan);
-        RoomPartitioner.Component selected = RoomPartitioner.select(source, floor, components);
-        return selected == null
-                ? Result.failure(Building.validationResult.TOO_SMALL, source)
-                : materialize(source, maxSize,
-                floorId, floor, components, selected);
     }
 
     /** Materializes every fresh topology component without assigning persistence identity. */
@@ -53,7 +33,7 @@ final class BuildingRoomScanner {
         FloorGeometry floor = scan.floor();
         if (floor == null || floor.cells().isEmpty()) return List.of();
         return RoomPartitioner.partition(
-                floor, scan.transitions(), StructureConnector.doorOwnerSides(world, floor), scan.storeyEdgeCells());
+                floor, scan.transitions(), StructureConnector.doorOwnerSides(world, floor), scan.verticalBoundaryCells());
     }
 
     static Result materialize(
@@ -65,20 +45,15 @@ final class BuildingRoomScanner {
             RoomPartitioner.Component component) {
         Set<BlockPos> floorCells = component.floorCells();
         if (floorCells.size() > maxSize) return Result.failure(Building.validationResult.BLOCK_LIMIT, source);
-        if (floorCells.size() < MIN_INTERIOR_AREA) return Result.failure(Building.validationResult.TOO_SMALL, source);
+        if (floorCells.size() < RoomPartitioner.MIN_ROOM_AREA) {
+            return Result.failure(Building.validationResult.TOO_SMALL, source);
+        }
 
         BlockPos seed = component.nearestCell(source);
         Set<BlockPos> poi = RoomPoiEvidence.candidates(components, component);
-        int minX = floorCells.stream().mapToInt(BlockPos::getX).min().orElse(source.getX());
-        int minY = floorCells.stream().mapToInt(BlockPos::getY).min().orElse(source.getY());
-        int minZ = floorCells.stream().mapToInt(BlockPos::getZ).min().orElse(source.getZ());
-        int maxX = floorCells.stream().mapToInt(BlockPos::getX).max().orElse(source.getX());
-        int maxZ = floorCells.stream().mapToInt(BlockPos::getZ).max().orElse(source.getZ());
-        int maxY = component.cells().stream().mapToInt(cell -> cell.ceilingY() - 1)
-                .max().orElse(floor.maxPhysicalCeilingY() - 1);
+        FloorGeometry.Bounds bounds = FloorGeometry.bounds(component.cells(), 0);
         return new Result(Building.validationResult.SUCCESS, seed, floorId, floor.anchorY(), floorCells, poi,
-                new BlockPos(minX, minY, minZ),
-                new BlockPos(maxX, maxY, maxZ));
+                bounds.min(), bounds.max());
     }
 
     record Result(Building.validationResult status,

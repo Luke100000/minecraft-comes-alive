@@ -19,6 +19,8 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.phys.Vec3;
 
+import java.lang.reflect.Field;
+
 @GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class HarvestingTaskGameTests {
@@ -66,7 +68,7 @@ public final class HarvestingTaskGameTests {
         BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
         prepareFarmland(helper, start.east(2).below());
 
-        VillagerEntityMCA villager = spawnHarvester(helper, start);
+        VillagerEntityMCA villager = spawnFarmlandOnlyHarvester(helper, start);
         HarvestingTask task = new HarvestingTask();
         long time = helper.getLevel().getGameTime();
         task.start(helper.getLevel(), villager, time);
@@ -84,7 +86,7 @@ public final class HarvestingTaskGameTests {
         BlockPos emptyFarmland = start.east(2).below();
         prepareFarmland(helper, emptyFarmland);
 
-        VillagerEntityMCA villager = spawnHarvester(helper, start);
+        VillagerEntityMCA villager = spawnFarmlandOnlyHarvester(helper, start);
         villager.getInventory().addItem(new ItemStack(Items.WHEAT_SEEDS));
         HarvestingTask task = new HarvestingTask();
         long time = helper.getLevel().getGameTime();
@@ -98,6 +100,44 @@ public final class HarvestingTaskGameTests {
                 "harvesting did not target empty farmland when seeds were available"
         );
         helper.succeed();
+    }
+
+    @GameTest(batch = "mca_harvesting_interruption", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void interruptedCropProgressDoesNotCarryToNextTarget(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
+        prepareMatureWheat(helper, start.east());
+
+        VillagerEntityMCA villager = spawnHarvester(helper, start);
+        HarvestingTask task = new HarvestingTask();
+        long time = helper.getLevel().getGameTime();
+        task.start(helper.getLevel(), villager, time);
+        setIntField(task, "workingTick", 35);
+        task.stop(helper.getLevel(), villager, time + 1);
+        helper.assertTrue(
+                getIntField(task, "workingTick") == 0,
+                "stopping harvesting did not reset interrupted work progress"
+        );
+        helper.succeed();
+    }
+
+    private static void setIntField(HarvestingTask task, String name, int value) {
+        try {
+            Field field = HarvestingTask.class.getDeclaredField(name);
+            field.setAccessible(true);
+            field.setInt(task, value);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("could not prepare harvesting field " + name, exception);
+        }
+    }
+
+    private static int getIntField(HarvestingTask task, String name) {
+        try {
+            Field field = HarvestingTask.class.getDeclaredField(name);
+            field.setAccessible(true);
+            return field.getInt(task);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("could not inspect harvesting field " + name, exception);
+        }
     }
 
     private static VillagerEntityMCA spawnHarvester(GameTestHelper helper, BlockPos pos) {
@@ -117,9 +157,26 @@ public final class HarvestingTaskGameTests {
         return villager;
     }
 
+    private static VillagerEntityMCA spawnFarmlandOnlyHarvester(GameTestHelper helper, BlockPos pos) {
+        VillagerEntityMCA villager = spawnHarvester(helper, pos);
+        // HarvestingTask makes the farmland scan eligible before its crop scan.
+        // Use that window so these tests isolate seed gating from crops in neighboring GameTest structures.
+        villager.tickCount = 1;
+        return villager;
+    }
+
     private static void prepareFarmland(GameTestHelper helper, BlockPos farmland) {
         helper.getLevel().setBlock(farmland.below(), Blocks.DIRT.defaultBlockState(), 3);
         helper.getLevel().setBlock(farmland, Blocks.FARMLAND.defaultBlockState(), 3);
         helper.getLevel().setBlock(farmland.above(), Blocks.AIR.defaultBlockState(), 3);
+    }
+
+    private static void prepareMatureWheat(GameTestHelper helper, BlockPos crop) {
+        prepareFarmland(helper, crop.below());
+        helper.getLevel().setBlock(
+                crop,
+                Blocks.WHEAT.defaultBlockState().setValue(CropBlock.AGE, CropBlock.MAX_AGE),
+                3
+        );
     }
 }

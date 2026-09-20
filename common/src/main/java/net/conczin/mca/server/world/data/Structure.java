@@ -10,6 +10,11 @@ import java.util.*;
 
 /** One persistent, independently rescannable physical section of a logical building. */
 public final class Structure implements VillageBuilding {
+    private static final Comparator<FloorCell> FLOOR_CELL_ORDER = Comparator
+            .comparingInt((FloorCell resolved) -> resolved.cell().feet().getY())
+            .thenComparingInt(resolved -> resolved.floor().anchorY())
+            .thenComparingInt(resolved -> resolved.floor().id());
+
     private int id;
     private int logicalBuildingId;
     private int nextFloorId;
@@ -91,7 +96,7 @@ public final class Structure implements VillageBuilding {
     }
 
     /**
-     * Semantic storey boundary. Non-top Floors end at the next semantic Floor anchor;
+     * Semantic Floor boundary. Non-top Floors end at the next semantic Floor anchor;
      * the top Floor ends at the highest physical ceiling observed in its exact geometry.
      */
     int semanticCeilingY(StructureFloor floor) {
@@ -111,13 +116,18 @@ public final class Structure implements VillageBuilding {
 
     private Optional<FloorCell> resolveInteractionFloorCell(BlockPos pos) {
         if (pos == null) return Optional.empty();
-        return getFloors().stream()
+        Optional<FloorCell> direct = getFloors().stream()
                 .flatMap(floor -> floor.geometry().interactionCellAt(pos.getX(), pos.getY(), pos.getZ())
                         .stream().map(cell -> new FloorCell(floor, cell)))
-                .max(Comparator
-                        .comparingInt((FloorCell resolved) -> resolved.cell().feet().getY())
-                        .thenComparingInt(resolved -> resolved.floor().anchorY())
-                        .thenComparingInt(resolved -> resolved.floor().id()));
+                .max(FLOOR_CELL_ORDER);
+        if (direct.isPresent()) return direct;
+
+        return getFloors().stream()
+                .flatMap(floor -> floor.connectors().stream()
+                        .filter(marker -> marker.pos().equals(pos))
+                        .flatMap(marker -> floor.geometry().cellAt(marker.floorCell())
+                                .stream().map(cell -> new FloorCell(floor, cell))))
+                .max(FLOOR_CELL_ORDER);
     }
 
     Optional<FloorCell> resolvePhysicalFloorCell(Vec3i pos) {
@@ -130,10 +140,7 @@ public final class Structure implements VillageBuilding {
         return getFloors().stream()
                 .flatMap(floor -> floor.geometry().physicalCellAt(pos.getX(), pos.getY(), pos.getZ())
                         .stream().map(cell -> new FloorCell(floor, cell)))
-                .max(Comparator
-                        .comparingInt((FloorCell resolved) -> resolved.cell().feet().getY())
-                        .thenComparingInt(resolved -> resolved.floor().anchorY())
-                        .thenComparingInt(resolved -> resolved.floor().id()));
+                .max(FLOOR_CELL_ORDER);
     }
 
     /** Exact physical membership resolves through exact Floor cells, never a 2D extrusion. */
@@ -200,16 +207,9 @@ public final class Structure implements VillageBuilding {
         List<FloorGeometry.Cell> cells = current.stream()
                 .flatMap(floor -> floor.geometry().cells().stream())
                 .toList();
-        if (cells.isEmpty()) return;
-
-        int minX = cells.stream().mapToInt(cell -> cell.feet().getX()).min().orElse(source.getX());
-        int minZ = cells.stream().mapToInt(cell -> cell.feet().getZ()).min().orElse(source.getZ());
-        int maxX = cells.stream().mapToInt(cell -> cell.feet().getX()).max().orElse(source.getX());
-        int maxZ = cells.stream().mapToInt(cell -> cell.feet().getZ()).max().orElse(source.getZ());
-        int minY = cells.stream().mapToInt(cell -> cell.feet().getY()).min().orElse(source.getY());
-        int maxY = cells.stream().mapToInt(cell -> cell.ceilingY() - 1).max().orElse(source.getY());
-        min = new BlockPos(minX, minY, minZ);
-        max = new BlockPos(maxX, maxY, maxZ);
+        FloorGeometry.Bounds bounds = FloorGeometry.bounds(cells, 0);
+        min = bounds.min();
+        max = bounds.max();
     }
 
 

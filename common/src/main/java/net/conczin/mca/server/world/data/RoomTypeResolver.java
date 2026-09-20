@@ -51,6 +51,15 @@ public final class RoomTypeResolver {
         return types.size() == 1 ? types.getFirst() : null;
     }
 
+    static String automaticTypeFor(Building room, boolean mainRoom) {
+        if (room == null) return null;
+        return automaticType(room.getVisibleMatchingTypes(), mainRoom);
+    }
+
+    private static String automaticType(List<BuildingType> matches, boolean mainRoom) {
+        return matches.isEmpty() ? (mainRoom ? "house" : "building") : matches.getFirst().name();
+    }
+
     public Context resolve(Building room) {
         if (room == null || room.getId() < 0 || roomsById.get(room.getId()) != room) {
             return resolve(room, findMainRoom(room));
@@ -197,8 +206,7 @@ public final class RoomTypeResolver {
         public String updatedType(String forcedType) {
             if (room == null) return null;
             if (forcedType != null) return matchesForcedType(forcedType) ? forcedType : null;
-            List<BuildingType> matches = directMatchingTypes();
-            return matches.isEmpty() ? (isMainRoom() ? "house" : "building") : matches.getFirst().name();
+            return automaticType(directMatchingTypes(), isMainRoom());
         }
 
         public BuildingType effectiveType() {

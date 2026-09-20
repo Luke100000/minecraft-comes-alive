@@ -114,13 +114,13 @@ public class InteractScreen extends AbstractDynamicScreen {
         super.mouseClicked(event, doubleClick);
 
         // Dialog
-        if (event.button() == 0 && dialogAnswerHover != null && dialogQuestionText != null) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && dialogAnswerHover != null && dialogQuestionText != null) {
             //todo double click (Likely fixable via using a different event -- 7.4.0)
             Network.sendToServer(new InteractionDialogueMessage(villager.asEntity().getUUID(), dialogQuestionId, dialogAnswerHover));
         }
 
         // Right mouse button
-        if (inGiftMode && event.button() == 1) {
+        if (inGiftMode && event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
             Network.sendToServer(new InteractionVillagerMessage("gift", villager.asEntity().getUUID()));
             return true;
         } else {

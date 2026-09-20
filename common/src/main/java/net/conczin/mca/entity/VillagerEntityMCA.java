@@ -1173,21 +1173,21 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             boolean head = passengers.size() > 2 && passengers.get(2) == this;
 
             Vec3 offset = head ? new Vec3(0, 0.55f, 0) : new Vec3(left ? 0.4F : -0.4F, 0.05f, 0).yRot(yaw);
+            Vec3 pos = this.position();
 
-            // todo currently only client side
-            if (isClientSide()) {
+            // Keep the physical carry position identical on both sides so the bounding box follows the passenger.
+            this.setPos(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
+
+            // Player genetics rendering is client-only. Preserve its original visual adjustment without moving the physical box.
+            if (isClientSide() && MCAClient.useGeneticsRenderer(vehicle.getUUID())) {
                 VillagerLike<?> playerData = MCAClient.getGeneticsRendererData(vehicle.getUUID()).orElse(null);
                 if (playerData != null) {
                     float height = playerData.getRawVerticalScaleFactor();
                     offset = offset.multiply(1.0f, height, 1.0f);
-                    offset = offset.add(0, (height - 1) * 1.5, 0);
+                    offset = offset.add(0, (height - 1) * 1.5 - 0.7, 0);
+                    this.setPosRaw(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
                 }
             }
-
-            offset = offset.add(0, -0.7, 0);
-
-            Vec3 pos = this.position();
-            this.setPos(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
 
             if (vehicle.isShiftKeyDown()) {
                 stopRiding();
@@ -1823,11 +1823,13 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             ItemStack projectile = this.getProjectile(weaponStack);
             AbstractArrow arrowEntity = ProjectileUtil.getMobArrow(this, projectile, pullProgress, weaponStack);
             double xd = target.getX() - this.getX();
-            double yd = getFriendlyArrowAimY(target) - arrowEntity.getY();
             double zd = target.getZ() - this.getZ();
-            double distanceToTarget = Math.sqrt(xd * xd + zd * zd);
+            double horizontalDistance = Math.sqrt(xd * xd + zd * zd);
+            double flightTicks = horizontalDistance / 1.6D;
+            double gravityCompensation = 0.025D * flightTicks * Math.max(0.0D, flightTicks - 1.0D);
+            double yd = getFriendlyArrowAimY(target) - arrowEntity.getY() + gravityCompensation;
             Projectile.spawnProjectileUsingShoot(
-                    arrowEntity, serverLevel, projectile, xd, yd + distanceToTarget * 0.2F, zd, 1.6F, FRIENDLY_ARROW_UNCERTAINTY
+                    arrowEntity, serverLevel, projectile, xd, yd, zd, 1.6F, FRIENDLY_ARROW_UNCERTAINTY
             );
             this.playSound(SoundEvents.SKELETON_SHOOT, 1.0F, 1.0F / (this.getRandom().nextFloat() * 0.4F + 0.8F));
         }

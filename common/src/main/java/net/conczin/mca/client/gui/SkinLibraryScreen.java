@@ -601,7 +601,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
 
         if (page == Page.EDITOR) {
-            if (event.button() == 0 || event.button() == 1) {
+            if (event.button() == InputConstants.MOUSE_BUTTON_LEFT || event.button() == InputConstants.MOUSE_BUTTON_RIGHT) {
                 activeMouseButton = event.button();
 
                 int x = (int) getPixelX();
@@ -617,7 +617,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
                 lastPixelMouseX = x;
                 lastPixelMouseY = y;
-            } else if (event.button() == 2) {
+            } else if (event.button() == InputConstants.MOUSE_BUTTON_MIDDLE) {
                 isPanning = true;
             }
         } else {
@@ -655,7 +655,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     public boolean mouseReleased(MouseButtonEvent event) {
         activeMouseButton = -1;
 
-        if (event.button() == 2) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_MIDDLE) {
             isPanning = false;
             if (!hasPanned && page == Page.EDITOR) {
                 pickColor();
@@ -677,10 +677,10 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     private void paint(int x, int y) {
         if (page == SkinLibraryScreen.Page.EDITOR && workspace.validPixel(x, y)) {
-            if (activeMouseButton == 0) {
+            if (activeMouseButton == InputConstants.MOUSE_BUTTON_LEFT) {
                 workspace.currentImage.setPixel(x, y, color.getColor());
                 workspace.setDirty(true);
-            } else if (activeMouseButton == 1) {
+            } else if (activeMouseButton == InputConstants.MOUSE_BUTTON_RIGHT) {
                 workspace.currentImage.setPixel(x, y, 0);
                 workspace.setDirty(true);
             }

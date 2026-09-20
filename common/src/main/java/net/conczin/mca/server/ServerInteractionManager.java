@@ -81,13 +81,23 @@ public class ServerInteractionManager {
             PlayerSaveData.showMailNotification(player);
         }
 
-        if (shouldRefreshPlayerDimensions()) {
-            player.refreshDimensions();
-            if (playerData.isEntityDataSet()) {
-                player.level().players().forEach(other ->
-                        Network.sendToPlayer(new PlayerDataMessage(player.getUUID(), playerData.getEntityData()), other)
-                );
-            }
+        refreshAndSyncPlayerDimensions(player, playerData, "server join refresh");
+    }
+
+    public void onPlayerRespawn(ServerPlayer player) {
+        refreshAndSyncPlayerDimensions(player, PlayerSaveData.get(player), "server respawn refresh");
+    }
+
+    private void refreshAndSyncPlayerDimensions(ServerPlayer player, PlayerSaveData playerData, String reason) {
+        if (!shouldRefreshPlayerDimensions()) {
+            return;
+        }
+
+        player.refreshDimensions();
+        if (playerData.isEntityDataSet()) {
+            player.level().players().forEach(p ->
+                    Network.sendToPlayer(new PlayerDataMessage(player.getUUID(), playerData.getEntityData()), p)
+            );
         }
     }
 

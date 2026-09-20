@@ -2,14 +2,19 @@ package net.conczin.mca.neoforge.gametest;
 
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerRecoveryFoodGameTests;
+import net.conczin.mca.entity.ai.ChoreToolMatchingGameTests;
 import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensorGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherArrowFriendlyFireGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherCombatMovementGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ArcherSpiderCombatGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.DoorInteractionGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.FishingTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.HarvestingTaskGameTests;
 import net.conczin.mca.entity.ai.navigation.FenceGateInteractionGameTests;
+import net.conczin.mca.entity.ai.navigation.StairWallPathfindingGameTests;
 import net.conczin.mca.server.world.data.CopiedOpenHouseGameTests;
 import net.conczin.mca.server.world.data.FloorScannerGameTests;
+import net.conczin.mca.server.world.data.ReportedFloorInteractionGameTests;
 import net.conczin.mca.server.world.data.VillageMourningGameTests;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
@@ -43,14 +48,19 @@ public final class McaGameTestRegistration {
     private static final Identifier ISOLATED_AIR_TEMPLATE = MCA.locate("ported_1_21_1/isolated_air");
     private static final List<Class<?>> TEST_CLASSES = List.of(
             VillagerRecoveryFoodGameTests.class,
+            ChoreToolMatchingGameTests.class,
             GuardEnemiesSensorGameTests.class,
             ArcherArrowFriendlyFireGameTests.class,
             ArcherCombatMovementGameTests.class,
+            ArcherSpiderCombatGameTests.class,
+            DoorInteractionGameTests.class,
             FenceGateInteractionGameTests.class,
+            StairWallPathfindingGameTests.class,
             FishingTaskGameTests.class,
             HarvestingTaskGameTests.class,
             CopiedOpenHouseGameTests.class,
             FloorScannerGameTests.class,
+            ReportedFloorInteractionGameTests.class,
             VillageMourningGameTests.class
     );
 
