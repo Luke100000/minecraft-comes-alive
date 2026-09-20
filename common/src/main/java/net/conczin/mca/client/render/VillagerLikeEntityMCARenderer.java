@@ -5,6 +5,7 @@ import net.conczin.mca.Config;
 import net.conczin.mca.client.gui.VillagerEditorScreen;
 import net.conczin.mca.client.model.MCAModelLayers;
 import net.conczin.mca.client.model.MCAArmorModel;
+import net.conczin.mca.client.model.VillagerOverlayModel;
 import net.conczin.mca.client.resources.SkinExporter;
 import net.conczin.mca.entity.Infectable;
 import net.conczin.mca.entity.VillagerLike;
@@ -12,6 +13,7 @@ import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.model.PlayerModel;
+import net.minecraft.client.model.geom.ModelLayerLocation;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.HumanoidMobRenderer;
@@ -35,6 +37,13 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> exte
                 new MCAArmorModel<>(ctx.bakeLayer(MCAModelLayers.VILLAGER_OUTER_ARMOR)),
                 ctx.getModelManager()
         ));
+    }
+
+    protected VillagerOverlayModel<T> createOverlay(
+            EntityRendererProvider.Context ctx,
+            ModelLayerLocation layer
+    ) {
+        return new VillagerOverlayModel<>(ctx.bakeLayer(layer), false);
     }
 
     @Override

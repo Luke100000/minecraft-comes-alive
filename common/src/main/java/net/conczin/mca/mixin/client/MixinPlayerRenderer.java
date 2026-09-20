@@ -6,7 +6,6 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.MCAClient;
-import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.model.MCAModelLayers;
 import net.conczin.mca.client.model.VillagerOverlayModel;
 import net.conczin.mca.client.render.layer.ClothingLayer;
@@ -37,7 +36,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(PlayerRenderer.class)
 public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> {
     @Unique
-    private ClothingLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> mca$clothingLayer;
+    private ClothingLayer<AbstractClientPlayer> mca$clothingLayer;
 
     public MixinPlayerRenderer(EntityRendererProvider.Context ctx, PlayerModel<AbstractClientPlayer> model, float shadowRadius) {
         super(ctx, model, shadowRadius);
@@ -140,14 +139,14 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
     )
     private ResourceLocation mca$useVillagerSkin(ResourceLocation original, AbstractClientPlayer player) {
         return MCAClient.useVillagerRenderer(player.getUUID())
-                ? SkinExporter.getSkin(CommonVillagerModel.getVillager(player))
+                ? SkinExporter.getSkin(MCAClient.resolveVillager(player))
                 : original;
     }
 
     @Inject(method = "scale(Lnet/minecraft/client/player/AbstractClientPlayer;Lcom/mojang/blaze3d/vertex/PoseStack;F)V", at = @At("TAIL"))
     private void mca$injectScale(AbstractClientPlayer player, PoseStack matrices, float tickDelta, CallbackInfo ci) {
         if (MCAClient.useGeneticsRenderer(player.getUUID())) {
-            var villager = CommonVillagerModel.getVillager(player);
+            var villager = MCAClient.resolveVillager(player);
             float width = villager.getRawHorizontalScaleFactor();
             matrices.scale(width, villager.getRawVerticalScaleFactor(), width);
             if (villager.getAgeState() == AgeState.BABY && !player.isPassenger()) {
@@ -181,7 +180,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
 
         ModelPart skinArm = arm;
         skinArm.visible = true;
-        var villager = CommonVillagerModel.getVillager(player);
+        var villager = MCAClient.resolveVillager(player);
         ResourceLocation skin = SkinExporter.getSkin(villager);
         if (VillagerLayer.canUse(skin)) {
             mca$renderArmPart(matrices, buffers, light, skin, SkinExporter.getSkinColor(villager), skinArm);

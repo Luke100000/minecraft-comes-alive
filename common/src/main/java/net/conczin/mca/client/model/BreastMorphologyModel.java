@@ -14,14 +14,13 @@ import static net.conczin.mca.client.model.MCAModelGeometry.BREASTPLATE;
 import static net.conczin.mca.client.model.MCAModelGeometry.BREASTS;
 import static net.conczin.mca.client.model.MCAModelGeometry.BREAST_TRANSFORM;
 
-/** MCA-only player geometry that follows, but never replaces, the renderer's player model. */
-public final class PlayerMorphologyModel {
+public final class BreastMorphologyModel {
     private final ModelPart breastTransform;
     private final ModelPart breasts;
     private final ModelPart breastsWear;
     private final List<ModelPart> breastParts;
 
-    public PlayerMorphologyModel(ModelPart root) {
+    public BreastMorphologyModel(ModelPart root) {
         ModelPart body = root.getChild(PartNames.BODY);
         breastTransform = body.getChild(BREAST_TRANSFORM);
         breasts = breastTransform.getChild(BREASTS);
@@ -30,12 +29,7 @@ public final class PlayerMorphologyModel {
     }
 
     public void apply(VillagerLike<?> villager, boolean showWear) {
-        CommonVillagerModel.applyBreastDimensions(
-                villager,
-                breastTransform,
-                breasts,
-                breastParts
-        );
+        MCAModelMorphology.applyBreastDimensions(villager, breastTransform, breasts, breastParts);
         breastsWear.visible = showWear && breastTransform.visible;
     }
 

@@ -4,7 +4,6 @@ import com.mojang.serialization.Dynamic;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
-import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
@@ -1043,7 +1042,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
             // todo currently only client side
             if (isClientSide() && MCAClient.useGeneticsRenderer(vehicle.getUUID())) {
-                float height = CommonVillagerModel.getVillager(vehicle).getRawVerticalScaleFactor();
+                float height = MCAClient.resolveVillager(vehicle).getRawVerticalScaleFactor();
                 offset = offset.multiply(1.0f, height, 1.0f);
                 offset = offset.add(0, (height - 1) * 1.5 - 0.7, 0);
             }

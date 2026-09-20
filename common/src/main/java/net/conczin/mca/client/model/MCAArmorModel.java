@@ -1,49 +1,32 @@
 package net.conczin.mca.client.model;
 
-import com.google.common.collect.ImmutableList;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import net.conczin.mca.entity.VillagerLike;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.world.entity.LivingEntity;
+
+import java.util.List;
 
 import static net.conczin.mca.client.model.MCAModelGeometry.BREASTS;
 import static net.conczin.mca.client.model.MCAModelGeometry.BREAST_TRANSFORM;
 
 /** Shared MCA humanoid armour model for villagers and genetics-enabled players. */
-public class MCAArmorModel<T extends LivingEntity> extends HumanoidModel<T> implements CommonVillagerModel<T> {
-    public final ModelPart breastTransform;
-    public final ModelPart breasts;
+public class MCAArmorModel<T extends LivingEntity> extends HumanoidModel<T> {
+    private final ModelPart breastTransform;
+    private final ModelPart breasts;
+    private final List<ModelPart> breastParts;
 
     public MCAArmorModel(ModelPart root) {
         super(root);
         breastTransform = body.getChild(BREAST_TRANSFORM);
         breasts = breastTransform.getChild(BREASTS);
+        breastParts = List.of(breasts);
     }
 
-    @Override
-    public ModelPart getMorphologyHead() {
-        return head;
-    }
-
-    @Override
-    public ModelPart getMorphologyHat() {
-        return hat;
-    }
-
-    @Override
-    public ModelPart getBreastTransform() {
-        return breastTransform;
-    }
-
-    @Override
-    public ModelPart getBreastPart() {
-        return breasts;
-    }
-
-    @Override
-    public Iterable<ModelPart> getBreastParts() {
-        return ImmutableList.of(breasts);
+    public void applyMorphology(VillagerLike<?> villager) {
+        MCAModelMorphology.applyBreastDimensions(villager, breastTransform, breasts, breastParts);
     }
 
     @Override

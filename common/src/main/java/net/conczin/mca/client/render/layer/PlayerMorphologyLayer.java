@@ -3,7 +3,7 @@ package net.conczin.mca.client.render.layer;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.MCAClient;
-import net.conczin.mca.client.model.PlayerMorphologyModel;
+import net.conczin.mca.client.model.BreastMorphologyModel;
 import net.conczin.mca.client.resources.SkinExporter;
 import net.conczin.mca.entity.VillagerLike;
 import net.minecraft.client.Minecraft;
@@ -22,14 +22,14 @@ import net.minecraft.util.FastColor;
 public final class PlayerMorphologyLayer extends RenderLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> {
     private static final int TRANSLUCENT_WHITE = 0x26FFFFFF;
 
-    private final PlayerMorphologyModel morphology;
+    private final BreastMorphologyModel morphology;
 
     public PlayerMorphologyLayer(
             RenderLayerParent<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> renderer,
             ModelPart attachments
     ) {
         super(renderer);
-        morphology = new PlayerMorphologyModel(attachments);
+        morphology = new BreastMorphologyModel(attachments);
     }
 
     @Override

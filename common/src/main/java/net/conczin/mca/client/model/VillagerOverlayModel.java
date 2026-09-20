@@ -1,15 +1,18 @@
 package net.conczin.mca.client.model;
 
-import com.google.common.collect.ImmutableList;
+import net.conczin.mca.entity.VillagerLike;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.world.entity.LivingEntity;
 
-public final class VillagerOverlayModel<T extends LivingEntity> extends PlayerModel<T> implements CommonVillagerModel<T> {
+import java.util.List;
+
+public final class VillagerOverlayModel<T extends LivingEntity> extends PlayerModel<T> {
     private final ModelPart breastTransform;
     private final ModelPart breasts;
     private final ModelPart breastsWear;
+    private final List<ModelPart> breastParts;
     private boolean wearsHidden;
 
     public VillagerOverlayModel(ModelPart root, boolean slim) {
@@ -17,6 +20,7 @@ public final class VillagerOverlayModel<T extends LivingEntity> extends PlayerMo
         breastTransform = body.getChild(MCAModelGeometry.BREAST_TRANSFORM);
         breasts = breastTransform.getChild(MCAModelGeometry.BREASTS);
         breastsWear = breastTransform.getChild(MCAModelGeometry.BREASTPLATE);
+        breastParts = List.of(breasts, breastsWear);
     }
 
     public VillagerOverlayModel<T> hideWears() {
@@ -44,7 +48,6 @@ public final class VillagerOverlayModel<T extends LivingEntity> extends PlayerMo
         breastsWear.visible = showWears;
     }
 
-    @Override
     public void syncWearParts() {
         leftPants.copyFrom(leftLeg);
         rightPants.copyFrom(rightLeg);
@@ -54,32 +57,17 @@ public final class VillagerOverlayModel<T extends LivingEntity> extends PlayerMo
         breastsWear.copyFrom(breasts);
     }
 
-    @Override
-    public ModelPart getMorphologyHead() {
-        return head;
+    public void applyMorphology(VillagerLike<?> villager) {
+        MCAModelMorphology.applyBreastDimensions(villager, breastTransform, breasts, breastParts);
+        breastTransform.visible &= body.visible;
+        breasts.visible &= body.visible;
+        breastsWear.visible = !wearsHidden && breastTransform.visible;
     }
 
-    @Override
-    public ModelPart getMorphologyHat() {
-        return hat;
+    public void hideBreasts() {
+        breastParts.forEach(part -> part.visible = false);
     }
 
-    @Override
-    public ModelPart getBreastTransform() {
-        return breastTransform;
-    }
-
-    @Override
-    public ModelPart getBreastPart() {
-        return breasts;
-    }
-
-    @Override
-    public Iterable<ModelPart> getBreastParts() {
-        return ImmutableList.of(breasts, breastsWear);
-    }
-
-    @Override
     public void copyVisibility(HumanoidModel<?> model) {
         boolean showWears = !wearsHidden;
         head.visible = model.head.visible;
@@ -94,14 +82,8 @@ public final class VillagerOverlayModel<T extends LivingEntity> extends PlayerMo
         leftPants.visible = showWears && model.leftLeg.visible;
         rightLeg.visible = model.rightLeg.visible;
         rightPants.visible = showWears && model.rightLeg.visible;
-
-        if (model instanceof CommonVillagerModel<?> source) {
-            breastTransform.visible = model.body.visible && source.getBreastTransform().visible;
-            breasts.visible = model.body.visible && source.getBreastPart().visible;
-        } else {
-            breastTransform.visible &= model.body.visible;
-            breasts.visible &= model.body.visible;
-        }
-        breastsWear.visible = showWears && breastTransform.visible;
+        breastTransform.visible = model.body.visible;
+        breasts.visible = model.body.visible;
+        breastsWear.visible = showWears && model.body.visible;
     }
 }

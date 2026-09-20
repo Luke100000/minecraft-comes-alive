@@ -4,7 +4,6 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCAClient;
-import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.model.MCAModelLayers;
 import net.conczin.mca.client.model.MCAArmorModel;
 import net.conczin.mca.entity.VillagerLike;
@@ -83,13 +82,8 @@ public abstract class MixinHumanoidArmorLayer<T extends LivingEntity, A extends 
 
         if (slot == EquipmentSlot.CHEST
                 && (entity instanceof VillagerLike<?> || geneticsPlayer)
-                && model instanceof CommonVillagerModel<?> morphology) {
-            CommonVillagerModel.applyBreastDimensions(
-                    CommonVillagerModel.getVillager(entity),
-                    morphology.getBreastTransform(),
-                    morphology.getBreastPart(),
-                    morphology.getBreastParts()
-            );
+                && model instanceof MCAArmorModel<?> morphology) {
+            morphology.applyMorphology(MCAClient.resolveVillager(entity));
         }
         return model;
     }

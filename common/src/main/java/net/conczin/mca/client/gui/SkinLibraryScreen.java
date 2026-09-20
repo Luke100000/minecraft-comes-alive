@@ -5,13 +5,13 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
+import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.gui.immersive_library.*;
 import net.conczin.mca.client.gui.immersive_library.responses.*;
 import net.conczin.mca.client.gui.immersive_library.types.Content;
 import net.conczin.mca.client.gui.immersive_library.types.LiteContent;
 import net.conczin.mca.client.gui.immersive_library.types.User;
 import net.conczin.mca.client.gui.widget.*;
-import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.resources.*;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
@@ -128,7 +128,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             this.villagerVisualization.readAdditionalSaveData(saveEntityData(villagerVisualization));
         } else {
             assert Minecraft.getInstance().player != null;
-            VillagerLike<?> villagerLike = CommonVillagerModel.getVillager(Minecraft.getInstance().level, Minecraft.getInstance().player.getUUID());
+            VillagerLike<?> villagerLike = MCAClient.resolveVillager(Minecraft.getInstance().player);
             if (villagerLike instanceof VillagerEntityMCA villager) {
                 this.villagerVisualization.readAdditionalSaveData(saveEntityData(villager));
             }

@@ -9,16 +9,18 @@ import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.ConfigRequest;
 import net.conczin.mca.network.c2s.PlayerDataRequest;
+import net.conczin.mca.registry.EntitiesMCA;
 import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 
 import java.util.*;
 
 public class MCAClient {
-    public static final Map<UUID, VillagerLike<?>> playerData = new HashMap<>();
-    public static final Set<UUID> playerDataRequests = new HashSet<>();
+    private static final Map<UUID, VillagerLike<?>> playerData = new HashMap<>();
+    private static final Set<UUID> playerDataRequests = new HashSet<>();
     private static final DestinyManager destinyManager = new DestinyManager();
-    public static VillagerEntityMCA fallbackVillager;
+    private static VillagerEntityMCA fallbackVillager;
 
     public static DestinyManager getDestinyManager() {
         return destinyManager;
@@ -27,6 +29,7 @@ public class MCAClient {
     public static void onLogin() {
         playerData.clear();
         playerDataRequests.clear();
+        fallbackVillager = null;
         ClientSkinCatalog.clear();
         Network.sendToServer(new ConfigRequest());
         ClientSkinCatalog.sync();
@@ -42,6 +45,19 @@ public class MCAClient {
             Network.sendToServer(new PlayerDataRequest(uuid));
         }
         return Optional.ofNullable(playerData.get(uuid));
+    }
+
+    public static VillagerLike<?> resolveVillager(Entity entity) {
+        if (entity instanceof VillagerLike<?> villager) {
+            return villager;
+        }
+        if (fallbackVillager == null) {
+            fallbackVillager = Objects.requireNonNull(
+                    EntitiesMCA.MALE_VILLAGER.create(entity.level()),
+                    "Failed to create fallback MCA villager"
+            );
+        }
+        return playerData.getOrDefault(entity.getUUID(), fallbackVillager);
     }
 
     public static boolean useExpandedPersonalityTranslations() {

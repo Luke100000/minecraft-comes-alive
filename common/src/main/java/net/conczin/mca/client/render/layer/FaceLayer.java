@@ -3,14 +3,15 @@ package net.conczin.mca.client.render.layer;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
-import net.conczin.mca.client.model.CommonVillagerModel;
+import net.conczin.mca.MCAClient;
+import net.conczin.mca.client.model.VillagerOverlayModel;
 import net.conczin.mca.client.resources.EyeTextureLayers;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.resources.FaceList;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.model.HumanoidModel;
+import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
@@ -28,23 +29,21 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> extends VillagerLayer<T, M> {
+public class FaceLayer<T extends LivingEntity> extends VillagerLayer<T> {
     private static final int OPAQUE_WHITE = 0xFFFFFFFF;
     private static final Map<EyeLayerKey, ResourceLocation> EYE_TEXTURE_CACHE = new ConcurrentHashMap<>();
 
     private final String variant;
 
-    public FaceLayer(RenderLayerParent<T, M> renderer, M model, String variant) {
+    public FaceLayer(RenderLayerParent<T, PlayerModel<T>> renderer, VillagerOverlayModel<T> model, String variant) {
         super(renderer, model);
         this.variant = variant;
     }
 
     @Override
-    public void render(PoseStack transform, MultiBufferSource provider, int light, T villager, float limbAngle, float limbDistance, float tickDelta, float animationProgress, float headYaw, float headPitch) {
+    protected void configureModel(T villager) {
         model.setAllVisible(false);
-        model.head.visible = true;
-
-        super.render(transform, provider, light, villager, limbAngle, limbDistance, tickDelta, animationProgress, headYaw, headPitch);
+        model.head.visible = getParentModel().head.visible;
     }
 
     @Override
@@ -196,7 +195,7 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
     }
 
     private VillagerLike<?> getVillager(T villager) {
-        return CommonVillagerModel.getVillager(villager);
+        return MCAClient.resolveVillager(villager);
     }
 
     private record EyeLayerKey(ResourceLocation texture, EyeTextureLayers.Layer layer, EyeTextureLayers.Side side) {

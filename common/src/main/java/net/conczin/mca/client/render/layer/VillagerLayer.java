@@ -5,10 +5,10 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
-import net.conczin.mca.client.model.CommonVillagerModel;
+import net.conczin.mca.client.model.VillagerOverlayModel;
 import net.minecraft.ResourceLocationException;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.model.HumanoidModel;
+import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
@@ -23,7 +23,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
 
-public abstract class VillagerLayer<T extends LivingEntity, M extends HumanoidModel<T>> extends RenderLayer<T, M> {
+public abstract class VillagerLayer<T extends LivingEntity> extends RenderLayer<T, PlayerModel<T>> {
     private static final Map<String, ResourceLocation> TEXTURE_CACHE = Maps.newHashMap();
     private static final Map<ResourceLocation, Boolean> TEXTURE_EXIST_CACHE = Maps.newHashMap();
 
@@ -32,9 +32,9 @@ public abstract class VillagerLayer<T extends LivingEntity, M extends HumanoidMo
         TEXTURE_EXIST_CACHE.put(MCA.locate("temp"), true);
     }
 
-    public final M model;
+    public final VillagerOverlayModel<T> model;
 
-    public VillagerLayer(RenderLayerParent<T, M> renderer, M model) {
+    public VillagerLayer(RenderLayerParent<T, PlayerModel<T>> renderer, VillagerOverlayModel<T> model) {
         super(renderer);
         this.model = model;
     }
@@ -64,28 +64,17 @@ public abstract class VillagerLayer<T extends LivingEntity, M extends HumanoidMo
         }
 
         getParentModel().copyPropertiesTo(model);
-
-        // Primarily restores compatibility with Armourers Workshop.
-        if (model instanceof CommonVillagerModel<?> layer) {
-            if (!(getParentModel() instanceof CommonVillagerModel<?>)) {
-                CommonVillagerModel.applyBreastDimensions(
-                        CommonVillagerModel.getVillager(villager),
-                        layer.getBreastTransform(),
-                        layer.getBreastPart(),
-                        layer.getBreastParts()
-                );
-            }
-            // Vanilla HumanoidModel.copyPropertiesTo only copies the canonical body
-            // bones. MCA wear parts are separate bones, so resync them after the
-            // parent animation has been copied into this layer model.
-            layer.syncWearParts();
-            layer.copyVisibility(getParentModel());
-        }
+        model.syncWearParts();
+        model.copyVisibility(getParentModel());
+        configureModel(villager);
 
         Minecraft client = Minecraft.getInstance();
         boolean visible = !villager.isInvisible();
         boolean glowing = client.shouldEntityAppearGlowing(villager);
         renderFinal(transform, provider, light, villager, tickDelta, visible, glowing);
+    }
+
+    protected void configureModel(T villager) {
     }
 
     public void renderFinal(PoseStack transform, MultiBufferSource provider, int light, T villager, float tickDelta, boolean visible, boolean glowing) {
@@ -111,7 +100,7 @@ public abstract class VillagerLayer<T extends LivingEntity, M extends HumanoidMo
         return showOutline ? RenderType.outline(texture) : null;
     }
 
-    protected void renderModel(PoseStack transform, MultiBufferSource provider, int light, M model, int color, ResourceLocation texture, int overlay, boolean visible, boolean glowing) {
+    protected void renderModel(PoseStack transform, MultiBufferSource provider, int light, VillagerOverlayModel<T> model, int color, ResourceLocation texture, int overlay, boolean visible, boolean glowing) {
         RenderType layer = getRenderLayer(texture, visible, isTranslucent(), glowing);
         if (layer == null) return;
         VertexConsumer buffer = provider.getBuffer(layer);

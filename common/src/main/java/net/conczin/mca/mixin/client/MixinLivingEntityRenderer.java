@@ -5,7 +5,6 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.MCAClient;
-import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.resources.SkinExporter;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.AgeState;
@@ -98,7 +97,7 @@ public abstract class MixinLivingEntityRenderer {
         if (entity instanceof AbstractClientPlayer player && MCAClient.useVillagerRenderer(player.getUUID())) {
             color = FastColor.ARGB32.multiply(
                     color,
-                    SkinExporter.getSkinColor(CommonVillagerModel.getVillager(player))
+                    SkinExporter.getSkinColor(MCAClient.resolveVillager(player))
             );
         }
         original.call(model, matrices, vertices, light, overlay, color);
