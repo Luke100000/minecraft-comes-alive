@@ -1624,13 +1624,12 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (weaponStack.getItem() instanceof BowItem) {
             ItemStack arrow = this.getProjectile(weaponStack);
             AbstractArrow persistentProjectileEntity = ProjectileUtil.getMobArrow(this, arrow, pullProgress, weaponStack);
-            double x = target.getX() - this.getX();
-            double z = target.getZ() - this.getZ();
-            double horizontalDistance = Math.sqrt(x * x + z * z);
-            double flightTicks = horizontalDistance / 1.6D;
-            double gravityCompensation = 0.025D * flightTicks * Math.max(0.0D, flightTicks - 1.0D);
-            double y = target.getY(0.5D) - persistentProjectileEntity.getY() + gravityCompensation;
-            persistentProjectileEntity.shoot(x, y, z, 1.6F, 3);
+            Vec3 shot = RangedWeaponHelper.calculateBowShotVector(
+                    persistentProjectileEntity.position(),
+                    target.position(),
+                    target.getBbHeight()
+            );
+            persistentProjectileEntity.shoot(shot.x, shot.y, shot.z, 1.6F, 3.0F);
             this.playSound(SoundEvents.SKELETON_SHOOT, 1.0F, 1.0F / (this.getRandom().nextFloat() * 0.4F + 0.8F));
             this.level().addFreshEntity(persistentProjectileEntity);
         }

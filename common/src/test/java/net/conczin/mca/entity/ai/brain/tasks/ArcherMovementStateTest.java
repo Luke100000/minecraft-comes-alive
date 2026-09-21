@@ -42,9 +42,15 @@ class ArcherMovementStateTest {
     }
 
     @Test
-    void sustainedLosLossBeatsKiteRangeAfterTargetIsOccluded() {
-        assertEquals(REPOSITION, selectBaseState(REPOSITION, 25, 25, 0, 225, -11));
-        assertEquals(REPOSITION, selectBaseState(KITE, 25, 25, 0, 225, -75));
+    void kiteHysteresisBeatsApproachToDistantTarget() {
+        assertEquals(KITE, selectBaseState(EMERGENCY_FLEE, 400.0D, 27.0D, 0.0D, 225.0D, 20));
+        assertEquals(KITE, selectBaseState(KITE, 400.0D, 80.0D, 0.0D, 225.0D, 20));
+    }
+
+    @Test
+    void closeThreatSafetyBeatsLostSightReposition() {
+        assertEquals(KITE, selectBaseState(KITE, 100.0D, 25.0D, 0.0D, 225.0D, -75));
+        assertEquals(KITE, selectBaseState(HOLD, 100.0D, 35.0D, 0.0D, 225.0D, -75));
     }
 
     @Test

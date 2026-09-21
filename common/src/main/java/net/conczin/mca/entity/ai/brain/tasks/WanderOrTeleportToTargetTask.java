@@ -1,6 +1,7 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.conczin.mca.entity.ai.navigation.PathfindingBlacklist;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -36,7 +37,7 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         boolean vanillaCanContinue = super.canStillUse(world, entity, gameTime);
         WalkTarget walkTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
         var path = entity.getNavigation().getPath();
-        if (walkTarget == null || path == null || pathEndSatisfiesWalkTarget(path, walkTarget)) {
+        if (walkTarget == null || path == null || pathEndSatisfiesWalkTarget(entity, path, walkTarget)) {
             return vanillaCanContinue;
         }
 
@@ -56,12 +57,20 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         return true;
     }
 
-    private static boolean pathEndSatisfiesWalkTarget(Path path, WalkTarget walkTarget) {
+    private static boolean pathEndSatisfiesWalkTarget(Mob entity, Path path, WalkTarget walkTarget) {
         var end = path.getEndNode();
         if (end == null) {
             return false;
         }
         BlockPos endPos = new BlockPos(end.x, end.y, end.z);
+        if (walkTarget.getTarget() instanceof MultiTargetPositionTracker multiTarget) {
+            for (BlockPos target : multiTarget.getPathTargets(entity)) {
+                if (endPos.distManhattan(target) <= walkTarget.getCloseEnoughDist()) {
+                    return true;
+                }
+            }
+            return false;
+        }
         return endPos.distManhattan(walkTarget.getTarget().currentBlockPosition()) <= walkTarget.getCloseEnoughDist();
     }
 

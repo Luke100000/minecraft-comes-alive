@@ -62,18 +62,18 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             return;
         }
 
+        Optional<Player> followedPlayer = getFollowedPlayer(villager);
         boolean shouldScan = villager.isGuard()
-                || villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isPresent()
+                || followedPlayer.isPresent()
                 || villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isPresent();
 
         AABB vanillaBounds = villager.getBoundingBox().inflate(VANILLA_NEARBY_RANGE);
-        AABB scanBounds = shouldScan ? getGuardScanBounds(villager) : vanillaBounds;
+        AABB scanBounds = shouldScan ? getGuardScanBounds(villager, followedPlayer) : vanillaBounds;
         List<LivingEntity> candidates = world.getEntitiesOfClass(
                 LivingEntity.class,
                 scanBounds,
                 target -> target != villager && target.isAlive()
         );
-        candidates.sort(Comparator.comparingDouble(villager::distanceToSqr));
 
         List<LivingEntity> nearbyEntities = new ArrayList<>();
         for (LivingEntity candidate : candidates) {
@@ -81,6 +81,7 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
                 nearbyEntities.add(candidate);
             }
         }
+        nearbyEntities.sort(Comparator.comparingDouble(villager::distanceToSqr));
         villager.getBrain().setMemory(MemoryModuleType.NEAREST_LIVING_ENTITIES, nearbyEntities);
         villager.getBrain().setMemory(
                 MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES,
@@ -92,52 +93,72 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             return;
         }
 
-        villager.getBrain().setMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY, this.getNearestHostile(villager, candidates));
+        villager.getBrain().setMemory(
+                MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY,
+                this.getNearestHostile(villager, candidates, followedPlayer)
+        );
     }
 
-    private Optional<LivingEntity> getNearestHostile(VillagerEntityMCA entity, List<LivingEntity> candidates) {
-        return candidates.stream()
-                .filter(target -> isGuardEnemy(target, entity))
-                .filter(target -> isWithinGuardEnemyRange(entity, target))
-                .filter(target -> isVisibleToGuard(entity, target))
-                .min((a, b) -> this.compareEntities(entity, a, b));
+    private Optional<LivingEntity> getNearestHostile(
+            VillagerEntityMCA entity,
+            List<LivingEntity> candidates,
+            Optional<Player> followedPlayer
+    ) {
+        LivingEntity best = null;
+        int bestPriority = Integer.MIN_VALUE;
+        double bestDistanceSquared = Double.POSITIVE_INFINITY;
+        for (LivingEntity target : candidates) {
+            int priority = getPriority(target, entity, followedPlayer);
+            if (priority < 0
+                    || !isWithinGuardEnemyRange(entity, target, followedPlayer)
+                    || !isVisibleToGuard(entity, target, followedPlayer)) {
+                continue;
+            }
+
+            double distanceSquared = target.distanceToSqr(entity);
+            if (priority > bestPriority
+                    || priority == bestPriority && distanceSquared < bestDistanceSquared) {
+                best = target;
+                bestPriority = priority;
+                bestDistanceSquared = distanceSquared;
+            }
+        }
+        return Optional.ofNullable(best);
     }
 
-    private AABB getGuardScanBounds(VillagerEntityMCA guard) {
+    private AABB getGuardScanBounds(VillagerEntityMCA guard, Optional<Player> followedPlayer) {
         AABB bounds = guard.getBoundingBox().inflate(GUARD_ENEMY_RANGE);
-        Optional<Player> followedPlayer = getFollowedPlayer(guard);
         if (followedPlayer.isPresent()) {
             bounds = bounds.minmax(followedPlayer.get().getBoundingBox().inflate(GUARD_ENEMY_RANGE));
         }
         return bounds;
     }
 
-    private boolean isWithinGuardEnemyRange(VillagerEntityMCA guard, LivingEntity target) {
+    private boolean isWithinGuardEnemyRange(
+            VillagerEntityMCA guard,
+            LivingEntity target,
+            Optional<Player> followedPlayer
+    ) {
         if (target.distanceToSqr(guard) <= GUARD_ENEMY_RANGE_SQR) {
             return true;
         }
-        return getFollowedPlayer(guard)
+        return followedPlayer
                 .filter(player -> target.distanceToSqr(player) <= GUARD_ENEMY_RANGE_SQR)
                 .isPresent();
     }
 
-    private boolean isVisibleToGuard(VillagerEntityMCA guard, LivingEntity target) {
+    private boolean isVisibleToGuard(
+            VillagerEntityMCA guard,
+            LivingEntity target,
+            Optional<Player> followedPlayer
+    ) {
         LivingEntity rangeAnchor = target.distanceToSqr(guard) <= GUARD_ENEMY_RANGE_SQR
                 ? guard
-                : getFollowedPlayer(guard).map(player -> (LivingEntity) player).orElse(guard);
+                : followedPlayer.map(player -> (LivingEntity) player).orElse(guard);
         TargetingConditions conditions = guard.getBrain().isMemoryValue(MemoryModuleType.ATTACK_TARGET, target)
                 ? TARGET_CONDITIONS_IGNORE_INVISIBILITY
                 : TARGET_CONDITIONS;
         return conditions.test(rangeAnchor, target) && guard.getSensing().hasLineOfSight(target);
-    }
-
-    private int compareEntities(LivingEntity entity, LivingEntity hostile1, LivingEntity hostile2) {
-        int i = getPriority(hostile2, entity) - getPriority(hostile1, entity);
-        return i == 0 ? compareDistances(entity, hostile1, hostile2) : i;
-    }
-
-    private int compareDistances(LivingEntity entity, LivingEntity hostile1, LivingEntity hostile2) {
-        return Double.compare(hostile1.distanceToSqr(entity), hostile2.distanceToSqr(entity));
     }
 
     public static boolean isGuardEnemy(LivingEntity entity, LivingEntity guard) {
@@ -148,6 +169,14 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
     }
 
     private static int getPriority(LivingEntity entity, LivingEntity guard) {
+        return getPriority(entity, guard, getFollowedPlayer(guard));
+    }
+
+    private static int getPriority(
+            LivingEntity entity,
+            LivingEntity guard,
+            Optional<Player> followedPlayer
+    ) {
         if (entity instanceof VillagerEntityMCA villager) {
             return villager.isHostile() ? 10 : -1;
         }
@@ -160,7 +189,6 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             return configuredPriority.get();
         }
 
-        Optional<Player> followedPlayer = getFollowedPlayer(guard);
         if (followedPlayer.isPresent()) {
             Player player = followedPlayer.get();
             if (entity instanceof Mob mob && mob.getTarget() == player) {

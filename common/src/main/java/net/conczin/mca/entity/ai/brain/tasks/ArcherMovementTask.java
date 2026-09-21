@@ -28,7 +28,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
     private static final int LOST_SIGHT_BEFORE_REPOSITION = 10;
     private static final int DEBUG_LOG_INTERVAL_TICKS = 20;
 
-    private static final double EMERGENCY_ENTER_DISTANCE_SQUARED = 12.25D;
+    static final double EMERGENCY_ENTER_DISTANCE_SQUARED = 12.25D;
     private static final double EMERGENCY_EXIT_DISTANCE_SQUARED = 25.0D;
     static final double KITE_ENTER_DISTANCE_SQUARED = 36.0D;
     private static final double KITE_EXIT_DISTANCE_SQUARED = 81.0D;
@@ -82,13 +82,6 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             }
         }
 
-        if (targetDistanceSquared > attackRangeSquared) {
-            return new BaseStateDecision(RangedCombatState.APPROACH, "out_of_range");
-        }
-        if (seeTime < -LOST_SIGHT_BEFORE_REPOSITION) {
-            return new BaseStateDecision(RangedCombatState.REPOSITION, "lost_los");
-        }
-
         if (closeRangeThreat) {
             if ((currentState == RangedCombatState.EMERGENCY_FLEE || currentState == RangedCombatState.KITE)
                     && threatDistanceSquared < KITE_EXIT_DISTANCE_SQUARED) {
@@ -97,6 +90,13 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             if (threatDistanceSquared < KITE_ENTER_DISTANCE_SQUARED) {
                 return new BaseStateDecision(RangedCombatState.KITE, "kite_close_threat");
             }
+        }
+
+        if (targetDistanceSquared > attackRangeSquared) {
+            return new BaseStateDecision(RangedCombatState.APPROACH, "out_of_range");
+        }
+        if (seeTime < -LOST_SIGHT_BEFORE_REPOSITION) {
+            return new BaseStateDecision(RangedCombatState.REPOSITION, "lost_los");
         }
 
         if (currentState == RangedCombatState.APPROACH) {
@@ -114,7 +114,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
     }
 
     static boolean shouldCancelStrafe(boolean visible, boolean inRange, boolean closeThreat, boolean collided, boolean stalled) {
-        return !visible || !inRange || closeThreat || collided || stalled;
+        return strafeCancelReason(visible, inRange, closeThreat, collided, stalled) != null;
     }
 
     private final double maximumRangeSquared;
@@ -186,7 +186,12 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         boolean visible = entity.getSensing().hasLineOfSight(target);
         updateSeeTime(visible);
 
-        LivingEntity movementThreat = RangedCombatPositioning.nearestMovementThreat(entity, target);
+        RangedCombatPositioning.ThreatContext threatContext =
+                RangedCombatPositioning.collectThreatContext(entity, target);
+        LivingEntity movementThreat = threatContext.nearestEscapeThreat();
+        if (movementThreat == null) {
+            movementThreat = target;
+        }
         double targetDistanceSquared = entity.distanceToSqr(target);
         double threatDistanceSquared = entity.distanceToSqr(movementThreat);
         double threatVerticalDistance = Math.abs(entity.getY() - movementThreat.getY());
@@ -215,7 +220,11 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             if (currentState == RangedCombatState.STRAFE) {
                 finishStrafe(entity, "base_state_change");
             }
-            if (stateChanged) {
+            boolean preserveRetreatWalkTarget = stateChanged
+                    && isRetreatState(currentState)
+                    && isRetreatState(baseState)
+                    && ownsCombatWalkTarget(entity);
+            if (stateChanged && !preserveRetreatWalkTarget) {
                 clearCombatWalkTarget(entity);
             }
             this.holdTicks = 0;
@@ -239,26 +248,23 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             switch (baseState) {
                 case APPROACH -> {
                     trackTarget(entity, target);
-                    publishApproach(entity, target, targetChanged || stateChanged);
+                    publishApproach(entity, target, threatContext.hazards());
                 }
                 case REPOSITION -> {
                     trackTarget(entity, target);
-                    publishReposition(entity, target, movementThreat, attackRangeSquared, targetChanged || stateChanged);
+                    publishReposition(
+                            entity,
+                            target,
+                            threatContext.hazards(),
+                            attackRangeSquared
+                    );
                 }
                 case KITE -> {
                     trackTarget(entity, target);
-                    publishKiteAway(
-                            entity,
-                            movementThreat,
-                            targetChanged || stateChanged
-                    );
+                    publishKiteAway(entity, threatContext);
                 }
                 case EMERGENCY_FLEE -> {
-                    publishEmergencyAway(
-                            entity,
-                            target,
-                            targetChanged || stateChanged
-                    );
+                    publishEmergencyAway(entity, threatContext);
                     trackEscapeOrTarget(entity, target);
                 }
                 default -> throw new IllegalStateException("Unexpected ranged combat base state: " + baseState);
@@ -271,7 +277,8 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
                     targetChanged,
                     visible,
                     inRange,
-                    closeThreat
+                    closeThreat,
+                    threatContext.hazards()
             );
         }
 
@@ -302,30 +309,47 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             boolean targetChanged,
             boolean visible,
             boolean inRange,
-            boolean closeThreat
+            boolean closeThreat,
+            List<? extends LivingEntity> hazards
     ) {
         if (targetChanged || (currentState != RangedCombatState.HOLD && currentState != RangedCombatState.STRAFE)) {
-            claimDirectMovement(entity);
+            clearCombatWalkTarget(entity);
         }
         trackTarget(entity, target);
 
+        if (entity.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET)) {
+            if (currentState == RangedCombatState.STRAFE) {
+                finishStrafe(entity, "walk_target_preempted");
+            } else {
+                this.holdTicks = 0;
+                setState(entity, RangedCombatState.HOLD);
+            }
+            return;
+        }
+
         if (currentState == RangedCombatState.STRAFE) {
-            continueStrafe(entity, target, visible, inRange, closeThreat);
+            continueStrafe(entity, target, visible, inRange, closeThreat, hazards);
             return;
         }
 
         setState(entity, RangedCombatState.HOLD);
         this.holdTicks++;
         if (shouldStartStrafe(this.holdTicks, this.strafeCooldown)) {
-            tryStartStrafe(entity, target, visible, inRange, closeThreat);
+            tryStartStrafe(entity, target, visible, inRange, closeThreat, hazards);
         }
     }
 
-    private void tryStartStrafe(E entity, LivingEntity target, boolean visible, boolean inRange, boolean closeThreat) {
+    private void tryStartStrafe(
+            E entity,
+            LivingEntity target,
+            boolean visible,
+            boolean inRange,
+            boolean closeThreat,
+            List<? extends LivingEntity> hazards
+    ) {
         trackTarget(entity, target);
         entity.lookAt(target, LOOK_SPEED, LOOK_SPEED);
-        float preferredDirection = entity.getRandom().nextBoolean() ? 1.0F : -1.0F;
-        float direction = findSafeStrafeDirection(entity, preferredDirection);
+        float direction = RangedCombatPositioning.findBestStrafeDirection(entity, hazards);
         if (direction == 0.0F) {
             this.strafeCooldown = nextStrafeCooldown(entity);
             logMovementIntent(entity, "strafe_skip", "no_safe_side", null);
@@ -339,10 +363,17 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         this.strafeTicksElapsed = 0;
         setState(entity, RangedCombatState.STRAFE);
         logMovementIntent(entity, "strafe_start", direction > 0.0F ? "right" : "left", null);
-        continueStrafe(entity, target, visible, inRange, closeThreat);
+        continueStrafe(entity, target, visible, inRange, closeThreat, hazards);
     }
 
-    private void continueStrafe(E entity, LivingEntity target, boolean visible, boolean inRange, boolean closeThreat) {
+    private void continueStrafe(
+            E entity,
+            LivingEntity target,
+            boolean visible,
+            boolean inRange,
+            boolean closeThreat,
+            List<? extends LivingEntity> hazards
+    ) {
         if (this.strafeTicksRemaining <= 0) {
             finishStrafe(entity, "duration_complete");
             return;
@@ -351,13 +382,18 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         trackTarget(entity, target);
         entity.lookAt(target, LOOK_SPEED, LOOK_SPEED);
 
-        boolean sideBlocked = !RangedCombatPositioning.isStrafeSideWalkable(entity, this.strafeDirection);
+        boolean sideBlocked = !RangedCombatPositioning.isImmediateStrafeStepWalkable(
+                entity,
+                this.strafeDirection,
+                hazards
+        );
         boolean collided = entity.horizontalCollision || entity.minorHorizontalCollision || sideBlocked;
         boolean stalled = this.strafeTicksElapsed > 3
                 && entity.onGround()
                 && entity.getDeltaMovement().horizontalDistanceSqr() < STUCK_HORIZONTAL_SPEED_SQUARED;
-        if (shouldCancelStrafe(visible, inRange, closeThreat, collided, stalled)) {
-            finishStrafe(entity, strafeCancelReason(visible, inRange, closeThreat, collided, stalled));
+        String cancelReason = strafeCancelReason(visible, inRange, closeThreat, collided, stalled);
+        if (cancelReason != null) {
+            finishStrafe(entity, cancelReason);
             return;
         }
 
@@ -368,16 +404,6 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         );
         this.strafeTicksElapsed++;
         this.strafeTicksRemaining--;
-    }
-
-    private float findSafeStrafeDirection(E entity, float preferredDirection) {
-        if (RangedCombatPositioning.isStrafeSideWalkable(entity, preferredDirection)) {
-            return preferredDirection;
-        }
-        float oppositeDirection = -preferredDirection;
-        return RangedCombatPositioning.isStrafeSideWalkable(entity, oppositeDirection)
-                ? oppositeDirection
-                : 0.0F;
     }
 
     private void finishStrafe(E entity, String reason) {
@@ -392,34 +418,48 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         setState(entity, RangedCombatState.HOLD);
     }
 
-    private void publishApproach(E entity, LivingEntity target, boolean force) {
-        WalkTarget walkTarget = new WalkTarget(new EntityTracker(target, false), (float)SPEED_MODIFIER, 0);
-        if (publishCombatWalkTarget(entity, walkTarget, force)) {
-            logMovementIntent(entity, "walk", "approach_target", walkTarget);
+    private void publishApproach(
+            E entity,
+            LivingEntity target,
+            List<? extends LivingEntity> hazards
+    ) {
+        if (!canPublishCombatWalkTarget(entity)) {
+            return;
         }
+
+        List<? extends LivingEntity> secondaryHazards = hazards.stream()
+                .filter(hazard -> hazard != target)
+                .toList();
+        publishApproachTarget(entity, target, secondaryHazards, "approach_target", "approach_blocked_by_hazard");
     }
 
     private void publishReposition(
             E entity,
             LivingEntity target,
-            LivingEntity movementThreat,
-            double attackRangeSquared,
-            boolean force
+            List<? extends LivingEntity> hazards,
+            double attackRangeSquared
     ) {
-        if (!canPublishCombatWalkTarget(entity, force)) {
+        if (!canPublishCombatWalkTarget(entity)) {
             return;
         }
 
         Optional<Vec3> firingPosition = RangedCombatPositioning.findFiringPosition(
                 entity,
                 target,
-                movementThreat,
+                hazards,
                 attackRangeSquared
         );
         if (firingPosition.isEmpty()) {
-            WalkTarget walkTarget = new WalkTarget(new EntityTracker(target, false), (float)SPEED_MODIFIER, 0);
-            setCombatWalkTarget(entity, walkTarget);
-            logMovementIntent(entity, "walk", "reposition_approach_fallback", walkTarget);
+            List<? extends LivingEntity> secondaryHazards = hazards.stream()
+                    .filter(hazard -> hazard != target)
+                    .toList();
+            publishApproachTarget(
+                    entity,
+                    target,
+                    secondaryHazards,
+                    "reposition_approach_fallback",
+                    "reposition_blocked_by_hazard"
+            );
             return;
         }
 
@@ -428,30 +468,65 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         logMovementIntent(entity, "walk", "reposition_firing_position", walkTarget);
     }
 
-    private void publishKiteAway(E entity, LivingEntity fallbackThreat, boolean force) {
-        if (!canPublishCombatWalkTarget(entity, force)) {
+    private void publishApproachTarget(
+            E entity,
+            LivingEntity target,
+            List<? extends LivingEntity> secondaryHazards,
+            String movementReason,
+            String blockedReason
+    ) {
+        if (secondaryHazards.isEmpty()) {
+            WalkTarget walkTarget = new WalkTarget(new EntityTracker(target, false), (float)SPEED_MODIFIER, 0);
+            setCombatWalkTarget(entity, walkTarget);
+            logMovementIntent(entity, "walk", movementReason, walkTarget);
+            return;
+        }
+
+        Optional<Vec3> waypoint = RangedCombatPositioning.findApproachPosition(entity, target, secondaryHazards);
+        if (waypoint.isEmpty()) {
+            clearCombatWalkTarget(entity);
+            scheduleWalkTargetRetry(entity);
+            logMovementIntent(entity, "hold", blockedReason, null);
+            return;
+        }
+
+        WalkTarget walkTarget = new WalkTarget(waypoint.orElseThrow(), (float)SPEED_MODIFIER, 0);
+        setCombatWalkTarget(entity, walkTarget);
+        logMovementIntent(entity, "walk", movementReason + "_waypoint", walkTarget);
+    }
+
+    private void publishKiteAway(
+            E entity,
+            RangedCombatPositioning.ThreatContext threatContext
+    ) {
+        if (!canPublishCombatWalkTarget(entity)) {
             return;
         }
         publishGroupAway(
                 entity,
-                RangedCombatPositioning.findGroupEscapePosition(
+                RangedCombatPositioning.findGroupEscapeTarget(
                         entity,
-                        RangedCombatPositioning.nearbyMovementThreats(entity, fallbackThreat),
+                        threatContext.escapeThreats(),
+                        threatContext.hazards(),
                         KITE_SAFE_DISTANCE
                 ),
                 SPEED_MODIFIER
         );
     }
 
-    private void publishEmergencyAway(E entity, LivingEntity fallbackThreat, boolean force) {
-        if (!canPublishCombatWalkTarget(entity, force)) {
+    private void publishEmergencyAway(
+            E entity,
+            RangedCombatPositioning.ThreatContext threatContext
+    ) {
+        if (!canPublishCombatWalkTarget(entity)) {
             return;
         }
         publishGroupAway(
                 entity,
-                RangedCombatPositioning.findEmergencyEscapePosition(
+                RangedCombatPositioning.findEmergencyEscapeTarget(
                         entity,
-                        RangedCombatPositioning.nearbyMovementThreats(entity, fallbackThreat),
+                        threatContext.escapeThreats(),
+                        threatContext.hazards(),
                         EMERGENCY_SAFE_DISTANCE
                 ),
                 EMERGENCY_SPEED_MODIFIER
@@ -460,34 +535,38 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
 
     private void publishGroupAway(
             E entity,
-            Optional<Vec3> awayPosition,
+            Optional<? extends PositionTracker> awayTarget,
             double speedModifier
     ) {
-        if (awayPosition.isEmpty()) {
+        if (awayTarget.isEmpty()) {
+            if (this.combatWalkTarget != null) {
+                scheduleWalkTargetRetry(entity);
+                logMovementIntent(entity, "keep_walk", "retreat_replan_unavailable", this.combatWalkTarget);
+                return;
+            }
             clearCombatWalkTarget(entity);
             scheduleWalkTargetRetry(entity);
             logMovementIntent(entity, "hold", "no_group_escape_position", null);
             return;
         }
 
-        WalkTarget walkTarget = new WalkTarget(awayPosition.orElseThrow(), (float)speedModifier, 0);
+        WalkTarget walkTarget = new WalkTarget(awayTarget.orElseThrow(), (float)speedModifier, 0);
         setCombatWalkTarget(entity, walkTarget);
         logMovementIntent(entity, "walk", "away_from_threat_group", walkTarget);
     }
 
-    private boolean publishCombatWalkTarget(E entity, WalkTarget walkTarget, boolean force) {
-        if (canPublishCombatWalkTarget(entity, force)) {
-            setCombatWalkTarget(entity, walkTarget);
-            return true;
-        }
-        return false;
+    private static boolean isRetreatState(RangedCombatState state) {
+        return state == RangedCombatState.KITE || state == RangedCombatState.EMERGENCY_FLEE;
     }
 
-    private boolean canPublishCombatWalkTarget(E entity, boolean force) {
-        if (force) {
-            return true;
-        }
+    private boolean ownsCombatWalkTarget(E entity) {
+        return this.combatWalkTarget != null
+                && entity.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null) == this.combatWalkTarget;
+    }
+
+    private boolean canPublishCombatWalkTarget(E entity) {
         return !entity.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                && !entity.getBrain().hasMemoryValue(MemoryModuleType.PATH)
                 && this.walkTargetRetryCooldown <= 0;
     }
 
@@ -509,17 +588,6 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         WalkTarget current = entity.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
         if (current == this.combatWalkTarget) {
             entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-        }
-        this.combatWalkTarget = null;
-        this.walkTargetRetryCooldown = 0;
-    }
-
-    private void claimDirectMovement(E entity) {
-        if (entity.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET)) {
-            entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-        }
-        if (!entity.getNavigation().isDone()) {
-            entity.getNavigation().stop();
         }
         this.combatWalkTarget = null;
         this.walkTargetRetryCooldown = 0;
@@ -555,14 +623,9 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
 
     private void resetLocalState() {
         this.lastTarget = null;
-        this.seeTime = 0;
         this.walkTargetRetryCooldown = 0;
         this.combatWalkTarget = null;
-        this.holdTicks = 0;
-        this.strafeCooldown = 0;
-        this.strafeTicksRemaining = 0;
-        this.strafeTicksElapsed = 0;
-        this.strafeDirection = 0.0F;
+        resetTacticalTimers();
         this.lastDebugState = "";
         this.lastDebugLogTime = Long.MIN_VALUE;
     }
@@ -629,7 +692,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         if (collided) {
             return "collision";
         }
-        return stalled ? "stalled" : "unknown";
+        return stalled ? "stalled" : null;
     }
 
     private void logStateTransition(

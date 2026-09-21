@@ -18,7 +18,6 @@ public enum RangedCombatState {
     }
 
     public static Optional<RangedCombatState> current(LivingEntity entity) {
-        Optional<RangedCombatState> memory = entity.getBrain().getMemoryInternal(MemoryModuleTypeMCA.RANGED_COMBAT_STATE);
-        return memory == null ? Optional.empty() : memory;
+        return entity.getBrain().getMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE);
     }
 }
