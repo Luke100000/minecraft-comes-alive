@@ -83,10 +83,6 @@ public class EyeCatalog extends SimplePreparableReloadListener<Map<ResourceLocat
         active.forEach(definition -> activeDefinitions.put(definition.id(), definition));
     }
 
-    public ResourceLocation resolve(ResourceLocation eye) {
-        return resolve(eye, Gender.NEUTRAL);
-    }
-
     public ResourceLocation resolve(ResourceLocation eye, Gender gender) {
         EyeDefinition current = activeDefinitions.get(eye);
         if (current != null && SkinSelection.matchesGender(current.gender(), gender)) {
@@ -114,10 +110,6 @@ public class EyeCatalog extends SimplePreparableReloadListener<Map<ResourceLocat
         WeightedPool.Mutable<ResourceLocation> pool = new WeightedPool.Mutable<>(EyeStyles.DEFAULT);
         candidates.forEach(entry -> pool.add(entry.id(), entry.chance()));
         return pool.pickOne();
-    }
-
-    public boolean contains(ResourceLocation eye) {
-        return activeDefinitions.containsKey(eye);
     }
 
     public boolean contains(ResourceLocation eye, Gender gender) {

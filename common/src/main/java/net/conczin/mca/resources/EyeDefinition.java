@@ -78,7 +78,7 @@ public record EyeDefinition(
         );
     }
 
-    public static int parseColor(String value) {
+    private static int parseColor(String value) {
         if (value == null || !value.matches("#[0-9A-Fa-f]{6}")) {
             throw new IllegalArgumentException("Expected color in #RRGGBB format: " + value);
         }

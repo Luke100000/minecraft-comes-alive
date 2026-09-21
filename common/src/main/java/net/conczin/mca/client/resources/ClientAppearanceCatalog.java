@@ -85,10 +85,6 @@ public final class ClientAppearanceCatalog {
                 .toList();
     }
 
-    public static ResourceLocation resolveEye(ResourceLocation eye) {
-        return resolveEye(eye, Gender.NEUTRAL);
-    }
-
     public static ResourceLocation resolveEye(ResourceLocation eye, Gender gender) {
         EyeDefinition current = eyes.get(eye);
         if (current != null && SkinSelection.matchesGender(current.gender(), gender)) {

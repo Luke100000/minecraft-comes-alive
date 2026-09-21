@@ -8,7 +8,7 @@ public final class EyeTintPixel {
     private EyeTintPixel() {
     }
 
-    public static boolean isIrisMarker(int alpha) {
+    private static boolean isIrisMarker(int alpha) {
         return alpha == IRIS_MARKER_ALPHA;
     }
 

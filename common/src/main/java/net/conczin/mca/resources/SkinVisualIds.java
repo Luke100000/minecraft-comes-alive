@@ -24,10 +24,6 @@ public final class SkinVisualIds {
         return skin != null && SkinSelection.matchesGender(skin, gender);
     }
 
-    public static boolean isEyeTexture(String identifier) {
-        return isEyeTexture(identifier, Gender.NEUTRAL);
-    }
-
     public static boolean isEyeTexture(String identifier, Gender gender) {
         ResourceLocation id = ResourceLocation.tryParse(identifier);
         EyeCatalog list = EyeCatalog.getInstance();
