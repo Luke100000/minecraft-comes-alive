@@ -1,5 +1,7 @@
 package net.conczin.mca.client.render;
 
+import net.conczin.mca.client.model.HairOverlayModel;
+import net.conczin.mca.client.model.MCALayerDefinitions;
 import net.conczin.mca.client.model.MCAModelLayers;
 import net.conczin.mca.client.model.VillagerPlayerModel;
 import net.conczin.mca.client.render.layer.ClothingLayer;
@@ -17,6 +19,9 @@ public class VillagerEntityMCARenderer extends VillagerLikeEntityMCARenderer<Vil
         layers.add(0, new VillagerMorphologyLayer<>(this, ctx.bakeLayer(MCAModelLayers.PLAYER_ATTACHMENTS)));
         addLayer(new FaceLayer<>(this, createOverlay(ctx, MCAModelLayers.VILLAGER_FACE).hideWears(), "normal"));
         addLayer(new ClothingLayer<>(this, createOverlay(ctx, MCAModelLayers.VILLAGER_CLOTHING), "normal"));
-        addLayer(new HairLayer<>(this, createOverlay(ctx, MCAModelLayers.VILLAGER_HAIR)));
+        addLayer(new HairLayer<>(this, new HairOverlayModel<>(
+                ctx.bakeLayer(MCAModelLayers.VILLAGER_HAIR),
+                MCALayerDefinitions.VILLAGER_CLOTHING_DILATION
+        )));
     }
 }

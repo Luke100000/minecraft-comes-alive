@@ -29,7 +29,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class FaceLayer<T extends LivingEntity> extends VillagerLayer<T> {
+public class FaceLayer<T extends LivingEntity> extends VillagerLayer<T, VillagerOverlayModel<T>> {
     private static final int OPAQUE_WHITE = 0xFFFFFFFF;
     private static final Map<EyeLayerKey, ResourceLocation> EYE_TEXTURE_CACHE = new ConcurrentHashMap<>();
 

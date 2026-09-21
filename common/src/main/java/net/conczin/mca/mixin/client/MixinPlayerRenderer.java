@@ -6,6 +6,8 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.MCAClient;
+import net.conczin.mca.client.model.HairOverlayModel;
+import net.conczin.mca.client.model.MCALayerDefinitions;
 import net.conczin.mca.client.model.MCAModelLayers;
 import net.conczin.mca.client.model.VillagerOverlayModel;
 import net.conczin.mca.client.render.layer.ClothingLayer;
@@ -78,10 +80,9 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
         addLayer(mca$clothingLayer);
         addLayer(new HairLayer<>(
                 this,
-                mca$createVisibleModel(
-                        ctx,
-                        slim ? MCAModelLayers.VILLAGER_HAIR_SLIM : MCAModelLayers.VILLAGER_HAIR,
-                        slim
+                new HairOverlayModel<>(
+                        ctx.bakeLayer(MCAModelLayers.VILLAGER_HAIR),
+                        MCALayerDefinitions.VILLAGER_CLOTHING_DILATION
                 )
         ));
         // Player morphology replaces geometry that used to render with the base model,

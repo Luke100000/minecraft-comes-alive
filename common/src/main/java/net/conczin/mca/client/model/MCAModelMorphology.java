@@ -5,6 +5,8 @@ import net.conczin.mca.entity.ai.relationship.Gender;
 import net.minecraft.client.model.geom.ModelPart;
 
 public final class MCAModelMorphology {
+    static final float BREAST_ROTATION_X = (float) Math.PI * 0.3F;
+
     private MCAModelMorphology() {
     }
 
@@ -29,7 +31,7 @@ public final class MCAModelMorphology {
         float breastY = (float) (5.0F - Math.pow(rawBreastSize, 0.5) * 2.5F);
         float breastZ = -1.5F + rawBreastSize * 0.25F;
         for (ModelPart part : breastParts) {
-            part.setRotation((float) Math.PI * 0.3F, 0.0F, 0.0F);
+            part.setRotation(BREAST_ROTATION_X, 0.0F, 0.0F);
             part.setPos(0.25F, breastY, breastZ);
         }
     }

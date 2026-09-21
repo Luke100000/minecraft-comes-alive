@@ -4,7 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
-import net.conczin.mca.client.model.VillagerOverlayModel;
+import net.conczin.mca.client.model.HairOverlayModel;
 import net.conczin.mca.client.resources.ColorPalette;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
@@ -19,14 +19,15 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.animal.Sheep;
 import net.minecraft.world.item.DyeColor;
 
-public class HairLayer<T extends LivingEntity> extends VillagerLayer<T> {
-    public HairLayer(RenderLayerParent<T, PlayerModel<T>> renderer, VillagerOverlayModel<T> model) {
+public class HairLayer<T extends LivingEntity> extends VillagerLayer<T, HairOverlayModel<T>> {
+    public HairLayer(RenderLayerParent<T, PlayerModel<T>> renderer, HairOverlayModel<T> model) {
         super(renderer, model);
     }
 
     @Override
     protected void configureModel(T villager) {
-        model.applyMorphology(MCAClient.resolveVillager(villager));
+        var villagerData = MCAClient.resolveVillager(villager);
+        model.applyMorphology(villagerData);
     }
 
     @Override

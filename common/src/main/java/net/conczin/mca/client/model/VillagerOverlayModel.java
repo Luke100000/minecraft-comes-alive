@@ -8,7 +8,7 @@ import net.minecraft.world.entity.LivingEntity;
 
 import java.util.List;
 
-public final class VillagerOverlayModel<T extends LivingEntity> extends PlayerModel<T> {
+public final class VillagerOverlayModel<T extends LivingEntity> extends PlayerModel<T> implements VillagerLayerModel<T> {
     private final ModelPart breastTransform;
     private final ModelPart breasts;
     private final ModelPart breastsWear;
@@ -21,6 +21,13 @@ public final class VillagerOverlayModel<T extends LivingEntity> extends PlayerMo
         breasts = breastTransform.getChild(MCAModelGeometry.BREASTS);
         breastsWear = breastTransform.getChild(MCAModelGeometry.BREASTPLATE);
         breastParts = List.of(breasts, breastsWear);
+    }
+
+    @Override
+    public void copyFrom(PlayerModel<T> parent) {
+        parent.copyPropertiesTo(this);
+        syncWearParts();
+        copyVisibility(parent);
     }
 
     public VillagerOverlayModel<T> hideWears() {

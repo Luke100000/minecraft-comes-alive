@@ -31,6 +31,10 @@ public class VillagerPlayerModel<T extends LivingEntity & VillagerLike<T>> exten
     public void prepareMobModel(T entity, float limbAngle, float limbDistance, float tickDelta) {
         updateArmPoses(entity);
         super.prepareMobModel(entity, limbAngle, limbDistance, tickDelta);
+        // MCA owns villager age proportions through VillagerDimensions. Keep vanilla's
+        // AgeableListModel baby transform disabled for the base model and every layer
+        // that copies render state from it.
+        young = false;
         riding |= entity.getAgeState() == AgeState.BABY;
     }
 
@@ -148,15 +152,12 @@ public class VillagerPlayerModel<T extends LivingEntity & VillagerLike<T>> exten
     @Override
     public void renderToBuffer(PoseStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
         T villager = currentVillager;
-        boolean wasYoung = young;
-        young = false;
         try {
             if (villager != null) {
                 color = FastColor.ARGB32.multiply(color, SkinExporter.getSkinColor(villager));
             }
             super.renderToBuffer(matrices, vertices, light, overlay, color);
         } finally {
-            young = wasYoung;
             currentVillager = null;
         }
     }

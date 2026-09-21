@@ -5,9 +5,10 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
-import net.conczin.mca.client.model.VillagerOverlayModel;
+import net.conczin.mca.client.model.VillagerLayerModel;
 import net.minecraft.ResourceLocationException;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
@@ -23,7 +24,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
 
-public abstract class VillagerLayer<T extends LivingEntity> extends RenderLayer<T, PlayerModel<T>> {
+public abstract class VillagerLayer<
+        T extends LivingEntity,
+        M extends EntityModel<T> & VillagerLayerModel<T>
+        > extends RenderLayer<T, PlayerModel<T>> {
     private static final Map<String, ResourceLocation> TEXTURE_CACHE = Maps.newHashMap();
     private static final Map<ResourceLocation, Boolean> TEXTURE_EXIST_CACHE = Maps.newHashMap();
 
@@ -32,9 +36,9 @@ public abstract class VillagerLayer<T extends LivingEntity> extends RenderLayer<
         TEXTURE_EXIST_CACHE.put(MCA.locate("temp"), true);
     }
 
-    public final VillagerOverlayModel<T> model;
+    public final M model;
 
-    public VillagerLayer(RenderLayerParent<T, PlayerModel<T>> renderer, VillagerOverlayModel<T> model) {
+    public VillagerLayer(RenderLayerParent<T, PlayerModel<T>> renderer, M model) {
         super(renderer);
         this.model = model;
     }
@@ -63,9 +67,7 @@ public abstract class VillagerLayer<T extends LivingEntity> extends RenderLayer<
             return;
         }
 
-        getParentModel().copyPropertiesTo(model);
-        model.syncWearParts();
-        model.copyVisibility(getParentModel());
+        model.copyFrom(getParentModel());
         configureModel(villager);
 
         Minecraft client = Minecraft.getInstance();
@@ -100,7 +102,7 @@ public abstract class VillagerLayer<T extends LivingEntity> extends RenderLayer<
         return showOutline ? RenderType.outline(texture) : null;
     }
 
-    protected void renderModel(PoseStack transform, MultiBufferSource provider, int light, VillagerOverlayModel<T> model, int color, ResourceLocation texture, int overlay, boolean visible, boolean glowing) {
+    protected void renderModel(PoseStack transform, MultiBufferSource provider, int light, M model, int color, ResourceLocation texture, int overlay, boolean visible, boolean glowing) {
         RenderType layer = getRenderLayer(texture, visible, isTranslucent(), glowing);
         if (layer == null) return;
         VertexConsumer buffer = provider.getBuffer(layer);

@@ -32,14 +32,11 @@ public class MCAArmorModel<T extends LivingEntity> extends HumanoidModel<T> {
     @Override
     public void renderToBuffer(PoseStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
         boolean wasBreastTransformVisible = breastTransform.visible;
-        boolean wasYoung = young;
         breastTransform.visible &= leftArm.visible || rightArm.visible;
-        young = false;
         try {
             super.renderToBuffer(matrices, vertices, light, overlay, color);
         } finally {
             breastTransform.visible = wasBreastTransformVisible;
-            young = wasYoung;
         }
     }
 

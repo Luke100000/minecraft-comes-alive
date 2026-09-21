@@ -1,5 +1,7 @@
 package net.conczin.mca.client.render;
 
+import net.conczin.mca.client.model.HairOverlayModel;
+import net.conczin.mca.client.model.MCALayerDefinitions;
 import net.conczin.mca.client.model.MCAModelLayers;
 import net.conczin.mca.client.model.ZombieVillagerPlayerModel;
 import net.conczin.mca.client.render.layer.ClothingLayer;
@@ -17,7 +19,10 @@ public class ZombieVillagerEntityMCARenderer extends VillagerLikeEntityMCARender
         layers.add(0, new VillagerMorphologyLayer<>(this, ctx.bakeLayer(MCAModelLayers.PLAYER_ATTACHMENTS)));
         addLayer(new FaceLayer<>(this, createOverlay(ctx, MCAModelLayers.ZOMBIE_VILLAGER_FACE).hideWears(), "normal"));
         addLayer(new ClothingLayer<>(this, createOverlay(ctx, MCAModelLayers.ZOMBIE_VILLAGER_CLOTHING), "zombie"));
-        addLayer(new HairLayer<>(this, createOverlay(ctx, MCAModelLayers.ZOMBIE_VILLAGER_HAIR)));
+        addLayer(new HairLayer<>(this, new HairOverlayModel<>(
+                ctx.bakeLayer(MCAModelLayers.ZOMBIE_VILLAGER_HAIR),
+                MCALayerDefinitions.ZOMBIE_VILLAGER_CLOTHING_DILATION
+        )));
     }
 
     @Override

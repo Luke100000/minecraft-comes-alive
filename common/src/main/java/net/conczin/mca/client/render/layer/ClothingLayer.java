@@ -9,7 +9,7 @@ import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.LivingEntity;
 
-public class ClothingLayer<T extends LivingEntity> extends VillagerLayer<T> {
+public class ClothingLayer<T extends LivingEntity> extends VillagerLayer<T, VillagerOverlayModel<T>> {
     private final String variant;
 
     public ClothingLayer(RenderLayerParent<T, PlayerModel<T>> renderer, VillagerOverlayModel<T> model, String variant) {
