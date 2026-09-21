@@ -82,7 +82,7 @@ public final class FloorScannerGameTests {
 
     @GameTest(batch = "mca_floor_full_block", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 80)
-    public static void fullBlockIsNotOwnedInteriorCell(GameTestHelper helper) {
+    public static void fullBlockKeepsCanonicalFloorCell(GameTestHelper helper) {
         BlockPos roomMin = helper.absolutePos(new BlockPos(4, 2, 4));
         buildClosedRoom(helper, roomMin, 5, 4);
         BlockPos blocked = roomMin.offset(1, 0, 1);
@@ -93,8 +93,42 @@ public final class FloorScannerGameTests {
 
         helper.assertTrue(scan.result() == Building.validationResult.SUCCESS,
                 "room scan failed: " + scan.result());
-        helper.assertTrue(scan.floor().cellAt(blocked).isEmpty(),
-                "full cube became an owned Room cell");
+        helper.assertTrue(scan.floor().cellAt(blocked).isPresent(),
+                "full cube erased its canonical Floor cell");
+        helper.assertTrue(SelectedFloorScanner.inspectSurfaceCell(
+                        helper.getLevel(), blocked, new FloorCeilingResolver(helper.getLevel())).isEmpty(),
+                "full cube unexpectedly became a traversable Floor surface");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_obstacle_stability", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void interiorBlockDoesNotMoveCanonicalFloorCell(GameTestHelper helper) {
+        BlockPos roomMin = helper.absolutePos(new BlockPos(4, 2, 4));
+        buildClosedRoom(helper, roomMin, 5, 4);
+        BlockPos seed = roomMin.offset(3, 0, 2);
+        BlockPos occupied = roomMin.offset(1, 0, 1);
+        var level = helper.getLevel();
+
+        SelectedFloorScanner.Result before = SelectedFloorScanner.scan(level, seed, 128, 16);
+        helper.assertTrue(before.result() == Building.validationResult.SUCCESS,
+                "baseline room scan failed: " + before.result());
+        Set<BlockPos> expected = before.floor().cells().stream()
+                .map(FloorGeometry.Cell::feet)
+                .collect(Collectors.toSet());
+
+        level.setBlock(occupied, Blocks.STONE.defaultBlockState(), 3);
+        SelectedFloorScanner.Result after = SelectedFloorScanner.scan(level, seed, 128, 16);
+        helper.assertTrue(after.result() == Building.validationResult.SUCCESS,
+                "room scan with interior block failed: " + after.result());
+        Set<BlockPos> actual = after.floor().cells().stream()
+                .map(FloorGeometry.Cell::feet)
+                .collect(Collectors.toSet());
+
+        helper.assertTrue(actual.equals(expected),
+                "interior block changed canonical Floor geometry: missing="
+                        + expected.stream().filter(cell -> !actual.contains(cell)).toList()
+                        + " added=" + actual.stream().filter(cell -> !expected.contains(cell)).toList());
         helper.succeed();
     }
 
@@ -121,7 +155,7 @@ public final class FloorScannerGameTests {
 
     @GameTest(batch = "mca_floor_partial_obstacle", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 80)
-    public static void fullHeightPartialObstacleDoesNotBecomeFloorCell(GameTestHelper helper) {
+    public static void fullHeightPartialObstacleKeepsCanonicalFloorCell(GameTestHelper helper) {
         BlockPos roomMin = helper.absolutePos(new BlockPos(4, 2, 4));
         buildClosedRoom(helper, roomMin, 5, 4);
         BlockPos blocked = roomMin.offset(1, 0, 1);
@@ -132,8 +166,11 @@ public final class FloorScannerGameTests {
 
         helper.assertTrue(scan.result() == Building.validationResult.SUCCESS,
                 "room scan failed: " + scan.result());
-        helper.assertTrue(scan.floor().cellAt(blocked).isEmpty(),
-                "full-height partial obstacle became ordinary Floor geometry");
+        helper.assertTrue(scan.floor().cellAt(blocked).isPresent(),
+                "full-height partial obstacle erased its canonical Floor cell");
+        helper.assertTrue(SelectedFloorScanner.inspectSurfaceCell(
+                        helper.getLevel(), blocked, new FloorCeilingResolver(helper.getLevel())).isEmpty(),
+                "full-height partial obstacle unexpectedly became a traversable Floor surface");
         helper.succeed();
     }
 

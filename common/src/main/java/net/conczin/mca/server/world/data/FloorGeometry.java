@@ -14,7 +14,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/** Exact physical geometry for one semantic Floor. */
+/** Exact structural ownership geometry for one semantic Floor; cells need not be traversable. */
 final class FloorGeometry {
     private final Set<Cell> cells;
     private final Map<BlockPos, FloorConnector.Type> connectorTypesByCell;
