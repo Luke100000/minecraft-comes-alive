@@ -86,7 +86,7 @@ Use:
 | mutable PathFinder budget | constructor-final | mutable + refreshed from effective path length | none | Adapt floor on 1.21.1; delete shim on 26.1.2+ | Task 2/3 regressions |
 | recompute deferral | absent in base | base checks `canUpdatePath()` | MCA has 1.21.1 override | Keep on 1.21.1; delete on 26.1.2+ | airborne recompute test |
 | sleep-start memory cleanup | `Villager.startSleeping()` | `SleepInBed` | already present | Already present / ownership moved | source comparison |
-| `getSurfaceY()` ownership | private WATER helper | public floatable-fluid helper | MCA shadows private helper without callers | Remove shadow on <=26.2; use native 26.3 owner | source visibility / compile / fluid regression if needed |
+| `getSurfaceY()` ownership | private exact-WATER helper | public floatable-fluid helper | MCA class-tweaks it extendable and overrides with `FluidTags.WATER` | Keep through 26.2; remove in favor of native 26.3 | class-tweaker/build wiring + focused fluid regression |
 | large-mob danger malus | old width handling | `BIG_MOBS_CLOSE_TO_DANGER` | likely irrelevant to normal MCA villager width | Decide from evidence | focused geometry only if relevant |
 
 - [ ] **Step 3: Explicitly classify 26.3-only/version plumbing**
@@ -258,11 +258,20 @@ Keep the current `recomputePath()` deferral on this branch. Vanilla 1.21.1 lacks
 
 Do not copy this override to 26.1.2+.
 
-- [ ] **Step 7: Remove the non-overriding `getSurfaceY()` shadow**
+- [ ] **Step 7: Preserve the class-tweaked water-tag surface override**
 
-Vanilla 1.21.1 declares `GroundPathNavigation.getSurfaceY()` private. The current MCA method with the same name has no MCA call sites and is not an override of the vanilla helper.
+Vanilla 1.21.1 declares `GroundPathNavigation.getSurfaceY()` private, but MCA deliberately widens it with:
 
-Remove the MCA shadow method and its now-unused WATER/fluid imports rather than treating it as a 26.3 backport seam. Let vanilla 1.21.1 continue owning its private WATER surface calculation.
+```text
+extendable method net/minecraft/world/entity/ai/navigation/GroundPathNavigation getSurfaceY ()I
+```
+
+Keep the MCA override on 1.21.1. It intentionally uses `FluidTags.WATER` instead of vanilla's exact `Blocks.WATER` test.
+
+Verify both loader paths remain wired:
+
+- Fabric consumes `mca.classtweaker`;
+- NeoForge receives the generated access transformer from `common:generateAccessTransformer`.
 
 - [ ] **Step 8: Add/retain unloaded-chunk proof**
 
@@ -409,9 +418,9 @@ Keep intentional:
 this.nodeEvaluator.setCanOpenDoors(true);
 ```
 
-- [ ] **Step 8: Do not recreate the private surface-helper shadow**
+- [ ] **Step 8: Retain the class-tweaked surface override on 26.1.2**
 
-Vanilla 26.1.2 still owns `getSurfaceY()` privately. Do not forward-port MCA's 1.21.1 same-name method or `@Override`; it is not a valid owner seam.
+Vanilla 26.1.2 still uses a private exact-WATER `getSurfaceY()`. The branch's `mca.classtweaker` still marks that method `extendable`, so keep MCA's `FluidTags.WATER` override and the class-tweaker entry.
 
 - [ ] **Step 9: Separate sensing migration from navigation**
 
@@ -485,9 +494,9 @@ git grep -n "recomputePath" -- common/src/main/java/net/conczin/mca/entity/ai/na
 
 Expected: no long-distance-config coupling and no stale 1.21.1 recompute shim.
 
-- [ ] **Step 4: Keep the private surface helper vanilla-owned**
+- [ ] **Step 4: Retain the class-tweaked surface override on 26.2**
 
-Vanilla 26.2 still declares `getSurfaceY()` private. Do not add an MCA same-name pseudo-override.
+Vanilla 26.2 still has the private exact-WATER implementation and MCA still widens it through `mca.classtweaker`. Keep the MCA `FluidTags.WATER` override here as well.
 
 - [ ] **Step 5: Preserve the sensing decision independently**
 
@@ -531,7 +540,7 @@ Pay special attention to:
 
 - [ ] **Step 3: Remove stale overrides when vanilla is stronger**
 
-Vanilla 26.3 makes `getSurfaceY()` public and generalizes it to `isInFloatableFluid()` / `FluidTags.ENTITY_FLOATABLE`. Do not introduce MCA's older WATER-only implementation on this branch; use the native 26.3 method unless a focused regression proves a separate MCA requirement.
+Vanilla 26.3 makes `getSurfaceY()` public and generalizes it to `isInFloatableFluid()` / `FluidTags.ENTITY_FLOATABLE`. Remove MCA's older WATER-only override on this branch and remove the now-unused `getSurfaceY` `extendable` entry from `mca.classtweaker`, unless a focused regression proves a separate MCA requirement.
 
 Do not remove climb/collision behavior just because the surrounding vanilla method changed; prove equivalence with focused regression first.
 

@@ -236,12 +236,12 @@ Examples that require explicit audit include:
 
 Pure signature renames, local-variable renames, annotation migrations, profiler/debug capture, debug subscriber support, and equivalent refactors are recorded as **Not ported: no gameplay/pathfinding semantic change**.
 
-One surface-navigation detail is version-specific and must not be treated as a normal override:
+One surface-navigation detail is version-specific and uses MCA's access-widening layer:
 
-- `GroundPathNavigation.getSurfaceY()` is private in vanilla 1.21.1, 26.1.2, and 26.2.
-- It becomes public in 26.3 and expands from WATER-only handling to `isInFloatableFluid()` / `FluidTags.ENTITY_FLOATABLE`.
-- The current MCA `getSurfaceY()` method has no MCA callers and cannot override the private vanilla owner on 1.21.1/26.1.2/26.2. It is therefore a shadow method, not a valid compatibility seam, and should not be carried forward as such.
-- On 26.3, prefer the native public generalized implementation rather than overriding it with MCA's older WATER-only copy unless a focused regression demonstrates a separate MCA requirement.
+- `GroundPathNavigation.getSurfaceY()` is private in vanilla source on 1.21.1, 26.1.2, and 26.2, but `common/src/main/resources/mca.classtweaker` marks it `extendable` on every MCA branch. Fabric consumes that class tweaker directly, while the common build generates the corresponding NeoForge access transformer.
+- MCA's override is therefore a real override on those branches, not a shadow method. It intentionally replaces vanilla's exact `Blocks.WATER` test with `FluidTags.WATER` so tagged/modded water remains navigable.
+- In 26.3 vanilla itself makes `getSurfaceY()` public and generalizes it further to `isInFloatableFluid()` / `FluidTags.ENTITY_FLOATABLE`.
+- On 26.3, prefer the native generalized implementation and remove MCA's older WATER-only override plus the now-unneeded `getSurfaceY` class-tweaker entry, unless a focused regression demonstrates a separate MCA requirement.
 
 ## Architecture
 
@@ -278,7 +278,7 @@ Implementation must maintain a ledger in the implementation notes or plan checkl
 | independent required path length | tied to `FOLLOW_RANGE` | separate requirement, villager=48 | partial equivalent via current 48 follow range | Adapted | ordinary-range + budget regression |
 | recompute while navigation cannot update | base 1.21.1 recomputes immediately | newer vanilla defers through `canUpdatePath()` | current MCA already carries a 1.21.1 compatibility override | Adapted on 1.21.1; delete on 26.1.2+ | airborne recompute regression |
 | sleep-start movement-memory cleanup | owned by `Villager.startSleeping()` | moved into `SleepInBed` | behavior already exists on 1.21.1 | Already present / ownership moved | source comparison; no duplicate hook |
-| surface-height helper | private WATER-based vanilla helper through 26.2 | public floatable-fluid helper in 26.3 | MCA currently shadows it without call sites | Remove shadow on <=26.2; use native 26.3 owner | source visibility + focused floatable-fluid regression if MCA touches this area |
+| surface-height helper | private exact-WATER helper through 26.2 | public floatable-fluid helper in 26.3 | MCA widens/overrides it with `FluidTags.WATER` through class tweaker | Keep MCA override through 26.2; use native 26.3 owner | class-tweaker/build wiring + focused fluid regression |
 
 The table is not limited to this known row. The audit is incomplete until every behaviorally meaningful hunk in the defined source boundary has a disposition.
 
