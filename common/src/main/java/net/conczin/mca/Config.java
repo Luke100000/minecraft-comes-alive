@@ -202,7 +202,7 @@ public final class Config extends CommonConfig {
     /**
      * Maximum pathfinding distance used when villagers walk to long-range memories such as beds.
      */
-    public int villagerPathfindingDistance = 80;
+    public int villagerPathfindingDistance = 160;
 
     /**
      * Maximum follow-range attribute for villagers. Affects how far they pursue entities and how large the pathfinding search budget is.

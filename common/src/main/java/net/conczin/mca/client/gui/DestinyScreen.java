@@ -10,59 +10,30 @@ import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.DestinyMessage;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.conczin.mca.util.localization.FlowingText;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class DestinyScreen extends VillagerEditorScreen {
     private static final ResourceLocation LOGO_TEXTURE = MCA.locate("textures/banner.png");
-    private static final boolean USE_TEMPORARY_DESTINY_UI_MOCKS = false;
-    private static final ResourceKey<Level> MOCK_SKY_ISLANDS_DIMENSION = ResourceKey.create(
-            Registries.DIMENSION,
-            MCA.locate("sky_islands")
-    );
-    private static final List<DestinyDestination> TEMPORARY_DESTINY_UI_MOCKS = List.of(
-            new DestinyDestination("somewhere", Optional.empty()),
-            new DestinyDestination("minecraft:village_plains", Optional.of(Level.OVERWORLD)),
-            new DestinyDestination("minecraft:village_desert", Optional.of(Level.OVERWORLD)),
-            new DestinyDestination("minecraft:village_savanna", Optional.of(Level.OVERWORLD)),
-            new DestinyDestination("minecraft:village_snowy", Optional.of(Level.OVERWORLD)),
-            new DestinyDestination("minecraft:village_taiga", Optional.of(Level.OVERWORLD)),
-            new DestinyDestination("ctov:village_plains", Optional.of(Level.OVERWORLD)),
-            new DestinyDestination("ctov:village_desert", Optional.of(Level.OVERWORLD)),
-            new DestinyDestination("towns_and_towers:village_mediterranean", Optional.of(Level.OVERWORLD)),
-            new DestinyDestination("better_villages:forest_village", Optional.of(Level.OVERWORLD)),
-            new DestinyDestination("mock:cliffside_village", Optional.of(Level.OVERWORLD)),
-            new DestinyDestination("mock:nether_village", Optional.of(Level.NETHER)),
-            new DestinyDestination("mock:crimson_colony", Optional.of(Level.NETHER)),
-            new DestinyDestination("mock:warped_settlement", Optional.of(Level.NETHER)),
-            new DestinyDestination("mock:basalt_town", Optional.of(Level.NETHER)),
-            new DestinyDestination("mock:end_village", Optional.of(Level.END)),
-            new DestinyDestination("mock:chorus_settlement", Optional.of(Level.END)),
-            new DestinyDestination("mock:void_outpost", Optional.of(Level.END)),
-            new DestinyDestination("mock:sky_harbor", Optional.of(MOCK_SKY_ISLANDS_DIMENSION)),
-            new DestinyDestination("mock:cloud_village", Optional.of(MOCK_SKY_ISLANDS_DIMENSION)),
-            new DestinyDestination("mock:floating_ruins", Optional.of(MOCK_SKY_ISLANDS_DIMENSION))
-    );
     private static final int DESTINY_COLUMNS = 3;
     private static final int DESTINY_ROWS = 3;
     private static final int DESTINY_LOCATIONS_PER_PAGE = DESTINY_COLUMNS * DESTINY_ROWS;
     private static final int DESTINY_BUTTON_GAP = 4;
     private static final int DESTINY_BUTTON_HORIZONTAL_PADDING = 16;
     private static final int DESTINY_DIMENSION_SELECTOR_MAX_WIDTH = 400;
+    private static final int DESTINY_DIMENSION_SELECTOR_MARGIN = 14;
     private final LinkedList<Component> story = new LinkedList<>();
     private final boolean allowTeleportation;
     private DestinyDestination destination;
@@ -162,13 +133,6 @@ public class DestinyScreen extends VillagerEditorScreen {
         return split[split.length - 1];
     }
 
-    private List<DestinyDestination> getDestinyDestinations() {
-        if (USE_TEMPORARY_DESTINY_UI_MOCKS) {
-            return TEMPORARY_DESTINY_UI_MOCKS;
-        }
-        return MCAClient.getDestinyManager().getDestinations();
-    }
-
     private MutableComponent getLocationName(String location) {
         return Component.translatableWithFallback("gui.destiny." + getPath(location), getFallbackLocationName(location));
     }
@@ -206,10 +170,11 @@ public class DestinyScreen extends VillagerEditorScreen {
         Map<ResourceKey<Level>, List<DestinyDestination>> byDimension = groupDestinationsByDimension(destinations);
 
         if (!byDimension.isEmpty()) {
-            ensureSelectedDimension(List.copyOf(byDimension.keySet()));
+            List<ResourceKey<Level>> dimensions = List.copyOf(byDimension.keySet());
+            ensureSelectedDimension(dimensions);
             boolean showDimensionSelector = byDimension.size() > 1;
             if (showDimensionSelector) {
-                drawDimensionSelector(List.copyOf(byDimension.keySet()));
+                drawDimensionSelector(dimensions);
             }
 
             List<DestinyDestination> dimensionDestinations = byDimension.get(selectedDestinyDimension);
@@ -262,7 +227,6 @@ public class DestinyScreen extends VillagerEditorScreen {
             return;
         }
 
-        Minecraft minecraft = Minecraft.getInstance();
         ResourceKey<Level> currentDimension = minecraft.level == null ? null : minecraft.level.dimension();
         if (currentDimension != null && dimensions.contains(currentDimension)) {
             selectedDestinyDimension = currentDimension;
@@ -283,9 +247,10 @@ public class DestinyScreen extends VillagerEditorScreen {
     }
 
     private void drawDimensionSelector(List<ResourceKey<Level>> dimensions) {
-        int selectorWidth = Math.min(DESTINY_DIMENSION_SELECTOR_MAX_WIDTH, width) - 28;
-        int buttonWidth = selectorWidth / dimensions.size();
-        int buttonX = (width - buttonWidth * dimensions.size()) / 2;
+        int selectorWidth = Math.min(DESTINY_DIMENSION_SELECTOR_MAX_WIDTH, width)
+                - DESTINY_DIMENSION_SELECTOR_MARGIN * 2;
+        int buttonWidth = Mth.roundToward(selectorWidth / dimensions.size(), 2);
+        int buttonX = Mth.roundToward((width - selectorWidth) / 2, 2);
         int buttonY = height / 2 - 28;
 
         for (ResourceKey<Level> dimension : dimensions) {
@@ -401,7 +366,9 @@ public class DestinyScreen extends VillagerEditorScreen {
 
     @Override
     protected void setPage(String page) {
-        List<DestinyDestination> destinations = page.equals("destiny") ? getDestinyDestinations() : List.of();
+        List<DestinyDestination> destinations = page.equals("destiny")
+                ? MCAClient.getDestinyManager().getDestinations()
+                : List.of();
         if (page.equals("destiny") && !allowTeleportation) {
             Network.sendToServer(DestinyMessage.close());
             MCAClient.getDestinyManager().allowClosing();

@@ -157,10 +157,10 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
             return;
         }
         if (PathingBlockInteraction.isHandOpenableTrapDoor(blockState)
-                && (adjacentNode == null || adjacentNode.y == pathNode.y)) {
-            // A closed trapdoor can be valid floor. Only open it when the path is
-            // actually crossing vertically through that block; otherwise opening
-            // it underneath the villager would create the obstacle ourselves.
+                && !isVerticalSameColumnTransition(pathNode, adjacentNode)) {
+            // A trapdoor is a hatch only when the path actually crosses its column
+            // vertically. A stair or other raised path beside a decorative trapdoor
+            // must not cause the villager to operate it.
             return;
         }
 
@@ -172,9 +172,19 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
                 && blockState.hasProperty(BlockStateProperties.OPEN)
                 && blockState.getValue(BlockStateProperties.OPEN);
         boolean changed = PathingBlockInteraction.setOpen(entity, world, blockState, blockPos, shouldBeOpen);
-        if (shouldBeOpen && (changed || (rememberIfAlreadyOpen && wasAlreadyOpen))) {
+        boolean rememberExistingOpenState = rememberIfAlreadyOpen
+                && wasAlreadyOpen
+                && !PathingBlockInteraction.isHandOpenableTrapDoor(blockState);
+        if (shouldBeOpen && (changed || rememberExistingOpenState)) {
             this.rememberToCloseToggleable(world, entity, blockPos);
         }
+    }
+
+    private static boolean isVerticalSameColumnTransition(Node node, @Nullable Node adjacentNode) {
+        return adjacentNode != null
+                && adjacentNode.x == node.x
+                && adjacentNode.z == node.z
+                && adjacentNode.y != node.y;
     }
 
     @Nullable

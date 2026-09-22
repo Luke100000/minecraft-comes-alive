@@ -24,6 +24,7 @@
     "MixinScreenHandler",
     "MixinServerGamePacketListenerImpl",
     "MixinSleepInBed",
+    "MixinValidateNearbyPoi",
     "MixinServerWorld",
     "MixinSynchedEntityData",
     "MixinTranslatableContents",

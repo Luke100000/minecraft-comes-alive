@@ -76,6 +76,15 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     }
 
     @Override
+    public void recomputePath() {
+        if (!canUpdatePath()) {
+            this.hasDelayedRecomputation = true;
+            return;
+        }
+        super.recomputePath();
+    }
+
+    @Override
     public void tick() {
         super.tick();
         this.climbTraversal.tick(this.path, this.speedModifier, this.tick);

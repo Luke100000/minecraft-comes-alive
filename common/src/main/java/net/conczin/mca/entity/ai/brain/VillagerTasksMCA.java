@@ -96,6 +96,7 @@ public class VillagerTasksMCA {
             MemoryModuleTypeMCA.MOURNING_POSITION,
             MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING,
             MemoryModuleTypeMCA.MOURNING_RETRY_AT,
+            MemoryModuleTypeMCA.INTERMEDIATE_WALK_RETRY_AT,
             MemoryModuleTypeMCA.FORCED_HOME,
             MemoryModuleTypeMCA.RANGED_COMBAT_STATE
     );
@@ -457,7 +458,7 @@ public class VillagerTasksMCA {
                 Pair.of(0, new SequenceTask<>(
                         ImmutableMap.of(MemoryModuleType.WALK_TARGET, MemoryStatus.VALUE_ABSENT),
                         ImmutableList.of(
-                                new EnterGraveyardTask(GRIEVING_WALK_SPEED),
+                                new EnterGraveyardTask(),
                                 mournAtGrave,
                                 new LambdaTask<>((v) -> {
                                     boolean completed = mournAtGrave.hasCompleted();

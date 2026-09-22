@@ -5,6 +5,7 @@ import com.mojang.datafixers.util.Pair;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.BedPoiCompatibility;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.Holder;
@@ -90,7 +91,11 @@ public class ExtendedFindPointOfInterestTask extends Behavior<VillagerEntityMCA>
             }
             return this.predicate.test(villager, blockPos);
         };
-        Set<Pair<Holder<PoiType>, BlockPos>> set = pointOfInterestStorage.findAllClosestFirstWithType(this.poiType, predicate, villager.blockPosition(), POI_SORTING_RADIUS, PoiManager.Occupancy.HAS_SPACE).limit(MAX_POSITIONS_PER_RUN).collect(Collectors.toSet());
+        Set<Pair<Holder<PoiType>, BlockPos>> set = pointOfInterestStorage
+                .findAllClosestFirstWithType(this.poiType, predicate, villager.blockPosition(), POI_SORTING_RADIUS, PoiManager.Occupancy.HAS_SPACE)
+                .limit(MAX_POSITIONS_PER_RUN)
+                .filter(poi -> isValidPoi(serverWorld, poi.getSecond()))
+                .collect(Collectors.toSet());
         Path path = findPathToPois(villager, set);
         if (path != null && path.canReach()) {
             BlockPos blockPos2 = path.getTarget();
@@ -116,6 +121,16 @@ public class ExtendedFindPointOfInterestTask extends Behavior<VillagerEntityMCA>
 
     static void finishClaim(Optional<BlockPos> claimedPosition, Consumer<BlockPos> onClaimed) {
         claimedPosition.ifPresent(onClaimed);
+    }
+
+    private boolean isValidPoi(ServerLevel level, BlockPos pos) {
+        if (this.targetMemoryModuleType != MemoryModuleType.HOME) {
+            return true;
+        }
+
+        // Keep HOME acquisition on the same compatibility contract used to register
+        // HOME POIs and by Set Home/bed navigation.
+        return BedPoiCompatibility.isAvailableHomePoiState(level.getBlockState(pos));
     }
 
     static class RetryMarker {

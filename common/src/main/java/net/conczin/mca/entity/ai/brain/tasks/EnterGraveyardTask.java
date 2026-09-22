@@ -6,7 +6,10 @@ import net.conczin.mca.entity.ai.Mourning;
 import net.conczin.mca.util.WorldUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
@@ -20,7 +23,7 @@ import java.util.stream.Stream;
 /**
  * Assigns a mourner to an occupied tombstone and an adjacent safe standing position.
  */
-public class EnterGraveyardTask extends EnterBuildingTask {
+public class EnterGraveyardTask extends Behavior<VillagerEntityMCA> {
     private static final int[][] HORIZONTAL_OFFSETS = {
             {1, 0}, {-1, 0}, {0, 1}, {0, -1},
             {1, 1}, {1, -1}, {-1, 1}, {-1, -1}
@@ -29,31 +32,31 @@ public class EnterGraveyardTask extends EnterBuildingTask {
     private static final double MOURNING_GRAVE_DISTANCE = 3.0D;
     private static final double RESERVATION_SCAN_RANGE = 256.0D;
 
-    public EnterGraveyardTask(float speed) {
-        super("graveyard", speed);
+    public EnterGraveyardTask() {
+        super(Map.of(
+                MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT,
+                MemoryModuleType.WALK_TARGET, MemoryStatus.VALUE_ABSENT,
+                MemoryModuleType.LOOK_TARGET, MemoryStatus.REGISTERED,
+                MemoryModuleTypeMCA.MOURNING_SITE, MemoryStatus.VALUE_PRESENT
+        ));
     }
 
     @Override
-    protected Optional<BlockPos> getNextPosition(VillagerEntityMCA villager) {
-        return findTarget(villager).map(target -> {
-            villager.getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_SITE, target.grave());
-            villager.getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_POSITION, GlobalPos.of(villager.level().dimension(), target.standingPosition()));
+    protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
+        findTarget(villager).ifPresent(position -> {
+            villager.getBrain().setMemory(
+                    MemoryModuleTypeMCA.MOURNING_POSITION,
+                    GlobalPos.of(villager.level().dimension(), position)
+            );
             villager.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
-            return target.standingPosition();
         });
     }
 
-    @Override
-    protected int getCompletionRange() {
-        return 0;
-    }
-
-    private Optional<MourningTarget> findTarget(VillagerEntityMCA villager) {
+    private Optional<BlockPos> findTarget(VillagerEntityMCA villager) {
         Level level = villager.level();
         return villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE)
                 .filter(grave -> Mourning.isMournableTombstone(level, grave))
-                .flatMap(grave -> findStandingPosition(level, villager, grave)
-                        .map(position -> new MourningTarget(grave, position)));
+                .flatMap(grave -> findStandingPosition(level, villager, grave));
     }
 
     public static boolean isAtMourningSite(VillagerEntityMCA villager) {
@@ -137,8 +140,5 @@ public class EnterGraveyardTask extends EnterBuildingTask {
     private static boolean isGoodWalkTarget(Level level, VillagerEntityMCA villager, BlockPos position) {
         return villager.getNavigation().isStableDestination(position)
                 && level.noCollision(villager, villager.getBoundingBox().move(Vec3.atBottomCenterOf(position).subtract(villager.position())));
-    }
-
-    private record MourningTarget(BlockPos grave, BlockPos standingPosition) {
     }
 }

@@ -71,6 +71,9 @@ public final class ArcherSpiderCombatGameTests {
 
         VillagerEntityMCA archer = spawnArcher(helper, archerPos);
         Spider spider = spawnSpider(helper, EntityType.SPIDER, archerPos.east(2), false);
+        // Movement is the subject of this integration test. Real bow spread is intentionally
+        // stochastic, so require one post-escape hit rather than a random number of hits.
+        spider.setHealth(1.0F);
         spider.setTarget(archer);
         startCombat(archer, spider);
 

@@ -1,13 +1,13 @@
 # 7.7.37
 
-* ***__Back up__*** your world before updating. This release migrates existing building and floor data to a new format.
+* ***__Back up__*** your world before updating. Existing building and floor data will be updated automatically when the world loads.
 
 ## Buildings & Blueprint
 
 * Buildings, floors, and rooms are now detected much more reliably, especially in multi-floor, stacked, irregular, and partially connected builds.
 * Stairs, ladders, doors, and other vertical connections are handled more accurately when scanning buildings.
 * Floors are kept separate properly, reducing cases where different storeys or nearby spaces were merged together by mistake.
-* Existing 7.7.36 building data is automatically migrated to the new format when loaded.
+* Existing 7.7.36 buildings are updated automatically when the world loads.
 * Added a **Remove Floor** action for empty floors.
 * Admin building-type changes now apply to the exact room you are standing in.
 * Rooms can now use the building's **Main Room** requirements. You can choose the Main Room yourself or let MCA select it automatically.
@@ -32,7 +32,11 @@
 * Fixed villagers sometimes losing or being assigned the wrong home.
 * Villagers can now recognise more modded beds as valid homes.
 * Fixed residents sometimes being assigned to the wrong building.
-* **Set Home** can now move a villager to an available bed near you without losing their current bed if no replacement is available.
+* **Set Home** now only assigns beds the villager can actually walk to.
+  * Routes through normal rooms, carpets, stairs, and doors can still be used as long as the villager can navigate them.
+  * If no reachable replacement bed is available, the villager keeps their current home.
+* Fixed cases where resolving duplicate homes could make villagers lose their assigned home or interfere with a bed another villager is sleeping in.
+* Villagers now give up and recover correctly when a distant home really cannot be reached.
 * Reworked graveyard mourning:
   * Added the `enableMourning` config option to disable mourning entirely.
   * Ambient mourning now happens in small groups of 2-4 villagers instead of large village-wide gatherings.
@@ -60,7 +64,7 @@
 
 ## Combat
 
-* Improved archer movement in combat, including approaching, holding position, repositioning, kiting, and emergency retreats.
+* Improved archer movement in combat, including approaching enemies, holding position, keeping their distance, repositioning, and retreating from danger.
 * Archers are better at avoiding crowds and obstacles while retreating and keep facing their target while moving.
 * Fixed archers continuing to use a bow or crossbow during an emergency retreat.
 * Fixed archers being pulled in conflicting directions while holding position or kiting.
@@ -71,7 +75,7 @@
 
 * ChatAI now reliably talks to the villager you actually interacted with.
 * Improved full-name and nickname targeting so partial names are less likely to select the wrong villager.
-* The server can now keep running while ChatAI responses are being generated, and requests time out if they take too long.
+* ChatAI no longer holds up the server while waiting for a reply, and gives up cleanly if a reply takes too long.
 * Profession changes made in the Villager Editor now apply and refresh more consistently.
 * Improved Destiny location configuration:
   * MCA can now automatically discover vanilla and modded village structures for the Destiny screen.
@@ -88,7 +92,7 @@
 
 ## Other fixes
 
-* Fixed MCA block, book, and entity loot tables not loading correctly on 1.21.1.
+* Fixed some MCA blocks, books, and entities not giving their intended drops or rewards on 1.21.1.
   * Gravestones can now be mined with their intended drops.
   * Fixed headstones not detecting **Silk Touch** correctly.
   * Fixed **Looting** not affecting zombie-villager rotten-flesh drops.
@@ -96,7 +100,7 @@
 * Fixed carried babies having their hitbox in the wrong place.
 * Fixed villager voice pitch changing over time instead of as the villager grows.
 * Fixed some translated text not refreshing after changing language or reloading resources.
-* Fixed player hitbox size not updating correctly after respawning.
+* Fixed player size not updating correctly after respawning.
 * Fixed villager size scaling at certain growth stages.
 * Fixed babies sitting too low in cribs.
 * Fixed golden apples aging child villagers by the wrong amount; they now advance age by the intended 20 minutes.

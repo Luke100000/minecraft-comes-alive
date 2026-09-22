@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai;
 
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.navigation.BedApproachTarget;
 import net.conczin.mca.server.world.data.GraveyardManager;
 import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.server.world.data.VillageManager;
@@ -13,16 +14,17 @@ import net.minecraft.core.GlobalPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.ai.Brain;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.pathfinder.Path;
 
+import java.util.Comparator;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -168,11 +170,16 @@ public class Residency {
                 } else if (!v.updateResident(entity)) {
                     // A duplicate memory does not own this position's POI ticket. Forget it without
                     // releasing the ticket retained for the canonical resident.
-                    entity.getBrain().eraseMemory(MemoryModuleType.HOME);
+                    clearHomeMemories(entity.getBrain());
                 }
                 entity.setTrackedValue(VILLAGE, v.getId());
             });
         }
+    }
+
+    static void clearHomeMemories(Brain<?> brain) {
+        brain.eraseMemory(MemoryModuleType.HOME);
+        brain.eraseMemory(MemoryModuleTypeMCA.FORCED_HOME);
     }
 
     public void leaveHome() {
@@ -232,13 +239,6 @@ public class Residency {
         return entity.getMCABrain().getMemoryInternal(MemoryModuleType.HOME);
     }
 
-    private static boolean validateBedPoi(ServerLevel level, BlockPos blockPos) {
-        BlockState blockState = level.getBlockState(blockPos);
-        return blockState.is(BlockTags.BEDS)
-                && blockState.hasProperty(BedBlock.OCCUPIED)
-                && !blockState.getValue(BedBlock.OCCUPIED);
-    }
-
     public void setHome(ServerPlayer player) {
         if (!entity.requiresHome()) {
             entity.sendChatMessage(player, "interaction.sethome.temporary");
@@ -248,45 +248,79 @@ public class Residency {
         seekHome();
 
         ServerLevel level = (ServerLevel) player.level();
-        PoiManager poiManager = level.getPoiManager();
-        Optional<GlobalPos> previousHome = entity.getBrain().getMemoryInternal(MemoryModuleType.HOME);
-        Optional<BlockPos> rememberedHome = previousHome
-                .filter(home -> home.dimension().equals(level.dimension()))
-                .map(GlobalPos::pos)
-                .filter(home -> home.distSqr(player.blockPosition()) <= 64.0D)
-                .filter(home -> poiManager.exists(home, type -> type.is(PoiTypes.HOME)))
-                .filter(home -> validateBedPoi(level, home));
-
-        Optional<BlockPos> claimedHome = poiManager.take(
-                registryEntry -> registryEntry.is(PoiTypes.HOME),
-                (registryEntry, blockPos) -> validateBedPoi(level, blockPos),
-                player.blockPosition(),
-                8
-        );
-        claimedHome.or(() -> rememberedHome).ifPresentOrElse(selectedHome -> {
+        if (trySetHome(level, player.blockPosition())) {
             entity.sendChatMessage(player, "interaction.sethome.success");
-
-            boolean reclaimedSameHome = previousHome
-                    .map(home -> home.dimension().equals(level.dimension()) && home.pos().equals(selectedHome))
-                    .orElse(false);
-            if (!reclaimedSameHome) {
-                entity.releasePoi(MemoryModuleType.HOME);
-            }
-            entity.getBrain().eraseMemory(MemoryModuleType.HOME);
-
-            entity.getBrain().setMemory(MemoryModuleType.HOME, GlobalPos.of(level.dimension(), selectedHome));
-            entity.getBrain().setMemory(MemoryModuleTypeMCA.FORCED_HOME, true);
-
-            seekHomeAfterClaim();
-        }, () -> {
-            entity.getBrain().eraseMemory(MemoryModuleTypeMCA.FORCED_HOME);
-
+        } else {
             getHomeVillage().map(v -> v.getBuildingAt(entity.blockPosition())).filter(Optional::isPresent).map(Optional::get).filter(b -> b.getBuildingType().noBeds()).ifPresentOrElse(building -> {
                 entity.sendChatMessage(player, "interaction.sethome.bedfail." + building.getBuildingType().name());
             }, () -> {
                 entity.sendChatMessage(player, "interaction.sethome.bedfail");
             });
-        });
+        }
+    }
+
+    boolean trySetHome(ServerLevel level, BlockPos searchOrigin) {
+        PoiManager poiManager = level.getPoiManager();
+        Optional<GlobalPos> previousHome = entity.getBrain().getMemoryInternal(MemoryModuleType.HOME);
+        Optional<BlockPos> rememberedHome = previousHome
+                .filter(home -> home.dimension().equals(level.dimension()))
+                .map(GlobalPos::pos)
+                .filter(home -> home.distSqr(searchOrigin) <= 64.0D)
+                .filter(home -> poiManager.exists(home, type -> type.is(PoiTypes.HOME)))
+                .filter(home -> BedPoiCompatibility.isAvailableHomePoiState(level.getBlockState(home)));
+
+        Optional<BlockPos> selectedHome = Stream.concat(
+                        poiManager.findAll(
+                                type -> type.is(PoiTypes.HOME),
+                                pos -> BedPoiCompatibility.isAvailableHomePoiState(level.getBlockState(pos)),
+                                searchOrigin,
+                                8,
+                                PoiManager.Occupancy.HAS_SPACE
+                        ),
+                        rememberedHome.stream()
+                )
+                .distinct()
+                .sorted(Comparator.comparingDouble(pos -> pos.distSqr(searchOrigin)))
+                .filter(pos -> canReachBed(level, pos))
+                .findFirst();
+        if (selectedHome.isEmpty()) {
+            return false;
+        }
+
+        BlockPos home = selectedHome.orElseThrow();
+        boolean reusingPreviousHome = previousHome
+                .map(previous -> previous.dimension().equals(level.dimension()) && previous.pos().equals(home))
+                .orElse(false);
+        if (!reusingPreviousHome) {
+            Optional<BlockPos> claimedHome = poiManager.take(
+                    type -> type.is(PoiTypes.HOME),
+                    (type, pos) -> pos.equals(home),
+                    home,
+                    1
+            );
+            if (claimedHome.filter(home::equals).isEmpty()) {
+                return false;
+            }
+            entity.releasePoi(MemoryModuleType.HOME);
+        }
+
+        entity.getBrain().eraseMemory(MemoryModuleType.HOME);
+        entity.getBrain().setMemory(MemoryModuleType.HOME, GlobalPos.of(level.dimension(), home));
+        entity.getBrain().setMemory(MemoryModuleTypeMCA.FORCED_HOME, true);
+        seekHomeAfterClaim();
+        return true;
+    }
+
+    private boolean canReachBed(ServerLevel level, BlockPos home) {
+        return BedApproachTarget.create(level, home)
+                .map(target -> {
+                    if (target.isReached(entity, 0)) {
+                        return true;
+                    }
+                    Path path = entity.getNavigation().createPath(target.getPathTargets(entity), 0);
+                    return path != null && path.canReach();
+                })
+                .orElse(false);
     }
 
     public void goHome(Player player) {

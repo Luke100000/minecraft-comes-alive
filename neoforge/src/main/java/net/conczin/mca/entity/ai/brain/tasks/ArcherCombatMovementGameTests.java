@@ -513,7 +513,7 @@ public final class ArcherCombatMovementGameTests {
     }
 
     @GameTest(batch = "mca_archer_combat_ownership", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
-    public static void emergencyFleeDoesNotStealPreCombatWalkTarget(GameTestHelper helper) {
+    public static void emergencyFleeTakesOverAfterPreCombatMovementOwnerYields(GameTestHelper helper) {
         cleanupTestEntities();
         BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
         prepareFlatArea(helper, start, 12);
@@ -529,11 +529,14 @@ public final class ArcherCombatMovementGameTests {
                 0.5F,
                 0
         );
-        var preCombatPath = archer.getNavigation().createPath(start.east(10), 0);
-        helper.assertTrue(preCombatPath != null && preCombatPath.canReach(), "fixture pre-combat path was not reachable");
         archer.getBrain().setMemory(MemoryModuleType.WALK_TARGET, preCombatTarget);
-        archer.getBrain().setMemory(MemoryModuleType.PATH, preCombatPath);
-        archer.getNavigation().moveTo(preCombatPath, 0.5D);
+
+        WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
+        helper.assertTrue(sink.tryStart(helper.getLevel(), archer, helper.getLevel().getGameTime()),
+                "fixture pre-combat movement owner did not start");
+        var preCombatPath = archer.getBrain().getMemory(MemoryModuleType.PATH).orElse(null);
+        helper.assertTrue(preCombatPath != null && preCombatPath.canReach(),
+                "fixture pre-combat movement owner did not create a reachable path");
 
         ArcherMovementTask<VillagerEntityMCA> movement = new ArcherMovementTask<>(15);
         long gameTime = helper.getLevel().getGameTime();
@@ -547,16 +550,19 @@ public final class ArcherCombatMovementGameTests {
         var currentTarget = archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
         helper.assertTrue(
                 currentTarget == preCombatTarget,
-                "EMERGENCY_FLEE stole a WALK_TARGET owned by another movement behavior"
+                "EMERGENCY_FLEE directly stole a WALK_TARGET before its movement owner yielded"
         );
-        helper.assertTrue(
-                archer.getBrain().getMemory(MemoryModuleType.PATH).orElse(null) == preCombatPath,
-                "EMERGENCY_FLEE erased a PATH owned by another movement behavior"
-        );
-        helper.assertTrue(
-                !archer.getNavigation().isDone(),
-                "EMERGENCY_FLEE stopped navigation owned by another movement behavior"
-        );
+
+        sink.tickOrStop(helper.getLevel(), archer, gameTime + 2);
+        helper.assertTrue(!archer.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET),
+                "pre-combat movement owner did not yield its WALK_TARGET to EMERGENCY_FLEE");
+        helper.assertTrue(!archer.getBrain().hasMemoryValue(MemoryModuleType.PATH),
+                "pre-combat movement owner did not release its PATH to EMERGENCY_FLEE");
+
+        movement.tick(helper.getLevel(), archer, gameTime + 3);
+        var emergencyTarget = archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
+        helper.assertTrue(emergencyTarget != null && emergencyTarget != preCombatTarget,
+                "EMERGENCY_FLEE did not publish an escape target after the previous owner yielded");
         helper.succeed();
     }
 

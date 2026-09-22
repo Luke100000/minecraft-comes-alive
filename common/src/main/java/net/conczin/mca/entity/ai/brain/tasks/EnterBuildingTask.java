@@ -1,5 +1,6 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
+import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.server.world.data.Building;
 import net.minecraft.core.BlockPos;
@@ -27,8 +28,18 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
     }
 
     protected void start(ServerLevel serverWorld, VillagerEntityMCA villager, long l) {
-        Optional<BlockPos> blockPos = getNextPosition(villager);
-        blockPos.ifPresent(pos -> BehaviorUtils.setWalkAndLookTargetMemories(villager, pos, this.speed, getCompletionRange()));
+        getNextPosition(villager)
+                .flatMap(pos -> getReachableWalkTarget(villager, pos))
+                .ifPresent(pos -> BehaviorUtils.setWalkAndLookTargetMemories(villager, pos, this.speed, getCompletionRange()));
+    }
+
+    private Optional<BlockPos> getReachableWalkTarget(VillagerEntityMCA villager, BlockPos target) {
+        int maxDistance = Config.getInstance().getVillagerPathfindingDistance();
+        if (LongDistanceWalkTarget.isWithinDirectPathRange(villager, target, maxDistance)) {
+            return Optional.of(target);
+        }
+        return LongDistanceWalkTarget.findIntermediatePosition(villager, target, maxDistance)
+                .map(BlockPos::containing);
     }
 
     protected Optional<Building> getNearestBuilding(VillagerEntityMCA villager) {

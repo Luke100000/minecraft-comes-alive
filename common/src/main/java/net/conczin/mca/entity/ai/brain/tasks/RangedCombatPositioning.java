@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.ai.RangedWeaponHelper;
 import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
+import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -37,6 +38,8 @@ final class RangedCombatPositioning {
     private static final int ESCAPE_GRAPH_RADIUS = ESCAPE_SEARCH_RADIUS + ESCAPE_ONWARD_LOOKAHEAD;
     private static final int ESCAPE_VERTICAL_RANGE = 5;
     private static final int ESCAPE_TARGETS_PER_SECTOR = 2;
+    private static final int ESCAPE_TARGET_LIMIT = 12;
+    private static final int ESCAPE_ONWARD_SCORE_SLACK = 1;
     private static final List<Direction> HORIZONTAL_DIRECTIONS = List.of(
             Direction.NORTH,
             Direction.SOUTH,
@@ -189,16 +192,16 @@ final class RangedCombatPositioning {
 
         Comparator<EscapeCandidate> safeComparator = Comparator
                 .comparingInt(EscapeCandidate::onwardSpace).reversed()
-                .thenComparing(Comparator.comparingInt(EscapeCandidate::elevationGain).reversed())
-                .thenComparingInt(EscapeCandidate::travelSteps)
                 .thenComparing(Comparator.comparingDouble(EscapeCandidate::minimumDistanceSquared).reversed())
-                .thenComparing(Comparator.comparingDouble(EscapeCandidate::minimumHazardDistanceSquared).reversed());
+                .thenComparing(Comparator.comparingDouble(EscapeCandidate::minimumHazardDistanceSquared).reversed())
+                .thenComparingInt(EscapeCandidate::travelSteps)
+                .thenComparing(Comparator.comparingInt(EscapeCandidate::elevationGain).reversed());
         Comparator<EscapeCandidate> emergencyComparator = Comparator
                 .comparingDouble(EscapeCandidate::minimumDistanceSquared).reversed()
                 .thenComparing(Comparator.comparingDouble(EscapeCandidate::minimumHazardDistanceSquared).reversed())
                 .thenComparing(Comparator.comparingInt(EscapeCandidate::onwardSpace).reversed())
-                .thenComparing(Comparator.comparingInt(EscapeCandidate::elevationGain).reversed())
-                .thenComparingInt(EscapeCandidate::travelSteps);
+                .thenComparingInt(EscapeCandidate::travelSteps)
+                .thenComparing(Comparator.comparingInt(EscapeCandidate::elevationGain).reversed());
         safeCandidates.sort(safeComparator);
         nonClosingCandidates.sort(safeComparator);
         emergencyFallbackCandidates.sort(emergencyComparator);
@@ -303,19 +306,32 @@ final class RangedCombatPositioning {
             return Optional.empty();
         }
 
-        int bestOnwardSpace = candidates.getFirst().onwardSpace();
+        int bestOnwardSpace = candidates.stream()
+                .mapToInt(EscapeCandidate::onwardSpace)
+                .max()
+                .orElse(0);
+        int minimumCompetitiveOnwardSpace = Math.max(0, bestOnwardSpace - ESCAPE_ONWARD_SCORE_SLACK);
+        boolean[] competitiveSectors = new boolean[8];
+        for (EscapeCandidate candidate : candidates) {
+            if (candidate.onwardSpace() == bestOnwardSpace) {
+                competitiveSectors[escapeSector(origin, candidate.position())] = true;
+            }
+        }
+
         List<EscapeCandidate> selected = new ArrayList<>();
         int[] perSector = new int[8];
         for (EscapeCandidate candidate : candidates) {
-            if (candidate.onwardSpace() != bestOnwardSpace) {
-                continue;
-            }
             int sector = escapeSector(origin, candidate.position());
-            if (perSector[sector] >= ESCAPE_TARGETS_PER_SECTOR) {
+            if (!competitiveSectors[sector]
+                    || candidate.onwardSpace() < minimumCompetitiveOnwardSpace
+                    || perSector[sector] >= ESCAPE_TARGETS_PER_SECTOR) {
                 continue;
             }
             selected.add(candidate);
             perSector[sector]++;
+            if (selected.size() >= ESCAPE_TARGET_LIMIT) {
+                break;
+            }
         }
         if (selected.isEmpty()) {
             return Optional.empty();
@@ -335,7 +351,7 @@ final class RangedCombatPositioning {
         return Math.floorMod(sector, 8);
     }
 
-    private static final class EscapePositionTarget implements MultiTargetPositionTracker {
+    private static final class EscapePositionTarget implements CombatEscapePositionTracker {
         private final BlockPos preferred;
         private final Set<BlockPos> targets;
 
