@@ -82,7 +82,8 @@ These are treated as intentional behavior and must survive the backport unless a
 - That geometric comparison is against ordinary **navigation capability**, not blindly against sensing `FOLLOW_RANGE`.
 - On 1.21.1 the ordinary navigation floor is 48. On newer vanilla this corresponds to the villager's native `requiredPathLength = 48`.
 - If a future branch uses `FOLLOW_RANGE = 16` while ordinary required path length remains 48, a target 30 blocks away is still an ordinary navigation target.
-- Vanilla 26.1.2 and 26.3 use the Mob default `FOLLOW_RANGE = 16` while villagers independently require 48 blocks of navigation. On the forward-port branches, prefer convergence to that split unless a concrete MCA sensing/targeting requirement justifies retaining the configurable 48 override. Any retained 48 must be documented as an MCA gameplay divergence, not as a pathfinding requirement.
+- Vanilla 26.1.2, 26.2, and 26.3 use the Mob default `FOLLOW_RANGE = 16` while villagers independently require 48 blocks of navigation. The current forward MCA branches only consume `villagerFollowRange` when constructing the villager attribute; no other MCA pathfinding owner depends on 48. Therefore the forward-port default should converge to 16 unless a concrete MCA sensing/targeting regression proves otherwise.
+- Preserve the existing `villagerFollowRange` config surface during this pathfinding work so existing user configuration remains readable/overridable. Changing or removing that public config contract is a separate migration decision.
 
 ### Long-distance execution
 
@@ -235,6 +236,13 @@ Examples that require explicit audit include:
 
 Pure signature renames, local-variable renames, annotation migrations, profiler/debug capture, debug subscriber support, and equivalent refactors are recorded as **Not ported: no gameplay/pathfinding semantic change**.
 
+One surface-navigation detail is version-specific and must not be treated as a normal override:
+
+- `GroundPathNavigation.getSurfaceY()` is private in vanilla 1.21.1, 26.1.2, and 26.2.
+- It becomes public in 26.3 and expands from WATER-only handling to `isInFloatableFluid()` / `FluidTags.ENTITY_FLOATABLE`.
+- The current MCA `getSurfaceY()` method has no MCA callers and cannot override the private vanilla owner on 1.21.1/26.1.2/26.2. It is therefore a shadow method, not a valid compatibility seam, and should not be carried forward as such.
+- On 26.3, prefer the native public generalized implementation rather than overriding it with MCA's older WATER-only copy unless a focused regression demonstrates a separate MCA requirement.
+
 ## Architecture
 
 ### One navigation owner
@@ -270,6 +278,7 @@ Implementation must maintain a ledger in the implementation notes or plan checkl
 | independent required path length | tied to `FOLLOW_RANGE` | separate requirement, villager=48 | partial equivalent via current 48 follow range | Adapted | ordinary-range + budget regression |
 | recompute while navigation cannot update | base 1.21.1 recomputes immediately | newer vanilla defers through `canUpdatePath()` | current MCA already carries a 1.21.1 compatibility override | Adapted on 1.21.1; delete on 26.1.2+ | airborne recompute regression |
 | sleep-start movement-memory cleanup | owned by `Villager.startSleeping()` | moved into `SleepInBed` | behavior already exists on 1.21.1 | Already present / ownership moved | source comparison; no duplicate hook |
+| surface-height helper | private WATER-based vanilla helper through 26.2 | public floatable-fluid helper in 26.3 | MCA currently shadows it without call sites | Remove shadow on <=26.2; use native 26.3 owner | source visibility + focused floatable-fluid regression if MCA touches this area |
 
 The table is not limited to this known row. The audit is incomplete until every behaviorally meaningful hunk in the defined source boundary has a disposition.
 

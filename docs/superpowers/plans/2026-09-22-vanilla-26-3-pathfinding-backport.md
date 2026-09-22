@@ -24,9 +24,9 @@ Intermediate sources answer “who owns this behavior on this branch?” They do
 | Branch | Sensing/default `FOLLOW_RANGE` | Ordinary navigation | Baseline node budget | MCA extended horizon |
 | --- | --- | --- | --- | --- |
 | `dev/1.21.1` | keep MCA 48 | adapt 26.3 semantics to minimum 48 | minimum 768 | 160 |
-| `dev/26.1.2` | prefer vanilla 16 after MCA consumer audit | vanilla native 48 | vanilla native ~768 | 160 |
+| `dev/26.1.2` | default 16; retain config override surface | vanilla native 48 | vanilla native ~768 | 160 |
 | `dev/26.2` | carry audited 26.1.2 decision | vanilla native 48 | vanilla native ~768 | 160 |
-| `dev/26.3` | converge on vanilla 16 unless documented MCA divergence | vanilla native 48 | vanilla native ~768 | 160 |
+| `dev/26.3` | default 16 unless a regression proves documented MCA divergence | vanilla native 48 | vanilla native ~768 | 160 |
 
 Do not use `villagerPathfindingDistance` to set ordinary `requiredPathLength` on any forward branch.
 
@@ -86,6 +86,7 @@ Use:
 | mutable PathFinder budget | constructor-final | mutable + refreshed from effective path length | none | Adapt floor on 1.21.1; delete shim on 26.1.2+ | Task 2/3 regressions |
 | recompute deferral | absent in base | base checks `canUpdatePath()` | MCA has 1.21.1 override | Keep on 1.21.1; delete on 26.1.2+ | airborne recompute test |
 | sleep-start memory cleanup | `Villager.startSleeping()` | `SleepInBed` | already present | Already present / ownership moved | source comparison |
+| `getSurfaceY()` ownership | private WATER helper | public floatable-fluid helper | MCA shadows private helper without callers | Remove shadow on <=26.2; use native 26.3 owner | source visibility / compile / fluid regression if needed |
 | large-mob danger malus | old width handling | `BIG_MOBS_CLOSE_TO_DANGER` | likely irrelevant to normal MCA villager width | Decide from evidence | focused geometry only if relevant |
 
 - [ ] **Step 3: Explicitly classify 26.3-only/version plumbing**
@@ -257,11 +258,17 @@ Keep the current `recomputePath()` deferral on this branch. Vanilla 1.21.1 lacks
 
 Do not copy this override to 26.1.2+.
 
-- [ ] **Step 7: Add/retain unloaded-chunk proof**
+- [ ] **Step 7: Remove the non-overriding `getSurfaceY()` shadow**
+
+Vanilla 1.21.1 declares `GroundPathNavigation.getSurfaceY()` private. The current MCA method with the same name has no MCA call sites and is not an override of the vanilla helper.
+
+Remove the MCA shadow method and its now-unused WATER/fluid imports rather than treating it as a 26.3 backport seam. Let vanilla 1.21.1 continue owning its private WATER surface calculation.
+
+- [ ] **Step 8: Add/retain unloaded-chunk proof**
 
 Add a focused GameTest if the current suite does not already prove this: a 160-horizon request must not synchronously load/generate a previously unloaded far chunk.
 
-- [ ] **Step 8: Run GREEN verification**
+- [ ] **Step 9: Run GREEN verification**
 
 ```powershell
 .\gradlew.bat common:test --no-daemon
@@ -402,36 +409,39 @@ Keep intentional:
 this.nodeEvaluator.setCanOpenDoors(true);
 ```
 
-- [ ] **Step 8: Separate sensing migration from navigation**
+- [ ] **Step 8: Do not recreate the private surface-helper shadow**
 
-Audit every MCA use of `FOLLOW_RANGE`:
+Vanilla 26.1.2 still owns `getSurfaceY()` privately. Do not forward-port MCA's 1.21.1 same-name method or `@Override`; it is not a valid owner seam.
+
+- [ ] **Step 9: Separate sensing migration from navigation**
+
+Reconfirm the source audit before editing. The current forward branches only use `villagerFollowRange` to construct the villager attribute:
 
 ```powershell
 git grep -n "FOLLOW_RANGE\|villagerFollowRange\|getVillagerFollowRange" -- common/src
 ```
 
-If no concrete MCA sensing/targeting feature requires the 48 default:
+Unless a new focused regression demonstrates a concrete MCA sensing/targeting requirement for 48:
 
 - change the forward-branch default to vanilla 16;
-- keep the config field only if configurable sensing is intentionally supported;
+- retain the existing config field/getter during this pathfinding work so existing configs remain compatible and can intentionally override sensing;
 - do not change ordinary navigation, which remains vanilla 48.
 
 If 48 is retained, document the exact non-pathfinding reason in the ledger.
 
-- [ ] **Step 9: Carry the 160 long-distance default forward**
+- [ ] **Step 10: Carry the 160 long-distance default forward**
 
 Change the old forward-branch `villagerPathfindingDistance = 80` default to 160 and keep it independent of ordinary `requiredPathLength`.
 
-- [ ] **Step 10: Verify no legacy coupling remains**
+- [ ] **Step 11: Verify no legacy coupling remains**
 
 ```powershell
-git grep -n "setRequiredPathLength" -- common/src/main/java
-git grep -n "getVillagerPathfindingDistance" -- common/src/main/java
+rg -n -U '(?s)setRequiredPathLength\(.{0,200}getVillagerPathfindingDistance' common/src/main/java
 ```
 
-Expected: no call feeds `getVillagerPathfindingDistance()` into `setRequiredPathLength(...)`.
+Expected: no matches. This multiline check is intentional because the current bad call is formatted across multiple lines.
 
-- [ ] **Step 11: Run the 26.1.2 verification lane**
+- [ ] **Step 12: Run the 26.1.2 verification lane**
 
 ```powershell
 .\gradlew.bat common:test --no-daemon
@@ -469,17 +479,21 @@ Classify differences as behavior vs API/version churn before editing MCA.
 - [ ] **Step 3: Re-run the duplicate-owner search**
 
 ```powershell
-git grep -n "setRequiredPathLength.*getVillagerPathfindingDistance" -- common/src/main/java
+rg -n -U '(?s)setRequiredPathLength\(.{0,200}getVillagerPathfindingDistance' common/src/main/java
 git grep -n "recomputePath" -- common/src/main/java/net/conczin/mca/entity/ai/navigation
 ```
 
 Expected: no long-distance-config coupling and no stale 1.21.1 recompute shim.
 
-- [ ] **Step 4: Preserve the sensing decision independently**
+- [ ] **Step 4: Keep the private surface helper vanilla-owned**
+
+Vanilla 26.2 still declares `getSurfaceY()` private. Do not add an MCA same-name pseudo-override.
+
+- [ ] **Step 5: Preserve the sensing decision independently**
 
 Carry the audited 26.1.2 `FOLLOW_RANGE` decision forward. Do not reintroduce 48 merely because an older branch had it.
 
-- [ ] **Step 5: Run the full focused lane**
+- [ ] **Step 6: Run the full focused lane**
 
 ```powershell
 .\gradlew.bat common:test --no-daemon
@@ -517,7 +531,7 @@ Pay special attention to:
 
 - [ ] **Step 3: Remove stale overrides when vanilla is stronger**
 
-For example, if MCA's `getSurfaceY()` override merely preserves old WATER-only behavior, remove or adapt it so it does not suppress 26.3's generalized `ENTITY_FLOATABLE` semantics.
+Vanilla 26.3 makes `getSurfaceY()` public and generalizes it to `isInFloatableFluid()` / `FluidTags.ENTITY_FLOATABLE`. Do not introduce MCA's older WATER-only implementation on this branch; use the native 26.3 method unless a focused regression proves a separate MCA requirement.
 
 Do not remove climb/collision behavior just because the surrounding vanilla method changed; prove equivalence with focused regression first.
 
@@ -603,10 +617,10 @@ Verify:
 ```powershell
 git diff --check
 git status --short
-git grep -n "setRequiredPathLength.*getVillagerPathfindingDistance" -- common/src/main/java
+rg -n -U '(?s)setRequiredPathLength\(.{0,200}getVillagerPathfindingDistance' common/src/main/java
 ```
 
-The grep must be empty on 26.1.2, 26.2, and 26.3.
+The multiline search must be empty on 26.1.2, 26.2, and 26.3.
 
 ## Final Acceptance
 
