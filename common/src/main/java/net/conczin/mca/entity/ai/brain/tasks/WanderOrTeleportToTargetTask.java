@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
+import net.conczin.mca.entity.ai.navigation.LongDistancePathTarget;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.conczin.mca.entity.ai.navigation.PathfindingBlacklist;
 import net.minecraft.core.BlockPos;
@@ -10,6 +11,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.behavior.MoveToTargetSink;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 
@@ -40,9 +42,21 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
 
         boolean vanillaCanContinue = super.canStillUse(world, entity, gameTime);
         WalkTarget walkTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        Path path = entity.getNavigation().getPath();
+        if (!vanillaCanContinue
+                && walkTarget != null
+                && walkTarget.getTarget() instanceof LongDistancePathTarget longDistanceTarget
+                && path != null
+                && entity.getNavigation().isDone()
+                && !entity.getNavigation().isStuck()
+                && isUsefulLongDistanceSegment(path, longDistanceTarget)) {
+            entity.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+            return false;
+        }
+
         if (vanillaCanContinue
                 || walkTarget == null
-                || entity.getNavigation().getPath() == null
+                || path == null
                 || !entity.getNavigation().isDone()
                 || walkTargetReached(entity, walkTarget)) {
             return vanillaCanContinue;
@@ -62,6 +76,33 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         // only for the same short retry window so the CANT_REACH timestamp survives long enough for the destination
         // producer to make the terminal decision.
         return true;
+    }
+
+    @Override
+    protected void start(ServerLevel world, Mob entity, long gameTime) {
+        super.start(world, entity, gameTime);
+        WalkTarget walkTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        Path path = entity.getNavigation().getPath();
+        if (walkTarget != null
+                && walkTarget.getTarget() instanceof LongDistancePathTarget longDistanceTarget
+                && path != null
+                && !entity.getNavigation().isStuck()
+                && isUsefulLongDistanceSegment(path, longDistanceTarget)) {
+            entity.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+        }
+    }
+
+    private static boolean isUsefulLongDistanceSegment(Path path, LongDistancePathTarget target) {
+        if (path.canReach()
+                || path.getNodeCount() < 2
+                || !path.getTarget().equals(target.currentBlockPosition())) {
+            return false;
+        }
+
+        BlockPos destination = target.currentBlockPosition();
+        BlockPos start = path.getNodePos(0);
+        BlockPos end = path.getEndNode().asBlockPos();
+        return end.distSqr(destination) < start.distSqr(destination);
     }
 
     private static boolean shouldYieldToEmergencyCombat(Mob entity) {

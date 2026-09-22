@@ -29,7 +29,6 @@ public interface MemoryModuleTypeMCA {
     MemoryModuleType<GlobalPos> MOURNING_POSITION = register("mourning_position", Optional.of(GlobalPos.CODEC));
     MemoryModuleType<Long> LAST_AMBIENT_MOURNING = register("last_ambient_mourning", Optional.of(Codec.LONG));
     MemoryModuleType<Long> MOURNING_RETRY_AT = register("mourning_retry_at", Optional.of(Codec.LONG));
-    MemoryModuleType<Long> INTERMEDIATE_WALK_RETRY_AT = register("intermediate_walk_retry_at", Optional.empty());
     MemoryModuleType<Boolean> FORCED_HOME = register("forced_home", Optional.of(Codec.BOOL));
     MemoryModuleType<RangedCombatState> RANGED_COMBAT_STATE = register("ranged_combat_state", Optional.empty());
 

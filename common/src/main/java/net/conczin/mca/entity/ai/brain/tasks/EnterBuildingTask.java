@@ -2,12 +2,15 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.navigation.LongDistancePathTarget;
 import net.conczin.mca.server.world.data.Building;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
+import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
+import net.minecraft.world.entity.ai.behavior.PositionTracker;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.level.Level;
@@ -29,17 +32,19 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
 
     protected void start(ServerLevel serverWorld, VillagerEntityMCA villager, long l) {
         getNextPosition(villager)
-                .flatMap(pos -> getReachableWalkTarget(villager, pos))
-                .ifPresent(pos -> BehaviorUtils.setWalkAndLookTargetMemories(villager, pos, this.speed, getCompletionRange()));
+                .ifPresent(pos -> BehaviorUtils.setWalkAndLookTargetMemories(
+                        villager,
+                        getWalkTarget(villager, pos),
+                        this.speed,
+                        getCompletionRange()
+                ));
     }
 
-    private Optional<BlockPos> getReachableWalkTarget(VillagerEntityMCA villager, BlockPos target) {
+    private PositionTracker getWalkTarget(VillagerEntityMCA villager, BlockPos target) {
         int maxDistance = Config.getInstance().getVillagerPathfindingDistance();
-        if (LongDistanceWalkTarget.isWithinDirectPathRange(villager, target, maxDistance)) {
-            return Optional.of(target);
-        }
-        return LongDistanceWalkTarget.findIntermediatePosition(villager, target, maxDistance)
-                .map(BlockPos::containing);
+        return LongDistancePathTarget.isNeeded(villager, target)
+                ? new LongDistancePathTarget(target, maxDistance)
+                : new BlockPosTracker(target);
     }
 
     protected Optional<Building> getNearestBuilding(VillagerEntityMCA villager) {

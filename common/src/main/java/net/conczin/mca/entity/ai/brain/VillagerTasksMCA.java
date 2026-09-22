@@ -96,7 +96,6 @@ public class VillagerTasksMCA {
             MemoryModuleTypeMCA.MOURNING_POSITION,
             MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING,
             MemoryModuleTypeMCA.MOURNING_RETRY_AT,
-            MemoryModuleTypeMCA.INTERMEDIATE_WALK_RETRY_AT,
             MemoryModuleTypeMCA.FORCED_HOME,
             MemoryModuleTypeMCA.RANGED_COMBAT_STATE
     );

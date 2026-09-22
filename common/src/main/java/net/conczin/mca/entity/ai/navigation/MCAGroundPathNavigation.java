@@ -4,12 +4,17 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathFinder;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.phys.Vec3;
+
+import java.util.Set;
 
 public class MCAGroundPathNavigation extends GroundPathNavigation {
     private static final int FALL_RESYNC_LOOKAHEAD = 2;
@@ -40,6 +45,32 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         this.nodeEvaluator.setCanPassDoors(true);
         this.nodeEvaluator.setCanOpenDoors(true);
         return new PathFinder(this.nodeEvaluator, maxVisitedNodes);
+    }
+
+    @Override
+    protected Path createPath(Set<BlockPos> targets, int radiusOffset, boolean above, int reachRange) {
+        WalkTarget walkTarget = this.mob.getBrain()
+                .getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                .orElse(null);
+        if (walkTarget != null
+                && walkTarget.getTarget() instanceof LongDistancePathTarget longDistanceTarget
+                && targetsLongDistanceDestination(targets, longDistanceTarget)) {
+            float maxPathLength = (float)Math.max(
+                    longDistanceTarget.requestedPathLength(),
+                    this.mob.getAttributeValue(Attributes.FOLLOW_RANGE)
+            );
+            return super.createPath(targets, radiusOffset, above, reachRange, maxPathLength);
+        }
+        return super.createPath(targets, radiusOffset, above, reachRange);
+    }
+
+    private static boolean targetsLongDistanceDestination(Set<BlockPos> targets, LongDistancePathTarget target) {
+        if (targets.size() != 1) {
+            return false;
+        }
+        BlockPos pathTarget = targets.iterator().next();
+        BlockPos logicalTarget = target.currentBlockPosition();
+        return pathTarget.getX() == logicalTarget.getX() && pathTarget.getZ() == logicalTarget.getZ();
     }
 
     @Override

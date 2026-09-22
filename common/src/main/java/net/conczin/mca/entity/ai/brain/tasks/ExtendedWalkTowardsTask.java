@@ -1,26 +1,22 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
-import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
+import net.conczin.mca.entity.ai.navigation.LongDistancePathTarget;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.behavior.OneShot;
 import net.minecraft.world.entity.ai.behavior.PositionTracker;
 import net.minecraft.world.entity.ai.behavior.declarative.BehaviorBuilder;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 public final class ExtendedWalkTowardsTask {
-    private static final long RANDOM_POS_RETRY_COOLDOWN = 20L;
-
     @FunctionalInterface
     public interface WalkTargetResolver {
         Optional<BlockPos> resolve(ServerLevel world, VillagerEntityMCA entity, GlobalPos destination);
@@ -58,18 +54,11 @@ public final class ExtendedWalkTowardsTask {
         return BehaviorBuilder.create((context) -> {
             return context.group(
                     context.registered(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
-                    context.registered(MemoryModuleTypeMCA.INTERMEDIATE_WALK_RETRY_AT),
                     context.registered(MemoryModuleType.WALK_TARGET),
                     context.present(destination)).apply(context,
-                    (cantReachWalkTargetSince, intermediateWalkRetryAt, walkTarget, destinationResult) -> {
+                    (cantReachWalkTargetSince, walkTarget, destinationResult) -> {
                         return (world, entity, time) -> {
                             if (!shouldWalk.test(entity)) {
-                                return true;
-                            }
-
-                            Optional<WalkTarget> currentWalkTarget = context.tryGet(walkTarget);
-                            if (currentWalkTarget.isPresent()
-                                    && !(currentWalkTarget.orElseThrow().getTarget() instanceof IntermediateWalkTargetTracker)) {
                                 return true;
                             }
 
@@ -77,51 +66,36 @@ public final class ExtendedWalkTowardsTask {
                             Optional<BlockPos> resolvedTarget = walkTargetResolver.resolve(world, entity, globalPos);
                             BlockPos targetPos = resolvedTarget.orElse(globalPos.pos());
                             int targetCompletionRange = resolvedTarget.isPresent() ? 0 : completionRange;
-                            boolean replacingIntermediateWithFinal = currentWalkTarget
-                                    .map(WalkTarget::getTarget)
-                                    .filter(IntermediateWalkTargetTracker.class::isInstance)
-                                    .isPresent()
-                                    && globalPos.dimension() == world.dimension()
-                                    && LongDistanceWalkTarget.isWithinDirectPathRange(entity, targetPos, maxDistance);
+                            boolean sameDimension = globalPos.dimension() == world.dimension();
+
+                            Optional<WalkTarget> currentWalkTarget = context.tryGet(walkTarget);
+                            if (currentWalkTarget.isPresent()) {
+                                PositionTracker currentTarget = currentWalkTarget.orElseThrow().getTarget();
+                                if (!(currentTarget instanceof LongDistancePathTarget longDistanceTarget)) {
+                                    return true;
+                                }
+                                if (sameDimension
+                                        && longDistanceTarget.currentBlockPosition().equals(targetPos)
+                                        && LongDistancePathTarget.isNeeded(entity, targetPos)) {
+                                    return true;
+                                }
+
+                                walkTarget.erase();
+                                cantReachWalkTargetSince.erase();
+                                return true;
+                            }
 
                             Optional<Long> optional = context.tryGet(cantReachWalkTargetSince);
                             long unreachableTicks = optional
                                     .map(since -> world.getGameTime() - since)
                                     .orElse(0L);
-                            if (replacingIntermediateWithFinal) {
-                                cantReachWalkTargetSince.erase();
-                                intermediateWalkRetryAt.erase();
-                            } else if (optional.isEmpty()) {
-                                intermediateWalkRetryAt.erase();
-                            } else if (unreachableTicks <= maxRunTime) {
-                                Optional<Long> retryAt = context.tryGet(intermediateWalkRetryAt);
-                                if (retryAt.isEmpty()) {
-                                    intermediateWalkRetryAt.set(time + RANDOM_POS_RETRY_COOLDOWN);
-                                    return true;
-                                }
-                                if (time < retryAt.orElseThrow()) {
-                                    return true;
-                                }
-                                intermediateWalkRetryAt.erase();
-                            }
-                            if (globalPos.dimension() == world.dimension()
-                                    && (replacingIntermediateWithFinal
-                                    || optional.isEmpty()
-                                    || unreachableTicks <= maxRunTime)) {
-                                if (!LongDistanceWalkTarget.isWithinDirectPathRange(entity, targetPos, maxDistance)) {
-                                    if (currentWalkTarget.isPresent()) {
-                                        return true;
-                                    }
-                                    Optional<Vec3> intermediatePosition = LongDistanceWalkTarget.findIntermediatePosition(entity, targetPos, maxDistance);
-                                    if (intermediatePosition.isEmpty()) {
-                                        if (optional.isEmpty()) {
-                                            cantReachWalkTargetSince.set(time);
-                                        }
-                                        intermediateWalkRetryAt.set(time + RANDOM_POS_RETRY_COOLDOWN);
-                                        return true;
-                                    }
-
-                                    walkTarget.set(new WalkTarget(new IntermediateWalkTargetTracker(intermediatePosition.orElseThrow()), speed, completionRange));
+                            if (sameDimension && (optional.isEmpty() || unreachableTicks <= maxRunTime)) {
+                                if (LongDistancePathTarget.isNeeded(entity, targetPos)) {
+                                    walkTarget.set(new WalkTarget(
+                                            new LongDistancePathTarget(targetPos, maxDistance),
+                                            speed,
+                                            targetCompletionRange
+                                    ));
                                 } else {
                                     Optional<? extends PositionTracker> finalTarget = finalTargetResolver.resolve(world, entity, globalPos);
                                     if (finalTarget.isEmpty()) {
@@ -141,7 +115,6 @@ public final class ExtendedWalkTowardsTask {
                                     }
                                 }
                             } else {
-                                intermediateWalkRetryAt.erase();
                                 if (currentWalkTarget.isPresent()) {
                                     walkTarget.erase();
                                 }
@@ -157,14 +130,7 @@ public final class ExtendedWalkTowardsTask {
 
                             return true;
                         };
-                    });
+            });
         });
-    }
-
-    /** Marks only the long-distance segment produced by this task, so it can safely supersede its own segment. */
-    private static final class IntermediateWalkTargetTracker extends BlockPosTracker {
-        private IntermediateWalkTargetTracker(Vec3 position) {
-            super(position);
-        }
     }
 }

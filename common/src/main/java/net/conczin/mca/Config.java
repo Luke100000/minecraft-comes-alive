@@ -200,12 +200,13 @@ public final class Config extends CommonConfig {
     public double villagerMinTeleportationDistance = 128;
 
     /**
-     * Maximum pathfinding distance used when villagers walk to long-range memories such as beds.
+     * Maximum geometric path horizon used for long-range villager destinations such as beds.
+     * This is separate from the vanilla FOLLOW_RANGE attribute and does not increase sensing range.
      */
     public int villagerPathfindingDistance = 160;
 
     /**
-     * Maximum follow-range attribute for villagers. Affects how far they pursue entities and how large the pathfinding search budget is.
+     * Vanilla follow-range attribute for villagers. Affects how far they pursue entities and the baseline pathfinder search budget.
      * Smaller values improve performance at the cost of reduced detection range.
      */
     public int villagerFollowRange = 48;
