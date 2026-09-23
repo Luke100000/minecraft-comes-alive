@@ -12,7 +12,7 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.world.entity.player.Player;
+import net.minecraft.server.level.ServerPlayer;
 
 public record AddCustomClothingMessage(String identifier, boolean isHair, String json) implements HandleablePayload {
     public static final CustomPacketPayload.Type<AddCustomClothingMessage> TYPE = new CustomPacketPayload.Type<>(MCA.locate("add_custom_clothing"));
@@ -30,7 +30,11 @@ public record AddCustomClothingMessage(String identifier, boolean isHair, String
     }
 
     @Override
-    public void handle(Player player) {
+    public void handleServer(ServerPlayer player) {
+        if (!CustomClothingManager.canEdit(player)) {
+            return;
+        }
+
         JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
         if (isHair) {
             Hair hair = new Hair(identifier, obj);

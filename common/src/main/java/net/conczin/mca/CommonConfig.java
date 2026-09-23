@@ -17,9 +17,11 @@ public class CommonConfig {
     public int villagerMaxAgeTime = 384000;
 
     /**
-     * If true, allows non-ops to add skins from the library to the server wide pool.
+     * Permission level required to add or remove skins from the server wide pool.
+     * On singleplayer the world owner always has access.
+     * Set to 0 to allow everyone.
      */
-    public boolean allowEveryoneToAddContentGlobally = false;
+    public int addContentGloballyPermissionLevel = 3;
 
     /**
      * Allow players to modify their size.

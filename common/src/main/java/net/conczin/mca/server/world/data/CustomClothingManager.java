@@ -2,6 +2,7 @@ package net.conczin.mca.server.world.data;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
+import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.CustomSkinsChangedMessage;
@@ -22,6 +23,11 @@ import java.util.function.BiFunction;
 public class CustomClothingManager {
     static final Storage<Clothing> CLOTHING_DUMMY = new Storage<>();
     static final Storage<Hair> HAIR_DUMMY = new Storage<>();
+
+    public static boolean canEdit(ServerPlayer player) {
+        return player.hasPermissions(Config.getInstance().addContentGloballyPermissionLevel)
+               || player.serverLevel().getServer().isSingleplayerOwner(player.getGameProfile());
+    }
 
     public static Storage<Clothing> getClothing() {
         Optional<MinecraftServer> server = MCA.getServer();

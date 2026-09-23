@@ -1,3 +1,7 @@
+# TBD
+
+* Fixed adding skins to server wide pool not working without cheats in singleplayer
+
 # 7.7.37
 
 * Improved villager bed pathfinding and sleeping reliability.
