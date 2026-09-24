@@ -357,10 +357,14 @@ public class VillagerTasksMCA {
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getGuardPanicPackage(float speedModifier) {
         float f = speedModifier * 1.5F;
         return ImmutableList.of(
+                Pair.of(0, new ConditionalTask<>(
+                        UpdateActivityFromSchedule.create(),
+                        villager -> !guardTooHurt(villager)
+                )),
                 Pair.of(1, VillagerCalmDown.create()),
                 Pair.of(2, SetWalkTargetAwayFrom.entity(MemoryModuleType.NEAREST_HOSTILE, f, 6, false)),
                 Pair.of(2, SetWalkTargetAwayFrom.entity(MemoryModuleType.HURT_BY_ENTITY, f, 6, false)),
-                Pair.of(3, StableVillageBoundRandomStroll.create(f, 2, 2)),
+                Pair.of(3, VillageBoundRandomStroll.create(f, 2, 2)),
                 getMinimalLookBehavior()
         );
     }
@@ -476,7 +480,7 @@ public class VillagerTasksMCA {
                         ImmutableList.of(
                                 Pair.of(InteractWith.of(EntityType.VILLAGER, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2), 2),
                                 Pair.of(InteractWith.of(EntityType.CAT, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2), 1),
-                                Pair.of(StableVillageBoundRandomStroll.create(speedModifier), 1),
+                                Pair.of(VillageBoundRandomStroll.create(speedModifier), 1),
                                 Pair.of(SetWalkTargetFromLookTarget.create(speedModifier, 2), 1),
                                 Pair.of(new JumpOnBed(speedModifier), 2),
                                 Pair.of(new DoNothing(20, 40), 2)
@@ -551,7 +555,7 @@ public class VillagerTasksMCA {
                                 Pair.of(InteractWith.of(EntitiesMCA.FEMALE_VILLAGER, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2), 2),
                                 Pair.of(InteractWith.of(EntitiesMCA.MALE_VILLAGER, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2), 2),
                                 Pair.of(InteractWith.of(EntityType.CAT, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2), 1),
-                                Pair.of(StableVillageBoundRandomStroll.create(speedModifier), 1),
+                                Pair.of(VillageBoundRandomStroll.create(speedModifier), 1),
                                 Pair.of(SetWalkTargetFromLookTarget.create(speedModifier, 2), 1),
                                 Pair.of(new JumpOnBed(speedModifier), 1),
                                 Pair.of(new DoNothing(30, 60), 1)
@@ -579,7 +583,7 @@ public class VillagerTasksMCA {
                 Pair.of(0, VillagerCalmDown.create()),
                 Pair.of(1, SetWalkTargetAwayFrom.entity(MemoryModuleType.NEAREST_HOSTILE, f, 6, false)),
                 Pair.of(1, SetWalkTargetAwayFrom.entity(MemoryModuleType.HURT_BY_ENTITY, f, 6, false)),
-                Pair.of(3, StableVillageBoundRandomStroll.create(f, 2, 2)),
+                Pair.of(3, VillageBoundRandomStroll.create(f, 2, 2)),
                 getMinimalLookBehavior()
         );
     }
@@ -589,7 +593,7 @@ public class VillagerTasksMCA {
                 Pair.of(0, RingBell.create()),
                 Pair.of(0, new RunOne<>(ImmutableList.of(
                         Pair.of(SetWalkTargetFromBlockMemory.create(MemoryModuleType.MEETING_POINT, speedModifier * 1.5F, 2, 150, 200), 6),
-                        Pair.of(StableVillageBoundRandomStroll.create(speedModifier * 1.5F), 2))
+                        Pair.of(VillageBoundRandomStroll.create(speedModifier * 1.5F), 2))
                 )),
                 getMinimalLookBehavior(),
                 Pair.of(99, ResetRaidStatus.create())
@@ -600,7 +604,7 @@ public class VillagerTasksMCA {
         return ImmutableList.of(
                 Pair.of(0, new RunOne<>(ImmutableList.of(
                         Pair.of(MoveToSkySeeingSpot.create(speedModifier), 5),
-                        Pair.of(StableVillageBoundRandomStroll.create(speedModifier * 1.1F), 2)
+                        Pair.of(VillageBoundRandomStroll.create(speedModifier * 1.1F), 2)
                 ))),
                 Pair.of(0, new CelebrateVillagersSurvivedRaid(600, 600)),
                 Pair.of(2, LocateHidingPlace.create(24, speedModifier * 1.4F, 1)),
@@ -631,7 +635,7 @@ public class VillagerTasksMCA {
                 Pair.of(5, InteractWith.of(EntitiesMCA.FEMALE_VILLAGER, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2)),
                 Pair.of(5, InteractWith.of(EntitiesMCA.MALE_VILLAGER, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2)),
                 Pair.of(5, InteractWith.of(EntityType.CAT, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2)),
-                Pair.of(5, StableVillageBoundRandomStroll.create(speedModifier)),
+                Pair.of(5, VillageBoundRandomStroll.create(speedModifier)),
                 Pair.of(5, SetWalkTargetFromLookTarget.create(speedModifier, 2)),
                 Pair.of(5, new EnterBuildingTask("inn", 0.5f))
         );
@@ -639,7 +643,7 @@ public class VillagerTasksMCA {
 
     private static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getMercenaryPackage(float speedModifier) {
         return ImmutableList.of(
-                Pair.of(5, StableVillageBoundRandomStroll.create(speedModifier)),
+                Pair.of(5, VillageBoundRandomStroll.create(speedModifier)),
                 Pair.of(5, SetWalkTargetFromLookTarget.create(speedModifier, 2))
         );
     }

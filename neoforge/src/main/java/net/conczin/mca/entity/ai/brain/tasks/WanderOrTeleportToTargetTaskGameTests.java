@@ -178,6 +178,67 @@ public final class WanderOrTeleportToTargetTaskGameTests {
         });
     }
 
+    @GameTest(batch = "mca_failed_path_retry_cadence", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 40)
+    public static void failedNearbyPathRetriesAfterOriginSevenTickInterval(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(10, 2, 10));
+        BlockPos destination = start.east(6);
+        prepareFlatArea(helper, start, 10, 2);
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(start))
+                .withName("Failed Path Retry Cadence Probe")
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.refreshBrain(helper.getLevel());
+        villager.setNoAi(true);
+        villager.setPos(villager.getX(), villager.getY() + 2.0D, villager.getZ());
+        villager.setNoGravity(true);
+        villager.setOnGround(false);
+
+        var brain = villager.getBrain();
+        brain.eraseMemory(MemoryModuleType.PATH);
+        brain.eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+        WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
+        long[] firstFailureAt = {-1L};
+
+        helper.onEachTick(() -> {
+            if (brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty()) {
+                brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(destination, 0.5F, 0));
+            }
+
+            long gameTime = helper.getLevel().getGameTime();
+            boolean started = sink.tryStart(helper.getLevel(), villager, gameTime);
+            helper.assertTrue(!started, "airborne retry unexpectedly created a path");
+            boolean targetWasErased = brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty();
+
+            if (firstFailureAt[0] < 0L) {
+                helper.assertTrue(targetWasErased, "initial failed path did not erase its WALK_TARGET");
+                firstFailureAt[0] = brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                        .orElse(-1L);
+                helper.assertTrue(firstFailureAt[0] == gameTime,
+                        "initial failed path did not establish the canonical failure timestamp");
+                return;
+            }
+
+            long elapsed = gameTime - firstFailureAt[0];
+            if (elapsed < 7L) {
+                helper.assertTrue(!targetWasErased,
+                        "failed nearby path retried before origin's seven-tick retry interval");
+                return;
+            }
+
+            helper.assertTrue(elapsed == 7L && targetWasErased,
+                    "failed nearby path did not retry after origin's seven-tick retry interval");
+            helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                            .filter(since -> since == firstFailureAt[0])
+                            .isPresent(),
+                    "failed retry rewrote the canonical failure-since timestamp");
+            villager.discard();
+            helper.succeed();
+        });
+    }
+
     @GameTest(batch = "mca_stuck_retry_throttle", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 120)
     public static void failedRetryAfterVanillaStuckCooldownUsesMcaThrottle(GameTestHelper helper) {
