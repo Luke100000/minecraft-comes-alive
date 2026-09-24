@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.NativeImage;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
+import net.conczin.mca.resources.EyeDefinition;
 import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
@@ -12,6 +13,7 @@ import net.minecraft.world.item.DyeColor;
 
 public final class EyeTextureLayers {
     private static final int NATURAL_DYE = 0xFFFFFFFF;
+    private static final int IRIS_MARKER_ALPHA = 254;
 
     private static final int ALBINISM_EYE_COLOR = 0xFFE8A0A0;
     private static final int BLUE_EYE_COLOR = 0xFF3A98E8;
@@ -67,11 +69,70 @@ public final class EyeTextureLayers {
         if (alpha == 0) {
             return null;
         }
-        if (EyeTintPixel.isValidIrisMarker(pixel)) {
-            EyeTintPixel.Mask mask = EyeTintPixel.decodeMarkedMask(pixel);
-            return DecodedPixel.tint(mask.tone(), EyeToneRendering.neutralMaskPixel(mask));
+        if (alpha != IRIS_MARKER_ALPHA) {
+            return DecodedPixel.fixed(pixel);
         }
-        return DecodedPixel.fixed(pixel);
+
+        int red = FastColor.ABGR32.red(pixel);
+        int green = FastColor.ABGR32.green(pixel);
+        int blue = FastColor.ABGR32.blue(pixel);
+        if (activeChannels(red, green, blue) != 1) {
+            return DecodedPixel.fixed(pixel);
+        }
+
+        Tone tone;
+        int intensity;
+        if (red > 0) {
+            tone = Tone.SHADOW;
+            intensity = red;
+        } else if (green > 0) {
+            tone = Tone.PRIMARY;
+            intensity = green;
+        } else {
+            tone = Tone.HIGHLIGHT;
+            intensity = blue;
+        }
+        int neutralPixel = 0xFF000000 | (intensity << 16) | (intensity << 8) | intensity;
+        return DecodedPixel.tint(tone, neutralPixel);
+    }
+
+    public static EyeDefinition.Tones resolveTones(EyeDefinition definition, int selectedArgb, float brightness) {
+        EyeDefinition.Tones tones = definition.tones(selectedArgb);
+        return new EyeDefinition.Tones(
+                applyBrightness(tones.shadow(), brightness),
+                applyBrightness(tones.primary(), brightness),
+                applyBrightness(tones.highlight(), brightness)
+        );
+    }
+
+    public static int multiplyPixel(int packedAbgr, int tintArgb) {
+        int tintRed = (tintArgb >>> 16) & 0xFF;
+        int tintGreen = (tintArgb >>> 8) & 0xFF;
+        int tintBlue = tintArgb & 0xFF;
+        int tintAlpha = (tintArgb >>> 24) & 0xFF;
+
+        int alpha = ((packedAbgr >>> 24) & 0xFF) * tintAlpha / 255;
+        int red = (packedAbgr & 0xFF) * tintRed / 255;
+        int green = ((packedAbgr >>> 8) & 0xFF) * tintGreen / 255;
+        int blue = ((packedAbgr >>> 16) & 0xFF) * tintBlue / 255;
+        return (alpha << 24) | (blue << 16) | (green << 8) | red;
+    }
+
+    private static int activeChannels(int red, int green, int blue) {
+        return (red > 0 ? 1 : 0) + (green > 0 ? 1 : 0) + (blue > 0 ? 1 : 0);
+    }
+
+    private static int applyBrightness(int argb, float brightness) {
+        float factor = 0.5F + Mth.clamp(brightness, 0.0F, 1.0F);
+        int alpha = (argb >>> 24) & 0xFF;
+        int red = scaleChannel((argb >>> 16) & 0xFF, factor);
+        int green = scaleChannel((argb >>> 8) & 0xFF, factor);
+        int blue = scaleChannel(argb & 0xFF, factor);
+        return (alpha << 24) | (red << 16) | (green << 8) | blue;
+    }
+
+    private static int scaleChannel(int channel, float factor) {
+        return Mth.clamp(Math.round(channel * factor), 0, 255);
     }
 
     public static Bounds findBounds(NativeImage image) {
@@ -111,12 +172,18 @@ public final class EyeTextureLayers {
         TINT
     }
 
-    public record DecodedPixel(PixelKind kind, EyeTintPixel.Tone tone, int pixel) {
+    public enum Tone {
+        SHADOW,
+        PRIMARY,
+        HIGHLIGHT
+    }
+
+    public record DecodedPixel(PixelKind kind, Tone tone, int pixel) {
         private static DecodedPixel fixed(int pixel) {
             return new DecodedPixel(PixelKind.FIXED, null, pixel);
         }
 
-        private static DecodedPixel tint(EyeTintPixel.Tone tone, int pixel) {
+        private static DecodedPixel tint(Tone tone, int pixel) {
             return new DecodedPixel(PixelKind.TINT, tone, pixel);
         }
     }

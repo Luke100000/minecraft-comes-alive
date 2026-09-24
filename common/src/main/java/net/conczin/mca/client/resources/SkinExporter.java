@@ -264,7 +264,7 @@ public class SkinExporter {
         }
     }
 
-    private static int toneColor(EyeDefinition.Tones tones, EyeTintPixel.Tone tone) {
+    private static int toneColor(EyeDefinition.Tones tones, EyeTextureLayers.Tone tone) {
         return switch (tone) {
             case SHADOW -> tones.shadow();
             case PRIMARY -> tones.primary();
@@ -273,15 +273,11 @@ public class SkinExporter {
     }
 
     private static EyeDefinition.Tones getEyeTones(VillagerLike<?> villager, boolean left, EyeDefinition definition) {
-        return EyeToneRendering.resolve(
+        return EyeTextureLayers.resolveTones(
                 definition,
-                getBaseEyeColor(villager, left),
+                EyeTextureLayers.getBaseEyeColor(villager, left, 0.0F),
                 villager.getGenetics().getGene(Genetics.EYE_BRIGHTNESS)
         );
-    }
-
-    private static int getBaseEyeColor(VillagerLike<?> villager, boolean left) {
-        return EyeTextureLayers.getBaseEyeColor(villager, left, 0.0F);
     }
 
     private static int getRainbow(VillagerLike<?> villager, int offset) {
@@ -295,7 +291,7 @@ public class SkinExporter {
     }
 
     public static void compositePixel(NativeImage base, int x, int y, int overPixel, int tintColor) {
-        int tintedPixel = EyeToneRendering.multiplyPixel(overPixel, tintColor);
+        int tintedPixel = EyeTextureLayers.multiplyPixel(overPixel, tintColor);
         int overAlpha = (tintedPixel >> 24) & 0xFF;
         if (overAlpha == 0) return;
         int overR = tintedPixel & 0xFF;

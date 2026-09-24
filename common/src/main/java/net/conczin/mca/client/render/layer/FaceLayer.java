@@ -6,7 +6,6 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.resources.ClientAppearanceCatalog;
 import net.conczin.mca.client.resources.EyeTextureLayers;
-import net.conczin.mca.client.resources.EyeToneRendering;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
@@ -208,12 +207,13 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
         return id;
     }
 
-    private int baseEyeColor(T villager, float tickDelta, boolean left) {
-        return EyeTextureLayers.getBaseEyeColor(getVillager(villager), left, tickDelta);
-    }
-
     private EyeDefinition.Tones tones(T villager, float tickDelta, boolean left, EyeDefinition definition) {
-        return EyeToneRendering.resolve(definition, baseEyeColor(villager, tickDelta, left), getVillager(villager).getGenetics().getGene(Genetics.EYE_BRIGHTNESS));
+        VillagerLike<?> villagerLike = getVillager(villager);
+        return EyeTextureLayers.resolveTones(
+                definition,
+                EyeTextureLayers.getBaseEyeColor(villagerLike, left, tickDelta),
+                villagerLike.getGenetics().getGene(Genetics.EYE_BRIGHTNESS)
+        );
     }
 
     private boolean isBlinking(T villager) {
