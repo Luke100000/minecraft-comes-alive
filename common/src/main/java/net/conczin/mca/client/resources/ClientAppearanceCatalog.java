@@ -72,6 +72,10 @@ public final class ClientAppearanceCatalog {
         return EyeSelection.idsForGender(eyes, gender);
     }
 
+    public static List<ResourceLocation> eyeIdsForEditor(Gender filterGender) {
+        return EyeSelection.idsForEditor(eyes, filterGender);
+    }
+
     public static ResourceLocation resolveEye(ResourceLocation eye, Gender gender) {
         return EyeSelection.resolve(eyes, eye, gender);
     }

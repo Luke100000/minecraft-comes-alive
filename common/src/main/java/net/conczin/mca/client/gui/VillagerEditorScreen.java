@@ -820,9 +820,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
                         Minecraft.getInstance().setScreen(new SkinLibraryScreen(this, villagerVisualization));
                     }));
                 }
-                if (!page.equals("eyes_catalog")) {
-                    addSelectionGenderFilterWidgets(y);
-                }
+                addSelectionGenderFilterWidgets(y);
                 filter();
             }
             case "presets" -> {
@@ -1416,7 +1414,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
 
     private void filter() {
         if (Objects.equals(page, "eyes_catalog")) {
-            filteredEyes = ClientAppearanceCatalog.eyeIdsForGender(villager.getGenetics().getGender()).stream()
+            filteredEyes = ClientAppearanceCatalog.eyeIdsForEditor(filterGender).stream()
                     .filter(id -> MCA.isBlankString(searchString) || id.toString().contains(searchString))
                     .toList();
 
@@ -1499,6 +1497,9 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
     }
 
     private boolean hasSelectionGender(Gender gender) {
+        if (page.equals("eyes_catalog")) {
+            return !ClientAppearanceCatalog.eyeIdsForEditor(gender).isEmpty();
+        }
         if (page.equals("clothing")) {
             return ClientAppearanceCatalog.clothing().values().stream()
                     .filter(entry -> !entry.exclude)
