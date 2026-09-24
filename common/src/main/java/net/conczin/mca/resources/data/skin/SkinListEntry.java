@@ -62,8 +62,8 @@ public abstract class SkinListEntry {
         int idxB = b.lastIndexOf('/');
         String strA = idxA >= 0 ? a.substring(idxA) : a;
         String strB = idxB >= 0 ? b.substring(idxB) : b;
-        String numA = strA.replaceAll("\\D+", "");
-        String numB = strB.replaceAll("\\D+", "");
+        String numA = digits(strA);
+        String numB = digits(strB);
         if (numA.isEmpty() || numB.isEmpty()) {
             return a.compareTo(b);
         }
@@ -75,6 +75,17 @@ public abstract class SkinListEntry {
         }
         int numberCompare = normalizedA.compareTo(normalizedB);
         return numberCompare != 0 ? numberCompare : a.compareTo(b);
+    }
+
+    private static String digits(String value) {
+        StringBuilder result = new StringBuilder();
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c >= '0' && c <= '9') {
+                result.append(c);
+            }
+        }
+        return result.toString();
     }
 
     private static String stripLeadingZeroes(String value) {

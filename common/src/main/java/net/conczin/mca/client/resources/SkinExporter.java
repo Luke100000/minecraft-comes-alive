@@ -7,8 +7,8 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
-import net.conczin.mca.entity.ai.relationship.Gender;
-import net.conczin.mca.resources.FaceList;
+import net.conczin.mca.resources.EyeDefinition;
+import net.conczin.mca.resources.EyeStyles;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -23,6 +23,7 @@ import net.minecraft.world.item.DyeColor;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.util.Map;
 
 public class SkinExporter {
     public static boolean export(VillagerEntityMCA villager) {
@@ -104,13 +105,7 @@ public class SkinExporter {
     }
 
     public static ResourceLocation getFace(VillagerLike<?> villager) {
-        Gender gender = villager.getGenetics().getGender();
-        FaceList list = FaceList.getInstance();
-        if (list == null) {
-            int index = (int) Math.min(21, Math.max(0, villager.getGenetics().getGene(Genetics.FACE) * 22));
-            return ResourceLocation.fromNamespaceAndPath("mca", "skins/face/normal/" + gender.getDataName() + "/" + index + ".png");
-        }
-        return list.pick("normal", villager.getGenetics().getGene(Genetics.FACE));
+        return ClientAppearanceCatalog.resolveEye(villager.getEyeTexture());
     }
 
     public static ResourceLocation getClothes(VillagerLike<?> villager) {
@@ -232,6 +227,8 @@ public class SkinExporter {
     }
 
     public static void compositeFace(NativeImage base, ResourceLocation faceId, VillagerLike<?> villager) {
+        EyeDefinition definition = ClientAppearanceCatalog.eyeDefinition(faceId);
+
         NativeImage face = loadTexture(faceId);
         if (face == null) {
             return;
@@ -240,46 +237,48 @@ public class SkinExporter {
         try {
             EyeTextureLayers.Bounds bounds = EyeTextureLayers.findBounds(face);
             int splitX = bounds.minX() + bounds.width() / 2;
-            compositeEyeLayer(base, face, EyeTextureLayers.Layer.SCLERA, EyeTextureLayers.Side.FULL, splitX, 0xFFFFFFFF);
-            compositeEyeLayer(base, face, EyeTextureLayers.Layer.DETAILS, EyeTextureLayers.Side.FULL, splitX, EyeTextureLayers.DETAILS_TINT);
-            if (villager.getTraits().hasTrait(Traits.HETEROCHROMIA)) {
-                compositeEyeLayer(base, face, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.LEFT, splitX, getEyeColor(villager, true));
-                compositeEyeLayer(base, face, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.RIGHT, splitX, getEyeColor(villager, false));
-            } else {
-                compositeEyeLayer(base, face, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.FULL, splitX, getEyeColor(villager, false));
+            boolean heterochromia = villager.getTraits().hasTrait(Traits.HETEROCHROMIA);
+            EyeDefinition.Tones rightTones = getEyeTones(villager, false, definition);
+            EyeDefinition.Tones leftTones = heterochromia ? getEyeTones(villager, true, definition) : rightTones;
+            int width = Math.min(base.getWidth(), face.getWidth());
+            int height = Math.min(base.getHeight(), face.getHeight());
+
+            for (int x = 0; x < width; x++) {
+                EyeDefinition.Tones tones = heterochromia && x >= splitX ? leftTones : rightTones;
+                for (int y = 0; y < height; y++) {
+                    EyeTextureLayers.DecodedPixel decoded = EyeTextureLayers.decodePixel(face.getPixelRGBA(x, y));
+                    if (decoded == null) {
+                        continue;
+                    }
+                    int tint = decoded.kind() == EyeTextureLayers.PixelKind.FIXED
+                            ? 0xFFFFFFFF
+                            : toneColor(tones, decoded.tone());
+                    compositePixel(base, x, y, decoded.pixel(), tint);
+                }
             }
         } finally {
             face.close();
         }
     }
 
-    public static void compositeEyeLayer(NativeImage base, NativeImage face, EyeTextureLayers.Layer layer, EyeTextureLayers.Side side, int splitX, int tintColor) {
-        int width = Math.min(base.getWidth(), face.getWidth());
-        int height = Math.min(base.getHeight(), face.getHeight());
-        for (int x = 0; x < width; x++) {
-            if (!EyeTextureLayers.isInSide(x, splitX, side)) {
-                continue;
-            }
-            for (int y = 0; y < height; y++) {
-                int pixel = face.getPixelRGBA(x, y); // ABGR
-                int alpha = (pixel >> 24) & 0xFF;
-                if (!EyeTextureLayers.isPixelForLayer(layer, alpha, pixel & 0xFF, (pixel >> 8) & 0xFF, (pixel >> 16) & 0xFF)) {
-                    continue;
-                }
-                compositePixel(base, x, y, pixel, tintColor);
-            }
-        }
+    private static int toneColor(EyeDefinition.Tones tones, EyeTintPixel.Tone tone) {
+        return switch (tone) {
+            case SHADOW -> tones.shadow();
+            case PRIMARY -> tones.primary();
+            case HIGHLIGHT -> tones.highlight();
+        };
     }
 
-    public static int getEyeColor(VillagerLike<?> villager, boolean left) {
-        int color;
-        if (villager.getTraits().hasTrait(Traits.RAINBOW_EYES)) {
-            int offset = left && villager.getTraits().hasTrait(Traits.HETEROCHROMIA) ? (25 * DyeColor.values().length) / 2 : 0;
-            color = getRainbow(villager, offset);
-        } else {
-            color = EyeTextureLayers.getStaticEyeColor(villager, left);
-        }
-        return EyeTextureLayers.applyBrightness(color, villager.getGenetics().getGene(Genetics.EYE_BRIGHTNESS));
+    private static EyeDefinition.Tones getEyeTones(VillagerLike<?> villager, boolean left, EyeDefinition definition) {
+        return EyeToneRendering.resolve(
+                definition,
+                getBaseEyeColor(villager, left),
+                villager.getGenetics().getGene(Genetics.EYE_BRIGHTNESS)
+        );
+    }
+
+    private static int getBaseEyeColor(VillagerLike<?> villager, boolean left) {
+        return EyeTextureLayers.getBaseEyeColor(villager, left, 0.0F);
     }
 
     private static int getRainbow(VillagerLike<?> villager, int offset) {
@@ -293,22 +292,14 @@ public class SkinExporter {
     }
 
     public static void compositePixel(NativeImage base, int x, int y, int overPixel, int tintColor) {
-        int tr = (tintColor >> 16) & 0xFF;
-        int tg = (tintColor >> 8) & 0xFF;
-        int tb = tintColor & 0xFF;
-        int ta = (tintColor >> 24) & 0xFF;
-        
-        int overAlpha = (overPixel >> 24) & 0xFF;
+        int tintedPixel = EyeToneRendering.multiplyPixel(overPixel, tintColor);
+        int overAlpha = (tintedPixel >> 24) & 0xFF;
         if (overAlpha == 0) return;
-        
-        int overR = ((overPixel & 0xFF) * tr) / 255;
-        int overG = (((overPixel >> 8) & 0xFF) * tg) / 255;
-        int overB = (((overPixel >> 16) & 0xFF) * tb) / 255;
-        int overA = (overAlpha * ta) / 255;
-        
-        if (overA == 0) {
-            return;
-        } else if (overA == 255) {
+        int overR = tintedPixel & 0xFF;
+        int overG = (tintedPixel >> 8) & 0xFF;
+        int overB = (tintedPixel >> 16) & 0xFF;
+
+        if (overAlpha == 255) {
             base.setPixelRGBA(x, y, 0xFF000000 | (overB << 16) | (overG << 8) | overR);
         } else {
             int basePixel = base.getPixelRGBA(x, y);
@@ -317,11 +308,11 @@ public class SkinExporter {
             int baseG = (basePixel >> 8) & 0xFF;
             int baseB = (basePixel >> 16) & 0xFF;
             
-            int outAlpha = overA + (baseAlpha * (255 - overA)) / 255;
+            int outAlpha = overAlpha + (baseAlpha * (255 - overAlpha)) / 255;
             if (outAlpha > 0) {
-                int outR = (overR * overA + baseR * baseAlpha * (255 - overA) / 255) / outAlpha;
-                int outG = (overG * overA + baseG * baseAlpha * (255 - overA) / 255) / outAlpha;
-                int outB = (overB * overA + baseB * baseAlpha * (255 - overA) / 255) / outAlpha;
+                int outR = (overR * overAlpha + baseR * baseAlpha * (255 - overAlpha) / 255) / outAlpha;
+                int outG = (overG * overAlpha + baseG * baseAlpha * (255 - overAlpha) / 255) / outAlpha;
+                int outB = (overB * overAlpha + baseB * baseAlpha * (255 - overAlpha) / 255) / outAlpha;
                 base.setPixelRGBA(x, y, (outAlpha << 24) | (outB << 16) | (outG << 8) | outR);
             }
         }

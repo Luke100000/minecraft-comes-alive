@@ -5,6 +5,7 @@ import com.mojang.datafixers.DataFixer;
 import com.mojang.datafixers.DataFixerBuilder;
 import com.mojang.datafixers.schemas.Schema;
 import com.mojang.serialization.Dynamic;
+import net.conczin.mca.datafix.fixes.EyeGeneticsFix;
 import net.conczin.mca.datafix.fixes.PersonalityAndTraitsFix;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
@@ -21,7 +22,7 @@ import java.util.Objects;
  */
 public final class McaDataFixers {
     public static final String DATA_VERSION_KEY = "MCADataVersion";
-    public static final int CURRENT_VERSION = 1;
+    public static final int CURRENT_VERSION = 2;
     public static final DSL.TypeReference MCA_DATA = () -> "mca:data";
 
     private static final String LEGACY_MCA_DATA_KEY = "MCAData";
@@ -109,6 +110,8 @@ public final class McaDataFixers {
         builder.addSchema(0, McaDataSchema::new);
         Schema versionOne = builder.addSchema(1, Schema::new);
         builder.addFixer(new PersonalityAndTraitsFix(versionOne));
+        Schema versionTwo = builder.addSchema(2, Schema::new);
+        builder.addFixer(new EyeGeneticsFix(versionTwo));
         return builder.build().fixer();
     }
 }
