@@ -34,6 +34,7 @@
     "MixinZombieVillager"
   ],
   "client": [
+    "client.MixinAbstractClientPlayer",
     "client.MixinClientLanguage",
     "client.MixinDeltaTrackerTimer",
     "client.MixinEntity",

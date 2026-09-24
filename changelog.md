@@ -1,6 +1,7 @@
 # TBD
 
 * Fixed adding skins to server wide pool not working without cheats in singleplayer
+* Fixed custom player size and hitbox resetting after changing dimensions.
 
 # 7.7.37
 
