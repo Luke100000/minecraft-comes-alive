@@ -42,26 +42,4 @@ public final class EyeStyles {
         return MCA.locate("skins/face/normal/" + gender.binary().getDataName() + "/" + styleIndex + ".png");
     }
 
-    /**
-     * Keeps the same gendered eye style when switching between male and female
-     * variants. If the identifier is not gendered, it is returned unchanged.
-     */
-    public static ResourceLocation forGender(ResourceLocation eye, Gender gender) {
-        if (gender != Gender.MALE && gender != Gender.FEMALE) {
-            return eye;
-        }
-
-        String path = eye.getPath();
-        String target = "/" + gender.getDataName() + "/";
-        String source = gender == Gender.MALE ? "/female/" : "/male/";
-        int index = path.indexOf(source);
-        if (index < 0) {
-            return eye;
-        }
-
-        return ResourceLocation.fromNamespaceAndPath(
-                eye.getNamespace(),
-                path.substring(0, index) + target + path.substring(index + source.length())
-        );
-    }
 }

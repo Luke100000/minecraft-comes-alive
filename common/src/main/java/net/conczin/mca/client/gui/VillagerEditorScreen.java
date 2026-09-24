@@ -21,7 +21,6 @@ import net.conczin.mca.network.c2s.VillagerEditorSyncRequest;
 import net.conczin.mca.network.c2s.VillagerNameRequest;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ProfessionsMCA;
-import net.conczin.mca.resources.EyeStyles;
 import net.conczin.mca.resources.SkinSelection;
 import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.HairStyle;
@@ -1417,7 +1416,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
 
     private void filter() {
         if (Objects.equals(page, "eyes_catalog")) {
-            filteredEyes = ClientAppearanceCatalog.eyeIdsForEditor(filterGender).stream()
+            filteredEyes = ClientAppearanceCatalog.eyeIdsForGender(villager.getGenetics().getGender()).stream()
                     .filter(id -> MCA.isBlankString(searchString) || id.toString().contains(searchString))
                     .toList();
 
@@ -1500,9 +1499,6 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
     }
 
     private boolean hasSelectionGender(Gender gender) {
-        if (page.equals("eyes_catalog")) {
-            return !ClientAppearanceCatalog.eyeIdsForEditor(gender).isEmpty();
-        }
         if (page.equals("clothing")) {
             return ClientAppearanceCatalog.clothing().values().stream()
                     .filter(entry -> !entry.exclude)

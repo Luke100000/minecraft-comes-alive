@@ -8,7 +8,6 @@ import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.resources.EyeDefinition;
-import net.conczin.mca.resources.EyeStyles;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -228,6 +227,10 @@ public class SkinExporter {
 
     public static void compositeFace(NativeImage base, ResourceLocation faceId, VillagerLike<?> villager) {
         EyeDefinition definition = ClientAppearanceCatalog.eyeDefinition(faceId);
+        if (definition == null) {
+            composite(base, faceId, 0xFFFFFFFF);
+            return;
+        }
 
         NativeImage face = loadTexture(faceId);
         if (face == null) {

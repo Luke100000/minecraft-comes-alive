@@ -64,8 +64,12 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
 
         if (canUse(skin)) {
             EyeDefinition definition = ClientAppearanceCatalog.eyeDefinition(skin);
-            EyeLayerTextures layers = getOrGenerateEyeLayers(skin);
-            renderEyes(transform, provider, light, villager, tickDelta, visible, glowing, overlay, definition, layers);
+            if (definition == null) {
+                renderModel(transform, provider, light, model, OPAQUE_WHITE, skin, overlay, visible, glowing);
+            } else {
+                EyeLayerTextures layers = getOrGenerateEyeLayers(skin);
+                renderEyes(transform, provider, light, villager, tickDelta, visible, glowing, overlay, definition, layers);
+            }
         }
 
         ResourceLocation extraOverlay = getOverlay(villager);

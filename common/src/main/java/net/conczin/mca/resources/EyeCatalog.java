@@ -19,9 +19,7 @@ import java.util.*;
 public class EyeCatalog extends SimplePreparableReloadListener<Map<ResourceLocation, List<SkinListJson.Entry>>> {
     public static final ResourceLocation ID = MCA.locate("skins/eyes");
     private static EyeCatalog INSTANCE;
-    private final Map<ResourceLocation, EyeDefinition> definitions = new HashMap<>();
-    private final Map<ResourceLocation, EyeDefinition> activeDefinitions = new HashMap<>();
-    private List<EyeDefinition> active = List.of();
+    private Map<ResourceLocation, EyeDefinition> definitions = Map.of();
 
     public EyeCatalog() {
         INSTANCE = this;
@@ -38,12 +36,12 @@ public class EyeCatalog extends SimplePreparableReloadListener<Map<ResourceLocat
 
     @Override
     protected void apply(Map<ResourceLocation, List<SkinListJson.Entry>> data, ResourceManager manager, ProfilerFiller profiler) {
-        definitions.clear();
-        data.forEach((id, entries) -> AppearanceCatalogLoader.addEyes(definitions, id, entries));
-        refreshDisabledEyes();
+        Map<ResourceLocation, EyeDefinition> loaded = new HashMap<>();
+        data.forEach((id, entries) -> AppearanceCatalogLoader.addEyes(loaded, id, entries));
+        definitions = selectEnabledDefinitions(loaded);
     }
 
-    private void refreshDisabledEyes() {
+    private Map<ResourceLocation, EyeDefinition> selectEnabledDefinitions(Map<ResourceLocation, EyeDefinition> loaded) {
         Set<ResourceLocation> disabled = new HashSet<>();
         List<String> configured = Config.getInstance().disabledEyeTextures;
         if (configured != null) {
@@ -56,49 +54,21 @@ public class EyeCatalog extends SimplePreparableReloadListener<Map<ResourceLocat
             }
         }
 
-        List<EyeDefinition> entries = definitions.values().stream()
+        List<EyeDefinition> entries = loaded.values().stream()
                 .sorted((a, b) -> SkinListEntry.compareIdentifiers(a.id().toString(), b.id().toString()))
                 .toList();
-        List<EyeDefinition> enabled = entries.stream()
-                .filter(entry -> !disabled.contains(entry.id()))
-                .toList();
-        List<EyeDefinition> selected = new ArrayList<>(enabled.isEmpty() ? entries : enabled);
+        List<EyeDefinition> selected = new ArrayList<>(entries);
+        selected.removeIf(entry -> disabled.contains(entry.id()));
         ensureGenderFallback(selected, entries, Gender.MALE);
         ensureGenderFallback(selected, entries, Gender.FEMALE);
-        selected.sort((a, b) -> SkinListEntry.compareIdentifiers(a.id().toString(), b.id().toString()));
-        active = List.copyOf(selected);
 
-        if (active.isEmpty()) {
-            EyeDefinition fallback = new EyeDefinition(
-                    EyeStyles.DEFAULT,
-                    Gender.NEUTRAL,
-                    1.0F,
-                    Map.of()
-            );
-            active = List.of(fallback);
-            MCA.LOGGER.warn("No usable eye definitions were loaded; using {}", EyeStyles.DEFAULT);
-        }
-
-        activeDefinitions.clear();
-        active.forEach(definition -> activeDefinitions.put(definition.id(), definition));
+        Map<ResourceLocation, EyeDefinition> effective = new HashMap<>();
+        selected.forEach(definition -> effective.put(definition.id(), definition));
+        return Map.copyOf(effective);
     }
 
     public ResourceLocation resolve(ResourceLocation eye, Gender gender) {
-        EyeDefinition current = activeDefinitions.get(eye);
-        if (current != null && SkinSelection.matchesGender(current.gender(), gender)) {
-            return eye;
-        }
-
-        ResourceLocation counterpart = EyeStyles.forGender(eye, gender);
-        EyeDefinition counterpartDefinition = activeDefinitions.get(counterpart);
-        if (counterpartDefinition != null && SkinSelection.matchesGender(counterpartDefinition.gender(), gender)) {
-            return counterpart;
-        }
-
-        List<EyeDefinition> candidates = candidates(gender);
-        return candidates.isEmpty()
-                ? EyeStyles.DEFAULT
-                : candidates.get(Math.floorMod(eye.hashCode(), candidates.size())).id();
+        return EyeSelection.resolve(definitions, eye, gender);
     }
 
     public ResourceLocation pick(Gender gender) {
@@ -113,14 +83,11 @@ public class EyeCatalog extends SimplePreparableReloadListener<Map<ResourceLocat
     }
 
     public boolean contains(ResourceLocation eye, Gender gender) {
-        EyeDefinition definition = activeDefinitions.get(eye);
-        return definition != null && SkinSelection.matchesGender(definition.gender(), gender);
+        return EyeSelection.contains(definitions, eye, gender);
     }
 
     private List<EyeDefinition> candidates(Gender gender) {
-        return active.stream()
-                .filter(entry -> SkinSelection.matchesGender(entry.gender(), gender))
-                .toList();
+        return EyeSelection.definitionsForGender(definitions, gender);
     }
 
     private static void ensureGenderFallback(List<EyeDefinition> selected, List<EyeDefinition> all, Gender gender) {
@@ -128,17 +95,21 @@ public class EyeCatalog extends SimplePreparableReloadListener<Map<ResourceLocat
             return;
         }
 
-        all.stream()
+        EyeDefinition fallback = all.stream()
                 .filter(entry -> SkinSelection.matchesGender(entry.gender(), gender))
                 .findFirst()
-                .ifPresent(entry -> {
-                    selected.add(entry);
-                    MCA.LOGGER.warn("All eye textures compatible with {} were disabled; keeping {} as a fallback", gender, entry.id());
-                });
+                .orElseGet(EyeCatalog::defaultDefinition);
+        selected.removeIf(entry -> entry.id().equals(fallback.id()));
+        selected.add(fallback);
+        MCA.LOGGER.warn("No enabled eye texture is compatible with {}; keeping {} as a fallback", gender, fallback.id());
+    }
+
+    private static EyeDefinition defaultDefinition() {
+        return new EyeDefinition(EyeStyles.DEFAULT, Gender.NEUTRAL, 1.0F, Map.of());
     }
 
     public Map<ResourceLocation, EyeDefinition> effectiveDefinitions() {
-        return Map.copyOf(activeDefinitions);
+        return definitions;
     }
 
     public void repair(VillagerLike<?> villager) {

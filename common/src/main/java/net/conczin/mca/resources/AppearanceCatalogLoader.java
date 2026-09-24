@@ -65,10 +65,6 @@ final class AppearanceCatalogLoader {
         addLayeredHair(layeredHair, id, SkinListJson.textureCollection(id, file));
     }
 
-    static void addEyes(Map<ResourceLocation, EyeDefinition> eyes, ResourceLocation id, JsonElement file) {
-        addEyes(eyes, id, SkinListJson.textureEntryCollection(id, file));
-    }
-
     static void addEyes(Map<ResourceLocation, EyeDefinition> eyes, ResourceLocation id, List<SkinListJson.Entry> entries) {
         Gender fileGender = eyeGender(id);
         for (SkinListJson.Entry entry : entries) {
