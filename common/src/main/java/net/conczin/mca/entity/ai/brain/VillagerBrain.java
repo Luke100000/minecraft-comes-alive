@@ -261,8 +261,6 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         if (getMoveState() == MoveState.FOLLOW && entity.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isEmpty()) {
             if (entity.getBrain().getMemoryInternal(MemoryModuleTypeMCA.STAYING).isPresent()) {
                 entity.setTrackedValue(MOVE_STATE, MoveState.STAY);
-            } else if (entity.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isPresent()) {
-                entity.setTrackedValue(MOVE_STATE, MoveState.FOLLOW);
             } else {
                 entity.setTrackedValue(MOVE_STATE, MoveState.MOVE);
             }

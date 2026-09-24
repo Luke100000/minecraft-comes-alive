@@ -1,5 +1,6 @@
 package net.conczin.mca.entity.ai;
 
+import net.conczin.mca.MCA;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.navigation.BedApproachTarget;
@@ -327,6 +328,15 @@ public class Residency {
         entity.getVillagerBrain().setMoveState(MoveState.MOVE, player);
         entity.getInteractions().stopInteracting();
         getHome().filter(p -> p.dimension() == entity.level().dimension()).ifPresentOrElse(home -> {
+            if (MCA.LOGGER.isDebugEnabled()) {
+                MCA.LOGGER.debug(
+                        "[MCA Go Home Debug] request entity={} pos={} home={} distance={}",
+                        entity.getUUID(),
+                        entity.blockPosition(),
+                        home.pos(),
+                        Math.sqrt(entity.blockPosition().distSqr(home.pos()))
+                );
+            }
             entity.moveTowards(home.pos());
             entity.sendChatMessage(player, "interaction.gohome.success");
         }, () -> entity.sendChatMessage(player, "interaction.gohome.fail.nohome"));

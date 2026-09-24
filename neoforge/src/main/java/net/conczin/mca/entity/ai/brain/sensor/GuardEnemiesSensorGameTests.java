@@ -61,6 +61,7 @@ public final class GuardEnemiesSensorGameTests {
             }
             target.absMoveTo(targetPos.getX() + 0.5D, targetPos.getY(), targetPos.getZ() + 0.5D);
             target.setNoAi(true);
+            target.setTarget(guard);
             helper.getLevel().addFreshEntity(target);
             TEST_ENTITIES.add(target);
 

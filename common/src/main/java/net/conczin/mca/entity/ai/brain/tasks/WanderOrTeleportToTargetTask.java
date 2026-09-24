@@ -2,12 +2,13 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
-import net.conczin.mca.entity.ai.navigation.LongDistancePathTarget;
+import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.conczin.mca.entity.ai.navigation.PathfindingBlacklist;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.behavior.MoveToTargetSink;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
@@ -16,22 +17,29 @@ import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 
 public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
-    private static final int FAILED_PATH_RETRY_INTERVAL = 7;
     private static final long UNREACHABLE_PATH_RETRY_TICKS = 20L;
-    private int failedPathRetryCooldown;
+    private boolean extendedMovementLifetime;
+
+    @Override
+    protected boolean timedOut(long gameTime) {
+        return !this.extendedMovementLifetime && super.timedOut(gameTime);
+    }
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel world, Mob entity) {
-        if (this.failedPathRetryCooldown > 0) {
-            this.failedPathRetryCooldown--;
-            return false;
+        long gameTime = world.getGameTime();
+        Long unreachableSince = entity.getBrain()
+                .getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                .orElse(null);
+        if (unreachableSince != null) {
+            long unreachableTicks = gameTime - unreachableSince;
+            if (unreachableTicks < UNREACHABLE_PATH_RETRY_TICKS
+                    || unreachableTicks % UNREACHABLE_PATH_RETRY_TICKS != 0L) {
+                return false;
+            }
         }
 
-        boolean canStart = super.checkExtraStartConditions(world, entity);
-        if (!canStart && entity.getBrain().hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)) {
-            this.failedPathRetryCooldown = FAILED_PATH_RETRY_INTERVAL - 1;
-        }
-        return canStart;
+        return super.checkExtraStartConditions(world, entity);
     }
 
     @Override
@@ -43,17 +51,6 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         boolean vanillaCanContinue = super.canStillUse(world, entity, gameTime);
         WalkTarget walkTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
         Path path = entity.getNavigation().getPath();
-        if (!vanillaCanContinue
-                && walkTarget != null
-                && walkTarget.getTarget() instanceof LongDistancePathTarget longDistanceTarget
-                && path != null
-                && entity.getNavigation().isDone()
-                && !entity.getNavigation().isStuck()
-                && isUsefulLongDistanceSegment(path, longDistanceTarget)) {
-            entity.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
-            return false;
-        }
-
         if (vanillaCanContinue
                 || walkTarget == null
                 || path == null
@@ -80,29 +77,25 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
 
     @Override
     protected void start(ServerLevel world, Mob entity, long gameTime) {
-        super.start(world, entity, gameTime);
         WalkTarget walkTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        super.start(world, entity, gameTime);
         Path path = entity.getNavigation().getPath();
+        this.extendedMovementLifetime = walkTarget != null
+                && walkTarget.getTarget() instanceof BlockPosTracker
+                && MCAGroundPathNavigation.requiresExtendedPath(
+                        entity,
+                        walkTarget.getTarget().currentBlockPosition()
+                );
         if (walkTarget != null
-                && walkTarget.getTarget() instanceof LongDistancePathTarget longDistanceTarget
+                && walkTarget.getTarget() instanceof BlockPosTracker
                 && path != null
                 && !entity.getNavigation().isStuck()
-                && isUsefulLongDistanceSegment(path, longDistanceTarget)) {
+                && MCAGroundPathNavigation.isUsefulPartialPath(
+                        path,
+                        walkTarget.getTarget().currentBlockPosition()
+                )) {
             entity.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
         }
-    }
-
-    private static boolean isUsefulLongDistanceSegment(Path path, LongDistancePathTarget target) {
-        if (path.canReach()
-                || path.getNodeCount() < 2
-                || !path.getTarget().equals(target.currentBlockPosition())) {
-            return false;
-        }
-
-        BlockPos destination = target.currentBlockPosition();
-        BlockPos start = path.getNodePos(0);
-        BlockPos end = path.getEndNode().asBlockPos();
-        return end.distSqr(destination) < start.distSqr(destination);
     }
 
     private static boolean shouldYieldToEmergencyCombat(Mob entity) {

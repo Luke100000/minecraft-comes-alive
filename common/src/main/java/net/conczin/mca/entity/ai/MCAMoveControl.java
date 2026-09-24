@@ -20,6 +20,14 @@ public class MCAMoveControl extends MoveControl {
         this.speedModifier = speedModifier;
     }
 
+    public void stopStrafing() {
+        if (this.operation == Operation.STRAFE) {
+            this.operation = Operation.WAIT;
+        }
+        // Vanilla WAIT clears forward input only; released lateral input otherwise keeps accelerating the mob.
+        this.mob.setXxa(0.0F);
+    }
+
     protected final boolean isClimbNavigationActive() {
         return this.mob.getNavigation() instanceof MCAGroundPathNavigation navigation
                 && navigation.isControllingClimbableMovement();

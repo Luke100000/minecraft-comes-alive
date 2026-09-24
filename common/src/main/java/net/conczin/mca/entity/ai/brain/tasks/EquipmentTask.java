@@ -21,13 +21,12 @@ import java.util.function.Predicate;
 
 public class EquipmentTask extends Behavior<VillagerEntityMCA> {
     private static final int COOLDOWN = 100;
-    private static final int CHECK_INTERVAL = 20;
+    private static final int EQUIPMENT_REFRESH_INTERVAL = 20;
     private final Predicate<VillagerEntityMCA> condition;
     private final Function<VillagerEntityMCA, EquipmentSet> equipmentSet;
     private int lastEquipTime;
     private boolean lastArmorWearState;
-    private int lastCheckTick = -CHECK_INTERVAL;
-    private boolean cachedConditionResult;
+    private int lastEquipmentRefreshTick = -EQUIPMENT_REFRESH_INTERVAL;
     private EquipmentSet cachedEquipmentSet;
 
     public EquipmentTask(Predicate<VillagerEntityMCA> condition, Function<VillagerEntityMCA, EquipmentSet> set) {
@@ -47,21 +46,21 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
             return true;
         }
 
-        // Check condition with cache to avoid repeated expensive tests
-        if (villager.tickCount - lastCheckTick >= CHECK_INTERVAL) {
-            lastCheckTick = villager.tickCount;
-            cachedConditionResult = condition.test(villager);
-            cachedEquipmentSet = cachedConditionResult ? equipmentSet.apply(villager) : null;
+        boolean wear = condition.test(villager);
+        if (wear && (cachedEquipmentSet == null
+                || villager.tickCount - lastEquipmentRefreshTick >= EQUIPMENT_REFRESH_INTERVAL)) {
+            lastEquipmentRefreshTick = villager.tickCount;
+            cachedEquipmentSet = equipmentSet.apply(villager);
         }
 
+        boolean present = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.WEARS_ARMOR).isPresent();
         EquipmentSet set = cachedEquipmentSet;
-        if (set != null && isNakedCombatSet(set, villager)) {
+        if (wear && set != null && isNakedCombatSet(set, villager)) {
             return false;
         }
 
         boolean preserveMourningHands = isPeacefullyGrieving(villager);
-        boolean present = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.WEARS_ARMOR).isPresent();
-        if (cachedConditionResult) {
+        if (wear) {
             lastEquipTime = villager.tickCount;
             return !present || set != null && !preserveMourningHands && isMissingRequestedHandItem(villager, set);
         } else if (villager.tickCount - lastEquipTime > COOLDOWN) {
@@ -95,15 +94,16 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
         }
 
         lastArmorWearState = villager.getVillagerBrain().getArmorWear();
-        boolean wear = cachedConditionResult;
+        boolean wear = condition.test(villager);
         EquipmentSet set = cachedEquipmentSet;
 
-        if ((wear || villager.getVillagerBrain().getArmorWear()) && set == null) {
+        if (wear || villager.getVillagerBrain().getArmorWear()) {
             set = equipmentSet.apply(villager);
             cachedEquipmentSet = set;
+            lastEquipmentRefreshTick = villager.tickCount;
         }
 
-        if (set != null && isNakedCombatSet(set, villager)) {
+        if (wear && set != null && isNakedCombatSet(set, villager)) {
             return;
         }
 

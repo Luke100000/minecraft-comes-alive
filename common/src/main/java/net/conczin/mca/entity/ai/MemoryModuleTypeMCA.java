@@ -4,11 +4,11 @@ import com.mojang.serialization.Codec;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.brain.tasks.RangedCombatState;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -24,11 +24,14 @@ public interface MemoryModuleTypeMCA {
     MemoryModuleType<Boolean> WEARS_ARMOR = register("wears_armor", Optional.of(Codec.BOOL));
     MemoryModuleType<Integer> SMALL_BOUNTY = register("small_bounty", Optional.of(Codec.INT));
     MemoryModuleType<LivingEntity> HIT_BY_PLAYER = register("hit_by_player", Optional.empty());
+    // Legacy-only registration: old Brain data must still be able to decode this key.
     MemoryModuleType<Long> LAST_GRIEVE = register("last_grieve", Optional.of(Codec.LONG));
-    MemoryModuleType<BlockPos> MOURNING_SITE = register("mourning_site", Optional.of(BlockPos.CODEC));
+    MemoryModuleType<GlobalPos> MOURNING_SITE = register("mourning_site", Optional.of(GlobalPos.CODEC));
     MemoryModuleType<GlobalPos> MOURNING_POSITION = register("mourning_position", Optional.of(GlobalPos.CODEC));
     MemoryModuleType<Long> LAST_AMBIENT_MOURNING = register("last_ambient_mourning", Optional.of(Codec.LONG));
     MemoryModuleType<Long> MOURNING_RETRY_AT = register("mourning_retry_at", Optional.of(Codec.LONG));
+    MemoryModuleType<ItemStack> MOURNING_PREVIOUS_MAIN_HAND = register("mourning_previous_main_hand", Optional.of(ItemStack.OPTIONAL_CODEC));
+    MemoryModuleType<ItemStack> MOURNING_FLOWER = register("mourning_flower", Optional.of(ItemStack.CODEC));
     MemoryModuleType<Boolean> FORCED_HOME = register("forced_home", Optional.of(Codec.BOOL));
     MemoryModuleType<RangedCombatState> RANGED_COMBAT_STATE = register("ranged_combat_state", Optional.empty());
 

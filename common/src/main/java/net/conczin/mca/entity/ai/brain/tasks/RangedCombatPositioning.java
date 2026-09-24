@@ -39,7 +39,6 @@ final class RangedCombatPositioning {
     private static final int ESCAPE_VERTICAL_RANGE = 5;
     private static final int ESCAPE_TARGETS_PER_SECTOR = 2;
     private static final int ESCAPE_TARGET_LIMIT = 12;
-    private static final int ESCAPE_ONWARD_SCORE_SLACK = 1;
     private static final List<Direction> HORIZONTAL_DIRECTIONS = List.of(
             Direction.NORTH,
             Direction.SOUTH,
@@ -170,12 +169,14 @@ final class RangedCombatPositioning {
             }
 
             boolean opensEveryThreat = opensDistanceFromEveryThreat(origin, candidatePosition, escapeThreats);
+            OnwardReachability onward = measureOnwardReachability(originBlock, position, reachablePositionSet);
             EscapeCandidate candidate = new EscapeCandidate(
                     candidatePosition,
                     candidateMinimumDistanceSquared,
                     minimumDistanceSquared(candidatePosition, hazards),
                     entry.getValue(),
-                    countOnwardReachableSpace(originBlock, position, reachablePositionSet),
+                    onward.progress(),
+                    onward.space(),
                     position.getY() - originBlock.getY()
             );
             boolean preservesHazards = preservesHazardClearance(origin, candidatePosition, hazards)
@@ -191,7 +192,8 @@ final class RangedCombatPositioning {
         }
 
         Comparator<EscapeCandidate> safeComparator = Comparator
-                .comparingInt(EscapeCandidate::onwardSpace).reversed()
+                .comparingInt(EscapeCandidate::onwardProgress).reversed()
+                .thenComparing(Comparator.comparingInt(EscapeCandidate::onwardSpace).reversed())
                 .thenComparing(Comparator.comparingDouble(EscapeCandidate::minimumDistanceSquared).reversed())
                 .thenComparing(Comparator.comparingDouble(EscapeCandidate::minimumHazardDistanceSquared).reversed())
                 .thenComparingInt(EscapeCandidate::travelSteps)
@@ -199,6 +201,7 @@ final class RangedCombatPositioning {
         Comparator<EscapeCandidate> emergencyComparator = Comparator
                 .comparingDouble(EscapeCandidate::minimumDistanceSquared).reversed()
                 .thenComparing(Comparator.comparingDouble(EscapeCandidate::minimumHazardDistanceSquared).reversed())
+                .thenComparing(Comparator.comparingInt(EscapeCandidate::onwardProgress).reversed())
                 .thenComparing(Comparator.comparingInt(EscapeCandidate::onwardSpace).reversed())
                 .thenComparingInt(EscapeCandidate::travelSteps)
                 .thenComparing(Comparator.comparingInt(EscapeCandidate::elevationGain).reversed());
@@ -257,12 +260,13 @@ final class RangedCombatPositioning {
                 && hasStandingSpace(entity, candidate);
     }
 
-    private static int countOnwardReachableSpace(
+    private static OnwardReachability measureOnwardReachability(
             BlockPos origin,
             BlockPos start,
             Set<BlockPos> reachablePositions
     ) {
         int minimumHorizontalDistanceSquared = horizontalDistanceSquared(origin, start);
+        int maximumHorizontalDistanceSquared = minimumHorizontalDistanceSquared;
         Set<BlockPos> visited = new HashSet<>();
         ArrayDeque<OnwardSearchNode> frontier = new ArrayDeque<>();
         visited.add(start);
@@ -283,13 +287,18 @@ final class RangedCombatPositioning {
                     }
                     if (horizontalDistanceSquared(origin, neighbor) >= minimumHorizontalDistanceSquared
                             && visited.add(neighbor)) {
+                        maximumHorizontalDistanceSquared = Math.max(
+                                maximumHorizontalDistanceSquared,
+                                horizontalDistanceSquared(origin, neighbor));
                         frontier.addLast(new OnwardSearchNode(neighbor, node.steps() + 1));
                     }
                     break;
                 }
             }
         }
-        return visited.size() - 1;
+        return new OnwardReachability(
+                maximumHorizontalDistanceSquared - minimumHorizontalDistanceSquared,
+                visited.size() - 1);
     }
 
     private static int horizontalDistanceSquared(BlockPos first, BlockPos second) {
@@ -306,14 +315,19 @@ final class RangedCombatPositioning {
             return Optional.empty();
         }
 
+        int bestOnwardProgress = candidates.stream()
+                .mapToInt(EscapeCandidate::onwardProgress)
+                .max()
+                .orElse(0);
         int bestOnwardSpace = candidates.stream()
+                .filter(candidate -> candidate.onwardProgress() == bestOnwardProgress)
                 .mapToInt(EscapeCandidate::onwardSpace)
                 .max()
                 .orElse(0);
-        int minimumCompetitiveOnwardSpace = Math.max(0, bestOnwardSpace - ESCAPE_ONWARD_SCORE_SLACK);
         boolean[] competitiveSectors = new boolean[8];
         for (EscapeCandidate candidate : candidates) {
-            if (candidate.onwardSpace() == bestOnwardSpace) {
+            if (candidate.onwardProgress() == bestOnwardProgress
+                    && candidate.onwardSpace() == bestOnwardSpace) {
                 competitiveSectors[escapeSector(origin, candidate.position())] = true;
             }
         }
@@ -323,7 +337,8 @@ final class RangedCombatPositioning {
         for (EscapeCandidate candidate : candidates) {
             int sector = escapeSector(origin, candidate.position());
             if (!competitiveSectors[sector]
-                    || candidate.onwardSpace() < minimumCompetitiveOnwardSpace
+                    || candidate.onwardProgress() != bestOnwardProgress
+                    || candidate.onwardSpace() != bestOnwardSpace
                     || perSector[sector] >= ESCAPE_TARGETS_PER_SECTOR) {
                 continue;
             }
@@ -573,8 +588,9 @@ final class RangedCombatPositioning {
         return null;
     }
 
-    static boolean isImmediateStrafeStepWalkable(
+    static boolean isImmediateStrafeStepSafe(
             PathfinderMob entity,
+            LivingEntity target,
             float lateralDirection,
             List<? extends LivingEntity> hazards
     ) {
@@ -584,17 +600,16 @@ final class RangedCombatPositioning {
         }
         Vec3 origin = entity.position();
         Vec3 candidate = origin.add(strafeOffset(entity, sign, STRAFE_PROBE_STEP));
-        return isWalkableDestination(entity, candidate)
-                && hasStandingSpace(entity, candidate)
-                && preservesHazardClearance(origin, candidate, hazards);
+        return isSafeStrafePosition(entity, target, origin, candidate, hazards);
     }
 
     static float findBestStrafeDirection(
             PathfinderMob entity,
+            LivingEntity target,
             List<? extends LivingEntity> hazards
     ) {
-        StrafeCandidate left = scoreStrafeSide(entity, -1.0F, hazards);
-        StrafeCandidate right = scoreStrafeSide(entity, 1.0F, hazards);
+        StrafeCandidate left = scoreStrafeSide(entity, target, -1.0F, hazards);
+        StrafeCandidate right = scoreStrafeSide(entity, target, 1.0F, hazards);
         if (left == null) {
             return right == null ? 0.0F : right.direction();
         }
@@ -614,6 +629,7 @@ final class RangedCombatPositioning {
 
     private static StrafeCandidate scoreStrafeSide(
             PathfinderMob entity,
+            LivingEntity target,
             float lateralDirection,
             List<? extends LivingEntity> hazards
     ) {
@@ -630,9 +646,7 @@ final class RangedCombatPositioning {
              distance <= MAX_STRAFE_CLEARANCE + 1.0E-6D;
              distance += STRAFE_PROBE_STEP) {
             Vec3 candidate = origin.add(strafeOffset(entity, sign, distance));
-            if (!isWalkableDestination(entity, candidate)
-                    || !hasStandingSpace(entity, candidate)
-                    || !preservesHazardClearance(origin, candidate, hazards)) {
+            if (!isSafeStrafePosition(entity, target, origin, candidate, hazards)) {
                 break;
             }
             clearance = distance;
@@ -649,12 +663,26 @@ final class RangedCombatPositioning {
         );
     }
 
+    private static boolean isSafeStrafePosition(
+            PathfinderMob entity,
+            LivingEntity target,
+            Vec3 origin,
+            Vec3 candidate,
+            List<? extends LivingEntity> hazards
+    ) {
+        return isWalkableDestination(entity, candidate)
+                && hasStandingSpace(entity, candidate)
+                && preservesHazardClearance(origin, candidate, hazards)
+                && hasLineOfSight(entity, candidate, target);
+    }
+
     private static Vec3 strafeOffset(PathfinderMob entity, float sign, double distance) {
         float yawRadians = entity.getYRot() * (float)(Math.PI / 180.0D);
+        // LivingEntity travels with lateral input in X and forward input in Z.
         return new Vec3(
-                -sign * Math.sin(yawRadians) * distance,
+                sign * Math.cos(yawRadians) * distance,
                 0.0D,
-                sign * Math.cos(yawRadians) * distance
+                sign * Math.sin(yawRadians) * distance
         );
     }
 
@@ -760,9 +788,13 @@ final class RangedCombatPositioning {
             double minimumDistanceSquared,
             double minimumHazardDistanceSquared,
             int travelSteps,
+            int onwardProgress,
             int onwardSpace,
             int elevationGain
     ) {
+    }
+
+    private record OnwardReachability(int progress, int space) {
     }
 
     private record OnwardSearchNode(BlockPos position, int steps) {

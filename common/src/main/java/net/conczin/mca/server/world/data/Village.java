@@ -40,8 +40,9 @@ public class Village implements Iterable<Building> {
     public static final int MERGE_MARGIN = 64;
     private static final int MOVE_IN_COOLDOWN = 1200;
     private static final long BED_SYNC_TIME = 200;
-    private static final int MIN_MOURNING_INTERVAL = 4_000;
-    private static final int MAX_MOURNING_INTERVAL = 9_000;
+    private static final int MOURNING_INTERVAL = 2_400;
+    private static final int MIN_MOURNING_RETRY = 600;
+    private static final int MAX_MOURNING_RETRY = 1_200;
     private static final int MIN_MOURNING_BURST_SIZE = 2;
     private static final int MAX_MOURNING_BURST_SIZE = 4;
     private static final long MOURNING_DAY_START = 1_000L;
@@ -587,12 +588,24 @@ public class Village implements Iterable<Building> {
         return nextMourningTime;
     }
 
-    static long calculateNextMourningTime(long now, RandomSource random) {
-        return now + Mth.nextInt(random, MIN_MOURNING_INTERVAL, MAX_MOURNING_INTERVAL);
+    static long calculateNextMourningTime(long now) {
+        return now + MOURNING_INTERVAL;
+    }
+
+    static long calculateMourningRetryTime(long now, RandomSource random) {
+        return now + Mth.nextInt(random, MIN_MOURNING_RETRY, MAX_MOURNING_RETRY);
     }
 
     static int calculateMourningBurstSize(RandomSource random) {
         return Mth.nextInt(random, MIN_MOURNING_BURST_SIZE, MAX_MOURNING_BURST_SIZE);
+    }
+
+    static List<BlockPos> selectMourningSafetyCandidates(List<BlockPos> graves, RandomSource random) {
+        List<BlockPos> candidates = new ArrayList<>(graves);
+        Util.shuffle(candidates, random);
+        return candidates.stream()
+                .limit(MAX_MOURNING_BURST_SIZE)
+                .toList();
     }
 
     static boolean isAmbientMourningTime(long dayTime) {
@@ -606,7 +619,7 @@ public class Village implements Iterable<Building> {
         }
 
         if (nextMourningTime == 0L) {
-            nextMourningTime = calculateNextMourningTime(time, world.random);
+            nextMourningTime = calculateNextMourningTime(time);
             markDirty();
             return;
         }
@@ -615,22 +628,33 @@ public class Village implements Iterable<Building> {
             return;
         }
 
-        nextMourningTime = calculateNextMourningTime(time, world.random);
-        releaseMourningBurst(world, time);
+        MourningBurstResult result = releaseMourningBurst(world, time);
+        nextMourningTime = result == MourningBurstResult.DEFERRED
+                ? calculateMourningRetryTime(time, world.random)
+                : calculateNextMourningTime(time);
+        markDirty();
     }
 
-    private void releaseMourningBurst(ServerLevel world, long time) {
+    private MourningBurstResult releaseMourningBurst(ServerLevel world, long time) {
         List<BlockPos> graves = Mourning.getMournableGraves(this, world);
         if (graves.isEmpty()) {
-            markDirty();
-            return;
+            return MourningBurstResult.NO_GRAVES;
+        }
+
+        List<BlockPos> safeGraves = selectMourningSafetyCandidates(graves, world.random).stream()
+                .filter(grave -> Mourning.isSafeToMourn(world, grave))
+                .collect(Collectors.toCollection(ArrayList::new));
+        if (safeGraves.isEmpty()) {
+            return MourningBurstResult.DEFERRED;
         }
 
         List<VillagerEntityMCA> candidates = getResidents(world).stream()
                 .filter(Mourning::canMournAmbiently)
                 .collect(Collectors.toCollection(ArrayList::new));
+        if (candidates.isEmpty()) {
+            return MourningBurstResult.DEFERRED;
+        }
 
-        Util.shuffle(graves, world.random);
         Util.shuffle(candidates, world.random);
         candidates.sort(Comparator.comparingLong(villager -> villager.getBrain()
                 .getMemoryInternal(MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING)
@@ -640,9 +664,15 @@ public class Village implements Iterable<Building> {
         for (int index = 0; index < count; index++) {
             VillagerEntityMCA villager = candidates.get(index);
             villager.getBrain().setMemory(MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING, time);
-            Mourning.start(villager, graves.get(index % graves.size()));
+            Mourning.start(villager, safeGraves.get(index % safeGraves.size()));
         }
-        markDirty();
+        return MourningBurstResult.STARTED;
+    }
+
+    private enum MourningBurstResult {
+        NO_GRAVES,
+        DEFERRED,
+        STARTED
     }
 
     public void onEnter(ServerLevel world) { villageTaxesManager.deliverTaxes(world); }

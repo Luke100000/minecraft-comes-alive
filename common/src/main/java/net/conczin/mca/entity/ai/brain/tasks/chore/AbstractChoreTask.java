@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai.brain.tasks.chore;
 
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -37,8 +38,10 @@ public abstract class AbstractChoreTask extends Behavior<VillagerEntityMCA> {
             walkingTicks += diff;
 
             if (walkingTicks > WALKING_THRESHOLD) {
-                Optional<Vec3> optional = Optional.ofNullable(LandRandomPos.getPos(entity, 10, 5));
-                entity.getBrain().setMemory(MemoryModuleType.WALK_TARGET, optional.map(vec3d -> new WalkTarget(vec3d, 0.4f, 0)));
+                entity.getBrain().setMemory(
+                        MemoryModuleType.WALK_TARGET,
+                        createStableWalkTarget(entity, LandRandomPos.getPos(entity, 10, 5))
+                );
                 walkingTicks = 0;
             }
 
@@ -46,6 +49,12 @@ public abstract class AbstractChoreTask extends Behavior<VillagerEntityMCA> {
         }
 
         return villager == null || !villager.getVillagerBrain().isPanicking();
+    }
+
+    static Optional<WalkTarget> createStableWalkTarget(VillagerEntityMCA entity, Vec3 candidate) {
+        return Optional.ofNullable(candidate)
+                .filter(position -> entity.getNavigation().isStableDestination(BlockPos.containing(position)))
+                .map(position -> new WalkTarget(position, 0.4f, 0));
     }
 
     @Override

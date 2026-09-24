@@ -2,6 +2,7 @@ package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.level.block.BedBlock;
@@ -29,6 +30,40 @@ public final class FloorScannerGameTests {
     };
 
     private FloorScannerGameTests() {
+    }
+
+    @GameTest(batch = "mca_room_wall_poi", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void wallPoiCountsWithoutBecomingFloorGeometry(GameTestHelper helper) {
+        BlockPos roomMin = helper.absolutePos(new BlockPos(4, 2, 4));
+        buildClosedRoom(helper, roomMin, 5, 4);
+        BlockPos seed = roomMin.offset(2, 0, 2);
+        BlockPos wallPoi = roomMin.offset(-1, 1, 2);
+        var level = helper.getLevel();
+        level.setBlock(wallPoi, Blocks.BOOKSHELF.defaultBlockState(), 3);
+
+        SelectedFloorScanner.Result floorScan = SelectedFloorScanner.scan(level, seed, 128, 16);
+        helper.assertTrue(floorScan.result() == Building.validationResult.SUCCESS,
+                "wall-POI room scan failed: " + floorScan.result());
+        helper.assertTrue(floorScan.floor().cellsAtColumn(wallPoi.getX(), wallPoi.getZ()).isEmpty(),
+                "wall POI column was manufactured into canonical FloorGeometry");
+
+        BuildingRoomScanner.Result roomScan = BuildingRoomScanner.partition(
+                        level, seed, 128, 0, floorScan).stream()
+                .filter(result -> result.status() == Building.validationResult.SUCCESS)
+                .findFirst()
+                .orElseThrow();
+        Building room = new Building(seed);
+        helper.assertTrue(room.applyRoomScan(level, roomScan) == Building.validationResult.SUCCESS,
+                "Room materialization failed");
+
+        var bookshelf = BuiltInRegistries.BLOCK.getKey(Blocks.BOOKSHELF);
+        helper.assertTrue(room.getBlocks().getOrDefault(bookshelf, List.of()).contains(wallPoi),
+                "configured bookshelf in Room wall was not recorded as POI evidence");
+        helper.assertTrue(room.getFloorCells().stream().noneMatch(cell ->
+                        cell.getX() == wallPoi.getX() && cell.getZ() == wallPoi.getZ()),
+                "Room persisted wall POI column as owned Floor geometry");
+        helper.succeed();
     }
 
     @GameTest(batch = "mca_floor_bed_footprint", templateNamespace = "minecraft",
@@ -113,22 +148,89 @@ public final class FloorScannerGameTests {
         SelectedFloorScanner.Result before = SelectedFloorScanner.scan(level, seed, 128, 16);
         helper.assertTrue(before.result() == Building.validationResult.SUCCESS,
                 "baseline room scan failed: " + before.result());
-        Set<BlockPos> expected = before.floor().cells().stream()
-                .map(FloorGeometry.Cell::feet)
-                .collect(Collectors.toSet());
+        Set<BlockPos> expected = before.floor().projection().cells();
 
         level.setBlock(occupied, Blocks.STONE.defaultBlockState(), 3);
         SelectedFloorScanner.Result after = SelectedFloorScanner.scan(level, seed, 128, 16);
         helper.assertTrue(after.result() == Building.validationResult.SUCCESS,
                 "room scan with interior block failed: " + after.result());
-        Set<BlockPos> actual = after.floor().cells().stream()
-                .map(FloorGeometry.Cell::feet)
-                .collect(Collectors.toSet());
+        Set<BlockPos> actual = after.floor().projection().cells();
 
         helper.assertTrue(actual.equals(expected),
                 "interior block changed canonical Floor geometry: missing="
                         + expected.stream().filter(cell -> !actual.contains(cell)).toList()
                         + " added=" + actual.stream().filter(cell -> !expected.contains(cell)).toList());
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_head_obstacle_stability", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void headHeightObstacleDoesNotEraseCanonicalFloorCell(GameTestHelper helper) {
+        BlockPos roomMin = helper.absolutePos(new BlockPos(4, 2, 4));
+        buildClosedRoom(helper, roomMin, 5, 4);
+        BlockPos seed = roomMin.offset(3, 0, 2);
+        BlockPos floorCell = roomMin.offset(1, 0, 1);
+        var level = helper.getLevel();
+
+        SelectedFloorScanner.Result before = SelectedFloorScanner.scan(level, seed, 128, 16);
+        helper.assertTrue(before.result() == Building.validationResult.SUCCESS,
+                "baseline room scan failed: " + before.result());
+        Set<BlockPos> expected = before.floor().cells().stream()
+                .map(FloorGeometry.Cell::feet)
+                .collect(Collectors.toSet());
+        helper.assertTrue(expected.contains(floorCell),
+                "fixture floor cell is not part of baseline FloorGeometry");
+
+        level.setBlock(floorCell.above(), Blocks.BREWING_STAND.defaultBlockState(), 3);
+        SelectedFloorScanner.Result after = SelectedFloorScanner.scan(level, seed, 128, 16);
+        helper.assertTrue(after.result() == Building.validationResult.SUCCESS,
+                "room scan with head-height obstacle failed: " + after.result());
+        Set<BlockPos> actual = after.floor().cells().stream()
+                .map(FloorGeometry.Cell::feet)
+                .collect(Collectors.toSet());
+
+        helper.assertTrue(actual.equals(expected),
+                "head-height obstacle changed canonical Floor geometry: missing="
+                        + expected.stream().filter(cell -> !actual.contains(cell)).toList()
+                        + " added=" + actual.stream().filter(cell -> !expected.contains(cell)).toList());
+        helper.assertTrue(SelectedFloorScanner.inspectSurfaceCell(
+                        level, floorCell, new FloorCeilingResolver(level)).isEmpty(),
+                "head-height obstacle unexpectedly left the Floor cell traversable");
+
+        level.setBlock(floorCell.above(), Blocks.STONE.defaultBlockState(), 3);
+        SelectedFloorScanner.Result withFullBlock = SelectedFloorScanner.scan(level, seed, 128, 16);
+        helper.assertTrue(withFullBlock.result() == Building.validationResult.SUCCESS,
+                "room scan with full head-height block failed: " + withFullBlock.result());
+        Set<BlockPos> fullBlockGeometry = withFullBlock.floor().projection().cells();
+        helper.assertTrue(fullBlockGeometry.equals(expected),
+                "full head-height block changed canonical Floor geometry: missing="
+                        + expected.stream().filter(cell -> !fullBlockGeometry.contains(cell)).toList()
+                        + " added=" + fullBlockGeometry.stream().filter(cell -> !expected.contains(cell)).toList());
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_narrow_head_obstacle_stability", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void narrowCorridorHeadObstacleKeepsCanonicalFloorCell(GameTestHelper helper) {
+        BlockPos corridorMin = helper.absolutePos(new BlockPos(4, 2, 4));
+        buildClosedRoom(helper, corridorMin, 5, 1);
+        BlockPos seed = corridorMin.offset(4, 0, 0);
+        BlockPos blocked = corridorMin;
+        var level = helper.getLevel();
+
+        SelectedFloorScanner.Result before = SelectedFloorScanner.scan(level, seed, 128, 16);
+        helper.assertTrue(before.result() == Building.validationResult.SUCCESS,
+                "baseline narrow-corridor scan failed: " + before.result());
+        helper.assertTrue(before.floor().cellAt(blocked).isPresent(),
+                "narrow-corridor end cell is not part of baseline FloorGeometry");
+
+        level.setBlock(blocked.above(), Blocks.BREWING_STAND.defaultBlockState(), 3);
+        SelectedFloorScanner.Result after = SelectedFloorScanner.scan(level, seed, 128, 16);
+
+        helper.assertTrue(after.result() == Building.validationResult.SUCCESS,
+                "blocked narrow-corridor scan failed: " + after.result());
+        helper.assertTrue(after.floor().cellAt(blocked).isPresent(),
+                "partial head-height obstacle erased a structurally enclosed floor cell with one floor neighbour");
         helper.succeed();
     }
 
@@ -2127,27 +2229,7 @@ public final class FloorScannerGameTests {
 
     private static void buildTwoStoreyStaircase(GameTestHelper helper, BlockPos origin) {
         var level = helper.getLevel();
-        int y = origin.getY();
-        for (int x = -1; x <= 12; x++) {
-            for (int z = -1; z <= 3; z++) {
-                for (int dy = -1; dy <= 6; dy++) {
-                    level.setBlock(new BlockPos(origin.getX() + x, y + dy, origin.getZ() + z),
-                            Blocks.AIR.defaultBlockState(), 3);
-                }
-            }
-        }
-        for (int x = -1; x <= 12; x++) {
-            for (int z = -1; z <= 3; z++) {
-                if (x == -1 || x == 12 || z == -1 || z == 3) {
-                    for (int dy = 0; dy <= 5; dy++) {
-                        level.setBlock(new BlockPos(origin.getX() + x, y + dy, origin.getZ() + z),
-                                Blocks.STONE.defaultBlockState(), 3);
-                    }
-                }
-                level.setBlock(new BlockPos(origin.getX() + x, y + 6, origin.getZ() + z),
-                        Blocks.STONE.defaultBlockState(), 3);
-            }
-        }
+        buildStaircaseShell(helper, origin, 12, 6);
         for (int x = 0; x <= 3; x++) {
             for (int z = 0; z <= 2; z++) {
                 level.setBlock(origin.offset(x, -1, z), Blocks.STONE.defaultBlockState(), 3);
@@ -2163,23 +2245,7 @@ public final class FloorScannerGameTests {
 
     private static void buildFlatUpperLandingStaircase(GameTestHelper helper, BlockPos origin) {
         var level = helper.getLevel();
-        int y = origin.getY();
-        for (int x = -1; x <= 11; x++) {
-            for (int z = -1; z <= 3; z++) {
-                for (int dy = -1; dy <= 6; dy++) {
-                    level.setBlock(new BlockPos(origin.getX() + x, y + dy, origin.getZ() + z),
-                            Blocks.AIR.defaultBlockState(), 3);
-                }
-                if (x == -1 || x == 11 || z == -1 || z == 3) {
-                    for (int dy = 0; dy <= 5; dy++) {
-                        level.setBlock(new BlockPos(origin.getX() + x, y + dy, origin.getZ() + z),
-                                Blocks.STONE.defaultBlockState(), 3);
-                    }
-                }
-                level.setBlock(new BlockPos(origin.getX() + x, y + 6, origin.getZ() + z),
-                        Blocks.STONE.defaultBlockState(), 3);
-            }
-        }
+        buildStaircaseShell(helper, origin, 11, 6);
         for (int x = 0; x <= 3; x++) {
             for (int z = 0; z <= 2; z++) {
                 level.setBlock(origin.offset(x, -1, z), Blocks.STONE.defaultBlockState(), 3);
@@ -2195,23 +2261,7 @@ public final class FloorScannerGameTests {
 
     private static void buildTwoBlockStairStoreys(GameTestHelper helper, BlockPos origin) {
         var level = helper.getLevel();
-        int y = origin.getY();
-        for (int x = -1; x <= 11; x++) {
-            for (int z = -1; z <= 3; z++) {
-                for (int dy = -1; dy <= 6; dy++) {
-                    level.setBlock(new BlockPos(origin.getX() + x, y + dy, origin.getZ() + z),
-                            Blocks.AIR.defaultBlockState(), 3);
-                }
-                if (x == -1 || x == 11 || z == -1 || z == 3) {
-                    for (int dy = 0; dy <= 5; dy++) {
-                        level.setBlock(new BlockPos(origin.getX() + x, y + dy, origin.getZ() + z),
-                                Blocks.STONE.defaultBlockState(), 3);
-                    }
-                }
-                level.setBlock(new BlockPos(origin.getX() + x, y + 6, origin.getZ() + z),
-                        Blocks.STONE.defaultBlockState(), 3);
-            }
-        }
+        buildStaircaseShell(helper, origin, 11, 6);
         for (int x = 0; x <= 3; x++) {
             for (int z = 0; z <= 2; z++) {
                 level.setBlock(origin.offset(x, -1, z), Blocks.STONE.defaultBlockState(), 3);
@@ -2233,27 +2283,7 @@ public final class FloorScannerGameTests {
 
     private static void buildFourStoreyStaircase(GameTestHelper helper, BlockPos origin) {
         var level = helper.getLevel();
-        int y = origin.getY();
-        for (int x = -1; x <= 28; x++) {
-            for (int z = -1; z <= 3; z++) {
-                for (int dy = -1; dy <= 12; dy++) {
-                    level.setBlock(new BlockPos(origin.getX() + x, y + dy, origin.getZ() + z),
-                            Blocks.AIR.defaultBlockState(), 3);
-                }
-            }
-        }
-        for (int x = -1; x <= 28; x++) {
-            for (int z = -1; z <= 3; z++) {
-                if (x == -1 || x == 28 || z == -1 || z == 3) {
-                    for (int dy = 0; dy <= 11; dy++) {
-                        level.setBlock(new BlockPos(origin.getX() + x, y + dy, origin.getZ() + z),
-                                Blocks.STONE.defaultBlockState(), 3);
-                    }
-                }
-                level.setBlock(new BlockPos(origin.getX() + x, y + 12, origin.getZ() + z),
-                        Blocks.STONE.defaultBlockState(), 3);
-            }
-        }
+        buildStaircaseShell(helper, origin, 28, 12);
         for (int x = 0; x <= 3; x++) {
             for (int z = 0; z <= 2; z++) {
                 level.setBlock(origin.offset(x, -1, z), Blocks.STONE.defaultBlockState(), 3);
@@ -2277,6 +2307,24 @@ public final class FloorScannerGameTests {
         buildFullBlockSteps(helper, origin.offset(4, 0, 1), 4);
         buildFullBlockSteps(helper, origin.offset(12, 3, 1), 4);
         buildFullBlockSteps(helper, origin.offset(20, 6, 1), 4);
+    }
+
+    private static void buildStaircaseShell(
+            GameTestHelper helper, BlockPos origin, int maxX, int roofOffset) {
+        var level = helper.getLevel();
+        for (int x = -1; x <= maxX; x++) {
+            for (int z = -1; z <= 3; z++) {
+                for (int dy = -2; dy <= roofOffset; dy++) {
+                    level.setBlock(origin.offset(x, dy, z), Blocks.AIR.defaultBlockState(), 3);
+                }
+                if (x == -1 || x == maxX || z == -1 || z == 3) {
+                    for (int dy = 0; dy < roofOffset; dy++) {
+                        level.setBlock(origin.offset(x, dy, z), Blocks.STONE.defaultBlockState(), 3);
+                    }
+                }
+                level.setBlock(origin.offset(x, roofOffset, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
     }
 
     private static BlockPos buildFullBlockSteps(GameTestHelper helper, BlockPos startFeet, int count) {

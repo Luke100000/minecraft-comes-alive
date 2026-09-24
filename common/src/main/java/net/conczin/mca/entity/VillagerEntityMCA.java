@@ -57,6 +57,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
+import net.minecraft.world.entity.ai.control.BodyRotationControl;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.animal.IronGolem;
@@ -102,6 +103,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("InfectionProgress", 0.0f);
     private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -AgeState.getMaxAge());
     private static final float VEHICLE_ATTACHMENT_Y = 0.6F;
+    private static final double MAX_SLEEPING_BED_DISTANCE = 1.14D;
+    private static final double MIN_SLEEPING_BED_Y_OFFSET = 0.4D;
     public static final int MAX_NICKNAME_LENGTH = 32;
     static final String CHAT_AI_PROMPT_KEY = "ChatAIPrompt";
     static final String NICKNAMES_KEY = "nicknames";
@@ -126,7 +129,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private long lastHit = 0;
     private int prevGrowthAmount;
     private boolean interactedWith;
-    private int lastAppliedHealthLevel = Integer.MIN_VALUE;
     private double lastAppliedHealthBonus = Double.NaN;
     private boolean recoveryFoodUseActive;
     private boolean completingRecoveryFoodUse;
@@ -150,6 +152,14 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         return VillagerLike.createTrackedData(type).addAll(INFECTION_PROGRESS, GROWTH_AMOUNT)
                 .add(Residency::createTrackedData)
                 .add(BreedableRelationship::createTrackedData);
+    }
+
+    @Override
+    protected BodyRotationControl createBodyControl() {
+        return new MCABodyRotationControl(
+                this,
+                () -> this.isUsingItem() && this.getUseItem().getItem() instanceof ProjectileWeaponItem
+        );
     }
 
     private static boolean canEat(ItemStack i) {
@@ -664,6 +674,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void aiStep() {
+        if (!level().isClientSide) {
+            reconcileSleepingPosition();
+        }
+
         int oldAge = getAge();
         updateSwingTime();
 
@@ -718,6 +732,28 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 VillagerTrackerManager.update(this);
             }
         }
+    }
+
+    private void reconcileSleepingPosition() {
+        if (!isSleeping()) {
+            return;
+        }
+
+        BlockPos sleepingPos = getSleepingPos().orElseThrow();
+        if (getY() > sleepingPos.getY() + MIN_SLEEPING_BED_Y_OFFSET
+                && sleepingPos.closerToCenterThan(position(), MAX_SLEEPING_BED_DISTANCE)) {
+            return;
+        }
+
+        Vec3 currentPosition = position();
+        float currentYaw = getYRot();
+        float currentPitch = getXRot();
+
+        stopSleeping();
+
+        setPos(currentPosition.x, currentPosition.y, currentPosition.z);
+        setYRot(currentYaw);
+        setXRot(currentPitch);
     }
 
     protected boolean findAndEquipToMain(Predicate<ItemStack> predicate) {
@@ -909,11 +945,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         int level = this.getVillagerData().getLevel() - 1;
         double bonus = Config.getInstance().villagerHealthBonusPerLevel * level;
 
-        if (level == lastAppliedHealthLevel && bonus == lastAppliedHealthBonus) {
+        if (bonus == lastAppliedHealthBonus) {
             return;
         }
 
-        lastAppliedHealthLevel = level;
         lastAppliedHealthBonus = bonus;
 
         AttributeInstance instance = this.getAttributes().getInstance(Attributes.MAX_HEALTH);
@@ -1089,6 +1124,12 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 .attach(EntityAttachment.VEHICLE, 0.0F, getRawVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F));
     }
 
+    public float getRawStandingEyeHeight() {
+        float renderedWidth = getRawHorizontalScaleFactor() * 0.6F;
+        float renderedHeight = getRawVerticalScaleFactor() * 2.0F;
+        return EntityDimensions.scalable(renderedWidth, renderedHeight).scale(getScale()).eyeHeight();
+    }
+
     @Override
     public void die(DamageSource cause) {
         // deselect equipment as this messes with MobEntities equipment dropping
@@ -1129,8 +1170,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             VillagerTrackerManager.update(this);
         }
     }
-
-
     @Override
     public void teleportTo(double destX, double destY, double destZ) {
         if (isPassenger()) {

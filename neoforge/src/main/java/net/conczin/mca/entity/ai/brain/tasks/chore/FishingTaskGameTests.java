@@ -1,5 +1,6 @@
 package net.conczin.mca.entity.ai.brain.tasks.chore;
 
+import net.minecraft.advancements.critereon.FishingHookPredicate;
 import net.conczin.mca.entity.MCAFishingBobberEntity;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
@@ -11,6 +12,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.behavior.LookAtTargetSink;
@@ -395,6 +397,8 @@ public final class FishingTaskGameTests {
         long gameTime = helper.getLevel().getGameTime();
         task.start(helper.getLevel(), villager, gameTime);
         task.tick(helper.getLevel(), villager, gameTime);
+        task.tick(helper.getLevel(), villager, gameTime + 1);
+        helper.assertTrue(activeBobber(helper, villager) != null, "fishing loot test did not create a bobber context");
 
         ItemStack plainRod = new ItemStack(Items.FISHING_ROD);
         villager.setItemInHand(villager.getDominantHand(), plainRod);
@@ -412,6 +416,82 @@ public final class FishingTaskGameTests {
                 luckyJunk <= plainJunk - 90,
                 "Luck of the Sea III did not reduce junk through the fishing loot context; plain="
                         + plainJunk + ", lucky=" + luckyJunk
+        );
+        helper.succeed();
+    }
+
+    @GameTest(
+            batch = "mca_fishing_open_water",
+            templateNamespace = "minecraft",
+            template = "bastion/blocks/air",
+            timeoutTicks = 800
+    )
+    public static void mcaBobberParticipatesInVanillaOpenWaterPredicate(GameTestHelper helper) {
+        BlockPos villagerPos = biteCycleVillagerPos(helper);
+        BlockPos openWater = villagerPos.east(3);
+        BlockPos shallowWater = villagerPos.west(10);
+        prepareOpenWater(helper, openWater);
+        prepareWater(helper, shallowWater);
+        VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
+
+        MCAFishingBobberEntity openBobber = MCAFishingBobberEntity.cast(helper.getLevel(), villager, openWater);
+        tickUntilBobbing(helper, openBobber);
+        setFishingCountdown(openBobber, "timeUntilHooked", 2);
+        openBobber.tick();
+
+        MCAFishingBobberEntity shallowBobber = MCAFishingBobberEntity.cast(helper.getLevel(), villager, shallowWater);
+        tickUntilBobbing(helper, shallowBobber);
+        setFishingCountdown(shallowBobber, "timeUntilHooked", 2);
+        shallowBobber.tick();
+
+        FishingHookPredicate predicate = FishingHookPredicate.inOpenWater(true);
+        helper.assertTrue(openBobber.isOpenWaterFishing(), "valid open-water fixture was rejected");
+        helper.assertTrue(
+                predicate.matches(openBobber, helper.getLevel(), openBobber.position()),
+                "vanilla fishing open-water predicate did not recognize the MCA bobber"
+        );
+        helper.assertTrue(!shallowBobber.isOpenWaterFishing(), "shallow fishing water was incorrectly treated as open water");
+        helper.assertTrue(
+                !predicate.matches(shallowBobber, helper.getLevel(), shallowBobber.position()),
+                "vanilla fishing open-water predicate accepted an invalid MCA fishing area"
+        );
+        helper.assertTrue(!openBobber.canUsePortal(false), "MCA fishing bobber retained generic portal behavior");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_fishing_empty_loot", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void emptyFishingLootDoesNotCreateFallbackCatchOrCrash(GameTestHelper helper) {
+        BlockPos villagerPos = helper.absolutePos(new BlockPos(3, 2, 3));
+        prepareWater(helper, villagerPos.east(2));
+        VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
+        TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL))
+                .withFishingLoot(List.of());
+        long time = helper.getLevel().getGameTime();
+
+        task.start(helper.getLevel(), villager, time);
+        task.tick(helper.getLevel(), villager, time);
+        task.tick(helper.getLevel(), villager, time + 1);
+        task.tick(helper.getLevel(), villager, time + 2);
+
+        helper.assertTrue(activeBobber(helper, villager) != null, "empty-loot fixture did not create a bobber");
+        int itemEntitiesBefore = helper.getLevel()
+                .getEntitiesOfClass(ItemEntity.class, villager.getBoundingBox().inflate(32.0D))
+                .size();
+        int caughtItemsBefore = countCaughtItems(villager);
+
+        invokeBeginReel(task, helper, villager);
+
+        int itemEntitiesAfter = helper.getLevel()
+                .getEntitiesOfClass(ItemEntity.class, villager.getBoundingBox().inflate(32.0D))
+                .size();
+        helper.assertTrue(activeBobberCount(helper, villager) == 0L, "empty loot did not finish the reel lifecycle");
+        helper.assertTrue(
+                countCaughtItems(villager) == caughtItemsBefore,
+                "empty fishing loot created a fallback catch"
+        );
+        helper.assertTrue(
+                itemEntitiesAfter == itemEntitiesBefore,
+                "empty fishing loot spawned a reel ItemEntity"
         );
         helper.succeed();
     }
@@ -834,6 +914,21 @@ public final class FishingTaskGameTests {
         }
     }
 
+    private static void prepareOpenWater(GameTestHelper helper, BlockPos center) {
+        // Leave enough margin for the cast's vanilla-style inaccuracy while keeping
+        // every possible landing point surrounded by the 5x5 area vanilla checks.
+        for (int x = -6; x <= 6; x++) {
+            for (int z = -6; z <= 6; z++) {
+                BlockPos water = center.offset(x, 0, z);
+                helper.getLevel().setBlock(water.below(2), Blocks.STONE.defaultBlockState(), 3);
+                helper.getLevel().setBlock(water.below(), Blocks.WATER.defaultBlockState(), 3);
+                helper.getLevel().setBlock(water, Blocks.WATER.defaultBlockState(), 3);
+                helper.getLevel().setBlock(water.above(), Blocks.AIR.defaultBlockState(), 3);
+                helper.getLevel().setBlock(water.above(2), Blocks.AIR.defaultBlockState(), 3);
+            }
+        }
+    }
+
     private static long activeBobberCount(GameTestHelper helper, VillagerEntityMCA villager) {
         return helper.getLevel()
                 .getEntitiesOfClass(MCAFishingBobberEntity.class, villager.getBoundingBox().inflate(32.0D))
@@ -919,6 +1014,24 @@ public final class FishingTaskGameTests {
         }
     }
 
+    private static void invokeBeginReel(
+            FishingTask task,
+            GameTestHelper helper,
+            VillagerEntityMCA villager
+    ) {
+        try {
+            Method method = FishingTask.class.getDeclaredMethod(
+                    "beginReel",
+                    net.minecraft.server.level.ServerLevel.class,
+                    VillagerEntityMCA.class
+            );
+            method.setAccessible(true);
+            method.invoke(task, helper.getLevel(), villager);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("could not invoke fishing reel", exception);
+        }
+    }
+
     private static void setFishingCountdown(MCAFishingBobberEntity bobber, String name, int value) {
         try {
             Field field = MCAFishingBobberEntity.class.getDeclaredField(name);
@@ -947,14 +1060,15 @@ public final class FishingTaskGameTests {
     ) {
         int junk = 0;
         for (int sample = 0; sample < samples; sample++) {
-            if (isFishingJunk(invokeFishingLoot(task, helper, villager))) {
+            if (invokeFishingLoot(task, helper, villager).stream().anyMatch(FishingTaskGameTests::isFishingJunk)) {
                 junk++;
             }
         }
         return junk;
     }
 
-    private static ItemStack invokeFishingLoot(
+    @SuppressWarnings("unchecked")
+    private static List<ItemStack> invokeFishingLoot(
             FishingTask task,
             GameTestHelper helper,
             VillagerEntityMCA villager
@@ -966,7 +1080,7 @@ public final class FishingTaskGameTests {
                     VillagerEntityMCA.class
             );
             method.setAccessible(true);
-            return (ItemStack) method.invoke(task, helper.getLevel(), villager);
+            return (List<ItemStack>) method.invoke(task, helper.getLevel(), villager);
         } catch (ReflectiveOperationException exception) {
             throw new AssertionError("could not invoke fishing loot roll", exception);
         }
@@ -991,6 +1105,7 @@ public final class FishingTaskGameTests {
     private static final class TestFishingTask extends FishingTask {
         private final Player assigningPlayer;
         private final Boolean forcedBiteResult;
+        private List<ItemStack> forcedFishingLoot;
         private int biteRollCount;
 
         private TestFishingTask(Player assigningPlayer) {
@@ -1009,6 +1124,11 @@ public final class FishingTaskGameTests {
         }
 
         @Override
+        List<ItemStack> getFishingLoot(ServerLevel world, VillagerEntityMCA villager) {
+            return forcedFishingLoot != null ? forcedFishingLoot : super.getFishingLoot(world, villager);
+        }
+
+        @Override
         Optional<Player> getAssigningPlayer() {
             return Optional.of(assigningPlayer);
         }
@@ -1024,6 +1144,11 @@ public final class FishingTaskGameTests {
 
         private int getBiteRollCount() {
             return biteRollCount;
+        }
+
+        private TestFishingTask withFishingLoot(List<ItemStack> loot) {
+            forcedFishingLoot = loot;
+            return this;
         }
     }
 }

@@ -89,6 +89,9 @@ public interface EntityRelationship {
             getRelationshipStream(getFamilyEntry().streamParents())
                     .forEach(r -> r.onTragedy(cause, burialSite, RelationshipType.CHILD, victim));
 
+            getRelationshipStream(getFamilyEntry().streamChildren())
+                    .forEach(r -> r.onTragedy(cause, burialSite, RelationshipType.PARENT, victim));
+
             getRelationshipStream(getFamilyEntry().siblings().stream())
                     .forEach(r -> r.onTragedy(cause, burialSite, RelationshipType.SIBLING, victim));
 

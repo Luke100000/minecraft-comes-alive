@@ -34,6 +34,8 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BiPredicate;
@@ -42,6 +44,8 @@ import java.util.function.BiPredicate;
  * I know you, you know me, we're all a big happy family.
  */
 public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRelationship {
+    private static final int WITNESS_MOURNER_LIMIT = 2;
+
     public static final Predicate IS_MARRIED = (villager, player) -> villager.getRelationships().isMarriedTo(player);
     public static final Predicate IS_ENGAGED = (villager, player) -> villager.getRelationships().isEngagedWith(player);
     public static final Predicate IS_PROMISED = (villager, player) -> villager.getRelationships().isPromisedTo(player);
@@ -168,14 +172,28 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
     }
 
     public void onTragedy(DamageSource cause, @Nullable BlockPos burialSite) {
+        List<VillagerEntityMCA> witnesses = List.of();
+
         // The death of a villager negatively modifies the mood of nearby strangers
         if (!entity.isHostile()) {
-            WorldUtils
-                    .getCloseEntities(entity.level(), entity, 32, VillagerEntityMCA.class)
-                    .forEach(villager -> villager.getRelationships().onTragedy(cause, burialSite, RelationshipType.STRANGER, entity));
+            witnesses = WorldUtils.getCloseEntities(entity.level(), entity, 32, VillagerEntityMCA.class);
+            witnesses.forEach(villager ->
+                    villager.getRelationships().onTragedy(cause, burialSite, RelationshipType.STRANGER, entity));
         }
 
         onTragedy(cause, burialSite, RelationshipType.SELF, entity);
+
+        if (Config.getInstance().enableMourning && burialSite != null) {
+            witnesses.stream()
+                    .filter(VillagerEntityMCA::isAlive)
+                    .filter(villager -> !villager.getUUID().equals(entity.getUUID()))
+                    .filter(villager -> villager.getBrain()
+                            .getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE).isEmpty())
+                    .filter(villager -> !Mourning.isTemporarilyBlocked(villager))
+                    .sorted(Comparator.comparingDouble(entity::distanceToSqr))
+                    .limit(WITNESS_MOURNER_LIMIT)
+                    .forEach(villager -> Mourning.start(villager, burialSite));
+        }
     }
 
     @Override

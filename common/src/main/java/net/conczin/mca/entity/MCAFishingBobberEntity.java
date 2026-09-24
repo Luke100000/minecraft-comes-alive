@@ -10,9 +10,11 @@ import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.MoverType;
@@ -22,6 +24,8 @@ import net.minecraft.world.item.FishingRodItem;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
@@ -36,7 +40,9 @@ public final class MCAFishingBobberEntity extends Projectile {
 
     private final RandomSource synchronizedRandom = RandomSource.create();
     private boolean bobbing;
+    private boolean openWater = true;
     private int flyingTicks;
+    private int outOfWaterTime;
     private int nibble;
     private int timeUntilLured;
     private int timeUntilHooked;
@@ -58,6 +64,17 @@ public final class MCAFishingBobberEntity extends Projectile {
         ) * 20.0F));
         bobber.launchAt(owner, targetWater);
         world.addFreshEntity(bobber);
+        world.playSound(
+                null,
+                owner.getX(),
+                owner.getY(),
+                owner.getZ(),
+                SoundEvents.FISHING_BOBBER_THROW,
+                SoundSource.NEUTRAL,
+                0.5F,
+                0.4F / (world.getRandom().nextFloat() * 0.4F + 0.8F)
+        );
+        owner.gameEvent(GameEvent.ITEM_INTERACT_START);
         MCA.LOGGER.info(
                 "[MCA Fishing Debug] cast bobber={} owner={} target={} lureSpeed={} pos={} motion={}",
                 bobber.getId(), owner.getUUID(), targetWater, bobber.lureSpeed, bobber.position(), bobber.getDeltaMovement()
@@ -156,8 +173,19 @@ public final class MCAFishingBobberEntity extends Projectile {
             }
         } else {
             stabilizeBobbing(waterHeight, inWater);
-            if (inWater && !level().isClientSide) {
-                catchingFish();
+            if (nibble <= 0 && timeUntilHooked <= 0) {
+                openWater = true;
+            } else {
+                openWater = openWater && outOfWaterTime < 10 && calculateOpenWater(pos);
+            }
+
+            if (inWater) {
+                outOfWaterTime = Math.max(0, outOfWaterTime - 1);
+                if (!level().isClientSide) {
+                    catchingFish();
+                }
+            } else {
+                outOfWaterTime = Math.min(10, outOfWaterTime + 1);
             }
         }
 
@@ -175,8 +203,26 @@ public final class MCAFishingBobberEntity extends Projectile {
     }
 
     @Override
+    public void lerpTo(double x, double y, double z, float yRot, float xRot, int steps) {
+    }
+
+    @Override
     public boolean shouldRenderAtSqrDistance(double distanceSqr) {
         return distanceSqr < 64.0 * 64.0;
+    }
+
+    public boolean isOpenWaterFishing() {
+        return openWater;
+    }
+
+    @Override
+    protected Entity.MovementEmission getMovementEmission() {
+        return Entity.MovementEmission.NONE;
+    }
+
+    @Override
+    public boolean canUsePortal(boolean allowPassengers) {
+        return false;
     }
 
     private boolean canRemain(@Nullable VillagerEntityMCA owner) {
@@ -312,6 +358,51 @@ public final class MCAFishingBobberEntity extends Projectile {
         );
     }
 
+    private boolean calculateOpenWater(BlockPos pos) {
+        OpenWaterType previous = OpenWaterType.INVALID;
+
+        for (int y = -1; y <= 2; y++) {
+            OpenWaterType current = getOpenWaterTypeForArea(pos.offset(-2, y, -2), pos.offset(2, y, 2));
+            switch (current) {
+                case ABOVE_WATER -> {
+                    if (previous == OpenWaterType.INVALID) {
+                        return false;
+                    }
+                }
+                case INSIDE_WATER -> {
+                    if (previous == OpenWaterType.ABOVE_WATER) {
+                        return false;
+                    }
+                }
+                case INVALID -> {
+                    return false;
+                }
+            }
+            previous = current;
+        }
+
+        return true;
+    }
+
+    private OpenWaterType getOpenWaterTypeForArea(BlockPos from, BlockPos to) {
+        return BlockPos.betweenClosedStream(from, to)
+                .map(this::getOpenWaterTypeForBlock)
+                .reduce((first, second) -> first == second ? first : OpenWaterType.INVALID)
+                .orElse(OpenWaterType.INVALID);
+    }
+
+    private OpenWaterType getOpenWaterTypeForBlock(BlockPos pos) {
+        BlockState state = level().getBlockState(pos);
+        if (state.isAir() || state.is(Blocks.LILY_PAD)) {
+            return OpenWaterType.ABOVE_WATER;
+        }
+
+        FluidState fluid = state.getFluidState();
+        return fluid.is(FluidTags.WATER) && fluid.isSource() && state.getCollisionShape(level(), pos).isEmpty()
+                ? OpenWaterType.INSIDE_WATER
+                : OpenWaterType.INVALID;
+    }
+
     @Override
     protected void onHitBlock(BlockHitResult result) {
         super.onHitBlock(result);
@@ -346,5 +437,11 @@ public final class MCAFishingBobberEntity extends Projectile {
             );
         }
         super.onSyncedDataUpdated(key);
+    }
+
+    private enum OpenWaterType {
+        ABOVE_WATER,
+        INSIDE_WATER,
+        INVALID
     }
 }

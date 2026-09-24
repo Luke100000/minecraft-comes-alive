@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.navigation.LongDistancePathTarget;
+import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
@@ -17,6 +18,10 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 public final class ExtendedWalkTowardsTask {
+    private static final WalkTargetResolver NO_WALK_TARGET_OVERRIDE = (world, entity, destination) -> Optional.empty();
+    private static final PositionTrackerResolver NO_FINAL_TARGET_OVERRIDE = (world, entity, destination) -> Optional.empty();
+    private static final Predicate<VillagerEntityMCA> ALWAYS_WALK = entity -> true;
+
     @FunctionalInterface
     public interface WalkTargetResolver {
         Optional<BlockPos> resolve(ServerLevel world, VillagerEntityMCA entity, GlobalPos destination);
@@ -30,27 +35,41 @@ public final class ExtendedWalkTowardsTask {
     private ExtendedWalkTowardsTask() {
     }
 
-    public static OneShot<VillagerEntityMCA> create(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxDistance, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp) {
-        return create(destination, speed, completionRange, maxDistance, maxRunTime, canGiveUp, onGiveUp, (world, entity, globalPos) -> Optional.empty(), entity -> true);
+    public static OneShot<VillagerEntityMCA> create(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp) {
+        return create(destination, speed, completionRange, maxRunTime, canGiveUp, onGiveUp, NO_WALK_TARGET_OVERRIDE, ALWAYS_WALK);
     }
 
-    public static OneShot<VillagerEntityMCA> create(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxDistance, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, Predicate<VillagerEntityMCA> shouldWalk) {
-        return create(destination, speed, completionRange, maxDistance, maxRunTime, canGiveUp, onGiveUp, (world, entity, globalPos) -> Optional.empty(), shouldWalk);
+    public static OneShot<VillagerEntityMCA> create(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, Predicate<VillagerEntityMCA> shouldWalk) {
+        return create(destination, speed, completionRange, maxRunTime, canGiveUp, onGiveUp, (world, entity, globalPos) -> Optional.empty(), shouldWalk);
     }
 
-    public static OneShot<VillagerEntityMCA> create(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxDistance, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, WalkTargetResolver walkTargetResolver) {
-        return create(destination, speed, completionRange, maxDistance, maxRunTime, canGiveUp, onGiveUp, walkTargetResolver, entity -> true);
+    public static OneShot<VillagerEntityMCA> create(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, WalkTargetResolver walkTargetResolver) {
+        return create(destination, speed, completionRange, maxRunTime, canGiveUp, onGiveUp, walkTargetResolver, ALWAYS_WALK);
     }
 
-    public static OneShot<VillagerEntityMCA> create(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxDistance, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, WalkTargetResolver walkTargetResolver, Predicate<VillagerEntityMCA> shouldWalk) {
-        return createInternal(destination, speed, completionRange, maxDistance, maxRunTime, canGiveUp, onGiveUp, walkTargetResolver, (world, entity, globalPos) -> Optional.empty(), shouldWalk);
+    public static OneShot<VillagerEntityMCA> create(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, WalkTargetResolver walkTargetResolver, Predicate<VillagerEntityMCA> shouldWalk) {
+        return createInternal(destination, speed, completionRange, maxRunTime, canGiveUp, onGiveUp,
+                new Policy(walkTargetResolver, NO_FINAL_TARGET_OVERRIDE, shouldWalk, true));
     }
 
-    public static OneShot<VillagerEntityMCA> createWithFinalTarget(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxDistance, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, PositionTrackerResolver finalTargetResolver) {
-        return createInternal(destination, speed, completionRange, maxDistance, maxRunTime, canGiveUp, onGiveUp, (world, entity, globalPos) -> Optional.empty(), finalTargetResolver, entity -> true);
+    public static OneShot<VillagerEntityMCA> createWithoutPoiRelease(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp) {
+        return createInternal(
+                destination,
+                speed,
+                completionRange,
+                maxRunTime,
+                canGiveUp,
+                onGiveUp,
+                new Policy(NO_WALK_TARGET_OVERRIDE, NO_FINAL_TARGET_OVERRIDE, ALWAYS_WALK, false)
+        );
     }
 
-    private static OneShot<VillagerEntityMCA> createInternal(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxDistance, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, WalkTargetResolver walkTargetResolver, PositionTrackerResolver finalTargetResolver, Predicate<VillagerEntityMCA> shouldWalk) {
+    public static OneShot<VillagerEntityMCA> createWithFinalTarget(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, PositionTrackerResolver finalTargetResolver) {
+        return createInternal(destination, speed, completionRange, maxRunTime, canGiveUp, onGiveUp,
+                new Policy(NO_WALK_TARGET_OVERRIDE, finalTargetResolver, ALWAYS_WALK, true));
+    }
+
+    private static OneShot<VillagerEntityMCA> createInternal(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, Policy policy) {
         return BehaviorBuilder.create((context) -> {
             return context.group(
                     context.registered(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
@@ -58,12 +77,12 @@ public final class ExtendedWalkTowardsTask {
                     context.present(destination)).apply(context,
                     (cantReachWalkTargetSince, walkTarget, destinationResult) -> {
                         return (world, entity, time) -> {
-                            if (!shouldWalk.test(entity)) {
+                            if (!policy.shouldWalk().test(entity)) {
                                 return true;
                             }
 
                             GlobalPos globalPos = context.get(destinationResult);
-                            Optional<BlockPos> resolvedTarget = walkTargetResolver.resolve(world, entity, globalPos);
+                            Optional<BlockPos> resolvedTarget = policy.walkTargetResolver().resolve(world, entity, globalPos);
                             BlockPos targetPos = resolvedTarget.orElse(globalPos.pos());
                             int targetCompletionRange = resolvedTarget.isPresent() ? 0 : completionRange;
                             boolean sameDimension = globalPos.dimension() == world.dimension();
@@ -76,7 +95,7 @@ public final class ExtendedWalkTowardsTask {
                                 }
                                 if (sameDimension
                                         && longDistanceTarget.currentBlockPosition().equals(targetPos)
-                                        && LongDistancePathTarget.isNeeded(entity, targetPos)) {
+                                        && MCAGroundPathNavigation.requiresExtendedPath(entity, targetPos)) {
                                     return true;
                                 }
 
@@ -90,36 +109,31 @@ public final class ExtendedWalkTowardsTask {
                                     .map(since -> world.getGameTime() - since)
                                     .orElse(0L);
                             if (sameDimension && (optional.isEmpty() || unreachableTicks <= maxRunTime)) {
-                                if (LongDistancePathTarget.isNeeded(entity, targetPos)) {
+                                if (MCAGroundPathNavigation.requiresExtendedPath(entity, targetPos)) {
                                     walkTarget.set(new WalkTarget(
-                                            new LongDistancePathTarget(targetPos, maxDistance),
+                                            new LongDistancePathTarget(targetPos),
                                             speed,
                                             targetCompletionRange
                                     ));
                                 } else {
-                                    Optional<? extends PositionTracker> finalTarget = finalTargetResolver.resolve(world, entity, globalPos);
+                                    Optional<? extends PositionTracker> finalTarget = policy.finalTargetResolver().resolve(world, entity, globalPos);
                                     if (finalTarget.isEmpty()) {
                                         if (targetPos.distManhattan(entity.blockPosition()) > targetCompletionRange) {
                                             walkTarget.set(new WalkTarget(targetPos, speed, targetCompletionRange));
-                                        } else if (currentWalkTarget.isPresent()) {
-                                            walkTarget.erase();
                                         }
                                     } else {
                                         PositionTracker tracker = finalTarget.orElseThrow();
                                         if (!(tracker instanceof MultiTargetPositionTracker multiTarget)
                                                 || !multiTarget.isReached(entity, 0)) {
                                             walkTarget.set(new WalkTarget(tracker, speed, 0));
-                                        } else if (currentWalkTarget.isPresent()) {
-                                            walkTarget.erase();
                                         }
                                     }
                                 }
                             } else {
-                                if (currentWalkTarget.isPresent()) {
-                                    walkTarget.erase();
-                                }
                                 if (canGiveUp.test(entity)) {
-                                    entity.releasePoi(destination);
+                                    if (policy.releasePoiOnGiveUp()) {
+                                        entity.releasePoi(destination);
+                                    }
                                     destinationResult.erase();
                                     cantReachWalkTargetSince.set(time);
                                     onGiveUp.accept(entity);
@@ -132,5 +146,13 @@ public final class ExtendedWalkTowardsTask {
                         };
             });
         });
+    }
+
+    private record Policy(
+            WalkTargetResolver walkTargetResolver,
+            PositionTrackerResolver finalTargetResolver,
+            Predicate<VillagerEntityMCA> shouldWalk,
+            boolean releasePoiOnGiveUp
+    ) {
     }
 }

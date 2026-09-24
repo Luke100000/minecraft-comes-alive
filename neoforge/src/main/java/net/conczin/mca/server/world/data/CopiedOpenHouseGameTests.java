@@ -36,6 +36,36 @@ public final class CopiedOpenHouseGameTests {
     private CopiedOpenHouseGameTests() {
     }
 
+    @GameTest(batch = "mca_copied_open_house_wall_cavity", templateNamespace = "mca",
+            template = TEMPLATE, timeoutTicks = 240, skyAccess = true)
+    public static void carvedWallCavityStopsAtSolidColumn(GameTestHelper helper) {
+        // Reproduce the live MCA Floor NBT Test edits from the diagnose trace without changing the fixture.
+        // GameTest relative Y is template-NBT Y + 1.
+        var level = helper.getLevel();
+        level.setBlock(helper.absolutePos(new BlockPos(34, 6, 6)), Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(helper.absolutePos(new BlockPos(35, 6, 6)), Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(helper.absolutePos(new BlockPos(35, 7, 6)), Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(helper.absolutePos(new BlockPos(36, 5, 6)), Blocks.STRIPPED_OAK_WOOD.defaultBlockState(), 3);
+        level.setBlock(helper.absolutePos(new BlockPos(36, 6, 6)), Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(helper.absolutePos(new BlockPos(36, 7, 6)), Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(helper.absolutePos(new BlockPos(36, 7, 7)), Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(helper.absolutePos(new BlockPos(37, 6, 7)), Blocks.AIR.defaultBlockState(), 3);
+
+        BlockPos seed = helper.absolutePos(new BlockPos(20, 7, 13));
+        BlockPos openCavity = helper.absolutePos(new BlockPos(36, 6, 6));
+        BlockPos headBlockedCavity = helper.absolutePos(new BlockPos(37, 6, 7));
+        SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(
+                level, seed, Config.getInstance().maxBuildingSize, Config.getInstance().maxBuildingRadius);
+
+        helper.assertTrue(scan.result() == Building.validationResult.SUCCESS,
+                "reported lower-floor scan failed: " + scan.result());
+        helper.assertTrue(scan.floor().cellAt(openCavity).isPresent(),
+                "carved two-block passage was not reflected in live Floor geometry");
+        helper.assertTrue(scan.floor().cellAt(headBlockedCavity).isEmpty(),
+                "solid wall continuation became structural Floor geometry");
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_copied_open_house_rooms", templateNamespace = "mca",
             template = TEMPLATE, timeoutTicks = 240, skyAccess = true)
     public static void everyCopiedHouseRoomComponentValidates(GameTestHelper helper) {

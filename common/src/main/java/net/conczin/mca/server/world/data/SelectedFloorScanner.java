@@ -104,19 +104,19 @@ final class SelectedFloorScanner {
         if (traversal.result() != Building.validationResult.SUCCESS) {
             return Result.failure(traversal.result(), traversalSeed.feet());
         }
-        SelectedFloorScan scan = materializeStructuralFloor(world, traversal, ceilings, classifier);
+        MaterializedFloor materialized = materializeStructuralFloor(world, traversal, ceilings, classifier);
 
-        LinkedHashSet<BlockPos> connectors = new LinkedHashSet<>(scan.connectors());
-        for (FloorGeometry.Cell cell : scan.floor().cells()) {
+        LinkedHashSet<BlockPos> connectors = new LinkedHashSet<>(traversal.connectors());
+        for (FloorGeometry.Cell cell : materialized.floor().cells()) {
             collectVerticalConnectors(world, cell, connectors);
         }
-        if (scan.floor().cells().size() + connectors.size() > maxSize) {
+        if (materialized.floor().cells().size() + connectors.size() > maxSize) {
             return Result.failure(Building.validationResult.BLOCK_LIMIT, traversalSeed.feet());
         }
-        FloorGeometry floor = new FloorGeometry(scan.floor().cells(),
-                StructureConnector.connectorMarkersForFloor(world, connectors, scan.floor()));
+        FloorGeometry floor = new FloorGeometry(materialized.floor().cells(),
+                StructureConnector.connectorMarkersForFloor(world, connectors, materialized.floor()));
         return success(traversalSeed.feet(), floor,
-                scan.transitions(), scan.verticalBoundaryCells(), scan.adjacentFloorSeeds());
+                materialized.transitions(), traversal.verticalBoundaryCells(), traversal.adjacentFloorSeeds());
     }
 
     private static Optional<SurfaceCell> resolveSeedCell(
@@ -346,7 +346,7 @@ final class SelectedFloorScanner {
      * Ambiguous full-block head obstructions need independent surrounding floor evidence so a
      * one-block wall cavity cannot manufacture Floor ownership.
      */
-    private static SelectedFloorScan materializeStructuralFloor(
+    private static MaterializedFloor materializeStructuralFloor(
             Level world,
             TraversalScan traversal,
             FloorCeilingResolver ceilings,
@@ -392,15 +392,11 @@ final class SelectedFloorScanner {
             }
         }
 
-        return new SelectedFloorScan(
-                traversal.result(),
+        return new MaterializedFloor(
                 new FloorGeometry(floorCells.values().stream()
                         .map(StructuralFloorCell::cell)
                         .toList(), Map.of()),
-                transitions,
-                traversal.verticalBoundaryCells(),
-                traversal.adjacentFloorSeeds(),
-                traversal.connectors());
+                Set.copyOf(transitions));
     }
 
     private static Optional<StructuralFloorCell> resolveStructuralNeighbor(
@@ -977,22 +973,7 @@ final class SelectedFloorScanner {
         }
     }
 
-    record SelectedFloorScan(Building.validationResult result,
-                      FloorGeometry floor,
-                      Set<Transition> transitions,
-                      Set<BlockPos> verticalBoundaryCells,
-                      Set<BlockPos> adjacentFloorSeeds,
-                      Set<BlockPos> connectors) {
-        SelectedFloorScan {
-            transitions = transitions == null ? Set.of() : Set.copyOf(transitions);
-            verticalBoundaryCells = verticalBoundaryCells == null ? Set.of() : Set.copyOf(verticalBoundaryCells);
-            adjacentFloorSeeds = adjacentFloorSeeds == null ? Set.of() : Set.copyOf(adjacentFloorSeeds);
-            connectors = connectors == null ? Set.of() : Set.copyOf(connectors);
-        }
-
-        static SelectedFloorScan failure(Building.validationResult result) {
-            return new SelectedFloorScan(result, null, Set.of(), Set.of(), Set.of(), Set.of());
-        }
+    private record MaterializedFloor(FloorGeometry floor, Set<Transition> transitions) {
     }
 
     private record SurfaceProbe(BlockPos feet, double surfaceY) {

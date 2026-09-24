@@ -1,28 +1,15 @@
 package net.conczin.mca.entity.ai.navigation;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 
 /**
- * Marks a real destination that should use MCA's extended path horizon without
- * replacing it with an artificial intermediate waypoint.
+ * Marks a long-distance destination owned by ExtendedWalkTowardsTask so that
+ * task can distinguish its own walk target from targets published by other AI.
+ * Path horizon selection itself belongs to MCAGroundPathNavigation.
  */
 public final class LongDistancePathTarget extends BlockPosTracker {
-    private final int requestedPathLength;
-
-    public LongDistancePathTarget(BlockPos target, int requestedPathLength) {
+    public LongDistancePathTarget(BlockPos target) {
         super(target);
-        this.requestedPathLength = requestedPathLength;
-    }
-
-    public int requestedPathLength() {
-        return requestedPathLength;
-    }
-
-    public static boolean isNeeded(Mob mob, BlockPos target) {
-        double normalPathRange = mob.getAttributeValue(Attributes.FOLLOW_RANGE);
-        return mob.blockPosition().distSqr(target) > normalPathRange * normalPathRange;
     }
 }

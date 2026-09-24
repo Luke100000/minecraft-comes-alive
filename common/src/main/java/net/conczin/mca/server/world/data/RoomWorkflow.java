@@ -51,13 +51,9 @@ public final class RoomWorkflow {
         StructureFloor floor = candidate.getFloors().getFirst();
         SelectedFloorScanner.Result floorScan = structureScan.scan();
         List<RoomPartitioner.Component> components = BuildingRoomScanner.components(world, floorScan);
-        RoomPartitioner.Component selectedComponent = RoomPartitioner.select(
-                structureScan.source(), floorScan.floor(), components);
-        BuildingRoomScanner.Result selectedGeometry = selectedComponent == null
-                ? BuildingRoomScanner.Result.failure(Building.validationResult.TOO_SMALL, structureScan.source())
-                : BuildingRoomScanner.materialize(
+        BuildingRoomScanner.Result selectedGeometry = BuildingRoomScanner.materializeSelected(
                 structureScan.source(), Config.getInstance().maxBuildingSize, floor.id(),
-                floorScan.floor(), components, selectedComponent);
+                floorScan.floor(), components);
         BuildingScanResult selected = roomResultFromGeometry(
                 village, candidate, floor, selectedGeometry);
         if (selected.result() != Building.validationResult.SUCCESS) return selected;
@@ -101,13 +97,9 @@ public final class RoomWorkflow {
         }
         List<RoomPartitioner.Component> components = analysis.observation() == null
                 ? BuildingRoomScanner.components(world, fresh.scan()) : analysis.components();
-        RoomPartitioner.Component selectedComponent = RoomPartitioner.select(
-                scanSeed, fresh.scannedFloor(), components);
-        BuildingRoomScanner.Result selected = selectedComponent == null
-                ? BuildingRoomScanner.Result.failure(Building.validationResult.TOO_SMALL, scanSeed)
-                : BuildingRoomScanner.materialize(
+        BuildingRoomScanner.Result selected = BuildingRoomScanner.materializeSelected(
                 scanSeed, Config.getInstance().maxBuildingSize, floor.id(),
-                fresh.scannedFloor(), components, selectedComponent);
+                fresh.scannedFloor(), components);
         BuildingScanResult addition = roomResultFromGeometry(
                 village, refreshed, refreshedFloor, selected);
         if (addition.result() != Building.validationResult.SUCCESS) {
@@ -191,12 +183,9 @@ public final class RoomWorkflow {
         List<RoomPartitioner.Component> components = structureScan.scannedFloor()
                 .sameCellPositions(analysis.observation().scan().floor())
                 ? analysis.components() : BuildingRoomScanner.components(world, structureScan.scan());
-        RoomPartitioner.Component selected = RoomPartitioner.select(
-                plan.scanSeed(), structureScan.scannedFloor(), components);
-        BuildingRoomScanner.Result geometry = selected == null
-                ? BuildingRoomScanner.Result.failure(Building.validationResult.TOO_SMALL, plan.scanSeed())
-                : BuildingRoomScanner.materialize(plan.scanSeed(), Config.getInstance().maxBuildingSize,
-                        attachmentFloor.id(), structureScan.scannedFloor(), components, selected);
+        BuildingRoomScanner.Result geometry = BuildingRoomScanner.materializeSelected(
+                plan.scanSeed(), Config.getInstance().maxBuildingSize,
+                attachmentFloor.id(), structureScan.scannedFloor(), components);
         return roomResultFromGeometry(village, candidate, attachmentFloor, geometry)
                 .withSource(source)
                 .withPendingStructure(candidate);

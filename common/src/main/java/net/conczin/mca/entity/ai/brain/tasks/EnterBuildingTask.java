@@ -1,22 +1,18 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
-import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
-import net.conczin.mca.entity.ai.navigation.LongDistancePathTarget;
 import net.conczin.mca.server.world.data.Building;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.ai.behavior.Behavior;
-import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
-import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
-import net.minecraft.world.entity.ai.behavior.PositionTracker;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -32,19 +28,7 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
 
     protected void start(ServerLevel serverWorld, VillagerEntityMCA villager, long l) {
         getNextPosition(villager)
-                .ifPresent(pos -> BehaviorUtils.setWalkAndLookTargetMemories(
-                        villager,
-                        getWalkTarget(villager, pos),
-                        this.speed,
-                        getCompletionRange()
-                ));
-    }
-
-    private PositionTracker getWalkTarget(VillagerEntityMCA villager, BlockPos target) {
-        int maxDistance = Config.getInstance().getVillagerPathfindingDistance();
-        return LongDistancePathTarget.isNeeded(villager, target)
-                ? new LongDistancePathTarget(target, maxDistance)
-                : new BlockPosTracker(target);
+                .ifPresent(pos -> villager.moveTowards(pos, this.speed, getCompletionRange()));
     }
 
     protected Optional<Building> getNearestBuilding(VillagerEntityMCA villager) {
@@ -55,6 +39,16 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
     }
 
     protected Optional<BlockPos> getRandomPositionIn(Building b, Level world, VillagerEntityMCA villager) {
+        if (!b.getFloorCells().isEmpty()) {
+            List<BlockPos> floorTargets = b.getFloorCells().stream()
+                    .filter(pos -> isGoodIndoorWalkTarget(world, villager, pos))
+                    .toList();
+            if (floorTargets.isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.of(floorTargets.get(world.getRandom().nextInt(floorTargets.size())));
+        }
+
         if (b.getBuildingType().grouped()) {
             //todo randomize
             return Optional.ofNullable(b.getCenter())

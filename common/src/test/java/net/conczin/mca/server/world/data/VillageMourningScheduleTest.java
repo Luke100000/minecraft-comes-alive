@@ -1,11 +1,15 @@
 package net.conczin.mca.server.world.data;
 
 import net.minecraft.SharedConstants;
+import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.util.RandomSource;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -31,12 +35,21 @@ class VillageMourningScheduleTest {
     }
 
     @Test
-    void nextMourningFallsBetweenFourAndNineThousandTicks() {
+    void nextMourningRunsTwoMinutesLater() {
         long now = 200_000L;
-        long next = Village.calculateNextMourningTime(now, RandomSource.create(1234L));
+        long next = Village.calculateNextMourningTime(now);
 
-        assertTrue(next >= now + 4_000L);
-        assertTrue(next <= now + 9_000L);
+        assertEquals(now + 2_400L, next);
+    }
+
+    @Test
+    void deferredMourningRetriesWithinThirtyToSixtySeconds() {
+        long now = 200_000L;
+        for (long seed = 0; seed < 20; seed++) {
+            long retry = Village.calculateMourningRetryTime(now, RandomSource.create(seed));
+            assertTrue(retry >= now + 600L);
+            assertTrue(retry <= now + 1_200L);
+        }
     }
 
     @Test
@@ -45,6 +58,21 @@ class VillageMourningScheduleTest {
             int burst = Village.calculateMourningBurstSize(RandomSource.create(seed));
             assertTrue(burst >= 2 && burst <= 4);
         }
+    }
+
+    @Test
+    void ambientSafetyChecksAtMostFourGravesPerAttempt() {
+        List<BlockPos> graves = IntStream.range(0, 10)
+                .mapToObj(index -> new BlockPos(index, 64, 0))
+                .toList();
+
+        List<BlockPos> candidates = Village.selectMourningSafetyCandidates(
+                graves,
+                RandomSource.create(1234L)
+        );
+
+        assertEquals(4, candidates.size());
+        assertTrue(graves.containsAll(candidates));
     }
 
     @Test

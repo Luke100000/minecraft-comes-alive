@@ -1,14 +1,17 @@
 package net.conczin.mca.entity.ai.navigation;
 
+import net.conczin.mca.Config;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.PathNavigationRegion;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathFinder;
 import net.minecraft.world.level.pathfinder.PathType;
@@ -17,6 +20,8 @@ import net.minecraft.world.phys.Vec3;
 import java.util.Set;
 
 public class MCAGroundPathNavigation extends GroundPathNavigation {
+    private static final float REQUIRED_PATH_LENGTH = 48.0F;
+    private static final int VISITED_NODES_PER_BLOCK = 16;
     private static final int FALL_RESYNC_LOOKAHEAD = 2;
     private static final int FALL_RESYNC_HORIZONTAL_DISTANCE = 2;
     private static final int FALL_RESYNC_MIN_VERTICAL_DROP = 2;
@@ -44,7 +49,20 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         this.nodeEvaluator = new MCAWalkNodeEvaluator();
         this.nodeEvaluator.setCanPassDoors(true);
         this.nodeEvaluator.setCanOpenDoors(true);
-        return new PathFinder(this.nodeEvaluator, maxVisitedNodes);
+        int requiredPathBudget = Mth.floor(REQUIRED_PATH_LENGTH * VISITED_NODES_PER_BLOCK);
+        int ordinaryBudget = Math.max(maxVisitedNodes, requiredPathBudget);
+        return new PathFinder(this.nodeEvaluator, ordinaryBudget) {
+            @Override
+            public Path findPath(PathNavigationRegion region, Mob mob, Set<BlockPos> targets,
+                                 float maxPathLength, int reachRange, float visitedNodesMultiplier) {
+                float rangeMultiplier = Math.max(
+                        1.0F,
+                        maxPathLength * VISITED_NODES_PER_BLOCK / ordinaryBudget
+                );
+                return super.findPath(region, mob, targets, maxPathLength, reachRange,
+                        visitedNodesMultiplier * rangeMultiplier);
+            }
+        };
     }
 
     @Override
@@ -52,25 +70,79 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         WalkTarget walkTarget = this.mob.getBrain()
                 .getMemoryInternal(MemoryModuleType.WALK_TARGET)
                 .orElse(null);
-        if (walkTarget != null
-                && walkTarget.getTarget() instanceof LongDistancePathTarget longDistanceTarget
-                && targetsLongDistanceDestination(targets, longDistanceTarget)) {
-            float maxPathLength = (float)Math.max(
-                    longDistanceTarget.requestedPathLength(),
-                    this.mob.getAttributeValue(Attributes.FOLLOW_RANGE)
+        float ordinaryPathLength = getOrdinaryPathLength(this.mob);
+        if (targetsCurrentStaticWalkTarget(targets, walkTarget)) {
+            BlockPos target = walkTarget.getTarget().currentBlockPosition();
+            float extendedPathLength = Math.max(
+                    (float)Config.getInstance().getVillagerPathfindingDistance(),
+                    ordinaryPathLength
             );
-            return super.createPath(targets, radiusOffset, above, reachRange, maxPathLength);
+            if (requiresExtendedPath(this.mob, target)) {
+                float pathLength = this.mob.getBrain().hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                        ? extendedPathLength
+                        : ordinaryPathLength;
+                return super.createPath(
+                        targets, radiusOffset, above, reachRange, pathLength
+                );
+            }
+
+            Path ordinaryPath = super.createPath(targets, radiusOffset, above, reachRange, ordinaryPathLength);
+            if (ordinaryPath == null
+                    || ordinaryPath.canReach()
+                    || isUsefulPartialPath(ordinaryPath, target)
+                    || extendedPathLength <= ordinaryPathLength) {
+                return ordinaryPath;
+            }
+
+            return preferEscalatedPath(
+                    ordinaryPath,
+                    super.createPath(targets, radiusOffset, above, reachRange, extendedPathLength)
+            );
         }
-        return super.createPath(targets, radiusOffset, above, reachRange);
+        return super.createPath(targets, radiusOffset, above, reachRange, ordinaryPathLength);
     }
 
-    private static boolean targetsLongDistanceDestination(Set<BlockPos> targets, LongDistancePathTarget target) {
-        if (targets.size() != 1) {
+    private static Path preferEscalatedPath(Path boundedPath, Path escalatedPath) {
+        if (escalatedPath != null
+                && (escalatedPath.canReach() || isBetterPartialPath(escalatedPath, boundedPath))) {
+            return escalatedPath;
+        }
+        return boundedPath;
+    }
+
+    private static boolean isBetterPartialPath(Path candidate, Path current) {
+        return candidate.getDistToTarget() < current.getDistToTarget();
+    }
+
+    private static boolean targetsCurrentStaticWalkTarget(Set<BlockPos> targets, WalkTarget walkTarget) {
+        if (walkTarget == null
+                || !(walkTarget.getTarget() instanceof BlockPosTracker)
+                || targets.size() != 1) {
             return false;
         }
         BlockPos pathTarget = targets.iterator().next();
-        BlockPos logicalTarget = target.currentBlockPosition();
+        BlockPos logicalTarget = walkTarget.getTarget().currentBlockPosition();
         return pathTarget.getX() == logicalTarget.getX() && pathTarget.getZ() == logicalTarget.getZ();
+    }
+
+    public static boolean requiresExtendedPath(Mob mob, BlockPos target) {
+        float ordinaryPathLength = getOrdinaryPathLength(mob);
+        return mob.blockPosition().distSqr(target) > ordinaryPathLength * ordinaryPathLength;
+    }
+
+    private static float getOrdinaryPathLength(Mob mob) {
+        return Math.max((float)mob.getAttributeValue(Attributes.FOLLOW_RANGE), REQUIRED_PATH_LENGTH);
+    }
+
+    public static boolean isUsefulPartialPath(Path path, BlockPos destination) {
+        if (path == null
+                || path.canReach()
+                || path.getNodeCount() < 2
+                || !path.getTarget().equals(destination)
+                || path.getEndNode() == null) {
+            return false;
+        }
+        return path.getDistToTarget() < path.getNodePos(0).distManhattan(destination);
     }
 
     @Override
@@ -118,7 +190,41 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     @Override
     public void tick() {
         super.tick();
+        chainCompletedStaticWalkTarget();
         this.climbTraversal.tick(this.path, this.speedModifier, this.tick);
+    }
+
+    private void chainCompletedStaticWalkTarget() {
+        Path completedPath = this.path;
+        if (completedPath == null
+                || !completedPath.isDone()
+                || completedPath.canReach()
+                || this.isStuck()) {
+            return;
+        }
+
+        WalkTarget walkTarget = this.mob.getBrain()
+                .getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                .orElse(null);
+        if (walkTarget == null || !(walkTarget.getTarget() instanceof BlockPosTracker)) {
+            return;
+        }
+        if (this.mob.getBrain().hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)) {
+            return;
+        }
+
+        BlockPos destination = walkTarget.getTarget().currentBlockPosition();
+        if (!completedPath.getTarget().equals(destination)
+                || destination.distManhattan(this.mob.blockPosition()) <= walkTarget.getCloseEnoughDist()
+                || !isUsefulPartialPath(completedPath, destination)) {
+            return;
+        }
+        Path nextPath = this.createPath(destination, 0);
+        if (nextPath == null
+                || (!nextPath.canReach() && !isUsefulPartialPath(nextPath, destination))) {
+            return;
+        }
+        this.moveTo(nextPath, walkTarget.getSpeedModifier());
     }
 
     @Override
