@@ -33,16 +33,9 @@ forge*changelog.txt
 
 .vscode/
 *.kra
-/scripts/translated/
-/todo.md
 *.kate-swp
-/scripts/TTS/.env
-/scripts/TTS/output/
-/scripts/TTS/working/
-/scripts/TTS/key.json
-/common/src/main/resources/assets/mca_voices/
-/scripts/TTS/temp.pcm
-/immersiveLibraryToken
-/common/src/generated/resources/.cache/
+
+.*
+
 
 neoforge/run-gametest

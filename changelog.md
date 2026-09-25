@@ -1,3 +1,7 @@
+# TBD
+
+* Fixed adding skins to server wide pool not working without cheats in singleplayer
+
 # 7.7.37
 
 * ***__Back up__*** your world before updating. Existing building and floor data will be updated automatically when the world loads.
