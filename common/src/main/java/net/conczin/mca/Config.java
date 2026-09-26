@@ -129,6 +129,16 @@ public final class Config extends CommonConfig {
     public boolean giveAdvancementBooks = true;
 
     /**
+     * Chance (0–1) that a villager plays Immersive Melodies during a socializing attempt. Set to 0 to disable it.
+     */
+    public float immersiveMelodiesChance = 0.05f;
+
+    /**
+     * Namespace of Immersive Melodies songs villagers may play. Use "*" to allow all server-known melodies.
+     */
+    public String immersiveMelodiesNamespace = "*";
+
+    /**
      * The number of hearts required for a villager to consider the player a friend.
      */
     public int heartsToBeConsideredAsFriend = 40;
