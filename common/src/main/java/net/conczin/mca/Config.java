@@ -1,999 +1,588 @@
 package net.conczin.mca;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonSyntaxException;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.electronwill.nightconfig.core.UnmodifiableConfig;
 import net.conczin.mca.entity.EquipmentSet;
-import net.conczin.mca.entity.ai.Traits;
-import net.minecraft.util.Mth;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.Bootstrap;
+import net.minecraft.world.entity.MobSpawnType;
+import net.neoforged.neoforge.common.ModConfigSpec;
+import org.apache.commons.lang3.tuple.Pair;
 
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.util.HashMap;
+import java.io.Reader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
-public final class Config extends CommonConfig {
-    private static final int VERSION = 2;
-    private static final Config INSTANCE = loadOrCreate();
-
-    private static CommonConfig serverConfig;
-
-    @SuppressWarnings("unused")
-    public String README = "https://github.com/Luke100000/minecraft-comes-alive/wiki";
-    public int version = 0;
-
-    //////////////////
-    // Mod features //
-    //////////////////
-
-    /**
-     * Overwrite newly spawned vanilla villagers with MCA villagers.
-     * If set to false, original villagers will remain unchanged.
-     */
-    public boolean overwriteOriginalVillagers = true;
-
-    /**
-     * A whitelist of modded villagers to be converted into MCA villagers.
-     * <p>
-     * Note: Modded villagers must extend from the {@code Villager} class.
-     * Example: Guard Villagers do not, and thus cannot be converted.
-     */
-    public List<String> moddedVillagerWhitelist = List.of();
-
-    /**
-     * Overwrite vanilla zombie villagers with MCA zombie villagers.
-     */
-    public boolean overwriteOriginalZombieVillagers = true;
-
-    /**
-     * Overwrite all zombies (not just zombie villagers)
-     * with MCA zombie villagers. May cause unpredictable behavior.
-     */
-    public boolean overwriteAllZombiesWithZombieVillagers = false;
-
-    /**
-     * Whitelist of modded zombie villagers to be converted into MCA zombie villagers.
-     */
-    public List<String> moddedZombieVillagerWhitelist = List.of();
-
-    /**
-     * Chance (0–1) that a spawned zombie will be a baby zombie.
-     */
-    public float babyZombieChance = 0.25f;
-
-    /**
-     * Injects MCA villagers into the villager tag.
-     */
-    public boolean villagerTagsHacks = true;
-
-    /**
-     * Enables the villager infection system.
-     * Infected villagers can turn into zombie villagers after some time.
-     */
-    public boolean enableInfection = true;
-
-    /**
-     * Allows summoning of the Grim Reaper entity.
-     */
-    public boolean allowGrimReaper = true;
-
-    /**
-     * Prefix used in villager chat messages.
-     */
-    public String villagerChatPrefix = "";
-
-    /**
-     * If true, players can damage baby villagers.
-     */
-    public boolean canHurtBabies = true;
-
-    /**
-     * Whether to show notifications when entering a village.
-     */
-    public boolean enterVillageNotification = true;
-
-    /**
-     * Whether to show notifications when villagers get married.
-     */
-    public boolean villagerMarriageNotification = true;
-
-    /**
-     * Whether to show notifications when a villager gives birth.
-     */
-    public boolean villagerBirthNotification = true;
-
-    /**
-     * Whether to show notifications when a visitor arrives at the inn.
-     */
-    public boolean innArrivalNotification = true;
-
-    /**
-     * Whether to show notifications when a villager restocks their trades.
-     */
-    public boolean villagerRestockNotification = true;
-
-    /**
-     * If true, all notifications (village entry, marriage, birth, etc.)
-     * are shown in the chat instead of above the hotbar.
-     */
-    public boolean showNotificationsAsChat = false;
-
-    /**
-     * If true, MCA book rewards are granted from advancements.
-     */
-    public boolean giveAdvancementBooks = true;
-
-    /**
-     * The number of hearts required for a villager to consider the player a friend.
-     */
-    public int heartsToBeConsideredAsFriend = 40;
-
-    /**
-     * Enables MCA villagers to send letters or mail to players.
-     */
-    public boolean enableVillagerMailingPlayers = true;
-
-    /**
-     * Check for matching gender when trying to marry a villager.
-     */
-    public boolean enableGenderCheckForPlayers = true;
-
-    /**
-     * Chance (0–1) for infection when bitten by a zombie.
-     */
-    public float zombieBiteInfectionChance = 0.05f;
-
-    /**
-     * Reduction in infection chance per villager trading level.
-     */
-    public float infectionChanceDecreasePerLevel = 0.25f;
-
-    /**
-     * Duration (in ticks) until a villager turns into a zombie after infection.
-     * 20 ticks = 1 second; 72000 ticks = 1 hour.
-     */
-    public int infectionTime = 72000;
-
-    ///////////////////////
-    // Villager behavior //
-    ///////////////////////
-
-    /**
-     * Fraction (0–1) of babies that are born as twins.
-     */
-    public float twinBabyChance = 0.05f;
-
-    /**
-     * Number of hearts required to marry a villager.
-     */
-    public int marriageHeartsRequirement = 100;
-
-    /**
-     * Number of hearts required to get engaged to a villager.
-     */
-    public int engagementHeartsRequirement = 50;
-
-    /**
-     * Number of hearts required to give a bouquet to a villager.
-     */
-    public int bouquetHeartsRequirement = 10;
-
-    /**
-     * Maximum health of a villager.
-     */
-    public int villagerMaxHealth = 20;
-
-    /**
-     * If true, allows stuck villagers to teleport to a safe location.
-     * Disabled by default as it can cause villagers to disappear unexpectedly.
-     */
-    public boolean allowVillagerTeleporting = false;
-
-    /**
-     * Minimum squared distance at which teleportation becomes possible for villagers.
-     */
-    public double villagerMinTeleportationDistance = 128;
-
-    /**
-     * Maximum geometric path horizon used for long-range villager destinations such as beds.
-     * This is separate from the vanilla FOLLOW_RANGE attribute and does not increase sensing range.
-     */
-    public int villagerPathfindingDistance = 160;
-
-    /**
-     * Vanilla follow-range attribute for villagers. Affects how far they pursue entities and the baseline pathfinder search budget.
-     * Smaller values improve performance at the cost of reduced detection range.
-     */
-    public int villagerFollowRange = 48;
-
-
-    /**
-     * Number of hearts a child starts with towards their parent.
-     */
-    public int childInitialHearts = 100;
-
-    /**
-     * Number of hearts required for a villager to greet the player.
-     */
-    public int greetHeartsThreshold = 75;
-
-    /**
-     * Number of in-game days after which villagers begin greeting the player.
-     */
-    public int greetAfterDays = 1;
-
-    /**
-     * Fraction (0–1) of villagers who will have biome-independent skin tones.
-     */
-    public float geneticImmigrantChance = 0.2f;
-
-    /**
-     * Chance multiplier (0–1) of a villager having one trait.
-     */
-    public float traitChance = 0.25f;
-
-    /**
-     * Chance multiplier (0–1) of a child inheriting a parent’s personality trait.
-     */
-    public float traitInheritChance = 0.5f;
-
-    /**
-     * Allows the player to bypass restrictions on certain traits
-     * that are normally blocked (e.g., Left-Handed, Diabetes, Vegetarian, etc.).
-     */
-    public boolean bypassTraitRestrictions = false;
-
-    /**
-     * Fraction (0–1) of villagers who are night owls (awake at night, asleep during the day).
-     */
-    public float nightOwlChance = 0.5f;
-
-    /**
-     * Allows all villagers to potentially become night owls.
-     */
-    public boolean allowAnyNightOwl = false;
-
-    /**
-     * For every X hearts, players may hit a villager once without guards attacking them.
-     */
-    public int heartsForPardonHit = 30;
-
-    /**
-     * Time (in ticks) before a player’s pardon resets after hitting a villager.
-     */
-    public int pardonPlayerTicks = 1200;
-
-    /**
-     * If true, guards will attack all monsters (including modded ones).
-     * May cause guards to attack neutral mobs depending on configuration.
-     */
-    public boolean guardsTargetMonsters = false;
-
-    /**
-     * Height scaling factor for male villagers.
-     */
-    public float maleVillagerHeightFactor = 0.9f;
-
-    /**
-     * Height scaling factor for female villagers.
-     */
-    public float femaleVillagerHeightFactor = 0.85f;
-
-    /**
-     * Width scaling factor for male villagers.
-     */
-    public float maleVillagerWidthFactor = 1.0f;
-
-    /**
-     * Width scaling factor for female villagers.
-     */
-    public float femaleVillagerWidthFactor = 0.95f;
-
-    /**
-     * If true, shows villager name tags above their heads.
-     */
-    public boolean showNameTags = true;
-
-    /**
-     * Maximum distance at which name tags are visible.
-     */
-    public float nameTagDistance = 5.0f;
-
-    /**
-     * Enables MCA villager voice lines.
-     * Set to false to mute all villager sounds.
-     */
-    public boolean useMCAVoices = true;
-
-    /**
-     * If true, villagers use vanilla Minecraft voice sounds
-     * instead of MCA custom voices.
-     */
-    public boolean useVanillaVoices = false;
-
-    /**
-     * Amount of interaction fatigue gained per interaction.
-     * Each fatigue point makes the next interaction harder.
-     */
-    public float interactionChanceFatigue = 1.0f;
-
-    /**
-     * Time (in ticks) before fatigue resets after interacting with a villager.
-     */
-    public int interactionFatigueCooldown = 4800;
-
-    /**
-     * Extra health villagers gain per trading level.
-     */
-    public int villagerHealthBonusPerLevel = 5;
-
-    /**
-     * If true, villagers use the vanilla “Squidward” (nose) model.
-     */
-    public boolean useSquidwardModels = false;
-
-    /**
-     * Enables female body features (visual only).
-     */
-    public boolean enableBoobs = true;
-
-    /**
-     * Duration (in ticks) that burned clothing effects remain visible.
-     */
-    public int burnedClothingTickLength = 3600;
-
-    /**
-     * Chance (0–1) that a villager will spawn with colored hair.
-     */
-    public float coloredHairChance = 0.02f;
-
-    /**
-     * Minimum hearts required for a villager to automatically appear
-     * on a tombstone when they die.
-     * Family members always appear regardless of this threshold.
-     */
-    public int heartsRequiredToAutoSpawnGravestone = 10;
-
-    /**
-     * The type of headstone that automatically spawns when a villager dies.
-     * Options: "cross_headstone", "gravelling_headstone", "upright_headstone", "slanted_headstone", "wall_headstone",
-     * "cobblestone_upright_headstone", "cobblestone_slanted_headstone", "wooden_upright_headstone", "wooden_slanted_headstone",
-     * "golden_upright_headstone", "golden_slanted_headstone", "deepslate_upright_headstone", "deepslate_slanted_headstone"
-     */
-    public String defaultHeadstoneType = "cross_headstone";
-
-    /** Enables personal and ambient villager mourning at occupied graves. */
-    public boolean enableMourning = true;
-
-    /**
-     * Enables smarter villager door AI,
-     * allowing them to open gates as well.
-     * <p>
-     * <b>DEPRECATED</b> Automatically enabled due to improvements in the pathfinding system
-     */
-    @Deprecated(since = "02/09/2026", forRemoval = true)
-    public boolean useSmarterDoorAI = false;
-
-    /**
-     * Time (in ticks) before villagers can procreate again.
-     */
-    public int procreationCooldown = 72000;
-
-
-    /////////////
-    // Tracker //
-    /////////////
-
-    /**
-     * Tracks villager positions for debugging or AI purposes.
-     * Slightly increases world size and CPU overhead.
-     */
-    public boolean trackVillagerPosition = true;
-
-    /**
-     * Number of ticks between position tracking updates for villagers.
-     */
-    public int trackVillagerPositionEveryNTicks = 200;
-
-
-    ////////
-    // AI //
-    /// ////
-    @SuppressWarnings("unused")
-    public String _read_this_before_using_villager_ai =
-            "https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations";
-
-    /**
-     * Enables the AI chat for villagers.
-     */
-    public boolean enableVillagerChatAI = false;
-
-    /**
-     * Chat completion endpoint for villager AI chat requests.
-     */
-    public String villagerChatAIEndpoint = "https://api.conczin.net/v1/mca/chat";
-
-    /**
-     * Villager try to follow commands like "follow me", ...
-     */
-    public boolean villagerChatAIUseTools = false;
-
-    /**
-     * Optional API token.
-     */
-    public String villagerChatAIToken = "";
-
-    /**
-     * AI model to use for villager chat.
-     */
-    public String villagerChatAIModel = "default";
-
-    /**
-     * System prompt used to guide global villager AI behavior.
-     */
-    public String villagerChatAISystemPrompt = "";
-
-    /**
-     * Permission level required to edit ChatAI villager, player, village, and world context prompts.
-     */
-    public int villagerChatAIContextPermissionLevel = 3;
-
-    /**
-     * If true, the system prompt is prepended to the user message instead of sent as a separate system message.
-     * Use this for OpenAI-compatible endpoints that ignore the system role.
-     */
-    public boolean villagerChatAIFuseSystemPrompt = false;
-
-    /**
-     * If true, AI uses long-term memory for persistent conversations.
-     */
-    public boolean villagerChatAIUseLongTermMemory = false;
-
-    /**
-     * If false, villager will have separate memories per player.
-     */
-    public boolean villagerChatAIUseSharedLongTermMemory = false;
-
-    /**
-     * If true, session-specific information is included in AI requests.
-     * Only relevant if writing a custom backend.
-     */
-    public boolean villagerChatAIIncludeSessionInformation = false;
-
-    /**
-     * Inworld API token.
-     */
-    public String inworldAIToken = "";
-
-    /**
-     * See GitHub wiki.
-     */
-    public Map<UUID, String> inworldAIResourceNames = new HashMap<>();
-
-    /**
-     * Enables online TTS (text-to-speech) for villager dialogue.
-     */
-    public boolean enableOnlineTTS = false;
-
-    /**
-     * Online TTS model to use.
-     */
-    public String onlineTTSModel = "default";
-
-    /**
-     * URL of the online TTS server.
-     */
-    public String onlineTTSServer = "https://api-rk.conczin.net/";
-
-    /**
-     * Player2 API url.
-     */
-    public String player2Url = "http://127.0.0.1:4315/";
-
-    /**
-     * Elevenlabs API key.
-     */
-    public String elevenlabsPrivateAPIkey = "";
-
-    /**
-     * ElevenLabs TTS model to use.
-     */
-    public String elevenlabsModel = "eleven_turbo_v2_5";
-
-    /**
-     * List of male voice IDs for ElevenLabs TTS.
-     */
-    public List<String> elevenlabsMaleVoices = List.of(
-            "ErXwobaYiN019PkySvjV",
-            "VR6AewLTigWG4xSOukaG",
-            "onwK4e9ZLuTAKqWW03F9",
-            "onwK4e9ZLuTAKqWW03F9"
-    );
-
-    /**
-     * List of female voice IDs for ElevenLabs TTS.
-     */
-    public List<String> elevenlabsFemaleVoices = List.of(
-            "MF3mGyEYCl7XYWbV9V6O",
-            "AZnzlk1XvdvUeBnXmlld",
-            "pMsXgVXv3BLzUgSXRplE",
-            "AZnzlk1XvdvUeBnXmlld"
-    );
-
-    //////////////////////
-    // Village behavior //
-    //////////////////////
-
-    /**
-     * Fraction (0–1) of villagers that spawn as guards.
-     */
-    public float guardSpawnFraction = 0.175f;
-
-    /**
-     * Equipment used by guards at each village equipment level.
-     * Level 0 is the default, level 1 requires an armory, level 2 requires an armory with a blacksmith.
-     */
-    public Map<String, EquipmentSet> guardEquipment = ImmutableMap.<String, EquipmentSet>builder()
-            .put("0", EquipmentSet.GUARD_0)
-            .put("1", EquipmentSet.GUARD_1)
-            .put("2", EquipmentSet.GUARD_2)
-            .build();
-
-    /**
-     * Equipment used by archers at each village equipment level.
-     */
-    public Map<String, EquipmentSet> archerEquipment = ImmutableMap.<String, EquipmentSet>builder()
-            .put("0", EquipmentSet.ARCHER_0)
-            .put("1", EquipmentSet.ARCHER_1)
-            .put("2", EquipmentSet.ARCHER_2)
-            .build();
-
-    /**
-     * Multiplier of taxes paid by villages.
-     */
-    public float taxesFactor = 0.5f;
-
-    /**
-     * Interval (in ticks) between tax collection seasons.
-     */
-    public int taxSeason = 168000;
-
-    /**
-     * Chance (0–1) per minute that a marriage event occurs in the village.
-     */
-    public float marriageChancePerMinute = 0.05f;
-
-    /**
-     * Chance (0–1) per minute that an adventurer arrives at the inn.
-     */
-    public float adventurerAtInnChancePerMinute = 0.05f;
-
-    /**
-     * Duration (in ticks) that adventurers stay at the inn.
-     */
-    public int adventurerStayTime = 48000;
-
-    /**
-     * Chance (0–1) per minute that villagers will procreate.
-     */
-    public float villagerProcreationChancePerMinute = 0.05f;
-
-    /**
-     * Interval (in ticks) at which bounty hunters attack the player if reputation is low.
-     */
-    public int bountyHunterInterval = 48000;
-
-    /**
-     * Negative heart threshold for bounty hunter attacks.
-     */
-    public int bountyHunterHearts = -150;
-
-    /**
-     * If true, the inn spawns adventurers.
-     */
-    public boolean innSpawnsAdventurers = true;
-
-    /**
-     * If true, the inn spawns cultists.
-     */
-    public boolean innSpawnsCultists = true;
-
-    /**
-     * If true, the inn spawns wandering traders.
-     */
-    public boolean innSpawnsWanderingTraders = true;
-
-    /**
-     * Fraction (0–1) of villages left as vanilla villages.
-     */
-    public float fractionOfVanillaVillages = 0;
-
-    /**
-     * Fraction (0–1) of vanilla zombie villagers.
-     */
-    public float fractionOfVanillaZombies = 0;
-
-    /**
-     * Minimum number of buildings required to consider an area a village.
-     * Below this, it is considered a settlement and welcome notifications are suppressed.
-     */
-    public int minimumBuildingsToBeConsideredAVillage = 3;
-
-    /**
-     * Dimensions where villagers should not be converted into MCA villagers.
-     */
-    public List<String> villagerDimensionBlacklist = List.of();
-
-    /**
-     * List of allowed spawn reasons for villager conversion.
-     */
-    public List<String> allowedSpawnReasons = List.of(
-            "natural",
-            "structure"
-    );
-
-    /**
-     * List of items that villagers cannot be interacted with for mod compat.
-     */
-    public List<String> villagerInteractionItemBlacklist = List.of(
-            "minecraft:bucket"
-    );
-
-    /**
-     * If true, automatically scan for buildings. High CPU usage.
-     */
-    public boolean enableAutoScanByDefault = false;
-
-    /**
-     * URL for the immersive skin library.
-     */
-    public String immersiveLibraryUrl = "https://mca.conczin.net";
-
-    /**
-     * Number of entries in the gift desaturation queue.
-     */
-    public int giftDesaturationQueueLength = 16;
-
-    /**
-     * Factor controlling how much repeated gifts lose effectiveness.
-     */
-    public float giftDesaturationFactor = 0.5f;
-
-    /**
-     * Exponent applied to desaturation formula; reduces impact of expensive gifts.
-     */
-    public double giftDesaturationExponent = 0.85;
-
-    /**
-     * Factor multiplying the satisfaction value to determine heart impact from gifts.
-     */
-    public double giftSatisfactionFactor = 0.33;
-
-    /**
-     * How much a gift influences a villager's mood.
-     */
-    public float giftMoodEffect = 0.5f;
-
-    /**
-     * Base mood effect of a gift, independent of previous gifts.
-     */
-    public float baseGiftMoodEffect = 2;
-
-    /**
-     * Time (in ticks) after which gift desaturation resets.
-     */
-    public int giftDesaturationReset = 24000;
-
-    /**
-     * Allow players to marry each other.
-     */
-    public boolean allowPlayerMarriage = true;
-
-    /**
-     * Minimum building size for buildings.
-     */
-    public int minBuildingSize = 32;
-
-    /**
-     * Maximum building size for buildings.
-     */
-    public int maxBuildingSize = 8192;
-
-    /**
-     * Maximum radius of a building from its center.
-     */
-    public int maxBuildingRadius = 320;
-
-    /**
-     * Minimum pillar height for Grim Reaper altars.
-     */
-    public int minPillarHeight = 2;
-
-    /**
-     * Maximum tree height for chopping chores.
-     */
-    public int maxTreeHeight = 8;
-
-    /**
-     * Maximum ticks for valid tree log blocks before they are considered grown.
-     */
-    public Map<String, Integer> maxTreeTicks = ImmutableMap.<String, Integer>builder()
-            .put("#minecraft:logs", 60)
-            .build();
-
-    /**
-     * List of valid blocks that can serve as the base of trees.
-     */
-    public List<String> validTreeSources = List.of(
-            "minecraft:grass_block",
-            "minecraft:dirt"
-    );
-
-    //////////////////////////
-    // Player customization //
-    //////////////////////////
-
-    /**
-     * Launches a player into Destiny feature when they first join.
-     */
-    public boolean launchIntoDestiny = true;
-
-    /**
-     * Allows the player to modify their Destiny once via command.
-     */
-    public boolean allowDestinyCommandOnce = true;
-
-    /**
-     * Allows the player to modify their Destiny multiple times via command.
-     */
-    public boolean allowDestinyCommandMoreThanOnce = false;
-
-    /**
-     * Players can teleport to Destiny locations.
-     */
-    public boolean allowDestinyTeleportation = true;
-
-    /**
-     * Enables shader locations mapping for players.
-     */
-    public boolean enablePlayerShaders = true;
-
-    /**
-     * Player can select the villager model.
-     */
-    public boolean enableVillagerPlayerModel = true;
-
-    /**
-     * Forces the player model to look like a villager.
-     */
-    public boolean forceVillagerPlayerModel = false;
-
-    /**
-     * Allows limited access to player editor (name, gender, etc.).
-     */
-    public boolean allowLimitedPlayerEditor = true;
-
-    /**
-     * Allows full access to player editor including clothing and hair.
-     */
-    public boolean allowFullPlayerEditor = false;
-
-    /**
-     * Use the USA name set instead of international names.
-     */
-    public boolean useModernUSANamesOnly = false;
-
-    /**
-     * Map of entity names to guard attack priorities.
-     * Negative values indicate the entity should be ignored.
-     */
-    public Map<String, Integer> guardsTargetEntities = ImmutableMap.<String, Integer>builder()
-            .put("minecraft:creeper", -1)
-            .put("minecraft:drowned", 2)
-            .put("minecraft:evoker", 3)
-            .put("minecraft:husk", 2)
-            .put("minecraft:illusioner", 3)
-            .put("minecraft:phantom", 0)
-            .put("minecraft:pillager", 3)
-            .put("minecraft:ravager", 3)
-            .put("minecraft:skeleton_horse", -1)
-            .put("minecraft:vex", 0)
-            .put("minecraft:vindicator", 4)
-            .put("minecraft:zoglin", 2)
-            .put("minecraft:zombie", 4)
-            .put("minecraft:zombie_horse", -1)
-            .put("minecraft:zombie_villager", 3)
-            .put("minecraft:spider", 0)
-            .put("minecraft:cave_spider", 0)
-            .put("minecraft:slime", 0)
-            .put("#minecraft:undead", 0)
-            .put(MCA.MOD_ID + ":female_zombie_villager", 3)
-            .put(MCA.MOD_ID + ":male_zombie_villager", 3)
-            .build();
-
-    /**
-     * List of blocks or tags that villagers will not teleport onto.
-     */
-    public List<String> unSafeBlocksToTeleportOn = List.of(
-            "#minecraft:climbable",
-            "#minecraft:fence_gates",
-            "#minecraft:fences",
-            "#minecraft:fire",
-            "#minecraft:portals",
-            "#minecraft:slabs",
-            "#minecraft:stairs",
-            "#minecraft:trapdoors",
-            "#minecraft:walls"
-    );
-
-    /**
-     * Blocks or tags that should trigger exact villager body clearance checks during pathfinding.
-     * Use this for small decorative blocks with awkward collision shapes, such as lanterns.
-     */
-    public List<String> villagerPathfindingCollisionCheckBlocks = List.of(
-            "#mca:villager_pathfinding_collision_checks"
-    );
-
-    /**
-     * If enabled, villagers run exact body clearance checks for every accepted path node.
-     * This can help with unusual modded collision issues, but it is more expensive in busy villages.
-     * For example, modded lanterns, it'd probably save a bit of performance keeping this off.
-     */
-    public boolean villagerPathfindingCheckAllNodeCollisions = false;
-
-    /**
-     * Structures that can be mentioned in Rumors conversation options.
-     */
-    public List<String> structuresInRumors = List.of(
-            "minecraft:igloo",
-            "minecraft:pyramid",
-            "minecraft:ruined_portal_desert",
-            "minecraft:ruined_portal_swamp",
-            "minecraft:ruined_portal",
-            "minecraft:ruined_portal_mountain",
-            "minecraft:mansion",
-            "minecraft:monument",
-            "minecraft:shipwreck",
-            "minecraft:shipwreck_beached",
-            "minecraft:village_desert",
-            "minecraft:village_taiga",
-            "minecraft:village_snowy",
-            "minecraft:village_plains",
-            "minecraft:village_savanna",
-            "minecraft:swamp_hut",
-            "minecraft:mineshaft",
-            "minecraft:jungle_pyramid",
-            "minecraft:pillager_outpost",
-            "minecraft:ancient_city"
-    );
-
-    /**
-     * Maps modded professions to MCA professions for clothing conversion.
-     * Only adult clothing is used; toddlers and children remain unchanged.
-     */
-    public Map<String, String> professionConversionsMap = Map.of();
-
-    /**
-     * Maps traits to shader locations, applied to players when camera entity has the trait.
-     * Requires enablePlayerShaders to be true.
-     */
-    public Map<String, String> shaderLocationsMap = Map.of(
-            "color_blind", "mca:shaders/post/color_blind.json",
-            "sirben", "mca:shaders/post/sirben.json"
-    );
-
-    /**
-     * Player renderer elements that can be disabled for certain mods.
-     * Supported values: arms, left_arm, right_arm, all, block_player, block_villager
-     */
-    public Map<String, String> playerRendererBlacklist = Map.of(
-            "morph", "arms",
-            "firstpersonmod", "arms",
-            "firstperson", "arms",
-            "epicfight", "all"
-    );
-
-    /**
-     * Map of tax items to their value in units.
-     * If item is too expensive, it may not be picked until tax budget is sufficient.
-     */
-    public Map<String, Float> taxesMap = Map.of(
-            "minecraft:emerald", 1.0f
-    );
-
-    /**
-     * Moves the player's eye height according to their in-game height. Does not change hitbox size.
-     */
-    public boolean scaleEyeHeightWithPlayerHeight = true;
-
-    public static Config getInstance() {
-        return INSTANCE;
+public final class Config {
+    public static final String COMMON_FILE_NAME = "mca-common.toml";
+    public static final String SERVER_FILE_NAME = "mca-server.toml";
+    public static final String CLIENT_FILE_NAME = "mca-client.toml";
+    public static final String LEGACY_FILE_NAME = "mca.json";
+
+    private static final Gson GSON = new Gson();
+    private static final Path CONFIG_DIRECTORY = Path.of("config");
+    private static final LegacyJson LEGACY = LegacyJson.load(CONFIG_DIRECTORY.resolve(LEGACY_FILE_NAME));
+    private static final boolean LEGACY_COMMON_IMPORT_ELIGIBLE = isLegacyImportEligible(COMMON_FILE_NAME);
+    private static final boolean LEGACY_SERVER_IMPORT_ELIGIBLE = isLegacyImportEligible(SERVER_FILE_NAME);
+    private static final boolean LEGACY_CLIENT_IMPORT_ELIGIBLE = isLegacyImportEligible(CLIENT_FILE_NAME);
+    private static boolean legacyCommonImported;
+    private static boolean legacyServerImported;
+    private static boolean legacyClientImported;
+
+    public static final CommonConfig COMMON;
+    public static final ModConfigSpec COMMON_SPEC;
+    public static final ServerConfig SERVER;
+    public static final ModConfigSpec SERVER_SPEC;
+    public static final ClientConfig CLIENT;
+    public static final ModConfigSpec CLIENT_SPEC;
+
+    static {
+        Pair<CommonConfig, ModConfigSpec> common = new ModConfigSpec.Builder().configure(CommonConfig::new);
+        COMMON = common.getLeft();
+        COMMON_SPEC = common.getRight();
+
+        Pair<ServerConfig, ModConfigSpec> server = new ModConfigSpec.Builder().configure(ServerConfig::new);
+        SERVER = server.getLeft();
+        SERVER_SPEC = server.getRight();
+
+        Pair<ClientConfig, ModConfigSpec> client = new ModConfigSpec.Builder().configure(ClientConfig::new);
+        CLIENT = client.getLeft();
+        CLIENT_SPEC = client.getRight();
     }
 
-    public static File getConfigFile() {
-        return new File("./config/mca.json");
+    private Config() {
     }
 
-    public static Config loadOrCreate() {
-        File file = getConfigFile();
-        if (file.exists()) {
-            try (FileReader reader = new FileReader(file)) {
-                Gson gson = new GsonBuilder().setPrettyPrinting().create();
-                Config config = gson.fromJson(reader, Config.class);
-                if (config == null || config.version != VERSION) {
-                    config = new Config();
+    public static void saveCommon() {
+        COMMON_SPEC.save();
+    }
+
+    public static void saveServer() {
+        SERVER_SPEC.save();
+    }
+
+    public static void saveClient() {
+        CLIENT_SPEC.save();
+    }
+
+    static boolean commonBoolean(String name, boolean fallback) {
+        return fallback;
+    }
+
+    static boolean serverBoolean(String name, boolean fallback) {
+        return fallback;
+    }
+
+    static boolean clientBoolean(String name, boolean fallback) {
+        return fallback;
+    }
+
+    static int commonInt(String name, int fallback) {
+        return fallback;
+    }
+
+    static int serverInt(String name, int fallback) {
+        return fallback;
+    }
+
+    static int clientInt(String name, int fallback) {
+        return fallback;
+    }
+
+    static double commonDouble(String name, double fallback) {
+        return fallback;
+    }
+
+    static double serverDouble(String name, double fallback) {
+        return fallback;
+    }
+
+    static double clientDouble(String name, double fallback) {
+        return fallback;
+    }
+
+    static String commonString(String name, String fallback) {
+        return fallback;
+    }
+
+    static String serverString(String name, String fallback) {
+        return fallback;
+    }
+
+    static String clientString(String name, String fallback) {
+        return fallback;
+    }
+
+    static List<String> commonList(String name, List<String> fallback) {
+        return fallback;
+    }
+
+    static List<String> serverList(String name, List<String> fallback) {
+        return fallback;
+    }
+
+    static List<String> clientList(String name, List<String> fallback) {
+        return fallback;
+    }
+
+    static List<String> commonMap(String name, List<String> fallback) {
+        return fallback;
+    }
+
+    static List<String> serverMap(String name, List<String> fallback) {
+        return fallback;
+    }
+
+    static List<String> clientMap(String name, List<String> fallback) {
+        return fallback;
+    }
+
+    public static Map<UUID, String> legacyInworldAIResourceNames() {
+        if (!LEGACY.has("inworldAIResourceNames")) {
+            return Map.of();
+        }
+        return decodeMap(
+                LEGACY.mapValue("inworldAIResourceNames", List.of()),
+                UUID.class,
+                String.class,
+                "inworldAIResourceNames");
+    }
+
+    private static boolean applyLegacyValues(ModConfigSpec spec) {
+        if (!LEGACY.present()) {
+            return false;
+        }
+
+        return applyLegacyValues(spec.getValues());
+    }
+
+    private static boolean applyLegacyValues(UnmodifiableConfig config) {
+        boolean changed = false;
+        for (UnmodifiableConfig.Entry entry : config.entrySet()) {
+            Object value = entry.getRawValue();
+            if (value instanceof UnmodifiableConfig nestedConfig) {
+                changed |= applyLegacyValues(nestedConfig);
+                continue;
+            }
+            if (!(value instanceof ModConfigSpec.ConfigValue<?> configValue)) {
+                continue;
+            }
+
+            List<String> path = configValue.getPath();
+            String name = path.get(path.size() - 1);
+            if (!LEGACY.has(name)) {
+                continue;
+            }
+
+            Object migratedValue = LEGACY.value(name, configValue.getDefault());
+            if (!configValue.getSpec().test(migratedValue)) {
+                MCA.LOGGER.warn("Ignoring invalid legacy MCA config value for '{}': {}", name, migratedValue);
+                continue;
+            }
+
+            setConfigValue(configValue, migratedValue);
+            changed = true;
+        }
+        return changed;
+    }
+
+    public static synchronized boolean migrateLegacy(ModConfigSpec spec, Path loadedConfigPath) {
+        if (!shouldImportLegacy(spec, loadedConfigPath)) {
+            return false;
+        }
+
+        boolean changed = applyLegacyValues(spec);
+        if (spec == COMMON_SPEC) {
+            legacyCommonImported = true;
+        } else if (spec == SERVER_SPEC) {
+            legacyServerImported = true;
+        } else if (spec == CLIENT_SPEC) {
+            legacyClientImported = true;
+        }
+        return changed;
+    }
+
+    private static boolean shouldImportLegacy(ModConfigSpec spec, Path loadedConfigPath) {
+        if (!LEGACY.present()) {
+            return false;
+        }
+        if (spec == COMMON_SPEC) {
+            return LEGACY_COMMON_IMPORT_ELIGIBLE && !legacyCommonImported;
+        }
+        if (spec == CLIENT_SPEC) {
+            return LEGACY_CLIENT_IMPORT_ELIGIBLE && !legacyClientImported;
+        }
+        if (spec == SERVER_SPEC) {
+            if (!LEGACY_SERVER_IMPORT_ELIGIBLE || legacyServerImported) {
+                return false;
+            }
+            Path globalServerConfig = CONFIG_DIRECTORY.resolve(SERVER_FILE_NAME).toAbsolutePath().normalize();
+            return loadedConfigPath.toAbsolutePath().normalize().equals(globalServerConfig);
+        }
+        return false;
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static void setConfigValue(ModConfigSpec.ConfigValue configValue, Object value) {
+        configValue.set(value);
+    }
+
+    static boolean isMapEntry(Object value, Class<?> keyType, Class<?> valueType) {
+        EncodedMapEntry entry = parseMapEntry(value);
+        if (entry == null) {
+            return false;
+        }
+        return canDecodeScalar(entry.key(), keyType) && canDecodeScalar(entry.value(), valueType);
+    }
+
+    static boolean isResourceLocation(Object value) {
+        return value instanceof String text && !text.isBlank() && ResourceLocation.tryParse(text) != null;
+    }
+
+    static boolean isRegistrySelector(Object value) {
+        if (!(value instanceof String text) || text.isBlank()) {
+            return false;
+        }
+        String resourceLocation = text.charAt(0) == '#' ? text.substring(1) : text;
+        return !resourceLocation.isBlank() && ResourceLocation.tryParse(resourceLocation) != null;
+    }
+
+    static <T> boolean isLoadSafeRegistryId(Object value, ResourceKey<? extends Registry<T>> registryKey) {
+        if (!(value instanceof String text) || text.isBlank()) {
+            return false;
+        }
+        ResourceLocation id = ResourceLocation.tryParse(text);
+        if (id == null) {
+            return false;
+        }
+        if (!"minecraft".equals(id.getNamespace()) || !isBootstrapReady()) {
+            return true;
+        }
+        Registry<T> registry = builtInRegistry(registryKey);
+        return registry != null && registry.containsKey(id);
+    }
+
+    static <T> boolean isLoadSafeRegistrySelector(Object value, ResourceKey<? extends Registry<T>> registryKey) {
+        if (!(value instanceof String text) || text.isBlank()) {
+            return false;
+        }
+        if (text.charAt(0) == '#') {
+            return isRegistrySelector(text);
+        }
+        return isLoadSafeRegistryId(text, registryKey);
+    }
+
+    static boolean isDestinySelector(Object value) {
+        return "somewhere".equals(value) || isRegistrySelector(value);
+    }
+
+    static boolean isSpawnReason(Object value) {
+        if (!(value instanceof String reason) || reason.isBlank()) {
+            return false;
+        }
+        try {
+            MobSpawnType.valueOf(reason.toUpperCase(Locale.ROOT));
+            return true;
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
+    }
+
+    static boolean isMapEntryWithResourceLocationKey(Object value, boolean allowTag, Class<?> valueType) {
+        EncodedMapEntry entry = parseMapEntry(value);
+        if (entry == null) {
+            return false;
+        }
+        boolean validKey = allowTag ? isRegistrySelector(entry.key()) : isResourceLocation(entry.key());
+        return validKey && canDecodeScalar(entry.value(), valueType);
+    }
+
+    static <T> boolean isMapEntryWithLoadSafeRegistryKey(
+            Object value,
+            ResourceKey<? extends Registry<T>> registryKey,
+            boolean allowTag,
+            Class<?> valueType
+    ) {
+        EncodedMapEntry entry = parseMapEntry(value);
+        if (entry == null) {
+            return false;
+        }
+        boolean validKey = allowTag
+                ? isLoadSafeRegistrySelector(entry.key(), registryKey)
+                : isLoadSafeRegistryId(entry.key(), registryKey);
+        return validKey && canDecodeScalar(entry.value(), valueType);
+    }
+
+    static boolean isProfessionConversionEntry(Object value) {
+        EncodedMapEntry entry = parseMapEntry(value);
+        if (entry == null) {
+            return false;
+        }
+        boolean validSource = "default".equals(entry.key())
+                || isLoadSafeRegistryId(entry.key(), Registries.VILLAGER_PROFESSION);
+        return validSource && isLoadSafeRegistryId(entry.value(), Registries.VILLAGER_PROFESSION);
+    }
+
+    private static boolean isBootstrapReady() {
+        try {
+            Bootstrap.checkBootstrapCalled(() -> "MCA config registry validation");
+            return true;
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> Registry<T> builtInRegistry(ResourceKey<? extends Registry<T>> registryKey) {
+        return (Registry<T>) BuiltInRegistries.REGISTRY.get(registryKey.location());
+    }
+
+    private static EncodedMapEntry parseMapEntry(Object value) {
+        if (!(value instanceof String entry)) {
+            return null;
+        }
+        int separator = entry.indexOf('=');
+        if (separator <= 0) {
+            return null;
+        }
+        return new EncodedMapEntry(
+                entry.substring(0, separator).trim(),
+                entry.substring(separator + 1).trim()
+        );
+    }
+
+    private static boolean canDecodeScalar(String value, Class<?> type) {
+        try {
+            decodeScalar(value, type);
+            return true;
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
+    static List<String> encodeMap(Map<?, ?> values) {
+        List<Map.Entry<?, ?>> entries = new ArrayList<>(values.entrySet());
+        entries.sort(Comparator.comparing(entry -> Objects.toString(entry.getKey())));
+
+        List<String> encoded = new ArrayList<>(entries.size());
+        for (Map.Entry<?, ?> entry : entries) {
+            encoded.add(entry.getKey() + "=" + encodeScalar(entry.getValue()));
+        }
+        return encoded;
+    }
+
+    static <K, V> Map<K, V> decodeMap(List<? extends String> values, Class<K> keyType, Class<V> valueType, String fieldName) {
+        Map<K, V> decoded = new LinkedHashMap<>();
+        for (String entry : values) {
+            int separator = entry.indexOf('=');
+            if (separator <= 0) {
+                MCA.LOGGER.warn("Skipping malformed map entry '{}' in MCA config value {}", entry, fieldName);
+                continue;
+            }
+            try {
+                K key = keyType.cast(decodeScalar(entry.substring(0, separator).trim(), keyType));
+                V value = valueType.cast(decodeScalar(entry.substring(separator + 1).trim(), valueType));
+                decoded.put(key, value);
+            } catch (RuntimeException exception) {
+                MCA.LOGGER.warn("Skipping invalid map entry '{}' in MCA config value {}", entry, fieldName, exception);
+            }
+        }
+        return decoded;
+    }
+
+    private static String encodeScalar(Object value) {
+        if (value instanceof String || value instanceof Number || value instanceof Boolean || value instanceof UUID) {
+            return value.toString();
+        }
+        if (value instanceof EquipmentSet) {
+            return GSON.toJson(value);
+        }
+        throw new IllegalArgumentException("Unsupported MCA config map value type: " + value.getClass().getName());
+    }
+
+    private static Object decodeScalar(String value, Class<?> type) {
+        if (type == String.class) {
+            return value;
+        }
+        if (type == UUID.class) {
+            return UUID.fromString(value);
+        }
+        if (type == Integer.class) {
+            return Integer.valueOf(value);
+        }
+        if (type == Float.class) {
+            return Float.valueOf(value);
+        }
+        if (type == Boolean.class) {
+            if (!value.equalsIgnoreCase("true") && !value.equalsIgnoreCase("false")) {
+                throw new IllegalArgumentException("Not a boolean: " + value);
+            }
+            return Boolean.valueOf(value);
+        }
+        if (type == EquipmentSet.class) {
+            EquipmentSet equipment = GSON.fromJson(value, EquipmentSet.class);
+            if (equipment == null) {
+                throw new IllegalArgumentException("Not an equipment set: " + value);
+            }
+            return equipment;
+        }
+        throw new IllegalArgumentException("Unsupported MCA config map type: " + type.getName());
+    }
+
+    private static boolean isLegacyImportEligible(String destinationFileName) {
+        return LEGACY.present() && Files.notExists(CONFIG_DIRECTORY.resolve(destinationFileName));
+    }
+
+    private record EncodedMapEntry(String key, String value) {
+    }
+
+    private record LegacyJson(JsonObject root, boolean present) {
+        static LegacyJson load(Path path) {
+            if (Files.notExists(path)) {
+                return new LegacyJson(new JsonObject(), false);
+            }
+            try (Reader reader = Files.newBufferedReader(path)) {
+                JsonElement element = JsonParser.parseReader(reader);
+                if (!element.isJsonObject()) {
+                    throw new IllegalArgumentException("Legacy config root is not a JSON object");
                 }
-                config.save();
-                return config;
-            } catch (JsonSyntaxException e) {
-                MCA.LOGGER.error("");
-                MCA.LOGGER.error("|||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
-                MCA.LOGGER.error("Minecraft Comes Alive config (mca.json) failed to launch!");
-                MCA.LOGGER.error(e);
-                MCA.LOGGER.error("|||||||||||||||||||||||||||||||||||||||||||||||||||||||||");
-                MCA.LOGGER.error("");
-            } catch (IOException e) {
-                MCA.LOGGER.error(e);
+                MCA.LOGGER.info("Found legacy MCA config {}. Missing TOML configs will import its values.", path);
+                return new LegacyJson(element.getAsJsonObject(), true);
+            } catch (IOException | RuntimeException exception) {
+                MCA.LOGGER.error("Unable to import legacy MCA config {}. The file is preserved and defaults will be used.", path, exception);
+                return new LegacyJson(new JsonObject(), false);
             }
         }
 
-        Config config = new Config();
-        config.save();
-        return config;
-    }
-
-    public static CommonConfig getServerConfig() {
-        if (serverConfig == null) {
-            return Config.getInstance();
-        } else {
-            return serverConfig;
+        boolean booleanValue(String name, boolean fallback) {
+            return read(name, fallback, JsonElement::getAsBoolean);
         }
-    }
 
-    public static void setServerConfig(CommonConfig config) {
-        serverConfig = config;
-    }
+        boolean has(String name) {
+            JsonElement element = root.get(name);
+            return element != null && !element.isJsonNull();
+        }
 
-    public int getVillagerPathfindingDistance() {
-        return Math.max(16, Math.min(256, villagerPathfindingDistance));
-    }
+        Object value(String name, Object fallback) {
+            if (fallback instanceof Boolean value) {
+                return booleanValue(name, value);
+            }
+            if (fallback instanceof Integer value) {
+                return intValue(name, value);
+            }
+            if (fallback instanceof Double value) {
+                return doubleValue(name, value);
+            }
+            if (fallback instanceof String value) {
+                return stringValue(name, value);
+            }
+            if (fallback instanceof List<?> values) {
+                List<String> strings = values.stream().map(Objects::toString).toList();
+                JsonElement element = root.get(name);
+                return element != null && element.isJsonObject()
+                        ? mapValue(name, strings)
+                        : listValue(name, strings);
+            }
+            throw new IllegalArgumentException("Unsupported MCA legacy config type for '" + name + "': " + fallback.getClass().getName());
+        }
 
-    public int getVillagerFollowRange() {
-        return Mth.clamp(villagerFollowRange, 16, 64);
-    }
+        int intValue(String name, int fallback) {
+            return read(name, fallback, JsonElement::getAsInt);
+        }
 
-    public void autocomplete() {
-        for (Traits.Trait trait : Traits.all()) {
-            String canonicalId = trait.getId().toString();
-            String legacyId = trait.getId().getNamespace().equals(MCA.MOD_ID)
-                    ? trait.getId().getPath()
-                    : canonicalId;
+        double doubleValue(String name, double fallback) {
+            return read(name, fallback, JsonElement::getAsDouble);
+        }
 
-            Boolean canonicalValue = enabledTraits.get(canonicalId);
-            Boolean legacyValue = enabledTraits.get(legacyId);
-            enabledTraits.put(canonicalId,
-                    canonicalValue != null ? canonicalValue : legacyValue != null ? legacyValue : true);
+        String stringValue(String name, String fallback) {
+            return read(name, fallback, JsonElement::getAsString);
+        }
 
-            if (!canonicalId.equals(legacyId)) {
-                enabledTraits.remove(legacyId);
+        List<String> listValue(String name, List<String> fallback) {
+            JsonElement element = root.get(name);
+            if (element == null || element.isJsonNull()) {
+                return fallback;
+            }
+            try {
+                if (!element.isJsonArray()) {
+                    throw new IllegalArgumentException("Expected a JSON array");
+                }
+                List<String> values = new ArrayList<>();
+                for (JsonElement item : element.getAsJsonArray()) {
+                    values.add(item.getAsString());
+                }
+                return values;
+            } catch (RuntimeException exception) {
+                warnField(name, exception);
+                return fallback;
             }
         }
-    }
 
-    public void save() {
-        autocomplete();
-
-        try (FileWriter writer = new FileWriter(getConfigFile())) {
-            version = VERSION;
-            Gson gson = new GsonBuilder().setPrettyPrinting().create();
-            gson.toJson(this, writer);
-        } catch (IOException e) {
-            MCA.LOGGER.error(e);
+        List<String> mapValue(String name, List<String> fallback) {
+            JsonElement element = root.get(name);
+            if (element == null || element.isJsonNull()) {
+                return fallback;
+            }
+            try {
+                if (!element.isJsonObject()) {
+                    throw new IllegalArgumentException("Expected a JSON object");
+                }
+                return encodeJsonMap(element.getAsJsonObject());
+            } catch (RuntimeException exception) {
+                warnField(name, exception);
+                return fallback;
+            }
         }
+
+        private <T> T read(String name, T fallback, java.util.function.Function<JsonElement, T> converter) {
+            JsonElement element = root.get(name);
+            if (element == null || element.isJsonNull()) {
+                return fallback;
+            }
+            try {
+                return converter.apply(element);
+            } catch (RuntimeException exception) {
+                warnField(name, exception);
+                return fallback;
+            }
+        }
+
+        private void warnField(String name, RuntimeException exception) {
+            MCA.LOGGER.warn("Unable to import legacy MCA config field '{}'; using the native config default.", name, exception);
+        }
+
+        private static List<String> encodeJsonMap(JsonObject object) {
+            return object.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .map(entry -> entry.getKey() + "=" + encodeJsonScalar(entry.getValue()))
+                    .toList();
+        }
+
+        private static String encodeJsonScalar(JsonElement value) {
+            if (value.isJsonPrimitive()) {
+                if (value.getAsJsonPrimitive().isString()) {
+                    return value.getAsString();
+                }
+                return value.toString();
+            }
+            return GSON.toJson(value);
+        }
+
     }
 }

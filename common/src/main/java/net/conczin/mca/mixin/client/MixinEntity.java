@@ -21,8 +21,8 @@ public abstract class MixinEntity {
     private float mca$scalePlayerEyeHeight(float original) {
         if (!((Object) this instanceof Player player)
                 || player.getPose() == Pose.SLEEPING
-                || !Config.getInstance().scaleEyeHeightWithPlayerHeight
-                || Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
+                || !Config.CLIENT.scaleEyeHeightWithPlayerHeight.get()
+                || Config.SERVER.scalePlayerHitboxWithSizeAndWidth.get()) {
             return original;
         }
 

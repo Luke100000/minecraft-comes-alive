@@ -162,7 +162,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default boolean canBeAttractedTo(PlayerSaveData other) {
-        return !Config.getInstance().enableGenderCheckForPlayers || canBeAttractedTo(toVillager(other));
+        return !Config.SERVER.enableGenderCheckForPlayers.get() || canBeAttractedTo(toVillager(other));
     }
 
     default InteractionHand getDominantHand() {
@@ -430,7 +430,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default float getHorizontalScaleFactor() {
-        if (getGenetics() == null || Config.getInstance().useSquidwardModels) {
+        if (getGenetics() == null) {
             return asEntity().isBaby() ? 0.5f : 1.0f;
         } else {
             return Math.min(0.999f, getRawHorizontalScaleFactor());
@@ -449,7 +449,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     }
 
     default float getRawVerticalScaleFactor() {
-        if (getGenetics() == null || Config.getInstance().useSquidwardModels) {
+        if (getGenetics() == null) {
             return asEntity().isBaby() ? 0.5f : 1.0f;
         } else {
             return getGenetics().getVerticalScaleFactor()
@@ -491,7 +491,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
 
         if (!isPlayer) {
             Mob entity = asEntity();
-            if (entity.getRandom().nextFloat() < Config.getInstance().coloredHairChance) {
+            if (entity.getRandom().nextFloat() < Config.SERVER.coloredHairChance.get().floatValue()) {
                 int n = entity.getRandom().nextInt(25);
                 int o = DyeColor.values().length;
                 int p = n % o;

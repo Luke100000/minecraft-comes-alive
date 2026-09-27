@@ -14,7 +14,7 @@ public class WeddingRingItem extends RelationshipItem {
 
     @Override
     protected int getHeartsRequired() {
-        return Config.getInstance().marriageHeartsRequirement;
+        return Config.SERVER.marriageHeartsRequirement.get();
     }
 
     @Override

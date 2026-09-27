@@ -143,14 +143,14 @@ public final class WanderOrTeleportToTargetTaskGameTests {
 
         WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
         long startedAt = helper.getLevel().getGameTime();
-        Config config = Config.getInstance();
-        int originalPathfindingDistance = config.villagerPathfindingDistance;
+        var pathfindingDistance = Config.SERVER.villagerPathfindingDistance;
+        int originalPathfindingDistance = pathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            pathfindingDistance.set(160);
             helper.assertTrue(sink.tryStart(helper.getLevel(), villager, startedAt),
                     "movement sink did not start the nearby extended detour");
         } finally {
-            config.villagerPathfindingDistance = originalPathfindingDistance;
+            pathfindingDistance.set(originalPathfindingDistance);
         }
         Path path = villager.getNavigation().getPath();
         helper.assertTrue(path != null && path.canReach(),
@@ -331,7 +331,7 @@ public final class WanderOrTeleportToTargetTaskGameTests {
             template = "bastion/blocks/air", timeoutTicks = 2_400)
     public static void brainDrivenLongDistanceWalkArrivesAfterMultipleSegmentsAndTimeoutWindow(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(4, 1, 4));
-        int pathHorizon = Math.max(Config.getInstance().getVillagerPathfindingDistance(), 48);
+        int pathHorizon = Math.max(Config.SERVER.villagerPathfindingDistance(), 48);
         BlockPos destination = start.east(pathHorizon * 2 + 64);
         ChunkPos startChunk = new ChunkPos(start);
         ChunkPos targetChunk = new ChunkPos(destination);
@@ -600,7 +600,7 @@ public final class WanderOrTeleportToTargetTaskGameTests {
             template = "bastion/blocks/air", timeoutTicks = 80)
     public static void usefulPartialLongDistancePathChainsImmediately(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
-        BlockPos destination = start.east(Config.getInstance().getVillagerPathfindingDistance() + 32);
+        BlockPos destination = start.east(Config.SERVER.villagerPathfindingDistance() + 32);
         prepareFlatPath(helper, start, destination);
 
         VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())

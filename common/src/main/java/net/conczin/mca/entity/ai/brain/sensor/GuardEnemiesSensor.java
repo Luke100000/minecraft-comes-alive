@@ -199,7 +199,7 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             }
         }
 
-        if (Config.getInstance().guardsTargetMonsters && entity instanceof Enemy) {
+        if (Config.SERVER.guardsTargetMonsters.get() && entity instanceof Enemy) {
             return 3;
         }
         return -1;
@@ -207,8 +207,8 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
 
     private static Optional<Integer> getConfiguredPriority(EntityType<?> type) {
         ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
-        if (Config.getInstance().guardsTargetEntities.containsKey(id.toString())) {
-            return Optional.of(Config.getInstance().guardsTargetEntities.get(id.toString()));
+        if (Config.SERVER.guardsTargetEntities().containsKey(id.toString())) {
+            return Optional.of(Config.SERVER.guardsTargetEntities().get(id.toString()));
         }
         return getTagPriority(type);
     }
@@ -226,7 +226,7 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
     }
 
     private static Optional<Integer> getTagPriority(EntityType<?> type) {
-        for (Map.Entry<String, Integer> entry : Config.getInstance().guardsTargetEntities.entrySet()) {
+        for (Map.Entry<String, Integer> entry : Config.SERVER.guardsTargetEntities().entrySet()) {
             String key = entry.getKey();
             if (key.startsWith("#")) {
                 ResourceLocation id = ResourceLocation.tryParse(key.substring(1));

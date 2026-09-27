@@ -13,7 +13,7 @@ public class ElevenlabsSpeechManager extends RealtimeSpeechManager {
     }
 
     public void play(String text, String gender, float pitch, float gene, Entity entity, boolean cacheable) {
-        List<String> voices = gender.equals("male") ? Config.getInstance().elevenlabsMaleVoices : Config.getInstance().elevenlabsFemaleVoices;
+        List<? extends String> voices = gender.equals("male") ? Config.CLIENT.elevenlabsMaleVoices.get() : Config.CLIENT.elevenlabsFemaleVoices.get();
         if (voices.isEmpty()) return;
 
         int tone = Math.min(voices.size() - 1, (int) Math.floor(gene * voices.size()));
@@ -23,8 +23,8 @@ public class ElevenlabsSpeechManager extends RealtimeSpeechManager {
     public void downloadAudio(OutputStream output, String voiceId, String text) {
         String payload = String.format(
                 "{\"text\": \"%s\", \"model_id\": \"%s\", \"voice_settings\": {\"stability\": 0.3, \"similarity_boost\": 0.5, \"style\": 0.05, \"use_speaker_boost\": true}}",
-                text, Config.getInstance().elevenlabsModel
+                text, Config.CLIENT.elevenlabsModel.get()
         );
-        RealtimeSpeechManager.download(output, this.url + voiceId + "?output_format=pcm_22050", payload, Config.getInstance().elevenlabsPrivateAPIkey);
+        RealtimeSpeechManager.download(output, this.url + voiceId + "?output_format=pcm_22050", payload, Config.CLIENT.elevenlabsPrivateAPIkey.get());
     }
 }

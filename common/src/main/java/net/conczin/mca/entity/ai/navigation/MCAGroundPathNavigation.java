@@ -74,7 +74,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (targetsCurrentStaticWalkTarget(targets, walkTarget)) {
             BlockPos target = walkTarget.getTarget().currentBlockPosition();
             float extendedPathLength = Math.max(
-                    (float)Config.getInstance().getVillagerPathfindingDistance(),
+                    (float)Config.SERVER.villagerPathfindingDistance(),
                     ordinaryPathLength
             );
             if (requiresExtendedPath(this.mob, target)) {

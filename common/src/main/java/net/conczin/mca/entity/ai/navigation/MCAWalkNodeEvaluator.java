@@ -332,7 +332,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
 
     private boolean hasBlockClearance(Node node) {
         AABB clearanceBox = getMobBoxAt(node);
-        if (!Config.getInstance().villagerPathfindingCheckAllNodeCollisions
+        if (!Config.SERVER.villagerPathfindingCheckAllNodeCollisions.get()
             && !PathfindingBlacklist.overlapsSpecialCollisionBlock(this.currentContext.level(), clearanceBox)) {
             return true;
         }

@@ -117,12 +117,12 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
 
     @Override
     protected void tick(ServerLevel world, Mob entity, long l) {
-        if (Config.getInstance().allowVillagerTeleporting) {
+        if (Config.SERVER.allowVillagerTeleporting.get()) {
             entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).ifPresent(walkTarget -> {
                 BlockPos targetPos = walkTarget.getTarget().currentBlockPosition();
 
                 // If the target is more than x blocks away, teleport to it immediately.
-                if (!targetPos.closerToCenterThan(entity.position(), Config.getInstance().villagerMinTeleportationDistance)) {
+                if (!targetPos.closerToCenterThan(entity.position(), Config.SERVER.villagerMinTeleportationDistance.get())) {
                     tryTeleport(world, entity, targetPos);
                 }
             });

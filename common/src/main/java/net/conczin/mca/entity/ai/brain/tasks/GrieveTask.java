@@ -18,7 +18,7 @@ public class GrieveTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA entity) {
-        if (!Config.getInstance().enableMourning) {
+        if (!Config.SERVER.enableMourning.get()) {
             return false;
         }
 

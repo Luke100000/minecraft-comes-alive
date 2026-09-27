@@ -28,7 +28,7 @@ public class VillageInnManager {
 
     public void updateInn(ServerLevel world) {
         village.getBuildingsOfType("inn").forEach(b -> {
-            if (world.random.nextFloat() < Config.getInstance().adventurerAtInnChancePerMinute) {
+            if (world.random.nextFloat() < Config.SERVER.adventurerAtInnChancePerMinute.get().floatValue()) {
                 List<BlockPos> values = new ArrayList<>(b.getBlocks().values().stream().flatMap(Collection::stream).toList());
                 Collections.shuffle(values);
                 for (BlockPos p : values) {
@@ -57,30 +57,30 @@ public class VillageInnManager {
         String name = null;
         if (this.doesNotSuffocateAt(world, blockPos)) {
             int i = world.random.nextInt(10);
-            if (i == 0 && Config.getInstance().innSpawnsWanderingTraders) {
+            if (i == 0 && Config.SERVER.innSpawnsWanderingTraders.get()) {
                 WanderingTrader trader = EntityType.WANDERING_TRADER.spawn(world, blockPos, MobSpawnType.EVENT);
                 if (trader != null) {
                     name = trader.getName().getString();
-                    trader.setDespawnDelay(Config.getInstance().adventurerStayTime);
+                    trader.setDespawnDelay(Config.SERVER.adventurerStayTime.get());
                 }
-            } else if (i == 1 && Config.getInstance().innSpawnsCultists) {
+            } else if (i == 1 && Config.SERVER.innSpawnsCultists.get()) {
                 VillagerEntityMCA adventurer = spawnInnVillager(world, blockPos, Gender.getRandom());
                 if (adventurer != null) {
                     name = adventurer.getName().getString();
                     adventurer.setProfession(ProfessionsMCA.CULTIST);
-                    adventurer.setDespawnDelay(Config.getInstance().adventurerStayTime);
+                    adventurer.setDespawnDelay(Config.SERVER.adventurerStayTime.get());
                 }
-            } else if (Config.getInstance().innSpawnsAdventurers) {
+            } else if (Config.SERVER.innSpawnsAdventurers.get()) {
                 VillagerEntityMCA adventurer = spawnInnVillager(world, blockPos, Gender.getRandom());
                 if (adventurer != null) {
                     name = adventurer.getName().getString();
                     adventurer.setProfession(ProfessionsMCA.ADVENTURER);
-                    adventurer.setDespawnDelay(Config.getInstance().adventurerStayTime);
+                    adventurer.setDespawnDelay(Config.SERVER.adventurerStayTime.get());
                 }
             }
 
             if (name != null) {
-                if (Config.getInstance().innArrivalNotification) {
+                if (Config.SERVER.innArrivalNotification.get()) {
                     village.broadCastMessage(world, "events.arrival.inn", name);
                 }
                 return true;

@@ -25,7 +25,7 @@ public class MixinServerGamePacketListenerImpl {
 
     @Inject(method = "broadcastChatMessage", at = @At("HEAD"))
     private void mca$handleAcceptedChat(PlayerChatMessage message, CallbackInfo ci) {
-        if (!Config.getInstance().enableVillagerChatAI) {
+        if (!Config.SERVER.enableVillagerChatAI.get()) {
             return;
         }
 

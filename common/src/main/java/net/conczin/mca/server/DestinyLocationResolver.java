@@ -1,6 +1,6 @@
 package net.conczin.mca.server;
 
-import net.conczin.mca.CommonConfig;
+import net.conczin.mca.ServerConfig;
 import net.conczin.mca.destiny.DestinyDestination;
 import net.conczin.mca.util.WorldUtils;
 import net.minecraft.core.BlockPos;
@@ -34,7 +34,7 @@ public final class DestinyLocationResolver {
     private DestinyLocationResolver() {
     }
 
-    public static synchronized void refreshCachedDestinations(MinecraftServer server, CommonConfig config) {
+    public static synchronized void refreshCachedDestinations(MinecraftServer server, ServerConfig config) {
         cachedDestinations = resolve(server, config);
         cachedServer = server;
     }
@@ -53,16 +53,16 @@ public final class DestinyLocationResolver {
         }
     }
 
-    public static List<DestinyDestination> resolve(MinecraftServer server, CommonConfig config) {
+    public static List<DestinyDestination> resolve(MinecraftServer server, ServerConfig config) {
         Registry<Structure> structures = server.registryAccess().registryOrThrow(Registries.STRUCTURE);
         List<ServerLevel> levels = sortedLevels(server).stream()
                 .filter(level -> isDimensionAllowed(level, config))
                 .toList();
         List<String> locationIds = resolveLocationIds(
-                config.destinySpawnLocations,
-                config.autoDiscoverDestinyLocations,
-                discoverVillageLocations(structures, config.autoDiscoverDestinyLocations),
-                config.destinySpawnLocationBlacklist
+                config.destinySpawnLocations.get(),
+                config.autoDiscoverDestinyLocations.get(),
+                discoverVillageLocations(structures, config.autoDiscoverDestinyLocations.get()),
+                config.destinySpawnLocationBlacklist.get()
         );
 
         List<DestinyDestination> destinations = new ArrayList<>();
@@ -84,10 +84,10 @@ public final class DestinyLocationResolver {
     }
 
     static List<String> resolveLocationIds(
-            Collection<String> configuredLocations,
+            Collection<? extends String> configuredLocations,
             boolean autoDiscover,
-            Collection<String> discoveredLocations,
-            Collection<String> blacklistPatterns
+            Collection<? extends String> discoveredLocations,
+            Collection<? extends String> blacklistPatterns
     ) {
         LinkedHashSet<String> locations = new LinkedHashSet<>(configuredLocations);
         if (autoDiscover) {
@@ -202,11 +202,11 @@ public final class DestinyLocationResolver {
         return levels;
     }
 
-    private static boolean isDimensionAllowed(ServerLevel level, CommonConfig config) {
-        if (config.destinyOverworldOnly && !Level.OVERWORLD.equals(level.dimension())) {
+    private static boolean isDimensionAllowed(ServerLevel level, ServerConfig config) {
+        if (config.destinyOverworldOnly.get() && !Level.OVERWORLD.equals(level.dimension())) {
             return false;
         }
-        return !isBlacklisted(level.dimension().location().toString(), config.destinyDimensionBlacklist);
+        return !isBlacklisted(level.dimension().location().toString(), config.destinyDimensionBlacklist.get());
     }
 
     private static Optional<Selector> parseSelector(String location) {
@@ -226,7 +226,7 @@ public final class DestinyLocationResolver {
         return Optional.of(new Selector(tag ? SelectorType.TAG : SelectorType.STRUCTURE, id));
     }
 
-    private static boolean isBlacklisted(String location, Collection<String> blacklistPatterns) {
+    private static boolean isBlacklisted(String location, Collection<? extends String> blacklistPatterns) {
         return blacklistPatterns.stream().anyMatch(pattern -> matches(location, pattern));
     }
 

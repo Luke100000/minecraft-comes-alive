@@ -35,6 +35,8 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.fabricmc.loader.api.FabricLoader;
+import fuzs.forgeconfigapiport.fabric.api.neoforge.v4.NeoForgeConfigRegistry;
+import fuzs.forgeconfigapiport.fabric.api.neoforge.v4.NeoForgeModConfigEvents;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -49,6 +51,8 @@ import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.neoforged.fml.config.ModConfig;
+import net.neoforged.neoforge.common.ModConfigSpec;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -85,6 +89,20 @@ public final class MCAFabric implements ModInitializer {
 
     @Override
     public void onInitialize() {
+        NeoForgeModConfigEvents.loading(MCA.MOD_ID).register(config -> {
+            if (config.getSpec() instanceof ModConfigSpec spec && Config.migrateLegacy(spec, config.getFullPath())) {
+                spec.save();
+            }
+        });
+        NeoForgeModConfigEvents.reloading(MCA.MOD_ID).register(config -> {
+            if (config.getSpec() == Config.SERVER_SPEC) {
+                MCA.getServer().ifPresent(server -> server.execute(() ->
+                        DestinyLocationResolver.refreshCachedDestinations(server, Config.SERVER)));
+            }
+        });
+        NeoForgeConfigRegistry.INSTANCE.register(MCA.MOD_ID, ModConfig.Type.COMMON, Config.COMMON_SPEC, Config.COMMON_FILE_NAME);
+        NeoForgeConfigRegistry.INSTANCE.register(MCA.MOD_ID, ModConfig.Type.SERVER, Config.SERVER_SPEC, Config.SERVER_FILE_NAME);
+
         BedPoiCompatibilityFabric.init();
         registerHelper(BuiltInRegistries.ITEM, ItemsMCA::registerItems);
         registerHelper(BuiltInRegistries.BLOCK, BlocksMCA::registerBlocks);
@@ -139,11 +157,11 @@ public final class MCAFabric implements ModInitializer {
         // Register events
         ServerLifecycleEvents.SERVER_STARTING.register(server -> MCA.startExecutorService());
         ServerLifecycleEvents.SERVER_STARTED.register(server ->
-                DestinyLocationResolver.refreshCachedDestinations(server, Config.getInstance())
+                DestinyLocationResolver.refreshCachedDestinations(server, Config.SERVER)
         );
         ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((server, resourceManager, success) -> {
             if (success) {
-                DestinyLocationResolver.refreshCachedDestinations(server, Config.getInstance());
+                DestinyLocationResolver.refreshCachedDestinations(server, Config.SERVER);
             }
         });
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {

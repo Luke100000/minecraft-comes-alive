@@ -25,7 +25,7 @@ public class CustomClothingManager {
     static final Storage<Hair> HAIR_DUMMY = new Storage<>();
 
     public static boolean canEdit(ServerPlayer player) {
-        return player.hasPermissions(Config.getInstance().addContentGloballyPermissionLevel)
+        return player.hasPermissions(Config.SERVER.addContentGloballyPermissionLevel.get())
                || player.serverLevel().getServer().isSingleplayerOwner(player.getGameProfile());
     }
 

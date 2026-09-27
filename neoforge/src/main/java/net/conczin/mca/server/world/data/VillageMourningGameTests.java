@@ -293,7 +293,7 @@ public final class VillageMourningGameTests {
         VillagerEntityMCA deceased = spawnVillager(helper, new BlockPos(6, 1, 1), "Distant Deceased Probe");
         VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(3, 1, 1), "Distant Mourner Probe");
         BlockPos start = mourner.blockPosition();
-        int pathfindingDistance = Config.getInstance().getVillagerPathfindingDistance();
+        int pathfindingDistance = Config.SERVER.villagerPathfindingDistance();
         BlockPos grave = start.east(pathfindingDistance + 32);
         prepareFlatArea(helper, start, 16, 3);
         prepareFlatArea(helper, grave, 2, 3);
@@ -388,16 +388,16 @@ public final class VillageMourningGameTests {
         BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
         VillagerEntityMCA deceased = spawnVillager(helper, new BlockPos(6, 1, 1), "Spouse Deceased Probe");
         VillagerEntityMCA spouse = spawnVillager(helper, new BlockPos(3, 1, 1), "Spouse Mourner Probe");
-        boolean previous = Config.getInstance().enableMourning;
+        boolean previous = Config.SERVER.enableMourning.get();
         try {
-            Config.getInstance().enableMourning = true;
+            Config.SERVER.enableMourning.set(true);
             spouse.getRelationships().onTragedy(
                     helper.getLevel().damageSources().generic(), grave, RelationshipType.SPOUSE, deceased);
 
             helper.assertTrue(isMourningAt(spouse, helper.getLevel(), grave),
                     "spouse tragedy should target the exact burial site");
         } finally {
-            Config.getInstance().enableMourning = previous;
+            Config.SERVER.enableMourning.set(previous);
         }
         helper.succeed();
     }
@@ -426,9 +426,9 @@ public final class VillageMourningGameTests {
                 .toList();
         List<VillagerEntityMCA> expectedMourners = eligibleWitnesses.stream().limit(2).toList();
 
-        boolean previous = Config.getInstance().enableMourning;
+        boolean previous = Config.SERVER.enableMourning.get();
         try {
-            Config.getInstance().enableMourning = true;
+            Config.SERVER.enableMourning.set(true);
             deceased.getRelationships().onTragedy(helper.getLevel().damageSources().generic(), grave);
 
             List<VillagerEntityMCA> mourners = eligibleWitnesses.stream()
@@ -441,7 +441,7 @@ public final class VillageMourningGameTests {
             helper.assertTrue(expectedMourners.stream().allMatch(villager -> villager.getBrain().isActive(ActivitiesMCA.GRIEVE)),
                     "selected witnesses should immediately enter the GRIEVE activity");
         } finally {
-            Config.getInstance().enableMourning = previous;
+            Config.SERVER.enableMourning.set(previous);
         }
         helper.succeed();
     }
@@ -488,16 +488,16 @@ public final class VillageMourningGameTests {
         BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
         VillagerEntityMCA deceasedParent = spawnVillager(helper, new BlockPos(6, 1, 1), "Parent Deceased Probe");
         VillagerEntityMCA child = spawnVillager(helper, new BlockPos(3, 1, 1), "Child Mourner Probe");
-        boolean previous = Config.getInstance().enableMourning;
+        boolean previous = Config.SERVER.enableMourning.get();
         try {
-            Config.getInstance().enableMourning = true;
+            Config.SERVER.enableMourning.set(true);
             child.getRelationships().onTragedy(
                     helper.getLevel().damageSources().generic(), grave, RelationshipType.PARENT, deceasedParent);
 
             helper.assertTrue(isMourningAt(child, helper.getLevel(), grave),
                     "a child should target their deceased parent's exact burial site");
         } finally {
-            Config.getInstance().enableMourning = previous;
+            Config.SERVER.enableMourning.set(previous);
         }
         helper.succeed();
     }
@@ -510,9 +510,9 @@ public final class VillageMourningGameTests {
         child.getRelationships().getFamilyEntry().assignParent(deceasedParent.getRelationships().getFamilyEntry());
         child.getBrain().setMemory(MemoryModuleTypeMCA.STAYING, true);
 
-        boolean previous = Config.getInstance().enableMourning;
+        boolean previous = Config.SERVER.enableMourning.get();
         try {
-            Config.getInstance().enableMourning = true;
+            Config.SERVER.enableMourning.set(true);
             deceasedParent.getRelationships().onTragedy(helper.getLevel().damageSources().generic(), grave);
 
             helper.assertTrue(isMourningAt(child, helper.getLevel(), grave),
@@ -520,7 +520,7 @@ public final class VillageMourningGameTests {
             helper.assertTrue(child.getBrain().getMemoryInternal(MemoryModuleTypeMCA.STAYING).isPresent(),
                     "parent mourning must retain an existing stay command while waiting to resume");
         } finally {
-            Config.getInstance().enableMourning = previous;
+            Config.SERVER.enableMourning.set(previous);
         }
         helper.succeed();
     }
@@ -529,16 +529,16 @@ public final class VillageMourningGameTests {
     public static void deceasedDoesNotMournOwnGrave(GameTestHelper helper) {
         BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
         VillagerEntityMCA deceased = spawnVillager(helper, new BlockPos(3, 1, 1), "Self Mourning Probe");
-        boolean previous = Config.getInstance().enableMourning;
+        boolean previous = Config.SERVER.enableMourning.get();
         try {
-            Config.getInstance().enableMourning = true;
+            Config.SERVER.enableMourning.set(true);
             deceased.getRelationships().onTragedy(
                     helper.getLevel().damageSources().generic(), grave, RelationshipType.SELF, deceased);
 
             helper.assertTrue(deceased.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE).isEmpty(),
                     "the deceased villager must not be assigned its own grave for mourning");
         } finally {
-            Config.getInstance().enableMourning = previous;
+            Config.SERVER.enableMourning.set(previous);
         }
         helper.succeed();
     }
@@ -565,9 +565,9 @@ public final class VillageMourningGameTests {
         spouse.getVillagerBrain().modifyMoodValue(
                 MoodGroup.MAX_LEVEL - spouse.getVillagerBrain().getMoodValue());
         int moodBefore = spouse.getVillagerBrain().getMoodValue();
-        boolean previous = Config.getInstance().enableMourning;
+        boolean previous = Config.SERVER.enableMourning.get();
         try {
-            Config.getInstance().enableMourning = false;
+            Config.SERVER.enableMourning.set(false);
             spouse.getRelationships().onTragedy(
                     helper.getLevel().damageSources().generic(), grave, RelationshipType.SPOUSE, deceased);
 
@@ -576,7 +576,7 @@ public final class VillageMourningGameTests {
             helper.assertTrue(spouse.getVillagerBrain().getMoodValue() < moodBefore,
                     "tragedy mood penalty must remain when mourning is disabled");
         } finally {
-            Config.getInstance().enableMourning = previous;
+            Config.SERVER.enableMourning.set(previous);
         }
         helper.succeed();
     }
@@ -861,9 +861,9 @@ public final class VillageMourningGameTests {
         Village due = withNextMourningTime(villageWithGraveyard(helper, grave), now, helper.getLevel());
         residents.forEach(due::updateResident);
         long beforeBurst = due.getNextMourningTime();
-        boolean previous = Config.getInstance().enableMourning;
+        boolean previous = Config.SERVER.enableMourning.get();
         try {
-            Config.getInstance().enableMourning = false;
+            Config.SERVER.enableMourning.set(false);
             due.tick(helper.getLevel(), now);
 
             helper.assertTrue(mourningSites(residents).isEmpty(),
@@ -871,7 +871,7 @@ public final class VillageMourningGameTests {
             helper.assertTrue(due.getNextMourningTime() == beforeBurst,
                     "disabled mourning must freeze the next ambient burst timestamp");
         } finally {
-            Config.getInstance().enableMourning = previous;
+            Config.SERVER.enableMourning.set(previous);
         }
         helper.succeed();
     }

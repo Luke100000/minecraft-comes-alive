@@ -42,9 +42,11 @@ import net.minecraft.world.entity.player.Player;
 public final class MCAFabricClient extends ClientProxyAbstractImpl implements ClientModInitializer {
     @Override
     public void onInitializeClient() {
+        ClientConfigHelper.register();
+
         Network.registerClientSender(ClientPlayNetworking::send);
 
-        if (Config.getInstance().useSquidwardModels) {
+        if (Config.CLIENT.useSquidwardModels.get()) {
             EntityRendererRegistry.register(EntitiesMCA.MALE_VILLAGER, VillagerRenderer::new);
             EntityRendererRegistry.register(EntitiesMCA.FEMALE_VILLAGER, VillagerRenderer::new);
 

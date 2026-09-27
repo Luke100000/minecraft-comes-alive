@@ -20,7 +20,7 @@ public class MixinAdvancementRewards {
             )
     )
     private List<ResourceKey<LootTable>> mca$filterAdvancementBooks(List<ResourceKey<LootTable>> original) {
-        if (Config.getInstance().giveAdvancementBooks) {
+        if (Config.SERVER.giveAdvancementBooks.get()) {
             return original;
         }
 

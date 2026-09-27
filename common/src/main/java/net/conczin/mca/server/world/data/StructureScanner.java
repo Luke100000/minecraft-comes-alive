@@ -1,6 +1,7 @@
 package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.ServerConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
@@ -26,9 +27,9 @@ final class StructureScanner {
     static Result scanNewStructure(Level world,
                                    BlockPos source,
                                    Collection<Structure> existing) {
-        Config config = Config.getInstance();
+        ServerConfig config = Config.SERVER;
         SelectedFloorScanner.Observation observation = new SelectedFloorScanner.Observation(
-                world, config.maxBuildingSize, config.maxBuildingRadius);
+                world, config.maxBuildingSize.get(), config.maxBuildingRadius.get());
         Result exact = resultFromObservedFloor(source, observation.selected(source), existing, -1, -1);
         if (exact.result() == Building.validationResult.SUCCESS) return exact;
 
@@ -98,9 +99,9 @@ final class StructureScanner {
     }
 
     private static Optional<FloorHandoff> resolveAttachmentSeed(Level world, BlockPos source) {
-        Config config = Config.getInstance();
+        ServerConfig config = Config.SERVER;
         SelectedFloorScanner.Observation observation = new SelectedFloorScanner.Observation(
-                world, config.maxBuildingSize, config.maxBuildingRadius);
+                world, config.maxBuildingSize.get(), config.maxBuildingRadius.get());
         SelectedFloorScanner.Result exact = observation.selected(source);
         if (exact.result() == Building.validationResult.SUCCESS && exact.floor() != null) {
             BlockPos resolvedSeed = resolveFloorSeed(world, exact.floor(), source).orElse(source);
@@ -226,9 +227,9 @@ final class StructureScanner {
                                      Collection<Structure> existing,
                                      int ignoredStructureId,
                                      int attachmentBuildingId) {
-        Config config = Config.getInstance();
+        ServerConfig config = Config.SERVER;
         SelectedFloorScanner.Result selected = SelectedFloorScanner.scan(
-                world, scanSeed, config.maxBuildingSize, config.maxBuildingRadius);
+                world, scanSeed, config.maxBuildingSize.get(), config.maxBuildingRadius.get());
         Result result = resultFromObservedFloor(
                 scanSeed, selected, existing, ignoredStructureId, attachmentBuildingId);
         return result.result() == Building.validationResult.SUCCESS

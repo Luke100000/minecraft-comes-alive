@@ -1,8 +1,10 @@
 package net.conczin.mca.network.c2s;
 
+import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
+import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.Network;
@@ -118,6 +120,29 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         return merged;
     }
 
+    private static CompoundTag mergePlayerEditorPatch(CompoundTag serverData, CompoundTag patch, boolean bypassTraitRestrictions) {
+        CompoundTag merged = mergeAllowedEditorPatch(serverData, patch);
+        if (bypassTraitRestrictions || !patch.contains("Traits")) {
+            return merged;
+        }
+
+        CompoundTag serverTraits = serverData.getCompound("Traits");
+        CompoundTag mergedTraits = merged.getCompound("Traits").copy();
+        for (Traits.Trait trait : Traits.all()) {
+            if (trait.isUsableOnPlayer()) {
+                continue;
+            }
+            String id = trait.getId().toString();
+            if (serverTraits.contains(id)) {
+                mergedTraits.putBoolean(id, true);
+            } else {
+                mergedTraits.remove(id);
+            }
+        }
+        merged.put("Traits", mergedTraits);
+        return merged;
+    }
+
     @Override
     public void handleServer(ServerPlayer player) {
         Entity entity = player.serverLevel().getEntity(uuid);
@@ -147,7 +172,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
 
         if (entity instanceof ServerPlayer serverPlayer) {
             CompoundTag serverData = PlayerSaveData.get(serverPlayer).getEntityData();
-            CompoundTag merged = mergeAllowedEditorPatch(serverData, patch);
+            CompoundTag merged = mergePlayerEditorPatch(serverData, patch, Config.SERVER.bypassTraitRestrictions.get());
             PlayerSaveData data = PlayerSaveData.get(serverPlayer);
             data.setEntityData(merged);
             data.setEntityDataSet(true);

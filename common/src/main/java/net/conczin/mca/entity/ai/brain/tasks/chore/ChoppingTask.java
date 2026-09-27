@@ -143,7 +143,7 @@ public class ChoppingTask extends AbstractChoreTask {
 
         // check upside continues and valid leaves exist.
         BlockPos.MutableBlockPos posUp = origin.mutable(); // copy as mutable for reduce resources
-        for (int y = 0; y < Config.getInstance().maxTreeHeight; y++) {
+        for (int y = 0; y < Config.SERVER.maxTreeHeight.get(); y++) {
             BlockState up = world.getBlockState(posUp.setY(posUp.getY() + 1)); // use set directly instead of "pos_up.move(Direction.UP)" (set is faster)
             if (up.is(BlockTags.LOGS)) {
                 continue;
@@ -172,7 +172,7 @@ public class ChoppingTask extends AbstractChoreTask {
         // Similar logic to WanderOrTeleportToTargetTask#isAreaSafe
         final BlockState state = world.getBlockState(pos);
         final ResourceLocation stateId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
-        for (String blockId : Config.getInstance().validTreeSources) {
+        for (String blockId : Config.SERVER.validTreeSources.get()) {
             if (blockId.equals(stateId.toString())) {
                 return true;
             } else if (blockId.charAt(0) == '#') {
@@ -192,7 +192,7 @@ public class ChoppingTask extends AbstractChoreTask {
 
     private int getTicksFor(BlockState state, int fallback) {
         // Similar logic to WanderOrTeleportToTargetTask#isAreaSafe
-        final Map<String, Integer> sources = Config.getInstance().maxTreeTicks;
+        final Map<String, Integer> sources = Config.SERVER.maxTreeTicks();
         final ResourceLocation stateId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
         for (String blockId : sources.keySet()) {
             if (blockId.equals(stateId.toString())) {

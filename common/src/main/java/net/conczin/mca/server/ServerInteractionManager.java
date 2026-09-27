@@ -58,17 +58,17 @@ public class ServerInteractionManager {
     public void onPlayerJoin(ServerPlayer player) {
         PlayerSaveData playerData = PlayerSaveData.get(player);
         if (!playerData.isEntityDataSet()) {
-            if (Config.getInstance().launchIntoDestiny) {
+            if (Config.SERVER.launchIntoDestiny.get()) {
                 launchDestiny(player);
 
                 player.addEffect(new MobEffectInstance(MobEffects.INVISIBILITY, 3600));
                 player.addEffect(new MobEffectInstance(MobEffects.HEALTH_BOOST, 3600));
-            } else if (Config.getInstance().allowDestinyCommandOnce) {
+            } else if (Config.SERVER.allowDestinyCommandOnce.get()) {
                 Network.sendToPlayer(new ShowToastRequest(
                         "server.destinyNotSet.title",
                         "server.destinyNotSet.description"
                 ), player);
-            } else if (Config.getInstance().allowFullPlayerEditor) {
+            } else if (Config.SERVER.allowFullPlayerEditor.get()) {
                 Network.sendToPlayer(new ShowToastRequest(
                         "server.playerNotCustomized.title",
                         "server.playerNotCustomized.description"
@@ -88,7 +88,7 @@ public class ServerInteractionManager {
     }
 
     private void refreshAndSyncPlayerDimensions(ServerPlayer player, PlayerSaveData playerData, String reason) {
-        if (!Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
+        if (!Config.SERVER.scalePlayerHitboxWithSizeAndWidth.get()) {
             return;
         }
 
@@ -166,7 +166,7 @@ public class ServerInteractionManager {
      */
     public void sendProposal(ServerPlayer sender, ServerPlayer receiver) {
         // Checks if the admin allows this
-        if (!Config.getInstance().allowPlayerMarriage) {
+        if (!Config.SERVER.allowPlayerMarriage.get()) {
             failMessage(sender, Component.translatable("notify.playerMarriage.disabled"));
             return;
         }

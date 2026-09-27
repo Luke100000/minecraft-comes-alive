@@ -37,7 +37,7 @@ public final class ClientNeoForge extends ClientProxyAbstractImpl {
         event.registerBlockEntityRenderer(BlockEntityTypesMCA.TOMBSTONE, TombstoneBlockEntityRenderer::new);
 
         // Entity renderers
-        if (Config.getInstance().useSquidwardModels) {
+        if (Config.CLIENT.useSquidwardModels.get()) {
             event.registerEntityRenderer(EntitiesMCA.MALE_VILLAGER, VillagerRenderer::new);
             event.registerEntityRenderer(EntitiesMCA.FEMALE_VILLAGER, VillagerRenderer::new);
             event.registerEntityRenderer(EntitiesMCA.MALE_ZOMBIE_VILLAGER, ZombieVillagerRenderer::new);

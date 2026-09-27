@@ -70,11 +70,15 @@ neoForge {
 
 
 dependencies {
+    compileOnly "net.neoforged:neoforge:${neoforge_version}"
+    compileOnly "net.neoforged.fancymodloader:loader:4.0.44"
     compileOnly 'org.spongepowered:mixin:0.8.7'
     // Loader modules provide the runtime; common only needs the API and processor.
     compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:${mixin_extras_version}"))
     testImplementation platform('org.junit:junit-bom:6.1.3')
     testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly "net.neoforged:neoforge:${neoforge_version}:universal"
+    testRuntimeOnly "net.neoforged.fancymodloader:loader:4.0.44"
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 

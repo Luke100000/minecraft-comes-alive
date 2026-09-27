@@ -66,8 +66,8 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> exte
         return villager.getCustomName() != null
                && !(Minecraft.getInstance().screen instanceof VillagerEditorScreen)
                && player != null
-               && Config.getInstance().showNameTags
-               && player.distanceToSqr(villager) < Math.pow(Config.getInstance().nameTagDistance, 2.0f)
+               && Config.CLIENT.showNameTags.get()
+               && player.distanceToSqr(villager) < Math.pow(Config.CLIENT.nameTagDistance.get().floatValue(), 2.0f)
                && !villager.isInvisibleTo(player);
     }
 

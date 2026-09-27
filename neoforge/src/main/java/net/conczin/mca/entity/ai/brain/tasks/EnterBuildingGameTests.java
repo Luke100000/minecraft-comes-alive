@@ -44,7 +44,7 @@ public final class EnterBuildingGameTests {
         villager.setNoAi(true);
         villager.refreshBrain(helper.getLevel());
 
-        int pathfindingDistance = Config.getInstance().getVillagerPathfindingDistance();
+        int pathfindingDistance = Config.SERVER.villagerPathfindingDistance();
         double testFollowRange = Math.max(4.0D, pathfindingDistance / 4.0D);
         villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(testFollowRange);
         double followRange = villager.getAttributeValue(Attributes.FOLLOW_RANGE);
@@ -76,7 +76,7 @@ public final class EnterBuildingGameTests {
             template = "bastion/blocks/air")
     public static void distantBuildingKeepsRealDestination(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(3, 1, 1));
-        int pathfindingDistance = Config.getInstance().getVillagerPathfindingDistance();
+        int pathfindingDistance = Config.SERVER.villagerPathfindingDistance();
         BlockPos buildingTarget = start.east(pathfindingDistance + 32);
         prepareFlatArea(helper, start, 16, 3);
 

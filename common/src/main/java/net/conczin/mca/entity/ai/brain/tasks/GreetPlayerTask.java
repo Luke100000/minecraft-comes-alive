@@ -42,10 +42,10 @@ public class GreetPlayerTask extends Behavior<VillagerEntityMCA> {
             // first check relationships, only family, friends and foes will greet you
             if (Relationship.IS_MARRIED.test(villager, player)
                 || Relationship.IS_RELATIVE.test(villager, player)
-                || Math.abs(memories.getHearts()) >= Config.getInstance().greetHeartsThreshold) {
+                || Math.abs(memories.getHearts()) >= Config.SERVER.greetHeartsThreshold.get()) {
                 long diff = day - memories.getLastSeen();
 
-                if (diff > Config.getInstance().greetAfterDays && memories.getLastSeen() > 0) {
+                if (diff > Config.SERVER.greetAfterDays.get() && memories.getLastSeen() > 0) {
                     return true;
                 }
 

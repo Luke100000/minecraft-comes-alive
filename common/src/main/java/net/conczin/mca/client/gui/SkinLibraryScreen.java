@@ -1585,7 +1585,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             return true;
         }
         return minecraft.player != null
-               && minecraft.player.hasPermissions(Config.getServerConfig().addContentGloballyPermissionLevel);
+               && minecraft.player.hasPermissions(Config.SERVER.addContentGloballyPermissionLevel.get());
     }
 
     private void setSelectionPage(int p) {

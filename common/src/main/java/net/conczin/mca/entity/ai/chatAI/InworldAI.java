@@ -50,7 +50,7 @@ public class InworldAI extends AbstractChatAIStrategy {
         UUID playerId = player.getUUID();
         String playerName = player.getName().getString();
         String playerGender = PlayerSaveData.get(player).getGender().getDataName();
-        String apiToken = Config.getInstance().inworldAIToken;
+        String apiToken = Config.COMMON.inworldAIToken.get();
 
         return CompletableFuture
                 .supplyAsync(() -> sessionModule.getResponse(playerId, playerName, playerGender, apiToken, msg, event))

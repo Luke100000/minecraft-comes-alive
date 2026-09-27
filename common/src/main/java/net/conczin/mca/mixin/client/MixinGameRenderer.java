@@ -44,7 +44,7 @@ public abstract class MixinGameRenderer {
                     if (mca$currentShader != null) {
                         loadEffect(mca$currentShader.getB());
                     } else {
-                        Config.getInstance().shaderLocationsMap.entrySet().stream()
+                        Config.CLIENT.shaderLocationsMap().entrySet().stream()
                                 .filter(entry -> villagerLike.getTraits().hasTrait(entry.getKey()))
                                 .filter(entry -> MCAClient.areShadersAllowed(entry.getKey() + "_shader"))
                                 .findFirst().ifPresent(entry -> {

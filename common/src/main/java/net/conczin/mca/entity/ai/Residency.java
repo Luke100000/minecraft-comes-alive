@@ -195,7 +195,7 @@ public class Residency {
         //report buildings close by
         if (entity.tickCount % 600 == 0 && entity.requiresHome()) {
             Optional<Village> village = getHomeVillage();
-            if (village.isEmpty() && Config.getInstance().enableAutoScanByDefault || village.filter(Village::isAutoScan).isPresent()) {
+            if (village.isEmpty() && Config.SERVER.enableAutoScanByDefault.get() || village.filter(Village::isAutoScan).isPresent()) {
                 reportBuildings();
             }
 

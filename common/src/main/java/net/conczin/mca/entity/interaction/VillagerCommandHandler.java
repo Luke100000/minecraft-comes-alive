@@ -243,10 +243,10 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 });
             }
             case "location" -> {
-                if (!Config.getInstance().structuresInRumors.isEmpty()) {
+                if (!Config.SERVER.structuresInRumors.get().isEmpty()) {
                     //choose a random arg from the default pool
                     if (arg.isEmpty()) {
-                        arg = Config.getInstance().structuresInRumors.get(entity.getRandom().nextInt(Config.getInstance().structuresInRumors.size()));
+                        arg = Config.SERVER.structuresInRumors.get().get(entity.getRandom().nextInt(Config.SERVER.structuresInRumors.get().size()));
                     }
 
                     //slightly randomly the search center

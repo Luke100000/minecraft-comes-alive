@@ -121,13 +121,13 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (world.getDayTime() % 100 == 0) {
             world.players().forEach(player -> PlayerSaveData.get(player).updateLastSeenVillage(this, player));
         }
-        int interval = Config.getInstance().bountyHunterInterval;
+        int interval = Config.SERVER.bountyHunterInterval.get();
         if (interval > 0 && world.getDayTime() % Math.max(1, interval / 10) == 0
                 && world.getDifficulty() != Difficulty.PEACEFUL) {
             world.players().forEach(player -> {
                 if (world.random.nextInt(10) == 0 && !isWithinHorizontalBoundaries(player.blockPosition()) && !player.isCreative()) {
                     villages.values().stream().filter(village -> village.getPopulation() >= 3)
-                            .filter(village -> village.getReputation(player) < Config.getInstance().bountyHunterHearts)
+                            .filter(village -> village.getReputation(player) < Config.SERVER.bountyHunterHearts.get())
                             .min(Comparator.comparingInt(village -> village.getReputation(player)))
                             .ifPresent(village -> startBountyHunterWave(player, village));
                 }

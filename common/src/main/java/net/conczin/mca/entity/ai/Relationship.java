@@ -89,7 +89,7 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
     }
 
     private BlockState getConfiguredTombstoneState() {
-        String configuredName = Config.getInstance().defaultHeadstoneType;
+        String configuredName = Config.SERVER.defaultHeadstoneType.get();
         if (configuredName != null && !configuredName.contains(":")) {
             configuredName = "mca:" + configuredName;
         }
@@ -132,7 +132,7 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
 
     public void onDeath(DamageSource cause) {
         boolean beRemembered = getFamilyEntry().willBeRemembered();
-        boolean beLoved = entity.getVillagerBrain().getMemories().values().stream().anyMatch(m -> m.getHearts() > Config.getInstance().heartsRequiredToAutoSpawnGravestone);
+        boolean beLoved = entity.getVillagerBrain().getMemories().values().stream().anyMatch(m -> m.getHearts() > Config.SERVER.heartsRequiredToAutoSpawnGravestone.get());
 
         if (beRemembered || beLoved || !entity.isHostile()) {
             getFamilyEntry().setDeceased(true);
@@ -183,7 +183,7 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
 
         onTragedy(cause, burialSite, RelationshipType.SELF, entity);
 
-        if (Config.getInstance().enableMourning && burialSite != null) {
+        if (Config.SERVER.enableMourning.get() && burialSite != null) {
             witnesses.stream()
                     .filter(VillagerEntityMCA::isAlive)
                     .filter(villager -> !villager.getUUID().equals(entity.getUUID()))
@@ -215,7 +215,7 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
                 || type == RelationshipType.PARENT
                 || type == RelationshipType.SIBLING
                 || type == RelationshipType.SPOUSE;
-        if (Config.getInstance().enableMourning
+        if (Config.SERVER.enableMourning.get()
                 && burialSite != null
                 && familyMourning
                 && !entity.getUUID().equals(with.getUUID())
