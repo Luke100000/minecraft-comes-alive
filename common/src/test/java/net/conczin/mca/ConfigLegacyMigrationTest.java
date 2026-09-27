@@ -24,6 +24,7 @@ class ConfigLegacyMigrationTest {
         Path configDirectory = Files.createDirectories(tempDirectory.resolve("config"));
         Files.writeString(configDirectory.resolve(Config.LEGACY_FILE_NAME), """
                 {
+                  "version": 2,
                   "enableOnlineTTS": true,
                   "onlineTTSModel": "player2",
                   "enableVillagerChatAI": true,
@@ -46,11 +47,23 @@ class ConfigLegacyMigrationTest {
     void existingNativeTomlSuppressesLegacyImportAndLeavesJsonUntouched() throws Exception {
         Path configDirectory = Files.createDirectories(tempDirectory.resolve("config"));
         Path legacyPath = configDirectory.resolve(Config.LEGACY_FILE_NAME);
-        String legacyJson = "{\"enableOnlineTTS\":true}";
+        String legacyJson = "{\"version\":2,\"enableOnlineTTS\":true}";
         Files.writeString(legacyPath, legacyJson, StandardCharsets.UTF_8);
         Files.writeString(configDirectory.resolve(Config.CLIENT_FILE_NAME), "# existing native config", StandardCharsets.UTF_8);
 
         runProbe(ExistingTomlProbe.class);
+
+        assertEquals(legacyJson, Files.readString(legacyPath, StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void nonDev121LegacySchemaIsNotMigratedOrRewritten() throws Exception {
+        Path configDirectory = Files.createDirectories(tempDirectory.resolve("config"));
+        Path legacyPath = configDirectory.resolve(Config.LEGACY_FILE_NAME);
+        String legacyJson = "{\"version\":1,\"enableOnlineTTS\":true}";
+        Files.writeString(legacyPath, legacyJson, StandardCharsets.UTF_8);
+
+        runProbe(UnsupportedLegacyVersionProbe.class);
 
         assertEquals(legacyJson, Files.readString(legacyPath, StandardCharsets.UTF_8));
     }
@@ -153,6 +166,19 @@ class ConfigLegacyMigrationTest {
             Path clientPath = Path.of("config", Config.CLIENT_FILE_NAME).toAbsolutePath().normalize();
             MigrationProbe.requireEquals(false, Config.migrateLegacy(Config.CLIENT_SPEC, clientPath), "existing CLIENT TOML did not suppress legacy import");
             MigrationProbe.requireEquals(false, Config.CLIENT.enableOnlineTTS.get(), "legacy JSON overwrote existing CLIENT TOML");
+        }
+    }
+
+    public static final class UnsupportedLegacyVersionProbe {
+        private UnsupportedLegacyVersionProbe() {
+        }
+
+        public static void main(String[] args) {
+            NeoForgeTestConfigLoader.loadDefaults(Config.CLIENT_SPEC);
+
+            Path clientPath = Path.of("config", Config.CLIENT_FILE_NAME).toAbsolutePath().normalize();
+            MigrationProbe.requireEquals(false, Config.migrateLegacy(Config.CLIENT_SPEC, clientPath), "non-dev/1.21.1 legacy schema was imported");
+            MigrationProbe.requireEquals(false, Config.CLIENT.enableOnlineTTS.get(), "non-dev/1.21.1 legacy value changed CLIENT config");
         }
     }
 }

@@ -34,6 +34,7 @@ public final class Config {
     public static final String SERVER_FILE_NAME = "mca-server.toml";
     public static final String CLIENT_FILE_NAME = "mca-client.toml";
     public static final String LEGACY_FILE_NAME = "mca.json";
+    private static final int DEV_1_21_1_LEGACY_VERSION = 2;
 
     private static final Gson GSON = new Gson();
     private static final Path CONFIG_DIRECTORY = Path.of("config");
@@ -462,8 +463,14 @@ public final class Config {
                 if (!element.isJsonObject()) {
                     throw new IllegalArgumentException("Legacy config root is not a JSON object");
                 }
+                JsonObject root = element.getAsJsonObject();
+                JsonElement version = root.get("version");
+                if (version == null || version.isJsonNull() || version.getAsInt() != DEV_1_21_1_LEGACY_VERSION) {
+                    MCA.LOGGER.info("Ignoring MCA config {} because it is not a dev/1.21.1 schema version {} file.", path, DEV_1_21_1_LEGACY_VERSION);
+                    return new LegacyJson(new JsonObject(), false);
+                }
                 MCA.LOGGER.info("Found legacy MCA config {}. Missing TOML configs will import its values.", path);
-                return new LegacyJson(element.getAsJsonObject(), true);
+                return new LegacyJson(root, true);
             } catch (IOException | RuntimeException exception) {
                 MCA.LOGGER.error("Unable to import legacy MCA config {}. The file is preserved and defaults will be used.", path, exception);
                 return new LegacyJson(new JsonObject(), false);
