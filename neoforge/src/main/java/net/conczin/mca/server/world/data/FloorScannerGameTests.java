@@ -1876,6 +1876,130 @@ public final class FloorScannerGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_floor_full_scan_rollback", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 220)
+    public static void fullScanRestoresEarlierRoomAfterLaterFailure(GameTestHelper helper) {
+        BlockPos firstMin = helper.absolutePos(new BlockPos(4, 2, 5));
+        BlockPos secondMin = firstMin.offset(10, 0, 0);
+        buildClosedRoom(helper, firstMin, 4, 4);
+        buildClosedRoom(helper, secondMin, 4, 4);
+
+        BlockPos firstSeed = firstMin.offset(1, 0, 1);
+        BlockPos secondSeed = secondMin.offset(1, 0, 1);
+        SelectedFloorScanner.Result firstScan = SelectedFloorScanner.scan(
+                helper.getLevel(), firstSeed, 256, 24);
+        SelectedFloorScanner.Result secondScan = SelectedFloorScanner.scan(
+                helper.getLevel(), secondSeed, 256, 24);
+        helper.assertTrue(firstScan.result() == Building.validationResult.SUCCESS,
+                "first rollback fixture Room did not scan successfully");
+        helper.assertTrue(secondScan.result() == Building.validationResult.SUCCESS,
+                "second rollback fixture Room did not scan successfully");
+
+        StructureFloor firstFloor = new StructureFloor(0, 0, firstScan.floor());
+        StructureFloor secondFloor = new StructureFloor(0, 0, secondScan.floor());
+        Structure firstStructure = new Structure(10, firstSeed, List.of(firstFloor));
+        Structure secondStructure = new Structure(20, secondSeed, List.of(secondFloor));
+        firstStructure.setLogicalBuildingId(10);
+        secondStructure.setLogicalBuildingId(20);
+        Building firstRoom = materializedRoom(100, 10, componentAt(
+                BuildingRoomScanner.partition(helper.getLevel(), firstSeed, 256, 0, firstScan), firstSeed));
+        Building secondRoom = materializedRoom(200, 20, componentAt(
+                BuildingRoomScanner.partition(helper.getLevel(), secondSeed, 256, 0, secondScan), secondSeed));
+        firstRoom.setType("building");
+        firstRoom.addBlock(Blocks.CRAFTING_TABLE, firstSeed);
+
+        Village village = new Village(1, helper.getLevel());
+        village.registerStructure(firstStructure, firstRoom);
+        village.registerStructure(secondStructure, secondRoom);
+        village.refreshLogicalBuildings();
+        VillageManager manager = new VillageManager(helper.getLevel());
+        RoomWorkflow workflow = new RoomWorkflow(manager, helper.getLevel());
+
+        int firstRoomId = firstRoom.getId();
+        int secondRoomId = secondRoom.getId();
+        Set<BlockPos> firstRoomCellsBefore = Set.copyOf(firstRoom.getFloorCells());
+        Set<BlockPos> secondRoomCellsBefore = Set.copyOf(secondRoom.getFloorCells());
+        var firstPoiBefore = firstRoom.getBlocks();
+        var secondPoiBefore = secondRoom.getBlocks();
+        long firstLastScanBefore = firstRoom.getLastScan();
+        long secondLastScanBefore = secondRoom.getLastScan();
+        String firstTypeBefore = firstRoom.getType();
+        String secondTypeBefore = secondRoom.getType();
+        boolean firstTypeForcedBefore = firstRoom.isTypeForced();
+        boolean secondTypeForcedBefore = secondRoom.isTypeForced();
+        boolean firstContributionBefore = firstRoom.contributesToMain();
+        boolean secondContributionBefore = secondRoom.contributesToMain();
+        Set<BlockPos> firstFloorCellsBefore = firstFloor.geometry().cells().stream()
+                .map(FloorGeometry.Cell::feet).collect(Collectors.toSet());
+        Set<BlockPos> secondFloorCellsBefore = secondFloor.geometry().cells().stream()
+                .map(FloorGeometry.Cell::feet).collect(Collectors.toSet());
+        int firstFloorNumberBefore = firstFloor.floorNumber();
+        int secondFloorNumberBefore = secondFloor.floorNumber();
+        int firstMainRoomBefore = village.getLogicalBuilding(10).orElseThrow().mainRoomId();
+        int secondMainRoomBefore = village.getLogicalBuilding(20).orElseThrow().mainRoomId();
+        boolean firstInheritanceBefore = village.getLogicalBuilding(10).orElseThrow().inheritanceEnabled();
+        boolean secondInheritanceBefore = village.getLogicalBuilding(20).orElseThrow().inheritanceEnabled();
+
+        buildClosedRoom(helper, firstMin, 5, 4);
+        secondRoomCellsBefore.forEach(cell ->
+                helper.getLevel().setBlock(cell.below(), Blocks.AIR.defaultBlockState(), 3));
+
+        RegisteredRoomUpdate firstUpdate = workflow.analyzeRegisteredRoomUpdate(
+                village, firstRoomId, firstSeed);
+        helper.assertTrue(firstUpdate.result() == Building.validationResult.SUCCESS,
+                "first Room was not a valid refresh candidate: " + firstUpdate.result());
+        helper.assertTrue(!firstUpdate.replacementRoom().getFloorCells().equals(firstRoomCellsBefore),
+                "first Room fixture does not exercise rollback of a real earlier mutation");
+        RegisteredRoomUpdate secondUpdate = workflow.analyzeRegisteredRoomUpdate(
+                village, secondRoomId, secondSeed);
+        helper.assertTrue(secondUpdate.result() != Building.validationResult.SUCCESS,
+                "second Room fixture did not produce the intended late full-scan failure");
+
+        Building.validationResult result = manager.fullScan(village);
+
+        helper.assertTrue(result != Building.validationResult.SUCCESS,
+                "full scan unexpectedly succeeded despite the later Room failure");
+        Building firstAfter = village.getBuilding(firstRoomId).orElseThrow();
+        Building secondAfter = village.getBuilding(secondRoomId).orElseThrow();
+        helper.assertTrue(firstAfter.getId() == firstRoomId && secondAfter.getId() == secondRoomId,
+                "full-scan rollback changed Room identity");
+        helper.assertTrue(firstAfter.getFloorCells().equals(firstRoomCellsBefore),
+                "full-scan rollback did not restore the earlier Room");
+        helper.assertTrue(secondAfter.getFloorCells().equals(secondRoomCellsBefore),
+                "full-scan rollback changed the later failed Room");
+        helper.assertTrue(firstAfter.getBlocks().equals(firstPoiBefore)
+                        && secondAfter.getBlocks().equals(secondPoiBefore),
+                "full-scan rollback changed Room POIs");
+        helper.assertTrue(firstAfter.getLastScan() == firstLastScanBefore
+                        && secondAfter.getLastScan() == secondLastScanBefore,
+                "full-scan rollback changed Room lastScan metadata");
+        helper.assertTrue(firstAfter.getType().equals(firstTypeBefore)
+                        && secondAfter.getType().equals(secondTypeBefore)
+                        && firstAfter.isTypeForced() == firstTypeForcedBefore
+                        && secondAfter.isTypeForced() == secondTypeForcedBefore
+                        && firstAfter.contributesToMain() == firstContributionBefore
+                        && secondAfter.contributesToMain() == secondContributionBefore,
+                "full-scan rollback changed Room classification metadata");
+        helper.assertTrue(village.getStructure(10).orElseThrow().getFloor(0).orElseThrow().geometry().cells().stream()
+                        .map(FloorGeometry.Cell::feet).collect(Collectors.toSet()).equals(firstFloorCellsBefore),
+                "full-scan rollback did not restore the earlier StructureFloor geometry");
+        helper.assertTrue(village.getStructure(20).orElseThrow().getFloor(0).orElseThrow().geometry().cells().stream()
+                        .map(FloorGeometry.Cell::feet).collect(Collectors.toSet()).equals(secondFloorCellsBefore),
+                "full-scan rollback changed the later StructureFloor geometry");
+        helper.assertTrue(village.getStructure(10).orElseThrow().getFloor(0).orElseThrow().floorNumber()
+                        == firstFloorNumberBefore
+                        && village.getStructure(20).orElseThrow().getFloor(0).orElseThrow().floorNumber()
+                        == secondFloorNumberBefore,
+                "full-scan rollback changed Floor numbering");
+        helper.assertTrue(village.getLogicalBuilding(10).orElseThrow().mainRoomId() == firstMainRoomBefore
+                        && village.getLogicalBuilding(20).orElseThrow().mainRoomId() == secondMainRoomBefore,
+                "full-scan rollback changed Main Room identity");
+        helper.assertTrue(village.getLogicalBuilding(10).orElseThrow().inheritanceEnabled() == firstInheritanceBefore
+                        && village.getLogicalBuilding(20).orElseThrow().inheritanceEnabled() == secondInheritanceBefore,
+                "full-scan rollback changed inheritance state");
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_floor_update_room_selected_split", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 200)
     public static void selectedRoomSplitReplacesOnlySelectedComponentAndLeavesSiblingUntouched(GameTestHelper helper) {

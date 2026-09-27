@@ -291,18 +291,12 @@ public class Village implements Iterable<Building> {
         currentFloorRoomIds.forEach(nextBuildings::remove);
         for (Building room : replacements) nextBuildings.put(room.getId(), room);
 
-        BuildingStateSnapshot snapshot = snapshotBuildingState();
-        try {
+        publishStructuralMutation(() -> {
             structures.put(refreshed.getId(), refreshed);
             buildings.clear();
             buildings.putAll(nextBuildings);
-            reconcileLogicalBuilding(refreshed.getLogicalBuildingId());
-            calculateDimensions();
-            return true;
-        } catch (RuntimeException exception) {
-            restoreBuildingState(snapshot);
-            throw exception;
-        }
+        });
+        return true;
     }
 
     void removeRooms(Collection<Integer> roomIds) {
@@ -314,6 +308,19 @@ public class Village implements Iterable<Building> {
                 buildings.values().stream().map(Building::copy).toList(),
                 structures.values().stream().map(Structure::copy).toList(),
                 logicalBuildings.values().stream().map(LogicalBuilding::copy).toList());
+    }
+
+    void publishStructuralMutation(Runnable mutation) {
+        BuildingStateSnapshot snapshot = snapshotBuildingState();
+        try {
+            mutation.run();
+            refreshLogicalBuildings();
+            calculateDimensions();
+            markDirty();
+        } catch (RuntimeException exception) {
+            restoreBuildingState(snapshot);
+            throw exception;
+        }
     }
 
     void restoreBuildingState(BuildingStateSnapshot snapshot) {
@@ -375,31 +382,27 @@ public class Village implements Iterable<Building> {
     boolean removeFloor(int buildingId, int floorNumber) {
         if (!canRemoveFloor(buildingId, floorNumber)) return false;
 
-        for (Structure structure : getBuildingStructures(buildingId)) {
-            List<Integer> floorIds = structure.getFloors().stream()
-                    .filter(floor -> floor.floorNumber() == floorNumber)
-                    .map(StructureFloor::id)
-                    .toList();
-            if (floorIds.isEmpty()) continue;
-            if (floorIds.size() == structure.getFloors().size()) {
-                structures.remove(structure.getId());
-            } else {
-                floorIds.forEach(structure::removeFloor);
+        publishStructuralMutation(() -> {
+            for (Structure structure : getBuildingStructures(buildingId)) {
+                List<Integer> floorIds = structure.getFloors().stream()
+                        .filter(floor -> floor.floorNumber() == floorNumber)
+                        .map(StructureFloor::id)
+                        .toList();
+                if (floorIds.isEmpty()) continue;
+                if (floorIds.size() == structure.getFloors().size()) {
+                    structures.remove(structure.getId());
+                } else {
+                    floorIds.forEach(structure::removeFloor);
+                }
             }
-        }
-        refreshLogicalBuildings();
-        calculateDimensions();
-        markDirty();
+        });
         return true;
     }
 
     public boolean removeRoom(int roomId) {
         Building room = buildings.get(roomId);
         if (room == null || isMainRoom(room)) return false;
-        buildings.remove(roomId);
-        refreshLogicalBuildings();
-        calculateDimensions();
-        markDirty();
+        publishStructuralMutation(() -> buildings.remove(roomId));
         return true;
     }
 
@@ -411,14 +414,11 @@ public class Village implements Iterable<Building> {
     }
 
     public void removeStructure(int structureId) {
-        Structure removed = structures.remove(structureId);
-        if (removed == null) return;
-        int buildingId = removed.getLogicalBuildingId();
-        buildings.values().removeIf(room -> room.getStructureId() == structureId);
-        if (getBuildingStructures(buildingId).isEmpty()) logicalBuildings.remove(buildingId);
-        else reconcileLogicalBuilding(buildingId);
-        calculateDimensions();
-        markDirty();
+        if (!structures.containsKey(structureId)) return;
+        publishStructuralMutation(() -> {
+            structures.remove(structureId);
+            buildings.values().removeIf(room -> room.getStructureId() == structureId);
+        });
     }
 
     void removeLogicalBuilding(int buildingId) {
@@ -972,9 +972,7 @@ public class Village implements Iterable<Building> {
         LogicalBuilding logical = logicalBuildings.get(structure.getLogicalBuildingId());
         if (logical == null || logical.mainRoomId() == room.getId()
                 || !belongsToLogicalBuilding(room, logical.id())) return false;
-        logical.setMainRoomId(room.getId());
-        applyFloorNumbers(logical);
-        markDirty();
+        publishStructuralMutation(() -> logical.setMainRoomId(room.getId()));
         return true;
     }
 
@@ -983,17 +981,23 @@ public class Village implements Iterable<Building> {
         if (structure == null) return false;
         LogicalBuilding logical = logicalBuildings.get(structure.getLogicalBuildingId());
         if (logical == null || logical.inheritanceEnabled() == enabled) return false;
-        logical.setInheritanceEnabled(enabled);
         markDirty();
+        logical.setInheritanceEnabled(enabled);
         return true;
     }
 
     public boolean setRoomContributesToMain(Building room, boolean contributes) {
         if (room == null || !buildings.containsKey(room.getId())
                 || room.contributesToMain() == contributes) return false;
-        room.setContributesToMain(contributes);
         markDirty();
+        room.setContributesToMain(contributes);
         return true;
+    }
+
+    void setRoomType(Building room, String type, boolean forced) {
+        markDirty();
+        room.setType(type);
+        room.setTypeForced(forced);
     }
 
     public Building.validationResult commitRoomInheritanceUpdate(
@@ -1016,26 +1020,22 @@ public class Village implements Iterable<Building> {
         }
         if (currentEnabled == update.enabled()) return Building.validationResult.SUCCESS;
 
-        String automaticType = null;
-        if (!update.enabled() && forcedType == null) {
-            automaticType = RoomTypeResolver.create(this).resolve(room).updatedType(null);
-            if (automaticType == null) return Building.validationResult.INVALID_TYPE;
+        LogicalBuilding logical = update.mainRoom()
+                ? getStructureFor(room).map(Structure::getLogicalBuildingId).map(logicalBuildings::get).orElse(null)
+                : null;
+        if (update.mainRoom() && logical == null) return Building.validationResult.OVERLAP;
+        String automaticType = !update.enabled() && forcedType == null
+                ? RoomTypeResolver.create(this).resolve(room).updatedType(null) : null;
+        if (!update.enabled() && forcedType == null && automaticType == null) {
+            return Building.validationResult.INVALID_TYPE;
         }
 
-        boolean changed = update.mainRoom()
-                ? setBuildingInheritanceEnabled(room, update.enabled())
-                : setRoomContributesToMain(room, update.enabled());
-        if (!changed) return Building.validationResult.OVERLAP;
-
+        markDirty();
+        if (logical != null) logical.setInheritanceEnabled(update.enabled());
+        else room.setContributesToMain(update.enabled());
         if (!update.enabled()) {
-            if (forcedType != null) {
-                room.setType(forcedType);
-                room.setTypeForced(true);
-            } else {
-                room.setType(automaticType);
-                room.setTypeForced(false);
-            }
-            markDirty();
+            room.setType(forcedType != null ? forcedType : automaticType);
+            room.setTypeForced(forcedType != null);
         }
         return Building.validationResult.SUCCESS;
     }

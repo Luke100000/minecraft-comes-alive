@@ -12,6 +12,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VillageManagerExpandedRoomCommitTest {
@@ -52,6 +53,70 @@ class VillageManagerExpandedRoomCommitTest {
         assertTrue(committedFloor.geometry().cellAt(newCell).isPresent());
         assertEquals(2, village.getRooms().count());
         assertTrue(village.getRooms().anyMatch(room -> room.getFloorCells().contains(newCell)));
+    }
+
+    @Test
+    void failedRoomAdditionPublicationLeavesScanReusableAndDoesNotConsumeId() {
+        ThrowOnceMarkDirtyVillage village = new ThrowOnceMarkDirtyVillage();
+        Structure structure = new Structure(10, BlockPos.ZERO, List.of(
+                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 3))));
+        Building main = room(100, 10, 0, region(64, 0, 1));
+        village.registerStructure(structure, main);
+
+        Building added = room(-1, 10, 0, region(64, 2, 3));
+        BuildingScanResult scan = new BuildingScanResult(
+                Building.validationResult.SUCCESS,
+                new BlockPos(2, 64, 0),
+                added,
+                List.of("building"),
+                village);
+        VillageManager manager = new VillageManager(null);
+        village.failNextMarkDirty();
+
+        assertThrows(IllegalStateException.class,
+                () -> manager.commitRoomAddition(scan, "building"));
+        assertEquals(-1, added.getId());
+        assertEquals(1, village.getRooms().count());
+
+        assertEquals(Building.validationResult.SUCCESS,
+                manager.commitRoomAddition(scan, "building"));
+        assertEquals(0, village.getRooms()
+                .filter(room -> room.getId() != main.getId())
+                .findFirst().orElseThrow().getId());
+    }
+
+    @Test
+    void failedInitialRoomPublicationLeavesPendingScanReusableAndDoesNotConsumeIds() {
+        ThrowOnceMarkDirtyVillage village = new ThrowOnceMarkDirtyVillage();
+        Structure pending = new Structure(-1, BlockPos.ZERO, List.of(
+                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 1))));
+        Building added = room(-1, -1, 0, region(64, 0, 1));
+        BuildingScanResult scan = new BuildingScanResult(
+                Building.validationResult.SUCCESS,
+                BlockPos.ZERO,
+                added,
+                List.of("building"),
+                village).withPendingStructure(pending);
+        VillageManager manager = new VillageManager(null);
+        village.failNextMarkDirty();
+
+        assertThrows(IllegalStateException.class,
+                () -> manager.commitRoomAddition(scan, "building"));
+        assertEquals(-1, pending.getId());
+        assertEquals(-1, pending.getLogicalBuildingId());
+        assertEquals(-1, added.getId());
+        assertEquals(-1, added.getStructureId());
+        assertEquals(0, village.getStructures().size());
+        assertEquals(0, village.getRooms().count());
+
+        assertEquals(Building.validationResult.SUCCESS,
+                manager.commitRoomAddition(scan, "building"));
+        Structure committedStructure = village.getStructures().values().stream().findFirst().orElseThrow();
+        Building committedRoom = village.getRooms().findFirst().orElseThrow();
+        assertEquals(0, committedStructure.getId());
+        assertEquals(0, committedStructure.getLogicalBuildingId());
+        assertEquals(1, committedRoom.getId());
+        assertEquals(0, committedRoom.getStructureId());
     }
 
     @Test
@@ -201,6 +266,27 @@ class VillageManagerExpandedRoomCommitTest {
         room.setGeometry(new BlockPos(minX, region.anchorY(), 0),
                 new BlockPos(maxX, region.anchorY() + 3, 0), region);
         return room;
+    }
+
+    private static final class ThrowOnceMarkDirtyVillage extends Village {
+        private boolean failNextMarkDirty;
+
+        private ThrowOnceMarkDirtyVillage() {
+            super(1, null);
+        }
+
+        private void failNextMarkDirty() {
+            failNextMarkDirty = true;
+        }
+
+        @Override
+        public void markDirty() {
+            if (failNextMarkDirty) {
+                failNextMarkDirty = false;
+                throw new IllegalStateException("forced dirty failure");
+            }
+            super.markDirty();
+        }
     }
 
 }

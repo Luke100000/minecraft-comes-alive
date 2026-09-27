@@ -194,10 +194,14 @@ class VillageFloorSystemTest {
             Building room = village.getBuildings().get(2);
             room.addBlock(Blocks.CRAFTING_TABLE, BlockPos.ZERO);
             RoomInheritanceUpdate update = RoomInheritanceUpdate.analyze(village, room, false);
+            String typeBefore = room.getType();
+            boolean forcedBefore = room.isTypeForced();
 
             assertEquals(Building.validationResult.INVALID_TYPE,
                     village.commitRoomInheritanceUpdate(update, "not_eligible"));
             assertTrue(room.contributesToMain());
+            assertEquals(typeBefore, room.getType());
+            assertEquals(forcedBefore, room.isTypeForced());
         } finally {
             BuildingTypes.getInstance().setBuildingTypes(previous);
         }
@@ -236,6 +240,52 @@ class VillageFloorSystemTest {
     }
 
     @Test
+    void metadataMutationsDoNotRecalculateVillageDimensions() {
+        MetadataTrackingVillage village = new MetadataTrackingVillage();
+        Structure structure = structure(10, 10,
+                TestStructureFloors.create(0, 64, 68, 0, region(64)));
+        Building main = room(1, 10, 0, true);
+        Building side = room(2, 10, 0, true);
+        registerStructure(village, structure, main);
+        registerRoom(village, side);
+        village.refreshLogicalBuildings();
+
+        assertTrue(village.setBuildingInheritanceEnabled(main, false));
+        assertTrue(village.setRoomContributesToMain(side, false));
+        village.setRoomType(side, "workshop", true);
+
+        assertEquals(0, village.dimensionCalculations);
+        assertEquals(3, village.dirtyMarks);
+    }
+
+    @Test
+    void failedMetadataDirtyMarkDoesNotMutateBuildingState() {
+        ThrowOnceMarkDirtyVillage village = new ThrowOnceMarkDirtyVillage();
+        Structure structure = structure(10, 10,
+                TestStructureFloors.create(0, 64, 68, 0, region(64)));
+        Building main = room(1, 10, 0, true);
+        Building side = room(2, 10, 0, true);
+        registerStructure(village, structure, main);
+        registerRoom(village, side);
+        village.refreshLogicalBuildings();
+
+        village.failNextMarkDirty();
+        assertThrows(IllegalStateException.class, () -> village.setBuildingInheritanceEnabled(main, false));
+        assertTrue(village.isBuildingInheritanceEnabled(main));
+
+        village.failNextMarkDirty();
+        assertThrows(IllegalStateException.class, () -> village.setRoomContributesToMain(side, false));
+        assertTrue(side.contributesToMain());
+
+        String typeBefore = side.getType();
+        boolean forcedBefore = side.isTypeForced();
+        village.failNextMarkDirty();
+        assertThrows(IllegalStateException.class, () -> village.setRoomType(side, "workshop", true));
+        assertEquals(typeBefore, side.getType());
+        assertEquals(forcedBefore, side.isTypeForced());
+    }
+
+    @Test
     void changingMainRoomAlsoMakesItsFloorTheGroundFloor() {
         Village village = new Village(1, null);
         Structure structure = structure(10, 10,
@@ -255,6 +305,26 @@ class VillageFloorSystemTest {
         assertEquals(-2, structure.getFloor(0).orElseThrow().floorNumber());
         assertEquals(-1, structure.getFloor(1).orElseThrow().floorNumber());
         assertEquals(0, structure.getFloor(2).orElseThrow().floorNumber());
+    }
+
+    @Test
+    void failedMainRoomPublicationRestoresMainRoomAndFloorNumbers() {
+        ThrowOnceMarkDirtyVillage village = new ThrowOnceMarkDirtyVillage();
+        Structure structure = structure(10, 10,
+                TestStructureFloors.create(0, 64, 68, 0, region(64)),
+                TestStructureFloors.create(1, 68, 72, 1, region(68)));
+        Building main = room(100, 10, 0, true);
+        Building upper = room(101, 10, 1, true);
+        registerStructure(village, structure, main);
+        registerRoom(village, upper);
+        village.refreshLogicalBuildings();
+
+        village.failNextMarkDirty();
+
+        assertThrows(IllegalStateException.class, () -> village.setMainRoom(upper));
+        assertEquals(100, village.getLogicalBuilding(10).orElseThrow().mainRoomId());
+        assertEquals(0, village.getStructure(10).orElseThrow().getFloor(0).orElseThrow().floorNumber());
+        assertEquals(1, village.getStructure(10).orElseThrow().getFloor(1).orElseThrow().floorNumber());
     }
 
     @Test
@@ -682,6 +752,7 @@ class VillageFloorSystemTest {
         assertTrue(village.canRemoveFloor(10, -1));
         assertEquals(main, village.getBuilding(100).orElseThrow());
         assertEquals(0, structure.getFloor(3).orElseThrow().floorNumber());
+        assertRegisteredRoomOwnership(village);
     }
 
     @Test
@@ -704,6 +775,7 @@ class VillageFloorSystemTest {
         assertTrue(second.getFloor(0).isEmpty());
         assertTrue(first.getFloor(1).isPresent());
         assertTrue(second.getFloor(1).isPresent());
+        assertRegisteredRoomOwnership(village);
     }
 
     @Test
@@ -723,6 +795,7 @@ class VillageFloorSystemTest {
 
         assertTrue(first.getFloor(1).isEmpty());
         assertTrue(second.getFloor(1).isPresent());
+        assertRegisteredRoomOwnership(village);
     }
 
     @Test
@@ -744,6 +817,7 @@ class VillageFloorSystemTest {
         assertTrue(village.canRemoveFloor(10, 1));
         assertTrue(structure.getFloor(0).isPresent());
         assertEquals(main, village.getBuilding(100).orElseThrow());
+        assertRegisteredRoomOwnership(village);
     }
 
     @Test
@@ -765,6 +839,7 @@ class VillageFloorSystemTest {
         assertTrue(structure.getFloor(1).isPresent());
         assertTrue(structure.getFloor(2).isPresent());
         assertEquals(main, village.getBuilding(100).orElseThrow());
+        assertRegisteredRoomOwnership(village);
     }
 
     @Test
@@ -864,6 +939,47 @@ class VillageFloorSystemTest {
         }
     }
 
+    private static final class ThrowOnceMarkDirtyVillage extends Village {
+        private boolean failNextMarkDirty;
+
+        private ThrowOnceMarkDirtyVillage() {
+            super(1, null);
+        }
+
+        private void failNextMarkDirty() {
+            failNextMarkDirty = true;
+        }
+
+        @Override
+        public void markDirty() {
+            if (failNextMarkDirty) {
+                failNextMarkDirty = false;
+                throw new IllegalStateException("forced dirty failure");
+            }
+            super.markDirty();
+        }
+    }
+
+    private static final class MetadataTrackingVillage extends Village {
+        private int dimensionCalculations;
+        private int dirtyMarks;
+
+        private MetadataTrackingVillage() {
+            super(1, null);
+        }
+
+        @Override
+        public void calculateDimensions() {
+            dimensionCalculations++;
+            super.calculateDimensions();
+        }
+
+        @Override
+        public void markDirty() {
+            dirtyMarks++;
+        }
+    }
+
     private static Map<String, BuildingType> installSingleWorkshopType() {
         BuildingTypes types = BuildingTypes.getInstance();
         Map<String, BuildingType> previous = types.getBuildingTypes();
@@ -959,5 +1075,12 @@ class VillageFloorSystemTest {
                 Math.max(a.getX(), b.getX()), Math.max(a.getY(), b.getY()), Math.max(a.getZ(), b.getZ())))
                 .orElse(BlockPos.ZERO);
         room.setGeometry(min, max, cells);
+    }
+
+    private static void assertRegisteredRoomOwnership(Village village) {
+        village.getRooms().forEach(room -> {
+            Structure owner = village.getStructure(room.getStructureId()).orElseThrow();
+            assertTrue(owner.getFloor(room.getFloorId()).isPresent());
+        });
     }
 }
