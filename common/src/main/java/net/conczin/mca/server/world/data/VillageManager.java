@@ -262,7 +262,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         room.setId(lastBuildingId);
         room.setType(category);
         room.setTypeForced(forcedType != null);
-        village.publishStructuralMutation(() -> village.registerRoom(room));
+        village.publishBuildingMutation(() -> village.registerRoom(room));
         lastBuildingId++;
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
@@ -327,7 +327,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         committedRoom.setType(category);
         committedRoom.setTypeForced(forcedType != null);
         Village targetVillage = village;
-        targetVillage.publishStructuralMutation(() -> targetVillage.registerStructure(committedStructure, committedRoom));
+        targetVillage.publishBuildingMutation(() -> targetVillage.registerStructure(committedStructure, committedRoom));
         lastBuildingId += 2;
         villages.put(village.getId(), village);
         finalizeVillageMutation(village);
@@ -500,7 +500,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                     .filter(building -> building.getStructureId() == orphanedStructureId)
                     .map(Building::getId)
                     .toList();
-            village.publishStructuralMutation(() -> village.removeRooms(orphanedRoomIds));
+            village.publishBuildingMutation(() -> village.removeRooms(orphanedRoomIds));
             return BuildingEditResult.SUCCESS;
         }
         Structure structure = target != null && target.isFunctionalRoom()
@@ -510,7 +510,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 .orElse(null);
         if (structure == null) return BuildingEditResult.NO_BUILDING;
 
-        village.publishStructuralMutation(() -> village.removeLogicalBuilding(structure.getLogicalBuildingId()));
+        village.publishBuildingMutation(() -> village.removeLogicalBuilding(structure.getLogicalBuildingId()));
 
         if (village.getBuildings().isEmpty() && village.getExternalBuildingMap().isEmpty()
                 && village.getStructures().isEmpty()) {

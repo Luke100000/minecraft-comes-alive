@@ -306,16 +306,12 @@ class BlueprintMapGeometryTest {
         int minZ = cells.stream().mapToInt(BlockPos::getZ).min().orElseThrow();
         int maxX = cells.stream().mapToInt(BlockPos::getX).max().orElseThrow();
         int maxZ = cells.stream().mapToInt(BlockPos::getZ).max().orElseThrow();
-        Method fromFootprint = BuildingFloorRegion.class.getDeclaredMethod(
-                "fromFootprint", int.class, java.util.Collection.class);
-        fromFootprint.setAccessible(true);
-        BuildingFloorRegion region = (BuildingFloorRegion) fromFootprint.invoke(null, floorY, cells);
         Method setGeometry = Building.class.getDeclaredMethod(
-                "setGeometry", BlockPos.class, BlockPos.class, BuildingFloorRegion.class);
+                "setGeometry", BlockPos.class, BlockPos.class, java.util.Collection.class);
         setGeometry.setAccessible(true);
         setGeometry.invoke(room,
                 new BlockPos(minX, floorY, minZ),
                 new BlockPos(maxX, floorY + 3, maxZ),
-                region);
+                cells);
     }
 }

@@ -291,7 +291,7 @@ public class Village implements Iterable<Building> {
         currentFloorRoomIds.forEach(nextBuildings::remove);
         for (Building room : replacements) nextBuildings.put(room.getId(), room);
 
-        publishStructuralMutation(() -> {
+        publishBuildingMutation(() -> {
             structures.put(refreshed.getId(), refreshed);
             buildings.clear();
             buildings.putAll(nextBuildings);
@@ -310,7 +310,7 @@ public class Village implements Iterable<Building> {
                 logicalBuildings.values().stream().map(LogicalBuilding::copy).toList());
     }
 
-    void publishStructuralMutation(Runnable mutation) {
+    void publishBuildingMutation(Runnable mutation) {
         BuildingStateSnapshot snapshot = snapshotBuildingState();
         try {
             mutation.run();
@@ -382,7 +382,7 @@ public class Village implements Iterable<Building> {
     boolean removeFloor(int buildingId, int floorNumber) {
         if (!canRemoveFloor(buildingId, floorNumber)) return false;
 
-        publishStructuralMutation(() -> {
+        publishBuildingMutation(() -> {
             for (Structure structure : getBuildingStructures(buildingId)) {
                 List<Integer> floorIds = structure.getFloors().stream()
                         .filter(floor -> floor.floorNumber() == floorNumber)
@@ -402,7 +402,7 @@ public class Village implements Iterable<Building> {
     public boolean removeRoom(int roomId) {
         Building room = buildings.get(roomId);
         if (room == null || isMainRoom(room)) return false;
-        publishStructuralMutation(() -> buildings.remove(roomId));
+        publishBuildingMutation(() -> buildings.remove(roomId));
         return true;
     }
 
@@ -415,7 +415,7 @@ public class Village implements Iterable<Building> {
 
     public void removeStructure(int structureId) {
         if (!structures.containsKey(structureId)) return;
-        publishStructuralMutation(() -> {
+        publishBuildingMutation(() -> {
             structures.remove(structureId);
             buildings.values().removeIf(room -> room.getStructureId() == structureId);
         });
@@ -972,7 +972,7 @@ public class Village implements Iterable<Building> {
         LogicalBuilding logical = logicalBuildings.get(structure.getLogicalBuildingId());
         if (logical == null || logical.mainRoomId() == room.getId()
                 || !belongsToLogicalBuilding(room, logical.id())) return false;
-        publishStructuralMutation(() -> logical.setMainRoomId(room.getId()));
+        publishBuildingMutation(() -> logical.setMainRoomId(room.getId()));
         return true;
     }
 
@@ -981,23 +981,22 @@ public class Village implements Iterable<Building> {
         if (structure == null) return false;
         LogicalBuilding logical = logicalBuildings.get(structure.getLogicalBuildingId());
         if (logical == null || logical.inheritanceEnabled() == enabled) return false;
-        markDirty();
-        logical.setInheritanceEnabled(enabled);
+        publishBuildingMutation(() -> logical.setInheritanceEnabled(enabled));
         return true;
     }
 
     public boolean setRoomContributesToMain(Building room, boolean contributes) {
         if (room == null || !buildings.containsKey(room.getId())
                 || room.contributesToMain() == contributes) return false;
-        markDirty();
-        room.setContributesToMain(contributes);
+        publishBuildingMutation(() -> room.setContributesToMain(contributes));
         return true;
     }
 
     void setRoomType(Building room, String type, boolean forced) {
-        markDirty();
-        room.setType(type);
-        room.setTypeForced(forced);
+        publishBuildingMutation(() -> {
+            room.setType(type);
+            room.setTypeForced(forced);
+        });
     }
 
     public Building.validationResult commitRoomInheritanceUpdate(
@@ -1030,13 +1029,14 @@ public class Village implements Iterable<Building> {
             return Building.validationResult.INVALID_TYPE;
         }
 
-        markDirty();
-        if (logical != null) logical.setInheritanceEnabled(update.enabled());
-        else room.setContributesToMain(update.enabled());
-        if (!update.enabled()) {
-            room.setType(forcedType != null ? forcedType : automaticType);
-            room.setTypeForced(forcedType != null);
-        }
+        publishBuildingMutation(() -> {
+            if (logical != null) logical.setInheritanceEnabled(update.enabled());
+            else room.setContributesToMain(update.enabled());
+            if (!update.enabled()) {
+                room.setType(forcedType != null ? forcedType : automaticType);
+                room.setTypeForced(forcedType != null);
+            }
+        });
         return Building.validationResult.SUCCESS;
     }
 
@@ -1203,10 +1203,10 @@ public class Village implements Iterable<Building> {
     }
 
     public enum RoomScanMode {
-        ADD_BUILDING, ADD_ROOM, UPDATE_ROOM, ADD_FLOOR, ADD_BASEMENT;
+        ADD_BUILDING, ADD_ROOM, UPDATE_ROOM, ADD_ATTACHMENT;
 
         public boolean isAttachment() {
-            return this == ADD_FLOOR || this == ADD_BASEMENT;
+            return this == ADD_ATTACHMENT;
         }
     }
 

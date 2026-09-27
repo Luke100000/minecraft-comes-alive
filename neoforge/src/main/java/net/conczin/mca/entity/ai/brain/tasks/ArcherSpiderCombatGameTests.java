@@ -178,7 +178,36 @@ public final class ArcherSpiderCombatGameTests {
                 path != null && path.canReach(),
                 "topology-ranked cave-corner target set contained no vanilla-reachable endpoint"
         );
+        for (BlockPos candidate : escapeTarget.getPathTargets(archer)) {
+            var candidatePath = archer.getNavigation().createPath(candidate, 0);
+            helper.assertTrue(
+                    candidatePath != null && candidatePath.canReach(),
+                    "cave-corner escape set exposed a candidate vanilla cannot actually reach: " + candidate
+            );
+            helper.assertTrue(
+                    pathUsesNorthExit(candidatePath, archerPos),
+                    "cave-corner escape candidate bypassed the only usable north exit: candidate=" + candidate
+                            + ", pathTarget=" + candidatePath.getTarget()
+            );
+        }
+        helper.assertTrue(
+                pathUsesNorthExit(path, archerPos),
+                "vanilla path stayed in the cave corner instead of using the open north exit; target="
+                        + path.getTarget() + ", candidates=" + escapeTarget.getPathTargets(archer)
+        );
         helper.succeed();
+    }
+
+    private static boolean pathUsesNorthExit(net.minecraft.world.level.pathfinder.Path path, BlockPos archerPos) {
+        for (int i = 0; i < path.getNodeCount(); i++) {
+            BlockPos node = path.getNodePos(i);
+            if (node.getZ() <= archerPos.getZ() - 4
+                    && node.getX() >= archerPos.getX() + 1
+                    && node.getX() <= archerPos.getX() + 4) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @GameTest(batch = "mca_archer_spider_cave_pocket", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)

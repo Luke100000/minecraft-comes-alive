@@ -240,8 +240,8 @@ class VillageFloorSystemTest {
     }
 
     @Test
-    void metadataMutationsDoNotRecalculateVillageDimensions() {
-        MetadataTrackingVillage village = new MetadataTrackingVillage();
+    void failedMetadataPublicationRestoresAggregateStateAfterDerivedStateFailure() {
+        ThrowOnceCalculateVillage village = new ThrowOnceCalculateVillage();
         Structure structure = structure(10, 10,
                 TestStructureFloors.create(0, 64, 68, 0, region(64)));
         Building main = room(1, 10, 0, true);
@@ -250,12 +250,11 @@ class VillageFloorSystemTest {
         registerRoom(village, side);
         village.refreshLogicalBuildings();
 
-        assertTrue(village.setBuildingInheritanceEnabled(main, false));
-        assertTrue(village.setRoomContributesToMain(side, false));
-        village.setRoomType(side, "workshop", true);
+        village.failNextCalculate();
 
-        assertEquals(0, village.dimensionCalculations);
-        assertEquals(3, village.dirtyMarks);
+        assertThrows(IllegalStateException.class,
+                () -> village.setRoomContributesToMain(side, false));
+        assertTrue(village.getBuilding(2).orElseThrow().contributesToMain());
     }
 
     @Test
@@ -271,18 +270,19 @@ class VillageFloorSystemTest {
 
         village.failNextMarkDirty();
         assertThrows(IllegalStateException.class, () -> village.setBuildingInheritanceEnabled(main, false));
-        assertTrue(village.isBuildingInheritanceEnabled(main));
+        assertTrue(village.isBuildingInheritanceEnabled(village.getBuilding(1).orElseThrow()));
 
         village.failNextMarkDirty();
         assertThrows(IllegalStateException.class, () -> village.setRoomContributesToMain(side, false));
-        assertTrue(side.contributesToMain());
+        assertTrue(village.getBuilding(2).orElseThrow().contributesToMain());
 
         String typeBefore = side.getType();
         boolean forcedBefore = side.isTypeForced();
         village.failNextMarkDirty();
         assertThrows(IllegalStateException.class, () -> village.setRoomType(side, "workshop", true));
-        assertEquals(typeBefore, side.getType());
-        assertEquals(forcedBefore, side.isTypeForced());
+        Building restored = village.getBuilding(2).orElseThrow();
+        assertEquals(typeBefore, restored.getType());
+        assertEquals(forcedBefore, restored.isTypeForced());
     }
 
     @Test
@@ -637,7 +637,7 @@ class VillageFloorSystemTest {
         Structure structure = structure(10, 10,
                 TestStructureFloors.create(0, 64, 68, 0, legacyRegion));
         Building room = room(100, 10, 0, true);
-        room.setGeometry(new BlockPos(10, 64, 10), new BlockPos(10, 67, 10), legacyRegion);
+        room.setGeometry(new BlockPos(10, 64, 10), new BlockPos(10, 67, 10), legacyRegion.cells());
         registerStructure(village, structure, room);
 
         assertEquals(room, village.findInteractionRoomAt(new BlockPos(10, 64, 10)).orElseThrow());
@@ -649,7 +649,7 @@ class VillageFloorSystemTest {
         StructureFloor floor = TestStructureFloors.create(0, 64, 68, 0, region(64));
         Structure structure = structure(10, 10, floor);
         Building room = room(100, 10, 0, true);
-        room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 1), region(64));
+        room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 1), region(64).cells());
         registerStructure(village, structure, room);
 
         BlockPos supportBlock = new BlockPos(0, 63, 0);
@@ -681,7 +681,7 @@ class VillageFloorSystemTest {
         StructureFloor floor = TestStructureFloors.create(0, 64, 68, 0, region(64));
         Structure structure = structure(10, 10, floor);
         Building room = room(100, 10, 0, true);
-        room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 1), region(64));
+        room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 1), region(64).cells());
         registerStructure(village, structure, room);
 
         assertEquals(room, village.findPhysicalRoomAt(new BlockPos(0, 66, 0)).orElseThrow());
@@ -857,7 +857,7 @@ class VillageFloorSystemTest {
         StructureFloor oldFloor = TestStructureFloors.create(0, 64, 68, 0, oldRegion);
         Structure current = structure(10, 10, oldFloor);
         Building main = room(100, 10, 0, true);
-        main.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 0), oldRegion);
+        main.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 0), oldRegion.cells());
         registerStructure(village, current, main);
 
         BuildingFloorRegion freshRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
@@ -870,7 +870,7 @@ class VillageFloorSystemTest {
         Building added = room(101, 10, 0, true);
         BuildingFloorRegion addedRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
-        added.setGeometry(new BlockPos(2, 64, 0), new BlockPos(3, 67, 0), addedRegion);
+        added.setGeometry(new BlockPos(2, 64, 0), new BlockPos(3, 67, 0), addedRegion.cells());
 
         assertTrue(village.replaceStructureAndRegisterRoom(refreshed, added));
         assertEquals(4, village.getStructure(10).orElseThrow().getFloor(0).orElseThrow().area());
@@ -885,7 +885,7 @@ class VillageFloorSystemTest {
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));
         Structure current = structure(10, 10, TestStructureFloors.create(0, 64, 68, 0, oldRegion));
         Building main = room(100, 10, 0, true);
-        main.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 0), oldRegion);
+        main.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 0), oldRegion.cells());
         registerStructure(village, current, main);
 
         BuildingFloorRegion freshRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
@@ -897,7 +897,7 @@ class VillageFloorSystemTest {
         Building added = room(101, 10, 0, true);
         BuildingFloorRegion addedRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
-        added.setGeometry(new BlockPos(2, 64, 0), new BlockPos(3, 67, 0), addedRegion);
+        added.setGeometry(new BlockPos(2, 64, 0), new BlockPos(3, 67, 0), addedRegion.cells());
 
         village.failNextCalculate();
 
@@ -957,26 +957,6 @@ class VillageFloorSystemTest {
                 throw new IllegalStateException("forced dirty failure");
             }
             super.markDirty();
-        }
-    }
-
-    private static final class MetadataTrackingVillage extends Village {
-        private int dimensionCalculations;
-        private int dirtyMarks;
-
-        private MetadataTrackingVillage() {
-            super(1, null);
-        }
-
-        @Override
-        public void calculateDimensions() {
-            dimensionCalculations++;
-            super.calculateDimensions();
-        }
-
-        @Override
-        public void markDirty() {
-            dirtyMarks++;
         }
     }
 

@@ -180,7 +180,7 @@ class RoomDFUTest {
         room.setStructureId(20);
         room.setFloorId(0);
         room.setType("house");
-        room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 69, 1), footprint);
+        room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 69, 1), footprint.cells());
         room.addBlock(Blocks.BELL, new BlockPos(0, 65, 0));
 
         Structure reloadedStructure = new Structure(structure.save());

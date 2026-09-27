@@ -65,7 +65,7 @@ class VillageBuildingStateSnapshotTest {
         room.setGeometry(
                 source,
                 source,
-                BuildingFloorRegion.fromFootprint(source.getY() - 1, List.of(source.below())));
+                List.of(source.below()));
         return room;
     }
 }

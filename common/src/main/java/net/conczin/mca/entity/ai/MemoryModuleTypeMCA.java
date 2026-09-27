@@ -34,6 +34,7 @@ public interface MemoryModuleTypeMCA {
     MemoryModuleType<ItemStack> MOURNING_FLOWER = register("mourning_flower", Optional.of(ItemStack.CODEC));
     MemoryModuleType<Boolean> FORCED_HOME = register("forced_home", Optional.of(Codec.BOOL));
     MemoryModuleType<RangedCombatState> RANGED_COMBAT_STATE = register("ranged_combat_state", Optional.empty());
+    MemoryModuleType<GlobalPos> CANT_REACH_WALK_TARGET = register("cant_reach_walk_target", Optional.empty());
 
     static <U> MemoryModuleType<U> register(String name, Optional<Codec<U>> codec) {
         ResourceLocation id = MCA.locate(name);

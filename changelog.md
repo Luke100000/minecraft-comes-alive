@@ -1,8 +1,3 @@
-# TBD
-
-* Fixed adding skins to server wide pool not working without cheats in singleplayer
-* Fixed custom player size and hitbox resetting after changing dimensions.
-
 # 7.7.37
 
 * ***__Back up__*** your world before updating. Existing building and floor data will be updated automatically when the world loads.
@@ -111,6 +106,8 @@
 * Fixed golden apples aging child villagers by the wrong amount; they now advance age by the intended 20 minutes.
 * Baby zombie villagers now stay babies when converted from vanilla baby zombie villagers.
 * Fixed flirty personality dialogue overriding parent/child dialogue for the player's children.
+* Fixed adding skins to server wide pool not working without cheats in singleplayer
+* Fixed custom player size and hitbox resetting after changing dimensions.
 
 # 7.7.36
 * Recommended to ***__backup__*** your world.

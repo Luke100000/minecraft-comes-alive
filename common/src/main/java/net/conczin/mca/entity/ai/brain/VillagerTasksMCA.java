@@ -97,7 +97,8 @@ public class VillagerTasksMCA {
             MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND,
             MemoryModuleTypeMCA.MOURNING_FLOWER,
             MemoryModuleTypeMCA.FORCED_HOME,
-            MemoryModuleTypeMCA.RANGED_COMBAT_STATE
+            MemoryModuleTypeMCA.RANGED_COMBAT_STATE,
+            MemoryModuleTypeMCA.CANT_REACH_WALK_TARGET
     );
 
     public static final ImmutableList<SensorType<? extends Sensor<? super Villager>>> SENSOR_TYPES = ImmutableList.of(

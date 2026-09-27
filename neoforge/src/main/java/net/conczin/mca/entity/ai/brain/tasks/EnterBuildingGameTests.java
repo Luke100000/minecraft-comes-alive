@@ -133,7 +133,17 @@ public final class EnterBuildingGameTests {
         Building building = buildingWithFloorCells(min, max, floorCells);
         Optional<BlockPos> selected = new TargetSelectionProbe().select(building, helper.getLevel(), villager);
 
-        helper.assertTrue(selected.isPresent(), "enter-building target selection returned no usable position");
+        String diagnostics = floorCells.stream()
+                .map(pos -> pos + " sky=" + helper.getLevel().canSeeSky(pos)
+                        + " stable=" + villager.getNavigation().isStableDestination(pos)
+                        + " collisionFree=" + helper.getLevel().noCollision(
+                        villager,
+                        villager.getBoundingBox().move(Vec3.atBottomCenterOf(pos).subtract(villager.position()))
+                ))
+                .toList()
+                .toString();
+        helper.assertTrue(selected.isPresent(),
+                "enter-building target selection returned no usable position; floorCells=" + diagnostics);
         helper.assertTrue(floorCells.contains(selected.orElseThrow()),
                 "enter-building selected an elevated/non-floor position instead of registered room floor geometry");
 

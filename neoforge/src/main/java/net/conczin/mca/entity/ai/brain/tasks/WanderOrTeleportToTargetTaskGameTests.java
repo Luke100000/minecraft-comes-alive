@@ -5,9 +5,13 @@ import com.google.common.collect.ImmutableSet;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
+import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
+import net.conczin.mca.entity.ai.SchedulesMCA;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.navigation.LongDistancePathTarget;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.MobSpawnType;
@@ -15,11 +19,17 @@ import net.minecraft.world.entity.ai.behavior.EntityTracker;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.entity.ai.village.poi.PoiManager;
+import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.entity.schedule.ScheduleBuilder;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -32,6 +42,67 @@ import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath;
 @PrefixGameTestTemplate(false)
 public final class WanderOrTeleportToTargetTaskGameTests {
     private WanderOrTeleportToTargetTaskGameTests() {
+    }
+
+    @GameTest(batch = "mca_walk_target_failure_owner", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void changedWalkTargetGetsFreshFailureOwnership(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(40, 1, 40));
+        BlockPos oldTarget = start.east(80);
+        BlockPos newTarget = start.west(80);
+        prepareFlatPath(helper, start, oldTarget);
+        prepareFlatPath(helper, start, newTarget);
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(start))
+                .withName("Walk Failure Owner Probe")
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.refreshBrain(helper.getLevel());
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+
+        var brain = villager.getBrain();
+        brain.setMemory(MemoryModuleType.WALK_TARGET,
+                new WalkTarget(new LongDistancePathTarget(oldTarget), 0.5F, 0));
+        Path oldPath = villager.getNavigation().createPath(oldTarget, 0);
+        helper.assertTrue(oldPath != null && !oldPath.canReach(),
+                "fixture old target did not produce a bounded partial path");
+        WalkTargetFailureMemory.record(villager, oldTarget, helper.getLevel().getGameTime() - 20L);
+
+        brain.eraseMemory(MemoryModuleType.PATH);
+        brain.setMemory(MemoryModuleType.WALK_TARGET,
+                new WalkTarget(new LongDistancePathTarget(newTarget), 0.5F, 0));
+        WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
+        long retryTime = helper.getLevel().getGameTime();
+        helper.assertTrue(sink.tryStart(helper.getLevel(), villager, retryTime),
+                "new far target did not start its ordinary partial-path attempt");
+
+        Path freshPath = villager.getNavigation().getPath();
+        helper.assertTrue(freshPath != null && !freshPath.canReach(),
+                "new far target inherited the old route's extended search");
+        helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE).isEmpty(),
+                "useful partial progress toward the new target kept stale failure timing");
+        helper.assertTrue(brain.getMemoryInternal(MemoryModuleTypeMCA.CANT_REACH_WALK_TARGET).isEmpty(),
+                "useful partial progress toward the new target kept stale failure ownership");
+
+        while (!freshPath.isDone()) {
+            freshPath.advance();
+        }
+        long finishedAt = retryTime + 1L;
+        sink.tickOrStop(helper.getLevel(), villager, finishedAt);
+
+        helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                        .filter(timestamp -> timestamp == finishedAt)
+                        .isPresent(),
+                "finished-short path did not establish fresh failure timing for the new target");
+        helper.assertTrue(brain.getMemoryInternal(MemoryModuleTypeMCA.CANT_REACH_WALK_TARGET)
+                        .filter(failureTarget -> failureTarget.pos().equals(newTarget))
+                        .isPresent(),
+                "finished-short path did not assign failure ownership to the new target");
+
+        villager.discard();
+        helper.succeed();
     }
 
     @GameTest(batch = "mca_walk_target_timeout_scope", templateNamespace = "minecraft",
@@ -180,7 +251,7 @@ public final class WanderOrTeleportToTargetTaskGameTests {
 
     @GameTest(batch = "mca_failed_path_retry_cadence", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 40)
-    public static void failedNearbyPathRetriesAfterOriginSevenTickInterval(GameTestHelper helper) {
+    public static void failedNearbyPathRetryIsNotThrottledInsideMovementSink(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(10, 2, 10));
         BlockPos destination = start.east(6);
         prepareFlatArea(helper, start, 10, 2);
@@ -200,131 +271,29 @@ public final class WanderOrTeleportToTargetTaskGameTests {
         brain.eraseMemory(MemoryModuleType.PATH);
         brain.eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
         WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
-        long[] firstFailureAt = {-1L};
-
-        helper.onEachTick(() -> {
-            if (brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty()) {
-                brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(destination, 0.5F, 0));
-            }
-
-            long gameTime = helper.getLevel().getGameTime();
-            boolean started = sink.tryStart(helper.getLevel(), villager, gameTime);
-            helper.assertTrue(!started, "airborne retry unexpectedly created a path");
-            boolean targetWasErased = brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty();
-
-            if (firstFailureAt[0] < 0L) {
-                helper.assertTrue(targetWasErased, "initial failed path did not erase its WALK_TARGET");
-                firstFailureAt[0] = brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
-                        .orElse(-1L);
-                helper.assertTrue(firstFailureAt[0] == gameTime,
-                        "initial failed path did not establish the canonical failure timestamp");
-                return;
-            }
-
-            long elapsed = gameTime - firstFailureAt[0];
-            if (elapsed < 7L) {
-                helper.assertTrue(!targetWasErased,
-                        "failed nearby path retried before origin's seven-tick retry interval");
-                return;
-            }
-
-            helper.assertTrue(elapsed == 7L && targetWasErased,
-                    "failed nearby path did not retry after origin's seven-tick retry interval");
-            helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
-                            .filter(since -> since == firstFailureAt[0])
-                            .isPresent(),
-                    "failed retry rewrote the canonical failure-since timestamp");
-            villager.discard();
-            helper.succeed();
-        });
-    }
-
-    @GameTest(batch = "mca_stuck_retry_throttle", templateNamespace = "minecraft",
-            template = "bastion/blocks/air", timeoutTicks = 120)
-    public static void failedRetryAfterVanillaStuckCooldownUsesMcaThrottle(GameTestHelper helper) {
-        BlockPos start = helper.absolutePos(new BlockPos(10, 2, 10));
-        BlockPos destination = start.east(6);
-        prepareFlatArea(helper, start, 10, 2);
-
-        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
-                .withAge(0)
-                .withPosition(Vec3.atBottomCenterOf(start))
-                .withName("Stuck Retry Throttle Probe")
-                .spawn(MobSpawnType.STRUCTURE);
-        villager.refreshBrain(helper.getLevel());
-        villager.setNoAi(true);
-        villager.setOnGround(true);
-        villager.setSpeed(0.5F);
-
-        var brain = villager.getBrain();
-        brain.eraseMemory(MemoryModuleType.PATH);
-        brain.eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
         brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(destination, 0.5F, 0));
+        long firstFailureAt = helper.getLevel().getGameTime();
+        helper.assertTrue(!sink.tryStart(helper.getLevel(), villager, firstFailureAt),
+                "airborne initial attempt unexpectedly created a path");
+        helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty(),
+                "initial failed path did not erase its WALK_TARGET");
+        helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                        .filter(since -> since == firstFailureAt)
+                        .isPresent(),
+                "initial failed path did not establish the canonical failure timestamp");
 
-        WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
-        long startedAt = helper.getLevel().getGameTime();
-        helper.assertTrue(sink.tryStart(helper.getLevel(), villager, startedAt),
-                "movement sink did not start the stuck-path fixture");
+        brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(destination, 0.5F, 0));
+        helper.assertTrue(!sink.tryStart(helper.getLevel(), villager, firstFailureAt + 1L),
+                "airborne retry unexpectedly created a path");
+        helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty(),
+                "movement sink throttled the retry instead of letting its producer own retry cadence");
+        helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                        .filter(since -> since == firstFailureAt)
+                        .isPresent(),
+                "failed retry rewrote the canonical failure-since timestamp");
 
-        for (int i = 0; i < 205 && !villager.getNavigation().isStuck(); i++) {
-            villager.getNavigation().tick();
-        }
-        helper.assertTrue(villager.getNavigation().isStuck(),
-                "fixture navigation did not enter vanilla's sticky stuck state");
-        sink.tickOrStop(helper.getLevel(), villager, startedAt + 1L);
-
-        villager.setPos(villager.getX(), villager.getY() + 2.0D, villager.getZ());
-        villager.setNoGravity(true);
-        villager.setOnGround(false);
-
-        long[] firstFailureAt = {-1L};
-        long[] secondFailureAt = {-1L};
-        helper.onEachTick(() -> {
-            if (brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty()) {
-                brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(destination, 0.5F, 0));
-            }
-
-            long gameTime = helper.getLevel().getGameTime();
-            boolean started = sink.tryStart(helper.getLevel(), villager, gameTime);
-            helper.assertTrue(!started, "airborne retry unexpectedly created a path");
-            boolean targetWasErased = brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty();
-
-            if (firstFailureAt[0] < 0L) {
-                if (targetWasErased) {
-                    firstFailureAt[0] = gameTime;
-                    helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
-                                    .filter(since -> since == gameTime)
-                                    .isPresent(),
-                            "failed retry did not establish the canonical unreachable timestamp");
-                }
-                return;
-            }
-
-            long elapsed = gameTime - (secondFailureAt[0] >= 0L ? secondFailureAt[0] : firstFailureAt[0]);
-            if (elapsed < 20L) {
-                helper.assertTrue(!targetWasErased,
-                        "failed path retried before the canonical 20-tick unreachable window elapsed");
-                helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
-                                .filter(since -> since == firstFailureAt[0])
-                                .isPresent(),
-                        "retry throttle rewrote the canonical failure-since timestamp");
-                return;
-            }
-
-            helper.assertTrue(targetWasErased,
-                    "failed path did not retry when the canonical 20-tick unreachable window elapsed");
-            helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
-                            .filter(since -> since == firstFailureAt[0])
-                            .isPresent(),
-                    "failed retry rewrote the canonical failure-since timestamp");
-            if (secondFailureAt[0] < 0L) {
-                secondFailureAt[0] = gameTime;
-                return;
-            }
-
-            villager.discard();
-            helper.succeed();
-        });
+        villager.discard();
+        helper.succeed();
     }
 
     @GameTest(batch = "mca_brain_driven_long_distance_walk", templateNamespace = "minecraft",
@@ -540,6 +509,122 @@ public final class WanderOrTeleportToTargetTaskGameTests {
         });
     }
 
+    @GameTest(batch = "mca_normal_night_sleep", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 700)
+    public static void normalNightVillagersAcquireHomesAndSleep(GameTestHelper helper) {
+        boolean mourningEnabled = Config.getInstance().enableMourning;
+        Config.getInstance().enableMourning = false;
+        BlockPos center = helper.absolutePos(new BlockPos(56, 1, 56));
+        prepareFlatArea(helper, center, 24, 3);
+        helper.getLevel().setDayTime(13_000L);
+
+        VillagerEntityMCA[] villagers = new VillagerEntityMCA[4];
+        boolean[] sawHome = new boolean[villagers.length];
+        boolean[] sawWalkTarget = new boolean[villagers.length];
+        for (int index = 0; index < villagers.length; index++) {
+            BlockPos foot = center.offset(8, 0, -9 + index * 6);
+            placeBed(helper, foot, Direction.EAST);
+
+            BlockPos start = center.offset(-8, 0, -9 + index * 6);
+            VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                    .withAge(0)
+                    .withPosition(Vec3.atBottomCenterOf(start))
+                    .withName("Normal Night Sleeper " + index)
+                    .spawn(MobSpawnType.STRUCTURE);
+            villager.refreshBrain(helper.getLevel());
+            villager.setOnGround(true);
+            villager.getBrain().setSchedule(SchedulesMCA.DEFAULT);
+            villager.getBrain().updateActivityFromSchedule(
+                    helper.getLevel().getDayTime(),
+                    helper.getLevel().getGameTime()
+            );
+            villager.getBrain().eraseMemory(MemoryModuleType.HOME);
+            villager.getBrain().eraseMemory(MemoryModuleType.PATH);
+            villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+            villager.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+            villagers[index] = villager;
+        }
+
+        PoiManager initialPoiManager = helper.getLevel().getPoiManager();
+        long initialHomePois = initialPoiManager.getCountInRange(
+                poi -> poi.is(PoiTypes.HOME), center, 48, PoiManager.Occupancy.ANY);
+        long initialAvailableHomePois = initialPoiManager.getCountInRange(
+                poi -> poi.is(PoiTypes.HOME), center, 48, PoiManager.Occupancy.HAS_SPACE);
+        helper.assertTrue(initialHomePois == villagers.length,
+                "night fixture did not register exactly one HOME POI per bed; homePois=" + initialHomePois);
+        helper.assertTrue(initialAvailableHomePois == villagers.length,
+                "night fixture consumed a HOME POI before natural brain ticking began; availableHomePois="
+                        + initialAvailableHomePois);
+
+        long startedAt = helper.getLevel().getGameTime();
+        helper.onEachTick(() -> {
+            long elapsed = helper.getLevel().getGameTime() - startedAt;
+            int sleeping = 0;
+            for (int index = 0; index < villagers.length; index++) {
+                VillagerEntityMCA villager = villagers[index];
+                sawHome[index] |= villager.getBrain().getMemoryInternal(MemoryModuleType.HOME).isPresent();
+                sawWalkTarget[index] |= villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).isPresent();
+                if (villager.isSleeping()) {
+                    sleeping++;
+                }
+            }
+            if (sleeping == villagers.length) {
+                Config.getInstance().enableMourning = mourningEnabled;
+                for (VillagerEntityMCA villager : villagers) {
+                    villager.discard();
+                }
+                helper.succeed();
+                return;
+            }
+
+            if (elapsed < 600L) {
+                return;
+            }
+
+            Config.getInstance().enableMourning = mourningEnabled;
+            StringBuilder state = new StringBuilder();
+            PoiManager poiManager = helper.getLevel().getPoiManager();
+            for (int index = 0; index < villagers.length; index++) {
+                VillagerEntityMCA villager = villagers[index];
+                if (villager.isSleeping()) {
+                    continue;
+                }
+                var brain = villager.getBrain();
+                long homePois = poiManager.getCountInRange(
+                        poi -> poi.is(PoiTypes.HOME), villager.blockPosition(), 48, PoiManager.Occupancy.ANY);
+                long availableHomePois = poiManager.getCountInRange(
+                        poi -> poi.is(PoiTypes.HOME), villager.blockPosition(), 48, PoiManager.Occupancy.HAS_SPACE);
+                state.append("; ")
+                        .append(villager.getName().getString())
+                        .append("@ ").append(villager.blockPosition())
+                        .append(" act=").append(brain.getActiveNonCoreActivity())
+                        .append(" home=").append(brain.getMemoryInternal(MemoryModuleType.HOME).isPresent())
+                        .append(" sawHome=").append(sawHome[index])
+                        .append(" walk=").append(brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).isPresent())
+                        .append(" sawWalk=").append(sawWalkTarget[index])
+                        .append(" cant=").append(brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE).isPresent())
+                        .append(" homePois=").append(homePois)
+                        .append(" availableHomePois=").append(availableHomePois)
+                        .append(" inVillage=").append(helper.getLevel().isVillage(villager.blockPosition()))
+                        .append(" running=").append(brain.getRunningBehaviors())
+                        .append(" done=").append(villager.getNavigation().isDone())
+                        .append(" stuck=").append(villager.getNavigation().isStuck());
+            }
+            helper.fail("normal nighttime villagers did not all acquire HOME and sleep; sleeping="
+                    + sleeping + "/" + villagers.length + state);
+        });
+    }
+
+    private static BlockPos placeBed(GameTestHelper helper, BlockPos foot, Direction facing) {
+        BlockPos head = foot.relative(facing);
+        BlockState footState = Blocks.RED_BED.defaultBlockState()
+                .setValue(BedBlock.FACING, facing)
+                .setValue(BedBlock.PART, BedPart.FOOT);
+        helper.getLevel().setBlock(foot, footState, Block.UPDATE_CLIENTS);
+        helper.getLevel().setBlock(head, footState.setValue(BedBlock.PART, BedPart.HEAD), Block.UPDATE_CLIENTS);
+        return head;
+    }
+
     /**
      * Catches an exact-target path finishing while the entity is still short of the requested block. Vanilla clears
      * the finished path and walk target, so MCA must preserve unreachable evidence for the destination producer instead
@@ -593,6 +678,8 @@ public final class WanderOrTeleportToTargetTaskGameTests {
 
         helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE).isPresent(),
                 "an exact-target path that finished short lost the terminal unreachable signal");
+        helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty(),
+                "finished short path kept the movement sink alive while the villager was already motionless");
         helper.succeed();
     }
 

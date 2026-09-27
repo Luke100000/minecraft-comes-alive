@@ -519,7 +519,7 @@ class BlueprintScreenMapInteractionTest {
         main.setFloorId(1);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = new RoomScanPlan(Optional.empty(), Village.RoomScanMode.ADD_BASEMENT,
+        RoomScanPlan plan = new RoomScanPlan(Optional.empty(), Village.RoomScanMode.ADD_ATTACHMENT,
                 10, -1, BlockPos.ZERO, BlockPos.ZERO, -1, -1, structure.getFloor(0).orElseThrow());
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, -1);
 
@@ -731,7 +731,7 @@ class BlueprintScreenMapInteractionTest {
     private static void ensureRoomOwnership(Structure structure, Building room) throws Exception {
         if (!room.getFloorCells().isEmpty()) return;
         StructureFloor floor = structure.getFloor(room.getFloorId()).orElseThrow();
-        BlockPos cell = floor.region().cells().iterator().next();
+        BlockPos cell = new BlockPos(structure.getPos0().getX(), floor.anchorY(), structure.getPos0().getZ());
         setRoomGeometry(room, cell);
     }
 }

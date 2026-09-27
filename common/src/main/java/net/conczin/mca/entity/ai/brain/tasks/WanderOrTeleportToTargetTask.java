@@ -1,6 +1,8 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
@@ -17,29 +19,11 @@ import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 
 public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
-    private static final long UNREACHABLE_PATH_RETRY_TICKS = 20L;
     private boolean extendedMovementLifetime;
 
     @Override
     protected boolean timedOut(long gameTime) {
         return !this.extendedMovementLifetime && super.timedOut(gameTime);
-    }
-
-    @Override
-    protected boolean checkExtraStartConditions(ServerLevel world, Mob entity) {
-        long gameTime = world.getGameTime();
-        Long unreachableSince = entity.getBrain()
-                .getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
-                .orElse(null);
-        if (unreachableSince != null) {
-            long unreachableTicks = gameTime - unreachableSince;
-            if (unreachableTicks < UNREACHABLE_PATH_RETRY_TICKS
-                    || unreachableTicks % UNREACHABLE_PATH_RETRY_TICKS != 0L) {
-                return false;
-            }
-        }
-
-        return super.checkExtraStartConditions(world, entity);
     }
 
     @Override
@@ -49,30 +33,25 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         }
 
         boolean vanillaCanContinue = super.canStillUse(world, entity, gameTime);
+        if (vanillaCanContinue) {
+            return true;
+        }
+
         WalkTarget walkTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
         Path path = entity.getNavigation().getPath();
-        if (vanillaCanContinue
-                || walkTarget == null
-                || path == null
-                || !entity.getNavigation().isDone()
-                || walkTargetReached(entity, walkTarget)) {
-            return vanillaCanContinue;
+        if (walkTarget != null
+                && path != null
+                && entity.getNavigation().isDone()
+                && !walkTargetReached(entity, walkTarget)
+                && !entity.getBrain().hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)) {
+            if (entity instanceof VillagerEntityMCA villager) {
+                WalkTargetFailureMemory.record(villager, walkTarget.getTarget().currentBlockPosition(), gameTime);
+            } else {
+                entity.getBrain().setMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE, gameTime);
+            }
         }
 
-        long unreachableSince = entity.getBrain()
-                .getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
-                .orElseGet(() -> {
-                    entity.getBrain().setMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE, gameTime);
-                    return gameTime;
-                });
-        if (gameTime - unreachableSince > UNREACHABLE_PATH_RETRY_TICKS) {
-            return false;
-        }
-
-        // Navigation can be "done" while the entity is still outside the logical WalkTarget. Keep this owner alive
-        // only for the same short retry window so the CANT_REACH timestamp survives long enough for the destination
-        // producer to make the terminal decision.
-        return true;
+        return false;
     }
 
     @Override
@@ -94,7 +73,11 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
                         path,
                         walkTarget.getTarget().currentBlockPosition()
                 )) {
-            entity.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+            if (entity instanceof VillagerEntityMCA villager) {
+                WalkTargetFailureMemory.clear(villager);
+            } else {
+                entity.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+            }
         }
     }
 

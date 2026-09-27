@@ -135,8 +135,8 @@ public final class BuildingDiagnostics {
         Building.validationResult analysis = switch (plan.mode()) {
             case ADD_BUILDING -> roomWorkflow.analyzeBuildingAddition(pos).result();
             case ADD_ROOM -> roomWorkflow.analyzeRoom(pos).result();
-            case ADD_FLOOR, ADD_BASEMENT -> roomWorkflow.analyzeAttachedRoom(
-                    village, plan, plan.mode(), plan.targetBuildingId()).result();
+            case ADD_ATTACHMENT -> roomWorkflow.analyzeAttachedRoom(
+                    village, plan, plan.targetBuildingId()).result();
             case UPDATE_ROOM -> room == null
                     ? Building.validationResult.NOT_IN_BUILDING
                     : roomWorkflow.analyzeRegisteredRoomUpdate(village, room.getId(), pos).result();
@@ -214,7 +214,7 @@ public final class BuildingDiagnostics {
         return switch (plan.mode()) {
             case UPDATE_ROOM -> StructuralPosition.REGISTERED_ROOM;
             case ADD_ROOM -> StructuralPosition.ATTACHABLE_ROOM;
-            case ADD_BUILDING, ADD_FLOOR, ADD_BASEMENT -> StructuralPosition.OUTSIDE;
+            case ADD_BUILDING, ADD_ATTACHMENT -> StructuralPosition.OUTSIDE;
         };
     }
 

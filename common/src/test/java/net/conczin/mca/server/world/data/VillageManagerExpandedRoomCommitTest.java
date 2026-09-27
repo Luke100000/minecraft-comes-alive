@@ -264,7 +264,7 @@ class VillageManagerExpandedRoomCommitTest {
         int minX = region.cells().stream().mapToInt(BlockPos::getX).min().orElseThrow();
         int maxX = region.cells().stream().mapToInt(BlockPos::getX).max().orElseThrow();
         room.setGeometry(new BlockPos(minX, region.anchorY(), 0),
-                new BlockPos(maxX, region.anchorY() + 3, 0), region);
+                new BlockPos(maxX, region.anchorY() + 3, 0), region.cells());
         return room;
     }
 

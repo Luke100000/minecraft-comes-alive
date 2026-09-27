@@ -4,10 +4,11 @@ import com.google.common.collect.ImmutableSet;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
-import net.conczin.mca.util.RegistryHelper;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.TagKey;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -22,6 +23,8 @@ import net.minecraft.world.phys.AABB;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -104,11 +107,23 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             List<LivingEntity> candidates,
             Optional<Player> followedPlayer
     ) {
+        ConfiguredPriorityLookup configuredPriorities = ConfiguredPriorityLookup.get();
+        Map<EntityType<?>, Optional<Integer>> configuredPriorityByType = new IdentityHashMap<>();
         LivingEntity best = null;
         int bestPriority = Integer.MIN_VALUE;
         double bestDistanceSquared = Double.POSITIVE_INFINITY;
         for (LivingEntity target : candidates) {
-            int priority = getPriority(target, entity, followedPlayer);
+            EntityType<?> type = target.getType();
+            Optional<Integer> configuredPriority = configuredPriorityByType.computeIfAbsent(
+                    type,
+                    configuredPriorities::getPriority
+            );
+            int priority = getPriority(
+                    target,
+                    entity,
+                    followedPlayer,
+                    configuredPriority
+            );
             if (priority < 0
                     || !isWithinGuardEnemyRange(entity, target, followedPlayer)
                     || !isVisibleToGuard(entity, target, followedPlayer)) {
@@ -124,6 +139,38 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             }
         }
         return Optional.ofNullable(best);
+    }
+
+    private static int getPriority(
+            LivingEntity entity,
+            LivingEntity guard,
+            Optional<Player> followedPlayer,
+            Optional<Integer> configuredPriority
+    ) {
+        if (entity instanceof VillagerEntityMCA villager) {
+            return villager.isHostile() ? 10 : -1;
+        }
+        if (guard != null && entity instanceof Mob mob && mob.getTarget() == guard) {
+            return 9;
+        }
+        if (configuredPriority.isPresent()) {
+            return configuredPriority.get();
+        }
+
+        if (followedPlayer.isPresent()) {
+            Player player = followedPlayer.get();
+            if (entity instanceof Mob mob && mob.getTarget() == player) {
+                return 9;
+            }
+            if (isFollowingDefenseEnemy(entity, player)) {
+                return 3;
+            }
+        }
+
+        if (Config.getInstance().guardsTargetMonsters && entity instanceof Enemy) {
+            return 3;
+        }
+        return -1;
     }
 
     private AABB getGuardScanBounds(VillagerEntityMCA guard, Optional<Player> followedPlayer) {
@@ -177,40 +224,11 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             LivingEntity guard,
             Optional<Player> followedPlayer
     ) {
-        if (entity instanceof VillagerEntityMCA villager) {
-            return villager.isHostile() ? 10 : -1;
-        }
-        if (guard != null && entity instanceof Mob mob && mob.getTarget() == guard) {
-            return 9;
-        }
-
-        Optional<Integer> configuredPriority = getConfiguredPriority(entity.getType());
-        if (configuredPriority.isPresent()) {
-            return configuredPriority.get();
-        }
-
-        if (followedPlayer.isPresent()) {
-            Player player = followedPlayer.get();
-            if (entity instanceof Mob mob && mob.getTarget() == player) {
-                return 9;
-            }
-            if (isFollowingDefenseEnemy(entity, player)) {
-                return 3;
-            }
-        }
-
-        if (Config.getInstance().guardsTargetMonsters && entity instanceof Enemy) {
-            return 3;
-        }
-        return -1;
+        return getPriority(entity, guard, followedPlayer, getConfiguredPriority(entity.getType()));
     }
 
     private static Optional<Integer> getConfiguredPriority(EntityType<?> type) {
-        ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
-        if (Config.getInstance().guardsTargetEntities.containsKey(id.toString())) {
-            return Optional.of(Config.getInstance().guardsTargetEntities.get(id.toString()));
-        }
-        return getTagPriority(type);
+        return ConfiguredPriorityLookup.get().getPriority(type);
     }
 
     private static Optional<Player> getFollowedPlayer(LivingEntity guard) {
@@ -225,16 +243,68 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
                && entity.distanceToSqr(player) <= GUARD_ENEMY_RANGE_SQR;
     }
 
-    private static Optional<Integer> getTagPriority(EntityType<?> type) {
-        for (Map.Entry<String, Integer> entry : Config.getInstance().guardsTargetEntities.entrySet()) {
-            String key = entry.getKey();
-            if (key.startsWith("#")) {
-                ResourceLocation id = ResourceLocation.tryParse(key.substring(1));
-                if (id != null && RegistryHelper.isObjectInTag(BuiltInRegistries.ENTITY_TYPE, id, type)) {
-                    return Optional.of(entry.getValue());
+    private record ConfiguredTagPriority(TagKey<EntityType<?>> tag, int priority) {
+    }
+
+    private record ConfiguredPriorityLookup(
+            Map<String, Integer> sourcePriorities,
+            Map<EntityType<?>, Integer> entityPriorities,
+            List<ConfiguredTagPriority> tagPriorities
+    ) {
+        private static ConfiguredPriorityLookup get() {
+            Map<String, Integer> configuredPriorities = Config.getInstance().guardsTargetEntities;
+            ConfiguredPriorityLookup lookup = Holder.INSTANCE;
+            if (!lookup.sourcePriorities.equals(configuredPriorities)) {
+                lookup = compile(configuredPriorities);
+                Holder.INSTANCE = lookup;
+            }
+            return lookup;
+        }
+
+        private static ConfiguredPriorityLookup compile(Map<String, Integer> configuredPriorities) {
+            Map<String, Integer> sourcePriorities = Map.copyOf(configuredPriorities);
+            Map<EntityType<?>, Integer> entityPriorities = new HashMap<>();
+            List<ConfiguredTagPriority> tagPriorities = new ArrayList<>();
+            for (Map.Entry<String, Integer> entry : sourcePriorities.entrySet()) {
+                String key = entry.getKey();
+                boolean tag = key.startsWith("#");
+                ResourceLocation id = ResourceLocation.tryParse(tag ? key.substring(1) : key);
+                if (id == null) {
+                    continue;
+                }
+
+                if (tag) {
+                    tagPriorities.add(new ConfiguredTagPriority(
+                            TagKey.create(Registries.ENTITY_TYPE, id),
+                            entry.getValue()
+                    ));
+                } else {
+                    BuiltInRegistries.ENTITY_TYPE.getOptional(id)
+                            .ifPresent(type -> entityPriorities.put(type, entry.getValue()));
                 }
             }
+            return new ConfiguredPriorityLookup(
+                    sourcePriorities,
+                    Map.copyOf(entityPriorities),
+                    List.copyOf(tagPriorities)
+            );
         }
-        return Optional.empty();
+
+        private Optional<Integer> getPriority(EntityType<?> type) {
+            Integer priority = this.entityPriorities.get(type);
+            if (priority != null) {
+                return Optional.of(priority);
+            }
+            for (ConfiguredTagPriority configuredTag : this.tagPriorities) {
+                if (type.is(configuredTag.tag())) {
+                    return Optional.of(configuredTag.priority());
+                }
+            }
+            return Optional.empty();
+        }
+
+        private static final class Holder {
+            private static ConfiguredPriorityLookup INSTANCE = compile(Config.getInstance().guardsTargetEntities);
+        }
     }
 }

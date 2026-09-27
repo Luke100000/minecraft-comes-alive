@@ -31,10 +31,6 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
     }
 
     /** Derived projection only; never authoritative physical topology. */
-    public BuildingFloorRegion region() {
-        return geometry.projection();
-    }
-
     public int area() {
         return geometry.footprintArea();
     }

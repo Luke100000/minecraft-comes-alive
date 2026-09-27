@@ -1,6 +1,7 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.navigation.LongDistancePathTarget;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
@@ -18,6 +19,7 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 public final class ExtendedWalkTowardsTask {
+    private static final long UNREACHABLE_PATH_RETRY_TICKS = 20L;
     private static final WalkTargetResolver NO_WALK_TARGET_OVERRIDE = (world, entity, destination) -> Optional.empty();
     private static final PositionTrackerResolver NO_FINAL_TARGET_OVERRIDE = (world, entity, destination) -> Optional.empty();
     private static final Predicate<VillagerEntityMCA> ALWAYS_WALK = entity -> true;
@@ -84,8 +86,12 @@ public final class ExtendedWalkTowardsTask {
                             GlobalPos globalPos = context.get(destinationResult);
                             Optional<BlockPos> resolvedTarget = policy.walkTargetResolver().resolve(world, entity, globalPos);
                             BlockPos targetPos = resolvedTarget.orElse(globalPos.pos());
+                            GlobalPos failureTarget = resolvedTarget
+                                    .map(pos -> GlobalPos.of(world.dimension(), pos))
+                                    .orElse(globalPos);
                             int targetCompletionRange = resolvedTarget.isPresent() ? 0 : completionRange;
                             boolean sameDimension = globalPos.dimension() == world.dimension();
+                            WalkTargetFailureMemory.clearIfTargetChanged(entity, failureTarget);
 
                             Optional<WalkTarget> currentWalkTarget = context.tryGet(walkTarget);
                             if (currentWalkTarget.isPresent()) {
@@ -100,7 +106,7 @@ public final class ExtendedWalkTowardsTask {
                                 }
 
                                 walkTarget.erase();
-                                cantReachWalkTargetSince.erase();
+                                WalkTargetFailureMemory.clear(entity);
                                 return true;
                             }
 
@@ -109,6 +115,12 @@ public final class ExtendedWalkTowardsTask {
                                     .map(since -> world.getGameTime() - since)
                                     .orElse(0L);
                             if (sameDimension && (optional.isEmpty() || unreachableTicks <= maxRunTime)) {
+                                if (optional.isPresent()
+                                        && (unreachableTicks < UNREACHABLE_PATH_RETRY_TICKS
+                                        || unreachableTicks % UNREACHABLE_PATH_RETRY_TICKS != 0L)) {
+                                    return true;
+                                }
+
                                 if (MCAGroundPathNavigation.requiresExtendedPath(entity, targetPos)) {
                                     walkTarget.set(new WalkTarget(
                                             new LongDistancePathTarget(targetPos),
@@ -135,10 +147,10 @@ public final class ExtendedWalkTowardsTask {
                                         entity.releasePoi(destination);
                                     }
                                     destinationResult.erase();
-                                    cantReachWalkTargetSince.set(time);
+                                    WalkTargetFailureMemory.record(entity, failureTarget, time);
                                     onGiveUp.accept(entity);
                                 } else {
-                                    cantReachWalkTargetSince.set(time);
+                                    WalkTargetFailureMemory.record(entity, failureTarget, time);
                                 }
                             }
 

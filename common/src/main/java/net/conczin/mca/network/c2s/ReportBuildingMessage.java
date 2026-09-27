@@ -33,7 +33,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         RoomWorkflow workflow = new RoomWorkflow(manager, player.serverLevel());
         try {
             switch (action) {
-                case ADD_ROOM, ADD_BUILDING, ADD_FLOOR, ADD_BASEMENT, UPDATE_ROOM ->
+                case SCAN_ROOM, ADD_BUILDING, ADD_ATTACHMENT ->
                         executeScanAction(workflow, player, player.blockPosition(), null,
                                 action, parseTargetBuildingId(data));
                 case SET_MAIN_ROOM -> updateMainRoom(manager, player);
@@ -61,11 +61,9 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                                   Action action,
                                   int expectedTargetId) {
         RoomWorkflow.Outcome outcome = switch (action) {
-            case ADD_ROOM -> workflow.addRoom(source, forcedType);
+            case SCAN_ROOM -> workflow.scanRoom(source, expectedTargetId, forcedType);
             case ADD_BUILDING -> workflow.addBuilding(source, forcedType);
-            case ADD_FLOOR -> workflow.addFloor(source, expectedTargetId, forcedType);
-            case ADD_BASEMENT -> workflow.addBasement(source, expectedTargetId, forcedType);
-            case UPDATE_ROOM -> workflow.updateRoom(source, expectedTargetId, forcedType);
+            case ADD_ATTACHMENT -> workflow.addAttachment(source, expectedTargetId, forcedType);
             case SET_ROOM_INHERITANCE -> workflow.updateInheritance(
                     source, expectedTargetId, false, forcedType);
             default -> null;
@@ -144,16 +142,16 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             return;
         }
         if (outcome.status() == RoomWorkflow.Status.FAILED) {
-            if (action == Action.ADD_ROOM && outcome.result() == Building.validationResult.IDENTICAL) {
+            if (action == Action.SCAN_ROOM
+                    && outcome.expectedTargetId() < 0
+                    && outcome.result() == Building.validationResult.IDENTICAL) {
                 player.displayClientMessage(Component.translatable("blueprint.roomAlreadyAdded"), true);
                 return;
             }
-            if ((action == Action.UPDATE_ROOM || action == Action.SET_ROOM_INHERITANCE)
+            if ((action == Action.SCAN_ROOM || action == Action.SET_ROOM_INHERITANCE)
                     && outcome.result() == Building.validationResult.NOT_IN_BUILDING) {
                 if (outcome.expectedTargetId() >= 0) {
                     player.displayClientMessage(Component.translatable("blueprint.roomUpdateConflict"), true);
-                } else if (action == Action.UPDATE_ROOM) {
-                    player.displayClientMessage(Component.translatable("blueprint.noRoomOnFloor"), true);
                 }
                 return;
             }
@@ -163,10 +161,10 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
 
         String successKey = switch (action) {
             case ADD_BUILDING -> "blueprint.buildingAdded";
-            case ADD_FLOOR -> "blueprint.floorAdded";
-            case ADD_BASEMENT -> "blueprint.basementAdded";
-            case UPDATE_ROOM -> "blueprint.roomUpdated";
-            case ADD_ROOM -> "blueprint.roomAdded";
+            case ADD_ATTACHMENT -> outcome.prospectiveFloorNumber() < 0
+                    ? "blueprint.basementAdded" : "blueprint.floorAdded";
+            case SCAN_ROOM -> outcome.expectedTargetId() >= 0
+                    ? "blueprint.roomUpdated" : "blueprint.roomAdded";
             default -> null;
         };
         if (successKey != null) displayScanResult(player, Building.validationResult.SUCCESS, successKey);
@@ -215,17 +213,15 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
 
     public enum Action {
         AUTO_SCAN,
-        ADD_ROOM,
+        SCAN_ROOM,
         REMOVE,
         FORCE_TYPE,
         FULL_SCAN,
         REMOVE_ROOM,
-        UPDATE_ROOM,
         SET_MAIN_ROOM,
         SET_ROOM_INHERITANCE,
         ADD_BUILDING,
-        ADD_FLOOR,
-        ADD_BASEMENT,
+        ADD_ATTACHMENT,
         REMOVE_FLOOR;
 
         public static final Action[] VALUES = values();

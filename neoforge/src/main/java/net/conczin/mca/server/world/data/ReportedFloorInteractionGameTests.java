@@ -30,7 +30,7 @@ public final class ReportedFloorInteractionGameTests {
         commit(helper, workflow, workflow.analyzeBuildingAddition(main));
         Village village = manager.findNearestVillage(main, Village.MERGE_MARGIN).orElseThrow();
         RoomScanPlan addition = village.getRoomScanPlan(helper.getLevel(), upper);
-        commit(helper, workflow, workflow.analyzeAttachedRoom(upper, addition.mode(), addition.targetBuildingId()));
+        commit(helper, workflow, workflow.analyzeAttachedRoom(upper, addition.targetBuildingId()));
         Building room = village.findInteractionRoomAt(upper).orElseThrow();
         StructureFloor floor = village.getStructureFor(room).orElseThrow()
                 .getFloor(room.getFloorId()).orElseThrow();
@@ -57,10 +57,10 @@ public final class ReportedFloorInteractionGameTests {
         commit(helper, workflow, workflow.analyzeBuildingAddition(main));
         Village village = manager.findNearestVillage(main, Village.MERGE_MARGIN).orElseThrow();
         RoomScanPlan addition = village.getRoomScanPlan(helper.getLevel(), landing);
-        helper.assertTrue(addition.mode() == Village.RoomScanMode.ADD_BASEMENT,
+        helper.assertTrue(addition.mode() == Village.RoomScanMode.ADD_ATTACHMENT,
                 "reported basement selected " + addition.mode());
         commit(helper, workflow,
-                workflow.analyzeAttachedRoom(landing, addition.mode(), addition.targetBuildingId()));
+                workflow.analyzeAttachedRoom(landing, addition.targetBuildingId()));
         Building room = village.findInteractionRoomAt(landing).orElseThrow();
         StructureFloor floor = village.getStructureFor(room).orElseThrow()
                 .getFloor(room.getFloorId()).orElseThrow();

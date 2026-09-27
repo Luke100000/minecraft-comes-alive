@@ -3,6 +3,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Mourning;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.core.BlockPos;
@@ -89,7 +90,7 @@ public class EnterGraveyardTask extends Behavior<VillagerEntityMCA> {
 
     private static void setMourningPosition(VillagerEntityMCA villager, GlobalPos position) {
         villager.getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_POSITION, position);
-        villager.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+        WalkTargetFailureMemory.clear(villager);
     }
 
     public static boolean isAtMourningSite(VillagerEntityMCA villager) {

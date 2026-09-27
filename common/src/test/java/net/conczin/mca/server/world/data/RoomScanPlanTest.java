@@ -17,7 +17,7 @@ class RoomScanPlanTest {
     @Test
     void attachmentCannotBeExecutedWithoutItsSelectedGeometry() {
         assertThrows(IllegalArgumentException.class, () -> new RoomScanPlan(Optional.empty(),
-                Village.RoomScanMode.ADD_BASEMENT, 1, -1, BlockPos.ZERO, BlockPos.ZERO, -1, -1));
+                Village.RoomScanMode.ADD_ATTACHMENT, 1, -1, BlockPos.ZERO, BlockPos.ZERO, -1, -1));
     }
 
     @Test

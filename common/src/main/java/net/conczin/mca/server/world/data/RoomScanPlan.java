@@ -47,10 +47,9 @@ public record RoomScanPlan(Optional<Building> currentRoom,
             case ADD_ROOM -> currentRoom.isEmpty() && existingFloor && noAttachment;
             case UPDATE_ROOM -> currentRoom.filter(room -> room.getStructureId() == targetStructureId
                     && room.getFloorId() == targetFloorId).isPresent() && existingFloor && noAttachment;
-            case ADD_FLOOR, ADD_BASEMENT -> currentRoom.isEmpty() && noExistingFloor
+            case ADD_ATTACHMENT -> currentRoom.isEmpty() && noExistingFloor
                     && targetBuildingId >= 0 && selectedAttachmentFloor != null
-                    && prospectiveFloorNumber != NO_PROSPECTIVE_FLOOR
-                    && (mode == Village.RoomScanMode.ADD_BASEMENT) == (prospectiveFloorNumber < 0);
+                    && prospectiveFloorNumber != NO_PROSPECTIVE_FLOOR;
         };
         if (!valid) throw new IllegalArgumentException("Inconsistent Room scan target for " + mode);
     }
@@ -97,9 +96,8 @@ public record RoomScanPlan(Optional<Building> currentRoom,
                                    BlockPos source,
                                    BlockPos scanSeed,
                                    StructureFloor selectedFloor) {
-        Village.RoomScanMode mode = floorNumber < 0
-                ? Village.RoomScanMode.ADD_BASEMENT : Village.RoomScanMode.ADD_FLOOR;
-        return new RoomScanPlan(Optional.empty(), mode, targetBuildingId, floorNumber, source, scanSeed,
+        return new RoomScanPlan(Optional.empty(), Village.RoomScanMode.ADD_ATTACHMENT,
+                targetBuildingId, floorNumber, source, scanSeed,
                 NO_INTERACTION_STRUCTURE, NO_INTERACTION_FLOOR, selectedFloor);
     }
 

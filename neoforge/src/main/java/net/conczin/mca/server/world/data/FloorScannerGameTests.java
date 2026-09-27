@@ -1386,7 +1386,7 @@ public final class FloorScannerGameTests {
         village.registerStructure(groundStructure, groundRoom);
 
         RoomScanPlan plan = village.getRoomScanPlan(helper.getLevel(), source);
-        helper.assertTrue(plan.mode() == Village.RoomScanMode.ADD_BASEMENT,
+        helper.assertTrue(plan.mode() == Village.RoomScanMode.ADD_ATTACHMENT,
                 "external basement planned as " + plan.mode());
         helper.assertTrue(plan.targetBuildingId() == 10,
                 "external basement targeted building " + plan.targetBuildingId());
