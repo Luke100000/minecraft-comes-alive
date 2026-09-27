@@ -136,8 +136,6 @@ public final class ServerConfig {
     public final ModConfigSpec.ConfigValue<Boolean> useModernUSANamesOnly;
     public final ModConfigSpec.ConfigValue<List<? extends String>> guardsTargetEntities;
     public final ModConfigSpec.ConfigValue<List<? extends String>> unSafeBlocksToTeleportOn;
-    public final ModConfigSpec.ConfigValue<List<? extends String>> villagerPathfindingCollisionCheckBlocks;
-    public final ModConfigSpec.ConfigValue<Boolean> villagerPathfindingCheckAllNodeCollisions;
     public final ModConfigSpec.ConfigValue<List<? extends String>> structuresInRumors;
     public final ModConfigSpec.ConfigValue<List<? extends String>> professionConversionsMap;
     public final ModConfigSpec.ConfigValue<List<? extends String>> taxesMap;
@@ -877,18 +875,6 @@ public final class ServerConfig {
             "#minecraft:trapdoors",
             "#minecraft:walls"
     )), () -> "", value -> Config.isLoadSafeRegistrySelector(value, Registries.BLOCK));
-        villagerPathfindingCollisionCheckBlocks = builder
-
-                .comment("Blocks or tags that trigger exact villager body clearance checks during pathfinding.")
-                .translation("mca.configuration.villagerPathfindingCollisionCheckBlocks")
-                .defineListAllowEmpty("villagerPathfindingCollisionCheckBlocks", Config.serverList("villagerPathfindingCollisionCheckBlocks", List.of(
-            "#mca:villager_pathfinding_collision_checks"
-    )), () -> "", value -> Config.isLoadSafeRegistrySelector(value, Registries.BLOCK));
-        villagerPathfindingCheckAllNodeCollisions = builder
-
-                .comment("Runs exact body clearance checks for every accepted path node.")
-                .translation("mca.configuration.villagerPathfindingCheckAllNodeCollisions")
-                .define("villagerPathfindingCheckAllNodeCollisions", Config.serverBoolean("villagerPathfindingCheckAllNodeCollisions", false));
         builder.pop();
 
         builder.translation("mca.configuration.section.player_customization").push("player_customization");

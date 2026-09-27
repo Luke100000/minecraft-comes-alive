@@ -20,6 +20,7 @@
     "MixinLivingEntity",
     "MixinMilkBucketItem",
     "MixinMoveToTargetSink",
+    "MixinSetWalkTargetFromBlockMemory",
     "MixinPlayer",
     "MixinProtoChunk",
     "MixinScreenHandler",

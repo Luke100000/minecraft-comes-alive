@@ -129,10 +129,6 @@ public class Building implements VillageBuilding {
         return validationResult.SUCCESS;
     }
 
-    void setGeometry(BlockPos min, BlockPos max, BuildingFloorRegion footprint) {
-        setGeometry(min, max, footprint == null ? Set.of() : footprint.cells());
-    }
-
     void setGeometry(BlockPos min, BlockPos max, Collection<BlockPos> exactFloorCells) {
         pos0X = min.getX();
         pos0Y = min.getY();

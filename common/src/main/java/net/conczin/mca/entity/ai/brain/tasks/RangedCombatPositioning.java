@@ -53,7 +53,6 @@ final class RangedCombatPositioning {
     private static final int[] APPROACH_LATERAL_OFFSETS = {-4, 4, -6, 6};
     private static final int[] CANDIDATE_VERTICAL_OFFSETS = {0, 1, -1, 2, -2};
     private static final double STRAFE_PROBE_STEP = 0.5D;
-    private static final double MIN_STRAFE_CLEARANCE = 1.5D;
     private static final double MAX_STRAFE_CLEARANCE = 2.5D;
 
     private RangedCombatPositioning() {
@@ -366,11 +365,11 @@ final class RangedCombatPositioning {
         return Math.floorMod(sector, 8);
     }
 
-    private static final class EscapePositionTarget implements CombatEscapePositionTracker {
+    private static class CandidatePositionTarget implements MultiTargetPositionTracker {
         private final BlockPos preferred;
         private final Set<BlockPos> targets;
 
-        private EscapePositionTarget(BlockPos preferred, Set<BlockPos> targets) {
+        private CandidatePositionTarget(BlockPos preferred, Set<BlockPos> targets) {
             this.preferred = preferred.immutable();
             this.targets = targets;
         }
@@ -406,27 +405,36 @@ final class RangedCombatPositioning {
         }
     }
 
-    static Optional<Vec3> findFiringPosition(
+    private static final class EscapePositionTarget extends CandidatePositionTarget implements CombatEscapePositionTracker {
+        private EscapePositionTarget(BlockPos preferred, Set<BlockPos> targets) {
+            super(preferred, targets);
+        }
+    }
+
+    static Optional<MultiTargetPositionTracker> findFiringTarget(
             PathfinderMob entity,
             LivingEntity target,
             List<? extends LivingEntity> hazards,
             double attackRangeSquared
     ) {
-        Vec3 best = null;
-        double bestTravelDistanceSquared = Double.POSITIVE_INFINITY;
         double minimumTargetDistance = Math.max(0.0D, entity.distanceTo(target) - MAX_REPOSITION_CLOSING_DISTANCE);
         double minimumTargetDistanceSquared = minimumTargetDistance * minimumTargetDistance;
+        Set<BlockPos> candidates = new LinkedHashSet<>();
 
-        Optional<Vec3> preferred = findPreferredLateralFiringPosition(
+        collectPreferredLateralFiringPositions(
                 entity,
                 target,
                 hazards,
                 attackRangeSquared,
-                minimumTargetDistanceSquared
+                minimumTargetDistanceSquared,
+                candidates
         );
+        Optional<MultiTargetPositionTracker> preferred = createCandidateTarget(candidates);
         if (preferred.isPresent()) {
             return preferred;
         }
+
+        candidates.clear();
 
         for (int i = 0; i < FIRING_CANDIDATE_ATTEMPTS; i++) {
             Vec3 candidate = LandRandomPos.getPos(entity, FIRING_HORIZONTAL_RANGE, FIRING_VERTICAL_RANGE);
@@ -441,27 +449,30 @@ final class RangedCombatPositioning {
             )) {
                 continue;
             }
-
-            double travelDistanceSquared = candidate.distanceToSqr(entity.position());
-            if (travelDistanceSquared < bestTravelDistanceSquared) {
-                bestTravelDistanceSquared = travelDistanceSquared;
-                best = candidate;
-            }
+            candidates.add(BlockPos.containing(candidate));
         }
 
-        return Optional.ofNullable(best);
+        return createCandidateTarget(candidates);
     }
 
-    private static Optional<Vec3> findPreferredLateralFiringPosition(
+    private static Optional<MultiTargetPositionTracker> createCandidateTarget(Set<BlockPos> candidates) {
+        if (candidates.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(new CandidatePositionTarget(candidates.iterator().next(), Set.copyOf(candidates)));
+    }
+
+    private static void collectPreferredLateralFiringPositions(
             PathfinderMob entity,
             LivingEntity target,
             List<? extends LivingEntity> hazards,
             double attackRangeSquared,
-            double minimumTargetDistanceSquared
+            double minimumTargetDistanceSquared,
+            Set<BlockPos> candidates
     ) {
         Vec3 towardTarget = target.position().subtract(entity.position()).multiply(1.0D, 0.0D, 1.0D);
         if (towardTarget.lengthSqr() < 1.0E-6D) {
-            return Optional.empty();
+            return;
         }
 
         Vec3 lateral = new Vec3(-towardTarget.z, 0.0D, towardTarget.x).normalize();
@@ -476,7 +487,7 @@ final class RangedCombatPositioning {
                     minimumTargetDistanceSquared,
                     preferredCandidate
             )) {
-                return Optional.of(preferredCandidate);
+                candidates.add(BlockPos.containing(preferredCandidate));
             }
 
             Vec3 oppositeCandidate = entity.position().add(lateral.scale(-distance * preferredSign));
@@ -488,10 +499,9 @@ final class RangedCombatPositioning {
                     minimumTargetDistanceSquared,
                     oppositeCandidate
             )) {
-                return Optional.of(oppositeCandidate);
+                candidates.add(BlockPos.containing(oppositeCandidate));
             }
         }
-        return Optional.empty();
     }
 
     private static boolean isValidFiringPosition(
@@ -653,7 +663,9 @@ final class RangedCombatPositioning {
             furthest = candidate;
         }
 
-        if (clearance < MIN_STRAFE_CLEARANCE) {
+        // Running STRAFE revalidates this same probe every tick, so startup only needs one safe step.
+        // The longer sweep still matters for ranking: prefer the side with more room when both are usable.
+        if (clearance < STRAFE_PROBE_STEP) {
             return null;
         }
         return new StrafeCandidate(

@@ -103,8 +103,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("InfectionProgress", 0.0f);
     private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -Config.SERVER.villagerMaxAgeTime.getDefault());
     private static final float VEHICLE_ATTACHMENT_Y = 0.6F;
-    private static final double MAX_SLEEPING_BED_DISTANCE = 1.14D;
-    private static final double MIN_SLEEPING_BED_Y_OFFSET = 0.4D;
     public static final int MAX_NICKNAME_LENGTH = 32;
     static final String CHAT_AI_PROMPT_KEY = "ChatAIPrompt";
     static final String NICKNAMES_KEY = "nicknames";
@@ -676,10 +674,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void aiStep() {
-        if (!level().isClientSide) {
-            reconcileSleepingPosition();
-        }
-
         int oldAge = getAge();
         updateSwingTime();
 
@@ -734,28 +728,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 VillagerTrackerManager.update(this);
             }
         }
-    }
-
-    private void reconcileSleepingPosition() {
-        if (!isSleeping()) {
-            return;
-        }
-
-        BlockPos sleepingPos = getSleepingPos().orElseThrow();
-        if (getY() > sleepingPos.getY() + MIN_SLEEPING_BED_Y_OFFSET
-                && sleepingPos.closerToCenterThan(position(), MAX_SLEEPING_BED_DISTANCE)) {
-            return;
-        }
-
-        Vec3 currentPosition = position();
-        float currentYaw = getYRot();
-        float currentPitch = getXRot();
-
-        stopSleeping();
-
-        setPos(currentPosition.x, currentPosition.y, currentPosition.z);
-        setYRot(currentYaw);
-        setXRot(currentPitch);
     }
 
     protected boolean findAndEquipToMain(Predicate<ItemStack> predicate) {

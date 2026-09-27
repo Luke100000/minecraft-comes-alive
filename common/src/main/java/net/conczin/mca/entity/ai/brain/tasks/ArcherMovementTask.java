@@ -6,6 +6,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.MCAMoveControl;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.RangedWeaponHelper;
+import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -447,19 +448,19 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             return;
         }
 
-        Optional<Vec3> firingPosition = RangedCombatPositioning.findFiringPosition(
+        Optional<MultiTargetPositionTracker> firingTarget = RangedCombatPositioning.findFiringTarget(
                 entity,
                 target,
                 hazards,
                 attackRangeSquared
         );
-        if (firingPosition.isEmpty()) {
+        if (firingTarget.isEmpty()) {
             scheduleWalkTargetRetry(entity);
             logMovementIntent(entity, "hold", "no_safe_firing_position", null);
             return;
         }
 
-        WalkTarget walkTarget = new WalkTarget(firingPosition.orElseThrow(), (float)SPEED_MODIFIER, 0);
+        WalkTarget walkTarget = new WalkTarget(firingTarget.orElseThrow(), (float)SPEED_MODIFIER, 0);
         setCombatWalkTarget(entity, walkTarget);
         logMovementIntent(entity, "walk", "reposition_firing_position", walkTarget);
     }

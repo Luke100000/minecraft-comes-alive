@@ -3,15 +3,12 @@ package net.conczin.mca.entity.ai.navigation;
 import com.google.gson.JsonSyntaxException;
 import net.conczin.mca.Config;
 import net.conczin.mca.util.RegistryHelper;
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
-import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.AABB;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -21,9 +18,6 @@ public final class PathfindingBlacklist {
     private static int cachedSize = -1;
     private static int cachedHash;
     private static List<Predicate<BlockState>> cachedMatchers = List.of();
-    private static int cachedCollisionSize = -1;
-    private static int cachedCollisionHash;
-    private static List<Predicate<BlockState>> cachedCollisionMatchers = List.of();
 
     private PathfindingBlacklist() {
     }
@@ -31,29 +25,6 @@ public final class PathfindingBlacklist {
     public static boolean isBlocked(BlockState state) {
         refreshCacheIfNeeded();
         return matches(state, cachedMatchers);
-    }
-
-    public static boolean overlapsSpecialCollisionBlock(BlockGetter level, AABB box) {
-        refreshCollisionCacheIfNeeded();
-        int minX = floorMin(box.minX);
-        int maxX = floorMax(box.maxX);
-        int minY = floorMin(box.minY);
-        int maxY = floorMax(box.maxY);
-        int minZ = floorMin(box.minZ);
-        int maxZ = floorMax(box.maxZ);
-        BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
-
-        for (int x = minX; x <= maxX; x++) {
-            for (int y = minY; y <= maxY; y++) {
-                for (int z = minZ; z <= maxZ; z++) {
-                    if (matches(level.getBlockState(pos.set(x, y, z)), cachedCollisionMatchers)) {
-                        return true;
-                    }
-                }
-            }
-        }
-
-        return false;
     }
 
     private static boolean matches(BlockState state, List<Predicate<BlockState>> matchers) {
@@ -80,20 +51,6 @@ public final class PathfindingBlacklist {
         cachedHash = hash;
     }
 
-    private static void refreshCollisionCacheIfNeeded() {
-        List<? extends String> configured = Config.SERVER.villagerPathfindingCollisionCheckBlocks.get();
-        int size = configured.size();
-        int hash = configured.hashCode();
-
-        if (size == cachedCollisionSize && hash == cachedCollisionHash) {
-            return;
-        }
-
-        cachedCollisionMatchers = buildMatchers(configured, "villagerPathfindingCollisionCheckBlocks");
-        cachedCollisionSize = size;
-        cachedCollisionHash = hash;
-    }
-
     private static List<Predicate<BlockState>> buildMatchers(List<? extends String> configured, String configName) {
         List<Predicate<BlockState>> matchers = new ArrayList<>();
 
@@ -117,13 +74,5 @@ public final class PathfindingBlacklist {
         }
 
         return List.copyOf(matchers);
-    }
-
-    private static int floorMin(double value) {
-        return (int)Math.floor(value);
-    }
-
-    private static int floorMax(double value) {
-        return (int)Math.floor(value - 1.0E-7D);
     }
 }

@@ -83,14 +83,6 @@ public record BuildingFloorRegion(int anchorY, List<Component> components) {
         return new Component(spans);
     }
 
-    public int intersectionArea(BuildingFloorRegion other) {
-        int intersection = 0;
-        for (Component component : components) {
-            for (Component candidate : other.components) intersection += component.intersectionArea(candidate);
-        }
-        return intersection;
-    }
-
     private record Cell(int x, int z) {
     }
 
@@ -131,46 +123,6 @@ public record BuildingFloorRegion(int anchorY, List<Component> components) {
                 for (int x = span.minX(); x <= span.maxX(); x++) cells.add(new BlockPos(x, anchorY, span.z()));
             }
             return Set.copyOf(cells);
-        }
-
-        private int intersectionArea(Component other) {
-            int intersection = 0;
-            int ownIndex = 0;
-            int otherIndex = 0;
-            while (ownIndex < spans.size() && otherIndex < other.spans.size()) {
-                int ownZ = spans.get(ownIndex).z();
-                int otherZ = other.spans.get(otherIndex).z();
-                if (ownZ < otherZ) {
-                    ownIndex = rowEnd(spans, ownIndex);
-                    continue;
-                }
-                if (otherZ < ownZ) {
-                    otherIndex = rowEnd(other.spans, otherIndex);
-                    continue;
-                }
-
-                int ownEnd = rowEnd(spans, ownIndex);
-                int otherEnd = rowEnd(other.spans, otherIndex);
-                for (int i = ownIndex; i < ownEnd; i++) {
-                    Span own = spans.get(i);
-                    for (int j = otherIndex; j < otherEnd; j++) {
-                        Span candidate = other.spans.get(j);
-                        int minSharedX = Math.max(own.minX(), candidate.minX());
-                        int maxSharedX = Math.min(own.maxX(), candidate.maxX());
-                        if (minSharedX <= maxSharedX) intersection += maxSharedX - minSharedX + 1;
-                    }
-                }
-                ownIndex = ownEnd;
-                otherIndex = otherEnd;
-            }
-            return intersection;
-        }
-
-        private static int rowEnd(List<Span> spans, int start) {
-            int end = start + 1;
-            int z = spans.get(start).z();
-            while (end < spans.size() && spans.get(end).z() == z) end++;
-            return end;
         }
 
     }

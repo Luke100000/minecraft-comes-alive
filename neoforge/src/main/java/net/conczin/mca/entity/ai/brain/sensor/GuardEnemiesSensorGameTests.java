@@ -1,5 +1,6 @@
 package net.conczin.mca.entity.ai.brain.sensor;
 
+import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
@@ -72,9 +73,21 @@ public final class GuardEnemiesSensorGameTests {
             List<LivingEntity> nearbyEntities = guard.getBrain()
                     .getMemory(MemoryModuleType.NEAREST_LIVING_ENTITIES)
                     .orElse(List.of());
+            boolean targetInScan = helper.getLevel().getEntitiesOfClass(
+                    LivingEntity.class,
+                    guard.getBoundingBox().inflate(48.0D),
+                    candidate -> candidate == target
+            ).contains(target);
+            boolean lineOfSight = guard.getSensing().hasLineOfSight(target);
             helper.assertTrue(
                     detected == target,
-                    "guard sensor did not detect a visible enemy 24 blocks away"
+                    "guard sensor did not detect a visible enemy 24 blocks away; detected=" + detected
+                            + ", targetInScan=" + targetInScan
+                            + ", lineOfSight=" + lineOfSight
+                            + ", distanceSqr=" + guard.distanceToSqr(target)
+                            + ", guardPos=" + guard.position()
+                            + ", targetPos=" + target.position()
+                            + ", targetMobTargetIsGuard=" + (target.getTarget() == guard)
             );
             helper.assertTrue(
                     nearbyEntities.contains(nearby),
@@ -86,6 +99,58 @@ public final class GuardEnemiesSensorGameTests {
             );
             helper.succeed();
         } finally {
+            cleanupTestEntities();
+        }
+    }
+
+    @GameTest(batch = "mca_guard_priority_config", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void guardPriorityConfigChangesAreObservedWithoutRestart(GameTestHelper helper) {
+        cleanupTestEntities();
+        List<? extends String> previousTargets = List.copyOf(Config.SERVER.guardsTargetEntities.get());
+        boolean previousTargetMonsters = Config.SERVER.guardsTargetMonsters.get();
+        try {
+            BlockPos guardPos = helper.absolutePos(new BlockPos(3, 2, 3));
+            BlockPos targetPos = guardPos.east(8);
+            prepareClearLane(helper, guardPos, targetPos);
+
+            VillagerEntityMCA guard = VillagerFactory.newVillager(helper.getLevel())
+                    .withAge(0)
+                    .withProfession(ProfessionsMCA.GUARD)
+                    .withPosition(Vec3.atBottomCenterOf(guardPos))
+                    .withName("Guard Config Refresh Probe")
+                    .spawn(MobSpawnType.STRUCTURE);
+            guard.refreshBrain(helper.getLevel());
+            TEST_ENTITIES.add(guard);
+
+            Zombie target = EntityType.ZOMBIE.create(helper.getLevel());
+            if (target == null) {
+                throw new IllegalStateException("failed to create zombie target");
+            }
+            target.absMoveTo(targetPos.getX() + 0.5D, targetPos.getY(), targetPos.getZ() + 0.5D);
+            target.setNoAi(true);
+            helper.getLevel().addFreshEntity(target);
+            TEST_ENTITIES.add(target);
+
+            Config.SERVER.guardsTargetMonsters.set(false);
+            Config.SERVER.guardsTargetEntities.set(List.of("minecraft:zombie=4"));
+            GuardEnemiesSensor sensor = new GuardEnemiesSensor();
+            sensor.doTick(helper.getLevel(), guard);
+            helper.assertTrue(
+                    guard.getBrain().getMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY).orElse(null) == target,
+                    "configured zombie priority was not used before the config change"
+            );
+
+            Config.SERVER.guardsTargetEntities.set(List.of("minecraft:zombie=-1"));
+            sensor.doTick(helper.getLevel(), guard);
+            helper.assertTrue(
+                    guard.getBrain().getMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY).isEmpty(),
+                    "guard sensor retained stale configured priority after guardsTargetEntities changed"
+            );
+            helper.succeed();
+        } finally {
+            Config.SERVER.guardsTargetEntities.set(previousTargets);
+            Config.SERVER.guardsTargetMonsters.set(previousTargetMonsters);
             cleanupTestEntities();
         }
     }

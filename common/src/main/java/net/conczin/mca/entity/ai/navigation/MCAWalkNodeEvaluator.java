@@ -2,7 +2,6 @@ package net.conczin.mca.entity.ai.navigation;
 
 import it.unimi.dsi.fastutil.longs.Long2BooleanMap;
 import it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap;
-import net.conczin.mca.Config;
 import net.conczin.mca.entity.ai.PathingBlockInteraction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -331,18 +330,12 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     }
 
     private boolean hasBlockClearance(Node node) {
-        AABB clearanceBox = getMobBoxAt(node);
-        if (!Config.SERVER.villagerPathfindingCheckAllNodeCollisions.get()
-            && !PathfindingBlacklist.overlapsSpecialCollisionBlock(this.currentContext.level(), clearanceBox)) {
-            return true;
-        }
-
         long key = BlockPos.asLong(node.x, node.y, node.z);
         if (this.clearanceCache.containsKey(key)) {
             return this.clearanceCache.get(key);
         }
 
-        boolean hasClearance = hasExactBlockClearance(clearanceBox);
+        boolean hasClearance = hasExactBlockClearance(getMobBoxAt(node));
         this.clearanceCache.put(key, hasClearance);
         return hasClearance;
     }

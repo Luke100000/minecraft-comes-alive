@@ -158,7 +158,7 @@ class StructureFloorResolutionTest {
         room.setStructureId(10);
         room.setFloorId(0);
         room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(4, 67, 0),
-                BuildingFloorRegion.fromFootprint(64, roomFootprint));
+                roomFootprint);
         Village village = new Village(1, null);
         village.registerStructure(structure, room);
 
@@ -203,8 +203,7 @@ class StructureFloorResolutionTest {
         room.setStructureId(10);
         room.setFloorId(0);
         room.setGeometry(new BlockPos(2, 64, 0), new BlockPos(4, 67, 0),
-                BuildingFloorRegion.fromFootprint(64, Set.of(
-                        new BlockPos(2, 64, 0), new BlockPos(3, 64, 0), new BlockPos(4, 64, 0))));
+                Set.of(new BlockPos(2, 64, 0), new BlockPos(3, 64, 0), new BlockPos(4, 64, 0)));
         Village legacy = new Village(1, null);
         legacy.registerStructure(structure, room);
 

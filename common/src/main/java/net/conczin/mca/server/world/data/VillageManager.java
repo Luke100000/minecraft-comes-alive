@@ -229,6 +229,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         building.setType(type.name());
         building.addPOI(world, pos);
         village.registerExternalBuilding(building);
+        village.calculateDimensions();
         villages.put(village.getId(), village);
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
@@ -255,13 +256,14 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         Structure structure = village == null ? null : village.getStructureFor(scan.building()).orElse(null);
         if (village == null || structure == null) return Building.validationResult.NOT_IN_BUILDING;
 
-        Building room = scan.building();
+        Building room = scan.building().copy();
         String category = chooseRoomCategory(scan, forcedType);
         if (category == null) return Building.validationResult.INVALID_TYPE;
-        room.setId(lastBuildingId++);
+        room.setId(lastBuildingId);
         room.setType(category);
         room.setTypeForced(forcedType != null);
-        village.registerRoom(room);
+        village.publishBuildingMutation(() -> village.registerRoom(room));
+        lastBuildingId++;
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
     }
@@ -317,34 +319,19 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             return Building.validationResult.NOT_IN_BUILDING;
         }
 
-        registerInitialRoom(village, structure, room, category, forcedType != null);
-        village.refreshLogicalBuildings();
+        Structure committedStructure = structure.copy();
+        committedStructure.setId(lastBuildingId);
+        Building committedRoom = room.copy();
+        committedRoom.setId(lastBuildingId + 1);
+        committedRoom.setStructureId(committedStructure.getId());
+        committedRoom.setType(category);
+        committedRoom.setTypeForced(forcedType != null);
+        Village targetVillage = village;
+        targetVillage.publishBuildingMutation(() -> targetVillage.registerStructure(committedStructure, committedRoom));
+        lastBuildingId += 2;
         villages.put(village.getId(), village);
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
-    }
-
-    private void registerInitialRoom(Village village,
-                                     Structure structure,
-                                     Building room,
-                                     String category,
-                                     boolean typeForced) {
-        int structureId;
-        if (structure.getId() >= 0 && village.getStructure(structure.getId()).isPresent()) {
-            structureId = structure.getId();
-        } else {
-            structureId = lastBuildingId++;
-            structure.setId(structureId);
-        }
-        room.setId(lastBuildingId++);
-        room.setStructureId(structureId);
-        room.setType(category);
-        room.setTypeForced(typeForced);
-        if (village.getStructure(structureId).isPresent()) {
-            village.registerRoom(room);
-            return;
-        }
-        village.registerStructure(structure, room);
     }
 
     public Building.validationResult commitRegisteredRoomUpdate(RegisteredRoomUpdate update,
@@ -444,7 +431,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     public Building.validationResult fullScan(Village village) {
         if (village == null) return Building.validationResult.NOT_IN_BUILDING;
         Village.BuildingStateSnapshot snapshot = village.snapshotBuildingState();
-        int previousLastBuildingId = lastBuildingId;
 
         for (int roomId : fullScanRoomIds(village)) {
             Building room = village.getBuilding(roomId).orElse(null);
@@ -452,40 +438,26 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             RegisteredRoomUpdate update = new RoomWorkflow(this, world).analyzeRegisteredRoomUpdate(
                     village, roomId, room.getSourceBlock());
             if (update.result() != Building.validationResult.SUCCESS) {
-                restoreFullScanSnapshot(village, snapshot, previousLastBuildingId);
+                village.restoreBuildingState(snapshot);
                 return update.result();
             }
             Building.validationResult result = applyRegisteredRoomUpdate(update, null, false);
             if (result == Building.validationResult.SUCCESS) continue;
 
-            restoreFullScanSnapshot(village, snapshot, previousLastBuildingId);
+            village.restoreBuildingState(snapshot);
             return result;
         }
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;
     }
 
-    private void restoreFullScanSnapshot(
-            Village village,
-            Village.BuildingStateSnapshot snapshot,
-            int previousLastBuildingId) {
-        village.restoreBuildingState(snapshot);
-        lastBuildingId = previousLastBuildingId;
-    }
-
-
     public BuildingEditResult forceRoomType(BlockPos pos, String type) {
         Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
         Building room = village == null ? null : village.findInteractionRoomAt(pos).orElse(null);
         if (room == null) return BuildingEditResult.NO_BUILDING;
-        if (room.getType().equals(type)) {
-            room.setTypeForced(false);
-            room.setType(RoomTypeResolver.create(village).resolve(room).updatedType(null));
-        } else {
-            room.setTypeForced(true);
-            room.setType(type);
-        }
-        village.markDirty();
+        boolean forced = !room.getType().equals(type);
+        String resolvedType = forced ? type : RoomTypeResolver.create(village).resolve(room).updatedType(null);
+        village.setRoomType(room, resolvedType, forced);
         return BuildingEditResult.SUCCESS;
     }
 
@@ -528,9 +500,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                     .filter(building -> building.getStructureId() == orphanedStructureId)
                     .map(Building::getId)
                     .toList();
-            if (orphanedRoomIds.isEmpty()) village.removeRoom(target.getId());
-            else orphanedRoomIds.forEach(village::removeRoom);
-            setDirty();
+            village.publishBuildingMutation(() -> village.removeRooms(orphanedRoomIds));
             return BuildingEditResult.SUCCESS;
         }
         Structure structure = target != null && target.isFunctionalRoom()
@@ -540,15 +510,15 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 .orElse(null);
         if (structure == null) return BuildingEditResult.NO_BUILDING;
 
-        village.removeLogicalBuilding(structure.getLogicalBuildingId());
+        village.publishBuildingMutation(() -> village.removeLogicalBuilding(structure.getLogicalBuildingId()));
 
         if (village.getBuildings().isEmpty() && village.getExternalBuildingMap().isEmpty()
                 && village.getStructures().isEmpty()) {
             removeVillage(village.getId());
+            setDirty();
         } else {
             finalizeVillageMutation(village);
         }
-        setDirty();
         return BuildingEditResult.SUCCESS;
     }
 
@@ -561,8 +531,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     private void finalizeVillageMutation(Village target) {
-        target.refreshLogicalBuildings();
-        target.calculateDimensions();
         Village finalVillage = target;
         villages.values().stream().filter(village -> village != finalVillage)
                 .filter(village -> village.getBox().inflatedBy(Village.MERGE_MARGIN).intersects(finalVillage.getBox()))

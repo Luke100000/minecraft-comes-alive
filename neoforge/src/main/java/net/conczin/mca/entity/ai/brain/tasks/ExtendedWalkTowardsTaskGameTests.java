@@ -2,16 +2,20 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.navigation.LongDistancePathTarget;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.behavior.OneShot;
+import net.minecraft.world.entity.ai.behavior.SetWalkTargetFromBlockMemory;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -27,6 +31,78 @@ public final class ExtendedWalkTowardsTaskGameTests {
     private static final int TEST_AREA_RADIUS = 16;
 
     private ExtendedWalkTowardsTaskGameTests() {
+    }
+
+    @GameTest(batch = "mca_persistent_poi_target", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void vanillaPoiProducerKeepsRealDestinationForMcaVillager(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        BlockPos target = villager.blockPosition().east(180);
+
+        assertFactoryKeepsRealDestination(helper, villager, MemoryModuleType.HOME, target, 1, 150, "HOME");
+        assertFactoryKeepsRealDestination(helper, villager, MemoryModuleType.JOB_SITE, target, 9, 100, "JOB_SITE");
+        assertFactoryKeepsRealDestination(helper, villager, MemoryModuleType.MEETING_POINT, target, 6, 100, "MEETING_POINT");
+
+        villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_persistent_poi_target", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void vanillaVillagerStillUsesVanillaIntermediatePoiTarget(GameTestHelper helper) {
+        BlockPos feet = helper.absolutePos(new BlockPos(2, 1, 2));
+        prepareFlatArea(helper, feet, TEST_AREA_RADIUS, 2);
+        Villager villager = EntityType.VILLAGER.create(helper.getLevel());
+        if (villager == null) {
+            throw new IllegalStateException("failed to create vanilla villager");
+        }
+        villager.absMoveTo(feet.getX() + 0.5D, feet.getY(), feet.getZ() + 0.5D);
+        villager.setNoAi(true);
+        helper.getLevel().addFreshEntity(villager);
+
+        BlockPos jobSite = feet.east(180);
+        villager.getBrain().setMemory(MemoryModuleType.JOB_SITE,
+                GlobalPos.of(helper.getLevel().dimension(), jobSite));
+        villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        villager.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+
+        OneShot<Villager> task = SetWalkTargetFromBlockMemory.create(
+                MemoryModuleType.JOB_SITE, 0.5F, 9, 100, TEST_TIMEOUT);
+        task.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime());
+
+        WalkTarget walkTarget = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                .orElseThrow(() -> new AssertionError("vanilla JOB_SITE producer did not publish a walk target"));
+        helper.assertTrue(!walkTarget.getTarget().currentBlockPosition().equals(jobSite),
+                "vanilla villager unexpectedly received MCA's persistent POI target policy");
+
+        villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_persistent_poi_target", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void vanillaPoiProducerDoesNotReplaceExistingMcaWalkTarget(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        BlockPos existingTarget = villager.blockPosition().north(4);
+        BlockPos jobSite = villager.blockPosition().east(180);
+        WalkTarget existingWalkTarget = new WalkTarget(existingTarget, 0.5F, 1);
+        villager.getBrain().setMemory(MemoryModuleType.JOB_SITE,
+                GlobalPos.of(helper.getLevel().dimension(), jobSite));
+        villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET, existingWalkTarget);
+
+        OneShot<Villager> task = SetWalkTargetFromBlockMemory.create(
+                MemoryModuleType.JOB_SITE, 0.5F, 9, 100, TEST_TIMEOUT);
+        boolean started = task.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime());
+
+        helper.assertTrue(!started,
+                "MCA wrapper started even though vanilla requires WALK_TARGET to be absent");
+        WalkTarget retained = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                .orElseThrow(() -> new AssertionError("MCA wrapper erased an existing walk target"));
+        helper.assertTrue(retained == existingWalkTarget,
+                "MCA wrapper replaced an existing walk target instead of preserving vanilla absence semantics");
+
+        villager.discard();
+        helper.succeed();
     }
 
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
@@ -100,12 +176,39 @@ public final class ExtendedWalkTowardsTaskGameTests {
     }
 
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void matchingDirectWalkTargetSurvivesRepeatedProducerTick(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        BlockPos home = villager.blockPosition().east(6);
+        setHome(villager, home);
+
+        OneShot<VillagerEntityMCA> task = createTask(ignored -> false);
+        long gameTime = helper.getLevel().getGameTime();
+        task.tryStart(helper.getLevel(), villager, gameTime);
+        WalkTarget first = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                .orElseThrow(() -> new AssertionError("initial nearby HOME did not publish a walk target"));
+        helper.assertTrue(!(first.getTarget() instanceof LongDistancePathTarget),
+                "fixture nearby HOME unexpectedly used the long-distance path policy");
+        helper.assertTrue(first.getTarget().currentBlockPosition().equals(home),
+                "initial nearby HOME walk target did not match the logical destination");
+
+        task.tryStart(helper.getLevel(), villager, gameTime + 1L);
+
+        WalkTarget second = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                .orElseThrow(() -> new AssertionError("matching nearby walk target was erased on the next producer tick"));
+        helper.assertTrue(second.getTarget().currentBlockPosition().equals(home),
+                "repeated producer tick replaced the matching nearby destination");
+
+        villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
     public static void unreachableTimestampStillAllowsRetryBeforeTimeout(GameTestHelper helper) {
         VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
         BlockPos home = villager.blockPosition().east((int)villager.getAttributeValue(Attributes.FOLLOW_RANGE) + 16);
         setHome(villager, home);
         long firstFailure = helper.getLevel().getGameTime() - 40L;
-        villager.getBrain().setMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE, firstFailure);
+        WalkTargetFailureMemory.record(villager, home, firstFailure);
 
         OneShot<VillagerEntityMCA> task = createTask(ignored -> false);
         task.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime());
@@ -118,6 +221,28 @@ public final class ExtendedWalkTowardsTaskGameTests {
                         .filter(timestamp -> timestamp == firstFailure)
                         .isPresent(),
                 "destination producer rewrote the original unreachable timestamp");
+
+        villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void unreachableTimestampDefersRetryUntilCanonicalWindow(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        BlockPos home = villager.blockPosition().east((int)villager.getAttributeValue(Attributes.FOLLOW_RANGE) + 16);
+        setHome(villager, home);
+        long firstFailure = helper.getLevel().getGameTime() - 19L;
+        WalkTargetFailureMemory.record(villager, home, firstFailure);
+
+        OneShot<VillagerEntityMCA> task = createTask(ignored -> false);
+        task.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime());
+
+        helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty(),
+                "destination producer retried before the canonical 20-tick failure window elapsed");
+        helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                        .filter(timestamp -> timestamp == firstFailure)
+                        .isPresent(),
+                "retry wait rewrote the original failure-since timestamp");
 
         villager.discard();
         helper.succeed();
@@ -158,6 +283,33 @@ public final class ExtendedWalkTowardsTaskGameTests {
                 canGiveUp,
                 ignored -> { }
         );
+    }
+
+    private static void assertFactoryKeepsRealDestination(
+            GameTestHelper helper,
+            VillagerEntityMCA villager,
+            MemoryModuleType<GlobalPos> memoryType,
+            BlockPos target,
+            int closeEnoughDistance,
+            int tooFarDistance,
+            String label
+    ) {
+        villager.getBrain().setMemory(memoryType, GlobalPos.of(helper.getLevel().dimension(), target));
+        villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        villager.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+
+        OneShot<Villager> task = SetWalkTargetFromBlockMemory.create(
+                memoryType, 0.5F, closeEnoughDistance, tooFarDistance, TEST_TIMEOUT);
+        task.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime());
+
+        WalkTarget walkTarget = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                .orElseThrow(() -> new AssertionError(label + " did not publish a walk target"));
+        helper.assertTrue(walkTarget.getTarget() instanceof LongDistancePathTarget,
+                label + " did not use MCA's persistent long-distance target policy");
+        helper.assertTrue(walkTarget.getTarget().currentBlockPosition().equals(target),
+                label + " replaced the real POI with an intermediate destination");
+
+        villager.getBrain().eraseMemory(memoryType);
     }
 
     private static VillagerEntityMCA spawnVillagerOnFlatArea(GameTestHelper helper) {

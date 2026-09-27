@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai;
 
 import net.conczin.mca.block.TombstoneBlock;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
 import net.conczin.mca.registry.TagsMCA;
 import net.conczin.mca.server.world.data.Building;
@@ -102,7 +103,7 @@ public final class Mourning {
         villager.getBrain().eraseMemory(MemoryModuleType.PATH);
         villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
         villager.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
-        villager.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+        WalkTargetFailureMemory.clear(villager);
         villager.getNavigation().stop();
     }
 
@@ -115,7 +116,7 @@ public final class Mourning {
         if (ownsWalkTarget) {
             villager.getBrain().eraseMemory(MemoryModuleType.PATH);
             villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-            villager.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+            WalkTargetFailureMemory.clear(villager);
             villager.getNavigation().stop();
         }
 

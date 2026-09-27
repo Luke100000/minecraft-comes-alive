@@ -3,6 +3,9 @@ package net.conczin.mca.entity.ai.navigation;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
+import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
+import net.conczin.mca.registry.BlocksMCA;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.GameTest;
@@ -14,12 +17,14 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
@@ -31,6 +36,29 @@ public final class MCAGroundPathNavigationGameTests {
     private static final Set<ChunkPos> PROGRESSIVE_FORCED_CHUNKS = new HashSet<>();
 
     private MCAGroundPathNavigationGameTests() {
+    }
+
+    @GameTest(batch = "mca_navigation_partial_tiebreak", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 20)
+    public static void equalDistancePartialPrefersFewerNodes(GameTestHelper helper) {
+        BlockPos target = new BlockPos(10, 0, 0);
+        Path longer = new Path(List.of(
+                new Node(0, 0, 0),
+                new Node(2, 0, 0),
+                new Node(5, 0, 0)
+        ), target, false);
+        Path shorter = new Path(List.of(
+                new Node(0, 0, 0),
+                new Node(5, 0, 0)
+        ), target, false);
+
+        helper.assertTrue(longer.getDistToTarget() == shorter.getDistToTarget(),
+                "fixture partial paths must end equally close to the target");
+        helper.assertTrue(MCAGroundPathNavigation.isBetterPartialPath(shorter, longer),
+                "equal-distance partial path did not prefer vanilla's shorter node count");
+        helper.assertTrue(!MCAGroundPathNavigation.isBetterPartialPath(longer, shorter),
+                "equal-distance partial path incorrectly preferred a longer node count");
+        helper.succeed();
     }
 
     @GameTest(batch = "mca_navigation_recompute", templateNamespace = "minecraft",
@@ -107,6 +135,79 @@ public final class MCAGroundPathNavigationGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_navigation_tombstone_collision", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void tombstoneCollisionIsRejectedByNodeEvaluator(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(4, 1, 4));
+        BlockPos target = start.east(6);
+        prepareFlatPath(helper, start, target);
+
+        for (int x = 0; x <= 6; x++) {
+            BlockPos lane = start.east(x);
+            for (int y = 0; y < 2; y++) {
+                helper.getLevel().setBlock(lane.north().above(y), Blocks.STONE.defaultBlockState(), 3);
+                helper.getLevel().setBlock(lane.south().above(y), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        BlockPos grave = start.east(3);
+        helper.getLevel().setBlock(grave, BlocksMCA.CROSS_HEADSTONE.defaultBlockState(), 3);
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(start))
+                .withName("Tombstone Collision Probe")
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+
+        Path path = villager.getNavigation().createPath(target, 0);
+
+        helper.assertTrue(path != null && path.canReach(),
+                "fixture did not retain a reachable detour around the narrow corridor");
+        for (int index = 0; index < path.getNodeCount(); index++) {
+            helper.assertTrue(!grave.equals(path.getNode(index).asBlockPos()),
+                    "pathfinder treated the cross headstone as a traversable node at " + grave);
+        }
+
+        villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_navigation_exact_air_target", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void exactAirWalkTargetDoesNotCollapseToSurfaceBelow(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(12, 1, 12));
+        BlockPos target = start.east(6).above(8);
+        prepareFlatArea(helper, start, 10, 2);
+        for (int y = start.getY(); y <= target.getY(); y++) {
+            helper.getLevel().setBlock(new BlockPos(target.getX(), y, target.getZ()),
+                    Blocks.AIR.defaultBlockState(), 3);
+        }
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(start))
+                .withName("Exact Air Target Probe")
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.refreshBrain(helper.getLevel());
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+        villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.5F, 0));
+
+        Path path = villager.getNavigation().createPath(target, 0);
+
+        helper.assertTrue(path != null,
+                "exact unsupported air target did not produce even a partial path result");
+        helper.assertTrue(target.equals(path.getTarget()),
+                "exact air WALK_TARGET was vertically collapsed to " + path.getTarget()
+                        + " instead of retaining " + target);
+        helper.assertTrue(!path.canReach(),
+                "unsupported exact air target was falsely reported reachable via the surface below");
+
+        villager.discard();
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_navigation_long_distance_horizon", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 80)
     public static void farStaticWalkTargetEscalatesOnlyAfterFailureEvidence(GameTestHelper helper) {
@@ -136,12 +237,15 @@ public final class MCAGroundPathNavigationGameTests {
         helper.assertTrue(target.equals(progressive.getTarget()),
                 "progressive path did not retain the real destination");
         helper.assertTrue(progressive.getEndNode().asBlockPos().equals(ordinary.getEndNode().asBlockPos()),
-                "first far-static segment expanded beyond the ordinary geometric horizon");
+                "first far-static segment expanded beyond the ordinary geometric horizon; ordinaryEnd="
+                        + ordinary.getEndNode().asBlockPos()
+                        + ", progressiveEnd=" + progressive.getEndNode().asBlockPos()
+                        + ", ordinaryDist=" + ordinary.getDistToTarget()
+                        + ", progressiveDist=" + progressive.getDistToTarget()
+                        + ", ordinaryNodes=" + ordinary.getNodeCount()
+                        + ", progressiveNodes=" + progressive.getNodeCount());
 
-        villager.getBrain().setMemory(
-                MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE,
-                helper.getLevel().getGameTime()
-        );
+        WalkTargetFailureMemory.record(villager, target, helper.getLevel().getGameTime());
         Path escalated = villager.getNavigation().createPath(target, 0);
         helper.assertTrue(escalated != null && escalated.getEndNode() != null,
                 "canonical retry did not receive an extended path result");
@@ -154,6 +258,97 @@ public final class MCAGroundPathNavigationGameTests {
                 "extended retry did not make useful progress toward the real destination");
         helper.assertTrue(villager.getAttributeValue(Attributes.FOLLOW_RANGE) == followRangeBefore,
                 "long-distance path request mutated FOLLOW_RANGE");
+
+        villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_navigation_surface_adjusted_retry", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void surfaceAdjustedFarTargetKeepsFailureEvidenceForExtendedRetry(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(4, 1, 4));
+        BlockPos surfaceTarget = start.east(80);
+        BlockPos logicalTarget = surfaceTarget.above(3);
+        prepareFlatPath(helper, start, surfaceTarget);
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(start))
+                .withName("Surface Adjusted Retry Probe")
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.refreshBrain(helper.getLevel());
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+        villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                new WalkTarget(new LongDistancePathTarget(logicalTarget), 0.5F, 1));
+
+        Path ordinary = villager.getNavigation().createPath(logicalTarget, 1);
+        helper.assertTrue(ordinary != null && ordinary.getEndNode() != null && !ordinary.canReach(),
+                "surface-adjusted fixture did not produce the expected bounded partial path");
+        helper.assertTrue(ordinary.getTarget().getX() == logicalTarget.getX()
+                        && ordinary.getTarget().getZ() == logicalTarget.getZ()
+                        && ordinary.getTarget().getY() != logicalTarget.getY(),
+                "fixture target was not surface-adjusted away from the logical Y; pathTarget="
+                        + ordinary.getTarget() + ", logicalTarget=" + logicalTarget);
+
+        WalkTargetFailureMemory.record(villager, logicalTarget, helper.getLevel().getGameTime());
+        Path retry = villager.getNavigation().createPath(logicalTarget, 1);
+
+        helper.assertTrue(villager.getBrain().hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
+                "surface-adjusted retry discarded failure evidence for the same logical target");
+        helper.assertTrue(retry != null && retry.getEndNode() != null,
+                "surface-adjusted retry did not produce a path");
+        helper.assertTrue(start.distSqr(retry.getEndNode().asBlockPos())
+                        > start.distSqr(ordinary.getEndNode().asBlockPos()),
+                "surface-adjusted retry did not extend the path horizon; ordinaryEnd="
+                        + ordinary.getEndNode().asBlockPos() + ", retryEnd=" + retry.getEndNode().asBlockPos());
+
+        villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_navigation_long_distance_horizon", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void freshFarTargetDoesNotReusePreviousTargetFailureEvidence(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(40, 1, 40));
+        BlockPos oldTarget = start.east(80);
+        BlockPos newTarget = start.west(80);
+        prepareFlatPath(helper, start, oldTarget);
+        prepareFlatPath(helper, start, newTarget);
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(start))
+                .withName("Fresh Long Path Horizon Probe")
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.refreshBrain(helper.getLevel());
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+
+        villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                new WalkTarget(new LongDistancePathTarget(oldTarget), 0.5F, 0));
+        Path oldPath = villager.getNavigation().createPath(oldTarget, 0);
+        helper.assertTrue(oldPath != null && !oldPath.canReach(),
+                "fixture old destination did not establish an ordinary progressive path");
+        long oldFailureSince = helper.getLevel().getGameTime() - 20L;
+        WalkTargetFailureMemory.record(villager, oldTarget, oldFailureSince);
+
+        villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                new WalkTarget(new LongDistancePathTarget(newTarget), 0.5F, 0));
+        Path freshPath = villager.getNavigation().createPath(newTarget, 0);
+
+        helper.assertTrue(freshPath != null && !freshPath.canReach(),
+                "fresh far destination reused stale failure evidence for an immediate extended search");
+        helper.assertTrue(newTarget.equals(freshPath.getTarget()),
+                "fresh far destination did not retain its real logical target");
+        helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                        .filter(timestamp -> timestamp == oldFailureSince)
+                        .isPresent(),
+                "path query mutated failure timing owned by the previous route");
+        helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.CANT_REACH_WALK_TARGET)
+                        .filter(failureTarget -> failureTarget.pos().equals(oldTarget))
+                        .isPresent(),
+                "path query mutated failure ownership instead of treating the new destination as fresh");
 
         villager.discard();
         helper.succeed();
@@ -344,10 +539,7 @@ public final class MCAGroundPathNavigationGameTests {
             helper.assertTrue(MCAGroundPathNavigation.isUsefulPartialPath(progressive, target),
                     "bounded far-static search did not retain useful progress toward the real destination");
 
-            villager.getBrain().setMemory(
-                    MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE,
-                    helper.getLevel().getGameTime()
-            );
+            WalkTargetFailureMemory.record(villager, target, helper.getLevel().getGameTime());
             Path escalated = villager.getNavigation().createPath(target, 0);
             helper.assertTrue(escalated != null && escalated.canReach(),
                     "canonical far-target retry did not receive the enlarged detour budget");

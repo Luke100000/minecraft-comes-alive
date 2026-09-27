@@ -1,6 +1,8 @@
 package net.conczin.mca.entity.ai.navigation;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
@@ -45,6 +47,17 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     }
 
     @Override
+    public Path createPath(BlockPos target, int reachRange) {
+        WalkTarget walkTarget = this.mob.getBrain()
+                .getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                .orElse(null);
+        if (isExactStaticAirWalkTarget(target, walkTarget)) {
+            return this.createPath(Set.of(target), 8, false, reachRange);
+        }
+        return super.createPath(target, reachRange);
+    }
+
+    @Override
     protected PathFinder createPathFinder(int maxVisitedNodes) {
         this.nodeEvaluator = new MCAWalkNodeEvaluator();
         this.nodeEvaluator.setCanPassDoors(true);
@@ -78,7 +91,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                     ordinaryPathLength
             );
             if (requiresExtendedPath(this.mob, target)) {
-                float pathLength = this.mob.getBrain().hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                float pathLength = hasFailureEvidenceFor(target)
                         ? extendedPathLength
                         : ordinaryPathLength;
                 return super.createPath(
@@ -102,6 +115,20 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         return super.createPath(targets, radiusOffset, above, reachRange, ordinaryPathLength);
     }
 
+    private boolean isExactStaticAirWalkTarget(BlockPos target, WalkTarget walkTarget) {
+        return walkTarget != null
+                && walkTarget.getCloseEnoughDist() == 0
+                && walkTarget.getTarget() instanceof BlockPosTracker
+                && walkTarget.getTarget().currentBlockPosition().equals(target)
+                && this.level.isLoaded(target)
+                && this.level.getBlockState(target).isAir();
+    }
+
+    private boolean hasFailureEvidenceFor(BlockPos target) {
+        return this.mob instanceof VillagerEntityMCA villager
+                && WalkTargetFailureMemory.hasFailureFor(villager, target);
+    }
+
     private static Path preferEscalatedPath(Path boundedPath, Path escalatedPath) {
         if (escalatedPath != null
                 && (escalatedPath.canReach() || isBetterPartialPath(escalatedPath, boundedPath))) {
@@ -110,8 +137,10 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         return boundedPath;
     }
 
-    private static boolean isBetterPartialPath(Path candidate, Path current) {
-        return candidate.getDistToTarget() < current.getDistToTarget();
+    static boolean isBetterPartialPath(Path candidate, Path current) {
+        int distanceComparison = Float.compare(candidate.getDistToTarget(), current.getDistToTarget());
+        return distanceComparison < 0
+                || (distanceComparison == 0 && candidate.getNodeCount() < current.getNodeCount());
     }
 
     private static boolean targetsCurrentStaticWalkTarget(Set<BlockPos> targets, WalkTarget walkTarget) {
@@ -209,7 +238,8 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (walkTarget == null || !(walkTarget.getTarget() instanceof BlockPosTracker)) {
             return;
         }
-        if (this.mob.getBrain().hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)) {
+        if (this.mob instanceof VillagerEntityMCA villager
+                && WalkTargetFailureMemory.hasFailureFor(villager, walkTarget.getTarget().currentBlockPosition())) {
             return;
         }
 

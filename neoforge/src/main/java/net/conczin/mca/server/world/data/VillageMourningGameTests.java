@@ -651,7 +651,7 @@ public final class VillageMourningGameTests {
     public static void dueVillageReleasesOneSmallBurstAndSchedulesAnother(GameTestHelper helper) {
         BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
         occupyGrave(helper, grave);
-        List<VillagerEntityMCA> residents = spawnResidents(helper, 10, "Burst Probe");
+        List<VillagerEntityMCA> residents = spawnIdleResidents(helper, 10, "Burst Probe");
         long now = helper.getLevel().getGameTime();
         helper.getLevel().setDayTime(6_000L);
         Village due = withNextMourningTime(villageWithGraveyard(helper, grave), now, helper.getLevel());
@@ -676,7 +676,7 @@ public final class VillageMourningGameTests {
     public static void nearbyMonsterDefersAmbientMourning(GameTestHelper helper) {
         BlockPos grave = helper.absolutePos(new BlockPos(4, 1, 4));
         occupyGrave(helper, grave);
-        List<VillagerEntityMCA> residents = spawnResidents(helper, 4, "Unsafe Ambient Probe");
+        List<VillagerEntityMCA> residents = spawnIdleResidents(helper, 4, "Unsafe Ambient Probe");
         Zombie zombie = EntityType.ZOMBIE.create(helper.getLevel());
         if (zombie == null) {
             throw new IllegalStateException("failed to create zombie");
@@ -768,7 +768,7 @@ public final class VillageMourningGameTests {
     public static void dueAmbientBurstWaitsUntilDaytime(GameTestHelper helper) {
         BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
         occupyGrave(helper, grave);
-        List<VillagerEntityMCA> residents = spawnResidents(helper, 4, "Night Burst Probe");
+        List<VillagerEntityMCA> residents = spawnIdleResidents(helper, 4, "Night Burst Probe");
         long now = helper.getLevel().getGameTime();
         Village due = withNextMourningTime(villageWithGraveyard(helper, grave), now, helper.getLevel());
         residents.forEach(due::updateResident);
@@ -826,7 +826,7 @@ public final class VillageMourningGameTests {
     public static void ambientFairnessPrefersNeverSelectedResidents(GameTestHelper helper) {
         BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
         occupyGrave(helper, grave);
-        List<VillagerEntityMCA> residents = spawnResidents(helper, 8, "Fairness Probe");
+        List<VillagerEntityMCA> residents = spawnIdleResidents(helper, 8, "Fairness Probe");
         long now = helper.getLevel().getGameTime();
         for (VillagerEntityMCA recent : residents.subList(0, 4)) {
             recent.getBrain().setMemory(MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING, now);
@@ -855,7 +855,7 @@ public final class VillageMourningGameTests {
     public static void disabledMourningFreezesNextAmbientBurst(GameTestHelper helper) {
         BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
         occupyGrave(helper, grave);
-        List<VillagerEntityMCA> residents = spawnResidents(helper, 4, "Disabled Ambient Probe");
+        List<VillagerEntityMCA> residents = spawnIdleResidents(helper, 4, "Disabled Ambient Probe");
         long now = helper.getLevel().getGameTime();
         helper.getLevel().setDayTime(6_000L);
         Village due = withNextMourningTime(villageWithGraveyard(helper, grave), now, helper.getLevel());
@@ -907,10 +907,12 @@ public final class VillageMourningGameTests {
         TombstoneBlock.Data.of(helper.getLevel().getBlockEntity(grave)).orElseThrow().setEntity(deceased);
     }
 
-    private static List<VillagerEntityMCA> spawnResidents(GameTestHelper helper, int count, String prefix) {
+    private static List<VillagerEntityMCA> spawnIdleResidents(GameTestHelper helper, int count, String prefix) {
         List<VillagerEntityMCA> residents = new ArrayList<>();
         for (int index = 0; index < count; index++) {
-            residents.add(spawnVillager(helper, new BlockPos(2 + index, 1, 3), prefix + " " + index));
+            VillagerEntityMCA resident = spawnVillager(helper, new BlockPos(2 + index, 1, 3), prefix + " " + index);
+            resident.getBrain().setActiveActivityIfPossible(Activity.IDLE);
+            residents.add(resident);
         }
         return residents;
     }

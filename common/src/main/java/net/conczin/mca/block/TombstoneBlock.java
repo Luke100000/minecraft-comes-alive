@@ -5,6 +5,7 @@ import net.conczin.mca.entity.Infectable;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Mourning;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.relationship.CompassionateEntity;
 import net.conczin.mca.entity.ai.relationship.EntityRelationship;
 import net.conczin.mca.entity.ai.relationship.Gender;
@@ -389,7 +390,7 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
                             villager.getBrain().eraseMemory(MemoryModuleType.PATH);
                             villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
                             villager.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
-                            villager.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+                            WalkTargetFailureMemory.clear(villager);
                         }
 
                         if (entity instanceof Infectable infectable) {

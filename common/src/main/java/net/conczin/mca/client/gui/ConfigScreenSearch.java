@@ -138,7 +138,7 @@ public final class ConfigScreenSearch {
             case "villagerInteractionItemBlacklist" -> exists(BuiltInRegistries.ITEM, value);
             case "maxTreeTicks" -> mapKeyMatches(value,
                     mapKey -> existsStableEntryOrRuntimeTag(BuiltInRegistries.BLOCK, registries, Registries.BLOCK, mapKey));
-            case "validTreeSources", "unSafeBlocksToTeleportOn", "villagerPathfindingCollisionCheckBlocks" ->
+            case "validTreeSources", "unSafeBlocksToTeleportOn" ->
                     existsStableEntryOrRuntimeTag(BuiltInRegistries.BLOCK, registries, Registries.BLOCK, value);
             case "guardsTargetEntities" -> mapKeyMatches(value,
                     mapKey -> existsStableEntryOrRuntimeTag(BuiltInRegistries.ENTITY_TYPE, registries, Registries.ENTITY_TYPE, mapKey));

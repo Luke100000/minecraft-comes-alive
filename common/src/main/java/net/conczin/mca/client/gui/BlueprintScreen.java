@@ -221,7 +221,7 @@ public class BlueprintScreen extends ExtendedScreen {
         int bx = width / 2 - 180;
         int by = height / 2 - 56;
         if (!page.equals("rename") && (!page.equals("empty") && !page.equals("waiting"))) {
-            for (String p : new String[]{"map", "rank", "catalog", "villagers", "rules", "refresh"}) {
+            for (String p : new String[]{"map", "rank", "catalog", "villagers", "rules"}) {
                 ButtonWidget widget = new ButtonWidget(bx, by, 80, 20, Component.translatable("gui.blueprint." + p), b -> setPage(p));
                 addRenderableWidget(widget);
                 if (page.equals(p) || ("advanced".equals(page) && "map".equals(p))) {
@@ -238,10 +238,6 @@ public class BlueprintScreen extends ExtendedScreen {
                 addRenderableWidget(new TooltipButtonWidget(bx, by + 5, 96, 20, "gui.blueprint.addBuilding", b -> {
                     Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.ADD_BUILDING));
                 }));
-                break;
-            case "refresh":
-                Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.FULL_SCAN));
-                setPage("map");
                 break;
             case "map", "advanced": {
                 bx = width / 2 + MAP_HALF_SIZE + MAP_SIDE_CONTROL_GUTTER;
@@ -317,6 +313,8 @@ public class BlueprintScreen extends ExtendedScreen {
                         village.toggleAutoScan();
                         setPage(page);
                     });
+                    column.addButton(Component.translatable("gui.blueprint.refresh"), b ->
+                            Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.FULL_SCAN)));
                     addInheritanceControl(column);
                     column.addTooltip("gui.blueprint.restrictAccess", b ->
                             Network.sendToServer(new ReportBuildingMessage(
@@ -494,10 +492,8 @@ public class BlueprintScreen extends ExtendedScreen {
     private static ReportBuildingMessage.Action getStructureScanAction(Village.RoomScanMode mode) {
         return switch (mode) {
             case ADD_BUILDING -> ReportBuildingMessage.Action.ADD_BUILDING;
-            case ADD_ROOM -> ReportBuildingMessage.Action.ADD_ROOM;
-            case UPDATE_ROOM -> ReportBuildingMessage.Action.UPDATE_ROOM;
-            case ADD_FLOOR -> ReportBuildingMessage.Action.ADD_FLOOR;
-            case ADD_BASEMENT -> ReportBuildingMessage.Action.ADD_BASEMENT;
+            case ADD_ROOM, UPDATE_ROOM -> ReportBuildingMessage.Action.SCAN_ROOM;
+            case ADD_ATTACHMENT -> ReportBuildingMessage.Action.ADD_ATTACHMENT;
         };
     }
 
@@ -540,9 +536,13 @@ public class BlueprintScreen extends ExtendedScreen {
             case ADD_BUILDING -> "gui.blueprint.addBuilding";
             case ADD_ROOM -> "gui.blueprint.addRoom";
             case UPDATE_ROOM -> "gui.blueprint.updateRoom";
-            case ADD_FLOOR -> "gui.blueprint.addFloor";
-            case ADD_BASEMENT -> "gui.blueprint.addBasement";
+            case ADD_ATTACHMENT -> "gui.blueprint.addFloor";
         };
+    }
+
+    private static String getAttachmentScanTranslationKey(RoomScanPlan plan) {
+        return plan.prospectiveFloorNumber() < 0
+                ? "gui.blueprint.addBasement" : "gui.blueprint.addFloor";
     }
 
     private void updateMapControls(RoomScanPlan scanContext) {
@@ -578,13 +578,14 @@ public class BlueprintScreen extends ExtendedScreen {
             attachmentScanButton.active = attachment;
             attachmentScanButton.setY(y);
             if (attachment) {
-                MutableComponent label = Component.translatable(getStructureScanTranslationKey(scanContext.mode()));
+                String attachmentKey = getAttachmentScanTranslationKey(scanContext);
+                MutableComponent label = Component.translatable(attachmentKey);
                 if (scanContext.prospectiveFloorNumber() != Integer.MIN_VALUE) {
                     label.append(Component.literal(" " + scanContext.prospectiveFloorNumber()));
                 }
                 attachmentScanButton.setMessage(label);
                 attachmentScanButton.setTooltip(Tooltip.create(Component.translatable(
-                        getStructureScanTranslationKey(scanContext.mode()) + ".tooltip")));
+                        attachmentKey + ".tooltip")));
                 y += 22;
             }
         }

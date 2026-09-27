@@ -174,8 +174,6 @@
   "mca.configuration.villagerMaxAgeTime": "Villager Max Age Time",
   "mca.configuration.villagerMaxHealth": "Villager Max Health",
   "mca.configuration.villagerMinTeleportationDistance": "Villager Min Teleportation Distance",
-  "mca.configuration.villagerPathfindingCheckAllNodeCollisions": "Villager Pathfinding Check All Node Collisions",
-  "mca.configuration.villagerPathfindingCollisionCheckBlocks": "Villager Pathfinding Collision Check Blocks",
   "mca.configuration.villagerPathfindingDistance": "Villager Pathfinding Distance",
   "mca.configuration.villagerProcreationChancePerMinute": "Villager Procreation Chance Per Minute",
   "mca.configuration.villagerRestockNotification": "Villager Restock Notification",
