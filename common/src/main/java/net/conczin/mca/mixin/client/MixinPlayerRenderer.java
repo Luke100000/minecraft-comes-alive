@@ -13,7 +13,7 @@ import net.conczin.mca.client.model.VillagerOverlayModel;
 import net.conczin.mca.client.render.layer.ClothingLayer;
 import net.conczin.mca.client.render.layer.FaceLayer;
 import net.conczin.mca.client.render.layer.HairLayer;
-import net.conczin.mca.client.render.layer.PlayerMorphologyLayer;
+import net.conczin.mca.client.render.layer.MorphologyLayer;
 import net.conczin.mca.client.render.layer.VillagerLayer;
 import net.conczin.mca.client.resources.SkinExporter;
 import net.conczin.mca.entity.ai.relationship.AgeState;
@@ -87,7 +87,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
         ));
         // Player morphology replaces geometry that used to render with the base model,
         // so keep it ahead of armor and the other player render layers.
-        layers.add(0, new PlayerMorphologyLayer(this, ctx.bakeLayer(MCAModelLayers.PLAYER_ATTACHMENTS)));
+        layers.add(0, new MorphologyLayer<>(this, ctx.bakeLayer(MCAModelLayers.PLAYER_ATTACHMENTS)));
     }
 
     @WrapOperation(

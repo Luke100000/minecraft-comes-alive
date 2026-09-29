@@ -9,7 +9,6 @@ import net.conczin.mca.entity.VillagerLike;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
-import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
@@ -17,15 +16,16 @@ import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.layers.RenderLayer;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FastColor;
+import net.minecraft.world.entity.LivingEntity;
 
-/** Renders MCA player morphology on top of the actual player model supplied by the renderer. */
-public final class PlayerMorphologyLayer extends RenderLayer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> {
+/** Renders MCA morphology using the authoritative parent model's body transform. */
+public final class MorphologyLayer<T extends LivingEntity> extends RenderLayer<T, PlayerModel<T>> {
     private static final int TRANSLUCENT_WHITE = 0x26FFFFFF;
 
     private final BreastMorphologyModel morphology;
 
-    public PlayerMorphologyLayer(
-            RenderLayerParent<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> renderer,
+    public MorphologyLayer(
+            RenderLayerParent<T, PlayerModel<T>> renderer,
             ModelPart attachments
     ) {
         super(renderer);
@@ -37,7 +37,7 @@ public final class PlayerMorphologyLayer extends RenderLayer<AbstractClientPlaye
             PoseStack matrices,
             MultiBufferSource buffers,
             int light,
-            AbstractClientPlayer player,
+            T entity,
             float limbAngle,
             float limbDistance,
             float tickDelta,
@@ -45,21 +45,29 @@ public final class PlayerMorphologyLayer extends RenderLayer<AbstractClientPlaye
             float headYaw,
             float headPitch
     ) {
-        VillagerLike<?> villager = MCAClient.getGeneticsPlayerData(player.getUUID())
-                .orElse(null);
+        // Player data may still be needed for hitbox dimensions when MCA's player
+        // renderer is disabled. In that case no player morphology should be drawn.
+        if (!(entity instanceof VillagerLike<?>) && !MCAClient.isPlayerRendererAllowed()) {
+            return;
+        }
+
+        VillagerLike<?> villager = entity instanceof VillagerLike<?> data
+                ? data
+                : MCAClient.getGeneticsPlayerData(entity.getUUID()).orElse(null);
         if (villager == null) {
             return;
         }
 
-        PlayerModel<AbstractClientPlayer> parent = getParentModel();
-        boolean villagerSkin = villager.getPlayerModel() == VillagerLike.PlayerModel.VILLAGER;
+        PlayerModel<T> parent = getParentModel();
+        boolean villagerSkin = entity instanceof VillagerLike<?>
+                || villager.getPlayerModel() == VillagerLike.PlayerModel.VILLAGER;
         morphology.apply(villager, !villagerSkin && parent.jacket.visible);
 
-        ResourceLocation texture = getTextureLocation(player);
+        ResourceLocation texture = getTextureLocation(entity);
         Minecraft minecraft = Minecraft.getInstance();
-        boolean visible = !player.isInvisible();
-        boolean translucent = !visible && !player.isInvisibleTo(minecraft.player);
-        boolean glowing = minecraft.shouldEntityAppearGlowing(player);
+        boolean visible = !entity.isInvisible();
+        boolean translucent = !visible && minecraft.player != null && !entity.isInvisibleTo(minecraft.player);
+        boolean glowing = minecraft.shouldEntityAppearGlowing(entity);
         RenderType renderType;
         if (translucent) {
             renderType = RenderType.itemEntityTranslucentCull(texture);
@@ -84,7 +92,7 @@ public final class PlayerMorphologyLayer extends RenderLayer<AbstractClientPlaye
                 matrices,
                 vertices,
                 light,
-                LivingEntityRenderer.getOverlayCoords(player, 0.0F),
+                LivingEntityRenderer.getOverlayCoords(entity, 0.0F),
                 color
         );
     }

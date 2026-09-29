@@ -52,34 +52,34 @@ public class FaceLayer<T extends LivingEntity> extends VillagerLayer<T, Villager
     }
 
     @Override
-    public void renderFinal(PoseStack transform, MultiBufferSource provider, int light, T villager, float tickDelta, boolean visible, boolean glowing) {
+    public void renderFinal(PoseStack transform, MultiBufferSource provider, int light, T villager, float tickDelta, Visibility visibility) {
         int overlay = LivingEntityRenderer.getOverlayCoords(villager, 0);
         ResourceLocation skin = getSkin(villager);
 
         if (isBlinking(villager)) {
             ResourceLocation blink = getBlinkSkin();
             if (canUse(blink)) {
-                renderModel(transform, provider, light, model, OPAQUE_WHITE, blink, overlay, visible, glowing);
+                renderModel(transform, provider, light, OPAQUE_WHITE, blink, overlay, visibility);
             }
             return;
         }
 
         VillagerLike<?> villagerLike = getVillager(villager);
         if (canUse(skin)) {
-            renderModel(transform, provider, light, model, OPAQUE_WHITE, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.SCLERA, EyeTextureLayers.Side.FULL), overlay, visible, glowing);
-            renderModel(transform, provider, light, model, EyeTextureLayers.DETAILS_TINT, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.DETAILS, EyeTextureLayers.Side.FULL), overlay, visible, glowing);
+            renderModel(transform, provider, light, OPAQUE_WHITE, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.SCLERA, EyeTextureLayers.Side.FULL), overlay, visibility);
+            renderModel(transform, provider, light, EyeTextureLayers.DETAILS_TINT, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.DETAILS, EyeTextureLayers.Side.FULL), overlay, visibility);
 
             if (villagerLike.getTraits().hasTrait(Traits.HETEROCHROMIA)) {
-                renderModel(transform, provider, light, model, getEyeColor(villager, tickDelta, true), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.LEFT), overlay, visible, glowing);
-                renderModel(transform, provider, light, model, getEyeColor(villager, tickDelta, false), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.RIGHT), overlay, visible, glowing);
+                renderModel(transform, provider, light, getEyeColor(villager, tickDelta, true), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.LEFT), overlay, visibility);
+                renderModel(transform, provider, light, getEyeColor(villager, tickDelta, false), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.RIGHT), overlay, visibility);
             } else {
-                renderModel(transform, provider, light, model, getEyeColor(villager, tickDelta, false), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.FULL), overlay, visible, glowing);
+                renderModel(transform, provider, light, getEyeColor(villager, tickDelta, false), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.FULL), overlay, visibility);
             }
         }
 
         ResourceLocation extraOverlay = getOverlay(villager);
         if (!Objects.equals(skin, extraOverlay) && canUse(extraOverlay)) {
-            renderModel(transform, provider, light, model, OPAQUE_WHITE, extraOverlay, overlay, visible, glowing);
+            renderModel(transform, provider, light, OPAQUE_WHITE, extraOverlay, overlay, visibility);
         }
     }
 

@@ -8,7 +8,7 @@ import net.conczin.mca.client.render.layer.ClothingLayer;
 import net.conczin.mca.client.render.layer.FaceLayer;
 import net.conczin.mca.client.render.layer.HairLayer;
 import net.conczin.mca.client.render.layer.VillagerFishingLineLayer;
-import net.conczin.mca.client.render.layer.VillagerMorphologyLayer;
+import net.conczin.mca.client.render.layer.MorphologyLayer;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.minecraft.client.model.geom.ModelLayers;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
@@ -17,7 +17,7 @@ public class VillagerEntityMCARenderer extends VillagerLikeEntityMCARenderer<Vil
     public VillagerEntityMCARenderer(EntityRendererProvider.Context ctx) {
         super(ctx, new VillagerPlayerModel<>(ctx.bakeLayer(ModelLayers.PLAYER)));
 
-        layers.add(0, new VillagerMorphologyLayer<>(this, ctx.bakeLayer(MCAModelLayers.PLAYER_ATTACHMENTS)));
+        layers.add(0, new MorphologyLayer<>(this, ctx.bakeLayer(MCAModelLayers.PLAYER_ATTACHMENTS)));
         addLayer(new FaceLayer<>(this, createOverlay(ctx, MCAModelLayers.VILLAGER_FACE).hideWears(), "normal"));
         addLayer(new ClothingLayer<>(this, createOverlay(ctx, MCAModelLayers.VILLAGER_CLOTHING), "normal"));
         addLayer(new HairLayer<>(this, new HairOverlayModel<>(

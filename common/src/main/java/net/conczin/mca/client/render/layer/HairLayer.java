@@ -31,32 +31,33 @@ public class HairLayer<T extends LivingEntity> extends VillagerLayer<T, HairOver
     }
 
     @Override
-    public void renderFinal(PoseStack transform, MultiBufferSource provider, int light, T villager, float tickDelta, boolean visible, boolean glowing) {
+    public void renderFinal(PoseStack transform, MultiBufferSource provider, int light, T villager, float tickDelta, Visibility visibility) {
         int overlay = LivingEntityRenderer.getOverlayCoords(villager, 0);
         int color = getColor(villager, tickDelta);
+        var villagerData = MCAClient.resolveVillager(villager);
         boolean renderedLayeredHair = false;
 
         for (LayeredHair.Category category : LayeredHair.Category.RENDER_ORDER) {
-            String identifier = MCAClient.resolveVillager(villager).getLayeredHair(category);
+            String identifier = villagerData.getLayeredHair(category);
             if (identifier.isBlank()) {
                 continue;
             }
 
-            renderedLayeredHair = true;
-
             ResourceLocation texture = getTexture(identifier);
             if (canUse(texture)) {
-                renderModel(transform, provider, light, model, color, texture, overlay, visible, glowing);
+                renderModel(transform, provider, light, color, texture, overlay, visibility);
+                renderedLayeredHair = true;
             }
 
             ResourceLocation overlayTexture = getOverlayTexture(identifier);
             if (canUse(overlayTexture)) {
-                renderModel(transform, provider, light, model, 0xFFFFFFFF, overlayTexture, overlay, visible, glowing);
+                renderModel(transform, provider, light, 0xFFFFFFFF, overlayTexture, overlay, visibility);
+                renderedLayeredHair = true;
             }
         }
 
         if (!renderedLayeredHair) {
-            super.renderFinal(transform, provider, light, villager, tickDelta, visible, glowing);
+            super.renderFinal(transform, provider, light, villager, tickDelta, visibility);
         }
     }
 
