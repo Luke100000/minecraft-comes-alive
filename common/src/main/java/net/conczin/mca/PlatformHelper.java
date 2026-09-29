@@ -1,5 +1,6 @@
 package net.conczin.mca;
 
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -16,5 +17,9 @@ public class PlatformHelper {
 
     public boolean isDevelopmentEnvironment() {
         return false;
+    }
+
+    public Path getConfigDirectory() {
+        return Path.of("config");
     }
 }

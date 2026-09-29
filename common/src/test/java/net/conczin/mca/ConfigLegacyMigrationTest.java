@@ -1,6 +1,15 @@
 package net.conczin.mca;
 
+import com.electronwill.nightconfig.core.UnmodifiableConfig;
+import com.electronwill.nightconfig.core.CommentedConfig;
+import com.electronwill.nightconfig.toml.TomlParser;
+import com.electronwill.nightconfig.toml.TomlWriter;
+import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import net.neoforged.fml.config.NeoForgeTestConfigLoader;
+import net.neoforged.neoforge.common.ModConfigSpec;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -8,16 +17,37 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class ConfigLegacyMigrationTest {
     @TempDir
     Path tempDirectory;
+
+    @Test
+    void realDev1211RunConfigMigratesWithoutModifyingTheOriginal() throws Exception {
+        String sourcePath = System.getenv("MCA_DEV_1211_JSON");
+        assumeTrue(sourcePath != null && Files.isRegularFile(Path.of(sourcePath)),
+                "Set MCA_DEV_1211_JSON to dev/1.21.1/neoforge/run/config/mca.json");
+
+        Path source = Path.of(sourcePath);
+        byte[] original = Files.readAllBytes(source);
+        Path configDirectory = Files.createDirectories(tempDirectory.resolve("config"));
+        Files.copy(source, configDirectory.resolve(Config.LEGACY_FILE_NAME), StandardCopyOption.REPLACE_EXISTING);
+
+        runProbe(RealDev1211Probe.class);
+        runProbe(RealDev1211SecondLaunchProbe.class);
+        assertArrayEquals(original, Files.readAllBytes(source),
+                "The original development run config must remain untouched");
+    }
 
     @Test
     void legacyValuesMigrateWithoutBecomingNativeDefaults() throws Exception {
@@ -68,12 +98,27 @@ class ConfigLegacyMigrationTest {
         assertEquals(legacyJson, Files.readString(legacyPath, StandardCharsets.UTF_8));
     }
 
-    private void runProbe(Class<?> probeClass) throws Exception {
-        Process process = new ProcessBuilder(
+    @Test
+    void loaderConfigDirectoryIsUsedForLegacyMigration() throws Exception {
+        Path configDirectory = Files.createDirectories(tempDirectory.resolve("custom-config"));
+        Files.writeString(configDirectory.resolve(Config.LEGACY_FILE_NAME), """
+                {
+                  "version": 2,
+                  "enableOnlineTTS": true
+                }
+                """, StandardCharsets.UTF_8);
+
+        runProbe(CustomConfigDirectoryProbe.class, configDirectory.toString());
+    }
+
+    private void runProbe(Class<?> probeClass, String... args) throws Exception {
+        List<String> command = new java.util.ArrayList<>(List.of(
                 javaExecutable(),
                 "-cp",
                 absoluteClasspath(),
-                probeClass.getName())
+                probeClass.getName()));
+        command.addAll(List.of(args));
+        Process process = new ProcessBuilder(command)
                 .directory(tempDirectory.toFile())
                 .redirectErrorStream(true)
                 .start();
@@ -179,6 +224,159 @@ class ConfigLegacyMigrationTest {
             Path clientPath = Path.of("config", Config.CLIENT_FILE_NAME).toAbsolutePath().normalize();
             MigrationProbe.requireEquals(false, Config.migrateLegacy(Config.CLIENT_SPEC, clientPath), "non-dev/1.21.1 legacy schema was imported");
             MigrationProbe.requireEquals(false, Config.CLIENT.enableOnlineTTS.get(), "non-dev/1.21.1 legacy value changed CLIENT config");
+        }
+    }
+
+    public static final class CustomConfigDirectoryProbe {
+        private CustomConfigDirectoryProbe() {
+        }
+
+        public static void main(String[] args) {
+            Path configDirectory = Path.of(args[0]).toAbsolutePath().normalize();
+            MCA.platformHelper = new PlatformHelper() {
+                @Override
+                public Path getConfigDirectory() {
+                    return configDirectory;
+                }
+            };
+
+            NeoForgeTestConfigLoader.loadDefaults(Config.CLIENT_SPEC);
+
+            Path clientPath = configDirectory.resolve(Config.CLIENT_FILE_NAME);
+            MigrationProbe.requireEquals(true, Config.migrateLegacy(Config.CLIENT_SPEC, clientPath), "legacy JSON was not read from the loader config directory");
+            MigrationProbe.requireEquals(true, Config.CLIENT.enableOnlineTTS.get(), "legacy value from the loader config directory was not migrated");
+        }
+    }
+
+    /** Checks every matching native value against an isolated copy of the actual dev/1.21.1 JSON. */
+    public static final class RealDev1211Probe {
+        private static final Gson GSON = new Gson();
+
+        private RealDev1211Probe() {
+        }
+
+        public static void main(String[] args) throws Exception {
+            Path configDir = Path.of("config").toAbsolutePath().normalize();
+            JsonObject legacy;
+            try (var reader = Files.newBufferedReader(configDir.resolve(Config.LEGACY_FILE_NAME))) {
+                legacy = JsonParser.parseReader(reader).getAsJsonObject();
+            }
+            if (legacy.get("version").getAsInt() != 2) {
+                throw new AssertionError("The real fixture must be dev/1.21.1 schema v2");
+            }
+
+            CommentedConfig common = CommentedConfig.inMemory();
+            CommentedConfig server = CommentedConfig.inMemory();
+            CommentedConfig client = CommentedConfig.inMemory();
+            NeoForgeTestConfigLoader.loadConfig(Config.COMMON_SPEC, common);
+            NeoForgeTestConfigLoader.loadConfig(Config.SERVER_SPEC, server);
+            NeoForgeTestConfigLoader.loadConfig(Config.CLIENT_SPEC, client);
+            Path serverPath = configDir.resolve(Config.SERVER_FILE_NAME);
+            if (Config.migrateLegacy(Config.SERVER_SPEC, configDir.resolve("world/serverconfig/mca-server.toml"))) {
+                throw new AssertionError("A world SERVER override imported the legacy global config");
+            }
+            if (!Config.migrateLegacy(Config.COMMON_SPEC, configDir.resolve(Config.COMMON_FILE_NAME))
+                    || !Config.migrateLegacy(Config.SERVER_SPEC, serverPath)
+                    || !Config.migrateLegacy(Config.CLIENT_SPEC, configDir.resolve(Config.CLIENT_FILE_NAME))) {
+                throw new AssertionError("One or more first-launch native configs did not import");
+            }
+
+            int covered = countPreservedValues(Config.COMMON_SPEC.getValues(), legacy)
+                    + countPreservedValues(Config.SERVER_SPEC.getValues(), legacy)
+                    + countPreservedValues(Config.CLIENT_SPEC.getValues(), legacy);
+            if (covered < 100) {
+                throw new AssertionError("Only " + covered + " real legacy fields were checked");
+            }
+            if (Config.migrateLegacy(Config.SERVER_SPEC, serverPath)) {
+                throw new AssertionError("SERVER legacy import ran twice");
+            }
+            saveToml(common, configDir.resolve(Config.COMMON_FILE_NAME));
+            saveToml(server, serverPath);
+            saveToml(client, configDir.resolve(Config.CLIENT_FILE_NAME));
+            System.out.println("Verified " + covered + " real dev/1.21.1 legacy fields");
+        }
+
+        private static void saveToml(CommentedConfig config, Path path) throws Exception {
+            try (var writer = Files.newBufferedWriter(path)) {
+                new TomlWriter().write(config, writer);
+            }
+        }
+
+        private static int countPreservedValues(UnmodifiableConfig section, JsonObject legacy) {
+            int checked = 0;
+            for (UnmodifiableConfig.Entry entry : section.entrySet()) {
+                if (entry.getRawValue() instanceof UnmodifiableConfig nested) {
+                    checked += countPreservedValues(nested, legacy);
+                } else if (entry.getRawValue() instanceof ModConfigSpec.ConfigValue<?> value
+                        && legacy.has(entry.getKey()) && !legacy.get(entry.getKey()).isJsonNull()) {
+                    Object expected = legacyValue(legacy.get(entry.getKey()), value.getDefault());
+                    if (!value.getSpec().test(expected)) {
+                        throw new AssertionError("Actual dev/1.21.1 field rejected by the native spec: " + entry.getKey());
+                    }
+                    if (!java.util.Objects.equals(expected, value.get())) {
+                        throw new AssertionError("Legacy field was not preserved: " + entry.getKey());
+                    }
+                    checked++;
+                }
+            }
+            return checked;
+        }
+
+        private static Object legacyValue(JsonElement element, Object defaultValue) {
+            if (defaultValue instanceof Boolean) return element.getAsBoolean();
+            if (defaultValue instanceof Integer) return element.getAsInt();
+            if (defaultValue instanceof Double) return element.getAsDouble();
+            if (defaultValue instanceof String) return element.getAsString();
+            if (defaultValue instanceof List<?>) {
+                if (element.isJsonArray()) {
+                    List<String> values = new ArrayList<>();
+                    element.getAsJsonArray().forEach(item -> values.add(item.getAsString()));
+                    return values;
+                }
+                if (element.isJsonObject()) {
+                    return element.getAsJsonObject().entrySet().stream()
+                            .sorted(java.util.Map.Entry.comparingByKey())
+                            .map(entry -> entry.getKey() + "=" + (entry.getValue().isJsonPrimitive()
+                                    && entry.getValue().getAsJsonPrimitive().isString()
+                                    ? entry.getValue().getAsString() : GSON.toJson(entry.getValue())))
+                            .toList();
+                }
+            }
+            throw new AssertionError("Unexpected legacy field shape for " + defaultValue.getClass().getSimpleName());
+        }
+    }
+
+    /** A separate JVM proves an existing TOML wins over the still-present legacy JSON. */
+    public static final class RealDev1211SecondLaunchProbe {
+        private RealDev1211SecondLaunchProbe() {
+        }
+
+        public static void main(String[] args) throws Exception {
+            Path configDir = Path.of("config").toAbsolutePath().normalize();
+            JsonObject legacy;
+            try (var reader = Files.newBufferedReader(configDir.resolve(Config.LEGACY_FILE_NAME))) {
+                legacy = JsonParser.parseReader(reader).getAsJsonObject();
+            }
+            loadToml(Config.COMMON_SPEC, configDir.resolve(Config.COMMON_FILE_NAME));
+            loadToml(Config.SERVER_SPEC, configDir.resolve(Config.SERVER_FILE_NAME));
+            loadToml(Config.CLIENT_SPEC, configDir.resolve(Config.CLIENT_FILE_NAME));
+            if (Config.migrateLegacy(Config.COMMON_SPEC, configDir.resolve(Config.COMMON_FILE_NAME))
+                    || Config.migrateLegacy(Config.SERVER_SPEC, configDir.resolve(Config.SERVER_FILE_NAME))
+                    || Config.migrateLegacy(Config.CLIENT_SPEC, configDir.resolve(Config.CLIENT_FILE_NAME))) {
+                throw new AssertionError("Second launch imported legacy JSON over existing native TOML");
+            }
+            int covered = RealDev1211Probe.countPreservedValues(Config.COMMON_SPEC.getValues(), legacy)
+                    + RealDev1211Probe.countPreservedValues(Config.SERVER_SPEC.getValues(), legacy)
+                    + RealDev1211Probe.countPreservedValues(Config.CLIENT_SPEC.getValues(), legacy);
+            if (covered < 100) {
+                throw new AssertionError("Second launch lost real legacy values");
+            }
+        }
+
+        private static void loadToml(ModConfigSpec spec, Path path) throws Exception {
+            try (var reader = Files.newBufferedReader(path)) {
+                NeoForgeTestConfigLoader.loadConfig(spec, new TomlParser().parse(reader));
+            }
         }
     }
 }

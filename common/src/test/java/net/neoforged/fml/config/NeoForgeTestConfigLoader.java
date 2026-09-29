@@ -16,4 +16,9 @@ public final class NeoForgeTestConfigLoader {
         spec.correct(config);
         spec.acceptConfig(new LoadedConfig(config, null, null));
     }
+
+    public static void loadConfig(ModConfigSpec spec, CommentedConfig config) {
+        spec.correct(config);
+        spec.acceptConfig(new LoadedConfig(config, null, null));
+    }
 }

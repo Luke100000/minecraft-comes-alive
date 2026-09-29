@@ -21,6 +21,7 @@ import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -37,7 +38,7 @@ public final class Config {
     private static final int DEV_1_21_1_LEGACY_VERSION = 2;
 
     private static final Gson GSON = new Gson();
-    private static final Path CONFIG_DIRECTORY = Path.of("config");
+    private static final Path CONFIG_DIRECTORY = MCA.platformHelper.getConfigDirectory().toAbsolutePath().normalize();
     private static final LegacyJson LEGACY = LegacyJson.load(CONFIG_DIRECTORY.resolve(LEGACY_FILE_NAME));
     private static final boolean LEGACY_COMMON_IMPORT_ELIGIBLE = isLegacyImportEligible(COMMON_FILE_NAME);
     private static final boolean LEGACY_SERVER_IMPORT_ELIGIBLE = isLegacyImportEligible(SERVER_FILE_NAME);
@@ -80,78 +81,6 @@ public final class Config {
 
     public static void saveClient() {
         CLIENT_SPEC.save();
-    }
-
-    static boolean commonBoolean(String name, boolean fallback) {
-        return fallback;
-    }
-
-    static boolean serverBoolean(String name, boolean fallback) {
-        return fallback;
-    }
-
-    static boolean clientBoolean(String name, boolean fallback) {
-        return fallback;
-    }
-
-    static int commonInt(String name, int fallback) {
-        return fallback;
-    }
-
-    static int serverInt(String name, int fallback) {
-        return fallback;
-    }
-
-    static int clientInt(String name, int fallback) {
-        return fallback;
-    }
-
-    static double commonDouble(String name, double fallback) {
-        return fallback;
-    }
-
-    static double serverDouble(String name, double fallback) {
-        return fallback;
-    }
-
-    static double clientDouble(String name, double fallback) {
-        return fallback;
-    }
-
-    static String commonString(String name, String fallback) {
-        return fallback;
-    }
-
-    static String serverString(String name, String fallback) {
-        return fallback;
-    }
-
-    static String clientString(String name, String fallback) {
-        return fallback;
-    }
-
-    static List<String> commonList(String name, List<String> fallback) {
-        return fallback;
-    }
-
-    static List<String> serverList(String name, List<String> fallback) {
-        return fallback;
-    }
-
-    static List<String> clientList(String name, List<String> fallback) {
-        return fallback;
-    }
-
-    static List<String> commonMap(String name, List<String> fallback) {
-        return fallback;
-    }
-
-    static List<String> serverMap(String name, List<String> fallback) {
-        return fallback;
-    }
-
-    static List<String> clientMap(String name, List<String> fallback) {
-        return fallback;
     }
 
     public static Map<UUID, String> legacyInworldAIResourceNames() {
@@ -233,6 +162,9 @@ public final class Config {
             if (!LEGACY_SERVER_IMPORT_ELIGIBLE || legacyServerImported) {
                 return false;
             }
+            // NeoForge and Forge Config API Port use the global config as the SERVER default and
+            // select an existing world/serverconfig file only as an override. Migrate only that
+            // global default; an explicit world override must remain authoritative.
             Path globalServerConfig = CONFIG_DIRECTORY.resolve(SERVER_FILE_NAME).toAbsolutePath().normalize();
             return loadedConfigPath.toAbsolutePath().normalize().equals(globalServerConfig);
         }
@@ -405,6 +337,30 @@ public final class Config {
             }
         }
         return decoded;
+    }
+
+    static final class DecodedMapCache<K, V> {
+        private final Class<K> keyType;
+        private final Class<V> valueType;
+        private final String fieldName;
+        // Snapshot the contents: native config reloads usually replace the list, but other
+        // callers may modify the existing list in place without changing its identity.
+        private List<String> source;
+        private Map<K, V> decoded = Map.of();
+
+        DecodedMapCache(Class<K> keyType, Class<V> valueType, String fieldName) {
+            this.keyType = keyType;
+            this.valueType = valueType;
+            this.fieldName = fieldName;
+        }
+
+        synchronized Map<K, V> get(List<? extends String> values) {
+            if (source == null || !values.equals(source)) {
+                decoded = Collections.unmodifiableMap(decodeMap(values, keyType, valueType, fieldName));
+                source = List.copyOf(values);
+            }
+            return decoded;
+        }
     }
 
     private static String encodeScalar(Object value) {

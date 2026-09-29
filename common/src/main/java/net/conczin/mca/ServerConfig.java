@@ -139,6 +139,22 @@ public final class ServerConfig {
     public final ModConfigSpec.ConfigValue<List<? extends String>> structuresInRumors;
     public final ModConfigSpec.ConfigValue<List<? extends String>> professionConversionsMap;
     public final ModConfigSpec.ConfigValue<List<? extends String>> taxesMap;
+    private final Config.DecodedMapCache<String, String> destinyLocationsToTranslationCache =
+            new Config.DecodedMapCache<>(String.class, String.class, "destinyLocationsToTranslationMap");
+    private final Config.DecodedMapCache<String, Boolean> enabledTraitsCache =
+            new Config.DecodedMapCache<>(String.class, Boolean.class, "enabledTraits");
+    private final Config.DecodedMapCache<String, EquipmentSet> guardEquipmentCache =
+            new Config.DecodedMapCache<>(String.class, EquipmentSet.class, "guardEquipment");
+    private final Config.DecodedMapCache<String, EquipmentSet> archerEquipmentCache =
+            new Config.DecodedMapCache<>(String.class, EquipmentSet.class, "archerEquipment");
+    private final Config.DecodedMapCache<String, Integer> maxTreeTicksCache =
+            new Config.DecodedMapCache<>(String.class, Integer.class, "maxTreeTicks");
+    private final Config.DecodedMapCache<String, Integer> guardsTargetEntitiesCache =
+            new Config.DecodedMapCache<>(String.class, Integer.class, "guardsTargetEntities");
+    private final Config.DecodedMapCache<String, String> professionConversionsCache =
+            new Config.DecodedMapCache<>(String.class, String.class, "professionConversionsMap");
+    private final Config.DecodedMapCache<String, Float> taxesCache =
+            new Config.DecodedMapCache<>(String.class, Float.class, "taxesMap");
 
     ServerConfig(ModConfigSpec.Builder builder) {
         builder.translation("mca.configuration.section.ai").push("ai");
@@ -146,22 +162,22 @@ public final class ServerConfig {
 
                 .comment("Enables the AI chat for villagers.")
                 .translation("mca.configuration.enableVillagerChatAI")
-                .define("enableVillagerChatAI", Config.serverBoolean("enableVillagerChatAI", false));
+                .define("enableVillagerChatAI", false);
         villagerChatAIModel = builder
 
                 .comment("AI model to use for villager chat.")
                 .translation("mca.configuration.villagerChatAIModel")
-                .define("villagerChatAIModel", Config.serverString("villagerChatAIModel", "default"));
+                .define("villagerChatAIModel", "default");
         villagerChatAIUseTools = builder
 
                 .comment("Villagers try to follow commands like \"follow me\", ...")
                 .translation("mca.configuration.villagerChatAIUseTools")
-                .define("villagerChatAIUseTools", Config.serverBoolean("villagerChatAIUseTools", false));
+                .define("villagerChatAIUseTools", false);
         villagerChatAIContextPermissionLevel = builder
 
                 .comment("Permission level required to edit ChatAI context prompts.")
                 .translation("mca.configuration.villagerChatAIContextPermissionLevel")
-                .defineInRange("villagerChatAIContextPermissionLevel", Config.serverInt("villagerChatAIContextPermissionLevel", 3), 0, 4);
+                .defineInRange("villagerChatAIContextPermissionLevel", 3, 0, 4);
         builder.pop();
 
         builder.translation("mca.configuration.section.destiny").push("destiny");
@@ -169,17 +185,17 @@ public final class ServerConfig {
 
                 .comment("Whether body customization (e.g., height, size) is available in the Destiny editor.")
                 .translation("mca.configuration.allowBodyCustomizationInDestiny")
-                .define("allowBodyCustomizationInDestiny", Config.serverBoolean("allowBodyCustomizationInDestiny", true));
+                .define("allowBodyCustomizationInDestiny", true);
         allowTraitCustomizationInDestiny = builder
 
                 .comment("Whether trait customization is available in the Destiny editor.")
                 .translation("mca.configuration.allowTraitCustomizationInDestiny")
-                .define("allowTraitCustomizationInDestiny", Config.serverBoolean("allowTraitCustomizationInDestiny", true));
+                .define("allowTraitCustomizationInDestiny", true);
         destinySpawnLocations = builder
 
                 .comment("Locations where the Destiny feature can teleport the player. <a href=\"https://github.com/Luke100000/minecraft-comes-alive/wiki/Custom-Rumors-and-Destiny-Structures\">Wiki</a>")
                 .translation("mca.configuration.destinySpawnLocations")
-                .defineListAllowEmpty("destinySpawnLocations", Config.serverList("destinySpawnLocations", List.of(
+                .defineListAllowEmpty("destinySpawnLocations", List.of(
             "somewhere",
             "minecraft:shipwreck_beached",
             "minecraft:village_desert",
@@ -188,55 +204,55 @@ public final class ServerConfig {
             "minecraft:village_plains",
             "minecraft:village_savanna",
             "minecraft:ancient_city"
-    )), () -> "", Config::isDestinySelector);
+    ), () -> "", Config::isDestinySelector);
         autoDiscoverDestinyLocations = builder
 
                 .comment("Automatically adds registered village structures to the Destiny screen.")
                 .translation("mca.configuration.autoDiscoverDestinyLocations")
-                .define("autoDiscoverDestinyLocations", Config.serverBoolean("autoDiscoverDestinyLocations", true));
+                .define("autoDiscoverDestinyLocations", true);
         destinySpawnLocationBlacklist = builder
 
                 .comment("Removes matching locations from the Destiny screen after manual and automatic locations are combined.")
                 .translation("mca.configuration.destinySpawnLocationBlacklist")
-                .defineListAllowEmpty("destinySpawnLocationBlacklist", Config.serverList("destinySpawnLocationBlacklist", List.of()), () -> "", value -> value instanceof String);
+                .defineListAllowEmpty("destinySpawnLocationBlacklist", List.of(), () -> "", value -> value instanceof String);
         destinyOverworldOnly = builder
 
                 .comment("Restricts dimension-bound Destiny destinations to the Overworld.")
                 .translation("mca.configuration.destinyOverworldOnly")
-                .define("destinyOverworldOnly", Config.serverBoolean("destinyOverworldOnly", false));
+                .define("destinyOverworldOnly", false);
         destinyDimensionBlacklist = builder
 
                 .comment("Removes Destiny destinations from matching dimensions after Minecraft determines where they can generate.")
                 .translation("mca.configuration.destinyDimensionBlacklist")
-                .defineListAllowEmpty("destinyDimensionBlacklist", Config.serverList("destinyDimensionBlacklist", List.of()), () -> "", value -> value instanceof String);
+                .defineListAllowEmpty("destinyDimensionBlacklist", List.of(), () -> "", value -> value instanceof String);
         destinyLocationsToTranslationMap = builder
 
                 .comment("Maps Destiny locations to translation keys for UI text.")
                 .translation("mca.configuration.destinyLocationsToTranslationMap")
-                .defineListAllowEmpty("destinyLocationsToTranslationMap", Config.serverMap("destinyLocationsToTranslationMap", Config.encodeMap(Map.of(
+                .defineListAllowEmpty("destinyLocationsToTranslationMap", Config.encodeMap(Map.of(
             "default", "destiny.story.travelling",
             "minecraft:shipwreck_beached", "destiny.story.sailing"
-    ))), () -> "", value -> Config.isMapEntry(value, String.class, String.class));
+    )), () -> "", value -> Config.isMapEntry(value, String.class, String.class));
         launchIntoDestiny = builder
 
                 .comment("Launches a player into Destiny feature when they first join.")
                 .translation("mca.configuration.launchIntoDestiny")
-                .define("launchIntoDestiny", Config.serverBoolean("launchIntoDestiny", true));
+                .define("launchIntoDestiny", true);
         allowDestinyCommandOnce = builder
 
                 .comment("Allows the player to modify their Destiny once via command.")
                 .translation("mca.configuration.allowDestinyCommandOnce")
-                .define("allowDestinyCommandOnce", Config.serverBoolean("allowDestinyCommandOnce", true));
+                .define("allowDestinyCommandOnce", true);
         allowDestinyCommandMoreThanOnce = builder
 
                 .comment("Allows the player to modify their Destiny multiple times via command.")
                 .translation("mca.configuration.allowDestinyCommandMoreThanOnce")
-                .define("allowDestinyCommandMoreThanOnce", Config.serverBoolean("allowDestinyCommandMoreThanOnce", false));
+                .define("allowDestinyCommandMoreThanOnce", false);
         allowDestinyTeleportation = builder
 
                 .comment("Players can teleport to Destiny locations.")
                 .translation("mca.configuration.allowDestinyTeleportation")
-                .define("allowDestinyTeleportation", Config.serverBoolean("allowDestinyTeleportation", true));
+                .define("allowDestinyTeleportation", true);
         builder.pop();
 
         builder.translation("mca.configuration.section.mod_features").push("mod_features");
@@ -244,124 +260,124 @@ public final class ServerConfig {
 
                 .comment("Overwrite newly spawned vanilla villagers with MCA villagers. If set to false, original villagers will remain unchanged.")
                 .translation("mca.configuration.overwriteOriginalVillagers")
-                .define("overwriteOriginalVillagers", Config.serverBoolean("overwriteOriginalVillagers", true));
+                .define("overwriteOriginalVillagers", true);
         moddedVillagerWhitelist = builder
 
                 .comment("A whitelist of modded villagers to be converted into MCA villagers.")
                 .translation("mca.configuration.moddedVillagerWhitelist")
-                .defineListAllowEmpty("moddedVillagerWhitelist", Config.serverList("moddedVillagerWhitelist", List.of()), () -> "",
+                .defineListAllowEmpty("moddedVillagerWhitelist", List.of(), () -> "",
                         value -> Config.isLoadSafeRegistryId(value, Registries.ENTITY_TYPE));
         overwriteOriginalZombieVillagers = builder
 
                 .comment("Overwrite vanilla zombie villagers with MCA zombie villagers.")
                 .translation("mca.configuration.overwriteOriginalZombieVillagers")
-                .define("overwriteOriginalZombieVillagers", Config.serverBoolean("overwriteOriginalZombieVillagers", true));
+                .define("overwriteOriginalZombieVillagers", true);
         overwriteAllZombiesWithZombieVillagers = builder
 
                 .comment("Overwrite all zombies (not just zombie villagers) with MCA zombie villagers. May cause unpredictable behavior.")
                 .translation("mca.configuration.overwriteAllZombiesWithZombieVillagers")
-                .define("overwriteAllZombiesWithZombieVillagers", Config.serverBoolean("overwriteAllZombiesWithZombieVillagers", false));
+                .define("overwriteAllZombiesWithZombieVillagers", false);
         moddedZombieVillagerWhitelist = builder
 
                 .comment("Whitelist of modded zombie villagers to be converted into MCA zombie villagers.")
                 .translation("mca.configuration.moddedZombieVillagerWhitelist")
-                .defineListAllowEmpty("moddedZombieVillagerWhitelist", Config.serverList("moddedZombieVillagerWhitelist", List.of()), () -> "",
+                .defineListAllowEmpty("moddedZombieVillagerWhitelist", List.of(), () -> "",
                         value -> Config.isLoadSafeRegistryId(value, Registries.ENTITY_TYPE));
         babyZombieChance = builder
 
                 .comment("Chance (0-1) that a spawned zombie will be a baby zombie.")
                 .translation("mca.configuration.babyZombieChance")
-                .defineInRange("babyZombieChance", Config.serverDouble("babyZombieChance", 0.25), 0.0, 1.0);
+                .defineInRange("babyZombieChance", 0.25, 0.0, 1.0);
         villagerTagsHacks = builder
 
                 .comment("Injects MCA villagers into the villager tag.")
                 .translation("mca.configuration.villagerTagsHacks")
-                .define("villagerTagsHacks", Config.serverBoolean("villagerTagsHacks", true));
+                .define("villagerTagsHacks", true);
         enableInfection = builder
 
                 .comment("Enables the villager infection system. Infected villagers can turn into zombie villagers after some time.")
                 .translation("mca.configuration.enableInfection")
-                .define("enableInfection", Config.serverBoolean("enableInfection", true));
+                .define("enableInfection", true);
         allowGrimReaper = builder
 
                 .comment("Allows summoning of the Grim Reaper entity.")
                 .translation("mca.configuration.allowGrimReaper")
-                .define("allowGrimReaper", Config.serverBoolean("allowGrimReaper", true));
+                .define("allowGrimReaper", true);
         villagerChatPrefix = builder
 
                 .comment("Prefix used in villager chat messages.")
                 .translation("mca.configuration.villagerChatPrefix")
-                .define("villagerChatPrefix", Config.serverString("villagerChatPrefix", ""));
+                .define("villagerChatPrefix", "");
         canHurtBabies = builder
 
                 .comment("If true, players can damage baby villagers.")
                 .translation("mca.configuration.canHurtBabies")
-                .define("canHurtBabies", Config.serverBoolean("canHurtBabies", true));
+                .define("canHurtBabies", true);
         enterVillageNotification = builder
 
                 .comment("Whether to show notifications when entering a village.")
                 .translation("mca.configuration.enterVillageNotification")
-                .define("enterVillageNotification", Config.serverBoolean("enterVillageNotification", true));
+                .define("enterVillageNotification", true);
         villagerMarriageNotification = builder
 
                 .comment("Whether to show notifications when villagers get married.")
                 .translation("mca.configuration.villagerMarriageNotification")
-                .define("villagerMarriageNotification", Config.serverBoolean("villagerMarriageNotification", true));
+                .define("villagerMarriageNotification", true);
         villagerBirthNotification = builder
 
                 .comment("Whether to show notifications when a villager gives birth.")
                 .translation("mca.configuration.villagerBirthNotification")
-                .define("villagerBirthNotification", Config.serverBoolean("villagerBirthNotification", true));
+                .define("villagerBirthNotification", true);
         innArrivalNotification = builder
 
                 .comment("Whether to show notifications when a visitor arrives at the inn.")
                 .translation("mca.configuration.innArrivalNotification")
-                .define("innArrivalNotification", Config.serverBoolean("innArrivalNotification", true));
+                .define("innArrivalNotification", true);
         villagerRestockNotification = builder
 
                 .comment("Whether to show notifications when a villager restocks their trades.")
                 .translation("mca.configuration.villagerRestockNotification")
-                .define("villagerRestockNotification", Config.serverBoolean("villagerRestockNotification", true));
+                .define("villagerRestockNotification", true);
         showNotificationsAsChat = builder
 
                 .comment("If true, all notifications (village entry, marriage, birth, etc.) are shown in the chat instead of above the hotbar.")
                 .translation("mca.configuration.showNotificationsAsChat")
-                .define("showNotificationsAsChat", Config.serverBoolean("showNotificationsAsChat", false));
+                .define("showNotificationsAsChat", false);
         giveAdvancementBooks = builder
 
                 .comment("If true, MCA book rewards are granted from advancements.")
                 .translation("mca.configuration.giveAdvancementBooks")
-                .define("giveAdvancementBooks", Config.serverBoolean("giveAdvancementBooks", true));
+                .define("giveAdvancementBooks", true);
         heartsToBeConsideredAsFriend = builder
 
                 .comment("The number of hearts required for a villager to consider the player a friend.")
                 .translation("mca.configuration.heartsToBeConsideredAsFriend")
-                .defineInRange("heartsToBeConsideredAsFriend", Config.serverInt("heartsToBeConsideredAsFriend", 40), 0, 10000);
+                .defineInRange("heartsToBeConsideredAsFriend", 40, 0, 10000);
         enableVillagerMailingPlayers = builder
 
                 .comment("Enables MCA villagers to send letters or mail to players.")
                 .translation("mca.configuration.enableVillagerMailingPlayers")
-                .define("enableVillagerMailingPlayers", Config.serverBoolean("enableVillagerMailingPlayers", true));
+                .define("enableVillagerMailingPlayers", true);
         enableGenderCheckForPlayers = builder
 
                 .comment("Check for matching gender when trying to marry a villager.")
                 .translation("mca.configuration.enableGenderCheckForPlayers")
-                .define("enableGenderCheckForPlayers", Config.serverBoolean("enableGenderCheckForPlayers", true));
+                .define("enableGenderCheckForPlayers", true);
         zombieBiteInfectionChance = builder
 
                 .comment("Chance (0-1) for infection when bitten by a zombie.")
                 .translation("mca.configuration.zombieBiteInfectionChance")
-                .defineInRange("zombieBiteInfectionChance", Config.serverDouble("zombieBiteInfectionChance", 0.05), 0.0, 1.0);
+                .defineInRange("zombieBiteInfectionChance", 0.05, 0.0, 1.0);
         infectionChanceDecreasePerLevel = builder
 
                 .comment("Reduction in infection chance per villager trading level.")
                 .translation("mca.configuration.infectionChanceDecreasePerLevel")
-                .defineInRange("infectionChanceDecreasePerLevel", Config.serverDouble("infectionChanceDecreasePerLevel", 0.25), 0.0, 1.0);
+                .defineInRange("infectionChanceDecreasePerLevel", 0.25, 0.0, 1.0);
         infectionTime = builder
 
                 .comment("Duration (in ticks) until a villager turns into a zombie after infection. 20 ticks = 1 second; 72000 ticks = 1 hour.")
                 .translation("mca.configuration.infectionTime")
-                .defineInRange("infectionTime", Config.serverInt("infectionTime", 72000), 1, 100000000);
+                .defineInRange("infectionTime", 72000, 1, 100000000);
         builder.pop();
 
         builder.translation("mca.configuration.section.villager_behavior").push("villager_behavior");
@@ -369,213 +385,213 @@ public final class ServerConfig {
 
                 .comment("Time (in ticks) until a baby grows up when held as an item.")
                 .translation("mca.configuration.babyItemGrowUpTime")
-                .defineInRange("babyItemGrowUpTime", Config.serverInt("babyItemGrowUpTime", 24000), 0, 100000000);
+                .defineInRange("babyItemGrowUpTime", 24000, 0, 100000000);
         villagerMaxAgeTime = builder
 
                 .comment("Maximum villager lifetime in ticks (Time to grow fully up).")
                 .translation("mca.configuration.villagerMaxAgeTime")
-                .defineInRange("villagerMaxAgeTime", Config.serverInt("villagerMaxAgeTime", 384000), 0, 100000000);
+                .defineInRange("villagerMaxAgeTime", 384000, 0, 100000000);
         enabledTraits = builder
 
                 .comment("Map of enabled traits. Keys are trait IDs, values are true/false.")
                 .translation("mca.configuration.enabledTraits")
-                .defineListAllowEmpty("enabledTraits", Config.serverMap("enabledTraits", List.of()), () -> "", value -> Config.isMapEntry(value, String.class, Boolean.class));
+                .defineListAllowEmpty("enabledTraits", List.of(), () -> "", value -> Config.isMapEntry(value, String.class, Boolean.class));
         twinBabyChance = builder
 
                 .comment("Fraction (0-1) of babies that are born as twins.")
                 .translation("mca.configuration.twinBabyChance")
-                .defineInRange("twinBabyChance", Config.serverDouble("twinBabyChance", 0.05), 0.0, 1.0);
+                .defineInRange("twinBabyChance", 0.05, 0.0, 1.0);
         marriageHeartsRequirement = builder
 
                 .comment("Number of hearts required to marry a villager.")
                 .translation("mca.configuration.marriageHeartsRequirement")
-                .defineInRange("marriageHeartsRequirement", Config.serverInt("marriageHeartsRequirement", 100), 1, 10000);
+                .defineInRange("marriageHeartsRequirement", 100, 1, 10000);
         engagementHeartsRequirement = builder
 
                 .comment("Number of hearts required to get engaged to a villager.")
                 .translation("mca.configuration.engagementHeartsRequirement")
-                .defineInRange("engagementHeartsRequirement", Config.serverInt("engagementHeartsRequirement", 50), 0, 10000);
+                .defineInRange("engagementHeartsRequirement", 50, 0, 10000);
         bouquetHeartsRequirement = builder
 
                 .comment("Number of hearts required to give a bouquet to a villager.")
                 .translation("mca.configuration.bouquetHeartsRequirement")
-                .defineInRange("bouquetHeartsRequirement", Config.serverInt("bouquetHeartsRequirement", 10), 0, 10000);
+                .defineInRange("bouquetHeartsRequirement", 10, 0, 10000);
         villagerMaxHealth = builder
 
                 .comment("Maximum health of a villager.")
                 .translation("mca.configuration.villagerMaxHealth")
-                .defineInRange("villagerMaxHealth", Config.serverInt("villagerMaxHealth", 20), 1, 10000);
+                .defineInRange("villagerMaxHealth", 20, 1, 10000);
         allowVillagerTeleporting = builder
 
                 .comment("If true, allows stuck villagers to teleport to a safe location. Disabled by default as it can cause villagers to disappear unexpectedly.")
                 .translation("mca.configuration.allowVillagerTeleporting")
-                .define("allowVillagerTeleporting", Config.serverBoolean("allowVillagerTeleporting", false));
+                .define("allowVillagerTeleporting", false);
         villagerMinTeleportationDistance = builder
 
                 .comment("Minimum squared distance at which teleportation becomes possible for villagers.")
                 .translation("mca.configuration.villagerMinTeleportationDistance")
-                .defineInRange("villagerMinTeleportationDistance", Config.serverDouble("villagerMinTeleportationDistance", 128), 0.0, 10000.0);
+                .defineInRange("villagerMinTeleportationDistance", 128, 0.0, 10000.0);
         villagerPathfindingDistance = builder
 
                 .comment("Maximum geometric path horizon used for long-range villager destinations such as beds.")
                 .translation("mca.configuration.villagerPathfindingDistance")
-                .defineInRange("villagerPathfindingDistance", Config.serverInt("villagerPathfindingDistance", 160), 16, 256);
+                .defineInRange("villagerPathfindingDistance", 160, 16, 256);
         villagerFollowRange = builder
 
                 .comment("Vanilla follow-range attribute for villagers.")
                 .translation("mca.configuration.villagerFollowRange")
-                .defineInRange("villagerFollowRange", Config.serverInt("villagerFollowRange", 48), 16, 64);
+                .defineInRange("villagerFollowRange", 48, 16, 64);
         childInitialHearts = builder
 
                 .comment("Number of hearts a child starts with towards their parent.")
                 .translation("mca.configuration.childInitialHearts")
-                .defineInRange("childInitialHearts", Config.serverInt("childInitialHearts", 100), -10000, 10000);
+                .defineInRange("childInitialHearts", 100, -10000, 10000);
         greetHeartsThreshold = builder
 
                 .comment("Number of hearts required for a villager to greet the player.")
                 .translation("mca.configuration.greetHeartsThreshold")
-                .defineInRange("greetHeartsThreshold", Config.serverInt("greetHeartsThreshold", 75), 0, 10000);
+                .defineInRange("greetHeartsThreshold", 75, 0, 10000);
         greetAfterDays = builder
 
                 .comment("Number of in-game days after which villagers begin greeting the player.")
                 .translation("mca.configuration.greetAfterDays")
-                .defineInRange("greetAfterDays", Config.serverInt("greetAfterDays", 1), 0, 1000000);
+                .defineInRange("greetAfterDays", 1, 0, 1000000);
         geneticImmigrantChance = builder
 
                 .comment("Fraction (0-1) of villagers who will have biome-independent skin tones.")
                 .translation("mca.configuration.geneticImmigrantChance")
-                .defineInRange("geneticImmigrantChance", Config.serverDouble("geneticImmigrantChance", 0.2), 0.0, 1.0);
+                .defineInRange("geneticImmigrantChance", 0.2, 0.0, 1.0);
         traitChance = builder
 
                 .comment("Chance multiplier (0-1) of a villager having one trait.")
                 .translation("mca.configuration.traitChance")
-                .defineInRange("traitChance", Config.serverDouble("traitChance", 0.25), 0.0, 1.0);
+                .defineInRange("traitChance", 0.25, 0.0, 1.0);
         traitInheritChance = builder
 
                 .comment("Chance multiplier (0-1) of a child inheriting a parent's personality trait.")
                 .translation("mca.configuration.traitInheritChance")
-                .defineInRange("traitInheritChance", Config.serverDouble("traitInheritChance", 0.5), 0.0, 1.0);
+                .defineInRange("traitInheritChance", 0.5, 0.0, 1.0);
         nightOwlChance = builder
 
                 .comment("Fraction (0-1) of villagers who are night owls (awake at night, asleep during the day).")
                 .translation("mca.configuration.nightOwlChance")
                 .worldRestart()
-                .defineInRange("nightOwlChance", Config.serverDouble("nightOwlChance", 0.5), 0.0, 1.0);
+                .defineInRange("nightOwlChance", 0.5, 0.0, 1.0);
         allowAnyNightOwl = builder
 
                 .comment("Allows all villagers to potentially become night owls.")
                 .translation("mca.configuration.allowAnyNightOwl")
                 .worldRestart()
-                .define("allowAnyNightOwl", Config.serverBoolean("allowAnyNightOwl", false));
+                .define("allowAnyNightOwl", false);
         heartsForPardonHit = builder
 
                 .comment("For every X hearts, players may hit a villager once without guards attacking them.")
                 .translation("mca.configuration.heartsForPardonHit")
-                .defineInRange("heartsForPardonHit", Config.serverInt("heartsForPardonHit", 30), 1, 10000);
+                .defineInRange("heartsForPardonHit", 30, 1, 10000);
         pardonPlayerTicks = builder
 
                 .comment("Time (in ticks) before a player's pardon resets after hitting a villager.")
                 .translation("mca.configuration.pardonPlayerTicks")
-                .defineInRange("pardonPlayerTicks", Config.serverInt("pardonPlayerTicks", 1200), 1, 100000000);
+                .defineInRange("pardonPlayerTicks", 1200, 1, 100000000);
         guardsTargetMonsters = builder
 
                 .comment("If true, guards will attack all monsters (including modded ones). May cause guards to attack neutral mobs depending on configuration.")
                 .translation("mca.configuration.guardsTargetMonsters")
-                .define("guardsTargetMonsters", Config.serverBoolean("guardsTargetMonsters", false));
+                .define("guardsTargetMonsters", false);
         maleVillagerHeightFactor = builder
 
                 .comment("Height scaling factor for male villagers.")
                 .translation("mca.configuration.maleVillagerHeightFactor")
                 .worldRestart()
-                .defineInRange("maleVillagerHeightFactor", Config.serverDouble("maleVillagerHeightFactor", 0.9), 0.0, 1.0);
+                .defineInRange("maleVillagerHeightFactor", 0.9, 0.0, 1.0);
         femaleVillagerHeightFactor = builder
 
                 .comment("Height scaling factor for female villagers.")
                 .translation("mca.configuration.femaleVillagerHeightFactor")
                 .worldRestart()
-                .defineInRange("femaleVillagerHeightFactor", Config.serverDouble("femaleVillagerHeightFactor", 0.85), 0.0, 1.0);
+                .defineInRange("femaleVillagerHeightFactor", 0.85, 0.0, 1.0);
         maleVillagerWidthFactor = builder
 
                 .comment("Width scaling factor for male villagers.")
                 .translation("mca.configuration.maleVillagerWidthFactor")
                 .worldRestart()
-                .defineInRange("maleVillagerWidthFactor", Config.serverDouble("maleVillagerWidthFactor", 1.0), 0.0, 1.0);
+                .defineInRange("maleVillagerWidthFactor", 1.0, 0.0, 1.0);
         femaleVillagerWidthFactor = builder
 
                 .comment("Width scaling factor for female villagers.")
                 .translation("mca.configuration.femaleVillagerWidthFactor")
                 .worldRestart()
-                .defineInRange("femaleVillagerWidthFactor", Config.serverDouble("femaleVillagerWidthFactor", 0.95), 0.0, 1.0);
+                .defineInRange("femaleVillagerWidthFactor", 0.95, 0.0, 1.0);
         useMCAVoices = builder
 
                 .comment("Enables MCA villager voice lines. Set to false to mute all villager sounds.")
                 .translation("mca.configuration.useMCAVoices")
-                .define("useMCAVoices", Config.serverBoolean("useMCAVoices", true));
+                .define("useMCAVoices", true);
         useVanillaVoices = builder
 
                 .comment("If true, villagers use vanilla Minecraft voice sounds instead of MCA custom voices.")
                 .translation("mca.configuration.useVanillaVoices")
-                .define("useVanillaVoices", Config.serverBoolean("useVanillaVoices", false));
+                .define("useVanillaVoices", false);
         interactionChanceFatigue = builder
 
                 .comment("Amount of interaction fatigue gained per interaction. Each fatigue point makes the next interaction harder.")
                 .translation("mca.configuration.interactionChanceFatigue")
-                .defineInRange("interactionChanceFatigue", Config.serverDouble("interactionChanceFatigue", 1.0), 0.0, 1.0);
+                .defineInRange("interactionChanceFatigue", 1.0, 0.0, 1.0);
         interactionFatigueCooldown = builder
 
                 .comment("Time (in ticks) before fatigue resets after interacting with a villager.")
                 .translation("mca.configuration.interactionFatigueCooldown")
-                .defineInRange("interactionFatigueCooldown", Config.serverInt("interactionFatigueCooldown", 4800), 0, 100000000);
+                .defineInRange("interactionFatigueCooldown", 4800, 0, 100000000);
         villagerHealthBonusPerLevel = builder
 
                 .comment("Extra health villagers gain per trading level.")
                 .translation("mca.configuration.villagerHealthBonusPerLevel")
-                .defineInRange("villagerHealthBonusPerLevel", Config.serverInt("villagerHealthBonusPerLevel", 5), 0, 100);
+                .defineInRange("villagerHealthBonusPerLevel", 5, 0, 100);
         burnedClothingTickLength = builder
 
                 .comment("Duration (in ticks) that burned clothing effects remain visible.")
                 .translation("mca.configuration.burnedClothingTickLength")
-                .defineInRange("burnedClothingTickLength", Config.serverInt("burnedClothingTickLength", 3600), 0, 100000000);
+                .defineInRange("burnedClothingTickLength", 3600, 0, 100000000);
         coloredHairChance = builder
 
                 .comment("Chance (0-1) that a villager will spawn with colored hair.")
                 .translation("mca.configuration.coloredHairChance")
-                .defineInRange("coloredHairChance", Config.serverDouble("coloredHairChance", 0.02), 0.0, 1.0);
+                .defineInRange("coloredHairChance", 0.02, 0.0, 1.0);
         heartsRequiredToAutoSpawnGravestone = builder
 
                 .comment("Minimum hearts required for a villager to automatically appear on a tombstone when they die. Family members always appear regardless of this threshold.")
                 .translation("mca.configuration.heartsRequiredToAutoSpawnGravestone")
-                .defineInRange("heartsRequiredToAutoSpawnGravestone", Config.serverInt("heartsRequiredToAutoSpawnGravestone", 10), 0, 10000);
+                .defineInRange("heartsRequiredToAutoSpawnGravestone", 10, 0, 10000);
         defaultHeadstoneType = builder
 
                 .comment("The type of headstone that automatically spawns when a villager dies.")
                 .translation("mca.configuration.defaultHeadstoneType")
-                .define("defaultHeadstoneType", Config.serverString("defaultHeadstoneType", "cross_headstone"));
+                .define("defaultHeadstoneType", "cross_headstone");
         enableMourning = builder
 
                 .comment("Enables personal and ambient villager mourning at occupied graves.")
                 .translation("mca.configuration.enableMourning")
-                .define("enableMourning", Config.serverBoolean("enableMourning", true));
+                .define("enableMourning", true);
         useSmarterDoorAI = builder
 
                 .comment("Enables smarter villager door AI, allowing them to open gates as well.")
                 .translation("mca.configuration.useSmarterDoorAI")
-                .define("useSmarterDoorAI", Config.serverBoolean("useSmarterDoorAI", false));
+                .define("useSmarterDoorAI", false);
         procreationCooldown = builder
 
                 .comment("Time (in ticks) before villagers can procreate again.")
                 .translation("mca.configuration.procreationCooldown")
-                .defineInRange("procreationCooldown", Config.serverInt("procreationCooldown", 72000), 0, 100000000);
+                .defineInRange("procreationCooldown", 72000, 0, 100000000);
         useModernUSANamesOnly = builder
 
                 .comment("Use the USA name set instead of international names.")
                 .translation("mca.configuration.useModernUSANamesOnly")
-                .define("useModernUSANamesOnly", Config.serverBoolean("useModernUSANamesOnly", false));
+                .define("useModernUSANamesOnly", false);
         structuresInRumors = builder
 
                 .comment("Structures that can be mentioned in Rumors conversation options.")
                 .translation("mca.configuration.structuresInRumors")
-                .defineListAllowEmpty("structuresInRumors", Config.serverList("structuresInRumors", List.of(
+                .defineListAllowEmpty("structuresInRumors", List.of(
             "minecraft:igloo",
             "minecraft:pyramid",
             "minecraft:ruined_portal_desert",
@@ -596,12 +612,12 @@ public final class ServerConfig {
             "minecraft:jungle_pyramid",
             "minecraft:pillager_outpost",
             "minecraft:ancient_city"
-    )), () -> "", Config::isResourceLocation);
+    ), () -> "", Config::isResourceLocation);
         professionConversionsMap = builder
 
                 .comment("Maps modded professions to MCA professions for clothing conversion. Only adult clothing is used; toddlers and children remain unchanged.")
                 .translation("mca.configuration.professionConversionsMap")
-                .defineListAllowEmpty("professionConversionsMap", Config.serverMap("professionConversionsMap", Config.encodeMap(Map.of())), () -> "", Config::isProfessionConversionEntry);
+                .defineListAllowEmpty("professionConversionsMap", Config.encodeMap(Map.of()), () -> "", Config::isProfessionConversionEntry);
         builder.pop();
 
         builder.translation("mca.configuration.section.tracker").push("tracker");
@@ -609,12 +625,12 @@ public final class ServerConfig {
 
                 .comment("Tracks villager positions for debugging or AI purposes. Slightly increases world size and CPU overhead.")
                 .translation("mca.configuration.trackVillagerPosition")
-                .define("trackVillagerPosition", Config.serverBoolean("trackVillagerPosition", true));
+                .define("trackVillagerPosition", true);
         trackVillagerPositionEveryNTicks = builder
 
                 .comment("Number of ticks between position tracking updates for villagers.")
                 .translation("mca.configuration.trackVillagerPositionEveryNTicks")
-                .defineInRange("trackVillagerPositionEveryNTicks", Config.serverInt("trackVillagerPositionEveryNTicks", 200), 1, 100000000);
+                .defineInRange("trackVillagerPositionEveryNTicks", 200, 1, 100000000);
         builder.pop();
 
         builder.translation("mca.configuration.section.village_behavior").push("village_behavior");
@@ -622,40 +638,40 @@ public final class ServerConfig {
 
                 .comment("If true, arrows fired by MCA archers pass through villagers instead of hitting them.")
                 .translation("mca.configuration.archerArrowsIgnoreVillagers")
-                .define("archerArrowsIgnoreVillagers", Config.serverBoolean("archerArrowsIgnoreVillagers", true));
+                .define("archerArrowsIgnoreVillagers", true);
         villagersInteractWithFenceGates = builder
 
                 .comment("If true, MCA villagers may path through and open or close fence gates.")
                 .translation("mca.configuration.villagersInteractWithFenceGates")
-                .define("villagersInteractWithFenceGates", Config.serverBoolean("villagersInteractWithFenceGates", true));
+                .define("villagersInteractWithFenceGates", true);
         guardSpawnFraction = builder
 
                 .comment("Fraction (0-1) of villagers that spawn as guards.")
                 .translation("mca.configuration.guardSpawnFraction")
-                .defineInRange("guardSpawnFraction", Config.serverDouble("guardSpawnFraction", 0.175), 0.0, 1.0);
+                .defineInRange("guardSpawnFraction", 0.175, 0.0, 1.0);
         guardEquipment = builder
 
                 .comment("Equipment used by guards at each village equipment level.")
                 .translation("mca.configuration.guardEquipment")
-                .defineListAllowEmpty("guardEquipment", Config.serverMap("guardEquipment", Config.encodeMap(ImmutableMap.<String, EquipmentSet>builder()
+                .defineListAllowEmpty("guardEquipment", Config.encodeMap(ImmutableMap.<String, EquipmentSet>builder()
             .put("0", EquipmentSet.GUARD_0)
             .put("1", EquipmentSet.GUARD_1)
             .put("2", EquipmentSet.GUARD_2)
-            .build())), () -> "", value -> Config.isMapEntry(value, String.class, EquipmentSet.class));
+            .build()), () -> "", value -> Config.isMapEntry(value, String.class, EquipmentSet.class));
         archerEquipment = builder
 
                 .comment("Equipment used by archers at each village equipment level.")
                 .translation("mca.configuration.archerEquipment")
-                .defineListAllowEmpty("archerEquipment", Config.serverMap("archerEquipment", Config.encodeMap(ImmutableMap.<String, EquipmentSet>builder()
+                .defineListAllowEmpty("archerEquipment", Config.encodeMap(ImmutableMap.<String, EquipmentSet>builder()
             .put("0", EquipmentSet.ARCHER_0)
             .put("1", EquipmentSet.ARCHER_1)
             .put("2", EquipmentSet.ARCHER_2)
-            .build())), () -> "", value -> Config.isMapEntry(value, String.class, EquipmentSet.class));
+            .build()), () -> "", value -> Config.isMapEntry(value, String.class, EquipmentSet.class));
         guardsTargetEntities = builder
 
                 .comment("Map of entity names to guard attack priorities. Negative values indicate the entity should be ignored.")
                 .translation("mca.configuration.guardsTargetEntities")
-                .defineListAllowEmpty("guardsTargetEntities", Config.serverMap("guardsTargetEntities", Config.encodeMap(ImmutableMap.<String, Integer>builder()
+                .defineListAllowEmpty("guardsTargetEntities", Config.encodeMap(ImmutableMap.<String, Integer>builder()
             .put("minecraft:creeper", -1)
             .put("minecraft:drowned", 2)
             .put("minecraft:evoker", 3)
@@ -677,194 +693,194 @@ public final class ServerConfig {
             .put("#minecraft:undead", 0)
             .put(MCA.MOD_ID + ":female_zombie_villager", 3)
             .put(MCA.MOD_ID + ":male_zombie_villager", 3)
-            .build())), () -> "", value -> Config.isMapEntryWithLoadSafeRegistryKey(value, Registries.ENTITY_TYPE, true, Integer.class));
+            .build()), () -> "", value -> Config.isMapEntryWithLoadSafeRegistryKey(value, Registries.ENTITY_TYPE, true, Integer.class));
         taxesFactor = builder
 
                 .comment("Multiplier of taxes paid by villages.")
                 .translation("mca.configuration.taxesFactor")
-                .defineInRange("taxesFactor", Config.serverDouble("taxesFactor", 0.5), 0.0, 1.0);
+                .defineInRange("taxesFactor", 0.5, 0.0, 1.0);
         taxSeason = builder
 
                 .comment("Interval (in ticks) between tax collection seasons.")
                 .translation("mca.configuration.taxSeason")
-                .defineInRange("taxSeason", Config.serverInt("taxSeason", 168000), 1, 100000000);
+                .defineInRange("taxSeason", 168000, 1, 100000000);
         taxesMap = builder
 
                 .comment("Map of tax items to their value in units. If item is too expensive, it may not be picked until tax budget is sufficient.")
                 .translation("mca.configuration.taxesMap")
-                .defineListAllowEmpty("taxesMap", Config.serverMap("taxesMap", Config.encodeMap(Map.of(
+                .defineListAllowEmpty("taxesMap", Config.encodeMap(Map.of(
             "minecraft:emerald", 1.0f
-    ))), () -> "", value -> Config.isMapEntryWithLoadSafeRegistryKey(value, Registries.ITEM, false, Float.class));
+    )), () -> "", value -> Config.isMapEntryWithLoadSafeRegistryKey(value, Registries.ITEM, false, Float.class));
         marriageChancePerMinute = builder
 
                 .comment("Chance (0-1) per minute that a marriage event occurs in the village.")
                 .translation("mca.configuration.marriageChancePerMinute")
-                .defineInRange("marriageChancePerMinute", Config.serverDouble("marriageChancePerMinute", 0.05), 0.0, 1.0);
+                .defineInRange("marriageChancePerMinute", 0.05, 0.0, 1.0);
         adventurerAtInnChancePerMinute = builder
 
                 .comment("Chance (0-1) per minute that an adventurer arrives at the inn.")
                 .translation("mca.configuration.adventurerAtInnChancePerMinute")
-                .defineInRange("adventurerAtInnChancePerMinute", Config.serverDouble("adventurerAtInnChancePerMinute", 0.05), 0.0, 1.0);
+                .defineInRange("adventurerAtInnChancePerMinute", 0.05, 0.0, 1.0);
         adventurerStayTime = builder
 
                 .comment("Duration (in ticks) that adventurers stay at the inn.")
                 .translation("mca.configuration.adventurerStayTime")
-                .defineInRange("adventurerStayTime", Config.serverInt("adventurerStayTime", 48000), 0, 100000000);
+                .defineInRange("adventurerStayTime", 48000, 0, 100000000);
         villagerProcreationChancePerMinute = builder
 
                 .comment("Chance (0-1) per minute that villagers will procreate.")
                 .translation("mca.configuration.villagerProcreationChancePerMinute")
-                .defineInRange("villagerProcreationChancePerMinute", Config.serverDouble("villagerProcreationChancePerMinute", 0.05), 0.0, 1.0);
+                .defineInRange("villagerProcreationChancePerMinute", 0.05, 0.0, 1.0);
         bountyHunterInterval = builder
 
                 .comment("Interval (in ticks) at which bounty hunters attack the player if reputation is low.")
                 .translation("mca.configuration.bountyHunterInterval")
-                .defineInRange("bountyHunterInterval", Config.serverInt("bountyHunterInterval", 48000), 10, 100000000);
+                .defineInRange("bountyHunterInterval", 48000, 10, 100000000);
         bountyHunterHearts = builder
 
                 .comment("Negative heart threshold for bounty hunter attacks.")
                 .translation("mca.configuration.bountyHunterHearts")
-                .defineInRange("bountyHunterHearts", Config.serverInt("bountyHunterHearts", -150), -10000, 10000);
+                .defineInRange("bountyHunterHearts", -150, -10000, 10000);
         innSpawnsAdventurers = builder
 
                 .comment("If true, the inn spawns adventurers.")
                 .translation("mca.configuration.innSpawnsAdventurers")
-                .define("innSpawnsAdventurers", Config.serverBoolean("innSpawnsAdventurers", true));
+                .define("innSpawnsAdventurers", true);
         innSpawnsCultists = builder
 
                 .comment("If true, the inn spawns cultists.")
                 .translation("mca.configuration.innSpawnsCultists")
-                .define("innSpawnsCultists", Config.serverBoolean("innSpawnsCultists", true));
+                .define("innSpawnsCultists", true);
         innSpawnsWanderingTraders = builder
 
                 .comment("If true, the inn spawns wandering traders.")
                 .translation("mca.configuration.innSpawnsWanderingTraders")
-                .define("innSpawnsWanderingTraders", Config.serverBoolean("innSpawnsWanderingTraders", true));
+                .define("innSpawnsWanderingTraders", true);
         fractionOfVanillaVillages = builder
 
                 .comment("Fraction (0-1) of villages left as vanilla villages.")
                 .translation("mca.configuration.fractionOfVanillaVillages")
-                .defineInRange("fractionOfVanillaVillages", Config.serverDouble("fractionOfVanillaVillages", 0), 0.0, 1.0);
+                .defineInRange("fractionOfVanillaVillages", 0, 0.0, 1.0);
         fractionOfVanillaZombies = builder
 
                 .comment("Fraction (0-1) of vanilla zombie villagers.")
                 .translation("mca.configuration.fractionOfVanillaZombies")
-                .defineInRange("fractionOfVanillaZombies", Config.serverDouble("fractionOfVanillaZombies", 0), 0.0, 1.0);
+                .defineInRange("fractionOfVanillaZombies", 0, 0.0, 1.0);
         minimumBuildingsToBeConsideredAVillage = builder
 
                 .comment("Minimum number of buildings required to consider an area a village. Below this, it is considered a settlement and welcome notifications are suppressed.")
                 .translation("mca.configuration.minimumBuildingsToBeConsideredAVillage")
-                .defineInRange("minimumBuildingsToBeConsideredAVillage", Config.serverInt("minimumBuildingsToBeConsideredAVillage", 3), 0, 100000);
+                .defineInRange("minimumBuildingsToBeConsideredAVillage", 3, 0, 100000);
         villagerDimensionBlacklist = builder
 
                 .comment("Dimensions where villagers should not be converted into MCA villagers.")
                 .translation("mca.configuration.villagerDimensionBlacklist")
-                .defineListAllowEmpty("villagerDimensionBlacklist", Config.serverList("villagerDimensionBlacklist", List.of()), () -> "", Config::isResourceLocation);
+                .defineListAllowEmpty("villagerDimensionBlacklist", List.of(), () -> "", Config::isResourceLocation);
         allowedSpawnReasons = builder
 
                 .comment("List of allowed spawn reasons for villager conversion.")
                 .translation("mca.configuration.allowedSpawnReasons")
-                .defineListAllowEmpty("allowedSpawnReasons", Config.serverList("allowedSpawnReasons", List.of(
+                .defineListAllowEmpty("allowedSpawnReasons", List.of(
             "natural",
             "structure"
-    )), () -> "", Config::isSpawnReason);
+    ), () -> "", Config::isSpawnReason);
         villagerInteractionItemBlacklist = builder
 
                 .comment("List of items that villagers cannot be interacted with for mod compat.")
                 .translation("mca.configuration.villagerInteractionItemBlacklist")
-                .defineListAllowEmpty("villagerInteractionItemBlacklist", Config.serverList("villagerInteractionItemBlacklist", List.of(
+                .defineListAllowEmpty("villagerInteractionItemBlacklist", List.of(
             "minecraft:bucket"
-    )), () -> "", value -> Config.isLoadSafeRegistryId(value, Registries.ITEM));
+    ), () -> "", value -> Config.isLoadSafeRegistryId(value, Registries.ITEM));
         enableAutoScanByDefault = builder
 
                 .comment("If true, automatically scan for buildings. High CPU usage.")
                 .translation("mca.configuration.enableAutoScanByDefault")
-                .define("enableAutoScanByDefault", Config.serverBoolean("enableAutoScanByDefault", false));
+                .define("enableAutoScanByDefault", false);
         giftDesaturationQueueLength = builder
 
                 .comment("Number of entries in the gift desaturation queue.")
                 .translation("mca.configuration.giftDesaturationQueueLength")
-                .defineInRange("giftDesaturationQueueLength", Config.serverInt("giftDesaturationQueueLength", 16), 0, 1000000);
+                .defineInRange("giftDesaturationQueueLength", 16, 0, 1000000);
         giftDesaturationFactor = builder
 
                 .comment("Factor controlling how much repeated gifts lose effectiveness.")
                 .translation("mca.configuration.giftDesaturationFactor")
-                .defineInRange("giftDesaturationFactor", Config.serverDouble("giftDesaturationFactor", 0.5), 0.0, 1.0);
+                .defineInRange("giftDesaturationFactor", 0.5, 0.0, 1.0);
         giftDesaturationExponent = builder
 
                 .comment("Exponent applied to desaturation formula; reduces impact of expensive gifts.")
                 .translation("mca.configuration.giftDesaturationExponent")
-                .defineInRange("giftDesaturationExponent", Config.serverDouble("giftDesaturationExponent", 0.85), 0.0, 10000.0);
+                .defineInRange("giftDesaturationExponent", 0.85, 0.0, 10000.0);
         giftSatisfactionFactor = builder
 
                 .comment("Factor multiplying the satisfaction value to determine heart impact from gifts.")
                 .translation("mca.configuration.giftSatisfactionFactor")
-                .defineInRange("giftSatisfactionFactor", Config.serverDouble("giftSatisfactionFactor", 0.33), 0.0, 1.0);
+                .defineInRange("giftSatisfactionFactor", 0.33, 0.0, 1.0);
         giftMoodEffect = builder
 
                 .comment("How much a gift influences a villager's mood.")
                 .translation("mca.configuration.giftMoodEffect")
-                .defineInRange("giftMoodEffect", Config.serverDouble("giftMoodEffect", 0.5), -10000.0, 10000.0);
+                .defineInRange("giftMoodEffect", 0.5, -10000.0, 10000.0);
         baseGiftMoodEffect = builder
 
                 .comment("Base mood effect of a gift, independent of previous gifts.")
                 .translation("mca.configuration.baseGiftMoodEffect")
-                .defineInRange("baseGiftMoodEffect", Config.serverDouble("baseGiftMoodEffect", 2), -10000.0, 10000.0);
+                .defineInRange("baseGiftMoodEffect", 2, -10000.0, 10000.0);
         giftDesaturationReset = builder
 
                 .comment("Time (in ticks) after which gift desaturation resets.")
                 .translation("mca.configuration.giftDesaturationReset")
-                .defineInRange("giftDesaturationReset", Config.serverInt("giftDesaturationReset", 24000), 1, 100000000);
+                .defineInRange("giftDesaturationReset", 24000, 1, 100000000);
         allowPlayerMarriage = builder
 
                 .comment("Allow players to marry each other.")
                 .translation("mca.configuration.allowPlayerMarriage")
-                .define("allowPlayerMarriage", Config.serverBoolean("allowPlayerMarriage", true));
+                .define("allowPlayerMarriage", true);
         minBuildingSize = builder
 
                 .comment("Minimum building size for buildings.")
                 .translation("mca.configuration.minBuildingSize")
-                .defineInRange("minBuildingSize", Config.serverInt("minBuildingSize", 32), 0, 100000);
+                .defineInRange("minBuildingSize", 32, 0, 100000);
         maxBuildingSize = builder
 
                 .comment("Maximum building size for buildings.")
                 .translation("mca.configuration.maxBuildingSize")
-                .defineInRange("maxBuildingSize", Config.serverInt("maxBuildingSize", 8192), 0, 100000);
+                .defineInRange("maxBuildingSize", 8192, 0, 100000);
         maxBuildingRadius = builder
 
                 .comment("Maximum radius of a building from its center.")
                 .translation("mca.configuration.maxBuildingRadius")
-                .defineInRange("maxBuildingRadius", Config.serverInt("maxBuildingRadius", 320), 0, 100000);
+                .defineInRange("maxBuildingRadius", 320, 0, 100000);
         minPillarHeight = builder
 
                 .comment("Minimum pillar height for Grim Reaper altars.")
                 .translation("mca.configuration.minPillarHeight")
-                .defineInRange("minPillarHeight", Config.serverInt("minPillarHeight", 2), 0, 100000);
+                .defineInRange("minPillarHeight", 2, 0, 100000);
         maxTreeHeight = builder
 
                 .comment("Maximum tree height for chopping chores.")
                 .translation("mca.configuration.maxTreeHeight")
-                .defineInRange("maxTreeHeight", Config.serverInt("maxTreeHeight", 8), 0, 100000);
+                .defineInRange("maxTreeHeight", 8, 0, 100000);
         maxTreeTicks = builder
 
                 .comment("Maximum ticks for valid tree log blocks before they are considered grown.")
                 .translation("mca.configuration.maxTreeTicks")
-                .defineListAllowEmpty("maxTreeTicks", Config.serverMap("maxTreeTicks", Config.encodeMap(ImmutableMap.<String, Integer>builder()
+                .defineListAllowEmpty("maxTreeTicks", Config.encodeMap(ImmutableMap.<String, Integer>builder()
             .put("#minecraft:logs", 60)
-            .build())), () -> "", value -> Config.isMapEntryWithLoadSafeRegistryKey(value, Registries.BLOCK, true, Integer.class));
+            .build()), () -> "", value -> Config.isMapEntryWithLoadSafeRegistryKey(value, Registries.BLOCK, true, Integer.class));
         validTreeSources = builder
 
                 .comment("List of valid blocks that can serve as the base of trees.")
                 .translation("mca.configuration.validTreeSources")
-                .defineListAllowEmpty("validTreeSources", Config.serverList("validTreeSources", List.of(
+                .defineListAllowEmpty("validTreeSources", List.of(
             "minecraft:grass_block",
             "minecraft:dirt"
-    )), () -> "", value -> Config.isLoadSafeRegistrySelector(value, Registries.BLOCK));
+    ), () -> "", value -> Config.isLoadSafeRegistrySelector(value, Registries.BLOCK));
         unSafeBlocksToTeleportOn = builder
 
                 .comment("List of blocks or tags that villagers will not teleport onto.")
                 .translation("mca.configuration.unSafeBlocksToTeleportOn")
-                .defineListAllowEmpty("unSafeBlocksToTeleportOn", Config.serverList("unSafeBlocksToTeleportOn", List.of(
+                .defineListAllowEmpty("unSafeBlocksToTeleportOn", List.of(
             "#minecraft:climbable",
             "#minecraft:fence_gates",
             "#minecraft:fences",
@@ -874,7 +890,7 @@ public final class ServerConfig {
             "#minecraft:stairs",
             "#minecraft:trapdoors",
             "#minecraft:walls"
-    )), () -> "", value -> Config.isLoadSafeRegistrySelector(value, Registries.BLOCK));
+    ), () -> "", value -> Config.isLoadSafeRegistrySelector(value, Registries.BLOCK));
         builder.pop();
 
         builder.translation("mca.configuration.section.player_customization").push("player_customization");
@@ -882,66 +898,66 @@ public final class ServerConfig {
 
                 .comment("Permission level required to add or remove skins from the server-wide pool.")
                 .translation("mca.configuration.addContentGloballyPermissionLevel")
-                .defineInRange("addContentGloballyPermissionLevel", Config.serverInt("addContentGloballyPermissionLevel", 3), 0, 4);
+                .defineInRange("addContentGloballyPermissionLevel", 3, 0, 4);
         allowPlayerSizeAdjustment = builder
 
                 .comment("Allow players to modify their size.")
                 .translation("mca.configuration.allowPlayerSizeAdjustment")
-                .define("allowPlayerSizeAdjustment", Config.serverBoolean("allowPlayerSizeAdjustment", true));
+                .define("allowPlayerSizeAdjustment", true);
         scalePlayerHitboxWithSizeAndWidth = builder
 
                 .comment("Scale player hitboxes using MCA size and width genetics.")
                 .translation("mca.configuration.scalePlayerHitboxWithSizeAndWidth")
                 .worldRestart()
-                .define("scalePlayerHitboxWithSizeAndWidth", Config.serverBoolean("scalePlayerHitboxWithSizeAndWidth", false));
+                .define("scalePlayerHitboxWithSizeAndWidth", false);
         allowLimitedPlayerEditor = builder
 
                 .comment("Allows limited access to player editor (name, gender, etc.).")
                 .translation("mca.configuration.allowLimitedPlayerEditor")
-                .define("allowLimitedPlayerEditor", Config.serverBoolean("allowLimitedPlayerEditor", true));
+                .define("allowLimitedPlayerEditor", true);
         allowFullPlayerEditor = builder
 
                 .comment("Allows full access to the player editor including clothing and hair.")
                 .translation("mca.configuration.allowFullPlayerEditor")
-                .define("allowFullPlayerEditor", Config.serverBoolean("allowFullPlayerEditor", false));
+                .define("allowFullPlayerEditor", false);
         bypassTraitRestrictions = builder
 
                 .comment("Allows players to bypass restrictions on traits that are normally blocked in the player editor.")
                 .translation("mca.configuration.bypassTraitRestrictions")
-                .define("bypassTraitRestrictions", Config.serverBoolean("bypassTraitRestrictions", false));
+                .define("bypassTraitRestrictions", false);
         builder.pop();
     }
 
     public Map<String, String> destinyLocationsToTranslationMap() {
-        return Config.decodeMap(destinyLocationsToTranslationMap.get(), String.class, String.class, "destinyLocationsToTranslationMap");
+        return destinyLocationsToTranslationCache.get(destinyLocationsToTranslationMap.get());
     }
 
     public Map<String, Boolean> enabledTraits() {
-        return Config.decodeMap(enabledTraits.get(), String.class, Boolean.class, "enabledTraits");
+        return enabledTraitsCache.get(enabledTraits.get());
     }
 
     public Map<String, EquipmentSet> guardEquipment() {
-        return Config.decodeMap(guardEquipment.get(), String.class, EquipmentSet.class, "guardEquipment");
+        return guardEquipmentCache.get(guardEquipment.get());
     }
 
     public Map<String, EquipmentSet> archerEquipment() {
-        return Config.decodeMap(archerEquipment.get(), String.class, EquipmentSet.class, "archerEquipment");
+        return archerEquipmentCache.get(archerEquipment.get());
     }
 
     public Map<String, Integer> maxTreeTicks() {
-        return Config.decodeMap(maxTreeTicks.get(), String.class, Integer.class, "maxTreeTicks");
+        return maxTreeTicksCache.get(maxTreeTicks.get());
     }
 
     public Map<String, Integer> guardsTargetEntities() {
-        return Config.decodeMap(guardsTargetEntities.get(), String.class, Integer.class, "guardsTargetEntities");
+        return guardsTargetEntitiesCache.get(guardsTargetEntities.get());
     }
 
     public Map<String, String> professionConversionsMap() {
-        return Config.decodeMap(professionConversionsMap.get(), String.class, String.class, "professionConversionsMap");
+        return professionConversionsCache.get(professionConversionsMap.get());
     }
 
     public Map<String, Float> taxesMap() {
-        return Config.decodeMap(taxesMap.get(), String.class, Float.class, "taxesMap");
+        return taxesCache.get(taxesMap.get());
     }
 
     public int villagerPathfindingDistance() {

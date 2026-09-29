@@ -18,47 +18,47 @@ public final class CommonConfig {
         _read_this_before_using_villager_ai = builder
 
                 .translation("mca.configuration._read_this_before_using_villager_ai")
-                .define("_read_this_before_using_villager_ai", Config.commonString("_read_this_before_using_villager_ai", "https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations"));
+                .define("_read_this_before_using_villager_ai", "https://github.com/Luke100000/minecraft-comes-alive/wiki/GPT3-based-conversations");
         villagerChatAIEndpoint = builder
 
                 .comment("Chat completion endpoint for villager AI chat requests.")
                 .translation("mca.configuration.villagerChatAIEndpoint")
-                .define("villagerChatAIEndpoint", Config.commonString("villagerChatAIEndpoint", "https://api.conczin.net/v1/mca/chat"));
+                .define("villagerChatAIEndpoint", "https://api.conczin.net/v1/mca/chat");
         villagerChatAIToken = builder
 
                 .comment("Optional API token.")
                 .translation("mca.configuration.villagerChatAIToken")
-                .define("villagerChatAIToken", Config.commonString("villagerChatAIToken", ""));
+                .define("villagerChatAIToken", "");
         villagerChatAISystemPrompt = builder
 
                 .comment("System prompt used to guide global villager AI behavior.")
                 .translation("mca.configuration.villagerChatAISystemPrompt")
-                .define("villagerChatAISystemPrompt", Config.commonString("villagerChatAISystemPrompt", ""));
+                .define("villagerChatAISystemPrompt", "");
         villagerChatAIFuseSystemPrompt = builder
 
                 .comment("Prepends the system prompt to the user message for endpoints that ignore the system role.")
                 .translation("mca.configuration.villagerChatAIFuseSystemPrompt")
-                .define("villagerChatAIFuseSystemPrompt", Config.commonBoolean("villagerChatAIFuseSystemPrompt", false));
+                .define("villagerChatAIFuseSystemPrompt", false);
         villagerChatAIUseLongTermMemory = builder
 
                 .comment("If true, AI uses long-term memory for persistent conversations.")
                 .translation("mca.configuration.villagerChatAIUseLongTermMemory")
-                .define("villagerChatAIUseLongTermMemory", Config.commonBoolean("villagerChatAIUseLongTermMemory", false));
+                .define("villagerChatAIUseLongTermMemory", false);
         villagerChatAIUseSharedLongTermMemory = builder
 
                 .comment("If false, villager will have separate memories per player.")
                 .translation("mca.configuration.villagerChatAIUseSharedLongTermMemory")
-                .define("villagerChatAIUseSharedLongTermMemory", Config.commonBoolean("villagerChatAIUseSharedLongTermMemory", false));
+                .define("villagerChatAIUseSharedLongTermMemory", false);
         villagerChatAIIncludeSessionInformation = builder
 
                 .comment("If true, session-specific information is included in AI requests. Only relevant if writing a custom backend.")
                 .translation("mca.configuration.villagerChatAIIncludeSessionInformation")
-                .define("villagerChatAIIncludeSessionInformation", Config.commonBoolean("villagerChatAIIncludeSessionInformation", false));
+                .define("villagerChatAIIncludeSessionInformation", false);
         inworldAIToken = builder
 
                 .comment("Inworld API token.")
                 .translation("mca.configuration.inworldAIToken")
-                .define("inworldAIToken", Config.commonString("inworldAIToken", ""));
+                .define("inworldAIToken", "");
         builder.pop();
     }
 }

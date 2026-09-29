@@ -254,7 +254,7 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
         private static ConfiguredPriorityLookup get() {
             Map<String, Integer> configuredPriorities = Config.SERVER.guardsTargetEntities();
             ConfiguredPriorityLookup lookup = Holder.INSTANCE;
-            if (!lookup.sourcePriorities.equals(configuredPriorities)) {
+            if (lookup.sourcePriorities != configuredPriorities) {
                 lookup = compile(configuredPriorities);
                 Holder.INSTANCE = lookup;
             }
@@ -262,10 +262,9 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
         }
 
         private static ConfiguredPriorityLookup compile(Map<String, Integer> configuredPriorities) {
-            Map<String, Integer> sourcePriorities = Map.copyOf(configuredPriorities);
             Map<EntityType<?>, Integer> entityPriorities = new HashMap<>();
             List<ConfiguredTagPriority> tagPriorities = new ArrayList<>();
-            for (Map.Entry<String, Integer> entry : sourcePriorities.entrySet()) {
+            for (Map.Entry<String, Integer> entry : configuredPriorities.entrySet()) {
                 String key = entry.getKey();
                 boolean tag = key.startsWith("#");
                 ResourceLocation id = ResourceLocation.tryParse(tag ? key.substring(1) : key);
@@ -284,7 +283,7 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
                 }
             }
             return new ConfiguredPriorityLookup(
-                    sourcePriorities,
+                    configuredPriorities,
                     Map.copyOf(entityPriorities),
                     List.copyOf(tagPriorities)
             );
