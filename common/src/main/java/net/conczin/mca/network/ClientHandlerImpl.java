@@ -231,7 +231,7 @@ public class ClientHandlerImpl implements ClientHandler {
 
     @Override
     public void handleDestinyGuiRequest(OpenDestinyGuiRequest message) {
-        MCAClient.getDestinyManager().requestOpen(message.allowTeleportation());
+        MCAClient.getDestinyManager().requestOpen(message.allowTeleportation(), message.destinations());
     }
 
     @Override
@@ -265,6 +265,8 @@ public class ClientHandlerImpl implements ClientHandler {
 
     @Override
     public void handleBuildingPolymorph(BuildingPolymorphMessage message) {
-        client.setScreen(new BuildingPolymorphScreen(message.matchingTypes(), message.scanPos(), message.isRoom()));
+        client.setScreen(new BuildingPolymorphScreen(
+                message.matchingTypes(), message.scanPos(), message.action(),
+                message.expectedTargetId(), client.screen));
     }
 }

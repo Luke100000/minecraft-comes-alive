@@ -2,6 +2,7 @@ package net.conczin.mca.util;
 
 import com.mojang.datafixers.util.Pair;
 import net.conczin.mca.MCA;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -80,6 +81,14 @@ public interface NbtHelper {
     static <K, V> CompoundTag fromMap(CompoundTag output, Map<K, V> map, Function<K, String> keyMapper, Function<V, Tag> valueMapper) {
         map.forEach((key, value) -> output.put(keyMapper.apply(key), valueMapper.apply(value)));
         return output;
+    }
+
+    static Tag encodeBlockPos(BlockPos pos) {
+        return BlockPos.CODEC.encodeStart(NbtOps.INSTANCE, pos).resultOrPartial(MCA.LOGGER::error).orElseThrow();
+    }
+
+    static BlockPos decodeBlockPos(Tag element) {
+        return BlockPos.CODEC.parse(NbtOps.INSTANCE, element).resultOrPartial(MCA.LOGGER::error).orElse(null);
     }
 
     static Tag encodeGlobalPosition(GlobalPos v) {

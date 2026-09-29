@@ -1,20 +1,31 @@
 package net.conczin.mca.entity.ai;
 
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.control.MoveControl;
 
 /**
  * Owns movement rules shared by every MCA villager movement mode.
- *
- * <p>Specialised controls such as {@link ArcherMoveControl} delegate here so
- * navigation-owned movement is handled consistently.</p>
  */
-class MCAMoveControl extends MoveControl {
+public class MCAMoveControl extends MoveControl {
     private static final double ADJACENT_RAISED_TARGET_EPSILON = 1.0E-6D;
 
-    MCAMoveControl(Mob mob) {
+    public MCAMoveControl(Mob mob) {
         super(mob);
+    }
+
+    public void strafe(float forwards, float right, double speedModifier) {
+        super.strafe(forwards, right);
+        this.speedModifier = speedModifier;
+    }
+
+    public void stopStrafing() {
+        if (this.operation == Operation.STRAFE) {
+            this.operation = Operation.WAIT;
+        }
+        // Vanilla WAIT clears forward input only; released lateral input otherwise keeps accelerating the mob.
+        this.mob.setXxa(0.0F);
     }
 
     protected final boolean isClimbNavigationActive() {
@@ -40,6 +51,15 @@ class MCAMoveControl extends MoveControl {
                 this.operation = Operation.JUMPING;
             }
             return;
+        }
+
+        if (this.operation == Operation.MOVE_TO) {
+            double dx = this.wantedX - this.mob.getX();
+            double dz = this.wantedZ - this.mob.getZ();
+            if (dx * dx + dz * dz > MIN_SPEED_SQR) {
+                float wantedYaw = (float)(Mth.atan2(dz, dx) * 180.0F / (float)Math.PI) - 90.0F;
+                this.mob.setYRot(this.rotlerp(this.mob.getYRot(), wantedYaw, MAX_TURN));
+            }
         }
 
         this.operation = Operation.WAIT;

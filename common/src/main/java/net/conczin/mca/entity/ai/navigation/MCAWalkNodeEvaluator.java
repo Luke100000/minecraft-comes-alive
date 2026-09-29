@@ -2,7 +2,6 @@ package net.conczin.mca.entity.ai.navigation;
 
 import it.unimi.dsi.fastutil.longs.Long2BooleanMap;
 import it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap;
-import net.conczin.mca.Config;
 import net.conczin.mca.entity.ai.PathingBlockInteraction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -88,7 +87,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         double modeledFloor = this.getFloorLevel(mobPos);
         if (!selectedStart.asBlockPos().equals(mobPos)
             && startBox.minY > modeledFloor + RAISED_START_EPSILON
-            && !canSweepStartBoxTo(selectedStart, startBox)) {
+            && !canSweepBoxTo(selectedStart, startBox)) {
             // Vanilla can choose a raised bounding-box corner as the start node on partial blocks. If the mob's
             // real raised box cannot physically sweep to that corner, start from the mob cell so A* can evaluate
             // the real exits instead of accepting an impossible first transition.
@@ -121,6 +120,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     public int getNeighbors(Node[] nodes, Node origin) {
         int nodeCount = super.getNeighbors(nodes, origin);
         nodeCount = rejectBlockedRaisedStartTransitions(nodes, nodeCount, origin);
+        nodeCount = rejectBlockedRaisedBarrierTransitions(nodes, nodeCount, origin);
         if (!isClimbable(origin.x, origin.y, origin.z)) {
             return addDescendingClimbableEntries(nodes, nodeCount, origin.asBlockPos());
         }
@@ -179,7 +179,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         int writeIndex = 0;
         for (int readIndex = 0; readIndex < nodeCount; readIndex++) {
             Node candidate = nodes[readIndex];
-            if (candidate != null && canSweepStartBoxTo(candidate, startBox)) {
+            if (candidate != null && canSweepBoxTo(candidate, startBox)) {
                 nodes[writeIndex++] = candidate;
             }
         }
@@ -188,6 +188,39 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             nodes[index] = null;
         }
         return writeIndex;
+    }
+
+    private int rejectBlockedRaisedBarrierTransitions(Node[] nodes, int nodeCount, Node origin) {
+        AABB originBox = getMobBoxAt(origin);
+        int writeIndex = 0;
+        for (int readIndex = 0; readIndex < nodeCount; readIndex++) {
+            Node candidate = nodes[readIndex];
+            if (candidate == null) {
+                continue;
+            }
+
+            AABB destinationBox = getMobBoxAt(candidate);
+            BlockState support = this.currentContext.getBlockState(
+                    this.collisionPos.set(candidate.x, candidate.y - 1, candidate.z)
+            );
+            boolean raisedBarrierTop = destinationBox.minY > originBox.minY + RAISED_START_EPSILON
+                    && isBarrierSupport(support);
+            if (!raisedBarrierTop || canSweepBoxTo(candidate, originBox)) {
+                nodes[writeIndex++] = candidate;
+            }
+        }
+
+        for (int index = writeIndex; index < nodeCount; index++) {
+            nodes[index] = null;
+        }
+        return writeIndex;
+    }
+
+    private static boolean isBarrierSupport(BlockState state) {
+        if (PathingBlockInteraction.isFenceGate(state)) {
+            return !state.getValue(BlockStateProperties.OPEN);
+        }
+        return state.is(BlockTags.FENCES) || state.is(BlockTags.WALLS);
     }
 
     private int removeLargeVerticalTransitions(Node[] nodes, int nodeCount, Node origin) {
@@ -244,7 +277,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         }
 
         BlockState state = context.getBlockState(this.climbablePos.set(x, y, z));
-        if (PathingBlockInteraction.isFenceGate(state)
+        if (PathingBlockInteraction.canInteractWithFenceGate(state)
                 && !state.getValue(BlockStateProperties.OPEN)) {
             // Vanilla treats closed fence gates as FENCE, so a path can never contain
             // the gate node for SmarterOpenDoorsTask to open. Treat hand-operated gates
@@ -297,18 +330,12 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     }
 
     private boolean hasBlockClearance(Node node) {
-        AABB clearanceBox = getMobBoxAt(node);
-        if (!Config.getInstance().villagerPathfindingCheckAllNodeCollisions
-            && !PathfindingBlacklist.overlapsSpecialCollisionBlock(this.currentContext.level(), clearanceBox)) {
-            return true;
-        }
-
         long key = BlockPos.asLong(node.x, node.y, node.z);
         if (this.clearanceCache.containsKey(key)) {
             return this.clearanceCache.get(key);
         }
 
-        boolean hasClearance = hasExactBlockClearance(clearanceBox);
+        boolean hasClearance = hasExactBlockClearance(getMobBoxAt(node));
         this.clearanceCache.put(key, hasClearance);
         return hasClearance;
     }
@@ -357,10 +384,16 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         );
     }
 
-    private boolean canSweepStartBoxTo(Node candidate, AABB startBox) {
+    private boolean canSweepBoxTo(Node candidate, AABB startBox) {
         AABB destinationBox = getMobBoxAt(candidate);
-        if (destinationBox.minY > startBox.minY + RAISED_START_EPSILON) {
-            return true;
+        AABB sweepBox = startBox;
+        double rise = destinationBox.minY - startBox.minY;
+        if (rise > RAISED_START_EPSILON) {
+            AABB verticalSweep = startBox.expandTowards(0.0D, rise, 0.0D);
+            if (!this.currentContext.level().noBlockCollision(this.mob, verticalSweep)) {
+                return false;
+            }
+            sweepBox = startBox.move(0.0D, rise, 0.0D);
         }
 
         Vec3 travel = new Vec3(
@@ -374,7 +407,6 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         }
 
         Vec3 step = travel.scale(1.0D / steps);
-        AABB sweepBox = startBox;
         for (int index = 0; index < steps; index++) {
             sweepBox = sweepBox.move(step);
             if (!this.currentContext.level().noBlockCollision(this.mob, sweepBox)) {

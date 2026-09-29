@@ -7,6 +7,7 @@ import net.conczin.mca.client.model.VillagerPlayerModel;
 import net.conczin.mca.client.render.layer.ClothingLayer;
 import net.conczin.mca.client.render.layer.FaceLayer;
 import net.conczin.mca.client.render.layer.HairLayer;
+import net.conczin.mca.client.render.layer.VillagerFishingLineLayer;
 import net.conczin.mca.client.render.layer.VillagerMorphologyLayer;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.minecraft.client.model.geom.ModelLayers;
@@ -23,5 +24,6 @@ public class VillagerEntityMCARenderer extends VillagerLikeEntityMCARenderer<Vil
                 ctx.bakeLayer(MCAModelLayers.VILLAGER_HAIR),
                 MCALayerDefinitions.VILLAGER_CLOTHING_DILATION
         )));
+        addLayer(new VillagerFishingLineLayer(this));
     }
 }

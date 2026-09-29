@@ -6,13 +6,13 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.ai.behavior.Behavior;
-import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -27,8 +27,8 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
     }
 
     protected void start(ServerLevel serverWorld, VillagerEntityMCA villager, long l) {
-        Optional<BlockPos> blockPos = getNextPosition(villager);
-        blockPos.ifPresent(pos -> BehaviorUtils.setWalkAndLookTargetMemories(villager, pos, this.speed, getCompletionRange()));
+        getNextPosition(villager)
+                .ifPresent(pos -> villager.moveTowards(pos, this.speed, getCompletionRange()));
     }
 
     protected Optional<Building> getNearestBuilding(VillagerEntityMCA villager) {
@@ -39,6 +39,16 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
     }
 
     protected Optional<BlockPos> getRandomPositionIn(Building b, Level world, VillagerEntityMCA villager) {
+        if (!b.getFloorCells().isEmpty()) {
+            List<BlockPos> floorTargets = b.getFloorCells().stream()
+                    .filter(pos -> isGoodIndoorWalkTarget(world, villager, pos))
+                    .toList();
+            if (floorTargets.isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.of(floorTargets.get(world.getRandom().nextInt(floorTargets.size())));
+        }
+
         if (b.getBuildingType().grouped()) {
             //todo randomize
             return Optional.ofNullable(b.getCenter())
@@ -75,10 +85,17 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
 
     protected Optional<BlockPos> getNextPosition(VillagerEntityMCA villager) {
         Optional<Building> b = getNearestBuilding(villager);
-        if (b.isPresent() && !b.get().containsPos(villager.blockPosition())) {
+        if (b.isPresent() && !isInsideBuilding(b.get(), villager)) {
             return getRandomPositionIn(b.get(), villager.level(), villager);
         }
         return Optional.empty();
+    }
+
+    protected boolean isInsideBuilding(Building target, VillagerEntityMCA villager) {
+        return villager.getResidency().getHomeVillage()
+                .flatMap(village -> village.findPhysicalRoomAt(villager.blockPosition()))
+                .map(current -> current.getId() == target.getId())
+                .orElse(false);
     }
 
     protected int getCompletionRange() {

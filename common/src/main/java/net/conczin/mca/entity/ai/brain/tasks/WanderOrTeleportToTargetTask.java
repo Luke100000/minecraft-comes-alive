@@ -1,32 +1,101 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
+import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
+import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
+import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.conczin.mca.entity.ai.navigation.PathfindingBlacklist;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.behavior.MoveToTargetSink;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 
 public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
-    // Stagger expensive path checks across villagers while preserving the existing seven-check interval.
-    private static final int PATHFINDING_INTERVAL = 7;
-    private int pathfindingCooldown = -1;
+    private boolean extendedMovementLifetime;
 
     @Override
-    protected boolean checkExtraStartConditions(ServerLevel serverWorld, Mob mobEntity) {
-        if (this.pathfindingCooldown < 0) {
-            this.pathfindingCooldown = Math.floorMod(mobEntity.getId(), PATHFINDING_INTERVAL);
-        }
-        if (this.pathfindingCooldown > 0) {
-            this.pathfindingCooldown--;
+    protected boolean timedOut(long gameTime) {
+        return !this.extendedMovementLifetime && super.timedOut(gameTime);
+    }
+
+    @Override
+    protected boolean canStillUse(ServerLevel world, Mob entity, long gameTime) {
+        if (shouldYieldToEmergencyCombat(entity)) {
             return false;
         }
 
-        this.pathfindingCooldown = PATHFINDING_INTERVAL - 1;
-        return super.checkExtraStartConditions(serverWorld, mobEntity);
+        boolean vanillaCanContinue = super.canStillUse(world, entity, gameTime);
+        if (vanillaCanContinue) {
+            return true;
+        }
+
+        WalkTarget walkTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        Path path = entity.getNavigation().getPath();
+        if (walkTarget != null
+                && path != null
+                && entity.getNavigation().isDone()
+                && !walkTargetReached(entity, walkTarget)
+                && !entity.getBrain().hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)) {
+            if (entity instanceof VillagerEntityMCA villager) {
+                WalkTargetFailureMemory.record(villager, walkTarget.getTarget().currentBlockPosition(), gameTime);
+            } else {
+                entity.getBrain().setMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE, gameTime);
+            }
+        }
+
+        return false;
+    }
+
+    @Override
+    protected void start(ServerLevel world, Mob entity, long gameTime) {
+        WalkTarget walkTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        super.start(world, entity, gameTime);
+        Path path = entity.getNavigation().getPath();
+        this.extendedMovementLifetime = walkTarget != null
+                && walkTarget.getTarget() instanceof BlockPosTracker
+                && MCAGroundPathNavigation.requiresExtendedPath(
+                        entity,
+                        walkTarget.getTarget().currentBlockPosition()
+                );
+        if (walkTarget != null
+                && walkTarget.getTarget() instanceof BlockPosTracker
+                && path != null
+                && !entity.getNavigation().isStuck()
+                && MCAGroundPathNavigation.isUsefulPartialPath(
+                        path,
+                        walkTarget.getTarget().currentBlockPosition()
+                )) {
+            if (entity instanceof VillagerEntityMCA villager) {
+                WalkTargetFailureMemory.clear(villager);
+            } else {
+                entity.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+            }
+        }
+    }
+
+    private static boolean shouldYieldToEmergencyCombat(Mob entity) {
+        if (RangedCombatState.current(entity).orElse(null) != RangedCombatState.EMERGENCY_FLEE) {
+            return false;
+        }
+
+        WalkTarget walkTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        return walkTarget != null && !(walkTarget.getTarget() instanceof CombatEscapePositionTracker);
+    }
+
+    private static boolean walkTargetReached(Mob entity, WalkTarget walkTarget) {
+        if (walkTarget.getTarget() instanceof MultiTargetPositionTracker multiTarget) {
+            return multiTarget.isReached(entity, walkTarget.getCloseEnoughDist());
+        }
+        return walkTarget.getTarget().currentBlockPosition().distManhattan(entity.blockPosition())
+                <= walkTarget.getCloseEnoughDist();
     }
 
     @Override

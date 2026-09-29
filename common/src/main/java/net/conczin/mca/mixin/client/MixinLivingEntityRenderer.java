@@ -1,11 +1,13 @@
 package net.conczin.mca.mixin.client;
 
+import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.resources.SkinExporter;
+import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.minecraft.client.model.EntityModel;
@@ -16,11 +18,26 @@ import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.util.FastColor;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Pose;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin(LivingEntityRenderer.class)
 public abstract class MixinLivingEntityRenderer {
+    @ModifyExpressionValue(
+            method = "render",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/world/entity/LivingEntity;getEyeHeight(Lnet/minecraft/world/entity/Pose;)F"
+            )
+    )
+    private float mca$alignSleepingVillagerWithBed(float original, LivingEntity entity, float yaw, float tickDelta) {
+        if (entity instanceof VillagerEntityMCA villager && entity.hasPose(Pose.SLEEPING)) {
+            return villager.getRawStandingEyeHeight();
+        }
+        return original;
+    }
+
     @WrapOperation(
             method = "render(Lnet/minecraft/world/entity/LivingEntity;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",
             at = @At(

@@ -56,6 +56,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
+import net.minecraft.world.entity.ai.control.BodyRotationControl;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.animal.IronGolem;
@@ -118,7 +119,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private final VillagerCommandHandler interactions = new VillagerCommandHandler(this);
     private final UpdatableInventory inventory = new UpdatableInventory(27);
     private final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.UNASSIGNED);
-    private final ArcherMoveControl archerMoveControl;
     long lastCooldown = 0L;
     private PlayerModel playerModel;
     private int despawnDelay;
@@ -126,7 +126,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private long lastHit = 0;
     private int prevGrowthAmount;
     private boolean interactedWith;
-    private int lastAppliedHealthLevel = Integer.MIN_VALUE;
     private double lastAppliedHealthBonus = Double.NaN;
     private boolean recoveryFoodUseActive;
     private boolean completingRecoveryFoodUse;
@@ -138,8 +137,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public VillagerEntityMCA(EntityType<VillagerEntityMCA> type, Level w, Gender gender) {
         super(type, w);
         inventory.addListener(this::onInvChange);
-        this.archerMoveControl = new ArcherMoveControl(this);
-        this.moveControl = this.archerMoveControl;
+        this.moveControl = new MCAMoveControl(this);
         genetics.setGender(gender);
         this.setPathfindingMalus(PathType.WATER_BORDER, 16.0F);
         this.setPathfindingMalus(PathType.TRAPDOOR, 8.0F);
@@ -147,14 +145,18 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         this.setPathfindingMalus(PathType.WATER, 16.0F);
     }
 
-    public ArcherMoveControl getArcherMoveControl() {
-        return this.archerMoveControl;
-    }
-
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(Class<E> type) {
         return VillagerLike.createTrackedData(type).addAll(INFECTION_PROGRESS, GROWTH_AMOUNT)
                 .add(Residency::createTrackedData)
                 .add(BreedableRelationship::createTrackedData);
+    }
+
+    @Override
+    protected BodyRotationControl createBodyControl() {
+        return new MCABodyRotationControl(
+                this,
+                () -> this.isUsingItem() && this.getUseItem().getItem() instanceof ProjectileWeaponItem
+        );
     }
 
     private static boolean canEat(ItemStack i) {
@@ -914,11 +916,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         int level = this.getVillagerData().getLevel() - 1;
         double bonus = Config.getInstance().villagerHealthBonusPerLevel * level;
 
-        if (level == lastAppliedHealthLevel && bonus == lastAppliedHealthBonus) {
+        if (bonus == lastAppliedHealthBonus) {
             return;
         }
 
-        lastAppliedHealthLevel = level;
         lastAppliedHealthBonus = bonus;
 
         AttributeInstance instance = this.getAttributes().getInstance(Attributes.MAX_HEALTH);
@@ -1039,16 +1040,18 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             boolean head = passengers.size() > 2 && passengers.get(2) == this;
 
             Vec3 offset = head ? new Vec3(0, 0.55f, 0) : new Vec3(left ? 0.4F : -0.4F, 0.05f, 0).yRot(yaw);
+            Vec3 pos = this.position();
 
-            // todo currently only client side
+            // Keep the physical carry position identical on both sides so the bounding box follows the passenger.
+            this.setPos(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
+
+            // Player genetics rendering is client-only. Preserve its original visual adjustment without moving the physical box.
             if (isClientSide() && MCAClient.useGeneticsRenderer(vehicle.getUUID())) {
                 float height = MCAClient.resolveVillager(vehicle).getRawVerticalScaleFactor();
                 offset = offset.multiply(1.0f, height, 1.0f);
                 offset = offset.add(0, (height - 1) * 1.5 - 0.7, 0);
+                this.setPosRaw(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
             }
-
-            Vec3 pos = this.position();
-            this.setPosRaw(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
 
             if (vehicle.isShiftKeyDown()) {
                 stopRiding();
@@ -1092,6 +1095,12 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 .attach(EntityAttachment.VEHICLE, 0.0F, getRawVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F));
     }
 
+    public float getRawStandingEyeHeight() {
+        float renderedWidth = getRawHorizontalScaleFactor() * 0.6F;
+        float renderedHeight = getRawVerticalScaleFactor() * 2.0F;
+        return EntityDimensions.scalable(renderedWidth, renderedHeight).scale(getScale()).eyeHeight();
+    }
+
     @Override
     public void die(DamageSource cause) {
         // deselect equipment as this messes with MobEntities equipment dropping
@@ -1132,8 +1141,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             VillagerTrackerManager.update(this);
         }
     }
-
-
     @Override
     public void teleportTo(double destX, double destY, double destZ) {
         if (isPassenger()) {
@@ -1279,7 +1286,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public float getVoicePitch() {
         float r = (random.nextFloat() - 0.5f) * 0.05f;
         float g = (genetics.getGene(Genetics.VOICE) - 0.5f) * 0.3f;
-        float a = Mth.lerp(AgeState.getDelta(tickCount), getAgeState().getPitch(), getAgeState().getNext().getPitch());
+        float a = Mth.lerp(AgeState.getDelta(getTrackedValue(GROWTH_AMOUNT)), getAgeState().getPitch(), getAgeState().getNext().getPitch());
         return a + r + g;
     }
 
@@ -1627,11 +1634,12 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (weaponStack.getItem() instanceof BowItem) {
             ItemStack arrow = this.getProjectile(weaponStack);
             AbstractArrow persistentProjectileEntity = ProjectileUtil.getMobArrow(this, arrow, pullProgress, weaponStack);
-            double x = target.getX() - this.getX();
-            double y = target.getY(0.3333333333333333D) - persistentProjectileEntity.getY();
-            double z = target.getZ() - this.getZ();
-            double vel = Math.sqrt(x * x + z * z);
-            persistentProjectileEntity.shoot(x, y + vel * 0.20000000298023224D, z, 1.6F, 3);
+            Vec3 shot = RangedWeaponHelper.calculateBowShotVector(
+                    persistentProjectileEntity.position(),
+                    target.position(),
+                    target.getBbHeight()
+            );
+            persistentProjectileEntity.shoot(shot.x, shot.y, shot.z, 1.6F, 3.0F);
             this.playSound(SoundEvents.SKELETON_SHOOT, 1.0F, 1.0F / (this.getRandom().nextFloat() * 0.4F + 0.8F));
             this.level().addFreshEntity(persistentProjectileEntity);
         }

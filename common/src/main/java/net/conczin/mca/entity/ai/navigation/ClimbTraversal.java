@@ -59,21 +59,6 @@ final class ClimbTraversal {
                 : Double.NaN;
     }
 
-    boolean shouldKeepCurrentPathForFollowTarget(@Nullable Path path, int targetY) {
-        Context context = resolve(path);
-        if (context == null || context.verticalDirection() == 0) {
-            return false;
-        }
-
-        double verticalDelta = targetY - this.mob.getY();
-        if (Math.abs(verticalDelta) <= 1.0D) {
-            return true;
-        }
-
-        int targetDirection = verticalDelta > 0.0D ? 1 : -1;
-        return targetDirection == context.verticalDirection();
-    }
-
     void tick(@Nullable Path path, double speedModifier, int navigationTick) {
         Context context = resolve(path);
         if (context == null) {
@@ -101,6 +86,10 @@ final class ClimbTraversal {
         if (hasReachedPartialHeightClimbable(context)) {
             path.advance();
             return true;
+        }
+
+        if (!ownsMotion(context)) {
+            return false;
         }
 
         if (this.mob.onClimbable()
@@ -261,10 +250,14 @@ final class ClimbTraversal {
             return;
         }
 
-        boolean atExitHeight = context.exitsClimbable() && isAtExitHeight(context, targetY);
+        boolean readyForHorizontalExit = isReadyForHorizontalExit(context, targetY);
+        boolean needsEarlyDownwardClearance = isLowerExit(context);
         double targetX = anchor.x();
         double targetZ = anchor.z();
-        if (context.exitsClimbable() && (!context.pathTargetsClimbable() || atExitHeight)) {
+        if (context.exitsClimbable()
+                && (!context.pathTargetsClimbable()
+                || readyForHorizontalExit
+                || needsEarlyDownwardClearance)) {
             targetX = context.targetNode().x + 0.5D;
             targetZ = context.targetNode().z + 0.5D;
         }
@@ -316,7 +309,7 @@ final class ClimbTraversal {
                         ? EXIT_VERTICAL_BIAS
                         : UPWARD_EXIT_CLEARANCE_SPEED;
                 controlledY = Math.max(controlledY, minimumUpwardSpeed);
-            } else {
+            } else if (isLowerExit(context)) {
                 controlledY = Math.min(controlledY, -EXIT_VERTICAL_BIAS);
             }
         }
@@ -338,8 +331,23 @@ final class ClimbTraversal {
                 && isHorizontallyAlignedWithClimbable(context.climbableNode());
     }
 
+    private boolean hasPassedClimbableTowardExit(Context context) {
+        return progressTowardExit(context) > 0.0D;
+    }
+
     private boolean isAtExitHeight(Context context, double targetY) {
         return hasReachedHeight(targetY, context.verticalDirection(), EXIT_HEIGHT_TOLERANCE);
+    }
+
+    private boolean isReadyForHorizontalExit(Context context, double targetY) {
+        if (!context.exitsClimbable()) {
+            return false;
+        }
+        if (context.verticalDirection() < 0
+                && context.targetNode().y == context.climbableNode().y) {
+            return hasReachedHeight(targetY, context.verticalDirection(), DESCENT_NODE_TOLERANCE);
+        }
+        return isAtExitHeight(context, targetY);
     }
 
     private boolean hasReachedHeight(double targetY, int verticalDirection, double tolerance) {
@@ -354,13 +362,50 @@ final class ClimbTraversal {
 
     private boolean hasCompletedClimbableExit(Context context) {
         if (context.targetNode().y == context.climbableNode().y) {
-            double tolerance = context.verticalDirection() < 0
-                    ? EXIT_CROSSING_TOLERANCE
-                    : ASCENT_NODE_TOLERANCE;
-            return hasReachedHeight(context.targetNode().y, context.verticalDirection(), tolerance);
+            if (context.verticalDirection() < 0) {
+                return hasReachedHeight(
+                        context.targetNode().y,
+                        context.verticalDirection(),
+                        EXIT_CROSSING_TOLERANCE
+                ) && hasClearedClimbableSupportTowardExit(context);
+            }
+            return hasReachedHeight(
+                    context.targetNode().y,
+                    context.verticalDirection(),
+                    ASCENT_NODE_TOLERANCE
+            );
+        }
+
+        if (isLowerExit(context) && hasClearedClimbableSupportTowardExit(context)) {
+            return true;
         }
 
         return hasCrossedHeight(context.targetNode().y, context.verticalDirection());
+    }
+
+    private boolean hasClearedClimbableSupportTowardExit(Context context) {
+        return progressTowardExit(context) >= 0.5D + this.mob.getBbWidth() / 2.0D;
+    }
+
+    private double progressTowardExit(Context context) {
+        double climbX = context.climbableNode().x + 0.5D;
+        double climbZ = context.climbableNode().z + 0.5D;
+        double exitX = context.targetNode().x + 0.5D;
+        double exitZ = context.targetNode().z + 0.5D;
+        double dx = exitX - climbX;
+        double dz = exitZ - climbZ;
+        double distance = Math.sqrt(dx * dx + dz * dz);
+        if (distance <= 1.0E-6D) {
+            return 0.0D;
+        }
+
+        return ((this.mob.getX() - climbX) * dx + (this.mob.getZ() - climbZ) * dz) / distance;
+    }
+
+    private static boolean isLowerExit(Context context) {
+        return context.exitsClimbable()
+                && context.verticalDirection() < 0
+                && context.targetNode().y < context.climbableNode().y;
     }
 
     private boolean hasCrossedHeight(double targetY, int verticalDirection) {
@@ -389,7 +434,8 @@ final class ClimbTraversal {
         return !this.mob.onClimbable()
                 && context.exitsClimbable()
                 && context.verticalDirection() < 0
-                && isAtExitHeight(context, context.targetNode().y);
+                && (hasPassedClimbableTowardExit(context)
+                || isLowerExit(context) && isAtExitHeight(context, context.targetNode().y));
     }
 
     private Vec3 getClimbableAnchor(BlockPos pos) {

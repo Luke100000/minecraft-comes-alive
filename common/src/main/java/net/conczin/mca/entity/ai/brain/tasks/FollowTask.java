@@ -47,17 +47,6 @@ public class FollowTask extends Behavior<VillagerEntityMCA> {
 
             BlockPos followPosition = getFollowPosition(playerToFollow);
 
-            villager.getBrain().setMemory(
-                    MemoryModuleType.LOOK_TARGET,
-                    new EntityTracker(playerToFollow, true)
-            );
-
-            if (villager.getNavigation() instanceof MCAGroundPathNavigation navigation
-                    && navigation.isControllingClimbable()
-                    && navigation.shouldKeepCurrentClimbPathForFollowTarget(followPosition.getY())) {
-                return;
-            }
-
             float distance = villager.distanceTo(playerToFollow) - 2.0F;
             float speed = Math.min(1.0F, Math.max(0.6F, distance * 0.1F));
             float speedModifier = (villager.isPassenger() ? 1.7F : 0.8F) * speed;
@@ -77,6 +66,10 @@ public class FollowTask extends Behavior<VillagerEntityMCA> {
                             speedModifier,
                             closeEnoughDistance
                     )
+            );
+            villager.getBrain().setMemory(
+                    MemoryModuleType.LOOK_TARGET,
+                    new EntityTracker(playerToFollow, true)
             );
         });
     }

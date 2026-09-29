@@ -13,7 +13,6 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.BoneMealItem;
-import net.minecraft.world.item.HoeItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.*;
 import net.minecraft.world.level.block.state.BlockState;
@@ -67,6 +66,8 @@ public class HarvestingTask extends AbstractChoreTask {
             villager.setItemInHand(villager.getDominantHand(), ItemStack.EMPTY);
         }
 
+        workingTick = 0;
+
         if (currentPos != null) {
             plantable.remove(currentPos);
             harvestable.remove(currentPos);
@@ -80,7 +81,7 @@ public class HarvestingTask extends AbstractChoreTask {
         super.start(world, villager, time);
 
         if (!villager.hasItemInSlot(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), stack -> stack.getItem() instanceof HoeItem);
+            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), Chore.HARVEST::matchesTool);
             if (i == -1) {
                 abandonJobWithMessage("chore.harvesting.nohoe");
             } else {
@@ -94,10 +95,10 @@ public class HarvestingTask extends AbstractChoreTask {
         }
 
         // equip hoe
-        if (!InventoryUtils.contains(villager.getInventory(), HoeItem.class) && !villager.hasItemInSlot(villager.getDominantSlot())) {
+        if (!InventoryUtils.contains(villager.getInventory(), Chore.HARVEST::matchesTool) && !villager.hasItemInSlot(villager.getDominantSlot())) {
             abandonJobWithMessage("chore.harvesting.nohoe");
         } else if (!villager.hasItemInSlot(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), stack -> stack.getItem() instanceof HoeItem);
+            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), Chore.HARVEST::matchesTool);
             ItemStack stack = villager.getInventory().getItem(i);
             villager.setItemInHand(villager.getDominantHand(), stack);
         }
@@ -114,15 +115,13 @@ public class HarvestingTask extends AbstractChoreTask {
             lastCropScan = villager.tickCount;
         }
 
-        //try to find a planting task
-        currentPos = TaskUtils.getNearestPoint(villager.blockPosition(), plantable);
+        currentPos = TaskUtils.getNearestPoint(villager.blockPosition(), harvestable);
         if (currentPos == null) {
-            currentPos = TaskUtils.getNearestPoint(villager.blockPosition(), harvestable);
+            currentPos = TaskUtils.getNearestPoint(villager.blockPosition(), bonemealable);
             if (currentPos == null) {
-                currentPos = TaskUtils.getNearestPoint(villager.blockPosition(), bonemealable);
-                if (currentPos != null) {
-                    swapItem(stack -> stack.getItem() instanceof BoneMealItem);
-                }
+                currentPos = hasSeeds() ? TaskUtils.getNearestPoint(villager.blockPosition(), plantable) : null;
+            } else {
+                swapItem(stack -> stack.getItem() instanceof BoneMealItem);
             }
         }
     }
@@ -160,6 +159,16 @@ public class HarvestingTask extends AbstractChoreTask {
 
     private boolean hasBoneMeal() {
         return InventoryUtils.contains(villager.getInventory(), BoneMealItem.class);
+    }
+
+    private boolean hasSeeds() {
+        return InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), HarvestingTask::isPlantableCropItem) >= 0;
+    }
+
+    private static boolean isPlantableCropItem(ItemStack stack) {
+        return !stack.isEmpty()
+               && stack.getItem() instanceof BlockItem blockItem
+               && blockItem.getBlock() instanceof CropBlock;
     }
 
     private void searchUnusedFarmLand(int rangeX, int rangeY) {
@@ -240,7 +249,7 @@ public class HarvestingTask extends AbstractChoreTask {
 
         if (stack.isEmpty()) {
             stack = InventoryUtils.stream(villager.getInventory())
-                    .filter(s -> !s.isEmpty() && s.getItem() instanceof BlockItem blockItem && blockItem.getBlock() instanceof CropBlock)
+                    .filter(HarvestingTask::isPlantableCropItem)
                     .findAny();
         }
 
