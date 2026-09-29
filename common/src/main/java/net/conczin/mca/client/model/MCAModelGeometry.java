@@ -17,6 +17,7 @@ public final class MCAModelGeometry {
     public static final String BREAST_TRANSFORM = "breast_transform";
     public static final String BREASTS = "breasts";
     public static final String BREASTPLATE = "breastplate";
+    static final String BREAST_HAIR_SURFACE = "hair_surface";
     static final float BREAST_WEAR_DILATION = 0.1F;
     static final float BREAST_X = -3.25F;
     static final float BREAST_Y = -1.25F;
@@ -75,7 +76,10 @@ public final class MCAModelGeometry {
                 CubeListBuilder.create(),
                 PartPose.ZERO
         );
-        PartDefinition breasts = transform.addOrReplaceChild(BREASTS, newHairBreastProjection(0), PartPose.ZERO);
+        // Both projected textures follow one breast pose. Their independent
+        // shells can be inflated without inheriting each other's scale.
+        PartDefinition breasts = transform.addOrReplaceChild(BREASTS, CubeListBuilder.create(), PartPose.ZERO);
+        breasts.addOrReplaceChild(BREAST_HAIR_SURFACE, newHairBreastProjection(0), PartPose.ZERO);
         breasts.addOrReplaceChild(BREASTPLATE, newHairBreastProjection(16), PartPose.ZERO);
     }
 

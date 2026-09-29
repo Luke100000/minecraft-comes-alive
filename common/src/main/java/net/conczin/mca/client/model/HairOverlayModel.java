@@ -19,9 +19,6 @@ public final class HairOverlayModel<T extends LivingEntity> extends EntityModel<
     private final ModelPart breastTransform;
     private final ModelPart breasts;
     private final List<ModelPart> breastParts;
-    private final float breastOffsetX;
-    private final float breastOffsetY;
-    private final float breastOffsetZ;
 
     public HairOverlayModel(ModelPart root, float clothingDilation) {
         this.root = root;
@@ -32,37 +29,22 @@ public final class HairOverlayModel<T extends LivingEntity> extends EntityModel<
         breasts = breastTransform.getChild(MCAModelGeometry.BREASTS);
         breastParts = List.of(breasts);
 
-        // Both hair textures must clear the outer clothing surface without
-        // inheriting the much larger spacing used by the torso hair shells.
-        float projectionDilation = clothingDilation + MCAModelGeometry.BREAST_WEAR_DILATION + SURFACE_SEPARATION;
-        float scaleX = 1.0F + projectionDilation * 2.0F / MCAModelGeometry.BREAST_WIDTH;
-        float scaleY = 1.0F + projectionDilation * 2.0F / MCAModelGeometry.BREAST_HEIGHT;
-        float scaleZ = 1.0F + projectionDilation * 2.0F / MCAModelGeometry.BREAST_DEPTH;
-        breasts.xScale = scaleX;
-        breasts.yScale = scaleY;
-        breasts.zScale = scaleZ;
+        // Inflate the two UV shells once around the same centre. The shared
+        // breast pivot supplies the full morphology pose on every render.
+        float innerDilation = clothingDilation + MCAModelGeometry.BREAST_WEAR_DILATION + SURFACE_SEPARATION;
+        sizeProjection(breasts.getChild(MCAModelGeometry.BREAST_HAIR_SURFACE), innerDilation);
+        sizeProjection(breasts.getChild(MCAModelGeometry.BREASTPLATE), innerDilation + SURFACE_SEPARATION);
+    }
 
-        // The outer texture follows the same pose through the breast parent.
-        // Use relative dilation so its inherited scale is applied only once.
-        ModelPart breastWear = breasts.getChild(MCAModelGeometry.BREASTPLATE);
-        float wearDilation = projectionDilation + SURFACE_SEPARATION;
-        breastWear.xScale = (MCAModelGeometry.BREAST_WIDTH + 2.0F * wearDilation)
-                / (MCAModelGeometry.BREAST_WIDTH + 2.0F * projectionDilation);
-        breastWear.yScale = (MCAModelGeometry.BREAST_HEIGHT + 2.0F * wearDilation)
-                / (MCAModelGeometry.BREAST_HEIGHT + 2.0F * projectionDilation);
-        breastWear.zScale = (MCAModelGeometry.BREAST_DEPTH + 2.0F * wearDilation)
-                / (MCAModelGeometry.BREAST_DEPTH + 2.0F * projectionDilation);
-        breastWear.setPos(
-                MCAModelGeometry.BREAST_CENTER_X * (1.0F - breastWear.xScale),
-                MCAModelGeometry.BREAST_CENTER_Y * (1.0F - breastWear.yScale),
+    private static void sizeProjection(ModelPart shell, float dilation) {
+        shell.xScale = 1.0F + 2.0F * dilation / MCAModelGeometry.BREAST_WIDTH;
+        shell.yScale = 1.0F + 2.0F * dilation / MCAModelGeometry.BREAST_HEIGHT;
+        shell.zScale = 1.0F + 2.0F * dilation / MCAModelGeometry.BREAST_DEPTH;
+        shell.setPos(
+                MCAModelGeometry.BREAST_CENTER_X * (1.0F - shell.xScale),
+                MCAModelGeometry.BREAST_CENTER_Y * (1.0F - shell.yScale),
                 0.0F
         );
-
-        float localOffsetX = MCAModelGeometry.BREAST_CENTER_X * (1.0F - scaleX);
-        float localOffsetY = MCAModelGeometry.BREAST_CENTER_Y * (1.0F - scaleY);
-        breastOffsetX = localOffsetX;
-        breastOffsetY = (float) Math.cos(MCAModelMorphology.BREAST_ROTATION_X) * localOffsetY;
-        breastOffsetZ = (float) Math.sin(MCAModelMorphology.BREAST_ROTATION_X) * localOffsetY;
     }
 
     @Override
@@ -80,9 +62,6 @@ public final class HairOverlayModel<T extends LivingEntity> extends EntityModel<
 
     public void applyMorphology(VillagerLike<?> villager) {
         MCAModelMorphology.applyBreastDimensions(villager, breastTransform, breasts, breastParts);
-        breasts.x += breastOffsetX;
-        breasts.y += breastOffsetY;
-        breasts.z += breastOffsetZ;
         breastTransform.visible &= body.visible;
         breasts.visible &= body.visible;
     }

@@ -1,8 +1,13 @@
 package net.conczin.mca.client.model;
 
 import net.conczin.mca.Config;
+import net.minecraft.SharedConstants;
+import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.model.geom.builders.CubeDeformation;
 import net.minecraft.client.model.geom.builders.LayerDefinition;
+import net.minecraft.server.Bootstrap;
+import net.minecraft.world.entity.LivingEntity;
 import org.joml.Vector3f;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -12,6 +17,7 @@ import java.lang.reflect.Field;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Checks the actual baked hair geometry without launching the game renderer. */
@@ -20,6 +26,8 @@ class HairOverlayModelTest {
 
     @BeforeAll
     static void enableGeometry() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
         originalEnableBoobs = Config.getInstance().enableBoobs;
         Config.getInstance().enableBoobs = true;
     }
@@ -31,9 +39,12 @@ class HairOverlayModelTest {
 
     @Test
     void projectedHairUsesTorsoUvsAndCoversTheUpperBreastSurface() throws Exception {
-        ModelPart breast = bakedHair(MCALayerDefinitions.VILLAGER_HAIR_DILATION)
-                .getChild("body").getChild(MCAModelGeometry.BREAST_TRANSFORM).getChild(MCAModelGeometry.BREASTS);
+        ModelPart pivot = bakedHair(MCALayerDefinitions.VILLAGER_HAIR_DILATION)
+                .getChild("body").getChild(MCAModelGeometry.BREAST_TRANSFORM)
+                .getChild(MCAModelGeometry.BREASTS);
+        ModelPart breast = pivot.getChild(MCAModelGeometry.BREAST_HAIR_SURFACE);
 
+        assertEquals(2, polygons(breast).size(), "Inner hair needs front and upper faces");
         int topFaces = 0;
         for (Object polygon : polygons(breast)) {
             Vector3f normal = (Vector3f) field(polygon, "normal");
@@ -52,7 +63,7 @@ class HairOverlayModelTest {
         }
         assertEquals(1, topFaces, "Hair needs an actual baked upper breast face");
 
-        ModelPart outerHair = breast.getChild(MCAModelGeometry.BREASTPLATE);
+        ModelPart outerHair = pivot.getChild(MCAModelGeometry.BREASTPLATE);
         assertEquals(2, polygons(outerHair).size(), "Outer hair needs front and upper faces");
         for (Object polygon : polygons(outerHair)) {
             for (Object vertex : (Object[]) field(polygon, "vertices")) {
@@ -65,6 +76,38 @@ class HairOverlayModelTest {
     }
 
     @Test
+    void hairAndClothingFollowTheExistingVanillaPlayerPose() {
+        for (boolean slim : new boolean[]{false, true}) {
+            PlayerModel<LivingEntity> parent = new PlayerModel<>(LayerDefinition.create(
+                    PlayerModel.createMesh(CubeDeformation.NONE, slim), 64, 64).bakeRoot(), slim);
+            parent.head.setRotation(0.4F, 0.6F, 0.1F);
+            parent.head.xScale = 1.3F;
+            parent.hat.visible = false;
+            parent.body.setRotation(0.15F, -0.3F, 0.2F);
+            parent.rightArm.xRot = -1.2F;
+
+            ModelPart hairRoot = bakedHair(MCALayerDefinitions.VILLAGER_HAIR_DILATION);
+            HairOverlayModel<LivingEntity> hair = new HairOverlayModel<>(
+                    hairRoot, MCALayerDefinitions.VILLAGER_CLOTHING_DILATION);
+            hair.copyFrom(parent);
+            assertEquals(parent.head.xRot, hairRoot.getChild("head").xRot);
+            assertEquals(parent.head.yRot, hairRoot.getChild("head").yRot);
+            assertEquals(parent.head.xScale, hairRoot.getChild("head").xScale);
+            assertEquals(parent.body.zRot, hairRoot.getChild("body").zRot);
+            assertFalse(hairRoot.getChild("hat").visible);
+
+            VillagerOverlayModel<LivingEntity> clothing = new VillagerOverlayModel<>(
+                    LayerDefinition.create(MCAModelGeometry.overlayData(CubeDeformation.NONE, slim), 64, 64).bakeRoot(),
+                    slim);
+            clothing.copyFrom(parent);
+            assertEquals(parent.head.yRot, clothing.head.yRot);
+            assertEquals(parent.head.xScale, clothing.head.xScale);
+            assertEquals(parent.body.zRot, clothing.body.zRot);
+            assertEquals(parent.rightArm.xRot, clothing.rightArm.xRot);
+        }
+    }
+
+    @Test
     void villagerAndZombieHairStayCloseToClothing() {
         float[][] dilations = {
                 {MCALayerDefinitions.VILLAGER_HAIR_DILATION, MCALayerDefinitions.VILLAGER_CLOTHING_DILATION},
@@ -73,17 +116,26 @@ class HairOverlayModelTest {
         for (float[] pair : dilations) {
             ModelPart root = bakedHair(pair[0]);
             new HairOverlayModel<>(root, pair[1]);
-            ModelPart breast = root.getChild("body")
+            ModelPart pivot = root.getChild("body")
                     .getChild(MCAModelGeometry.BREAST_TRANSFORM).getChild(MCAModelGeometry.BREASTS);
-            ModelPart outerHair = breast.getChild(MCAModelGeometry.BREASTPLATE);
+            ModelPart breast = pivot.getChild(MCAModelGeometry.BREAST_HAIR_SURFACE);
+            ModelPart outerHair = pivot.getChild(MCAModelGeometry.BREASTPLATE);
             float clothingWidth = MCAModelGeometry.BREAST_WIDTH
                     + 2.0F * (pair[1] + MCAModelGeometry.BREAST_WEAR_DILATION);
             float baseGap = (MCAModelGeometry.BREAST_WIDTH * breast.xScale - clothingWidth) / 2.0F;
-            float outerGap = (MCAModelGeometry.BREAST_WIDTH * breast.xScale * outerHair.xScale - clothingWidth) / 2.0F;
+            float outerGap = (MCAModelGeometry.BREAST_WIDTH * outerHair.xScale - clothingWidth) / 2.0F;
 
             assertTrue(baseGap > 0.0F, "Hair must clear clothing");
             assertTrue(outerGap > baseGap, "Outer hair must clear inner hair");
             assertTrue(outerGap <= 0.02F, "Outer hair must not float above clothing");
+            assertEquals(1.0F, pivot.xScale, "Morphology pivot must not inherit shell dilation");
+            assertEquals(1.0F, pivot.yScale);
+            for (ModelPart shell : List.of(breast, outerHair)) {
+                assertEquals(MCAModelGeometry.BREAST_CENTER_X,
+                        MCAModelGeometry.BREAST_CENTER_X * shell.xScale + shell.x, 0.00001F);
+                assertEquals(MCAModelGeometry.BREAST_CENTER_Y,
+                        MCAModelGeometry.BREAST_CENTER_Y * shell.yScale + shell.y, 0.00001F);
+            }
         }
     }
 
