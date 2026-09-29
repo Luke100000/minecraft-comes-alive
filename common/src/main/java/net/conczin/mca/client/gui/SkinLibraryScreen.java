@@ -1244,7 +1244,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         List<TooltipButtonWidget> widgets = new LinkedList<>();
 
         // subscribe
-        if (canEditServerWideContent()) {
+        if (canEditServerWideContent() || (Config.getServerConfig().allowEveryoneToAddContentGlobally
+                && getServerContentById(content.contentid()).isEmpty())) {
             widgets.add(new ToggleableTooltipIconButtonWidget(0, 0, 0, 3 * 16,
                     getServerContentById(content.contentid()).isPresent(),
                     Component.translatable("gui.skin_library.subscribe"),
