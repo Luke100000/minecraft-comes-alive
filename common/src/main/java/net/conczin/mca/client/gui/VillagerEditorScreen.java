@@ -58,6 +58,8 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
     protected static final int DATA_WIDTH = 175;
     private static final int TRAITS_PER_PAGE = 8;
     private static final int LAYERED_HAIR_PER_PAGE = 6;
+    private static final int APPEARANCE_GALLERY_COLUMNS = 4;
+    private static final int APPEARANCE_GALLERY_PER_PAGE = 8;
     private static final float MIN_PREVIEW_ZOOM = 0.7F;
     private static final float MAX_PREVIEW_ZOOM = 1.4F;
     private static final int VOICE_PREVIEW_BUTTON_WIDTH = 22;
@@ -97,6 +99,8 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
     private int clothingPageCount;
     private int commandsInFlightCount = 0;
     private ButtonWidget pageButtonWidget;
+    private ButtonWidget previousSelectionPageButton;
+    private ButtonWidget nextSelectionPageButton;
     private List<String> filteredClothing = new LinkedList<>();
     private List<String> filteredHairStyles = new LinkedList<>();
     private List<String> filteredBodySkins = new LinkedList<>();
@@ -297,6 +301,9 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
         this.page = page;
 
         clearWidgets();
+        pageButtonWidget = null;
+        previousSelectionPageButton = null;
+        nextSelectionPageButton = null;
 
         if (page.equals("loading")) {
             return;
@@ -782,27 +789,36 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
             case "clothing", "hair", "skin", "eyes_catalog", "hair_base", "hair_bangs", "hair_back", "hair_front", "hair_extra" -> {
                 filterGender = villager.getGenetics().getGender();
                 searchString = "";
+                clothingPage = 0;
 
-                //search
-                textFieldWidget = addRenderableWidget(new EditBox(this.font, width / 2 - DATA_WIDTH / 2, height / 2 - 100, DATA_WIDTH, 18,
+                boolean spaciousGallery = isAppearanceGallery();
+                VillagerEditorGalleryPolicy.GalleryLayout galleryLayout = spaciousGallery
+                        ? VillagerEditorGalleryPolicy.layout(width, height)
+                        : null;
+                int searchWidth = spaciousGallery ? Math.min(260, width - 32) : DATA_WIDTH;
+                textFieldWidget = addRenderableWidget(new EditBox(this.font, (width - searchWidth) / 2,
+                        spaciousGallery ? galleryLayout.searchY() : height / 2 - 100, searchWidth, 18,
                         Component.translatable("gui.villager_editor.search")));
                 textFieldWidget.setMaxLength(64);
                 textFieldWidget.setResponder(v -> {
                     searchString = v;
                     filter();
                 });
-                y = height / 2 + 85;
+                y = spaciousGallery ? galleryLayout.footerY() : height / 2 + 85;
                 pageButtonWidget = addRenderableWidget(new ButtonWidget(width / 2 - 30, y, 60, 20, Component.literal(""), b -> {
                 }));
-                addRenderableWidget(new ButtonWidget(width / 2 - 32 - 28, y, 28, 20, Component.literal("<<"), b -> {
+                pageButtonWidget.active = false;
+                previousSelectionPageButton = addRenderableWidget(new ButtonWidget(width / 2 - 60, y, 28, 20, Component.literal("<"), b -> {
                     clothingPage = Math.max(0, clothingPage - 1);
                     updateClothingPageWidget();
                 }));
-                addRenderableWidget(new ButtonWidget(width / 2 + 32, y, 28, 20, Component.literal(">>"), b -> {
+                nextSelectionPageButton = addRenderableWidget(new ButtonWidget(width / 2 + 32, y, 28, 20, Component.literal(">"), b -> {
                     clothingPage = Math.max(0, Math.min(clothingPageCount - 1, clothingPage + 1));
                     updateClothingPageWidget();
                 }));
-                addRenderableWidget(new ButtonWidget(width / 2 + 32 + 32, y, 64, 20, Component.translatable("gui.button.done"), b -> {
+                int backX = spaciousGallery ? Math.max(4, width / 2 - 158) : width / 2 + 64;
+                addRenderableWidget(new ButtonWidget(backX, y, 64, 20,
+                        Component.translatable(spaciousGallery ? "gui.button.back" : "gui.button.done"), b -> {
                     if (page.equals("clothing")) {
                         setPage("clothing_style");
                     } else if (page.equals("skin")) {
@@ -816,11 +832,12 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
                     }
                 }));
                 if (page.equals("clothing") || page.equals("hair")) {
-                    addRenderableWidget(new ButtonWidget(width / 2 + 128, y, 64, 20, Component.translatable("gui.button.library"), b -> {
+                    int libraryX = spaciousGallery ? Math.min(width - 68, width / 2 + 94) : width / 2 + 128;
+                    addRenderableWidget(new ButtonWidget(libraryX, y, 64, 20, Component.translatable("gui.button.library"), b -> {
                         Minecraft.getInstance().setScreen(new SkinLibraryScreen(this, villagerVisualization));
                     }));
                 }
-                addSelectionGenderFilterWidgets(y);
+                addSelectionGenderFilterWidgets(spaciousGallery ? galleryLayout.filterY() : y);
                 filter();
             }
             case "presets" -> {
@@ -897,6 +914,10 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
     }
 
     private void addPreviewRotationWidgets() {
+        if (!VillagerEditorGalleryPolicy.showPreviewControls(page)) {
+            return;
+        }
+
         boolean selectionPage = isSelectionPage();
         int centerX = selectionPage ? width / 2 : width / 2 - DATA_WIDTH / 2;
         if (selectionPage) {
@@ -1410,6 +1431,12 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
         if (pageButtonWidget != null) {
             pageButtonWidget.setMessage(Component.literal(String.format("%d / %d", clothingPage + 1, clothingPageCount)));
         }
+        if (previousSelectionPageButton != null) {
+            previousSelectionPageButton.active = clothingPage > 0;
+        }
+        if (nextSelectionPageButton != null) {
+            nextSelectionPageButton.active = clothingPage + 1 < clothingPageCount;
+        }
     }
 
     private void filter() {
@@ -1463,37 +1490,47 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
     }
 
     private void addSelectionGenderFilterWidgets(int y) {
-        List<Gender> filters = SELECTION_GENDER_FILTERS.stream()
-                .filter(gender -> gender == Gender.UNASSIGNED || hasSelectionGender(gender))
+        List<VillagerEditorGalleryPolicy.FilterOption<Gender>> options = VillagerEditorGalleryPolicy.filterOptions(
+                SELECTION_GENDER_FILTERS,
+                this::hasSelectionGender,
+                Gender.UNASSIGNED
+        );
+        List<Gender> filters = options.stream()
+                .map(VillagerEditorGalleryPolicy.FilterOption::value)
                 .toList();
 
-        if (!filters.contains(filterGender)) {
+        boolean selectedFilterAvailable = options.stream()
+                .anyMatch(option -> option.value() == filterGender && option.available());
+        if (!selectedFilterAvailable) {
             filterGender = Gender.UNASSIGNED;
         }
 
-        int regionLeft = 4;
-        int regionRight = width / 2 - 64;
-        int regionWidth = Math.max(filters.size(), regionRight - regionLeft);
-        int buttonWidth = Math.min(SELECTION_GENDER_BUTTON_WIDTH, regionWidth / filters.size());
-        int rowWidth = buttonWidth * filters.size();
-        int x = regionLeft + (regionWidth - rowWidth) / 2;
+        boolean spaciousGallery = isAppearanceGallery();
+        int gap = spaciousGallery ? 4 : 0;
+        int regionLeft = spaciousGallery ? 12 : 4;
+        int regionWidth = spaciousGallery ? width - 24 : Math.max(filters.size(), width / 2 - 64 - regionLeft);
+        int buttonWidth = Math.min(spaciousGallery ? 80 : SELECTION_GENDER_BUTTON_WIDTH,
+                (regionWidth - gap * (filters.size() - 1)) / filters.size());
+        int rowWidth = buttonWidth * filters.size() + gap * (filters.size() - 1);
+        int x = spaciousGallery ? (width - rowWidth) / 2 : regionLeft + (regionWidth - rowWidth) / 2;
         selectionGenderWidgets.clear();
-        for (int i = 0; i < filters.size(); i++) {
-            Gender gender = filters.get(i);
+        for (int i = 0; i < options.size(); i++) {
+            VillagerEditorGalleryPolicy.FilterOption<Gender> option = options.get(i);
+            Gender gender = option.value();
             Component label = gender == Gender.UNASSIGNED
                     ? Component.translatable("gui.villager_editor.all")
                     : Gender.getText(gender);
             ButtonWidget widget = addRenderableWidget(new ButtonWidget(
-                    x + buttonWidth * i,
+                    x + (buttonWidth + gap) * i,
                     y,
                     buttonWidth,
                     20,
                     label,
                     b -> setSelectionGenderFilter(gender)
             ));
+            widget.active = option.available() && filterGender != gender;
             selectionGenderWidgets.put(gender, widget);
         }
-        updateSelectionGenderFilterWidgets();
     }
 
     private boolean hasSelectionGender(Gender gender) {
@@ -1532,7 +1569,8 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
     }
 
     private void updateSelectionGenderFilterWidgets() {
-        selectionGenderWidgets.forEach((gender, widget) -> widget.active = filterGender != gender);
+        selectionGenderWidgets.forEach((gender, widget) ->
+                widget.active = filterGender != gender && (gender == Gender.UNASSIGNED || hasSelectionGender(gender)));
     }
 
     protected String[] getPages() {
@@ -1568,7 +1606,11 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
     }
 
     private int getSelectionItemsPerPage() {
-        return isLayeredHairPage() ? LAYERED_HAIR_PER_PAGE : CLOTHES_PER_PAGE;
+        return isLayeredHairPage() ? LAYERED_HAIR_PER_PAGE : isAppearanceGallery() ? APPEARANCE_GALLERY_PER_PAGE : CLOTHES_PER_PAGE;
+    }
+
+    private boolean isAppearanceGallery() {
+        return VillagerEditorGalleryPolicy.usesUnifiedGallery(page);
     }
 
     protected boolean isLayeredHairPage() {
@@ -1977,10 +2019,21 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
             villagerVisualization.refreshDimensions();
 
             hoveredClothingId = -1;
+            boolean spaciousGallery = isAppearanceGallery();
+            VillagerEditorGalleryPolicy.GalleryLayout galleryLayout = spaciousGallery
+                    ? VillagerEditorGalleryPolicy.layout(width, height)
+                    : null;
             int itemsPerPage = getSelectionItemsPerPage();
             int totalOnPage = Math.min(itemsPerPage, Math.max(0, getFilteredSelectionSize() - clothingPage * itemsPerPage));
-            int row0Count = Math.min(totalOnPage, isLayeredHairPage() ? LAYERED_HAIR_PER_PAGE : CLOTHES_H);
+            int row0Count = Math.min(totalOnPage, spaciousGallery ? APPEARANCE_GALLERY_COLUMNS : isLayeredHairPage() ? LAYERED_HAIR_PER_PAGE : CLOTHES_H);
             int row1Count = Math.max(0, totalOnPage - row0Count);
+            String selectedGalleryId = switch (page) {
+                case "clothing" -> Objects.toString(villager.getClothes(), "");
+                case "hair" -> findCurrentHairStyle(filteredHairStyles).orElse("");
+                case "skin" -> Objects.toString(villager.getSkin(), "");
+                case "eyes_catalog" -> Objects.toString(villager.getEyeTexture(), "");
+                default -> "";
+            };
             int previewRightEyeColor = page.equals("eyes_catalog")
                     ? EyeTextureLayers.getStaticEyeColor(villager, false)
                     : 0;
@@ -2012,29 +2065,37 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
 
                 boolean layeredHairSelection = isLayeredHairPage();
                 boolean eyeSelection = page.equals("eyes_catalog");
-                int spacing = layeredHairSelection ? 56 : eyeSelection ? 42 : 40;
-                int cx = width / 2 + (int) ((column - countInRow / 2.0 + 0.5 - 0.5 * (row % 2)) * spacing);
-                int cy = layeredHairSelection ? height / 2 + 8 : height / 2 + (int) ((row - CLOTHES_V / 2.0 + 0.5) * 65) + 10;
+                int spacing = spaciousGallery ? galleryLayout.spacing()
+                        : layeredHairSelection ? 56 : eyeSelection ? 42 : 40;
+                double stagger = spaciousGallery ? 0.0 : 0.5 * (row % 2);
+                int cx = width / 2 + (int) ((column - countInRow / 2.0 + 0.5 - stagger) * spacing);
+                int cy = spaciousGallery ? (row == 0 ? galleryLayout.row0CenterY() : galleryLayout.row1CenterY())
+                        : layeredHairSelection ? height / 2 + 8 : height / 2 + (int) ((row - CLOTHES_V / 2.0 + 0.5) * 65) + 10;
 
-                int rx = layeredHairSelection ? 25 : eyeSelection ? 21 : 20;
-                int ry0 = layeredHairSelection ? 60 : 35;
-                int ry1 = layeredHairSelection ? 60 : 45;
+                int rx = spaciousGallery ? galleryLayout.cardRadius() : layeredHairSelection ? 25 : eyeSelection ? 21 : 20;
+                int ry0 = spaciousGallery ? galleryLayout.cardRadius() : layeredHairSelection ? 60 : 35;
+                int ry1 = spaciousGallery ? galleryLayout.cardRadius() : layeredHairSelection ? 60 : 45;
 
                 int x0 = cx - rx;
                 int y0 = cy - ry0;
                 int x1 = cx + rx;
                 int y1 = cy + ry1;
 
-                int hoverYMax = layeredHairSelection ? y1 : y1 - 5;
+                int hoverYMax = spaciousGallery || layeredHairSelection ? y1 : y1 - 5;
                 if (mouseX >= x0 && mouseX <= x1 && mouseY >= y0 && mouseY <= hoverYMax) {
                     hoveredClothingId = index;
                 }
 
-                int previewPadding = (hoveredClothingId == index) ? 5 : 0;
+                boolean hovered = hoveredClothingId == index;
+                boolean selected = spaciousGallery && selectedGalleryId.equals(getFilteredSelectionIdentifier(index));
+                if (spaciousGallery) {
+                    context.fill(x0, y0, x1, y1, selected ? 0xAA3B3520 : hovered ? 0x88505050 : 0x66232323);
+                }
+                int previewPadding = spaciousGallery ? 0 : hovered ? 5 : 0;
                 float rotationOffset = layeredHairSelection && getLayeredHairCategory() == LayeredHair.Category.BACK ? 180.0F : 0.0F;
-                int previewSize = eyeSelection
-                        ? ((hoveredClothingId == index) ? 50 : 45)
-                        : ((hoveredClothingId == index) ? (layeredHairSelection ? 45 : 35) : (layeredHairSelection ? 40 : 30));
+                int previewSize = spaciousGallery ? (hovered ? galleryLayout.hoveredPreviewSize() : galleryLayout.previewSize())
+                        : eyeSelection ? (hovered ? 50 : 45)
+                        : hovered ? (layeredHairSelection ? 45 : 35) : (layeredHairSelection ? 40 : 30);
                 renderPreviewEntity(
                         context,
                         x0 - previewPadding,
@@ -2047,9 +2108,16 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
                         villagerVisualization,
                         rotationOffset
                 );
+                if (spaciousGallery) {
+                    context.renderOutline(x0, y0, x1 - x0, y1 - y0,
+                            selected ? 0xFFFFD35A : hovered ? 0xFFEAEAEA : 0x776E6E6E);
+                }
                 if (eyeSelection) {
                     context.drawCenteredString(font, Integer.toString(index + 1), cx, y1 - 10, 0xFFFFFFFF);
                 }
+            }
+            if (totalOnPage == 0) {
+                context.drawCenteredString(font, Component.translatable("gui.villager_editor.none"), width / 2, height / 2, 0xFFAAAAAA);
             }
         }
 
