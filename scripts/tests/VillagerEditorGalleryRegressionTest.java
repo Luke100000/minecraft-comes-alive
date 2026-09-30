@@ -53,13 +53,19 @@ public final class VillagerEditorGalleryRegressionTest {
         int row0CenterY = readInt(layoutType, layout, "row0CenterY");
         int row1CenterY = readInt(layoutType, layout, "row1CenterY");
         int footerY = readInt(layoutType, layout, "footerY");
+        int columns = readInt(layoutType, layout, "columns");
+        int itemsPerPage = readInt(layoutType, layout, "itemsPerPage");
         int cardRadius = readInt(layoutType, layout, "cardRadius");
         int previewSize = readInt(layoutType, layout, "previewSize");
+        int hoveredPreviewSize = readInt(layoutType, layout, "hoveredPreviewSize");
 
+        assertEquals(6, columns, "standard editor screens use six gallery columns");
+        assertEquals(12, itemsPerPage, "standard editor screens show two rows of six items");
         assertTrue(searchY <= 112, "search bar moves upward to free gallery space");
         assertTrue(footerY >= 330, "footer controls move downward to use the screen height");
-        assertTrue(cardRadius >= 38, "gallery cards are larger on a standard editor screen");
-        assertTrue(previewSize <= cardRadius + 5, "avatars leave breathing room inside the larger cards");
+        assertTrue(cardRadius >= 30, "gallery cards stay comfortably sized on a standard editor screen");
+        assertTrue(previewSize <= cardRadius + 6, "avatars leave breathing room inside the cards");
+        assertEquals(previewSize, hoveredPreviewSize, "hover highlighting does not resize avatars");
         assertTrue(searchY + 18 < filterY, "search and gender filters do not overlap");
         assertTrue(filterY + 20 < row0CenterY - cardRadius, "gender filters stay clear of the first row");
         assertTrue(row0CenterY + cardRadius < row1CenterY - cardRadius, "gallery rows do not overlap");
@@ -67,6 +73,10 @@ public final class VillagerEditorGalleryRegressionTest {
 
         Object compactLayout = layoutMethod.invoke(null, 427, 240);
         int compactFooterY = readInt(layoutType, compactLayout, "footerY");
+        int compactColumns = readInt(layoutType, compactLayout, "columns");
+        int compactItemsPerPage = readInt(layoutType, compactLayout, "itemsPerPage");
+        assertEquals(4, compactColumns, "compact screens fall back to four gallery columns");
+        assertEquals(8, compactItemsPerPage, "compact screens show two rows of four items");
         assertTrue(compactFooterY + 20 <= 240, "unified gallery footer stays on-screen at compact GUI heights");
     }
 
