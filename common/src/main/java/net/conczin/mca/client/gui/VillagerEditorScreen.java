@@ -56,6 +56,8 @@ import java.util.function.Supplier;
 
 public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpdateListener {
     protected static final int DATA_WIDTH = 175;
+    private static final VillagerEditorAppearancePanelPolicy.PanelLayout APPEARANCE_PANEL_LAYOUT =
+            VillagerEditorAppearancePanelPolicy.layout(DATA_WIDTH);
     private static final int TRAITS_PER_PAGE = 8;
     private static final int LAYERED_HAIR_PER_PAGE = 6;
     private static final float MIN_PREVIEW_ZOOM = 0.7F;
@@ -413,11 +415,10 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
                 textFieldWidget.setValue(villagerUUID.toString());
             }
             case "body" -> {
-                addCharacterSubpageTabs(y, "body");
-                y += 24;
+                y = addCharacterSubpageTabs(y, "body");
 
                 y = addSkinSelectionWidgets(y);
-                y += 4;
+                y += APPEARANCE_PANEL_LAYOUT.groupGap();
 
                 //genes
                 if (!Config.getServerConfig().allowPlayerSizeAdjustment && villagerUUID.equals(playerUUID)) {
@@ -431,8 +432,12 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
                     y += 24;
                 }
 
-                addGeneSlider(width / 2, y, DATA_WIDTH / 2, Genetics.BREAST);
-                addRenderableWidget(new TooltipButtonWidget(width / 2 + DATA_WIDTH / 2, y, DATA_WIDTH / 2, 20,
+                addGeneSlider(width / 2, y, APPEARANCE_PANEL_LAYOUT.leftActionWidth(), Genetics.BREAST);
+                addRenderableWidget(new TooltipButtonWidget(
+                        width / 2 + APPEARANCE_PANEL_LAYOUT.leftActionWidth() + APPEARANCE_PANEL_LAYOUT.actionGap(),
+                        y,
+                        APPEARANCE_PANEL_LAYOUT.rightActionWidth(),
+                        20,
                         Component.translatable("gui.villager_editor.skin_color_selection", Component.translatable(hsvColoredSkin ? "gui.villager_editor.color_mode_rgb" : "gui.villager_editor.color_mode_natural")),
                         Component.translatable("gui.villager_editor.skin_color_mode.tooltip"),
                         b -> {
@@ -470,7 +475,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
                     loadDyeIntoColorSelector(villager.getSkinDye());
                     addRgbColorSliders(y + 8, this::refreshSkinColor);
                 } else {
-                    int pickerSize = fitColorPickerSize(y + 8, 120);
+                    int pickerSize = fitColorPickerSize(y + 8, 112);
                     int pickerX = width / 2 + (DATA_WIDTH - pickerSize) / 2;
                     addRenderableWidget(new ColorPickerWidget(pickerX, y + 8, pickerSize, pickerSize,
                             genetics.getGene(Genetics.HEMOGLOBIN),
@@ -484,11 +489,10 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
                 }
             }
             case "clothing_style" -> {
-                addCharacterSubpageTabs(y, "clothing_style");
-                y += 24;
+                y = addCharacterSubpageTabs(y, "clothing_style");
 
                 addCycleCommandRow(y, "clothing", getClothingText());
-                y += 22;
+                y += 20 + APPEARANCE_PANEL_LAYOUT.rowGap();
 
                 addAppearanceActionRow(
                         y,
@@ -499,11 +503,10 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
                 );
             }
             case "hair_style" -> {
-                addCharacterSubpageTabs(y, "hair_style");
-                y += 24;
+                y = addCharacterSubpageTabs(y, "hair_style");
 
                 addCycleCommandRow(y, "hair", getHairStyleText());
-                y += 22;
+                y += 20 + APPEARANCE_PANEL_LAYOUT.rowGap();
 
                 addAppearanceActionRow(
                         y,
@@ -512,10 +515,13 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
                         Component.translatable("gui.villager_editor.selectHair"),
                         () -> setPage("hair")
                 );
-                y += 22;
+                y += 20 + APPEARANCE_PANEL_LAYOUT.groupGap();
 
-                // Hair color mode stays with the color controls instead of competing with selection controls.
-                addRenderableWidget(new TooltipButtonWidget(width / 2, y, DATA_WIDTH, 20,
+                addRenderableWidget(new TooltipButtonWidget(
+                        width / 2,
+                        y,
+                        APPEARANCE_PANEL_LAYOUT.leftActionWidth(),
+                        20,
                         Component.translatable(hsvColoredHair ? "gui.villager_editor.hair_hsv" : "gui.villager_editor.hair_genetic"),
                         Component.translatable("gui.villager_editor.hair_mode.tooltip"),
                         b -> {
@@ -525,14 +531,16 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
                             }
                             init();
                         }));
-                y += 22;
-
-                int advancedHairWidth = 120;
-                addRenderableWidget(new ButtonWidget(width / 2 + (DATA_WIDTH - advancedHairWidth) / 2, y, advancedHairWidth, 20,
+                addRenderableWidget(new ButtonWidget(
+                        width / 2 + APPEARANCE_PANEL_LAYOUT.leftActionWidth() + APPEARANCE_PANEL_LAYOUT.actionGap(),
+                        y,
+                        APPEARANCE_PANEL_LAYOUT.rightActionWidth(),
+                        20,
                         Component.translatable("gui.villager_editor.advancedHair"), b -> {
+                    // Advanced hair intentionally keeps its legacy editor flow.
                     setPage("hair_advanced");
                 }));
-                y += 24;
+                y += 20 + APPEARANCE_PANEL_LAYOUT.groupGap();
 
                 //hair color
                 if (hsvColoredHair) {
@@ -600,7 +608,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
 
                     y += 65;
                 } else {
-                    int pickerSize = fitColorPickerSize(y, 120);
+                    int pickerSize = fitColorPickerSize(y, 112);
                     int pickerX = width / 2 + (DATA_WIDTH - pickerSize) / 2;
                     addRenderableWidget(new ColorPickerWidget(pickerX, y, pickerSize, pickerSize,
                             genetics.getGene(Genetics.PHEOMELANIN),
@@ -613,8 +621,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
                 }
             }
             case "eyes" -> {
-                addCharacterSubpageTabs(y, "eyes");
-                y += 24;
+                y = addCharacterSubpageTabs(y, "eyes");
 
                 boolean hasHetero = villager.getTraits().hasTrait(Traits.HETEROCHROMIA);
                 int maxTarget = hasHetero ? 2 : 1;
@@ -623,11 +630,12 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
                 }
 
                 y = addEyeTextureChanger(y);
+                y += APPEARANCE_PANEL_LAYOUT.groupGap();
                 addGeneSlider(width / 2, y, DATA_WIDTH, Genetics.EYE_BRIGHTNESS);
-                y += 22;
+                y += 20 + APPEARANCE_PANEL_LAYOUT.rowGap();
 
                 if (hasHetero) {
-                    addRenderableWidget(new ButtonWidget(width / 2, y, DATA_WIDTH / 2, 20,
+                    addRenderableWidget(new ButtonWidget(width / 2, y, APPEARANCE_PANEL_LAYOUT.leftActionWidth(), 20,
                             Component.translatable(eyeColorTarget == 1 ? "gui.villager_editor.customize_eyes_left" : "gui.villager_editor.customize_eyes_right"),
                             b -> {
                                 eyeColorTarget = eyeColorTarget == 1 ? 2 : 1;
@@ -635,7 +643,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
                                 init();
                             }));
                 } else {
-                    addRenderableWidget(new TooltipButtonWidget(width / 2, y, DATA_WIDTH / 2, 20,
+                    addRenderableWidget(new TooltipButtonWidget(width / 2, y, APPEARANCE_PANEL_LAYOUT.leftActionWidth(), 20,
                             Component.translatable("gui.villager_editor.customize_eyes"),
                             Component.translatable("gui.villager_editor.heterochromia_required.tooltip"),
                             b -> {
@@ -643,7 +651,11 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
                 }
 
                 boolean activeHsv = eyeColorTarget == 1 ? hsvColoredEyes : hsvColoredEyesLeft;
-                addRenderableWidget(new TooltipButtonWidget(width / 2 + DATA_WIDTH / 2, y, DATA_WIDTH / 2, 20,
+                addRenderableWidget(new TooltipButtonWidget(
+                        width / 2 + APPEARANCE_PANEL_LAYOUT.leftActionWidth() + APPEARANCE_PANEL_LAYOUT.actionGap(),
+                        y,
+                        APPEARANCE_PANEL_LAYOUT.rightActionWidth(),
+                        20,
                         Component.translatable(activeHsv ? "gui.villager_editor.eye_hsv" : "gui.villager_editor.eye_genetic"),
                         Component.translatable("gui.villager_editor.eye_mode.tooltip"),
                         b -> {
@@ -1105,12 +1117,18 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
         return y + 22;
     }
 
-    private void addCharacterSubpageTabs(int y, String selectedPage) {
-        int tabWidth = DATA_WIDTH / 4;
-        addCharacterSubpageTab(width / 2, y, tabWidth, "body", selectedPage);
-        addCharacterSubpageTab(width / 2 + tabWidth, y, tabWidth, "clothing_style", selectedPage);
-        addCharacterSubpageTab(width / 2 + tabWidth * 2, y, tabWidth, "hair_style", selectedPage);
-        addCharacterSubpageTab(width / 2 + tabWidth * 3, y, DATA_WIDTH - tabWidth * 3, "eyes", selectedPage);
+    private int addCharacterSubpageTabs(int y, String selectedPage) {
+        int tabWidth = APPEARANCE_PANEL_LAYOUT.tabWidth();
+        int tabGap = APPEARANCE_PANEL_LAYOUT.tabGap();
+        int x = width / 2;
+        addCharacterSubpageTab(x, y, tabWidth, "body", selectedPage);
+        x += tabWidth + tabGap;
+        addCharacterSubpageTab(x, y, tabWidth, "clothing_style", selectedPage);
+        x += tabWidth + tabGap;
+        addCharacterSubpageTab(x, y, tabWidth, "hair_style", selectedPage);
+        x += tabWidth + tabGap;
+        addCharacterSubpageTab(x, y, APPEARANCE_PANEL_LAYOUT.lastTabWidth(), "eyes", selectedPage);
+        return y + 20 + APPEARANCE_PANEL_LAYOUT.groupGap();
     }
 
     private void addCharacterSubpageTab(int x, int y, int width, String page, String selectedPage) {
@@ -1121,16 +1139,17 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
     }
 
     private void addCycleCommandRow(int y, String command, Component label) {
-        addRenderableWidget(new ButtonWidget(width / 2, y, 25, 20, Component.literal("<"), b -> {
+        int arrowWidth = APPEARANCE_PANEL_LAYOUT.cycleArrowWidth();
+        addRenderableWidget(new ButtonWidget(width / 2, y, arrowWidth, 20, Component.literal("<"), b -> {
             if (command.equals("clothing")) {
                 cycleClothing(-1);
             } else if (command.equals("hair")) {
                 cycleHairStyle(-1);
             }
         }));
-        addRenderableWidget(new ButtonWidget(width / 2 + 25, y, DATA_WIDTH - 50, 20, label, b -> {
+        addRenderableWidget(new ButtonWidget(width / 2 + arrowWidth, y, DATA_WIDTH - arrowWidth * 2, 20, label, b -> {
         })).active = false;
-        addRenderableWidget(new ButtonWidget(width / 2 + DATA_WIDTH - 25, y, 25, 20, Component.literal(">"), b -> {
+        addRenderableWidget(new ButtonWidget(width / 2 + DATA_WIDTH - arrowWidth, y, arrowWidth, 20, Component.literal(">"), b -> {
             if (command.equals("clothing")) {
                 cycleClothing(1);
             } else if (command.equals("hair")) {
@@ -1140,8 +1159,15 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
     }
 
     private void addAppearanceActionRow(int y, Component randomLabel, Runnable randomAction, Component selectLabel, Runnable selectAction) {
-        addRenderableWidget(new ButtonWidget(width / 2, y, DATA_WIDTH / 2, 20, randomLabel, b -> randomAction.run()));
-        addRenderableWidget(new ButtonWidget(width / 2 + DATA_WIDTH / 2, y, DATA_WIDTH / 2, 20, selectLabel, b -> selectAction.run()));
+        addRenderableWidget(new ButtonWidget(width / 2, y, APPEARANCE_PANEL_LAYOUT.leftActionWidth(), 20, randomLabel, b -> randomAction.run()));
+        addRenderableWidget(new ButtonWidget(
+                width / 2 + APPEARANCE_PANEL_LAYOUT.leftActionWidth() + APPEARANCE_PANEL_LAYOUT.actionGap(),
+                y,
+                APPEARANCE_PANEL_LAYOUT.rightActionWidth(),
+                20,
+                selectLabel,
+                b -> selectAction.run()
+        ));
     }
 
     private int addSkinSelectionWidgets(int y) {
@@ -1149,16 +1175,17 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
             addRenderableWidget(new ButtonWidget(width / 2, y, DATA_WIDTH, 20, Component.translatable("gui.loading"), b -> {
             })).active = false;
         } else {
-            addRenderableWidget(new ButtonWidget(width / 2, y, 25, 20, Component.literal("<"), b -> {
+            int arrowWidth = APPEARANCE_PANEL_LAYOUT.cycleArrowWidth();
+            addRenderableWidget(new ButtonWidget(width / 2, y, arrowWidth, 20, Component.literal("<"), b -> {
                 cycleSkin(-1);
             }));
-            addRenderableWidget(new ButtonWidget(width / 2 + 25, y, DATA_WIDTH - 50, 20, getSkinIndexText(), b -> {
+            addRenderableWidget(new ButtonWidget(width / 2 + arrowWidth, y, DATA_WIDTH - arrowWidth * 2, 20, getSkinIndexText(), b -> {
             })).active = false;
-            addRenderableWidget(new ButtonWidget(width / 2 + DATA_WIDTH - 25, y, 25, 20, Component.literal(">"), b -> {
+            addRenderableWidget(new ButtonWidget(width / 2 + DATA_WIDTH - arrowWidth, y, arrowWidth, 20, Component.literal(">"), b -> {
                 cycleSkin(1);
             }));
         }
-        y += 22;
+        y += 20 + APPEARANCE_PANEL_LAYOUT.rowGap();
 
         addAppearanceActionRow(
                 y,
@@ -1167,7 +1194,7 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
                 Component.translatable("gui.villager_editor.selectSkin"),
                 () -> setPage("skin")
         );
-        return y + 24;
+        return y + 20;
     }
 
     private List<Clothing> getClothingChoices() {
