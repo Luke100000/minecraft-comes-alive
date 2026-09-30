@@ -62,6 +62,7 @@ public class HairStyleList extends SimpleJsonResourceReloadListener {
 
     public WeightedPool<String> getPool(Gender gender) {
         return getStyles(gender).stream()
+                .filter(style -> !style.exclude())
                 .collect(() -> new WeightedPool.Mutable<>("mca:missing"),
                         (list, entry) -> list.add(entry.getIdentifier(), entry.getChance()),
                         (a, b) -> a.entries.addAll(b.entries));
