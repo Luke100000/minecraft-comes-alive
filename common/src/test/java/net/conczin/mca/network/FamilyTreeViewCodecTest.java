@@ -108,8 +108,38 @@ class FamilyTreeViewCodecTest {
         }
     }
 
+    @Test
+    void searchEntryRoundTripsRecordedParentMetadataAndDeceasedState() {
+        FamilyTreeSearchEntry entry = new FamilyTreeSearchEntry(
+                ROOT,
+                "Root",
+                true,
+                "Father",
+                true,
+                "",
+                true
+        );
+
+        FamilyTreeSearchEntry decoded = roundTripByteBuf(FamilyTreeSearchEntry.STREAM_CODEC, entry);
+
+        assertEquals(entry, decoded);
+        assertTrue(decoded.fatherRecorded());
+        assertTrue(decoded.motherRecorded());
+        assertTrue(decoded.deceased());
+    }
+
     private static <T> T roundTrip(StreamCodec<FriendlyByteBuf, T> codec, T value) {
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
+        try {
+            codec.encode(buffer, value);
+            return codec.decode(buffer);
+        } finally {
+            buffer.release();
+        }
+    }
+
+    private static <T> T roundTripByteBuf(StreamCodec<io.netty.buffer.ByteBuf, T> codec, T value) {
+        io.netty.buffer.ByteBuf buffer = Unpooled.buffer();
         try {
             codec.encode(buffer, value);
             return codec.decode(buffer);

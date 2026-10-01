@@ -155,18 +155,9 @@ public class FamilyTreeSearchScreen extends Screen {
     }
 
     private Component relationshipLabel(FamilyTreeSearchEntry entry) {
-        return Component.literal(entry.name()).append(" - ").append(childOfLabel(entry));
-    }
-
-    private Component childOfLabel(FamilyTreeSearchEntry entry) {
-        if (MCA.isBlankString(entry.mother()) && MCA.isBlankString(entry.father())) {
-            return Component.translatable("gui.family_tree.child_of_0");
-        } else if (MCA.isBlankString(entry.mother())) {
-            return Component.translatable("gui.family_tree.child_of_1", entry.father());
-        } else if (MCA.isBlankString(entry.father())) {
-            return Component.translatable("gui.family_tree.child_of_1", entry.mother());
-        } else {
-            return Component.translatable("gui.family_tree.child_of_2", entry.father(), entry.mother());
-        }
+        Component name = FamilyTreeSearchPresentation.displayName(entry);
+        return FamilyTreeSearchPresentation.parentLine(entry)
+                .<Component>map(parent -> Component.empty().append(name).append(" - ").append(parent))
+                .orElse(name);
     }
 }
