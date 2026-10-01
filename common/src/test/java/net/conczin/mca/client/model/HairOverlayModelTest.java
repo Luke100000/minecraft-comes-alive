@@ -76,6 +76,20 @@ class HairOverlayModelTest {
     }
 
     @Test
+    void hairUsesVanillaPlayerOuterLayerSpacing() throws Exception {
+        ModelPart hairRoot = bakedHair(MCALayerDefinitions.VILLAGER_HAIR_DILATION);
+        Bounds head = bounds(hairRoot.getChild("head"));
+        Bounds hat = bounds(hairRoot.getChild("hat"));
+        Bounds body = bounds(hairRoot.getChild("body"));
+        Bounds jacket = bounds(hairRoot.getChild("jacket"));
+
+        assertEquals(0.5F, hat.maxX() - head.maxX(), 0.00001F, "Vanilla hat spacing should be preserved");
+        assertEquals(0.5F, head.minX() - hat.minX(), 0.00001F, "Vanilla hat spacing should be symmetric");
+        assertEquals(0.25F, jacket.maxX() - body.maxX(), 0.00001F, "Vanilla jacket spacing should be preserved");
+        assertEquals(0.25F, body.minX() - jacket.minX(), 0.00001F, "Vanilla jacket spacing should be symmetric");
+    }
+
+    @Test
     void hairAndClothingFollowTheExistingVanillaPlayerPose() {
         for (boolean slim : new boolean[]{false, true}) {
             PlayerModel<LivingEntity> parent = new PlayerModel<>(LayerDefinition.create(
@@ -151,9 +165,33 @@ class HairOverlayModelTest {
         return result;
     }
 
+    private static Bounds bounds(ModelPart part) throws ReflectiveOperationException {
+        float minX = Float.POSITIVE_INFINITY;
+        float minY = Float.POSITIVE_INFINITY;
+        float minZ = Float.POSITIVE_INFINITY;
+        float maxX = Float.NEGATIVE_INFINITY;
+        float maxY = Float.NEGATIVE_INFINITY;
+        float maxZ = Float.NEGATIVE_INFINITY;
+        for (Object polygon : polygons(part)) {
+            for (Object vertex : (Object[]) field(polygon, "vertices")) {
+                Vector3f pos = (Vector3f) field(vertex, "pos");
+                minX = Math.min(minX, pos.x());
+                minY = Math.min(minY, pos.y());
+                minZ = Math.min(minZ, pos.z());
+                maxX = Math.max(maxX, pos.x());
+                maxY = Math.max(maxY, pos.y());
+                maxZ = Math.max(maxZ, pos.z());
+            }
+        }
+        return new Bounds(minX, minY, minZ, maxX, maxY, maxZ);
+    }
+
     private static Object field(Object target, String name) throws ReflectiveOperationException {
         Field field = target.getClass().getDeclaredField(name);
         field.setAccessible(true);
         return field.get(target);
+    }
+
+    private record Bounds(float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
     }
 }

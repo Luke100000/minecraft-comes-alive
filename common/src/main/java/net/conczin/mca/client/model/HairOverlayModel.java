@@ -6,25 +6,26 @@ import net.conczin.mca.entity.VillagerLike;
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.model.geom.PartNames;
 import net.minecraft.world.entity.LivingEntity;
 
 import java.util.List;
 
 public final class HairOverlayModel<T extends LivingEntity> extends EntityModel<T> implements VillagerLayerModel<T> {
     private static final float SURFACE_SEPARATION = 0.005F;
-    private final ModelPart root;
     private final ModelPart head;
     private final ModelPart hat;
     private final ModelPart body;
+    private final ModelPart jacket;
     private final ModelPart breastTransform;
     private final ModelPart breasts;
     private final List<ModelPart> breastParts;
 
     public HairOverlayModel(ModelPart root, float clothingDilation) {
-        this.root = root;
-        head = root.getChild("head");
-        hat = root.getChild("hat");
-        body = root.getChild("body");
+        head = root.getChild(PartNames.HEAD);
+        hat = root.getChild(PartNames.HAT);
+        body = root.getChild(PartNames.BODY);
+        jacket = root.getChild(PartNames.JACKET);
         breastTransform = body.getChild(MCAModelGeometry.BREAST_TRANSFORM);
         breasts = breastTransform.getChild(MCAModelGeometry.BREASTS);
         breastParts = List.of(breasts);
@@ -52,10 +53,12 @@ public final class HairOverlayModel<T extends LivingEntity> extends EntityModel<
         head.copyFrom(parent.head);
         hat.copyFrom(parent.hat);
         body.copyFrom(parent.body);
+        jacket.copyFrom(parent.body);
 
         head.visible = parent.head.visible;
         hat.visible = parent.head.visible && parent.hat.visible;
         body.visible = parent.body.visible;
+        jacket.visible = parent.body.visible;
         breastTransform.visible = parent.body.visible;
         breasts.visible = parent.body.visible;
     }
@@ -72,6 +75,9 @@ public final class HairOverlayModel<T extends LivingEntity> extends EntityModel<
 
     @Override
     public void renderToBuffer(PoseStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
-        root.render(matrices, vertices, light, overlay, color);
+        head.render(matrices, vertices, light, overlay, color);
+        hat.render(matrices, vertices, light, overlay, color);
+        body.render(matrices, vertices, light, overlay, color);
+        jacket.render(matrices, vertices, light, overlay, color);
     }
 }

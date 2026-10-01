@@ -39,34 +39,8 @@ public final class MCAModelGeometry {
     }
 
     public static MeshDefinition hairData(float dilation) {
-        CubeDeformation deformation = new CubeDeformation(dilation);
-        MeshDefinition mesh = new MeshDefinition();
-        PartDefinition root = mesh.getRoot();
-        root.addOrReplaceChild(
-                PartNames.HEAD,
-                CubeListBuilder.create().texOffs(0, 0)
-                        .addBox(-4, -8, -4, 8, 8, 8, deformation),
-                PartPose.ZERO
-        );
-        root.addOrReplaceChild(
-                PartNames.HAT,
-                CubeListBuilder.create().texOffs(32, 0)
-                        .addBox(-4, -8, -4, 8, 8, 8, deformation.extend(0.3F)),
-                PartPose.ZERO
-        );
-        PartDefinition body = root.addOrReplaceChild(
-                PartNames.BODY,
-                CubeListBuilder.create().texOffs(16, 16)
-                        .addBox(-4, 0, -2, 8, 12, 4, deformation),
-                PartPose.ZERO
-        );
-        body.addOrReplaceChild(
-                "jacket",
-                CubeListBuilder.create().texOffs(16, 32)
-                        .addBox(-4, 0, -2, 8, 12, 4, deformation.extend(0.25F)),
-                PartPose.ZERO
-        );
-        addHairBreastParts(body);
+        MeshDefinition mesh = PlayerModel.createMesh(new CubeDeformation(dilation), false);
+        addHairBreastParts(mesh.getRoot().getChild(PartNames.BODY));
         return mesh;
     }
 
