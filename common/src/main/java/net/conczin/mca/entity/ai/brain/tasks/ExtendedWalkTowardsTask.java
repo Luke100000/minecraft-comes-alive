@@ -5,9 +5,11 @@ import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.navigation.LongDistancePathTarget;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
+import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.behavior.OneShot;
 import net.minecraft.world.entity.ai.behavior.PositionTracker;
 import net.minecraft.world.entity.ai.behavior.declarative.BehaviorBuilder;
@@ -20,6 +22,8 @@ import java.util.function.Predicate;
 
 public final class ExtendedWalkTowardsTask {
     private static final long UNREACHABLE_PATH_RETRY_TICKS = 20L;
+    private static final long STALLED_DESTINATION_RETRY_TICKS = 100L;
+    private static final double STALLED_DESTINATION_PROGRESS_SQR = 16.0D;
     private static final WalkTargetResolver NO_WALK_TARGET_OVERRIDE = (world, entity, destination) -> Optional.empty();
     private static final PositionTrackerResolver NO_FINAL_TARGET_OVERRIDE = (world, entity, destination) -> Optional.empty();
     private static final Predicate<VillagerEntityMCA> ALWAYS_WALK = entity -> true;
@@ -72,6 +76,10 @@ public final class ExtendedWalkTowardsTask {
     }
 
     private static OneShot<VillagerEntityMCA> createInternal(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, Policy policy) {
+        WalkTargetRetryGate retryGate = new WalkTargetRetryGate(
+                STALLED_DESTINATION_RETRY_TICKS,
+                STALLED_DESTINATION_PROGRESS_SQR,
+                1);
         return BehaviorBuilder.create((context) -> {
             return context.group(
                     context.registered(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
@@ -93,7 +101,23 @@ public final class ExtendedWalkTowardsTask {
                             boolean sameDimension = globalPos.dimension() == world.dimension();
                             WalkTargetFailureMemory.clearIfTargetChanged(entity, failureTarget);
 
+                            // A long partial route may take longer than maxRunTime even while
+                            // making progress. Vanilla's CANT_REACH timestamp is only reset
+                            // by a fully reachable result, so clear stale failure evidence
+                            // when this villager has actually traversed another segment.
                             Optional<WalkTarget> currentWalkTarget = context.tryGet(walkTarget);
+                            // Only HOME's own transit (or the gap between segments)
+                            // can resolve HOME's failure. Combat or another producer
+                            // may move the villager without making progress on HOME.
+                            boolean ownsMovement = currentWalkTarget.isEmpty()
+                                    || (currentWalkTarget.orElseThrow().getTarget()
+                                            instanceof BlockPosTracker transit
+                                    && transit.currentBlockPosition().equals(targetPos));
+                            if (sameDimension && ownsMovement
+                                    && retryGate.noteProgress(targetPos, entity.blockPosition(), time)) {
+                                WalkTargetFailureMemory.clear(entity);
+                            }
+
                             if (currentWalkTarget.isPresent()) {
                                 PositionTracker currentTarget = currentWalkTarget.orElseThrow().getTarget();
                                 if (!(currentTarget instanceof LongDistancePathTarget longDistanceTarget)) {
@@ -121,24 +145,42 @@ public final class ExtendedWalkTowardsTask {
                                     return true;
                                 }
 
+                                WalkTarget proposedTarget = null;
                                 if (MCAGroundPathNavigation.requiresExtendedPath(entity, targetPos)) {
-                                    walkTarget.set(new WalkTarget(
+                                    proposedTarget = new WalkTarget(
                                             new LongDistancePathTarget(targetPos),
                                             speed,
                                             targetCompletionRange
-                                    ));
+                                    );
                                 } else {
                                     Optional<? extends PositionTracker> finalTarget = policy.finalTargetResolver().resolve(world, entity, globalPos);
                                     if (finalTarget.isEmpty()) {
                                         if (targetPos.distManhattan(entity.blockPosition()) > targetCompletionRange) {
-                                            walkTarget.set(new WalkTarget(targetPos, speed, targetCompletionRange));
+                                            proposedTarget = new WalkTarget(targetPos, speed, targetCompletionRange);
                                         }
                                     } else {
                                         PositionTracker tracker = finalTarget.orElseThrow();
                                         if (!(tracker instanceof MultiTargetPositionTracker multiTarget)
                                                 || !multiTarget.isReached(entity, 0)) {
-                                            walkTarget.set(new WalkTarget(tracker, speed, 0));
+                                            proposedTarget = new WalkTarget(tracker, speed, 0);
                                         }
+                                    }
+                                }
+                                if (proposedTarget != null) {
+                                    if (retryGate.tryReserve(targetPos, entity.blockPosition(), time)) {
+                                        PathRequestDiagnostics.tagDestinationMemory(proposedTarget, destination);
+                                        walkTarget.set(proposedTarget);
+                                    } else {
+                                        // A partial path can clear vanilla's failure timestamp even
+                                        // when the villager never moves. Retain failure ownership so
+                                        // a permanently blocked POI can still expire.
+                                        if (optional.isEmpty()) {
+                                            WalkTargetFailureMemory.record(entity, failureTarget, retryGate.stalledSince());
+                                        }
+                                        PathRequestDiagnostics.recordDeferredProducerRetry(entity,
+                                                "ExtendedWalkTowardsTask", destination.toString(),
+                                                retryGate.previousOrigin(), targetPos.toShortString(),
+                                                time - retryGate.previousAttemptTime());
                                     }
                                 }
                             } else {

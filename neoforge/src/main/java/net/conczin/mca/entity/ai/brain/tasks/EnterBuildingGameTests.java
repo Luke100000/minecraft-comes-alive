@@ -20,6 +20,7 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
@@ -131,6 +132,8 @@ public final class EnterBuildingGameTests {
         villager.setNoAi(true);
 
         Building building = buildingWithFloorCells(min, max, floorCells);
+        helper.assertTrue(building.getFloorCells().equals(floorCells),
+                "fixture did not preserve the registered room floor cells");
         Optional<BlockPos> selected = new TargetSelectionProbe().select(building, helper.getLevel(), villager);
 
         String diagnostics = floorCells.stream()
@@ -148,6 +151,45 @@ public final class EnterBuildingGameTests {
                 "enter-building selected an elevated/non-floor position instead of registered room floor geometry");
 
         villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_enter_building_nearest_selection", templateNamespace = "minecraft",
+            template = "bastion/blocks/air")
+    public static void nearestBuildingResolvesDynamicTypeOncePerScan(GameTestHelper helper) {
+        BlockPos origin = helper.absolutePos(new BlockPos(4, 2, 4));
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(origin))
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.setNoAi(true);
+        try {
+            Building farHouse = new Building(origin.east(8));
+            Building library = new Building(origin.east());
+            library.setType("library");
+            Building nearestHouse = new Building(origin.east(3));
+            Building tiedHouse = new Building(origin.south(3));
+            List<Building> candidates = List.of(farHouse, library, nearestHouse, tiedHouse);
+            NearestBuildingProbe task = new NearestBuildingProbe();
+
+            helper.assertTrue(task.select(villager, candidates).orElse(null) == nearestHouse,
+                    "nearest matching room or stable equal-distance ordering changed");
+            helper.assertTrue(task.typeResolutions == 1,
+                    "favored building type was resolved more than once in the same scan: "
+                            + task.typeResolutions);
+
+            task.wantedType = "library";
+            helper.assertTrue(task.select(villager, candidates).orElse(null) == library,
+                    "a later selection reused the old favored building type");
+            helper.assertTrue(task.typeResolutions == 2,
+                    "each independent nearest-room scan must resolve its dynamic type once");
+
+            task.wantedType = "missing";
+            helper.assertTrue(task.select(villager, candidates).isEmpty()
+                            && task.typeResolutions == 3,
+                    "a missing favored room must return empty after one type resolution");
+        } finally {
+            villager.discard();
+        }
         helper.succeed();
     }
 
@@ -198,6 +240,25 @@ public final class EnterBuildingGameTests {
 
         private Optional<BlockPos> select(Building building, Level level, VillagerEntityMCA villager) {
             return getRandomPositionIn(building, level, villager);
+        }
+    }
+
+    private static final class NearestBuildingProbe extends EnterBuildingTask {
+        private String wantedType = "house";
+        private int typeResolutions;
+
+        private NearestBuildingProbe() {
+            super("", 0.5F);
+        }
+
+        @Override
+        public String getBuilding(VillagerEntityMCA villager) {
+            typeResolutions++;
+            return wantedType;
+        }
+
+        private Optional<Building> select(VillagerEntityMCA villager, List<Building> candidates) {
+            return getNearestBuilding(villager, candidates);
         }
     }
 }

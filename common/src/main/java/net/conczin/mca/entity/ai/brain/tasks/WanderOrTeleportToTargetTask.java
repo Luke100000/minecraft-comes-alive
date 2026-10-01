@@ -59,22 +59,35 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         WalkTarget walkTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
         super.start(world, entity, gameTime);
         Path path = entity.getNavigation().getPath();
+        // A nearby HOME can require a long detour. Keep its already-computed
+        // reachable route alive instead of timing out and walking back toward HOME.
+        boolean longReachableRoute = path != null && path.canReach() && path.getEndNode() != null
+                && walkTarget != null && path.getTarget().equals(walkTarget.getTarget().currentBlockPosition())
+                && path.getEndNode().walkedDistance > MCAGroundPathNavigation.getOrdinaryPathLength(entity);
         this.extendedMovementLifetime = walkTarget != null
                 && walkTarget.getTarget() instanceof BlockPosTracker
-                && MCAGroundPathNavigation.requiresExtendedPath(
+                && (longReachableRoute || MCAGroundPathNavigation.requiresExtendedPath(
                         entity,
                         walkTarget.getTarget().currentBlockPosition()
-                );
+                ));
         if (walkTarget != null
                 && walkTarget.getTarget() instanceof BlockPosTracker
                 && path != null
                 && !entity.getNavigation().isStuck()
                 && MCAGroundPathNavigation.isUsefulPartialPath(
-                        path,
-                        walkTarget.getTarget().currentBlockPosition()
+                        path, walkTarget.getTarget().currentBlockPosition()
                 )) {
             if (entity instanceof VillagerEntityMCA villager) {
-                WalkTargetFailureMemory.clear(villager);
+                // A fresh useful segment is optimistic progress and must be able
+                // to chain immediately. A previous failure episode for this same
+                // destination must survive another no-movement partial attempt.
+                BlockPos destination = walkTarget.getTarget().currentBlockPosition();
+                boolean priorFailure = WalkTargetFailureMemory.hasFailureFor(villager, destination)
+                        && villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                        .filter(since -> since < gameTime).isPresent();
+                if (!priorFailure) {
+                    WalkTargetFailureMemory.clear(villager);
+                }
             } else {
                 entity.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
             }

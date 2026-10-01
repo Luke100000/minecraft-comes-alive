@@ -180,8 +180,8 @@ public final class WanderOrTeleportToTargetTaskGameTests {
     }
 
     @GameTest(batch = "mca_walk_target_timeout_scope", templateNamespace = "minecraft",
-            template = "bastion/blocks/air", timeoutTicks = 400)
-    public static void nearbyExtendedDetourKeepsVanillaMovementTimeout(GameTestHelper helper) {
+            template = "bastion/blocks/air", timeoutTicks = 1_000)
+    public static void nearbyReachableLongDetourCanFinishWithoutMovementTimeout(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(40, 1, 40));
         BlockPos target = start.east(2);
         prepareFlatArea(helper, start, 30, 3);
@@ -210,7 +210,8 @@ public final class WanderOrTeleportToTargetTaskGameTests {
         Path ordinary = villager.getNavigation().createPath(target, 0);
         helper.assertTrue(ordinary != null && !ordinary.canReach(),
                 "fixture ordinary path unexpectedly solved the long nearby detour");
-        brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.35F, 0));
+        villager.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(0.5D);
+        brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.5F, 0));
 
         WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
         long startedAt = helper.getLevel().getGameTime();
@@ -228,24 +229,49 @@ public final class WanderOrTeleportToTargetTaskGameTests {
                 "fixture did not select the reachable extended detour");
         helper.assertTrue(!MCAGroundPathNavigation.requiresExtendedPath(villager, target),
                 "fixture target must remain inside the ordinary geometric range");
+        helper.assertTrue(!sink.timedOut(startedAt + 251L),
+                "long reachable route did not qualify for extended lifetime; nodes=" + path.getNodeCount()
+                        + ", walkedDistance=" + path.getEndNode().walkedDistance
+                        + ", pathTarget=" + path.getTarget() + ", walkTarget=" + target);
 
-        // This test owns the sink lifecycle, not physical travel. Freeze entity AI so
-        // a completed route cannot turn the timeout assertion into a path-end test.
-        villager.setNoAi(true);
-
+        boolean[] continuedAfterVanillaTimeout = {false};
+        boolean[] madePhysicalProgress = {false};
         helper.onEachTick(() -> {
             long gameTime = helper.getLevel().getGameTime();
             sink.tickOrStop(helper.getLevel(), villager, gameTime);
+            madePhysicalProgress[0] |= villager.blockPosition().distSqr(start) >= 16.0D;
             if (gameTime - startedAt < 260L) {
                 return;
             }
 
-            helper.assertTrue(!villager.blockPosition().equals(target),
-                    "fixture reached the target before exercising the vanilla timeout window");
-            helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty(),
-                    "nearby extended-horizon fallback incorrectly suppressed the vanilla movement timeout");
-            villager.discard();
-            helper.succeed();
+            if (villager.blockPosition().equals(target)) {
+                helper.assertTrue(continuedAfterVanillaTimeout[0],
+                        "fixture did not exercise natural movement beyond the vanilla timeout");
+                villager.discard();
+                helper.succeed();
+            } else {
+                helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).isPresent(),
+                        "reachable long detour lost its WALK_TARGET; position=" + villager.position()
+                                + ", path=" + villager.getNavigation().getPath()
+                                + ", stuck=" + villager.getNavigation().isStuck()
+                                + ", timedOut=" + sink.timedOut(gameTime));
+                helper.assertTrue(madePhysicalProgress[0],
+                        "long detour kept a movement behavior without physical progress");
+                continuedAfterVanillaTimeout[0] = true;
+            }
+            if (gameTime - startedAt >= 950L) {
+                Path active = villager.getNavigation().getPath();
+                helper.fail("long detour did not finish; position=" + villager.position()
+                        + ", entityTicks=" + villager.tickCount
+                        + ", entityTicking=" + helper.getLevel().isPositionEntityTicking(villager.blockPosition())
+                        + ", noAi=" + villager.isNoAi() + ", width=" + villager.getBbWidth()
+                        + ", speed=" + villager.getSpeed() + ", grounded=" + villager.onGround()
+                        + ", movement=" + villager.getDeltaMovement()
+                        + ", path=" + active
+                        + ", next=" + (active == null ? null : active.getNextNodeIndex())
+                        + ", node=" + (active == null || active.isDone() ? null : active.getNextNodePos())
+                        + ", wanted=" + (active == null || active.isDone() ? null : active.getNextEntityPos(villager)));
+            }
         });
     }
 

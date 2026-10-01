@@ -7,6 +7,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
+import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.PathfinderMob;
@@ -80,18 +81,23 @@ abstract class MixinMoveToTargetSink {
             WalkTarget walkTarget,
             long gameTime
     ) {
-        if (!(walkTarget.getTarget() instanceof MultiTargetPositionTracker multiTarget)) {
-            return original.call(navigation, target, reachRange);
-        }
+        PathRequestDiagnostics.beginSinkRequest(mob, walkTarget);
+        try {
+            if (!(walkTarget.getTarget() instanceof MultiTargetPositionTracker multiTarget)) {
+                return original.call(navigation, target, reachRange);
+            }
 
-        Set<BlockPos> pathTargets = multiTarget.getPathTargets(mob);
-        if (pathTargets.isEmpty()) {
-            return null;
-        }
+            Set<BlockPos> pathTargets = multiTarget.getPathTargets(mob);
+            if (pathTargets.isEmpty()) {
+                return null;
+            }
 
-        // Preserve vanilla MoveToTargetSink semantics: a non-null partial path is still
-        // useful progress, while vanilla tracks CANT_REACH_WALK_TARGET_SINCE separately.
-        return navigation.createPath(pathTargets, reachRange);
+            // Preserve vanilla MoveToTargetSink semantics: a non-null partial path is still
+            // useful progress, while vanilla tracks CANT_REACH_WALK_TARGET_SINCE separately.
+            return navigation.createPath(pathTargets, reachRange);
+        } finally {
+            PathRequestDiagnostics.endSinkRequest();
+        }
     }
 
     @WrapOperation(

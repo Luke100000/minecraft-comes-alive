@@ -11,7 +11,6 @@ import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,15 +32,31 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
 
     protected Optional<Building> getNearestBuilding(VillagerEntityMCA villager) {
         return villager.getResidency().getHomeVillage()
-                .flatMap(buildings -> buildings.getBuildings().values().stream()
-                        .filter(a -> a.getType().equals(getBuilding(villager)))
-                        .min(Comparator.comparingInt(a -> a.getCenter().distManhattan(villager.blockPosition()))));
+                .flatMap(village -> getNearestBuilding(villager, village.getBuildings().values()));
+    }
+
+    protected Optional<Building> getNearestBuilding(VillagerEntityMCA villager, Iterable<Building> candidates) {
+        String buildingType = getBuilding(villager);
+        BlockPos origin = villager.blockPosition();
+        Building nearest = null;
+        int nearestDistance = Integer.MAX_VALUE;
+        for (Building candidate : candidates) {
+            if (!candidate.getType().equals(buildingType)) {
+                continue;
+            }
+            int distance = candidate.getCenter().distManhattan(origin);
+            if (nearest == null || distance < nearestDistance) {
+                nearest = candidate;
+                nearestDistance = distance;
+            }
+        }
+        return Optional.ofNullable(nearest);
     }
 
     protected Optional<BlockPos> getRandomPositionIn(Building b, Level world, VillagerEntityMCA villager) {
         if (!b.getFloorCells().isEmpty()) {
             List<BlockPos> floorTargets = b.getFloorCells().stream()
-                    .filter(pos -> isGoodIndoorWalkTarget(world, villager, pos))
+                    .filter(pos -> isGoodFloorWalkTarget(world, villager, pos))
                     .toList();
             if (floorTargets.isEmpty()) {
                 return Optional.empty();
@@ -76,7 +91,11 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
 
     private boolean isGoodIndoorWalkTarget(Level world, VillagerEntityMCA villager, BlockPos pos) {
         return !world.canSeeSky(pos)
-                && villager.getNavigation().isStableDestination(pos)
+                && isGoodFloorWalkTarget(world, villager, pos);
+    }
+
+    private boolean isGoodFloorWalkTarget(Level world, VillagerEntityMCA villager, BlockPos pos) {
+        return villager.getNavigation().isStableDestination(pos)
                 && world.noCollision(
                         villager,
                         villager.getBoundingBox().move(Vec3.atBottomCenterOf(pos).subtract(villager.position()))

@@ -7,6 +7,7 @@ import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.SchedulesMCA;
 import net.conczin.mca.entity.ai.SensorsMCA;
+import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
 import net.conczin.mca.fabric.resources.*;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.MessagesMCA;
@@ -137,7 +138,10 @@ public final class MCAFabric implements ModInitializer {
         });
 
         // Register events
-        ServerLifecycleEvents.SERVER_STARTING.register(server -> MCA.startExecutorService());
+        ServerLifecycleEvents.SERVER_STARTING.register(server -> {
+            MCA.startExecutorService();
+            PathRequestDiagnostics.onServerStarting();
+        });
         ServerLifecycleEvents.SERVER_STARTED.register(server ->
                 DestinyLocationResolver.refreshCachedDestinations(server, Config.getInstance())
         );
@@ -149,10 +153,13 @@ public final class MCAFabric implements ModInitializer {
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             DestinyLocationResolver.clearCachedDestinations(server);
             MCA.shutdownExecutorService();
+            PathRequestDiagnostics.onServerStopping(server.overworld().getGameTime());
         });
         ServerTickEvents.END_WORLD_TICK.register(w -> VillageManager.get(w).tick());
         ServerTickEvents.END_SERVER_TICK.register(s -> ServerInteractionManager.getInstance().tick());
         ServerTickEvents.END_SERVER_TICK.register(MCA::setServer);
+        ServerTickEvents.END_SERVER_TICK.register(server ->
+                PathRequestDiagnostics.onServerEndTick(server.overworld().getGameTime()));
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
                 ServerInteractionManager.getInstance().onPlayerJoin(handler.player)

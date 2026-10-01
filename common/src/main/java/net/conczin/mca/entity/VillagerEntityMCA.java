@@ -84,6 +84,7 @@ import net.minecraft.world.item.ProjectileWeaponItem;
 import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -175,20 +176,17 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     public Vec3 handleRelativeFrictionAndCalculateMovement(Vec3 input, float friction) {
         Vec3 movement = super.handleRelativeFrictionAndCalculateMovement(input, friction);
-        if (getNavigation() instanceof MCAGroundPathNavigation navigation) {
-            double controlledY = navigation.getControlledClimbableVelocity();
-            if (!Double.isNaN(controlledY)) {
-                return new Vec3(movement.x(), controlledY, movement.z());
-            }
-        }
-        return movement;
+        return getNavigation() instanceof MCAGroundPathNavigation navigation
+                ? navigation.adjustClimbableTravelMovement(movement)
+                : movement;
     }
 
     @Override
     public void setJumping(boolean jumping) {
         boolean navigationControlsClimb = this.getNavigation() instanceof MCAGroundPathNavigation navigation
                 && navigation.isControllingClimbableMovement();
-        super.setJumping(jumping && !this.onClimbable() && !navigationControlsClimb);
+        boolean climbableSuppressesJump = this.onClimbable() && !this.getInBlockState().is(Blocks.SCAFFOLDING);
+        super.setJumping(jumping && !climbableSuppressesJump && !navigationControlsClimb);
     }
 
     public static AttributeSupplier.Builder createAttributes() {
