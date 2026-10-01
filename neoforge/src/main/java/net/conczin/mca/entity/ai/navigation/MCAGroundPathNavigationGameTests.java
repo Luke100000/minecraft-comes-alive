@@ -3,6 +3,7 @@ package net.conczin.mca.entity.ai.navigation;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
+import net.conczin.mca.entity.ai.MCAMoveControl;
 import net.conczin.mca.entity.ai.PathingBlockInteraction;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
@@ -23,6 +24,7 @@ import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.ScaffoldingBlock;
 import net.minecraft.world.level.block.SnowLayerBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -88,6 +90,52 @@ public final class MCAGroundPathNavigationGameTests {
     }
 
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 20)
+    public static void flatScaffoldingKeepsGroundJumpMoveControlState(GameTestHelper helper) {
+        BlockPos current = helper.absolutePos(new BlockPos(4, 1, 4));
+        helper.getLevel().setBlock(current.below(), Blocks.STONE.defaultBlockState(), 3);
+        helper.getLevel().setBlock(current, Blocks.SCAFFOLDING.defaultBlockState(), 3);
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(current)).spawn(MobSpawnType.STRUCTURE);
+        try {
+            villager.setNoAi(true);
+            helper.assertTrue(villager.onClimbable(), "fixture villager is not inside scaffolding");
+
+            ProbeMoveControl moveControl = new ProbeMoveControl(villager);
+            moveControl.markJumping();
+            moveControl.setWantedPosition(current.getX() + 1.5D, current.getY(), current.getZ() + 0.5D, 0.5D);
+            helper.assertTrue(moveControl.isJumping(),
+                    "flat scaffolding replaced a legitimate ground jump with MOVE_TO");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 20)
+    public static void flatScaffoldingPreservesRaisedTargetJump(GameTestHelper helper) {
+        BlockPos current = helper.absolutePos(new BlockPos(4, 1, 4));
+        helper.getLevel().setBlock(current.below(), Blocks.STONE.defaultBlockState(), 3);
+        helper.getLevel().setBlock(current, Blocks.SCAFFOLDING.defaultBlockState(), 3);
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(current)).spawn(MobSpawnType.STRUCTURE);
+        try {
+            villager.setNoAi(true);
+            helper.assertTrue(villager.onClimbable(), "fixture villager is not inside scaffolding");
+
+            ProbeMoveControl moveControl = new ProbeMoveControl(villager);
+            moveControl.setWantedPosition(villager.getX(), villager.getY() + 1.0D, villager.getZ(), 0.5D);
+            moveControl.tick();
+            helper.assertTrue(moveControl.isJumping(),
+                    "flat scaffolding suppressed vanilla's raised-target jump");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 20)
     public static void flatScaffoldingDoesNotSuppressGroundJump(GameTestHelper helper) {
         BlockPos current = helper.absolutePos(new BlockPos(4, 1, 4));
         helper.getLevel().setBlock(current.below(), Blocks.STONE.defaultBlockState(), 3);
@@ -139,6 +187,95 @@ public final class MCAGroundPathNavigationGameTests {
                     "villager did not walk through scaffolding; pos=" + villager.blockPosition()
                             + "; path=" + summarizePath(villager.getNavigation().getPath()));
             villager.discard();
+        });
+    }
+
+    @GameTest(batch = "mca_scaffolding_vertical", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void verticalPathClimbsScaffolding(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(2, 1, 2));
+        BlockPos target = start.above(2);
+        prepareFlatArea(helper, start, 1, 4);
+        helper.runAfterDelay(1, () -> placeStableScaffoldingColumn(helper, start));
+        helper.runAfterDelay(2, () -> {
+            BlockState support = helper.getLevel().getBlockState(start.below());
+            helper.assertTrue(support.is(Blocks.STONE),
+                    "vertical scaffolding support changed before navigation: " + support);
+            helper.assertTrue(support.isFaceSturdy(helper.getLevel(), start.below(), Direction.UP),
+                    "vertical scaffolding support has no sturdy top face: " + support);
+            helper.assertTrue(helper.getLevel().getBlockState(start).is(Blocks.SCAFFOLDING),
+                    "vertical scaffolding disappeared before navigation; distance="
+                            + ScaffoldingBlock.getDistance(helper.getLevel(), start));
+            helper.assertTrue(ScaffoldingBlock.getDistance(helper.getLevel(), start) == 0,
+                    "supported vertical scaffolding resolved nonzero distance: "
+                            + ScaffoldingBlock.getDistance(helper.getLevel(), start));
+
+            VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                    .withAge(0).withPosition(Vec3.atBottomCenterOf(start)).spawn(MobSpawnType.STRUCTURE);
+            villager.refreshBrain(helper.getLevel());
+            villager.getBrain().removeAllBehaviors();
+
+            Path path = villager.getNavigation().createPath(target, 0);
+            helper.assertTrue(path != null && path.canReach(),
+                    "vertical scaffolding ascent did not produce a reachable path");
+            helper.assertTrue(path.getNodeCount() >= 3,
+                    "vertical scaffolding ascent path omitted climb nodes: " + summarizePath(path));
+
+            ClimbTraversal probe = new ClimbTraversal(villager, helper.getLevel());
+            villager.setDeltaMovement(Vec3.ZERO);
+            helper.assertTrue(probe.followPath(path),
+                    "vertical scaffolding path was not handled by climb traversal: " + summarizePath(path));
+            helper.assertTrue(path.getNextNodeIndex() == 1,
+                    "vertical scaffolding path did not advance past the already-reached start node: "
+                            + summarizePath(path));
+            probe.tick(path, 0.5D, 1);
+            helper.assertTrue(probe.ownsMovement(path, 1),
+                    "vertical scaffolding path was not climb-owned: " + summarizePath(path));
+            helper.assertTrue(villager.getDeltaMovement().y > 0.0D,
+                    "vertical scaffolding climb ownership produced no upward motion: "
+                            + villager.getDeltaMovement() + "; " + summarizePath(path));
+            villager.setDeltaMovement(Vec3.ZERO);
+
+            helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D),
+                    "vertical scaffolding ascent could not start");
+
+            helper.succeedWhen(() -> {
+                helper.assertTrue(villager.blockPosition().getY() >= target.getY(),
+                        "villager did not climb scaffolding; pos=" + villager.blockPosition()
+                                + "; path=" + summarizePath(villager.getNavigation().getPath()));
+                villager.discard();
+            });
+        });
+    }
+
+    @GameTest(batch = "mca_scaffolding_vertical", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void verticalPathDescendsScaffolding(GameTestHelper helper) {
+        BlockPos target = helper.absolutePos(new BlockPos(2, 1, 2));
+        BlockPos start = target.above(2);
+        prepareFlatArea(helper, target, 1, 4);
+        helper.runAfterDelay(1, () -> placeStableScaffoldingColumn(helper, target));
+        helper.runAfterDelay(2, () -> {
+            helper.assertTrue(helper.getLevel().getBlockState(target).is(Blocks.SCAFFOLDING),
+                    "vertical descent scaffolding disappeared before navigation");
+
+            VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                    .withAge(0).withPosition(Vec3.atBottomCenterOf(start)).spawn(MobSpawnType.STRUCTURE);
+            villager.refreshBrain(helper.getLevel());
+            villager.getBrain().removeAllBehaviors();
+
+            Path path = villager.getNavigation().createPath(target, 0);
+            helper.assertTrue(path != null && path.canReach(),
+                    "vertical scaffolding descent did not produce a reachable path");
+            helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D),
+                    "vertical scaffolding descent could not start");
+
+            helper.succeedWhen(() -> {
+                helper.assertTrue(villager.blockPosition().getY() <= target.getY(),
+                        "villager did not descend scaffolding; pos=" + villager.blockPosition()
+                                + "; path=" + summarizePath(villager.getNavigation().getPath()));
+                villager.discard();
+            });
         });
     }
 
@@ -1637,6 +1774,32 @@ public final class MCAGroundPathNavigationGameTests {
                 + ", end=" + (path.getEndNode() == null ? null : path.getEndNode().asBlockPos())
                 + ", canReach=" + path.canReach()
                 + ", next=" + path.getNextNodeIndex() + '/' + path.getNodeCount();
+    }
+
+    private static BlockState stableScaffolding() {
+        return Blocks.SCAFFOLDING.defaultBlockState()
+                .setValue(ScaffoldingBlock.DISTANCE, 0)
+                .setValue(ScaffoldingBlock.BOTTOM, false);
+    }
+
+    private static void placeStableScaffoldingColumn(GameTestHelper helper, BlockPos bottom) {
+        for (int rise = 0; rise <= 2; rise++) {
+            helper.getLevel().setBlock(bottom.above(rise), stableScaffolding(), 3);
+        }
+    }
+
+    private static final class ProbeMoveControl extends MCAMoveControl {
+        private ProbeMoveControl(VillagerEntityMCA villager) {
+            super(villager);
+        }
+
+        private void markJumping() {
+            this.operation = Operation.JUMPING;
+        }
+
+        private boolean isJumping() {
+            return this.operation == Operation.JUMPING;
+        }
     }
 
 }

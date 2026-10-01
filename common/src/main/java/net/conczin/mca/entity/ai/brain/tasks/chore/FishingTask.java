@@ -38,7 +38,6 @@ public class FishingTask extends AbstractChoreTask {
     private static final double REEL_DELIVERY_DISTANCE_SQR = 0.5 * 0.5;
 
     private BlockPos targetWater;
-    private MCAFishingBobberEntity bobber;
     private final List<ItemEntity> reelItems = new ArrayList<>();
     private int reelTicks;
     private boolean biteAttempted;
@@ -80,6 +79,8 @@ public class FishingTask extends AbstractChoreTask {
             return;
         }
 
+        MCAFishingBobberEntity bobber = villager.getFishingBobber();
+
         if (villager.isUsingRecoveryFood()) {
             if (bobber != null) {
                 MCA.LOGGER.info(
@@ -88,17 +89,17 @@ public class FishingTask extends AbstractChoreTask {
                         villager.getInventory().countItem(Items.FISHING_ROD)
                 );
             }
-            discardBobber();
+            discardBobber(villager);
             return;
         }
 
         if (!equipFishingRod(villager)) {
-            discardBobber();
+            discardBobber(villager);
             return;
         }
 
         if (targetWater != null && !world.getBlockState(targetWater).is(Blocks.WATER)) {
-            discardBobber();
+            discardBobber(villager);
             targetWater = null;
         }
 
@@ -166,6 +167,11 @@ public class FishingTask extends AbstractChoreTask {
     }
 
     private void beginReel(ServerLevel world, VillagerEntityMCA villager) {
+        MCAFishingBobberEntity bobber = villager.getFishingBobber();
+        if (bobber == null || bobber.isRemoved()) {
+            return;
+        }
+
         List<ItemStack> caught = getFishingLoot(world, villager);
         villager.swing(villager.getDominantHand());
         world.playSound(
@@ -208,7 +214,7 @@ public class FishingTask extends AbstractChoreTask {
         }
         reelTicks = 0;
 
-        discardBobber();
+        discardBobber(villager);
         villager.getItemInHand(villager.getDominantHand())
                 .hurtAndBreak(1, villager, villager.getDominantSlot());
     }
@@ -323,6 +329,7 @@ public class FishingTask extends AbstractChoreTask {
     }
 
     List<ItemStack> getFishingLoot(ServerLevel world, VillagerEntityMCA villager) {
+        MCAFishingBobberEntity bobber = villager.getFishingBobber();
         if (bobber == null || bobber.isRemoved()) {
             return List.of();
         }
@@ -337,11 +344,11 @@ public class FishingTask extends AbstractChoreTask {
         return lootTable.getRandomItems(builder.create(LootContextParamSets.FISHING));
     }
 
-    private void discardBobber() {
+    private void discardBobber(VillagerEntityMCA villager) {
+        MCAFishingBobberEntity bobber = villager.getFishingBobber();
         if (bobber != null && !bobber.isRemoved()) {
             bobber.discard();
         }
-        bobber = null;
         biteAttempted = false;
         biteReactionTicksRemaining = -1;
     }
@@ -356,7 +363,7 @@ public class FishingTask extends AbstractChoreTask {
             }
         }
 
-        discardBobber();
+        discardBobber(villager);
         targetWater = null;
 
         if (villager.isUsingRecoveryFood()) {

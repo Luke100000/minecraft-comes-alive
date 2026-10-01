@@ -45,7 +45,6 @@ public class Building implements VillageBuilding {
     private int structureId = -1;
     private int floorId = -1;
     private int id = -1;
-    private long lastScan;
 
     public Building(BlockPos pos) {
         pos0X = pos1X = posX = pos.getX();
@@ -125,7 +124,6 @@ public class Building implements VillageBuilding {
         posY = seed.getY();
         posZ = seed.getZ();
         setGeometry(scan.min(), scan.max(), scan.floorCells());
-        lastScan = world.getGameTime();
         return validationResult.SUCCESS;
     }
 
@@ -141,21 +139,12 @@ public class Building implements VillageBuilding {
                 .collect(Collectors.toUnmodifiableSet());
     }
 
-    public Optional<BuildingFloorRegion> getFloorRegion() {
-        return floorCells.isEmpty() ? Optional.empty() : Optional.of(projectedFloorRegion());
-    }
-
     public Set<BlockPos> getFloorCells() {
         return floorCells;
     }
 
     boolean ownsFloorCell(BlockPos feet) {
         return feet != null && floorCells.contains(feet);
-    }
-
-    BuildingFloorRegion projectedFloorRegion() {
-        int projectionY = floorCells.stream().mapToInt(BlockPos::getY).min().orElse(posY);
-        return BuildingFloorRegion.fromFootprint(projectionY, floorCells);
     }
 
     public int getFloorY() {
@@ -171,26 +160,11 @@ public class Building implements VillageBuilding {
     }
 
     boolean containsFloorColumn(int x, int z) {
-        if (floorCells.isEmpty()) {
-            return x >= pos0X && x <= pos1X && z >= pos0Z && z <= pos1Z;
-        }
         return floorCells.stream().anyMatch(cell -> cell.getX() == x && cell.getZ() == z);
     }
 
     public long getFloorFootprintArea() {
-        return floorCells.isEmpty() ? getHorizontalArea() : floorCells.size();
-    }
-
-    public long getFloorFootprintIntersectionArea(Building other) {
-        if (other == null) {
-            return 0L;
-        }
-        if (!floorCells.isEmpty() && !other.floorCells.isEmpty()) {
-            return floorCells.stream().filter(other.floorCells::contains).count();
-        }
-        int x = Math.min(pos1X, other.pos1X) - Math.max(pos0X, other.pos0X) + 1;
-        int z = Math.min(pos1Z, other.pos1Z) - Math.max(pos0Z, other.pos0Z) + 1;
-        return x <= 0 || z <= 0 ? 0L : (long) x * z;
+        return floorCells.size();
     }
 
 
@@ -390,20 +364,7 @@ public class Building implements VillageBuilding {
 
     @Override
     public boolean containsPos(Vec3i pos) {
-        if (pos == null) return false;
-        if (!floorCells.isEmpty()) {
-            return ownsFloorCell(new BlockPos(pos.getX(), pos.getY(), pos.getZ()));
-        }
-        return pos.getX() >= pos0X && pos.getX() <= pos1X
-                && pos.getY() >= pos0Y && pos.getY() <= pos1Y
-                && pos.getZ() >= pos0Z && pos.getZ() <= pos1Z;
-    }
-
-    boolean containsHorizontalPosition(Vec3i pos) {
-        return pos.getX() >= pos0X - PLAYER_POSITION_HORIZONTAL_MARGIN
-                && pos.getX() <= pos1X + PLAYER_POSITION_HORIZONTAL_MARGIN
-                && pos.getZ() >= pos0Z - PLAYER_POSITION_HORIZONTAL_MARGIN
-                && pos.getZ() <= pos1Z + PLAYER_POSITION_HORIZONTAL_MARGIN;
+        return pos != null && ownsFloorCell(new BlockPos(pos.getX(), pos.getY(), pos.getZ()));
     }
 
     public boolean containsPositionWithMargin(Vec3i pos, int horizontalMargin, int verticalMargin) {
@@ -412,22 +373,6 @@ public class Building implements VillageBuilding {
                 && pos.getZ() >= pos0Z - horizontalMargin && pos.getZ() <= pos1Z + horizontalMargin;
     }
 
-
-    public boolean overlaps(Building other) {
-        return pos1X > other.pos0X && pos0X < other.pos1X
-                && pos1Y > other.pos0Y && pos0Y < other.pos1Y
-                && pos1Z > other.pos0Z && pos0Z < other.pos1Z;
-    }
-
-    public boolean isIdentical(Building other) {
-        return other != null && floorId == other.floorId
-                && getFloorFootprintArea() == other.getFloorFootprintArea()
-                && getFloorFootprintIntersectionArea(other) == getFloorFootprintArea();
-    }
-
-    public int getHorizontalArea() {
-        return Math.max(1, pos1X - pos0X + 1) * Math.max(1, pos1Z - pos0Z + 1);
-    }
 
     Building copy() {
         Building copy = new Building(getSourceBlock());
@@ -447,7 +392,6 @@ public class Building implements VillageBuilding {
         copy.posY = posY;
         copy.posZ = posZ;
         copy.floorCells = floorCells;
-        copy.lastScan = lastScan;
         blocks.forEach((key, value) -> copy.blocks.put(key, new ArrayList<>(value)));
         return copy;
     }
@@ -459,14 +403,6 @@ public class Building implements VillageBuilding {
 
     public void setId(int id) {
         this.id = id;
-    }
-
-    public long getLastScan() {
-        return lastScan;
-    }
-
-    public void setLastScan(long lastScan) {
-        this.lastScan = lastScan;
     }
 
     public boolean isComplete() {

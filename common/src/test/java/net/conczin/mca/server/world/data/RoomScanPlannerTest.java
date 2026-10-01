@@ -351,7 +351,7 @@ class RoomScanPlannerTest {
     }
 
     private static Structure structure(int id, int logicalBuildingId, StructureFloor floor) {
-        Structure structure = new Structure(id, floor.geometry().projection().cells().iterator().next(), List.of(floor));
+        Structure structure = new Structure(id, floor.geometry().cells().iterator().next().feet(), List.of(floor));
         structure.setLogicalBuildingId(logicalBuildingId);
         return structure;
     }
@@ -361,7 +361,7 @@ class RoomScanPlannerTest {
                 .mapToObj(x -> new BlockPos(x, anchorY, 0))
                 .collect(java.util.stream.Collectors.toSet());
         return TestStructureFloors.create(id, anchorY, ceilingY, 0,
-                BuildingFloorRegion.fromFootprint(anchorY, cells));
+                TestFloorFootprint.fromFootprint(anchorY, cells));
     }
 
     private static FloorGeometry scannedFloor(int anchorY, int ceilingY, int minX, int maxX) {

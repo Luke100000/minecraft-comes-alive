@@ -43,6 +43,16 @@ class VillageFloorSystemTest {
     }
 
     @Test
+    void emptyFunctionalRoomDoesNotSynthesizeRectangularOwnership() {
+        Building room = new Building(new BlockPos(1, 64, 1));
+        room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(2, 67, 2), Set.of());
+
+        assertFalse(room.containsPos(new BlockPos(1, 64, 1)));
+        assertFalse(room.containsFloorColumn(1, 1));
+        assertEquals(0L, room.getFloorFootprintArea());
+    }
+
+    @Test
     void registerStructureRejectsInvalidRoomReferenceWithoutMutation() {
         Village village = new Village(1, null);
         Structure existing = structure(10, 10, floor(0, 64));
@@ -632,7 +642,7 @@ class VillageFloorSystemTest {
     @Test
     void interactionRoomLookupFallsBackToPhysicalRoomGeometryWithoutRecursing() {
         Village village = new Village(1, null);
-        BuildingFloorRegion legacyRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+        TestFloorFootprint legacyRegion = TestFloorFootprint.fromFootprint(64, Set.of(
                 new BlockPos(10, 64, 10)));
         Structure structure = structure(10, 10,
                 TestStructureFloors.create(0, 64, 68, 0, legacyRegion));
@@ -852,7 +862,7 @@ class VillageFloorSystemTest {
     @Test
     void expandedStructureAndNewRoomCommitAgainstOneRefreshedFloorGeometry() {
         Village village = new Village(1, null);
-        BuildingFloorRegion oldRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+        TestFloorFootprint oldRegion = TestFloorFootprint.fromFootprint(64, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));
         StructureFloor oldFloor = TestStructureFloors.create(0, 64, 68, 0, oldRegion);
         Structure current = structure(10, 10, oldFloor);
@@ -860,7 +870,7 @@ class VillageFloorSystemTest {
         main.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 0), oldRegion.cells());
         registerStructure(village, current, main);
 
-        BuildingFloorRegion freshRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+        TestFloorFootprint freshRegion = TestFloorFootprint.fromFootprint(64, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
         Structure refreshed = current.copy();
@@ -868,7 +878,7 @@ class VillageFloorSystemTest {
                 TestStructureFloors.create(0, 64, 68, 0, freshRegion)));
 
         Building added = room(101, 10, 0, true);
-        BuildingFloorRegion addedRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+        TestFloorFootprint addedRegion = TestFloorFootprint.fromFootprint(64, Set.of(
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
         added.setGeometry(new BlockPos(2, 64, 0), new BlockPos(3, 67, 0), addedRegion.cells());
 
@@ -881,21 +891,21 @@ class VillageFloorSystemTest {
     @Test
     void failedPostPublicationStepRestoresPreviousAggregateState() {
         ThrowOnceCalculateVillage village = new ThrowOnceCalculateVillage();
-        BuildingFloorRegion oldRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+        TestFloorFootprint oldRegion = TestFloorFootprint.fromFootprint(64, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));
         Structure current = structure(10, 10, TestStructureFloors.create(0, 64, 68, 0, oldRegion));
         Building main = room(100, 10, 0, true);
         main.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 0), oldRegion.cells());
         registerStructure(village, current, main);
 
-        BuildingFloorRegion freshRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+        TestFloorFootprint freshRegion = TestFloorFootprint.fromFootprint(64, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
         Structure refreshed = current.copy();
         assertTrue(refreshed.replaceFloorGeometry(0,
                 TestStructureFloors.create(0, 64, 68, 0, freshRegion)));
         Building added = room(101, 10, 0, true);
-        BuildingFloorRegion addedRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+        TestFloorFootprint addedRegion = TestFloorFootprint.fromFootprint(64, Set.of(
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
         added.setGeometry(new BlockPos(2, 64, 0), new BlockPos(3, 67, 0), addedRegion.cells());
 
@@ -997,17 +1007,17 @@ class VillageFloorSystemTest {
         return TestStructureFloors.create(id, y, y + 4, region(y));
     }
 
-    private static BuildingFloorRegion region(int y) {
+    private static TestFloorFootprint region(int y) {
         return region(y, 0, 0);
     }
 
-    private static BuildingFloorRegion region(int y, int x, int z) {
-        return BuildingFloorRegion.fromFootprint(y, Set.of(
+    private static TestFloorFootprint region(int y, int x, int z) {
+        return TestFloorFootprint.fromFootprint(y, Set.of(
                 new BlockPos(x, y, z), new BlockPos(x + 1, y, z),
                 new BlockPos(x, y, z + 1), new BlockPos(x + 1, y, z + 1)));
     }
 
-    private static FloorGeometry scannedFloor(BuildingFloorRegion region) {
+    private static FloorGeometry scannedFloor(TestFloorFootprint region) {
         Set<FloorGeometry.Cell> cells = region.cells().stream()
                 .map(pos -> new FloorGeometry.Cell(pos, pos.getY() + 4))
                 .collect(java.util.stream.Collectors.toSet());

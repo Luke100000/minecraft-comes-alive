@@ -580,7 +580,7 @@ public class BlueprintScreen extends ExtendedScreen {
             if (attachment) {
                 String attachmentKey = getAttachmentScanTranslationKey(scanContext);
                 MutableComponent label = Component.translatable(attachmentKey);
-                if (scanContext.prospectiveFloorNumber() != Integer.MIN_VALUE) {
+                if (scanContext.hasProspectiveFloor()) {
                     label.append(Component.literal(" " + scanContext.prospectiveFloorNumber()));
                 }
                 attachmentScanButton.setMessage(label);

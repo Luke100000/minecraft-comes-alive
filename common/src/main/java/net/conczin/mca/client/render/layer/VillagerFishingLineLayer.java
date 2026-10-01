@@ -15,14 +15,11 @@ import net.minecraft.client.renderer.entity.layers.RenderLayer;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.item.FishingRodItem;
 import net.minecraft.world.phys.Vec3;
-import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 public final class VillagerFishingLineLayer
         extends RenderLayer<VillagerEntityMCA, VillagerEntityModelMCA<VillagerEntityMCA>> {
-    private static final double BOBBER_SEARCH_RADIUS = 32.0;
-
     public VillagerFishingLineLayer(
             RenderLayerParent<VillagerEntityMCA, VillagerEntityModelMCA<VillagerEntityMCA>> parent
     ) {
@@ -46,7 +43,7 @@ public final class VillagerFishingLineLayer
             return;
         }
 
-        MCAFishingBobberEntity bobber = findOwnedBobber(villager);
+        MCAFishingBobberEntity bobber = villager.getFishingBobber();
         if (bobber == null) {
             return;
         }
@@ -107,18 +104,5 @@ public final class VillagerFishingLineLayer
             FishingHookRenderer.stringVertex(dx, dy, dz, consumer, pose, fraction, nextFraction);
         }
         poseStack.popPose();
-    }
-
-    @Nullable
-    private static MCAFishingBobberEntity findOwnedBobber(VillagerEntityMCA villager) {
-        return villager.level()
-                .getEntitiesOfClass(
-                        MCAFishingBobberEntity.class,
-                        villager.getBoundingBox().inflate(BOBBER_SEARCH_RADIUS),
-                        bobber -> !bobber.isRemoved() && bobber.getVillagerOwner() == villager
-                )
-                .stream()
-                .findFirst()
-                .orElse(null);
     }
 }

@@ -102,6 +102,45 @@ public final class MCAWalkNodeEvaluatorLookupGameTests {
     }
 
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void stackedScaffoldingStillAddsVerticalClimbEdge(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos lower = helper.absolutePos(new BlockPos(4, 1, 4));
+        BlockPos upper = lower.above();
+        level.setBlock(lower.below(), Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(lower, Blocks.SCAFFOLDING.defaultBlockState(), 3);
+        level.setBlock(upper, Blocks.SCAFFOLDING.defaultBlockState(), 3);
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(level)
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(lower))
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.setNoAi(true);
+        MCAWalkNodeEvaluator evaluator = new MCAWalkNodeEvaluator();
+        try {
+            evaluator.prepare(new PathNavigationRegion(level, lower.offset(-4, -3, -4),
+                    upper.offset(4, 4, 4)), villager);
+            Node start = evaluator.getStart();
+            Node[] neighbors = new Node[32];
+            int neighborCount = evaluator.getNeighbors(neighbors, start);
+
+            Node climb = null;
+            for (int i = 0; i < neighborCount; i++) {
+                if (neighbors[i].asBlockPos().equals(upper)) {
+                    climb = neighbors[i];
+                    break;
+                }
+            }
+            helper.assertTrue(climb != null,
+                    "vanilla-pass-through scaffolding lost its explicit vertical climb edge");
+            helper.assertTrue(climb.type == PathType.WALKABLE && climb.costMalus >= 0.0F,
+                    "vertical scaffolding edge was not promoted to a usable climb node: " + climb);
+            helper.succeed();
+        } finally {
+            evaluator.done();
+            villager.discard();
+        }
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 100)
     public static void skipsBarrierFloorChecksOnOrdinaryGround(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos origin = helper.absolutePos(new BlockPos(8, 1, 8));

@@ -23,6 +23,7 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.PathNavigationRegion;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
@@ -30,6 +31,8 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.level.pathfinder.PathFinder;
+import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -41,6 +44,7 @@ import java.lang.management.ThreadMXBean;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -297,6 +301,9 @@ public final class PathfindingABGameTests {
                 }
             }
             if (elapsed == 500L) {
+                if (Boolean.getBoolean("mca.pathFrontierAudit")) {
+                    auditBroadWallSearches(helper);
+                }
                 // Diagnostic only: after the timed capture, test whether a
                 // partial detour resolves with more A* visited nodes. Never
                 // include these probes in the measured search totals.
@@ -347,6 +354,55 @@ public final class PathfindingABGameTests {
                 waitForProfileWorker();
             }
         });
+    }
+
+    /**
+     * Replay the existing wall geometry with equal native search allowances.
+     * Component diagnosis only: this does not install paths or assert a Brain journey.
+     */
+    private static void auditBroadWallSearches(GameTestHelper helper) {
+        for (int halfWallLength : new int[]{35, 55}) {
+            // Fixed coordinates also fix Node hash/tie ordering across the two worlds.
+            BlockPos start = new BlockPos(256, -59, 256);
+            BlockPos target = start.east(2);
+            prepareFlatArea(helper, start, halfWallLength + 6, 3);
+            for (int z = -halfWallLength; z <= halfWallLength; z++) {
+                for (int y = 0; y < 3; y++) {
+                    helper.getLevel().setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+                }
+            }
+            VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                    .withAge(0).withPosition(Vec3.atBottomCenterOf(start))
+                    .withName("AB wall frontier").spawn(MobSpawnType.STRUCTURE);
+            VILLAGERS.add(villager);
+            setBenchmarkFollowRange(villager);
+            villager.getGenetics().setGene(net.conczin.mca.entity.ai.Genetics.SIZE, 0.5F);
+            villager.getGenetics().setGene(net.conczin.mca.entity.ai.Genetics.WIDTH, 0.5F);
+            villager.getTraits().getTraits().forEach(villager.getTraits()::removeTrait);
+            villager.refreshDimensions();
+            villager.setNoAi(true);
+            villager.setOnGround(true);
+            PathNavigationRegion region = new PathNavigationRegion(helper.getLevel(),
+                    start.offset(-168, -8, -168), start.offset(168, 8, 168));
+            var evaluator = villager.getNavigation().getNodeEvaluator();
+            String label = "wall" + (halfWallLength * 2 + 1);
+            for (int budget : new int[]{768, 2_560, 5_120}) {
+                float maxLength = budget == 768 ? 48.0F : 160.0F;
+                PathFinder finder = new PathFinder(evaluator, budget);
+                Path path = finder.findPath(region, villager, Set.of(target), maxLength, 0, 1.0F);
+                SearchFrontierGameTests.log(label + "-mca", finder, evaluator, start, budget, maxLength, path);
+                helper.assertTrue(path != null, "wall component probe could not start: " + label);
+            }
+            // Same mob, terrain and budget with vanilla evaluation isolates MCA traversal changes.
+            WalkNodeEvaluator vanilla = new WalkNodeEvaluator();
+            vanilla.setCanPassDoors(true);
+            vanilla.setCanOpenDoors(true);
+            PathFinder finder = new PathFinder(vanilla, 2_560);
+            Path path = finder.findPath(region, villager, Set.of(target), 160.0F, 0, 1.0F);
+            SearchFrontierGameTests.log(label + "-vanilla", finder, vanilla, start, 2_560, 160.0F, path);
+            helper.assertTrue(path != null, "vanilla wall component probe could not start: " + label);
+            villager.discard();
+        }
     }
 
     private static void createRegisteredHouse(GameTestHelper helper, BlockPos min) {

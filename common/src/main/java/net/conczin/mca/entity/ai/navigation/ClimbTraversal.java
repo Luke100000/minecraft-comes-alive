@@ -61,6 +61,16 @@ final class ClimbTraversal {
         return new Vec3(movement.x(), this.lastControlledVerticalVelocity, movement.z());
     }
 
+    boolean isDescendingScaffolding(@Nullable Path path, int navigationTick) {
+        if (this.lastMovementControlTick != navigationTick || this.lastControlledVerticalVelocity >= 0.0D) {
+            return false;
+        }
+
+        Context context = resolve(path);
+        return context != null
+                && this.level.getBlockState(context.climbableNode().asBlockPos()).is(Blocks.SCAFFOLDING);
+    }
+
     void tick(@Nullable Path path, double speedModifier, int navigationTick) {
         Context context = resolve(path);
         if (context == null || !ownsMotion(context)) {

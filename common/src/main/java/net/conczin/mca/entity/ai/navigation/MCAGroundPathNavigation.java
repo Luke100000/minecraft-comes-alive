@@ -51,6 +51,10 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         return this.climbTraversal.ownsMovement(this.path, this.tick);
     }
 
+    public boolean isDescendingThroughScaffolding() {
+        return this.climbTraversal.isDescendingScaffolding(this.path, this.tick);
+    }
+
     /**
      * Vanilla owns friction and horizontal travel. When climb traversal moved this tick,
      * preserve only its chosen vertical velocity for the next travel step.

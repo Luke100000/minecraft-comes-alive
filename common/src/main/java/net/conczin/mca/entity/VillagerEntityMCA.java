@@ -123,6 +123,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.UNASSIGNED);
     long lastCooldown = 0L;
     private PlayerModel playerModel;
+    @Nullable
+    private MCAFishingBobberEntity fishingBobber;
     private int despawnDelay;
     private int burned;
     private long lastHit = 0;
@@ -182,6 +184,13 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    public boolean isDescending() {
+        return super.isDescending()
+                || getNavigation() instanceof MCAGroundPathNavigation navigation
+                && navigation.isDescendingThroughScaffolding();
+    }
+
+    @Override
     public void setJumping(boolean jumping) {
         boolean navigationControlsClimb = this.getNavigation() instanceof MCAGroundPathNavigation navigation
                 && navigation.isControllingClimbableMovement();
@@ -205,6 +214,15 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     public PlayerModel getPlayerModel() {
         return playerModel;
+    }
+
+    @Nullable
+    public MCAFishingBobberEntity getFishingBobber() {
+        return fishingBobber;
+    }
+
+    void setFishingBobber(@Nullable MCAFishingBobberEntity fishingBobber) {
+        this.fishingBobber = fishingBobber;
     }
 
     @Override

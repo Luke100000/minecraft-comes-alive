@@ -37,9 +37,14 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 public class VillageManager extends SavedData implements Iterable<Village> {
+    static final long ORIGIN_GEOMETRY_REFRESH_INITIAL_DELAY = 20L;
+    static final long ORIGIN_GEOMETRY_REFRESH_MAX_DELAY = 20L * 60L;
+    private static final int ORIGIN_GEOMETRY_REFRESH_MAX_FAILURES = 6;
+
     public final Set<BlockPos> cache = ConcurrentHashMap.newKeySet();
     private final Map<Integer, Village> villages = new HashMap<>();
     private final List<BlockPos> buildingQueue = new LinkedList<>();
+    private final Map<OriginGeometryRefreshKey, OriginGeometryRefreshRetry> originGeometryRefreshRetries = new HashMap<>();
     private final ServerLevel world;
     private final ReaperSpawner reapers;
     private int lastBuildingId;
@@ -71,6 +76,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 villages.put(village.getId(), village);
             }
         }
+        scheduleOriginGeometryRefreshes(world.getGameTime());
     }
 
     public static VillageManager get(ServerLevel world) {
@@ -83,6 +89,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     public boolean removeVillage(int id) {
         if (villages.remove(id) != null) {
+            originGeometryRefreshRetries.keySet().removeIf(key -> key.villageId() == id);
             cache.clear();
             return true;
         }
@@ -136,11 +143,84 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
         long time = world.getGameTime();
         for (Village village : this) village.tick(world, time);
+        tickOriginGeometryRefresh(time);
         if (time % buildingCooldown == 0 && !buildingQueue.isEmpty()) {
             processBuilding(buildingQueue.removeFirst());
         }
         reapers.tick(world);
         SpawnQueue.getInstance().tick();
+    }
+
+    static long originGeometryRefreshDelay(int failures) {
+        int boundedFailures = Math.max(0, Math.min(failures, ORIGIN_GEOMETRY_REFRESH_MAX_FAILURES));
+        long delay = ORIGIN_GEOMETRY_REFRESH_INITIAL_DELAY << boundedFailures;
+        return Math.min(delay, ORIGIN_GEOMETRY_REFRESH_MAX_DELAY);
+    }
+
+    private void scheduleOriginGeometryRefreshes(long time) {
+        for (Village village : villages.values()) {
+            for (Structure structure : village.getStructures().values()) {
+                if (!structure.hasOriginGeometryApproximation()) continue;
+                OriginGeometryRefreshKey key = new OriginGeometryRefreshKey(village.getId(), structure.getId());
+                originGeometryRefreshRetries.putIfAbsent(
+                        key, new OriginGeometryRefreshRetry(time + ORIGIN_GEOMETRY_REFRESH_INITIAL_DELAY, 0));
+            }
+        }
+    }
+
+    void tickOriginGeometryRefresh(long time) {
+        Map.Entry<OriginGeometryRefreshKey, OriginGeometryRefreshRetry> due = originGeometryRefreshRetries.entrySet()
+                .stream()
+                .filter(entry -> entry.getValue().retryAt() <= time)
+                .min(Comparator
+                        .comparingInt((Map.Entry<OriginGeometryRefreshKey, OriginGeometryRefreshRetry> entry) ->
+                                entry.getKey().villageId())
+                        .thenComparingInt(entry -> entry.getKey().structureId()))
+                .orElse(null);
+        if (due == null) return;
+
+        OriginGeometryRefreshKey key = due.getKey();
+        Village village = villages.get(key.villageId());
+        Structure structure = village == null ? null : village.getStructure(key.structureId()).orElse(null);
+        if (structure == null || !structure.hasOriginGeometryApproximation()) {
+            originGeometryRefreshRetries.remove(key);
+            return;
+        }
+
+        Building room = village.getRooms()
+                .filter(candidate -> candidate.getStructureId() == structure.getId())
+                .filter(candidate -> candidate.getFloorId() == 0)
+                .min(Comparator.comparingInt(Building::getId))
+                .orElse(null);
+        if (room == null) {
+            rescheduleOriginGeometryRefresh(key, due.getValue(), time);
+            return;
+        }
+        BlockPos source = room.getSourceBlock();
+        if (world.getChunkSource().getChunkNow(source.getX() >> 4, source.getZ() >> 4) == null) {
+            originGeometryRefreshRetries.put(
+                    key, new OriginGeometryRefreshRetry(time + ORIGIN_GEOMETRY_REFRESH_INITIAL_DELAY,
+                            due.getValue().failures()));
+            return;
+        }
+
+        RegisteredRoomUpdate update = new RoomWorkflow(this, world).analyzeRegisteredRoomUpdate(
+                village, room.getId(), source);
+        Building.validationResult result = applyRegisteredRoomUpdate(update, null, false);
+        if (result == Building.validationResult.SUCCESS) {
+            originGeometryRefreshRetries.remove(key);
+            finalizeVillageMutation(village);
+            return;
+        }
+        rescheduleOriginGeometryRefresh(key, due.getValue(), time);
+    }
+
+    private void rescheduleOriginGeometryRefresh(OriginGeometryRefreshKey key,
+                                                 OriginGeometryRefreshRetry previous,
+                                                 long time) {
+        int failures = Math.min(previous.failures() + 1, ORIGIN_GEOMETRY_REFRESH_MAX_FAILURES);
+        originGeometryRefreshRetries.put(
+                key, new OriginGeometryRefreshRetry(time + originGeometryRefreshDelay(failures), failures));
     }
 
     private void startBountyHunterWave(ServerPlayer player, Village sender) {
@@ -181,13 +261,16 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     public void reportBuilding(BlockPos pos) {
-        cache.add(pos);
-        buildingQueue.add(pos);
+        if (cache.add(pos)) buildingQueue.add(pos);
     }
 
     public Building.validationResult processBuilding(BlockPos pos) {
         BuildingType externalType = getGroupedBuildingType(pos);
-        if (externalType != null) return processExternalBuilding(pos, externalType);
+        if (externalType != null) {
+            Building.validationResult result = processExternalBuilding(pos, externalType);
+            if (result != Building.validationResult.SUCCESS) cache.remove(pos);
+            return result;
+        }
 
         Village village = findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
         if (village != null && village.getInteractionStructureAt(pos).isPresent()) {
@@ -195,8 +278,13 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             return Building.validationResult.SUCCESS;
         }
         BuildingScanResult scan = new RoomWorkflow(this, world).analyzeReportedBuildingAddition(pos);
-        if (scan.result() != Building.validationResult.SUCCESS || scan.isAmbiguous()) return scan.result();
-        return commitRoomAddition(scan, null);
+        if (scan.result() != Building.validationResult.SUCCESS || scan.isAmbiguous()) {
+            cache.remove(pos);
+            return scan.result();
+        }
+        Building.validationResult result = commitRoomAddition(scan, null);
+        if (result != Building.validationResult.SUCCESS) cache.remove(pos);
+        return result;
     }
 
     private BuildingType getGroupedBuildingType(BlockPos pos) {
@@ -556,5 +644,29 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     public void setBuildingCooldown(int buildingCooldown) { this.buildingCooldown = buildingCooldown; }
-    public void merge(Village into, Village from) { into.merge(from); }
+    public void merge(Village into, Village from) {
+        into.merge(from);
+        if (into.getId() == from.getId()) return;
+
+        List<Map.Entry<OriginGeometryRefreshKey, OriginGeometryRefreshRetry>> movedRetries =
+                originGeometryRefreshRetries.entrySet().stream()
+                        .filter(entry -> entry.getKey().villageId() == from.getId())
+                        .toList();
+        for (Map.Entry<OriginGeometryRefreshKey, OriginGeometryRefreshRetry> entry : movedRetries) {
+            originGeometryRefreshRetries.remove(entry.getKey());
+            int structureId = entry.getKey().structureId();
+            Structure moved = into.getStructure(structureId).orElse(null);
+            if (moved == null || !moved.hasOriginGeometryApproximation()) continue;
+
+            OriginGeometryRefreshKey movedKey = new OriginGeometryRefreshKey(into.getId(), structureId);
+            originGeometryRefreshRetries.merge(movedKey, entry.getValue(),
+                    (first, second) -> first.retryAt() <= second.retryAt() ? first : second);
+        }
+    }
+
+    private record OriginGeometryRefreshKey(int villageId, int structureId) {
+    }
+
+    private record OriginGeometryRefreshRetry(long retryAt, int failures) {
+    }
 }

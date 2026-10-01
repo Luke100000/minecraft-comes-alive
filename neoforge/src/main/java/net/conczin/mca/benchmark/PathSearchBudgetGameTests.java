@@ -141,7 +141,13 @@ public final class PathSearchBudgetGameTests {
         }
         VillagerEntityMCA villager = spawn(helper, start, target);
         boolean[] passedWallEnd = {false};
+        boolean[] leftStart = {false};
         observeJourney(helper, scenario, villager, start, target, 2_000, elapsed -> {
+            leftStart[0] |= villager.blockPosition().distSqr(start) >= 64.0D;
+            if (leftStart[0] && villager.blockPosition().equals(start)) {
+                report(scenario + "_backtracked", villager, start, false, elapsed);
+                helper.fail("villager returned to its original start instead of completing the detour");
+            }
             passedWallEnd[0] |= Math.abs(villager.getZ() - start.getZ() - 0.5D) > halfWallLength + 0.5D;
             if (villager.blockPosition().equals(target)) {
                 helper.assertTrue(passedWallEnd[0], "villager reached HOME without going around the wall");
@@ -171,6 +177,11 @@ public final class PathSearchBudgetGameTests {
             if (elapsed == 300) {
                 helper.assertTrue(!villager.blockPosition().equals(target), "sealed HOME was somehow reached");
                 report("blocked300", villager, start, false, elapsed);
+                // This nearby HOME is sealed on every side, not behind a broad obstacle.
+                // Retries must stay in the local goal neighborhood, not invent a distant excursion.
+                double localGoalRadius = start.distManhattan(target) + 2.0D;
+                helper.assertTrue(villager.position().distanceTo(Vec3.atBottomCenterOf(start)) <= localGoalRadius,
+                        "sealed nearby HOME triggered speculative wandering beyond the local goal neighborhood");
                 for (int y = 0; y < 3; y++) {
                     helper.getLevel().setBlock(target.west().above(y), Blocks.AIR.defaultBlockState(), 3);
                 }
@@ -314,6 +325,10 @@ public final class PathSearchBudgetGameTests {
                     long expanded = PathRequestDiagnostics.snapshot(mob).expandedNodes() - before;
                     int budget = (int) (ordinaryBudget * visitedNodesMultiplier * adjustment
                             * Math.max(1.0F, maxPathLength * 16.0F / ordinaryBudget));
+                    if (Boolean.getBoolean("mca.pathFrontierAudit")) {
+                        SearchFrontierGameTests.log("brain", actualFinder, BudgetProbeNavigation.this.nodeEvaluator,
+                                mob.blockPosition(), budget, maxPathLength, result);
+                    }
                     MCA.LOGGER.info("[MCA Search Query] maxLength={} budget={} expanded={} position={} targets={} "
                                     + "reachable={} nodes={} end={}", maxPathLength, budget, expanded,
                             mob.blockPosition(), targets, result != null && result.canReach(),

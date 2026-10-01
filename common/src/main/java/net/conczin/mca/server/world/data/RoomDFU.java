@@ -192,18 +192,24 @@ final class RoomDFU {
         }
         for (Tag value : villageTag.getList("structures", Tag.TAG_COMPOUND)) {
             CompoundTag structure = (CompoundTag) value;
+            require(structure, "id", Tag.TAG_INT, "Structure");
             require(structure, "buildingId", Tag.TAG_INT, "Structure");
             require(structure, "source", "Structure");
             require(structure, "floors", Tag.TAG_LIST, "Structure");
+            for (Tag floorValue : structure.getList("floors", Tag.TAG_COMPOUND)) {
+                require((CompoundTag) floorValue, "id", Tag.TAG_INT, "StructureFloor");
+            }
         }
         for (Tag value : villageTag.getList("logicalBuildings", Tag.TAG_COMPOUND)) {
             CompoundTag logical = (CompoundTag) value;
+            require(logical, "id", Tag.TAG_INT, "Logical building");
             require(logical, "mainRoomId", Tag.TAG_INT, "Logical building");
             require(logical, "inheritanceEnabled", Tag.TAG_BYTE, "Logical building");
         }
     }
 
     private static void requireCurrentBuildingShape(CompoundTag building, String kind) {
+        require(building, "id", Tag.TAG_INT, kind);
         require(building, "floorCells", Tag.TAG_LIST, kind);
         require(building, "contributesToMain", Tag.TAG_BYTE, kind);
         require(building, "structureId", Tag.TAG_INT, kind);
@@ -253,6 +259,7 @@ final class RoomDFU {
                     .toList(), Map.of());
             Structure structure = new Structure(id, room.getSourceBlock(), List.of(
                     new StructureFloor(0, 0, geometry)));
+            structure.setOriginGeometryApproximate(true);
             rooms.put(id, room);
             structures.put(id, structure);
             logicalBuildings.put(id, new LogicalBuilding(id, id, true));

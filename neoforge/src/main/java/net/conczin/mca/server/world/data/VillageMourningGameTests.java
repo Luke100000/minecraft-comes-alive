@@ -14,12 +14,14 @@ import net.conczin.mca.entity.ai.brain.tasks.MournAtGraveTask;
 import net.conczin.mca.entity.ai.navigation.LongDistancePathTarget;
 import net.conczin.mca.entity.ai.relationship.RelationshipType;
 import net.conczin.mca.registry.BlocksMCA;
+import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.GameType;
@@ -629,8 +631,9 @@ public final class VillageMourningGameTests {
 
         village.tick(helper.getLevel(), now);
 
-        helper.assertTrue(village.getNextMourningTime() == now + 2_400L,
-                "first tick should schedule mourning exactly two minutes later");
+        helper.assertTrue(village.getNextMourningTime() >= now + 4_000L
+                        && village.getNextMourningTime() <= now + 9_000L,
+                "first tick should schedule mourning between 4,000 and 9,000 ticks later");
         helper.succeed();
     }
 
@@ -642,8 +645,9 @@ public final class VillageMourningGameTests {
 
         due.tick(helper.getLevel(), now);
 
-        helper.assertTrue(due.getNextMourningTime() > now,
-                "empty due burst must still schedule the following burst");
+        helper.assertTrue(due.getNextMourningTime() >= now + 4_000L
+                        && due.getNextMourningTime() <= now + 9_000L,
+                "empty due burst must still schedule the following normal interval");
         helper.succeed();
     }
 
@@ -663,8 +667,8 @@ public final class VillageMourningGameTests {
 
         helper.assertTrue(firstCount >= 2 && firstCount <= 4,
                 "one due burst must select only two to four residents");
-        helper.assertTrue(nextBurst == now + 2_400L,
-                "one due burst must schedule the next occurrence two minutes later");
+        helper.assertTrue(nextBurst >= now + 4_000L && nextBurst <= now + 9_000L,
+                "one due burst must schedule the next occurrence in the normal random range");
 
         due.tick(helper.getLevel(), nextBurst - 1L);
         helper.assertTrue(mourningSites(residents).size() == firstCount,
@@ -695,9 +699,8 @@ public final class VillageMourningGameTests {
 
         helper.assertTrue(mourningSites(residents).isEmpty(),
                 "ambient mourning must not start while a monster is within the vanilla bed-safety range of the grave");
-        helper.assertTrue(due.getNextMourningTime() >= now + 600L
-                        && due.getNextMourningTime() <= now + 1_200L,
-                "unsafe ambient mourning should retry in thirty to sixty seconds");
+        helper.assertTrue(due.getNextMourningTime() == now + 4_800L,
+                "unsafe ambient mourning should retry after four minutes");
 
         long retry = due.getNextMourningTime();
         zombie.discard();
@@ -705,6 +708,49 @@ public final class VillageMourningGameTests {
 
         helper.assertTrue(!mourningSites(residents).isEmpty(),
                 "ambient mourning should start after the nearby monster is gone");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_mourning_safety_fallback", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void ambientSafetySearchFindsSafeGraveBeyondFirstFour(GameTestHelper helper) {
+        List<BlockPos> graves = List.of(
+                helper.absolutePos(new BlockPos(2, 1, 2)),
+                helper.absolutePos(new BlockPos(3, 1, 2)),
+                helper.absolutePos(new BlockPos(4, 1, 2)),
+                helper.absolutePos(new BlockPos(5, 1, 2)),
+                helper.absolutePos(new BlockPos(14, 1, 14))
+        );
+        graves.forEach(grave -> occupyGrave(helper, grave));
+        BlockPos safeGrave = graves.getLast();
+
+        Zombie zombie = EntityType.ZOMBIE.create(helper.getLevel());
+        if (zombie == null) {
+            throw new IllegalStateException("failed to create zombie");
+        }
+        BlockPos zombiePos = helper.absolutePos(new BlockPos(3, 1, 3));
+        zombie.absMoveTo(zombiePos.getX() + 0.5D, zombiePos.getY(), zombiePos.getZ() + 0.5D);
+        zombie.setNoAi(true);
+        helper.getLevel().addFreshEntity(zombie);
+
+        helper.assertTrue(graves.subList(0, 4).stream().noneMatch(grave -> Mourning.isSafeToMourn(helper.getLevel(), grave)),
+                "the first four grave fixtures must be unsafe");
+        helper.assertTrue(Mourning.isSafeToMourn(helper.getLevel(), safeGrave),
+                "the distant fallback grave must be safe");
+
+        long seed = 0L;
+        while (true) {
+            List<BlockPos> shuffled = new ArrayList<>(graves);
+            Util.shuffle(shuffled, RandomSource.create(seed));
+            if (shuffled.getLast().equals(safeGrave)) {
+                break;
+            }
+            seed++;
+        }
+
+        List<BlockPos> selected = Village.selectSafeMourningGraves(graves, RandomSource.create(seed),
+                grave -> Mourning.isSafeToMourn(helper.getLevel(), grave));
+        helper.assertTrue(selected.equals(List.of(safeGrave)),
+                "ambient grave selection must search past four unsafe graves to find a safe fallback");
         helper.succeed();
     }
 

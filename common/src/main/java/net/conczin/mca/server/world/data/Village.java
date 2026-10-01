@@ -14,6 +14,7 @@ import net.conczin.mca.util.NbtHelper;
 import net.conczin.mca.util.WorldUtils;
 import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.nbt.*;
@@ -28,8 +29,11 @@ import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.TrapDoorBlock;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.*;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -40,9 +44,9 @@ public class Village implements Iterable<Building> {
     public static final int MERGE_MARGIN = 64;
     private static final int MOVE_IN_COOLDOWN = 1200;
     private static final long BED_SYNC_TIME = 200;
-    private static final int MOURNING_INTERVAL = 2_400;
-    private static final int MIN_MOURNING_RETRY = 600;
-    private static final int MAX_MOURNING_RETRY = 1_200;
+    private static final int MIN_MOURNING_INTERVAL = 4_000;
+    private static final int MAX_MOURNING_INTERVAL = 9_000;
+    private static final int MOURNING_RETRY = 4_800;
     private static final int MIN_MOURNING_BURST_SIZE = 2;
     private static final int MAX_MOURNING_BURST_SIZE = 4;
     private static final long MOURNING_DAY_START = 1_000L;
@@ -436,7 +440,7 @@ public class Village implements Iterable<Building> {
         }
         RoomTypeResolver resolver = RoomTypeResolver.create(this);
         return getRooms().filter(room -> {
-            BuildingType effective = resolver.resolve(room).effectiveType();
+            BuildingType effective = resolver.effectiveType(room);
             return effective != null && effective.name().equals(type);
         });
     }
@@ -588,24 +592,40 @@ public class Village implements Iterable<Building> {
         return nextMourningTime;
     }
 
-    static long calculateNextMourningTime(long now) {
-        return now + MOURNING_INTERVAL;
+    static long calculateNextMourningTime(long now, RandomSource random) {
+        return now + Mth.nextInt(random, MIN_MOURNING_INTERVAL, MAX_MOURNING_INTERVAL);
     }
 
-    static long calculateMourningRetryTime(long now, RandomSource random) {
-        return now + Mth.nextInt(random, MIN_MOURNING_RETRY, MAX_MOURNING_RETRY);
+    static long calculateMourningRetryTime(long now) {
+        return now + MOURNING_RETRY;
     }
 
     static int calculateMourningBurstSize(RandomSource random) {
         return Mth.nextInt(random, MIN_MOURNING_BURST_SIZE, MAX_MOURNING_BURST_SIZE);
     }
 
-    static List<BlockPos> selectMourningSafetyCandidates(List<BlockPos> graves, RandomSource random) {
+    static List<BlockPos> selectSafeMourningGraves(List<BlockPos> graves, RandomSource random,
+                                                   Predicate<BlockPos> isSafe) {
         List<BlockPos> candidates = new ArrayList<>(graves);
         Util.shuffle(candidates, random);
-        return candidates.stream()
-                .limit(MAX_MOURNING_BURST_SIZE)
-                .toList();
+        List<BlockPos> safeGraves = new ArrayList<>();
+        int initialChecks = Math.min(MAX_MOURNING_BURST_SIZE, candidates.size());
+        for (int index = 0; index < initialChecks; index++) {
+            BlockPos grave = candidates.get(index);
+            if (isSafe.test(grave)) {
+                safeGraves.add(grave);
+            }
+        }
+        if (safeGraves.isEmpty()) {
+            for (int index = initialChecks; index < candidates.size(); index++) {
+                BlockPos grave = candidates.get(index);
+                if (isSafe.test(grave)) {
+                    safeGraves.add(grave);
+                    break;
+                }
+            }
+        }
+        return safeGraves;
     }
 
     static boolean isAmbientMourningTime(long dayTime) {
@@ -619,7 +639,7 @@ public class Village implements Iterable<Building> {
         }
 
         if (nextMourningTime == 0L) {
-            nextMourningTime = calculateNextMourningTime(time);
+            nextMourningTime = calculateNextMourningTime(time, world.random);
             markDirty();
             return;
         }
@@ -630,8 +650,8 @@ public class Village implements Iterable<Building> {
 
         MourningBurstResult result = releaseMourningBurst(world, time);
         nextMourningTime = result == MourningBurstResult.DEFERRED
-                ? calculateMourningRetryTime(time, world.random)
-                : calculateNextMourningTime(time);
+                ? calculateMourningRetryTime(time)
+                : calculateNextMourningTime(time, world.random);
         markDirty();
     }
 
@@ -641,9 +661,8 @@ public class Village implements Iterable<Building> {
             return MourningBurstResult.NO_GRAVES;
         }
 
-        List<BlockPos> safeGraves = selectMourningSafetyCandidates(graves, world.random).stream()
-                .filter(grave -> Mourning.isSafeToMourn(world, grave))
-                .collect(Collectors.toCollection(ArrayList::new));
+        List<BlockPos> safeGraves = selectSafeMourningGraves(graves, world.random,
+                grave -> Mourning.isSafeToMourn(world, grave));
         if (safeGraves.isEmpty()) {
             return MourningBurstResult.DEFERRED;
         }
@@ -914,6 +933,19 @@ public class Village implements Iterable<Building> {
     Optional<ResolvedInteraction> resolveInteractionPosition(BlockPos pos) {
         Map<Integer, List<Building>> roomsByStructure = getRooms()
                 .collect(Collectors.groupingBy(Building::getStructureId));
+        BlockState state = world == null ? null : world.getBlockState(pos);
+        if (state != null && state.getBlock() instanceof TrapDoorBlock) {
+            Direction ownerSide = StructureConnector.ownerSide(state);
+            List<BlockPos> connectorColumn = StructureConnector.verticalColumn(world, pos);
+            List<ResolvedInteraction> above = verticalSideInteractions(pos.above(), connectorColumn, roomsByStructure);
+            List<ResolvedInteraction> below = verticalSideInteractions(pos.below(), connectorColumn, roomsByStructure);
+            boolean sharedBoundary = above.stream().anyMatch(first -> below.stream().anyMatch(second ->
+                    first.structure().getId() != second.structure().getId()
+                            || first.position().floor().id() != second.position().floor().id()));
+            if (!connectorColumn.isEmpty() || sharedBoundary) {
+                return uniqueRegisteredRoom(ownerSide == Direction.UP ? above : below);
+            }
+        }
         return structures.values().stream()
                 .map(structure -> new ResolvedInteraction(structure,
                         structure.resolveInteractionPosition(pos,
@@ -922,6 +954,27 @@ public class Village implements Iterable<Building> {
                 .min(Comparator
                         .comparing((ResolvedInteraction resolved) -> resolved.position().room() == null)
                         .thenComparingInt(resolved -> resolved.structure().getId()));
+    }
+
+    private List<ResolvedInteraction> verticalSideInteractions(BlockPos pos, List<BlockPos> connectorColumn,
+                                                            Map<Integer, List<Building>> roomsByStructure) {
+        return structures.values().stream()
+                .map(structure -> new ResolvedInteraction(structure,
+                        structure.resolveVerticalSide(pos, connectorColumn,
+                                roomsByStructure.getOrDefault(structure.getId(), List.of())).orElse(null)))
+                .filter(resolved -> resolved.position() != null)
+                .toList();
+    }
+
+    private static Optional<ResolvedInteraction> uniqueRegisteredRoom(List<ResolvedInteraction> candidates) {
+        ResolvedInteraction owner = null;
+        for (ResolvedInteraction candidate : candidates) {
+            Building room = candidate.position().room();
+            if (room == null) continue;
+            if (owner != null && owner.position().room().getId() != room.getId()) return Optional.empty();
+            if (owner == null) owner = candidate;
+        }
+        return Optional.ofNullable(owner);
     }
 
     public Optional<Building> getMainRoom(Structure structure) {
@@ -934,13 +987,7 @@ public class Village implements Iterable<Building> {
 
     public Optional<Building> findPhysicalRoomAt(Vec3i pos) {
         Optional<Structure> structure = getExactStructureAt(pos);
-        if (structure.isEmpty()) {
-            BlockPos query = new BlockPos(pos.getX(), pos.getY(), pos.getZ());
-            return getRooms()
-                    .filter(room -> room.containsPos(pos))
-                    .filter(room -> room.getFloorCells().isEmpty() || room.ownsFloorCell(query))
-                    .min(Comparator.comparingInt(Building::getId));
-        }
+        if (structure.isEmpty()) return Optional.empty();
         Structure.FloorCell resolved = structure.get().resolvePhysicalFloorCell(pos).orElse(null);
         if (resolved == null) return Optional.empty();
         return getRooms().filter(room -> room.getStructureId() == structure.get().getId())
@@ -950,10 +997,13 @@ public class Village implements Iterable<Building> {
     }
 
     public Optional<Building> findInteractionRoomAt(BlockPos pos) {
-        return resolveInteractionPosition(pos)
+        Optional<Building> resolved = resolveInteractionPosition(pos)
                 .map(ResolvedInteraction::position)
-                .map(Structure.InteractionPosition::room)
-                .or(() -> findPhysicalRoomAt(pos));
+                .map(Structure.InteractionPosition::room);
+        if (world != null && world.getBlockState(pos).getBlock() instanceof TrapDoorBlock) {
+            return resolved;
+        }
+        return resolved.or(() -> findPhysicalRoomAt(pos));
     }
 
     record ResolvedInteraction(Structure structure, Structure.InteractionPosition position) {

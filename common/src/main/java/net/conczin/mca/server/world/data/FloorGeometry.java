@@ -142,14 +142,6 @@ final class FloorGeometry {
                 .max(Comparator.comparingInt(cell -> cell.feet().getY()));
     }
 
-    BuildingFloorRegion projection() {
-        int y = anchorY();
-        Set<BlockPos> projected = cells.stream()
-                .map(cell -> new BlockPos(cell.feet().getX(), y, cell.feet().getZ()))
-                .collect(Collectors.toUnmodifiableSet());
-        return BuildingFloorRegion.fromFootprint(y, projected);
-    }
-
     boolean sameProjectedFootprint(FloorGeometry other) {
         return other != null && cellsByColumn.keySet().equals(other.cellsByColumn.keySet());
     }

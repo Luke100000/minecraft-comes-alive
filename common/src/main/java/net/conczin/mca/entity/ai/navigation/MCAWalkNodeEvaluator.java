@@ -10,6 +10,7 @@ import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.PathNavigationRegion;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.pathfinder.Node;
@@ -317,6 +318,9 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         boolean climbable = state.is(BlockTags.CLIMBABLE);
         if (context == this.currentContext) {
             this.climbableCache.put(BlockPos.asLong(x, y, z), climbable);
+        }
+        if (state.is(Blocks.SCAFFOLDING)) {
+            return super.getPathType(context, x, y, z);
         }
         if (climbable) {
             return PathType.WALKABLE;

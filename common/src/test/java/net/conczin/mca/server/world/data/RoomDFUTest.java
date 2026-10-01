@@ -20,6 +20,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -75,6 +76,23 @@ class RoomDFUTest {
                 new BlockPos(3, 64, 0), new BlockPos(3, 64, 1),
                 new BlockPos(3, 64, 2), new BlockPos(3, 64, 3)),
                 room.getFloorCells());
+    }
+
+    @Test
+    void originApproximationMarkerPersistsOnlyForOriginMigratedStructures() {
+        CompoundTag origin = new CompoundTag();
+        origin.put("buildings", list(originBuilding(7, "house")));
+        Structure migratedOrigin = RoomDFU.load(origin).structures().get(7);
+
+        CompoundTag savedOrigin = migratedOrigin.save();
+        assertTrue(savedOrigin.getBoolean("originGeometryApproximate"));
+        assertTrue(new Structure(savedOrigin).save().getBoolean("originGeometryApproximate"));
+
+        Structure migratedFloorClean = RoomDFU.load(upstreamFloorCleanSquashVillage(true))
+                .structures().get(20);
+        Structure canonical = RoomDFU.load(canonicalVillage().save()).structures().get(20);
+        assertFalse(migratedFloorClean.save().contains("originGeometryApproximate"));
+        assertFalse(canonical.save().contains("originGeometryApproximate"));
     }
 
     @Test
@@ -168,7 +186,7 @@ class RoomDFUTest {
 
     @Test
     void canonicalRoomAndStructureGeometryRoundTripsExactly() {
-        BuildingFloorRegion footprint = BuildingFloorRegion.fromFootprint(64, Set.of(
+        TestFloorFootprint footprint = TestFloorFootprint.fromFootprint(64, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
                 new BlockPos(0, 64, 1), new BlockPos(1, 64, 1)));
         StructureFloor floor = TestStructureFloors.create(0, 64, 70, -2, footprint);
@@ -237,6 +255,74 @@ class RoomDFUTest {
                 .getCompound(0).remove("buildingId");
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
+    void canonicalRoomMissingIdIsRejectedAtDfuBoundary() {
+        CompoundTag malformed = canonicalVillage().save();
+        malformed.getList("buildings", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .getCompound(0).remove("id");
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
+    void canonicalExternalBuildingMissingIdIsRejectedAtDfuBoundary() {
+        Village village = canonicalVillage();
+        ExternalBuilding external = new ExternalBuilding(new BlockPos(20, 64, 20));
+        external.setId(30);
+        external.setType("graveyard");
+        village.registerExternalBuilding(external);
+        CompoundTag malformed = village.save();
+        malformed.getList("externalBuildings", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .getCompound(0).remove("id");
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
+    void canonicalStructureMissingIdIsRejectedAtDfuBoundary() {
+        CompoundTag malformed = canonicalVillage().save();
+        malformed.getList("structures", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .getCompound(0).remove("id");
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
+    void canonicalStructureFloorMissingIdIsRejectedAtDfuBoundary() {
+        CompoundTag malformed = canonicalVillage().save();
+        malformed.getList("structures", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .getCompound(0).getList("floors", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .getCompound(0).remove("id");
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
+    void canonicalLogicalBuildingMissingIdIsRejectedAtDfuBoundary() {
+        CompoundTag malformed = canonicalVillage().save();
+        malformed.getList("logicalBuildings", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .getCompound(0).remove("id");
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
+    void canonicalStructureAllowsMissingNextFloorId() {
+        CompoundTag compatible = canonicalVillage().save();
+        compatible.getList("structures", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .getCompound(0).remove("nextFloorId");
+
+        assertDoesNotThrow(() -> RoomDFU.load(compatible));
+    }
+
+    @Test
+    void originGeometryRefreshBackoffIsBounded() {
+        assertEquals(40L, VillageManager.originGeometryRefreshDelay(1));
+        assertEquals(80L, VillageManager.originGeometryRefreshDelay(2));
+        assertEquals(VillageManager.ORIGIN_GEOMETRY_REFRESH_MAX_DELAY,
+                VillageManager.originGeometryRefreshDelay(30));
     }
 
     @Test
@@ -379,7 +465,7 @@ class RoomDFUTest {
     }
 
     private static StructureFloor floor(int id, int anchorY, int ceilingY, int number) {
-        BuildingFloorRegion region = BuildingFloorRegion.fromFootprint(
+        TestFloorFootprint region = TestFloorFootprint.fromFootprint(
                 anchorY, List.of(new BlockPos(0, anchorY, 0), new BlockPos(1, anchorY, 0)));
         return TestStructureFloors.create(id, anchorY, ceilingY, number, region);
     }
@@ -437,24 +523,27 @@ class RoomDFUTest {
     }
 
     private static CompoundTag legacyRegion(int anchorY, Set<BlockPos> cells) {
-        BuildingFloorRegion region = BuildingFloorRegion.fromFootprint(anchorY, cells);
         CompoundTag tag = new CompoundTag();
         tag.putInt("anchorY", anchorY);
-        tag.putInt("area", region.area());
+        tag.putInt("area", cells.size());
         ListTag components = new ListTag();
-        for (BuildingFloorRegion.Component component : region.components()) {
+        if (!cells.isEmpty()) {
+            List<BlockPos> ordered = cells.stream()
+                    .sorted(java.util.Comparator.comparingInt((BlockPos pos) -> pos.getZ())
+                            .thenComparingInt(pos -> pos.getX()))
+                    .toList();
             CompoundTag componentTag = new CompoundTag();
-            componentTag.putInt("minX", component.minX());
-            componentTag.putInt("minZ", component.minZ());
-            componentTag.putInt("maxX", component.maxX());
-            componentTag.putInt("maxZ", component.maxZ());
-            componentTag.putInt("area", component.area());
+            componentTag.putInt("minX", ordered.stream().mapToInt(BlockPos::getX).min().orElseThrow());
+            componentTag.putInt("minZ", ordered.stream().mapToInt(BlockPos::getZ).min().orElseThrow());
+            componentTag.putInt("maxX", ordered.stream().mapToInt(BlockPos::getX).max().orElseThrow());
+            componentTag.putInt("maxZ", ordered.stream().mapToInt(BlockPos::getZ).max().orElseThrow());
+            componentTag.putInt("area", ordered.size());
             ListTag spans = new ListTag();
-            for (BuildingFloorRegion.Span span : component.spans()) {
+            for (BlockPos cell : ordered) {
                 CompoundTag spanTag = new CompoundTag();
-                spanTag.putInt("z", span.z());
-                spanTag.putInt("minX", span.minX());
-                spanTag.putInt("maxX", span.maxX());
+                spanTag.putInt("z", cell.getZ());
+                spanTag.putInt("minX", cell.getX());
+                spanTag.putInt("maxX", cell.getX());
                 spans.add(spanTag);
             }
             componentTag.put("spans", spans);
