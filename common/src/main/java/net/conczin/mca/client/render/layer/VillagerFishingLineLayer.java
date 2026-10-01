@@ -3,10 +3,10 @@ package net.conczin.mca.client.render.layer;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
-import net.conczin.mca.client.model.VillagerEntityModelMCA;
 import net.conczin.mca.entity.MCAFishingBobberEntity;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.FishingHookRenderer;
@@ -20,11 +20,11 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 public final class VillagerFishingLineLayer
-        extends RenderLayer<VillagerEntityMCA, VillagerEntityModelMCA<VillagerEntityMCA>> {
+        extends RenderLayer<VillagerEntityMCA, PlayerModel<VillagerEntityMCA>> {
     private static final double BOBBER_SEARCH_RADIUS = 32.0;
 
     public VillagerFishingLineLayer(
-            RenderLayerParent<VillagerEntityMCA, VillagerEntityModelMCA<VillagerEntityMCA>> parent
+            RenderLayerParent<VillagerEntityMCA, PlayerModel<VillagerEntityMCA>> parent
     ) {
         super(parent);
     }

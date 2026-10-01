@@ -63,4 +63,20 @@ class CommonConfigGameplayOptionsTest {
                 config.destinyDimensionBlacklist
         );
     }
+
+    @Test
+    void publicSkinContributionsAreOptInAndDoNotChangeManagePermission() {
+        CommonConfig defaults = new CommonConfig();
+        assertFalse(defaults.allowEveryoneToAddContentGlobally);
+        assertEquals(3, defaults.addContentGloballyPermissionLevel);
+
+        CommonConfig contributionsAllowed = GSON.fromJson("""
+                {
+                  "allowEveryoneToAddContentGlobally": true,
+                  "addContentGloballyPermissionLevel": 4
+                }
+                """, CommonConfig.class);
+        assertTrue(contributionsAllowed.allowEveryoneToAddContentGlobally);
+        assertEquals(4, contributionsAllowed.addContentGloballyPermissionLevel);
+    }
 }

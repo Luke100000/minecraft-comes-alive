@@ -24,10 +24,9 @@ public record RemoveCustomClothingMessage(Type kind, String identifier) implemen
 
     @Override
     public void handleServer(ServerPlayer player) {
-        if (!CustomClothingManager.canEdit(player)) {
+        if (!CustomClothingManager.canManage(player)) {
             return;
         }
-
         if (kind == Type.CLOTHING) {
             CustomClothingManager.getClothing().removeEntry(identifier);
         } else if (kind == Type.HAIR) {
