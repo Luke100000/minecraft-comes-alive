@@ -24,11 +24,15 @@ import java.util.Optional;
 import java.util.UUID;
 
 public class FamilyTreeScreen extends Screen {
-    private static final int HEADER_HEIGHT = 30;
+    private static final int HEADER_HEIGHT = 54;
     private static final int FOOTER_HEIGHT = 30;
     private static final int FIT_PADDING = 24;
-    private static final int SEARCH_X = 54;
-    private static final int SEARCH_WIDTH = 180;
+    private static final int HEADER_MARGIN = 5;
+    private static final int HEADER_GAP = 4;
+    private static final int SEARCH_MAX_WIDTH = 180;
+    private static final int SEARCH_MIN_WIDTH = 80;
+    private static final int BACK_WIDTH = 44;
+    private static final int DONE_WIDTH = 72;
     private static final int SEARCH_ROW_HEIGHT = 22;
     private static final int SEARCH_RESULT_LIMIT = 6;
     private static final float MIN_ZOOM = 0.25F;
@@ -51,6 +55,8 @@ public class FamilyTreeScreen extends Screen {
     private ButtonWidget zoomLabel;
     @Nullable
     private EditBox searchField;
+    private int searchX;
+    private int searchWidth = SEARCH_MAX_WIDTH;
     private List<FamilyTreeSearchEntry> searchResults = List.of();
     private boolean searchOpen;
     private boolean searchPending;
@@ -68,33 +74,51 @@ public class FamilyTreeScreen extends Screen {
 
     @Override
     protected void init() {
-        int y = 5;
-        addRenderableWidget(new ButtonWidget(5, y, 44, 20, Component.translatable("gui.family_tree.back"), button -> goBack()));
+        HeaderLayout header = headerLayout(width);
+        searchX = header.searchX();
+        searchWidth = header.searchWidth();
+        int topY = 5;
+        int controlsY = 29;
+        addRenderableWidget(new ButtonWidget(
+                header.backX(),
+                topY,
+                BACK_WIDTH,
+                20,
+                Component.translatable("gui.family_tree.back"),
+                button -> goBack()
+        ));
+        addRenderableWidget(new ButtonWidget(
+                header.doneX(),
+                topY,
+                DONE_WIDTH,
+                20,
+                Component.translatable("gui.done"),
+                button -> onClose()
+        ));
 
         searchField = addRenderableWidget(new EditBox(
                 font,
-                SEARCH_X,
-                y + 1,
-                140,
+                header.searchX(),
+                controlsY + 1,
+                header.searchWidth(),
                 18,
                 Component.translatable("gui.family_tree.search")
         ));
         searchField.setMaxLength(32);
         searchField.setResponder(this::searchFamily);
 
-        int controlsX = Math.max(width - 278, width / 2 + 36);
-        addRenderableWidget(new ButtonWidget(controlsX, y, 20, 20, Component.literal("-"), button -> setZoom(viewport.zoom() - 0.1F)));
-        zoomLabel = addRenderableWidget(new ButtonWidget(controlsX + 22, y, 48, 20, zoomLabel(), button -> {
+        addRenderableWidget(new ButtonWidget(header.zoomOutX(), controlsY, 20, 20, Component.literal("-"), button -> setZoom(viewport.zoom() - 0.1F)));
+        zoomLabel = addRenderableWidget(new ButtonWidget(header.zoomLabelX(), controlsY, 48, 20, zoomLabel(), button -> {
         }));
         zoomLabel.active = false;
-        addRenderableWidget(new ButtonWidget(controlsX + 72, y, 20, 20, Component.literal("+"), button -> setZoom(viewport.zoom() + 0.1F)));
-        addRenderableWidget(new ButtonWidget(controlsX + 94, y, 44, 20, Component.translatable("gui.family_tree.fit"), button -> {
+        addRenderableWidget(new ButtonWidget(header.zoomInX(), controlsY, 20, 20, Component.literal("+"), button -> setZoom(viewport.zoom() + 0.1F)));
+        addRenderableWidget(new ButtonWidget(header.fitX(), controlsY, 44, 20, Component.translatable("gui.family_tree.fit"), button -> {
             viewport = fitView(layout, width, canvasHeight(), FIT_PADDING);
+            updateZoomLabel();
         }));
-        addRenderableWidget(new ButtonWidget(controlsX + 140, y, 54, 20, Component.translatable("gui.family_tree.center"), button -> {
+        addRenderableWidget(new ButtonWidget(header.centerX(), controlsY, 54, 20, Component.translatable("gui.family_tree.center"), button -> {
             viewport = centerView(layout, viewport);
         }));
-        addRenderableWidget(new ButtonWidget(controlsX + 196, y, 72, 20, Component.translatable("gui.done"), button -> onClose()));
 
         if (viewModel.nodes().isEmpty() && viewModel.pendingFocusId().isEmpty()) {
             requestFocus(viewModel.focusId(), false);
@@ -154,6 +178,7 @@ public class FamilyTreeScreen extends Screen {
     private void goBack() {
         viewModel.back().ifPresent(entry -> {
             viewport = entry.viewport();
+            updateZoomLabel();
             rebuildLayout();
             if (!viewModel.nodes().containsKey(entry.focusId())) {
                 requestFocus(entry.focusId(), false);
@@ -235,7 +260,7 @@ public class FamilyTreeScreen extends Screen {
 
     @Nullable
     private FamilyTreeSearchEntry searchResultAt(double mouseX, double mouseY) {
-        if (!searchOpen || searchPending || mouseX < SEARCH_X || mouseX >= SEARCH_X + SEARCH_WIDTH) {
+        if (!searchOpen || searchPending || mouseX < searchX || mouseX >= searchX + searchWidth) {
             return null;
         }
         int top = HEADER_HEIGHT + 2;
@@ -256,7 +281,7 @@ public class FamilyTreeScreen extends Screen {
                 mouseX,
                 mouseY,
                 width / 2.0,
-                height / 2.0,
+                canvasCenterY(),
                 viewport.zoom() + (float) scrollY * 0.1F
         );
         updateZoomLabel();
@@ -266,6 +291,7 @@ public class FamilyTreeScreen extends Screen {
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         renderBackground(context, mouseX, mouseY, delta);
+        super.render(context, mouseX, mouseY, delta);
         context.fill(0, HEADER_HEIGHT, width, height - FOOTER_HEIGHT, 0x66000000);
 
         hovered = insideCanvas(mouseX, mouseY)
@@ -275,7 +301,7 @@ public class FamilyTreeScreen extends Screen {
         context.enableScissor(0, HEADER_HEIGHT, width, height - FOOTER_HEIGHT);
         PoseStack pose = context.pose();
         pose.pushPose();
-        pose.translate(width / 2.0 + viewport.panX(), height / 2.0 + viewport.panY(), 0);
+        pose.translate(width / 2.0 + viewport.panX(), canvasCenterY() + viewport.panY(), 0);
         pose.scale(viewport.zoom(), viewport.zoom(), 1.0F);
 
         renderEdges(context);
@@ -287,7 +313,6 @@ public class FamilyTreeScreen extends Screen {
 
         renderFixedChrome(context, mouseX, mouseY);
         renderSearchOverlay(context, mouseX, mouseY);
-        super.render(context, mouseX, mouseY, delta);
     }
 
     private void renderEdges(GuiGraphics context) {
@@ -320,7 +345,13 @@ public class FamilyTreeScreen extends Screen {
                     && target.direction() == control.direction();
             context.fill(bounds.left(), bounds.top(), bounds.right(), bounds.bottom(), isHovered ? 0xFF6D8FB3 : 0xFF3F566D);
             String marker = control.direction() == FamilyTreeView.Direction.ANCESTORS ? "↑" : "↓";
-            context.drawCenteredString(font, marker, bounds.centerX(), bounds.centerY() - font.lineHeight / 2, 0xFFFFFFFF);
+            PoseStack pose = context.pose();
+            pose.pushPose();
+            pose.translate(bounds.centerX(), bounds.centerY(), 1);
+            float inverseScale = inverseTextScale(viewport.zoom());
+            pose.scale(inverseScale, inverseScale, 1.0F);
+            context.drawCenteredString(font, marker, 0, -font.lineHeight / 2, 0xFFFFFFFF);
+            pose.popPose();
         }
     }
 
@@ -345,36 +376,56 @@ public class FamilyTreeScreen extends Screen {
             context.fill(bounds.left(), bounds.top(), bounds.right(), bounds.bottom(), background);
             drawBorder(context, bounds, card.role() == FamilyTreeLayout.Role.FOCUS ? 0xFFFFFFFF : 0xFF9AA7B2);
 
+            PoseStack pose = context.pose();
+            pose.pushPose();
+            pose.translate(bounds.centerX(), bounds.centerY(), 1);
+            float inverseScale = inverseTextScale(viewport.zoom());
+            pose.scale(inverseScale, inverseScale, 1.0F);
+
+            int renderedCardWidth = Math.max(1, Math.round(FamilyTreeLayout.CARD_WIDTH * viewport.zoom()));
+            int renderedCardHeight = Math.max(1, Math.round(FamilyTreeLayout.CARD_HEIGHT * viewport.zoom()));
+            int textWidth = Math.max(8, renderedCardWidth - 8);
             String name = nodeDisplayName(node).getString();
-            int textWidth = FamilyTreeLayout.CARD_WIDTH - 12;
             if (font.width(name) > textWidth) {
                 String ellipsis = "...";
                 name = font.plainSubstrByWidth(name, Math.max(0, textWidth - font.width(ellipsis))) + ellipsis;
             }
-            context.drawCenteredString(font, name, bounds.centerX(), bounds.top() + 7, 0xFFFFFFFF);
 
             String profession = node.getProfessionText().getString();
             if (font.width(profession) > textWidth) {
                 profession = font.plainSubstrByWidth(profession, textWidth);
             }
-            context.drawCenteredString(font, profession, bounds.centerX(), bounds.top() + 22, 0xFFBFC7CE);
+
+            boolean showProfession = renderedCardHeight >= font.lineHeight * 2 + 4;
+            if (showProfession) {
+                context.drawCenteredString(font, name, 0, -font.lineHeight - 1, 0xFFFFFFFF);
+                context.drawCenteredString(font, profession, 0, 2, 0xFFBFC7CE);
+            } else {
+                context.drawCenteredString(font, name, 0, -font.lineHeight / 2, 0xFFFFFFFF);
+            }
 
             if (node.isDeceased()) {
-                context.drawString(font, "†", bounds.left() + 4, bounds.top() + 4, 0xFFD9D9D9);
+                context.drawString(
+                        font,
+                        "†",
+                        -renderedCardWidth / 2 + 3,
+                        -renderedCardHeight / 2 + 3,
+                        0xFFD9D9D9
+                );
             }
+            pose.popPose();
         }
     }
 
     private void renderFixedChrome(GuiGraphics context, int mouseX, int mouseY) {
         FamilyTreeNode focused = viewModel.nodes().get(viewModel.focusId());
         Component focusName = focused == null ? title : nodeDisplayName(focused);
-        context.drawCenteredString(
-                font,
-                Component.translatable("gui.family_tree.formatted_title", focusName),
-                width / 2,
-                10,
-                0xFFFFFFFF
-        );
+        String headerTitle = Component.translatable("gui.family_tree.formatted_title", focusName).getString();
+        int titleWidth = Math.max(0, width - (DONE_WIDTH + HEADER_MARGIN + 10) * 2);
+        if (font.width(headerTitle) > titleWidth) {
+            headerTitle = font.plainSubstrByWidth(headerTitle, titleWidth);
+        }
+        context.drawCenteredString(font, headerTitle, width / 2, 10, 0xFFFFFFFF);
 
         Optional<Component> status = statusMessage(viewModel, searchOpen && !searchPending, searchResults);
         if (searchPending) {
@@ -417,11 +468,11 @@ public class FamilyTreeScreen extends Screen {
 
         int top = HEADER_HEIGHT + 2;
         if (searchPending) {
-            context.fill(SEARCH_X, top, SEARCH_X + SEARCH_WIDTH, top + SEARCH_ROW_HEIGHT, 0xEE20262C);
+            context.fill(searchX, top, searchX + searchWidth, top + SEARCH_ROW_HEIGHT, 0xEE20262C);
             context.drawString(
                     font,
                     Component.translatable("gui.family_tree.loading_family"),
-                    SEARCH_X + 6,
+                    searchX + 6,
                     top + 7,
                     0xFFFFFFFF
             );
@@ -429,11 +480,11 @@ public class FamilyTreeScreen extends Screen {
         }
 
         if (searchResults.isEmpty()) {
-            context.fill(SEARCH_X, top, SEARCH_X + SEARCH_WIDTH, top + SEARCH_ROW_HEIGHT, 0xEE20262C);
+            context.fill(searchX, top, searchX + searchWidth, top + SEARCH_ROW_HEIGHT, 0xEE20262C);
             context.drawString(
                     font,
                     Component.translatable("gui.family_tree.no_records"),
-                    SEARCH_X + 6,
+                    searchX + 6,
                     top + 7,
                     0xFFFFFFFF
             );
@@ -441,20 +492,20 @@ public class FamilyTreeScreen extends Screen {
         }
 
         int count = Math.min(searchResults.size(), SEARCH_RESULT_LIMIT);
-        context.fill(SEARCH_X, top, SEARCH_X + SEARCH_WIDTH, top + count * SEARCH_ROW_HEIGHT, 0xEE20262C);
+        context.fill(searchX, top, searchX + searchWidth, top + count * SEARCH_ROW_HEIGHT, 0xEE20262C);
         for (int index = 0; index < count; index++) {
             int rowTop = top + index * SEARCH_ROW_HEIGHT;
-            boolean rowHovered = mouseX >= SEARCH_X
-                    && mouseX < SEARCH_X + SEARCH_WIDTH
+            boolean rowHovered = mouseX >= searchX
+                    && mouseX < searchX + searchWidth
                     && mouseY >= rowTop
                     && mouseY < rowTop + SEARCH_ROW_HEIGHT;
             if (rowHovered) {
-                context.fill(SEARCH_X, rowTop, SEARCH_X + SEARCH_WIDTH, rowTop + SEARCH_ROW_HEIGHT, 0xFF43586C);
+                context.fill(searchX, rowTop, searchX + searchWidth, rowTop + SEARCH_ROW_HEIGHT, 0xFF43586C);
             }
             context.drawString(
                     font,
                     searchResultLabel(searchResults.get(index)),
-                    SEARCH_X + 6,
+                    searchX + 6,
                     rowTop + 7,
                     0xFFFFFFFF
             );
@@ -485,7 +536,7 @@ public class FamilyTreeScreen extends Screen {
     }
 
     private int worldY(double mouseY) {
-        return (int) Math.floor((mouseY - height / 2.0 - viewport.panY()) / viewport.zoom());
+        return (int) Math.floor((mouseY - canvasCenterY() - viewport.panY()) / viewport.zoom());
     }
 
     private boolean insideCanvas(double mouseX, double mouseY) {
@@ -496,8 +547,48 @@ public class FamilyTreeScreen extends Screen {
         return Math.max(1, height - HEADER_HEIGHT - FOOTER_HEIGHT);
     }
 
+    private double canvasCenterY() {
+        return HEADER_HEIGHT + canvasHeight() / 2.0;
+    }
+
     private Component zoomLabel() {
+        return zoomLabel(viewport);
+    }
+
+    static Component zoomLabel(FamilyTreeViewModel.ViewportState viewport) {
         return Component.literal(Math.round(viewport.zoom() * 100.0F) + "%");
+    }
+
+    static float inverseTextScale(float zoom) {
+        return 1.0F / zoom;
+    }
+
+    static HeaderLayout headerLayout(int screenWidth) {
+        int fixedControlsWidth = 20 + 2 + 48 + 2 + 20 + 6 + 44 + HEADER_GAP + 54;
+        int searchWidth = Math.max(
+                SEARCH_MIN_WIDTH,
+                Math.min(SEARCH_MAX_WIDTH, screenWidth - HEADER_MARGIN * 2 - 6 - fixedControlsWidth)
+        );
+        int controlsWidth = searchWidth + 6 + fixedControlsWidth;
+        int controlsLeft = Math.max(HEADER_MARGIN, (screenWidth - controlsWidth) / 2);
+        int zoomOutX = controlsLeft + searchWidth + 6;
+        int zoomLabelX = zoomOutX + 22;
+        int zoomInX = zoomOutX + 72;
+        int fitX = zoomOutX + 98;
+        int centerX = fitX + 44 + HEADER_GAP;
+        return new HeaderLayout(
+                HEADER_MARGIN,
+                Math.max(HEADER_MARGIN, screenWidth - HEADER_MARGIN - DONE_WIDTH),
+                controlsLeft,
+                searchWidth,
+                zoomOutX,
+                zoomLabelX,
+                zoomInX,
+                fitX,
+                centerX,
+                controlsLeft,
+                centerX + 54
+        );
     }
 
     private void updateZoomLabel() {
@@ -639,5 +730,20 @@ public class FamilyTreeScreen extends Screen {
     }
 
     record ContinuationTarget(UUID anchor, FamilyTreeView.Direction direction) implements HitTarget {
+    }
+
+    record HeaderLayout(
+            int backX,
+            int doneX,
+            int searchX,
+            int searchWidth,
+            int zoomOutX,
+            int zoomLabelX,
+            int zoomInX,
+            int fitX,
+            int centerX,
+            int controlsLeft,
+            int controlsRight
+    ) {
     }
 }

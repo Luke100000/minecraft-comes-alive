@@ -58,6 +58,35 @@ class FamilyTreeScreenInteractionTest {
     }
 
     @Test
+    void graphTextCancelsViewportScaleSoGlyphsStayPixelSharp() {
+        assertEquals(2.0F, FamilyTreeScreen.inverseTextScale(0.5F), 0.0001F);
+        assertEquals(1.0F, FamilyTreeScreen.inverseTextScale(1.0F), 0.0001F);
+        assertEquals(0.5F, FamilyTreeScreen.inverseTextScale(2.0F), 0.0001F);
+    }
+
+    @Test
+    void headerKeepsNavigationBalancedAndCentersTheControlRow() {
+        FamilyTreeScreen.HeaderLayout header = FamilyTreeScreen.headerLayout(854);
+
+        assertEquals(5, header.backX());
+        assertEquals(854 - 5 - 72, header.doneX());
+        assertEquals(
+                854 - header.controlsRight(),
+                header.controlsLeft()
+        );
+        assertTrue(header.searchWidth() <= 180);
+    }
+
+    @Test
+    void headerShrinksSearchInsteadOfPushingControlsOffSmallScreens() {
+        FamilyTreeScreen.HeaderLayout header = FamilyTreeScreen.headerLayout(320);
+
+        assertTrue(header.searchWidth() >= 80);
+        assertTrue(header.controlsLeft() >= 5);
+        assertTrue(header.controlsRight() <= 315);
+    }
+
+    @Test
     void fitViewKeepsContentInsideCanvasWithPadding() {
         FamilyTreeLayout.Result result = result(new FamilyTreeLayout.Bounds(-200, 200, -100, 100));
 
@@ -98,6 +127,18 @@ class FamilyTreeScreenInteractionTest {
         assertTrue(back.isPresent());
         assertEquals(ROOT, model.focusId());
         assertEquals(previous, back.orElseThrow().viewport());
+    }
+
+    @Test
+    void restoredViewportDisplaysItsRestoredZoom() {
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        FamilyTreeViewModel.ViewportState previous = new FamilyTreeViewModel.ViewportState(12, -8, 1.0F);
+        long requestId = model.beginFocus(OTHER, previous);
+        model.accept(new GetFamilyTreeResponse(requestId, OTHER, true, FamilyTreeView.empty()));
+
+        FamilyTreeViewModel.ViewportState restored = model.back().orElseThrow().viewport();
+
+        assertEquals(Component.literal("100%"), FamilyTreeScreen.zoomLabel(restored));
     }
 
     @Test
