@@ -111,7 +111,7 @@ public class ClientHandlerImpl implements ClientHandler {
     public void handleFamilyTreeResponse(GetFamilyTreeResponse message) {
         Screen screen = client.screen;
         if (screen instanceof FamilyTreeScreen gui) {
-            gui.setFamilyData(message.uuid(), message.family());
+            gui.acceptFamilyData(message);
         }
     }
 
