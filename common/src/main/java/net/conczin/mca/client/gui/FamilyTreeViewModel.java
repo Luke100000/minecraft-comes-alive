@@ -46,7 +46,6 @@ public final class FamilyTreeViewModel {
     private final Map<Long, FamilyTreeView.Continuation> pendingExpansions = new LinkedHashMap<>();
 
     private UUID focusId;
-    private UUID selection;
     private UUID pendingFocusId;
     private UUID unavailableFocusId;
     private long pendingFocusRequestId = -1L;
@@ -123,7 +122,6 @@ public final class FamilyTreeViewModel {
         pendingFocusId = null;
         pendingFocusRequestId = -1L;
         unavailableFocusId = null;
-        selection = null;
         return Optional.of(entry);
     }
 
@@ -141,14 +139,6 @@ public final class FamilyTreeViewModel {
 
     public Set<UUID> unavailable() {
         return Set.copyOf(unavailable);
-    }
-
-    public Optional<UUID> selection() {
-        return Optional.ofNullable(selection);
-    }
-
-    public void select(UUID id) {
-        selection = id;
     }
 
     public Optional<UUID> pendingFocusId() {

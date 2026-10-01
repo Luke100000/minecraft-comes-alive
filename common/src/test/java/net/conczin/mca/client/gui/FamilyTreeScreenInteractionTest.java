@@ -58,13 +58,6 @@ class FamilyTreeScreenInteractionTest {
     }
 
     @Test
-    void graphTextCancelsViewportScaleSoGlyphsStayPixelSharp() {
-        assertEquals(2.0F, FamilyTreeScreen.inverseTextScale(0.5F), 0.0001F);
-        assertEquals(1.0F, FamilyTreeScreen.inverseTextScale(1.0F), 0.0001F);
-        assertEquals(0.5F, FamilyTreeScreen.inverseTextScale(2.0F), 0.0001F);
-    }
-
-    @Test
     void headerKeepsNavigationBalancedAndCentersTheControlRow() {
         FamilyTreeScreen.HeaderLayout header = FamilyTreeScreen.headerLayout(854);
 
@@ -113,6 +106,34 @@ class FamilyTreeScreenInteractionTest {
         assertEquals(1.5F, centered.zoom());
         assertEquals(-135.0, centered.panX(), 0.0001);
         assertEquals(-30.0, centered.panY(), 0.0001);
+    }
+
+    @Test
+    void focusTransitionRecentersOnlyAfterTheNewLayoutArrives() {
+        FamilyTreeLayout.Result result = result(new FamilyTreeLayout.Bounds(40, 140, -30, 70));
+        FamilyTreeViewModel.ViewportState current = new FamilyTreeViewModel.ViewportState(18, 22, 1.5F);
+
+        assertEquals(
+                current,
+                FamilyTreeScreen.focusViewportAfterResponse(result, current, false)
+        );
+        assertEquals(
+                FamilyTreeScreen.centerView(result, current),
+                FamilyTreeScreen.focusViewportAfterResponse(result, current, true)
+        );
+    }
+
+    @Test
+    void detailStripUsesOnlyHoveredRelativesAndNeverLabelsTheFocusAsSelf() {
+        assertEquals(
+                Optional.of(OTHER),
+                FamilyTreeScreen.detailPerson(new FamilyTreeScreen.PersonTarget(OTHER), ROOT)
+        );
+        assertEquals(
+                Optional.empty(),
+                FamilyTreeScreen.detailPerson(new FamilyTreeScreen.PersonTarget(ROOT), ROOT)
+        );
+        assertEquals(Optional.empty(), FamilyTreeScreen.detailPerson(null, ROOT));
     }
 
     @Test

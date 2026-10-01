@@ -60,6 +60,7 @@ public class FamilyTreeScreen extends Screen {
     private List<FamilyTreeSearchEntry> searchResults = List.of();
     private boolean searchOpen;
     private boolean searchPending;
+    private long pendingRecenterRequestId = -1L;
 
     public FamilyTreeScreen(UUID entityId) {
         super(Component.translatable("gui.family_tree.title"));
@@ -121,7 +122,7 @@ public class FamilyTreeScreen extends Screen {
         }));
 
         if (viewModel.nodes().isEmpty() && viewModel.pendingFocusId().isEmpty()) {
-            requestFocus(viewModel.focusId(), false);
+            requestFocus(viewModel.focusId(), true);
         } else {
             rebuildLayout();
         }
@@ -136,8 +137,14 @@ public class FamilyTreeScreen extends Screen {
     public void acceptFamilyData(GetFamilyTreeResponse response) {
         FamilyTreeViewModel.MergeResult result = viewModel.accept(response);
         rebuildLayout();
-        if (result == FamilyTreeViewModel.MergeResult.APPLIED && response.found()) {
-            viewport = centerView(layout, viewport);
+        if (result == FamilyTreeViewModel.MergeResult.APPLIED
+                && response.found()
+                && response.requestId() == pendingRecenterRequestId) {
+            viewport = focusViewportAfterResponse(layout, viewport, true);
+            pendingRecenterRequestId = -1L;
+        } else if (result != FamilyTreeViewModel.MergeResult.STALE
+                && response.requestId() == pendingRecenterRequestId) {
+            pendingRecenterRequestId = -1L;
         }
     }
 
@@ -153,9 +160,7 @@ public class FamilyTreeScreen extends Screen {
 
     private void requestFocus(UUID id, boolean recenter) {
         long requestId = viewModel.beginFocus(id, viewport);
-        if (recenter) {
-            viewport = new FamilyTreeViewModel.ViewportState(0, 0, viewport.zoom());
-        }
+        pendingRecenterRequestId = recenter ? requestId : -1L;
         sendFocusRequest(id, requestId);
     }
 
@@ -177,6 +182,7 @@ public class FamilyTreeScreen extends Screen {
 
     private void goBack() {
         viewModel.back().ifPresent(entry -> {
+            pendingRecenterRequestId = -1L;
             viewport = entry.viewport();
             updateZoomLabel();
             rebuildLayout();
@@ -202,7 +208,7 @@ public class FamilyTreeScreen extends Screen {
 
     private void selectSearchResult(FamilyTreeSearchEntry entry) {
         long requestId = beginSearchSelection(viewModel, entry, viewport);
-        viewport = new FamilyTreeViewModel.ViewportState(0, 0, viewport.zoom());
+        pendingRecenterRequestId = requestId;
         searchOpen = false;
         searchPending = false;
         searchResults = List.of();
@@ -245,7 +251,6 @@ public class FamilyTreeScreen extends Screen {
                 Minecraft.getInstance().getSoundManager()
                         .play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1));
                 if (target.get() instanceof PersonTarget person) {
-                    viewModel.select(person.uuid());
                     if (!person.uuid().equals(viewModel.focusId())) {
                         requestFocus(person.uuid(), true);
                     }
@@ -345,13 +350,7 @@ public class FamilyTreeScreen extends Screen {
                     && target.direction() == control.direction();
             context.fill(bounds.left(), bounds.top(), bounds.right(), bounds.bottom(), isHovered ? 0xFF6D8FB3 : 0xFF3F566D);
             String marker = control.direction() == FamilyTreeView.Direction.ANCESTORS ? "↑" : "↓";
-            PoseStack pose = context.pose();
-            pose.pushPose();
-            pose.translate(bounds.centerX(), bounds.centerY(), 1);
-            float inverseScale = inverseTextScale(viewport.zoom());
-            pose.scale(inverseScale, inverseScale, 1.0F);
-            context.drawCenteredString(font, marker, 0, -font.lineHeight / 2, 0xFFFFFFFF);
-            pose.popPose();
+            context.drawCenteredString(font, marker, bounds.centerX(), bounds.centerY() - font.lineHeight / 2, 0xFFFFFFFF);
         }
     }
 
@@ -362,58 +361,34 @@ public class FamilyTreeScreen extends Screen {
                 continue;
             }
             FamilyTreeLayout.Bounds bounds = card.bounds();
-            boolean selected = viewModel.selection().filter(card.uuid()::equals).isPresent();
             boolean isHovered = hovered instanceof PersonTarget target && target.uuid().equals(card.uuid());
             int background = card.role() == FamilyTreeLayout.Role.FOCUS
                     ? 0xFF334B63
                     : node.isDeceased() ? 0xFF3D3D3D : 0xFF252D35;
-            if (selected) {
-                background = 0xFF526D87;
-            } else if (isHovered) {
+            if (isHovered) {
                 background = 0xFF43586C;
             }
 
             context.fill(bounds.left(), bounds.top(), bounds.right(), bounds.bottom(), background);
             drawBorder(context, bounds, card.role() == FamilyTreeLayout.Role.FOCUS ? 0xFFFFFFFF : 0xFF9AA7B2);
 
-            PoseStack pose = context.pose();
-            pose.pushPose();
-            pose.translate(bounds.centerX(), bounds.centerY(), 1);
-            float inverseScale = inverseTextScale(viewport.zoom());
-            pose.scale(inverseScale, inverseScale, 1.0F);
-
-            int renderedCardWidth = Math.max(1, Math.round(FamilyTreeLayout.CARD_WIDTH * viewport.zoom()));
-            int renderedCardHeight = Math.max(1, Math.round(FamilyTreeLayout.CARD_HEIGHT * viewport.zoom()));
-            int textWidth = Math.max(8, renderedCardWidth - 8);
             String name = nodeDisplayName(node).getString();
+            int textWidth = FamilyTreeLayout.CARD_WIDTH - 12;
             if (font.width(name) > textWidth) {
                 String ellipsis = "...";
                 name = font.plainSubstrByWidth(name, Math.max(0, textWidth - font.width(ellipsis))) + ellipsis;
             }
+            context.drawCenteredString(font, name, bounds.centerX(), bounds.top() + 7, 0xFFFFFFFF);
 
             String profession = node.getProfessionText().getString();
             if (font.width(profession) > textWidth) {
                 profession = font.plainSubstrByWidth(profession, textWidth);
             }
-
-            boolean showProfession = renderedCardHeight >= font.lineHeight * 2 + 4;
-            if (showProfession) {
-                context.drawCenteredString(font, name, 0, -font.lineHeight - 1, 0xFFFFFFFF);
-                context.drawCenteredString(font, profession, 0, 2, 0xFFBFC7CE);
-            } else {
-                context.drawCenteredString(font, name, 0, -font.lineHeight / 2, 0xFFFFFFFF);
-            }
+            context.drawCenteredString(font, profession, bounds.centerX(), bounds.top() + 22, 0xFFBFC7CE);
 
             if (node.isDeceased()) {
-                context.drawString(
-                        font,
-                        "†",
-                        -renderedCardWidth / 2 + 3,
-                        -renderedCardHeight / 2 + 3,
-                        0xFFD9D9D9
-                );
+                context.drawString(font, "†", bounds.left() + 4, bounds.top() + 4, 0xFFD9D9D9);
             }
-            pose.popPose();
         }
     }
 
@@ -435,9 +410,7 @@ public class FamilyTreeScreen extends Screen {
             context.drawCenteredString(font, status.orElseThrow(), width / 2, height - 20, 0xFFFFFFFF);
         }
 
-        PersonTarget detailTarget = hovered instanceof PersonTarget person
-                ? person
-                : viewModel.selection().map(PersonTarget::new).orElse(null);
+        PersonTarget detailTarget = detailPerson(hovered, viewModel.focusId()).map(PersonTarget::new).orElse(null);
         if (detailTarget != null && status.isEmpty()) {
             FamilyTreeNode node = viewModel.nodes().get(detailTarget.uuid());
             if (node != null) {
@@ -559,10 +532,6 @@ public class FamilyTreeScreen extends Screen {
         return Component.literal(Math.round(viewport.zoom() * 100.0F) + "%");
     }
 
-    static float inverseTextScale(float zoom) {
-        return 1.0F / zoom;
-    }
-
     static HeaderLayout headerLayout(int screenWidth) {
         int fixedControlsWidth = 20 + 2 + 48 + 2 + 20 + 6 + 44 + HEADER_GAP + 54;
         int searchWidth = Math.max(
@@ -610,8 +579,14 @@ public class FamilyTreeScreen extends Screen {
             FamilyTreeSearchEntry entry,
             FamilyTreeViewModel.ViewportState viewport
     ) {
-        model.select(entry.uuid());
         return model.beginFocus(entry.uuid(), viewport);
+    }
+
+    static Optional<UUID> detailPerson(@Nullable HitTarget target, UUID focusId) {
+        if (target instanceof PersonTarget person && !person.uuid().equals(focusId)) {
+            return Optional.of(person.uuid());
+        }
+        return Optional.empty();
     }
 
     static Optional<String> integratedSearchQuery(String value) {
@@ -707,6 +682,14 @@ public class FamilyTreeScreen extends Screen {
                 -bounds.centerY() * current.zoom(),
                 current.zoom()
         );
+    }
+
+    static FamilyTreeViewModel.ViewportState focusViewportAfterResponse(
+            FamilyTreeLayout.Result result,
+            FamilyTreeViewModel.ViewportState current,
+            boolean recenter
+    ) {
+        return recenter ? centerView(result, current) : current;
     }
 
     static Optional<HitTarget> hitTargetAt(FamilyTreeLayout.Result result, int worldX, int worldY) {
