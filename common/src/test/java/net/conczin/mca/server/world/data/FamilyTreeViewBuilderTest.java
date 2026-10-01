@@ -34,6 +34,10 @@ class FamilyTreeViewBuilderTest {
     private static final UUID DESCENDANT_3 = uuid(12);
     private static final UUID DESCENDANT_4 = uuid(13);
     private static final UUID DESCENDANT_5 = uuid(14);
+    private static final UUID DESCENDANT_6 = uuid(15);
+    private static final UUID DESCENDANT_7 = uuid(16);
+    private static final UUID DESCENDANT_8 = uuid(17);
+    private static final UUID DESCENDANT_9 = uuid(18);
 
     @BeforeAll
     static void bootstrapMinecraft() {
@@ -142,7 +146,7 @@ class FamilyTreeViewBuilderTest {
     }
 
     @Test
-    void requestedDepthIsClampedToFour() {
+    void requestedDepthIsClampedToEightAndStillOffersContinuation() {
         FamilyTree tree = tree();
         FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
         FamilyTreeNode child1 = node(tree, CHILD, Gender.MALE);
@@ -150,16 +154,34 @@ class FamilyTreeViewBuilderTest {
         FamilyTreeNode child3 = node(tree, DESCENDANT_3, Gender.MALE);
         FamilyTreeNode child4 = node(tree, DESCENDANT_4, Gender.FEMALE);
         FamilyTreeNode child5 = node(tree, DESCENDANT_5, Gender.MALE);
+        FamilyTreeNode child6 = node(tree, DESCENDANT_6, Gender.FEMALE);
+        FamilyTreeNode child7 = node(tree, DESCENDANT_7, Gender.MALE);
+        FamilyTreeNode child8 = node(tree, DESCENDANT_8, Gender.FEMALE);
+        FamilyTreeNode child9 = node(tree, DESCENDANT_9, Gender.MALE);
         child1.setFather(root);
         child2.setFather(child1);
         child3.setFather(child2);
         child4.setFather(child3);
         child5.setFather(child4);
+        child6.setFather(child5);
+        child7.setFather(child6);
+        child8.setFather(child7);
+        child9.setFather(child8);
 
         FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, -5, 99).orElseThrow();
 
-        assertEquals(Set.of(ROOT, CHILD, DESCENDANT_2, DESCENDANT_3, DESCENDANT_4), view.nodes().keySet());
-        assertEquals(Set.of(new FamilyTreeView.Continuation(DESCENDANT_4, DESCENDANTS)), view.continuations());
+        assertEquals(Set.of(
+                ROOT,
+                CHILD,
+                DESCENDANT_2,
+                DESCENDANT_3,
+                DESCENDANT_4,
+                DESCENDANT_5,
+                DESCENDANT_6,
+                DESCENDANT_7,
+                DESCENDANT_8
+        ), view.nodes().keySet());
+        assertEquals(Set.of(new FamilyTreeView.Continuation(DESCENDANT_8, DESCENDANTS)), view.continuations());
         assertEquals(Set.of(), view.unavailable());
     }
 

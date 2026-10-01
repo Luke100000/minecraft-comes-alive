@@ -1,6 +1,7 @@
 package net.conczin.mca.client.gui;
 
 import net.conczin.mca.entity.ai.relationship.Gender;
+import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.network.FamilyTreeSearchEntry;
 import net.conczin.mca.network.FamilyTreeView;
 import net.conczin.mca.network.s2c.GetFamilyTreeResponse;
@@ -147,6 +148,29 @@ class FamilyTreeScreenInteractionTest {
                 Optional.empty(),
                 FamilyTreeScreen.detailPerson(new FamilyTreeScreen.PersonTarget(ROOT), ROOT)
         );
+    }
+
+    @Test
+    void weddingRingIsCenteredOnPartnerConnection() {
+        FamilyTreeLayout.Bounds left = new FamilyTreeLayout.Bounds(-123, -13, -20, 20);
+        FamilyTreeLayout.Bounds right = new FamilyTreeLayout.Bounds(13, 123, -20, 20);
+
+        assertEquals(
+                new FamilyTreeLayout.Bounds(-8, 8, -8, 8),
+                FamilyTreeScreen.partnerRingBounds(left, right)
+        );
+    }
+
+    @Test
+    void weddingRingOnlyDecoratesMarriageConnections() {
+        assertTrue(FamilyTreeScreen.showsWeddingRing(
+                RelationshipState.MARRIED_TO_VILLAGER,
+                RelationshipState.MARRIED_TO_VILLAGER
+        ));
+        assertEquals(false, FamilyTreeScreen.showsWeddingRing(
+                RelationshipState.ENGAGED,
+                RelationshipState.ENGAGED
+        ));
     }
 
     @Test

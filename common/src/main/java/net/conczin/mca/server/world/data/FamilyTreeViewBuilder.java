@@ -11,7 +11,7 @@ import java.util.Set;
 import java.util.UUID;
 
 public final class FamilyTreeViewBuilder {
-    public static final int MAX_DEPTH = 4;
+    public static final int MAX_DEPTH = 8;
 
     private FamilyTreeViewBuilder() {
     }

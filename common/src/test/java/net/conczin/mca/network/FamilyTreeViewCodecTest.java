@@ -90,6 +90,15 @@ class FamilyTreeViewCodecTest {
     }
 
     @Test
+    void defaultRequestLoadsEightGenerationsPerDirection() {
+        GetFamilyTreeRequest request = new GetFamilyTreeRequest(ROOT);
+
+        assertEquals(8, request.ancestorDepth());
+        assertEquals(8, request.descendantDepth());
+        assertEquals(8, GetFamilyTreeRequest.MAX_DEPTH);
+    }
+
+    @Test
     void requestDecodeClampsDepthsBeforeServerHandling() {
         FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
         try {

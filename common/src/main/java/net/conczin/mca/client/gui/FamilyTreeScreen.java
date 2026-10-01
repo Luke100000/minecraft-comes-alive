@@ -2,12 +2,14 @@ package net.conczin.mca.client.gui;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
+import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.network.FamilyTreeSearchEntry;
 import net.conczin.mca.network.FamilyTreeView;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.FamilyTreeUUIDLookup;
 import net.conczin.mca.network.c2s.GetFamilyTreeRequest;
 import net.conczin.mca.network.s2c.GetFamilyTreeResponse;
+import net.conczin.mca.registry.ItemsMCA;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.client.Minecraft;
@@ -20,6 +22,7 @@ import net.minecraft.sounds.SoundEvents;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -337,6 +340,7 @@ public class FamilyTreeScreen extends Screen {
     }
 
     private void renderEdges(GuiGraphics context) {
+        Map<UUID, FamilyTreeNode> nodes = viewModel.nodes();
         for (FamilyTreeLayout.Edge edge : layout.edges()) {
             FamilyTreeLayout.Card from = card(edge.from());
             FamilyTreeLayout.Card to = card(edge.to());
@@ -348,7 +352,20 @@ public class FamilyTreeScreen extends Screen {
             int x2 = to.bounds().centerX();
             int y2 = to.bounds().centerY();
             if (edge.type() == FamilyTreeLayout.EdgeType.PARTNER) {
-                context.hLine(Math.min(x1, x2), Math.max(x1, x2), y1, 0xFFE0E0E0);
+                FamilyTreeNode fromNode = nodes.get(edge.from());
+                FamilyTreeNode toNode = nodes.get(edge.to());
+                if (fromNode != null
+                        && toNode != null
+                        && showsWeddingRing(fromNode.getRelationshipState(), toNode.getRelationshipState())) {
+                    FamilyTreeLayout.Bounds ring = partnerRingBounds(from.bounds(), to.bounds());
+                    int left = Math.min(x1, x2);
+                    int right = Math.max(x1, x2);
+                    context.hLine(left, ring.left() - 2, y1, 0xFFE0E0E0);
+                    context.hLine(ring.right() + 1, right, y1, 0xFFE0E0E0);
+                    context.renderItem(ItemsMCA.WEDDING_RING.getDefaultInstance(), ring.left(), ring.top());
+                } else {
+                    context.hLine(Math.min(x1, x2), Math.max(x1, x2), y1, 0xFFE0E0E0);
+                }
             } else {
                 int midY = (y1 + y2) / 2;
                 context.vLine(x1, Math.min(y1, midY), Math.max(y1, midY), 0xFFB8B8B8);
@@ -603,6 +620,19 @@ public class FamilyTreeScreen extends Screen {
 
     static boolean startsCanvasDrag(int button, boolean insideCanvas, boolean hasTarget) {
         return button == 0 && insideCanvas && !hasTarget;
+    }
+
+    static FamilyTreeLayout.Bounds partnerRingBounds(
+            FamilyTreeLayout.Bounds from,
+            FamilyTreeLayout.Bounds to
+    ) {
+        int centerX = (from.centerX() + to.centerX()) / 2;
+        int centerY = (from.centerY() + to.centerY()) / 2;
+        return new FamilyTreeLayout.Bounds(centerX - 8, centerX + 8, centerY - 8, centerY + 8);
+    }
+
+    static boolean showsWeddingRing(RelationshipState from, RelationshipState to) {
+        return from.isMarried() || to.isMarried();
     }
 
     static Optional<UUID> detailPerson(@Nullable HitTarget target, UUID focusId) {
