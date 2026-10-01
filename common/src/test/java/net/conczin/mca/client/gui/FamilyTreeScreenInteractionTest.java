@@ -111,16 +111,26 @@ class FamilyTreeScreenInteractionTest {
 
     @Test
     void focusTransitionRecentersOnlyAfterTheNewLayoutArrives() {
-        FamilyTreeLayout.Result result = result(new FamilyTreeLayout.Bounds(40, 140, -30, 70));
+        FamilyTreeLayout.Card focused = new FamilyTreeLayout.Card(
+                OTHER,
+                FamilyTreeLayout.Role.PARTNER,
+                new FamilyTreeLayout.Bounds(40, 140, -30, 70)
+        );
+        FamilyTreeLayout.Result result = new FamilyTreeLayout.Result(
+                List.of(focused),
+                List.of(),
+                List.of(),
+                focused.bounds()
+        );
         FamilyTreeViewModel.ViewportState current = new FamilyTreeViewModel.ViewportState(18, 22, 1.5F);
 
         assertEquals(
                 current,
-                FamilyTreeScreen.focusViewportAfterResponse(result, current, false)
+                FamilyTreeScreen.focusViewportAfterResponse(result, current, OTHER, false)
         );
         assertEquals(
-                FamilyTreeScreen.centerView(result, current),
-                FamilyTreeScreen.focusViewportAfterResponse(result, current, true)
+                new FamilyTreeViewModel.ViewportState(-135, -30, 1.5F),
+                FamilyTreeScreen.focusViewportAfterResponse(result, current, OTHER, true)
         );
     }
 
@@ -159,6 +169,7 @@ class FamilyTreeScreenInteractionTest {
                 new FamilyTreeLayout.Bounds(-8, 8, -8, 8),
                 FamilyTreeScreen.partnerRingBounds(left, right)
         );
+        assertEquals(3, FamilyTreeScreen.WEDDING_RING_VISIBLE_EDGE_INSET);
     }
 
     @Test
@@ -203,7 +214,7 @@ class FamilyTreeScreenInteractionTest {
     void layoutHitTestIdentifiesKnownCardByUuid() {
         FamilyTreeLayout.Card card = new FamilyTreeLayout.Card(
                 ROOT,
-                FamilyTreeLayout.Role.FOCUS,
+                FamilyTreeLayout.Role.ANCHOR,
                 new FamilyTreeLayout.Bounds(-55, 55, -20, 20)
         );
         FamilyTreeLayout.Result result = new FamilyTreeLayout.Result(

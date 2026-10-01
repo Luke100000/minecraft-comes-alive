@@ -28,13 +28,14 @@ public final class FamilyTreeLayout {
     private FamilyTreeLayout() {
     }
 
-    public static Result layout(UUID focus, FamilyTreeViewModel.Snapshot snapshot) {
+    public static Result layout(FamilyTreeViewModel.Snapshot snapshot) {
+        UUID layoutRoot = snapshot.layoutRootId();
         Map<UUID, FamilyTreeNode> nodes = snapshot.nodes();
-        if (!nodes.containsKey(focus)) {
+        if (!nodes.containsKey(layoutRoot)) {
             return Result.empty();
         }
 
-        Map<UUID, Placement> placements = collectPlacements(focus, nodes);
+        Map<UUID, Placement> placements = collectPlacements(layoutRoot, nodes);
         Map<Integer, List<UUID>> generations = new LinkedHashMap<>();
         placements.forEach((uuid, placement) ->
                 generations.computeIfAbsent(placement.generation(), ignored -> new ArrayList<>()).add(uuid));
@@ -45,7 +46,7 @@ public final class FamilyTreeLayout {
             List<UUID> ids = generations.get(generation);
             ids.sort(UUID_ORDER);
             if (generation == 0) {
-                placeFocusGeneration(focus, ids, placements, boundsById);
+                placeAnchorGeneration(layoutRoot, ids, placements, boundsById);
             } else {
                 placeGeneration(generation, ids, boundsById);
             }
@@ -61,25 +62,26 @@ public final class FamilyTreeLayout {
         return new Result(cards, edges, continuations, contentBounds);
     }
 
-    private static Map<UUID, Placement> collectPlacements(UUID focus, Map<UUID, FamilyTreeNode> nodes) {
+    private static Map<UUID, Placement> collectPlacements(UUID layoutRoot, Map<UUID, FamilyTreeNode> nodes) {
         Map<UUID, Placement> placements = new LinkedHashMap<>();
-        placements.put(focus, new Placement(0, Role.FOCUS));
+        placements.put(layoutRoot, new Placement(0, Role.ANCHOR));
 
-        FamilyTreeNode focusNode = nodes.get(focus);
-        walkAncestors(focusNode, nodes, placements);
-        walkDescendants(focusNode, nodes, placements);
-        addSiblings(focusNode, nodes, placements);
-        addPartners(nodes, placements);
+        FamilyTreeNode rootNode = nodes.get(layoutRoot);
+        walkAncestors(rootNode, 0, nodes, placements);
+        walkDescendants(rootNode, 0, nodes, placements);
+        addSiblings(rootNode, nodes, placements);
+        addPartnerBranches(nodes, placements);
         return placements;
     }
 
     private static void walkAncestors(
             FamilyTreeNode root,
+            int rootGeneration,
             Map<UUID, FamilyTreeNode> nodes,
             Map<UUID, Placement> placements
     ) {
         Deque<GenerationNode> queue = new ArrayDeque<>();
-        queue.add(new GenerationNode(root, 0));
+        queue.add(new GenerationNode(root, rootGeneration));
         Set<UUID> visited = new HashSet<>();
         visited.add(root.id());
 
@@ -103,11 +105,12 @@ public final class FamilyTreeLayout {
 
     private static void walkDescendants(
             FamilyTreeNode root,
+            int rootGeneration,
             Map<UUID, FamilyTreeNode> nodes,
             Map<UUID, Placement> placements
     ) {
         Deque<GenerationNode> queue = new ArrayDeque<>();
-        queue.add(new GenerationNode(root, 0));
+        queue.add(new GenerationNode(root, rootGeneration));
         Set<UUID> visited = new HashSet<>();
         visited.add(root.id());
 
@@ -131,29 +134,34 @@ public final class FamilyTreeLayout {
     }
 
     private static void addSiblings(
-            FamilyTreeNode focus,
+            FamilyTreeNode anchor,
             Map<UUID, FamilyTreeNode> nodes,
             Map<UUID, Placement> placements
     ) {
-        Set<UUID> focusParents = new HashSet<>(parentIds(focus));
-        if (focusParents.isEmpty()) {
+        Set<UUID> anchorParents = new HashSet<>(parentIds(anchor));
+        if (anchorParents.isEmpty()) {
             return;
         }
 
         nodes.values().stream()
-                .filter(node -> !node.id().equals(focus.id()))
-                .filter(node -> parentIds(node).stream().anyMatch(focusParents::contains))
+                .filter(node -> !node.id().equals(anchor.id()))
+                .filter(node -> parentIds(node).stream().anyMatch(anchorParents::contains))
                 .sorted(Comparator.comparing(node -> node.id().toString()))
                 .forEach(node -> placements.putIfAbsent(node.id(), new Placement(0, Role.SIBLING)));
     }
 
-    private static void addPartners(Map<UUID, FamilyTreeNode> nodes, Map<UUID, Placement> placements) {
+    private static void addPartnerBranches(Map<UUID, FamilyTreeNode> nodes, Map<UUID, Placement> placements) {
         for (Map.Entry<UUID, Placement> entry : List.copyOf(placements.entrySet())) {
             FamilyTreeNode node = nodes.get(entry.getKey());
             if (node == null || !FamilyTreeNode.isValid(node.partner()) || !nodes.containsKey(node.partner())) {
                 continue;
             }
-            placements.putIfAbsent(node.partner(), new Placement(entry.getValue().generation(), Role.PARTNER));
+
+            FamilyTreeNode partner = nodes.get(node.partner());
+            int generation = entry.getValue().generation();
+            placements.putIfAbsent(partner.id(), new Placement(generation, Role.PARTNER));
+            walkAncestors(partner, generation, nodes, placements);
+            walkDescendants(partner, generation, nodes, placements);
         }
     }
 
@@ -168,20 +176,20 @@ public final class FamilyTreeLayout {
         return parents;
     }
 
-    private static void placeFocusGeneration(
-            UUID focus,
+    private static void placeAnchorGeneration(
+            UUID layoutRoot,
             List<UUID> ids,
             Map<UUID, Placement> placements,
             Map<UUID, Bounds> boundsById
     ) {
-        boundsById.put(focus, cardBounds(0, 0));
+        boundsById.put(layoutRoot, cardBounds(0, 0));
 
         List<UUID> siblings = ids.stream()
-                .filter(id -> !id.equals(focus))
+                .filter(id -> !id.equals(layoutRoot))
                 .filter(id -> placements.get(id).role() == Role.SIBLING)
                 .toList();
         List<UUID> others = ids.stream()
-                .filter(id -> !id.equals(focus))
+                .filter(id -> !id.equals(layoutRoot))
                 .filter(id -> placements.get(id).role() != Role.SIBLING)
                 .toList();
 
@@ -294,7 +302,7 @@ public final class FamilyTreeLayout {
     }
 
     public enum Role {
-        FOCUS,
+        ANCHOR,
         ANCESTOR,
         DESCENDANT,
         SIBLING,

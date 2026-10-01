@@ -83,6 +83,19 @@ class FamilyTreeViewModelTest {
     }
 
     @Test
+    void changingFocusKeepsTheOriginalLayoutRoot() {
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        long request = model.beginFocus(OTHER, viewport(0, 0, 1));
+
+        model.accept(response(request, OTHER, view(Map.of(OTHER, node(OTHER)), Set.of(), Set.of())));
+
+        assertEquals(ROOT, model.layoutRootId());
+        assertEquals(OTHER, model.focusId());
+        assertEquals(ROOT, model.snapshot().layoutRootId());
+        assertEquals(OTHER, model.snapshot().focusId());
+    }
+
+    @Test
     void staleFocusResponseDoesNotReplaceNewerPendingState() {
         FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
         long first = model.beginFocus(CHILD, viewport(0, 0, 1));

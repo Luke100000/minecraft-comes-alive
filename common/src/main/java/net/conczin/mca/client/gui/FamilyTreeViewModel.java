@@ -27,6 +27,7 @@ public final class FamilyTreeViewModel {
     }
 
     public record Snapshot(
+            UUID layoutRootId,
             UUID focusId,
             Map<UUID, FamilyTreeNode> nodes,
             Set<FamilyTreeView.Continuation> continuations,
@@ -45,6 +46,7 @@ public final class FamilyTreeViewModel {
     private final Deque<HistoryEntry> history = new ArrayDeque<>();
     private final Map<Long, FamilyTreeView.Continuation> pendingExpansions = new LinkedHashMap<>();
 
+    private final UUID layoutRootId;
     private UUID focusId;
     private UUID pendingFocusId;
     private UUID unavailableFocusId;
@@ -52,6 +54,7 @@ public final class FamilyTreeViewModel {
     private long nextRequestId = 1L;
 
     public FamilyTreeViewModel(UUID initialFocus) {
+        this.layoutRootId = initialFocus;
         this.focusId = initialFocus;
     }
 
@@ -129,6 +132,10 @@ public final class FamilyTreeViewModel {
         return focusId;
     }
 
+    public UUID layoutRootId() {
+        return layoutRootId;
+    }
+
     public Map<UUID, FamilyTreeNode> nodes() {
         return Map.copyOf(nodes);
     }
@@ -158,6 +165,6 @@ public final class FamilyTreeViewModel {
     }
 
     public Snapshot snapshot() {
-        return new Snapshot(focusId, nodes, continuations, unavailable);
+        return new Snapshot(layoutRootId, focusId, nodes, continuations, unavailable);
     }
 }

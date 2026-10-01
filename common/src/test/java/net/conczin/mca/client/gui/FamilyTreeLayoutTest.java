@@ -48,11 +48,28 @@ class FamilyTreeLayoutTest {
         FamilyTreeLayout.Card root = card(result, ROOT);
         assertEquals(0, root.bounds().centerX());
         assertEquals(0, root.bounds().centerY());
-        assertEquals(FamilyTreeLayout.Role.FOCUS, root.role());
+        assertEquals(FamilyTreeLayout.Role.ANCHOR, root.role());
     }
 
     @Test
-    void twoParentsOccupyGenerationAboveFocus() {
+    void changingFocusDoesNotReorientTheBranch() {
+        FamilyTreeNode root = node(ROOT);
+        FamilyTreeNode partner = node(PARTNER);
+        FamilyTreeNode father = node(FATHER);
+        root.updatePartner(partner);
+        root.setFather(father);
+        Map<UUID, FamilyTreeNode> nodes = nodes(root, partner, father);
+
+        FamilyTreeLayout.Result rootFocused = layout(ROOT, ROOT, nodes, Set.of());
+        FamilyTreeLayout.Result partnerFocused = layout(ROOT, PARTNER, nodes, Set.of());
+
+        for (UUID id : nodes.keySet()) {
+            assertEquals(card(rootFocused, id).bounds(), card(partnerFocused, id).bounds());
+        }
+    }
+
+    @Test
+    void twoParentsOccupyGenerationAboveAnchor() {
         FamilyTreeNode root = node(ROOT);
         FamilyTreeNode father = node(FATHER);
         FamilyTreeNode mother = node(MOTHER);
@@ -80,7 +97,7 @@ class FamilyTreeLayoutTest {
     }
 
     @Test
-    void partnerSharesFocusGenerationWithoutOverlap() {
+    void partnerSharesAnchorGenerationWithoutOverlap() {
         FamilyTreeNode root = node(ROOT);
         FamilyTreeNode partner = node(PARTNER);
         root.updatePartner(partner);
@@ -93,7 +110,22 @@ class FamilyTreeLayoutTest {
     }
 
     @Test
-    void siblingsSurroundFocusWithoutExpandingTheirChildren() {
+    void partnerAncestorsArePlacedWithoutChangingTheLayoutRoot() {
+        FamilyTreeNode root = node(ROOT);
+        FamilyTreeNode partner = node(PARTNER);
+        FamilyTreeNode partnerFather = node(FATHER);
+        root.updatePartner(partner);
+        partner.setFather(partnerFather);
+
+        FamilyTreeLayout.Result result = layout(nodes(root, partner, partnerFather), Set.of());
+
+        assertEquals(0, card(result, ROOT).bounds().centerX());
+        assertEquals(card(result, ROOT).bounds().centerY(), card(result, PARTNER).bounds().centerY());
+        assertTrue(card(result, FATHER).bounds().centerY() < card(result, PARTNER).bounds().centerY());
+    }
+
+    @Test
+    void siblingsSurroundAnchorWithoutExpandingTheirChildren() {
         FamilyTreeNode root = node(ROOT);
         FamilyTreeNode father = node(FATHER);
         FamilyTreeNode siblingA = node(SIBLING_A);
@@ -109,11 +141,11 @@ class FamilyTreeLayoutTest {
         assertEquals(card(result, ROOT).bounds().centerY(), card(result, SIBLING_A).bounds().centerY());
         assertEquals(card(result, ROOT).bounds().centerY(), card(result, SIBLING_B).bounds().centerY());
         assertTrue(result.cards().stream().noneMatch(card -> card.uuid().equals(SIBLING_CHILD)));
-        int focusX = card(result, ROOT).bounds().centerX();
+        int anchorX = card(result, ROOT).bounds().centerX();
         int minSiblingX = Math.min(card(result, SIBLING_A).bounds().centerX(), card(result, SIBLING_B).bounds().centerX());
         int maxSiblingX = Math.max(card(result, SIBLING_A).bounds().centerX(), card(result, SIBLING_B).bounds().centerX());
-        assertTrue(minSiblingX < focusX);
-        assertTrue(maxSiblingX > focusX);
+        assertTrue(minSiblingX < anchorX);
+        assertTrue(maxSiblingX > anchorX);
     }
 
     @Test
@@ -204,8 +236,18 @@ class FamilyTreeLayoutTest {
             Map<UUID, FamilyTreeNode> nodes,
             Set<FamilyTreeView.Continuation> continuations
     ) {
-        FamilyTreeViewModel.Snapshot snapshot = new FamilyTreeViewModel.Snapshot(ROOT, nodes, continuations, Set.of());
-        return FamilyTreeLayout.layout(ROOT, snapshot);
+        return layout(ROOT, ROOT, nodes, continuations);
+    }
+
+    private static FamilyTreeLayout.Result layout(
+            UUID layoutRoot,
+            UUID focus,
+            Map<UUID, FamilyTreeNode> nodes,
+            Set<FamilyTreeView.Continuation> continuations
+    ) {
+        FamilyTreeViewModel.Snapshot snapshot =
+                new FamilyTreeViewModel.Snapshot(layoutRoot, focus, nodes, continuations, Set.of());
+        return FamilyTreeLayout.layout(snapshot);
     }
 
     private static FamilyTreeLayout.Card card(FamilyTreeLayout.Result result, UUID uuid) {

@@ -49,6 +49,14 @@ public final class FamilyTreeViewBuilder {
                 unavailable,
                 descendantRemaining
         );
+        includePartnerLineage(
+                tree,
+                nodes,
+                continuations,
+                unavailable,
+                ancestorRemaining,
+                descendantRemaining
+        );
         includeRootSiblings(tree, rootEntry, nodes, unavailable);
         includePartners(tree, nodes, unavailable);
 
@@ -151,6 +159,57 @@ public final class FamilyTreeViewBuilder {
                         )),
                 () -> unavailable.add(parentId)
         ));
+    }
+
+    private static void includePartnerLineage(
+            FamilyTree tree,
+            Map<UUID, FamilyTreeNode> nodes,
+            Set<FamilyTreeView.Continuation> continuations,
+            Set<UUID> unavailable,
+            Map<UUID, Integer> ancestorRemaining,
+            Map<UUID, Integer> descendantRemaining
+    ) {
+        for (FamilyTreeNode node : List.copyOf(nodes.values())) {
+            UUID partnerId = node.partner();
+            if (!FamilyTreeNode.isValid(partnerId)) {
+                continue;
+            }
+
+            Optional<FamilyTreeNode> partnerNode = tree.getOrEmpty(partnerId);
+            if (partnerNode.isEmpty()) {
+                unavailable.add(partnerId);
+                continue;
+            }
+
+            FamilyTreeNode partner = partnerNode.orElseThrow();
+            nodes.putIfAbsent(partnerId, partner);
+
+            Integer ancestorDepth = ancestorRemaining.get(node.id());
+            if (ancestorDepth != null) {
+                walkAncestors(
+                        tree,
+                        partner,
+                        ancestorDepth,
+                        nodes,
+                        continuations,
+                        unavailable,
+                        ancestorRemaining
+                );
+            }
+
+            Integer descendantDepth = descendantRemaining.get(node.id());
+            if (descendantDepth != null) {
+                walkDescendants(
+                        tree,
+                        partner,
+                        descendantDepth,
+                        nodes,
+                        continuations,
+                        unavailable,
+                        descendantRemaining
+                );
+            }
+        }
     }
 
     private static void includePartners(

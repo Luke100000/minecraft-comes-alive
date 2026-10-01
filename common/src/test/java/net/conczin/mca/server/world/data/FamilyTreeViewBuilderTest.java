@@ -86,6 +86,23 @@ class FamilyTreeViewBuilderTest {
     }
 
     @Test
+    void partnerAncestorsExpandWithoutRefocusingOnThePartner() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode partner = node(tree, PARTNER, Gender.FEMALE);
+        FamilyTreeNode partnerFather = node(tree, FATHER, Gender.MALE);
+        FamilyTreeNode partnerGrandfather = node(tree, PATERNAL_GRANDFATHER, Gender.MALE);
+        root.updatePartner(partner);
+        partner.setFather(partnerFather);
+        partnerFather.setFather(partnerGrandfather);
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, 2, 0).orElseThrow();
+
+        assertEquals(Set.of(ROOT, PARTNER, FATHER, PATERNAL_GRANDFATHER), view.nodes().keySet());
+        assertEquals(Set.of(), view.continuations());
+    }
+
+    @Test
     void boundaryWithResolvableParentsCreatesAncestorContinuation() {
         FamilyTree tree = tree();
         FamilyTreeNode root = node(tree, ROOT, Gender.MALE);

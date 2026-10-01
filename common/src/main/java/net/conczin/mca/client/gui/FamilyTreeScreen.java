@@ -42,6 +42,7 @@ public class FamilyTreeScreen extends Screen {
     private static final float MAX_ZOOM = 2.0F;
     static final String DECEASED_MARKER = "☠";
     static final int DECEASED_MARKER_COLOR = 0xFFA94A3A;
+    static final int WEDDING_RING_VISIBLE_EDGE_INSET = 3;
 
     private final Screen parent;
     private final FamilyTreeViewModel viewModel;
@@ -146,7 +147,7 @@ public class FamilyTreeScreen extends Screen {
         if (result == FamilyTreeViewModel.MergeResult.APPLIED
                 && response.found()
                 && response.requestId() == pendingRecenterRequestId) {
-            viewport = focusViewportAfterResponse(layout, viewport, true);
+            viewport = focusViewportAfterResponse(layout, viewport, response.uuid(), true);
             pendingRecenterRequestId = -1L;
         } else if (result != FamilyTreeViewModel.MergeResult.STALE
                 && response.requestId() == pendingRecenterRequestId) {
@@ -161,7 +162,7 @@ public class FamilyTreeScreen extends Screen {
     }
 
     private void rebuildLayout() {
-        layout = FamilyTreeLayout.layout(viewModel.focusId(), viewModel.snapshot());
+        layout = FamilyTreeLayout.layout(viewModel.snapshot());
     }
 
     private void requestFocus(UUID id, boolean recenter) {
@@ -360,8 +361,8 @@ public class FamilyTreeScreen extends Screen {
                     FamilyTreeLayout.Bounds ring = partnerRingBounds(from.bounds(), to.bounds());
                     int left = Math.min(x1, x2);
                     int right = Math.max(x1, x2);
-                    context.hLine(left, ring.left() - 2, y1, 0xFFE0E0E0);
-                    context.hLine(ring.right() + 1, right, y1, 0xFFE0E0E0);
+                    context.hLine(left, ring.left() + WEDDING_RING_VISIBLE_EDGE_INSET, y1, 0xFFE0E0E0);
+                    context.hLine(ring.right() - WEDDING_RING_VISIBLE_EDGE_INSET, right, y1, 0xFFE0E0E0);
                     context.renderItem(ItemsMCA.WEDDING_RING.getDefaultInstance(), ring.left(), ring.top());
                 } else {
                     context.hLine(Math.min(x1, x2), Math.max(x1, x2), y1, 0xFFE0E0E0);
@@ -388,14 +389,17 @@ public class FamilyTreeScreen extends Screen {
     }
 
     private void renderCards(GuiGraphics context) {
+        Map<UUID, FamilyTreeNode> nodes = viewModel.nodes();
+        UUID focusId = viewModel.focusId();
         for (FamilyTreeLayout.Card card : layout.cards()) {
-            FamilyTreeNode node = viewModel.nodes().get(card.uuid());
+            FamilyTreeNode node = nodes.get(card.uuid());
             if (node == null) {
                 continue;
             }
             FamilyTreeLayout.Bounds bounds = card.bounds();
             boolean isHovered = hovered instanceof PersonTarget target && target.uuid().equals(card.uuid());
-            int background = card.role() == FamilyTreeLayout.Role.FOCUS
+            boolean focused = card.uuid().equals(focusId);
+            int background = focused
                     ? 0xFF334B63
                     : node.isDeceased() ? 0xFF3D3D3D : 0xFF252D35;
             if (isHovered) {
@@ -403,7 +407,7 @@ public class FamilyTreeScreen extends Screen {
             }
 
             context.fill(bounds.left(), bounds.top(), bounds.right(), bounds.bottom(), background);
-            drawBorder(context, bounds, card.role() == FamilyTreeLayout.Role.FOCUS ? 0xFFFFFFFF : 0xFF9AA7B2);
+            drawBorder(context, bounds, focused ? 0xFFFFFFFF : 0xFF9AA7B2);
 
             String name = nodeDisplayName(node).getString();
             int textWidth = FamilyTreeLayout.CARD_WIDTH - 12;
@@ -432,7 +436,9 @@ public class FamilyTreeScreen extends Screen {
     }
 
     private void renderFixedChrome(GuiGraphics context, int mouseX, int mouseY) {
-        FamilyTreeNode focused = viewModel.nodes().get(viewModel.focusId());
+        Map<UUID, FamilyTreeNode> nodes = viewModel.nodes();
+        UUID focusId = viewModel.focusId();
+        FamilyTreeNode focused = nodes.get(focusId);
         Component focusName = focused == null ? title : nodeDisplayName(focused);
         String headerTitle = Component.translatable("gui.family_tree.formatted_title", focusName).getString();
         int titleWidth = Math.max(0, width - (DONE_WIDTH + HEADER_MARGIN + 10) * 2);
@@ -449,12 +455,12 @@ public class FamilyTreeScreen extends Screen {
             context.drawCenteredString(font, status.orElseThrow(), width / 2, height - 20, 0xFFFFFFFF);
         }
 
-        PersonTarget detailTarget = detailPerson(hovered, viewModel.focusId()).map(PersonTarget::new).orElse(null);
+        PersonTarget detailTarget = detailPerson(hovered, focusId).map(PersonTarget::new).orElse(null);
         if (detailTarget != null && status.isEmpty()) {
-            FamilyTreeNode node = viewModel.nodes().get(detailTarget.uuid());
+            FamilyTreeNode node = nodes.get(detailTarget.uuid());
             if (node != null) {
                 FamilyTreeRelationshipResolver.Relation relation =
-                        FamilyTreeRelationshipResolver.resolve(viewModel.focusId(), detailTarget.uuid(), viewModel.nodes());
+                        FamilyTreeRelationshipResolver.resolve(focusId, detailTarget.uuid(), nodes);
                 Component detail = nodeDisplayName(node).copy()
                         .append(" · ")
                         .append(relationLabel(relation));
@@ -740,9 +746,21 @@ public class FamilyTreeScreen extends Screen {
     static FamilyTreeViewModel.ViewportState focusViewportAfterResponse(
             FamilyTreeLayout.Result result,
             FamilyTreeViewModel.ViewportState current,
+            UUID focusId,
             boolean recenter
     ) {
-        return recenter ? centerView(result, current) : current;
+        if (!recenter) {
+            return current;
+        }
+        return result.cards().stream()
+                .filter(card -> card.uuid().equals(focusId))
+                .findFirst()
+                .map(card -> new FamilyTreeViewModel.ViewportState(
+                        -card.bounds().centerX() * current.zoom(),
+                        -card.bounds().centerY() * current.zoom(),
+                        current.zoom()
+                ))
+                .orElse(current);
     }
 
     static Optional<HitTarget> hitTargetAt(FamilyTreeLayout.Result result, int worldX, int worldY) {
