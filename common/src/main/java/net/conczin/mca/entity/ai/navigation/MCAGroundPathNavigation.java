@@ -33,10 +33,12 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     private static final int FALL_RESYNC_MIN_VERTICAL_DROP = 2;
     private static final long FAILED_EXTENDED_RETRY_TICKS = 100L;
     private static final double FAILED_EXTENDED_RETRY_MOVE_DISTANCE_SQR = 16.0D;
+    private static final double FAILED_TARGET_INVALIDATION_RADIUS_SQR = 9.0D;
     private final ClimbTraversal climbTraversal;
     private BlockPos failedExtendedTarget;
     private BlockPos failedExtendedOrigin;
     private long failedExtendedAt;
+    private long retryInvalidationRevision;
 
     public MCAGroundPathNavigation(Mob mob, Level level) {
         super(mob, level);
@@ -171,6 +173,9 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 && !isUsefulPartialPath(extendedPath, target)
                 && (ordinaryPath == null
                 || extendedPath.getDistToTarget() >= ordinaryPath.getDistToTarget()))) {
+            if (failedExtendedTarget == null || !failedExtendedTarget.equals(target)) {
+                retryInvalidationRevision = 0L;
+            }
             failedExtendedTarget = target.immutable();
             failedExtendedOrigin = this.mob.blockPosition();
             failedExtendedAt = this.level.getGameTime();
@@ -305,6 +310,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
     @Override
     public boolean shouldRecomputePath(BlockPos changed) {
+        recordRetryInvalidation(changed);
         if (!super.shouldRecomputePath(changed)) {
             return false;
         }
@@ -341,6 +347,21 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             }
         }
         return changed.closerToCenterThan(this.mob.position(), horizontalClearance + 1.0D);
+    }
+
+    private void recordRetryInvalidation(BlockPos changed) {
+        if (failedExtendedTarget == null || !hasFailureEvidenceFor(failedExtendedTarget)) {
+            return;
+        }
+        if (changed.distSqr(failedExtendedTarget) <= FAILED_TARGET_INVALIDATION_RADIUS_SQR) {
+            retryInvalidationRevision++;
+        }
+    }
+
+    public long retryInvalidationRevision(BlockPos target) {
+        return failedExtendedTarget != null && failedExtendedTarget.equals(target)
+                ? retryInvalidationRevision
+                : 0L;
     }
 
     /** Observe vanilla's block-update invalidation before it clears the current path. */

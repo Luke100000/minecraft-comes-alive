@@ -134,12 +134,18 @@ public final class ExtendedWalkTowardsTask {
                                 return true;
                             }
 
+                            long routeInvalidationRevision = entity.getNavigation() instanceof MCAGroundPathNavigation navigation
+                                    ? navigation.retryInvalidationRevision(targetPos)
+                                    : 0L;
+                            boolean routeInvalidated = retryGate.hasNewRouteInvalidation(
+                                    targetPos, routeInvalidationRevision);
                             Optional<Long> optional = context.tryGet(cantReachWalkTargetSince);
                             long unreachableTicks = optional
                                     .map(since -> world.getGameTime() - since)
                                     .orElse(0L);
                             if (sameDimension && (optional.isEmpty() || unreachableTicks <= maxRunTime)) {
                                 if (optional.isPresent()
+                                        && !routeInvalidated
                                         && (unreachableTicks < UNREACHABLE_PATH_RETRY_TICKS
                                         || unreachableTicks % UNREACHABLE_PATH_RETRY_TICKS != 0L)) {
                                     return true;
@@ -167,7 +173,8 @@ public final class ExtendedWalkTowardsTask {
                                     }
                                 }
                                 if (proposedTarget != null) {
-                                    if (retryGate.tryReserve(targetPos, entity.blockPosition(), time)) {
+                                    if (retryGate.tryReserve(targetPos, entity.blockPosition(), time,
+                                            routeInvalidationRevision)) {
                                         PathRequestDiagnostics.tagDestinationMemory(proposedTarget, destination);
                                         walkTarget.set(proposedTarget);
                                     } else {

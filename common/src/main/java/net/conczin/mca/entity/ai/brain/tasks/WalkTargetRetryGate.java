@@ -17,6 +17,7 @@ final class WalkTargetRetryGate {
     private BlockPos stalledOrigin;
     private long stalledSince;
     private int immediateRetriesRemaining;
+    private long previousRouteInvalidationRevision;
 
     WalkTargetRetryGate(long retryIntervalTicks, double progressDistanceSqr) {
         this(retryIntervalTicks, progressDistanceSqr, 0);
@@ -36,9 +37,14 @@ final class WalkTargetRetryGate {
     }
 
     boolean tryReserve(BlockPos destination, BlockPos origin, long gameTime) {
+        return tryReserve(destination, origin, gameTime, 0L);
+    }
+
+    boolean tryReserve(BlockPos destination, BlockPos origin, long gameTime, long routeInvalidationRevision) {
         long elapsed = gameTime - previousAttemptTime;
         boolean unchanged = isSameStalledAttempt(destination, origin, gameTime);
-        if (unchanged) {
+        boolean routeInvalidated = hasNewRouteInvalidation(destination, routeInvalidationRevision);
+        if (unchanged && !routeInvalidated) {
             if (elapsed < retryIntervalTicks) {
                 if (immediateRetriesRemaining == 0) {
                     return false;
@@ -54,7 +60,14 @@ final class WalkTargetRetryGate {
         previousDestination = destination.immutable();
         previousOrigin = origin.immutable();
         previousAttemptTime = gameTime;
+        previousRouteInvalidationRevision = routeInvalidationRevision;
         return true;
+    }
+
+    boolean hasNewRouteInvalidation(BlockPos destination, long routeInvalidationRevision) {
+        return previousDestination != null
+                && previousDestination.equals(destination)
+                && routeInvalidationRevision > previousRouteInvalidationRevision;
     }
 
     private boolean isSameStalledAttempt(BlockPos destination, BlockPos origin, long gameTime) {

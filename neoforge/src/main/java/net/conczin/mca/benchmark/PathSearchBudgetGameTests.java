@@ -187,6 +187,10 @@ public final class PathSearchBudgetGameTests {
                 }
                 opened[0] = true;
             }
+            if (elapsed == 340) {
+                helper.assertTrue(villager.blockPosition().equals(target),
+                        "opened HOME did not wake the stalled route within 40 ticks");
+            }
             if (villager.blockPosition().equals(target)) {
                 helper.assertTrue(opened[0], "blocked HOME was reached before opening the entrance");
             }
