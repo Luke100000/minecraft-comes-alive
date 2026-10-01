@@ -44,6 +44,11 @@ class ConfigListValidationTest {
 
         assertTrue(Config.SERVER.taxesMap.getSpec().test(List.of("minecraft:emerald=1.0")));
         assertFalse(Config.SERVER.taxesMap.getSpec().test(List.of("minecraft:bad item=1.0")));
+        assertTrue(Config.SERVER.taxesMap.getSpec().test(List.of("minecraft:emerald=0.01")));
+        for (String amount : List.of("0", "-1", "NaN", "Infinity", "-Infinity", "not_a_number")) {
+            assertFalse(Config.SERVER.taxesMap.getSpec().test(List.of("minecraft:emerald=" + amount)),
+                    "Invalid tax value must never reach the village collection loop: " + amount);
+        }
     }
 
     @Test

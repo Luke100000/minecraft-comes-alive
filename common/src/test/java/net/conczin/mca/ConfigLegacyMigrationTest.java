@@ -26,9 +26,19 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 class ConfigLegacyMigrationTest {
+    @Test
+    void pathlessServerDefaultsDoNotAttemptLegacyMigration() {
+        var config = NeoForgeTestConfigLoader.pathlessServerConfig(Config.SERVER_SPEC);
+        assertThrows(IllegalStateException.class, config::getFullPath,
+                "The native loader's in-memory SERVER defaults have no filesystem path");
+        assertDoesNotThrow(() -> Config.migrateLegacy(config));
+    }
+
     @TempDir
     Path tempDirectory;
 

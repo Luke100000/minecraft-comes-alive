@@ -133,6 +133,15 @@ class ConfigLayoutTest {
     }
 
     @Test
+    void villagerCollisionsAreServerConfigAndEnabledByDefault() {
+        ModConfigSpec.ConfigValue<?> value = Config.SERVER_SPEC.getValues()
+                .get(List.of("villager_behavior", "enableVillagerCollisions"));
+
+        assertTrue(value != null);
+        assertEquals(true, value.getDefault());
+    }
+
+    @Test
     void restartMetadataMatchesActualLifecycleBoundaries() {
         for (ModConfigSpec.ConfigValue<?> value : List.of(
                 Config.CLIENT.useSquidwardModels,

@@ -16,6 +16,7 @@ public final class NeoForgeClientConfigHelper {
     }
 
     private static Screen createConfigScreen(ModContainer modContainer, Screen parent) {
-        return new ConfigurationScreen(modContainer, parent, ConfigScreenSearch::createSection);
+        return ConfigScreenSearch.createRoot(parent,
+                new ConfigurationScreen(modContainer, parent, ConfigScreenSearch::createSection), modContainer.getModId());
     }
 }

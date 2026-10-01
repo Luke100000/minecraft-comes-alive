@@ -57,6 +57,7 @@ public final class ServerConfig {
     public final ModConfigSpec.ConfigValue<Integer> engagementHeartsRequirement;
     public final ModConfigSpec.ConfigValue<Integer> bouquetHeartsRequirement;
     public final ModConfigSpec.ConfigValue<Integer> villagerMaxHealth;
+    public final ModConfigSpec.ConfigValue<Boolean> enableVillagerCollisions;
     public final ModConfigSpec.ConfigValue<Boolean> allowVillagerTeleporting;
     public final ModConfigSpec.ConfigValue<Double> villagerMinTeleportationDistance;
     public final ModConfigSpec.ConfigValue<Integer> villagerPathfindingDistance;
@@ -421,6 +422,11 @@ public final class ServerConfig {
                 .comment("Maximum health of a villager.")
                 .translation("mca.configuration.villagerMaxHealth")
                 .defineInRange("villagerMaxHealth", 20, 1, 10000);
+        enableVillagerCollisions = builder
+
+                .comment("If true, MCA villagers physically push each other while colliding. Climbing MCA villagers never receive entity collision pushes.")
+                .translation("mca.configuration.enableVillagerCollisions")
+                .define("enableVillagerCollisions", true);
         allowVillagerTeleporting = builder
 
                 .comment("If true, allows stuck villagers to teleport to a safe location. Disabled by default as it can cause villagers to disappear unexpectedly.")
@@ -710,7 +716,7 @@ public final class ServerConfig {
                 .translation("mca.configuration.taxesMap")
                 .defineListAllowEmpty("taxesMap", Config.encodeMap(Map.of(
             "minecraft:emerald", 1.0f
-    )), () -> "", value -> Config.isMapEntryWithLoadSafeRegistryKey(value, Registries.ITEM, false, Float.class));
+    )), () -> "", Config::isValidTaxEntry);
         marriageChancePerMinute = builder
 
                 .comment("Chance (0-1) per minute that a marriage event occurs in the village.")

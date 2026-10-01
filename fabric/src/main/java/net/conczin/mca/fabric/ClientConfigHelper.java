@@ -19,6 +19,7 @@ public final class ClientConfigHelper {
     }
 
     private static Screen createConfigScreen(String modId, Screen parent) {
-        return new ConfigurationScreen(modId, parent, ConfigScreenSearch::createSection);
+        return ConfigScreenSearch.createRoot(parent,
+                new ConfigurationScreen(modId, parent, ConfigScreenSearch::createSection), modId);
     }
 }

@@ -63,12 +63,14 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> exte
     @Override
     protected boolean shouldShowName(T villager) {
         Player player = Minecraft.getInstance().player;
-        return villager.getCustomName() != null
-               && !(Minecraft.getInstance().screen instanceof VillagerEditorScreen)
-               && player != null
-               && Config.CLIENT.showNameTags.get()
-               && player.distanceToSqr(villager) < Math.pow(Config.CLIENT.nameTagDistance.get().floatValue(), 2.0f)
-               && !villager.isInvisibleTo(player);
+        if (villager.getCustomName() == null
+                || Minecraft.getInstance().screen instanceof VillagerEditorScreen
+                || player == null
+                || !Config.CLIENT.showNameTags.get()) {
+            return false;
+        }
+        double maxDistance = Config.CLIENT.nameTagDistance.get();
+        return player.distanceToSqr(villager) < maxDistance * maxDistance && !villager.isInvisibleTo(player);
     }
 
     @Override

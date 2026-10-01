@@ -13,6 +13,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.entity.MobSpawnType;
+import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -130,6 +131,22 @@ public final class Config {
             changed = true;
         }
         return changed;
+    }
+
+    /** Config loading events may carry in-memory SERVER defaults with no backing file. */
+    public static void migrateLegacy(ModConfig config) {
+        if (!(config.getSpec() instanceof ModConfigSpec spec)) {
+            return;
+        }
+        Path path;
+        try {
+            path = config.getFullPath();
+        } catch (IllegalStateException pathless) {
+            return;
+        }
+        if (migrateLegacy(spec, path)) {
+            spec.save();
+        }
     }
 
     public static synchronized boolean migrateLegacy(ModConfigSpec spec, Path loadedConfigPath) {
@@ -337,6 +354,19 @@ public final class Config {
             }
         }
         return decoded;
+    }
+
+    static boolean isValidTaxEntry(Object value) {
+        EncodedMapEntry entry = parseMapEntry(value);
+        if (entry == null || !isLoadSafeRegistryId(entry.key(), Registries.ITEM)) {
+            return false;
+        }
+        try {
+            float amount = Float.parseFloat(entry.value());
+            return Float.isFinite(amount) && amount > 0;
+        } catch (NumberFormatException exception) {
+            return false;
+        }
     }
 
     static final class DecodedMapCache<K, V> {

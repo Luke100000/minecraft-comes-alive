@@ -29,6 +29,9 @@ public class MCAClient {
         playerDataRequests.clear();
         ClientSkinCatalog.clear();
         ClientSkinCatalog.sync();
+        // SERVER config is synchronized before entering play; refresh dimensions that
+        // previously depended on MCA's removed ConfigResponse callback.
+        refreshPlayerDataDependentDimensions();
     }
 
     public static Optional<VillagerLike<?>> getPlayerData(UUID uuid) {

@@ -1,8 +1,12 @@
 package net.conczin.mca.mixin;
 
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import net.conczin.mca.Config;
 import net.conczin.mca.entity.PlayerDimensions;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -34,5 +38,24 @@ abstract class MixinLivingEntity {
             return false;
         }
         return original;
+    }
+
+    @WrapOperation(
+            method = "doPush",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/world/entity/Entity;push(Lnet/minecraft/world/entity/Entity;)V"
+            )
+    )
+    private void mca$controlVillagerCollisionPush(Entity target, Entity source, Operation<Void> original) {
+        // Vanilla LivingEntity#isPushable already rejects onClimbable() entities, so climbing
+        // villagers keep their built-in immunity regardless of this MCA-to-MCA collision setting.
+        if (!Config.SERVER.enableVillagerCollisions.get()
+                && target instanceof VillagerEntityMCA
+                && source instanceof VillagerEntityMCA) {
+            return;
+        }
+
+        original.call(target, source);
     }
 }

@@ -72,9 +72,7 @@ public final class CommonNeoForge {
     }
 
     private static void onConfigLoad(ModConfigEvent.Loading event) {
-        if (event.getConfig().getSpec() instanceof ModConfigSpec spec && Config.migrateLegacy(spec, event.getConfig().getFullPath())) {
-            spec.save();
-        }
+        Config.migrateLegacy(event.getConfig());
     }
 
     private static void onConfigReload(ModConfigEvent.Reloading event) {

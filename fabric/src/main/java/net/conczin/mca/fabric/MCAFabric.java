@@ -89,11 +89,7 @@ public final class MCAFabric implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        NeoForgeModConfigEvents.loading(MCA.MOD_ID).register(config -> {
-            if (config.getSpec() instanceof ModConfigSpec spec && Config.migrateLegacy(spec, config.getFullPath())) {
-                spec.save();
-            }
-        });
+        NeoForgeModConfigEvents.loading(MCA.MOD_ID).register(Config::migrateLegacy);
         NeoForgeModConfigEvents.reloading(MCA.MOD_ID).register(config -> {
             if (config.getSpec() == Config.SERVER_SPEC) {
                 MCA.getServer().ifPresent(server -> server.execute(() ->

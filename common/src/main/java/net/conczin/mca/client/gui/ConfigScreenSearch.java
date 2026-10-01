@@ -8,6 +8,7 @@ import net.minecraft.client.OptionInstance;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.OptionsList;
 import net.minecraft.client.gui.components.SpriteIconButton;
@@ -26,6 +27,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.util.CommonColors;
 import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.config.ModConfigs;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import net.neoforged.neoforge.common.TranslatableEnum;
@@ -67,6 +69,50 @@ public final class ConfigScreenSearch {
         return new SearchableConfigurationSectionScreen(parent, type, modConfig, title);
     }
 
+    /** Native's top-level screen disables remote SERVER entries, so expose a separate read-only route. */
+    public static Screen createRoot(Screen parent, Screen nativeScreen, String modId) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.getCurrentServer() == null || client.isSingleplayer()) {
+            return nativeScreen;
+        }
+        return ModConfigs.getModConfigs(modId).stream()
+                .filter(config -> config.getType() == ModConfig.Type.SERVER
+                        && config.getSpec() instanceof ModConfigSpec spec && spec.isLoaded())
+                .findFirst()
+                .<Screen>map(server -> new RemoteConfigurationRoot(parent, nativeScreen, server))
+                .orElse(nativeScreen);
+    }
+
+    private static final class RemoteConfigurationRoot extends Screen {
+        private final Screen parent;
+        private final Screen nativeScreen;
+        private final ModConfig server;
+
+        private RemoteConfigurationRoot(Screen parent, Screen nativeScreen, ModConfig server) {
+            super(Component.translatable("mca.configuration.remote.title"));
+            this.parent = parent;
+            this.nativeScreen = nativeScreen;
+            this.server = server;
+        }
+
+        @Override
+        protected void init() {
+            int left = (width - ConfigurationScreen.BIG_BUTTON_WIDTH) / 2;
+            addRenderableWidget(Button.builder(Component.translatable("mca.configuration.remote.local"),
+                            button -> minecraft.setScreen(nativeScreen))
+                    .bounds(left, height / 2 - 26, ConfigurationScreen.BIG_BUTTON_WIDTH, 20).build());
+            addRenderableWidget(Button.builder(Component.translatable("mca.configuration.remote.server"),
+                            button -> minecraft.setScreen(createSection(this, ModConfig.Type.SERVER, server,
+                                    Component.translatable("mca.configuration.remote.server"))))
+                    .bounds(left, height / 2 + 4, ConfigurationScreen.BIG_BUTTON_WIDTH, 20).build());
+        }
+
+        @Override
+        public void onClose() {
+            minecraft.setScreen(parent);
+        }
+    }
+
     static EntryLayout entryLayout(int screenWidth) {
         int rowWidth = Math.min(MAX_ROW_WIDTH, Math.max(VANILLA_ROW_WIDTH, screenWidth - SCREEN_MARGIN));
         int valueWidth = Button.DEFAULT_WIDTH + (rowWidth - VANILLA_ROW_WIDTH) * 2 / 5;
@@ -103,8 +149,8 @@ public final class ConfigScreenSearch {
 
     static Component booleanLabel(boolean value) {
         return value
-                ? Component.literal("TRUE").withColor(CommonColors.GREEN)
-                : Component.literal("FALSE").withColor(CommonColors.SOFT_RED);
+                ? Component.translatableWithFallback("mca.configuration.boolean.true", "TRUE").withColor(CommonColors.GREEN)
+                : Component.translatableWithFallback("mca.configuration.boolean.false", "FALSE").withColor(CommonColors.SOFT_RED);
     }
 
     static Component enumDisplayName(Enum<?> value) {
@@ -168,9 +214,29 @@ public final class ConfigScreenSearch {
         return element;
     }
 
+    /** Opening a list is navigation, not a server config edit. Its contents remain read-only. */
+    static ConfigurationScreen.ConfigurationSectionScreen.Element readOnlyListNavigation(
+            ConfigurationScreen.ConfigurationSectionScreen.Element element) {
+        Component notice = Component.translatableWithFallback("mca.configuration.read_only",
+                "Server-owned setting: read-only on multiplayer clients");
+        Component tooltip = element.tooltip() == null ? notice
+                : Component.empty().append(element.tooltip()).append("\n\n").append(notice);
+        if (element.widget() != null) {
+            element.widget().setTooltip(Tooltip.create(tooltip));
+        }
+        return new ConfigurationScreen.ConfigurationSectionScreen.Element(
+                element.name(), tooltip, element.widget(), false);
+    }
+
     static Component listEntryError(String key, String value, List<String> drafts, int index,
                                     Predicate<String> nativeValidator, RegistryAccess registries,
                                     Set<ResourceLocation> dimensions) {
+        return listEntryError(key, value, drafts, index, nativeValidator, registries, dimensions, null);
+    }
+
+    private static Component listEntryError(String key, String value, List<String> drafts, int index,
+                                            Predicate<String> nativeValidator, RegistryAccess registries,
+                                            Set<ResourceLocation> dimensions, Map<String, Integer> duplicateCounts) {
         if (!nativeValidator.test(value)) {
             if (MAP_LISTS.contains(key) && value.indexOf('=') <= 0) {
                 return Component.translatableWithFallback("mca.configuration.validation.map", "Expected key=value");
@@ -189,14 +255,22 @@ public final class ConfigScreenSearch {
             return null;
         }
         String candidate = uniqueListKey(key, value);
+        if (duplicateCounts != null) {
+            return duplicateCounts.getOrDefault(candidate, 0) > 1
+                    ? duplicateEntryError(key) : null;
+        }
         for (int other = 0; other < drafts.size(); other++) {
             if (other != index && candidate.equals(uniqueListKey(key, drafts.get(other)))) {
-                return MAP_LISTS.contains(key)
-                        ? Component.translatableWithFallback("mca.configuration.validation.duplicate_key", "Duplicate key")
-                        : Component.translatableWithFallback("mca.configuration.validation.duplicate", "Duplicate entry");
+                return duplicateEntryError(key);
             }
         }
         return null;
+    }
+
+    private static Component duplicateEntryError(String key) {
+        return MAP_LISTS.contains(key)
+                ? Component.translatableWithFallback("mca.configuration.validation.duplicate_key", "Duplicate key")
+                : Component.translatableWithFallback("mca.configuration.validation.duplicate", "Duplicate entry");
     }
 
     private static String uniqueListKey(String key, String value) {
@@ -479,6 +553,12 @@ public final class ConfigScreenSearch {
         @Override
         protected <T> Element createList(String key, ModConfigSpec.ListValueSpec spec, ModConfigSpec.ConfigValue<List<T>> valueList) {
             Component tooltip = getTooltipComponent(key, null);
+            Component listTitle = Component.empty().append(getTitle()).append(" > ").append(getTranslationComponent(key));
+            if (isRemoteServerSettings(context)) {
+                listTitle = Component.empty().append(listTitle).append(" ")
+                        .append(Component.translatableWithFallback("mca.configuration.read_only.badge", "[READ-ONLY]"));
+            }
+            Component displayTitle = listTitle;
             return new Element(
                     Component.translatable(SECTION, getTranslationComponent(key)),
                     tooltip,
@@ -487,7 +567,7 @@ public final class ConfigScreenSearch {
                                             new RegistryValidatingConfigurationListScreen<>(
                                                     Context.list(context, this),
                                                     key,
-                                                    Component.empty().append(getTitle()).append(" > ").append(getTranslationComponent(key)),
+                                                    displayTitle,
                                                     spec,
                                                     valueList).rebuild())))
                             .tooltip(Tooltip.create(tooltip))
@@ -639,22 +719,46 @@ public final class ConfigScreenSearch {
         @Override
         protected void createAddElementButton() {
             if (cfgList.isEmpty()) {
-                Component message = Component.translatable("mca.configuration.list.empty");
+                Component message = isRemoteServerSettings(context)
+                        ? Component.translatableWithFallback("mca.configuration.list.empty.read_only", "No entries")
+                        : Component.translatable("mca.configuration.list.empty");
                 StringWidget emptyLabel = new StringWidget(Button.DEFAULT_WIDTH, Button.DEFAULT_HEIGHT, message, font).alignLeft();
                 emptyLabel.setTooltip(Tooltip.create(message));
                 list.addSmall(emptyLabel, null);
             }
+            if (isRemoteServerSettings(context)) {
+                return;
+            }
             super.createAddElementButton();
+        }
+
+        @Override
+        protected AbstractWidget createListLabel(int index) {
+            if (isRemoteServerSettings(context)) {
+                return new StringWidget(Button.DEFAULT_WIDTH, Button.DEFAULT_HEIGHT,
+                        Component.translatableWithFallback("mca.configuration.list.entry", "Entry %s", index + 1),
+                        font).alignLeft();
+            }
+            return super.createListLabel(index);
         }
 
         @SuppressWarnings("unchecked")
         @Override
         protected Element createStringListValue(int index, String value) {
+            if (isRemoteServerSettings(context)) {
+                StringWidget label = new StringWidget(Button.DEFAULT_WIDTH, Button.DEFAULT_HEIGHT,
+                        Component.literal(value), font).alignLeft();
+                label.setTooltip(Tooltip.create(Component.literal(value)));
+                return new Element(getTranslationComponent(key), getTooltipComponent(key, null), label, false);
+            }
             drafts.put(index, value);
             Element element = createStringValue(
                     key,
                     candidate -> {
                         drafts.put(index, candidate);
+                        // Keep incomplete text in the working copy so native add/move/delete
+                        // rebuilds cannot silently replace it with the last valid value.
+                        cfgList.set(index, (T) candidate);
                         return entryError(index, candidate) == null;
                     },
                     () -> value,
@@ -666,11 +770,32 @@ public final class ConfigScreenSearch {
         }
 
         @Override
+        protected void setUndoButtonstate(boolean state) {
+            super.setUndoButtonstate(state && !isRemoteServerSettings(context));
+        }
+
+        @Override
         protected void setResetButtonstate(boolean state) {
+            if (isRemoteServerSettings(context)) {
+                super.setResetButtonstate(false);
+                doneButton.active = true;
+                return;
+            }
             List<String> current = currentDrafts();
             boolean allDraftsValid = drafts.size() == cfgList.stream().filter(String.class::isInstance).count();
+            Map<String, Integer> duplicateCounts = new HashMap<>();
+            if (MAP_LISTS.contains(key) || RESOURCE_ID_LISTS.contains(key)) {
+                current.forEach(value -> duplicateCounts.merge(uniqueListKey(key, value), 1, Integer::sum));
+            }
+            var connection = Minecraft.getInstance().getConnection();
+            RegistryAccess registries = connection == null ? null : connection.registryAccess();
+            Set<ResourceLocation> dimensions = connection == null ? null : connection.levels().stream()
+                    .map(level -> level.location())
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet());
+            Predicate<String> nativeValidator = candidate -> spec.test(List.of(candidate));
             for (Map.Entry<Integer, String> draft : drafts.entrySet()) {
-                Component error = entryError(draft.getKey(), draft.getValue(), current);
+                Component error = listEntryError(key, draft.getValue(), current, draft.getKey(),
+                        nativeValidator, registries, dimensions, duplicateCounts);
                 allDraftsValid &= error == null;
                 EditBox editor = editors.get(draft.getKey());
                 if (editor != null) {
@@ -682,18 +807,30 @@ public final class ConfigScreenSearch {
                     editor.setTooltip(Tooltip.create(tooltip));
                 }
             }
-            super.setResetButtonstate(state || !allDraftsValid);
+            super.setResetButtonstate((state || !allDraftsValid) && !isRemoteServerSettings(context));
             doneButton.active = isListDoneEnabled(doneButton.active, allDraftsValid);
         }
 
         @Override
         public void onClose() {
+            if (isRemoteServerSettings(context)) {
+                changed = false;
+                super.onClose();
+                return;
+            }
             List<String> current = currentDrafts();
             for (Map.Entry<Integer, String> draft : drafts.entrySet()) {
                 if (entryError(draft.getKey(), draft.getValue(), current) != null) {
-                    // Escape discards an invalid editing session; it never commits the stale backing list.
-                    changed = false;
-                    break;
+                    minecraft.setScreen(new ConfirmScreen(discard -> {
+                        if (discard) {
+                            changed = false;
+                            RegistryValidatingConfigurationListScreen.super.onClose();
+                        } else {
+                            minecraft.setScreen(this);
+                        }
+                    }, Component.translatable("mca.configuration.validation.discard.title"),
+                            Component.translatable("mca.configuration.validation.discard.message")));
+                    return;
                 }
             }
             super.onClose();
@@ -754,6 +891,12 @@ public final class ConfigScreenSearch {
             label.setPosition(layout.labelX(), rowTop);
             value.setWidth(layout.valueWidth());
             value.setPosition(layout.valueX(), rowTop);
+            entry.renderBack(graphics, index, rowTop, rowLeft, rowWidth, rowHeight,
+                    mouseX, mouseY, entry == getHovered(), partialTick);
+            if (isSelectedItem(index)) {
+                renderSelection(graphics, rowTop, rowWidth, rowHeight,
+                        isFocused() ? -1 : -8355712, -16777216);
+            }
             label.render(graphics, mouseX, mouseY, partialTick);
             value.render(graphics, mouseX, mouseY, partialTick);
         }
@@ -782,7 +925,11 @@ public final class ConfigScreenSearch {
                             value)) {
                 return null;
             }
-            return isRemoteServerSettings(context) ? readOnlyValue(original) : original;
+            if (!isRemoteServerSettings(context)) {
+                return original;
+            }
+            return context.valueSpecs().get(key) instanceof ModConfigSpec.ListValueSpec
+                    ? readOnlyListNavigation(original) : readOnlyValue(original);
         }
 
         private boolean matchesAncestor(ConfigurationScreen.ConfigurationSectionScreen.Context context) {

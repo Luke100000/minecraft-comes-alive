@@ -291,6 +291,13 @@ class ConfigScreenSearchTest {
                 new ConfigurationScreen.ConfigurationSectionScreen.Element(Component.literal("List"), Component.empty(), button, false);
         assertSame(listValue, ConfigScreenSearch.readOnlyValue(listValue));
         assertFalse(button.active);
+
+        Button browseList = Button.builder(Component.literal("Browse list"), ignored -> {}).build();
+        ConfigurationScreen.ConfigurationSectionScreen.Element navigation =
+                new ConfigurationScreen.ConfigurationSectionScreen.Element(Component.literal("List"),
+                        Component.empty(), browseList, false);
+        assertSame(browseList, ConfigScreenSearch.readOnlyListNavigation(navigation).widget());
+        assertTrue(browseList.active, "Read-only lists must remain browsable");
     }
 
     private static ConfigurationScreen.ConfigurationSectionScreen.Filter searchFilter(String query) throws Exception {
