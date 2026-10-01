@@ -10,8 +10,10 @@ import net.conczin.mca.fabric.resources.*;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.MessagesMCA;
 import net.conczin.mca.network.Network;
+import net.conczin.mca.network.s2c.AppearanceCatalogSync;
 import net.conczin.mca.registry.*;
 import net.conczin.mca.resources.BodySkinList;
+import net.conczin.mca.resources.EyeCatalog;
 import net.conczin.mca.resources.HairStyleList;
 import net.conczin.mca.resources.LayeredHairList;
 import net.conczin.mca.server.ServerInteractionManager;
@@ -113,6 +115,7 @@ public final class MCAFabric implements ModInitializer {
         managerHelper.registerReloadListener(new FabricClothingList());
         registerReloadListener(managerHelper, HairStyleList.ID, new HairStyleList());
         registerReloadListener(managerHelper, LayeredHairList.ID, new LayeredHairList());
+        registerReloadListener(managerHelper, EyeCatalog.ID, new EyeCatalog());
         managerHelper.registerReloadListener(new FabricGiftLoader());
         managerHelper.registerReloadListener(new FabricDialogues());
         managerHelper.registerReloadListener(new FabricTasks());
@@ -138,6 +141,13 @@ public final class MCAFabric implements ModInitializer {
         ServerTickEvents.END_WORLD_TICK.register(w -> VillageManager.get(w).tick());
         ServerTickEvents.END_SERVER_TICK.register(s -> ServerInteractionManager.getInstance().tick());
         ServerTickEvents.END_SERVER_TICK.register(MCA::setServer);
+        ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((server, manager, success) -> {
+            EyeCatalog eyeCatalog = EyeCatalog.getInstance();
+            if (success && eyeCatalog != null) {
+                eyeCatalog.repairLoaded(server);
+            }
+        });
+        ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS.register((player, joined) -> AppearanceCatalogSync.send(player));
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
                 ServerInteractionManager.getInstance().onPlayerJoin(handler.player)

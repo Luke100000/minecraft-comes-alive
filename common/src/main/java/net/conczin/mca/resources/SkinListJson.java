@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiFunction;
 
 public final class SkinListJson {
     private SkinListJson() {
@@ -98,15 +99,27 @@ public final class SkinListJson {
     }
 
     public static Map<ResourceLocation, List<String>> textureCollections(ResourceManager manager, String directory) {
+        return textureCollections(manager, directory, SkinListJson::stringEntries);
+    }
+
+    public static Map<ResourceLocation, List<Entry>> textureEntryCollections(ResourceManager manager, String directory) {
+        return textureCollections(manager, directory, SkinListJson::entries);
+    }
+
+    private static <T> Map<ResourceLocation, List<T>> textureCollections(
+            ResourceManager manager,
+            String directory,
+            BiFunction<ResourceLocation, JsonElement, List<T>> entryReader
+    ) {
         FileToIdConverter converter = FileToIdConverter.json(directory);
-        Map<ResourceLocation, List<String>> collections = new LinkedHashMap<>();
+        Map<ResourceLocation, List<T>> collections = new LinkedHashMap<>();
 
         converter.listMatchingResourceStacks(manager).forEach((file, resources) -> {
             ResourceLocation id = converter.fileToId(file);
-            List<String> textures = collections.computeIfAbsent(id, ignored -> new ArrayList<>());
+            List<T> textures = collections.computeIfAbsent(id, ignored -> new ArrayList<>());
             for (Resource resource : resources) {
                 try (Reader reader = resource.openAsReader()) {
-                    appendTextureCollection(id, JsonParser.parseReader(reader), textures);
+                    appendTextureCollection(id, JsonParser.parseReader(reader), textures, entryReader);
                 } catch (Exception exception) {
                     MCA.LOGGER.warn("Failed to read skin texture collection {} from {}", id, resource.sourcePackId(), exception);
                 }
@@ -118,13 +131,18 @@ public final class SkinListJson {
 
     public static List<String> textureCollection(ResourceLocation id, JsonElement file) {
         List<String> textures = new ArrayList<>();
-        appendTextureCollection(id, file, textures);
+        appendTextureCollection(id, file, textures, SkinListJson::stringEntries);
         return textures;
     }
 
-    private static void appendTextureCollection(ResourceLocation id, JsonElement file, List<String> textures) {
+    private static <T> void appendTextureCollection(
+            ResourceLocation id,
+            JsonElement file,
+            List<T> textures,
+            BiFunction<ResourceLocation, JsonElement, List<T>> entryReader
+    ) {
         if (file.isJsonArray()) {
-            appendTextureArray(id, file, textures);
+            textures.addAll(entryReader.apply(id, file));
             return;
         }
         if (!file.isJsonObject()) {
@@ -140,13 +158,14 @@ public final class SkinListJson {
             MCA.LOGGER.warn("Invalid skin texture collection {}, missing textures", id);
             return;
         }
-        appendTextureArray(id, textureArray, textures);
+        textures.addAll(entryReader.apply(id, textureArray));
     }
 
-    private static void appendTextureArray(ResourceLocation id, JsonElement textureArray, List<String> textures) {
+    private static List<String> stringEntries(ResourceLocation id, JsonElement textureArray) {
         if (!textureArray.isJsonArray()) {
             throw new JsonParseException("Expected textures array");
         }
+        List<String> textures = new ArrayList<>();
         textureArray.getAsJsonArray().forEach(element -> {
             if (!element.isJsonPrimitive()) {
                 MCA.LOGGER.warn("Invalid skin texture collection entry in {}, expected a string", id);
@@ -154,6 +173,7 @@ public final class SkinListJson {
             }
             textures.add(element.getAsString());
         });
+        return textures;
     }
 
     public record Entry(String identifier, JsonObject metadata) {
