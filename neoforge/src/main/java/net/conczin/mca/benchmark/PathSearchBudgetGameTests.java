@@ -88,10 +88,7 @@ public final class PathSearchBudgetGameTests {
         wallJourney(helper, "wall71", 35);
     }
 
-    // Deliberate limit probe, not a promise that bounded A* solves every broad detour.
-    // Its failed arrival remains visible in the output and is never counted as a passing journey.
-    @GameTest(batch = LONG_DETOUR_BATCH, templateNamespace = "mca_ab", template = "ab_air", timeoutTicks = 2_100,
-            required = false)
+    @GameTest(batch = LONG_DETOUR_BATCH, templateNamespace = "mca_ab", template = "ab_air", timeoutTicks = 2_100)
     public static void brainWalksAround111BlockWall(GameTestHelper helper) {
         wallJourney(helper, "wall111", 55);
     }

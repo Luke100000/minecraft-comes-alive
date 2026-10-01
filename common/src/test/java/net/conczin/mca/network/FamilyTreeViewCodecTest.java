@@ -1,29 +1,33 @@
 package net.conczin.mca.network;
 
 import io.netty.buffer.Unpooled;
+import net.conczin.mca.FamilyTreeTestSupport;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.network.c2s.GetFamilyTreeRequest;
+import net.conczin.mca.network.s2c.FamilyTreeUUIDResponse;
 import net.conczin.mca.network.s2c.GetFamilyTreeResponse;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
-import net.minecraft.SharedConstants;
 import net.minecraft.Util;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.server.Bootstrap;
+import net.minecraft.world.entity.npc.VillagerProfession;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.Set;
 import java.util.UUID;
 
 import static net.conczin.mca.network.FamilyTreeView.Direction.ANCESTORS;
 import static net.conczin.mca.network.FamilyTreeView.Direction.DESCENDANTS;
+import static net.conczin.mca.FamilyTreeTestSupport.uuid;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FamilyTreeViewCodecTest {
     private static final UUID ROOT = uuid(1);
@@ -31,8 +35,7 @@ class FamilyTreeViewCodecTest {
 
     @BeforeAll
     static void bootstrapMinecraft() {
-        SharedConstants.tryDetectVersion();
-        Bootstrap.bootStrap();
+        FamilyTreeTestSupport.bootstrapMinecraft();
     }
 
     @Test
@@ -46,6 +49,7 @@ class FamilyTreeViewCodecTest {
                 Util.NIL_UUID,
                 Util.NIL_UUID
         );
+        rootNode.setProfession(VillagerProfession.FARMER);
         FamilyTreeView view = new FamilyTreeView(
                 Map.of(ROOT, rootNode),
                 Set.of(
@@ -62,6 +66,7 @@ class FamilyTreeViewCodecTest {
         assertEquals(ROOT, decoded.uuid());
         assertTrue(decoded.found());
         assertEquals(Set.of(ROOT), decoded.view().nodes().keySet());
+        assertEquals(VillagerProfession.FARMER, decoded.view().nodes().get(ROOT).getProfession());
         assertEquals(rootNode.save(), decoded.view().nodes().get(ROOT).save());
         assertEquals(view.continuations(), decoded.view().continuations());
         assertEquals(Set.of(UNAVAILABLE), decoded.view().unavailable());
@@ -91,10 +96,8 @@ class FamilyTreeViewCodecTest {
 
     @Test
     void defaultRequestLoadsEightGenerationsPerDirection() {
-        GetFamilyTreeRequest request = new GetFamilyTreeRequest(ROOT);
-
-        assertEquals(8, request.ancestorDepth());
-        assertEquals(8, request.descendantDepth());
+        assertEquals(8, GetFamilyTreeRequest.DEFAULT_ANCESTOR_DEPTH);
+        assertEquals(8, GetFamilyTreeRequest.DEFAULT_DESCENDANT_DEPTH);
         assertEquals(8, GetFamilyTreeRequest.MAX_DEPTH);
     }
 
@@ -118,15 +121,14 @@ class FamilyTreeViewCodecTest {
     }
 
     @Test
-    void searchEntryRoundTripsRecordedParentMetadataAndDeceasedState() {
+    void searchEntryRoundTripsRecordedParentMetadata() {
         FamilyTreeSearchEntry entry = new FamilyTreeSearchEntry(
                 ROOT,
                 "Root",
                 true,
                 "Father",
                 true,
-                "",
-                true
+                ""
         );
 
         FamilyTreeSearchEntry decoded = roundTripByteBuf(FamilyTreeSearchEntry.STREAM_CODEC, entry);
@@ -134,7 +136,56 @@ class FamilyTreeViewCodecTest {
         assertEquals(entry, decoded);
         assertTrue(decoded.fatherRecorded());
         assertTrue(decoded.motherRecorded());
-        assertTrue(decoded.deceased());
+    }
+
+    @Test
+    void searchResponseRoundTripsTheQueryThatProducedItsResults() {
+        FamilyTreeSearchEntry entry = new FamilyTreeSearchEntry(
+                ROOT,
+                "Root",
+                false,
+                "",
+                false,
+                ""
+        );
+        FamilyTreeUUIDResponse response = new FamilyTreeUUIDResponse("root", java.util.List.of(entry));
+
+        FamilyTreeUUIDResponse decoded = roundTrip(FamilyTreeUUIDResponse.STREAM_CODEC, response);
+
+        assertEquals("root", decoded.search());
+        assertEquals(java.util.List.of(entry), decoded.list());
+    }
+
+    @Test
+    void viewRejectsMoreThanTheWireNodeBudget() {
+        Map<UUID, FamilyTreeNode> nodes = new LinkedHashMap<>();
+        for (int index = 0; index < 257; index++) {
+            UUID id = uuid(10_000 + index);
+            nodes.put(id, new FamilyTreeNode(null, id, id.toString(), false, Gender.MALE, Util.NIL_UUID, Util.NIL_UUID));
+        }
+
+        assertThrows(IllegalArgumentException.class, () -> new FamilyTreeView(nodes, Set.of(), Set.of()));
+    }
+
+    @Test
+    void viewRejectsNodeWithMoreThanTheWireRelationshipBudget() {
+        FamilyTreeNode root = new FamilyTreeNode(
+                null,
+                ROOT,
+                "Root",
+                false,
+                Gender.MALE,
+                Util.NIL_UUID,
+                Util.NIL_UUID
+        );
+        for (int index = 0; index < 257; index++) {
+            root.addChild(uuid(20_000 + index));
+        }
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new FamilyTreeView(Map.of(ROOT, root), Set.of(), Set.of())
+        );
     }
 
     private static <T> T roundTrip(StreamCodec<FriendlyByteBuf, T> codec, T value) {
@@ -157,7 +208,4 @@ class FamilyTreeViewCodecTest {
         }
     }
 
-    private static UUID uuid(int value) {
-        return UUID.fromString("00000000-0000-0000-0000-" + String.format("%012d", value));
-    }
 }

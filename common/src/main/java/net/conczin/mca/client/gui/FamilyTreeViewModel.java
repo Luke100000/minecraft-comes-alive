@@ -5,6 +5,7 @@ import net.conczin.mca.network.s2c.GetFamilyTreeResponse;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 
 import java.util.ArrayDeque;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -12,8 +13,11 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
-public final class FamilyTreeViewModel {
+final class FamilyTreeViewModel {
+    private static final AtomicLong NEXT_REQUEST_ID = new AtomicLong(1L);
+
     public enum MergeResult {
         APPLIED,
         STALE,
@@ -23,35 +27,33 @@ public final class FamilyTreeViewModel {
     public record ViewportState(double panX, double panY, float zoom) {
     }
 
-    public record HistoryEntry(UUID focusId, ViewportState viewport) {
+    public record HistoryEntry(UUID layoutRootId, UUID focusId, ViewportState viewport) {
     }
 
     public record Snapshot(
             UUID layoutRootId,
-            UUID focusId,
             Map<UUID, FamilyTreeNode> nodes,
-            Set<FamilyTreeView.Continuation> continuations,
-            Set<UUID> unavailable
+            Set<FamilyTreeView.Continuation> continuations
     ) {
         public Snapshot {
             nodes = Map.copyOf(nodes);
             continuations = Set.copyOf(continuations);
-            unavailable = Set.copyOf(unavailable);
         }
     }
 
     private final Map<UUID, FamilyTreeNode> nodes = new LinkedHashMap<>();
+    private final Map<UUID, FamilyTreeNode> nodesView = Collections.unmodifiableMap(nodes);
     private final Set<FamilyTreeView.Continuation> continuations = new LinkedHashSet<>();
     private final Set<UUID> unavailable = new LinkedHashSet<>();
     private final Deque<HistoryEntry> history = new ArrayDeque<>();
     private final Map<Long, FamilyTreeView.Continuation> pendingExpansions = new LinkedHashMap<>();
 
-    private final UUID layoutRootId;
+    private UUID layoutRootId;
     private UUID focusId;
     private UUID pendingFocusId;
+    private UUID pendingLayoutRootId;
     private UUID unavailableFocusId;
     private long pendingFocusRequestId = -1L;
-    private long nextRequestId = 1L;
 
     public FamilyTreeViewModel(UUID initialFocus) {
         this.layoutRootId = initialFocus;
@@ -59,51 +61,71 @@ public final class FamilyTreeViewModel {
     }
 
     public long beginFocus(UUID id, ViewportState viewport) {
-        if (!id.equals(focusId) && pendingFocusId == null) {
-            history.push(new HistoryEntry(focusId, viewport));
+        return beginFocus(id, viewport, false);
+    }
+
+    public long beginRootFocus(UUID id, ViewportState viewport) {
+        return beginFocus(id, viewport, true);
+    }
+
+    private long beginFocus(UUID id, ViewportState viewport, boolean changeLayoutRoot) {
+        if (pendingFocusId == null
+                && (!id.equals(focusId) || changeLayoutRoot && !id.equals(layoutRootId))) {
+            history.push(new HistoryEntry(layoutRootId, focusId, viewport));
         }
         pendingFocusId = id;
+        pendingLayoutRootId = changeLayoutRoot ? id : null;
         unavailableFocusId = null;
-        pendingFocusRequestId = nextRequestId++;
+        pendingFocusRequestId = NEXT_REQUEST_ID.getAndIncrement();
         return pendingFocusRequestId;
     }
 
     public long beginExpansion(UUID anchor, FamilyTreeView.Direction direction) {
-        long requestId = nextRequestId++;
+        long requestId = NEXT_REQUEST_ID.getAndIncrement();
         pendingExpansions.put(requestId, new FamilyTreeView.Continuation(anchor, direction));
         return requestId;
     }
 
     public MergeResult accept(GetFamilyTreeResponse response) {
-        merge(response.view());
-
         if (response.requestId() == pendingFocusRequestId
                 && pendingFocusId != null
                 && pendingFocusId.equals(response.uuid())) {
+            UUID nextLayoutRoot = pendingLayoutRootId;
             pendingFocusId = null;
+            pendingLayoutRootId = null;
             pendingFocusRequestId = -1L;
 
             if (!response.found()) {
                 unavailable.add(response.uuid());
                 unavailableFocusId = response.uuid();
-                if (!history.isEmpty() && history.peek().focusId().equals(focusId)) {
+                if (!history.isEmpty()
+                        && history.peek().focusId().equals(focusId)
+                        && history.peek().layoutRootId().equals(layoutRootId)) {
                     history.pop();
                 }
                 return MergeResult.NOT_FOUND;
             }
 
+            merge(response.view());
             focusId = response.uuid();
+            if (nextLayoutRoot != null) {
+                layoutRootId = nextLayoutRoot;
+            }
             unavailableFocusId = null;
+            pruneContinuations();
             return MergeResult.APPLIED;
         }
 
-        FamilyTreeView.Continuation expansion = pendingExpansions.remove(response.requestId());
+        FamilyTreeView.Continuation expansion = pendingExpansions.get(response.requestId());
         if (expansion != null && expansion.anchor().equals(response.uuid())) {
-            continuations.remove(expansion);
+            pendingExpansions.remove(response.requestId());
             if (!response.found()) {
                 unavailable.add(response.uuid());
                 return MergeResult.NOT_FOUND;
             }
+            merge(response.view());
+            continuations.remove(expansion);
+            pruneContinuations();
             return MergeResult.APPLIED;
         }
 
@@ -114,6 +136,24 @@ public final class FamilyTreeViewModel {
         nodes.putAll(view.nodes());
         continuations.addAll(view.continuations());
         unavailable.addAll(view.unavailable());
+        unavailable.removeAll(view.nodes().keySet());
+    }
+
+    private void pruneContinuations() {
+        continuations.removeIf(continuation -> {
+            FamilyTreeNode node = nodes.get(continuation.anchor());
+            if (node == null) {
+                return true;
+            }
+            return switch (continuation.direction()) {
+                case ANCESTORS -> node.streamParents().noneMatch(this::isUnloaded);
+                case DESCENDANTS -> node.streamChildren().noneMatch(this::isUnloaded);
+            };
+        });
+    }
+
+    private boolean isUnloaded(UUID id) {
+        return FamilyTreeNode.isValid(id) && !nodes.containsKey(id) && !unavailable.contains(id);
     }
 
     public Optional<HistoryEntry> back() {
@@ -121,8 +161,10 @@ public final class FamilyTreeViewModel {
             return Optional.empty();
         }
         HistoryEntry entry = history.pop();
+        layoutRootId = entry.layoutRootId();
         focusId = entry.focusId();
         pendingFocusId = null;
+        pendingLayoutRootId = null;
         pendingFocusRequestId = -1L;
         unavailableFocusId = null;
         return Optional.of(entry);
@@ -132,28 +174,16 @@ public final class FamilyTreeViewModel {
         return focusId;
     }
 
-    public UUID layoutRootId() {
-        return layoutRootId;
+    Optional<UUID> previousFocusId() {
+        return history.isEmpty() ? Optional.empty() : Optional.of(history.peek().focusId());
     }
 
     public Map<UUID, FamilyTreeNode> nodes() {
-        return Map.copyOf(nodes);
-    }
-
-    public Set<FamilyTreeView.Continuation> continuations() {
-        return Set.copyOf(continuations);
-    }
-
-    public Set<UUID> unavailable() {
-        return Set.copyOf(unavailable);
+        return nodesView;
     }
 
     public Optional<UUID> pendingFocusId() {
         return Optional.ofNullable(pendingFocusId);
-    }
-
-    public Set<FamilyTreeView.Continuation> pendingExpansions() {
-        return Set.copyOf(pendingExpansions.values());
     }
 
     public Optional<UUID> unavailableFocusId() {
@@ -165,6 +195,6 @@ public final class FamilyTreeViewModel {
     }
 
     public Snapshot snapshot() {
-        return new Snapshot(layoutRootId, focusId, nodes, continuations, unavailable);
+        return new Snapshot(layoutRootId, nodes, continuations);
     }
 }

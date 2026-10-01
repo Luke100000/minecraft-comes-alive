@@ -1688,8 +1688,12 @@ public final class ArcherCombatMovementGameTests {
         archer.getBrain().eraseMemory(MemoryModuleTypeMCA.WEARS_ARMOR);
         archer.setItemSlot(archer.getDominantSlot(), ItemStack.EMPTY);
 
+        AtomicInteger conditionCalls = new AtomicInteger();
         AtomicInteger supplierCalls = new AtomicInteger();
-        EquipmentTask equipment = new EquipmentTask(ignored -> true, ignored -> {
+        EquipmentTask equipment = new EquipmentTask(ignored -> {
+            conditionCalls.incrementAndGet();
+            return true;
+        }, ignored -> {
             supplierCalls.incrementAndGet();
             return EquipmentSet.ARCHER_0;
         });
@@ -1698,6 +1702,8 @@ public final class ArcherCombatMovementGameTests {
         archer.tickCount = 0;
         helper.assertTrue(equipment.tryStart(helper.getLevel(), archer, gameTime),
                 "equipment fixture did not start while missing its bow");
+        helper.assertTrue(conditionCalls.get() == 1,
+                "successful start evaluated the live duty predicate more than once: " + conditionCalls.get());
         helper.assertTrue(supplierCalls.get() == 1,
                 "successful start looked up equipment more than once after a fresh start-condition lookup: "
                         + supplierCalls.get());
@@ -1709,6 +1715,8 @@ public final class ArcherCombatMovementGameTests {
         archer.setItemSlot(archer.getDominantSlot(), ItemStack.EMPTY);
         helper.assertTrue(equipment.tryStart(helper.getLevel(), archer, gameTime + 2),
                 "equipment fixture did not restart when the bow was removed");
+        helper.assertTrue(conditionCalls.get() == 2,
+                "later successful start evaluated the live duty predicate more than once: " + conditionCalls.get());
         helper.assertTrue(supplierCalls.get() == 2,
                 "a later successful start reused an older cached selection instead of refreshing it");
         helper.succeed();

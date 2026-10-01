@@ -1,15 +1,14 @@
 package net.conczin.mca.client.gui;
 
+import net.conczin.mca.FamilyTreeTestSupport;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.network.FamilyTreeSearchEntry;
 import net.conczin.mca.network.FamilyTreeView;
 import net.conczin.mca.network.s2c.GetFamilyTreeResponse;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
-import net.minecraft.SharedConstants;
 import net.minecraft.Util;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.Bootstrap;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -20,6 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static net.conczin.mca.network.FamilyTreeView.Direction.ANCESTORS;
+import static net.conczin.mca.FamilyTreeTestSupport.uuid;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -29,8 +29,7 @@ class FamilyTreeScreenInteractionTest {
 
     @BeforeAll
     static void bootstrapMinecraft() {
-        SharedConstants.tryDetectVersion();
-        Bootstrap.bootStrap();
+        FamilyTreeTestSupport.bootstrapMinecraft();
     }
 
     @Test
@@ -64,10 +63,8 @@ class FamilyTreeScreenInteractionTest {
 
         assertEquals(5, header.backX());
         assertEquals(854 - 5 - 72, header.doneX());
-        assertEquals(
-                854 - header.controlsRight(),
-                header.controlsLeft()
-        );
+        assertEquals(234, header.searchX());
+        assertEquals(566, header.centerX());
         assertTrue(header.searchWidth() <= 180);
     }
 
@@ -76,8 +73,8 @@ class FamilyTreeScreenInteractionTest {
         FamilyTreeScreen.HeaderLayout header = FamilyTreeScreen.headerLayout(320);
 
         assertTrue(header.searchWidth() >= 80);
-        assertTrue(header.controlsLeft() >= 5);
-        assertTrue(header.controlsRight() <= 315);
+        assertEquals(5, header.searchX());
+        assertEquals(261, header.centerX());
     }
 
     @Test
@@ -113,7 +110,6 @@ class FamilyTreeScreenInteractionTest {
     void focusTransitionRecentersOnlyAfterTheNewLayoutArrives() {
         FamilyTreeLayout.Card focused = new FamilyTreeLayout.Card(
                 OTHER,
-                FamilyTreeLayout.Role.PARTNER,
                 new FamilyTreeLayout.Bounds(40, 140, -30, 70)
         );
         FamilyTreeLayout.Result result = new FamilyTreeLayout.Result(
@@ -125,12 +121,8 @@ class FamilyTreeScreenInteractionTest {
         FamilyTreeViewModel.ViewportState current = new FamilyTreeViewModel.ViewportState(18, 22, 1.5F);
 
         assertEquals(
-                current,
-                FamilyTreeScreen.focusViewportAfterResponse(result, current, OTHER, false)
-        );
-        assertEquals(
                 new FamilyTreeViewModel.ViewportState(-135, -30, 1.5F),
-                FamilyTreeScreen.focusViewportAfterResponse(result, current, OTHER, true)
+                FamilyTreeScreen.focusViewportAfterResponse(result, current, OTHER)
         );
     }
 
@@ -138,26 +130,6 @@ class FamilyTreeScreenInteractionTest {
     void deceasedCardsUseSkullAndMutedPersimmonRed() {
         assertEquals("☠", FamilyTreeScreen.DECEASED_MARKER);
         assertEquals(0xFFA94A3A, FamilyTreeScreen.DECEASED_MARKER_COLOR);
-    }
-
-    @Test
-    void canvasDragStartsOnlyFromEmptyCanvas() {
-        assertTrue(FamilyTreeScreen.startsCanvasDrag(0, true, false));
-        assertEquals(false, FamilyTreeScreen.startsCanvasDrag(0, false, false));
-        assertEquals(false, FamilyTreeScreen.startsCanvasDrag(0, true, true));
-        assertEquals(false, FamilyTreeScreen.startsCanvasDrag(1, true, false));
-    }
-
-    @Test
-    void hoverDetailShowsRelativesButNotTheFocusedPerson() {
-        assertEquals(
-                Optional.of(OTHER),
-                FamilyTreeScreen.detailPerson(new FamilyTreeScreen.PersonTarget(OTHER), ROOT)
-        );
-        assertEquals(
-                Optional.empty(),
-                FamilyTreeScreen.detailPerson(new FamilyTreeScreen.PersonTarget(ROOT), ROOT)
-        );
     }
 
     @Test
@@ -214,7 +186,6 @@ class FamilyTreeScreenInteractionTest {
     void layoutHitTestIdentifiesKnownCardByUuid() {
         FamilyTreeLayout.Card card = new FamilyTreeLayout.Card(
                 ROOT,
-                FamilyTreeLayout.Role.ANCHOR,
                 new FamilyTreeLayout.Bounds(-55, 55, -20, 20)
         );
         FamilyTreeLayout.Result result = new FamilyTreeLayout.Result(
@@ -251,34 +222,38 @@ class FamilyTreeScreenInteractionTest {
     }
 
     @Test
-    void selectingIntegratedSearchResultFocusesExactUuidAndPushesHistory() {
-        FamilyTreeViewModel model = loadedModel();
-        FamilyTreeSearchEntry selected = searchEntry(OTHER, "Same Name");
-        FamilyTreeViewModel.ViewportState viewport = new FamilyTreeViewModel.ViewportState(5, 7, 1.25F);
-
-        long requestId = FamilyTreeScreen.beginSearchSelection(model, selected, viewport);
-        model.accept(new GetFamilyTreeResponse(requestId, OTHER, true, view(OTHER)));
-
-        assertEquals(OTHER, model.focusId());
-        FamilyTreeViewModel.HistoryEntry back = model.back().orElseThrow();
-        assertEquals(ROOT, back.focusId());
-        assertEquals(viewport, back.viewport());
-    }
-
-    @Test
-    void duplicateSearchNamesStillSelectByUuid() {
-        FamilyTreeViewModel model = loadedModel();
-        FamilyTreeSearchEntry first = searchEntry(uuid(2), "Same Name");
-        FamilyTreeSearchEntry second = searchEntry(uuid(3), "Same Name");
-
-        FamilyTreeScreen.beginSearchSelection(
-                model,
-                second,
-                new FamilyTreeViewModel.ViewportState(0, 0, 1.0F)
+    void selectedPersonKeepsRelationshipDetailAfterHoverEnds() {
+        FamilyTreeNode parent = node(ROOT, "Sug");
+        FamilyTreeNode child = node(OTHER, "Sima");
+        child.setFather(parent);
+        parent.addChild(OTHER);
+        FamilyTreeView family = new FamilyTreeView(
+                Map.of(ROOT, parent, OTHER, child),
+                Set.of(),
+                Set.of()
         );
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        FamilyTreeViewModel.ViewportState viewport = new FamilyTreeViewModel.ViewportState(0, 0, 1.0F);
+        long initial = model.beginFocus(ROOT, viewport);
+        model.accept(new GetFamilyTreeResponse(initial, ROOT, true, family));
+        long selected = model.beginFocus(OTHER, viewport);
+        model.accept(new GetFamilyTreeResponse(selected, OTHER, true, family));
 
-        assertEquals(Optional.of(second.uuid()), model.pendingFocusId());
-        assertTrue(model.pendingFocusId().filter(id -> !id.equals(first.uuid())).isPresent());
+        Optional<FamilyTreeScreen.RelationshipDetail> selectedDetail = Optional.of(
+                new FamilyTreeScreen.RelationshipDetail(OTHER, FamilyTreeRelationshipResolver.Relation.CHILD)
+        );
+        assertEquals(selectedDetail, FamilyTreeScreen.relationshipDetail(null, model));
+        assertEquals(
+                selectedDetail,
+                FamilyTreeScreen.relationshipDetail(new FamilyTreeScreen.PersonTarget(OTHER), model)
+        );
+        assertEquals(
+                Optional.of(new FamilyTreeScreen.RelationshipDetail(
+                        ROOT,
+                        FamilyTreeRelationshipResolver.Relation.FATHER
+                )),
+                FamilyTreeScreen.relationshipDetail(new FamilyTreeScreen.PersonTarget(ROOT), model)
+        );
     }
 
     @Test
@@ -338,27 +313,27 @@ class FamilyTreeScreenInteractionTest {
     }
 
     private static FamilyTreeView view(UUID id) {
-        FamilyTreeNode node = new FamilyTreeNode(
+        return new FamilyTreeView(Map.of(id, node(id, "Person")), Set.of(), Set.of());
+    }
+
+    private static FamilyTreeNode node(UUID id, String name) {
+        return new FamilyTreeNode(
                 null,
                 id,
-                "Person",
+                name,
                 false,
                 Gender.MALE,
                 Util.NIL_UUID,
                 Util.NIL_UUID
         );
-        return new FamilyTreeView(Map.of(id, node), Set.of(), Set.of());
     }
 
     private static FamilyTreeSearchEntry searchEntry(UUID id, String name) {
-        return new FamilyTreeSearchEntry(id, name, false, "", false, "", false);
+        return new FamilyTreeSearchEntry(id, name, false, "", false, "");
     }
 
     private static FamilyTreeLayout.Result result(FamilyTreeLayout.Bounds bounds) {
         return new FamilyTreeLayout.Result(List.of(), List.of(), List.of(), bounds);
     }
 
-    private static UUID uuid(int value) {
-        return UUID.fromString("00000000-0000-0000-0000-" + String.format("%012d", value));
-    }
 }

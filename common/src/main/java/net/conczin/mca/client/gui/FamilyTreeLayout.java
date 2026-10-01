@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-public final class FamilyTreeLayout {
+final class FamilyTreeLayout {
     public static final int CARD_WIDTH = 110;
     public static final int CARD_HEIGHT = 40;
     public static final int HORIZONTAL_GAP = 18;
@@ -46,14 +46,14 @@ public final class FamilyTreeLayout {
             List<UUID> ids = generations.get(generation);
             ids.sort(UUID_ORDER);
             if (generation == 0) {
-                placeAnchorGeneration(layoutRoot, ids, placements, boundsById);
+                placeAnchorGeneration(layoutRoot, ids, placements, nodes, boundsById);
             } else {
-                placeGeneration(generation, ids, boundsById);
+                placeGeneration(generation, ids, nodes, boundsById);
             }
         }
 
         List<Card> cards = boundsById.entrySet().stream()
-                .map(entry -> new Card(entry.getKey(), placements.get(entry.getKey()).role(), entry.getValue()))
+                .map(entry -> new Card(entry.getKey(), entry.getValue()))
                 .toList();
         List<Edge> edges = buildEdges(nodes, boundsById);
         List<ContinuationControl> continuations = buildContinuations(snapshot.continuations(), boundsById);
@@ -146,7 +146,7 @@ public final class FamilyTreeLayout {
         nodes.values().stream()
                 .filter(node -> !node.id().equals(anchor.id()))
                 .filter(node -> parentIds(node).stream().anyMatch(anchorParents::contains))
-                .sorted(Comparator.comparing(node -> node.id().toString()))
+                .sorted(Comparator.comparing(FamilyTreeNode::id, UUID_ORDER))
                 .forEach(node -> placements.putIfAbsent(node.id(), new Placement(0, Role.SIBLING)));
     }
 
@@ -166,66 +166,94 @@ public final class FamilyTreeLayout {
     }
 
     private static List<UUID> parentIds(FamilyTreeNode node) {
-        List<UUID> parents = new ArrayList<>(2);
-        if (FamilyTreeNode.isValid(node.father())) {
-            parents.add(node.father());
-        }
-        if (FamilyTreeNode.isValid(node.mother())) {
-            parents.add(node.mother());
-        }
-        return parents;
+        return node.streamParents().toList();
     }
 
     private static void placeAnchorGeneration(
             UUID layoutRoot,
             List<UUID> ids,
             Map<UUID, Placement> placements,
+            Map<UUID, FamilyTreeNode> nodes,
             Map<UUID, Bounds> boundsById
     ) {
         boundsById.put(layoutRoot, cardBounds(0, 0));
 
+        UUID partnerId = nodes.get(layoutRoot).partner();
+        boolean hasPartner = FamilyTreeNode.isValid(partnerId) && ids.contains(partnerId);
+        int partnerX = CARD_WIDTH + PARTNER_GAP;
+        if (hasPartner) {
+            boundsById.put(partnerId, cardBounds(partnerX, 0));
+        }
+
         List<UUID> siblings = ids.stream()
                 .filter(id -> !id.equals(layoutRoot))
+                .filter(id -> !id.equals(partnerId))
                 .filter(id -> placements.get(id).role() == Role.SIBLING)
                 .toList();
         List<UUID> others = ids.stream()
                 .filter(id -> !id.equals(layoutRoot))
+                .filter(id -> !id.equals(partnerId))
                 .filter(id -> placements.get(id).role() != Role.SIBLING)
                 .toList();
 
         int step = CARD_WIDTH + HORIZONTAL_GAP;
-        int leftSlot = -1;
-        int rightSlot = 1;
+        int leftX = -step;
+        int rightX = hasPartner ? partnerX + step : step;
         for (int index = 0; index < siblings.size(); index++) {
             UUID id = siblings.get(index);
             if ((index & 1) == 0) {
-                boundsById.put(id, cardBounds(leftSlot * step, 0));
-                leftSlot--;
+                boundsById.put(id, cardBounds(leftX, 0));
+                leftX -= step;
             } else {
-                boundsById.put(id, cardBounds(rightSlot * step, 0));
-                rightSlot++;
+                boundsById.put(id, cardBounds(rightX, 0));
+                rightX += step;
             }
         }
 
         for (UUID id : others) {
-            Placement placement = placements.get(id);
-            int spacing = placement.role() == Role.PARTNER ? CARD_WIDTH + PARTNER_GAP : step;
-            int x = rightSlot * step;
-            if (placement.role() == Role.PARTNER && rightSlot == 1) {
-                x = spacing;
-            }
-            boundsById.put(id, cardBounds(x, 0));
-            rightSlot++;
+            boundsById.put(id, cardBounds(rightX, 0));
+            rightX += step;
         }
     }
 
-    private static void placeGeneration(int generation, List<UUID> ids, Map<UUID, Bounds> boundsById) {
-        int step = CARD_WIDTH + HORIZONTAL_GAP;
-        int totalWidth = ids.isEmpty() ? 0 : CARD_WIDTH + (ids.size() - 1) * step;
-        int firstCenter = -(totalWidth / 2) + CARD_WIDTH / 2;
+    private static void placeGeneration(
+            int generation,
+            List<UUID> ids,
+            Map<UUID, FamilyTreeNode> nodes,
+            Map<UUID, Bounds> boundsById
+    ) {
+        List<List<UUID>> units = new ArrayList<>();
+        Set<UUID> assigned = new HashSet<>();
+        Set<UUID> generationIds = new HashSet<>(ids);
+        for (UUID id : ids) {
+            if (!assigned.add(id)) {
+                continue;
+            }
+            FamilyTreeNode node = nodes.get(id);
+            UUID partnerId = node == null ? null : node.partner();
+            if (FamilyTreeNode.isValid(partnerId) && generationIds.contains(partnerId) && assigned.add(partnerId)) {
+                units.add(List.of(id, partnerId));
+            } else {
+                units.add(List.of(id));
+            }
+        }
+
+        int totalWidth = units.stream()
+                .mapToInt(unit -> unit.size() == 2 ? CARD_WIDTH * 2 + PARTNER_GAP : CARD_WIDTH)
+                .sum()
+                + Math.max(0, units.size() - 1) * HORIZONTAL_GAP;
+        int cursorX = -(totalWidth / 2);
         int y = generation * (CARD_HEIGHT + GENERATION_GAP);
-        for (int index = 0; index < ids.size(); index++) {
-            boundsById.put(ids.get(index), cardBounds(firstCenter + index * step, y));
+        for (List<UUID> unit : units) {
+            int firstCenter = cursorX + CARD_WIDTH / 2;
+            boundsById.put(unit.get(0), cardBounds(firstCenter, y));
+            if (unit.size() == 2) {
+                boundsById.put(unit.get(1), cardBounds(firstCenter + CARD_WIDTH + PARTNER_GAP, y));
+                cursorX += CARD_WIDTH * 2 + PARTNER_GAP;
+            } else {
+                cursorX += CARD_WIDTH;
+            }
+            cursorX += HORIZONTAL_GAP;
         }
     }
 
@@ -301,7 +329,7 @@ public final class FamilyTreeLayout {
         return bounds == null ? new Bounds(0, 0, 0, 0) : bounds;
     }
 
-    public enum Role {
+    private enum Role {
         ANCHOR,
         ANCESTOR,
         DESCENDANT,
@@ -351,7 +379,7 @@ public final class FamilyTreeLayout {
         }
     }
 
-    public record Card(UUID uuid, Role role, Bounds bounds) {
+    public record Card(UUID uuid, Bounds bounds) {
     }
 
     public record Edge(UUID from, UUID to, EdgeType type) {

@@ -1,10 +1,9 @@
 package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.entity.ai.relationship.Gender;
+import net.conczin.mca.FamilyTreeTestSupport;
 import net.conczin.mca.network.FamilyTreeView;
-import net.minecraft.SharedConstants;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.server.Bootstrap;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -16,6 +15,7 @@ import java.util.UUID;
 
 import static net.conczin.mca.network.FamilyTreeView.Direction.ANCESTORS;
 import static net.conczin.mca.network.FamilyTreeView.Direction.DESCENDANTS;
+import static net.conczin.mca.FamilyTreeTestSupport.uuid;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -41,8 +41,7 @@ class FamilyTreeViewBuilderTest {
 
     @BeforeAll
     static void bootstrapMinecraft() {
-        SharedConstants.tryDetectVersion();
-        Bootstrap.bootStrap();
+        FamilyTreeTestSupport.bootstrapMinecraft();
     }
 
     @Test
@@ -221,6 +220,38 @@ class FamilyTreeViewBuilderTest {
     }
 
     @Test
+    void wideDescendantGenerationStopsAtNodeBudgetAndOffersContinuation() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        for (int index = 0; index < 300; index++) {
+            node(tree, uuid(1_000 + index), Gender.MALE).setFather(root);
+        }
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, 0, 1).orElseThrow();
+
+        assertEquals(256, view.nodes().size());
+        assertTrue(view.continuations().contains(new FamilyTreeView.Continuation(ROOT, DESCENDANTS)));
+    }
+
+    @Test
+    void builtViewOwnsDetachedBoundedNodeSnapshots() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        for (int index = 0; index < 300; index++) {
+            node(tree, uuid(2_000 + index), Gender.MALE).setFather(root);
+        }
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, 0, 0).orElseThrow();
+        FamilyTreeNode snapshot = view.nodes().get(ROOT);
+        root.setName("mutated after build");
+        root.addChild(uuid(9_999));
+
+        assertEquals(ROOT.toString(), snapshot.getName());
+        assertTrue(snapshot.children().size() <= 1);
+        assertTrue(!snapshot.children().contains(uuid(9_999)));
+    }
+
+    @Test
     void missingRootReturnsEmpty() {
         Optional<FamilyTreeView> view = FamilyTreeViewBuilder.build(tree(), ROOT, 2, 2);
 
@@ -243,7 +274,4 @@ class FamilyTreeViewBuilderTest {
         return snapshot;
     }
 
-    private static UUID uuid(int value) {
-        return UUID.fromString("00000000-0000-0000-0000-" + String.format("%012d", value));
-    }
 }

@@ -1,11 +1,10 @@
 package net.conczin.mca.client.gui;
 
+import net.conczin.mca.FamilyTreeTestSupport;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.network.FamilyTreeView;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
-import net.minecraft.SharedConstants;
 import net.minecraft.Util;
-import net.minecraft.server.Bootstrap;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -17,6 +16,7 @@ import java.util.UUID;
 
 import static net.conczin.mca.network.FamilyTreeView.Direction.ANCESTORS;
 import static net.conczin.mca.network.FamilyTreeView.Direction.DESCENDANTS;
+import static net.conczin.mca.FamilyTreeTestSupport.uuid;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -34,11 +34,12 @@ class FamilyTreeLayoutTest {
     private static final UUID CHILD_B = uuid(9);
     private static final UUID GRANDCHILD = uuid(10);
     private static final UUID SIBLING_CHILD = uuid(11);
+    private static final UUID PARTNER_A = uuid(12);
+    private static final UUID PARTNER_B = uuid(13);
 
     @BeforeAll
     static void bootstrapMinecraft() {
-        SharedConstants.tryDetectVersion();
-        Bootstrap.bootStrap();
+        FamilyTreeTestSupport.bootstrapMinecraft();
     }
 
     @Test
@@ -48,7 +49,6 @@ class FamilyTreeLayoutTest {
         FamilyTreeLayout.Card root = card(result, ROOT);
         assertEquals(0, root.bounds().centerX());
         assertEquals(0, root.bounds().centerY());
-        assertEquals(FamilyTreeLayout.Role.ANCHOR, root.role());
     }
 
     @Test
@@ -110,6 +110,29 @@ class FamilyTreeLayoutTest {
     }
 
     @Test
+    void partnerConnectionDoesNotRunThroughSiblingCard() {
+        FamilyTreeNode root = node(ROOT);
+        FamilyTreeNode father = node(FATHER);
+        FamilyTreeNode siblingA = node(SIBLING_A);
+        FamilyTreeNode siblingB = node(SIBLING_B);
+        FamilyTreeNode partner = node(PARTNER);
+        root.setFather(father);
+        siblingA.setFather(father);
+        siblingB.setFather(father);
+        root.updatePartner(partner);
+
+        FamilyTreeLayout.Result result = layout(nodes(root, father, siblingA, siblingB, partner), Set.of());
+        FamilyTreeLayout.Card rootCard = card(result, ROOT);
+        FamilyTreeLayout.Card partnerCard = card(result, PARTNER);
+        int midpointX = (rootCard.bounds().centerX() + partnerCard.bounds().centerX()) / 2;
+        int midpointY = rootCard.bounds().centerY();
+
+        assertTrue(result.cards().stream()
+                .filter(card -> !card.uuid().equals(ROOT) && !card.uuid().equals(PARTNER))
+                .noneMatch(card -> card.bounds().contains(midpointX, midpointY)));
+    }
+
+    @Test
     void partnerAncestorsArePlacedWithoutChangingTheLayoutRoot() {
         FamilyTreeNode root = node(ROOT);
         FamilyTreeNode partner = node(PARTNER);
@@ -122,6 +145,30 @@ class FamilyTreeLayoutTest {
         assertEquals(0, card(result, ROOT).bounds().centerX());
         assertEquals(card(result, ROOT).bounds().centerY(), card(result, PARTNER).bounds().centerY());
         assertTrue(card(result, FATHER).bounds().centerY() < card(result, PARTNER).bounds().centerY());
+    }
+
+    @Test
+    void nonAnchorGenerationKeepsCouplesAdjacent() {
+        FamilyTreeNode root = node(ROOT);
+        FamilyTreeNode childA = node(CHILD_A);
+        FamilyTreeNode childB = node(CHILD_B);
+        FamilyTreeNode partnerA = node(PARTNER_A);
+        FamilyTreeNode partnerB = node(PARTNER_B);
+        childA.setFather(root);
+        childB.setFather(root);
+        childA.updatePartner(partnerA);
+        childB.updatePartner(partnerB);
+
+        FamilyTreeLayout.Result result = layout(nodes(root, childA, childB, partnerA, partnerB), Set.of());
+
+        assertEquals(
+                FamilyTreeLayout.CARD_WIDTH + FamilyTreeLayout.PARTNER_GAP,
+                Math.abs(card(result, CHILD_A).bounds().centerX() - card(result, PARTNER_A).bounds().centerX())
+        );
+        assertEquals(
+                FamilyTreeLayout.CARD_WIDTH + FamilyTreeLayout.PARTNER_GAP,
+                Math.abs(card(result, CHILD_B).bounds().centerX() - card(result, PARTNER_B).bounds().centerX())
+        );
     }
 
     @Test
@@ -246,7 +293,7 @@ class FamilyTreeLayoutTest {
             Set<FamilyTreeView.Continuation> continuations
     ) {
         FamilyTreeViewModel.Snapshot snapshot =
-                new FamilyTreeViewModel.Snapshot(layoutRoot, focus, nodes, continuations, Set.of());
+                new FamilyTreeViewModel.Snapshot(layoutRoot, nodes, continuations);
         return FamilyTreeLayout.layout(snapshot);
     }
 
@@ -278,7 +325,4 @@ class FamilyTreeLayoutTest {
         return new FamilyTreeNode(null, id, id.toString(), false, Gender.MALE, Util.NIL_UUID, Util.NIL_UUID);
     }
 
-    private static UUID uuid(int value) {
-        return UUID.fromString("00000000-0000-0000-0000-" + String.format("%012d", value));
-    }
 }

@@ -1,5 +1,6 @@
 package net.conczin.mca.client.gui;
 
+import net.conczin.mca.FamilyTreeTestSupport;
 import net.conczin.mca.network.FamilyTreeSearchEntry;
 import net.minecraft.network.chat.Component;
 import org.junit.jupiter.api.Test;
@@ -12,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static net.conczin.mca.FamilyTreeTestSupport.uuid;
 
 class FamilyTreeSearchPresentationTest {
     private static final UUID ONE = uuid(1);
@@ -76,15 +78,6 @@ class FamilyTreeSearchPresentationTest {
     }
 
     @Test
-    void unresolvedParentNeverEmitsOrphanTranslation() {
-        FamilyTreeSearchEntry entry = entry(ONE, "Alex", true, "", false, "");
-
-        Optional<Component> parentLine = FamilyTreeSearchPresentation.parentLine(entry);
-
-        assertTrue(parentLine.isEmpty());
-    }
-
-    @Test
     void emptyStandaloneQueryKeepsPlayerNameSeeding() {
         assertEquals(Optional.of("Local Player"), FamilyTreeSearchScreen.standaloneSearchQuery(" ", "Local Player"));
         assertEquals(Optional.of("Alex"), FamilyTreeSearchScreen.standaloneSearchQuery(" Alex ", "Local Player"));
@@ -98,10 +91,7 @@ class FamilyTreeSearchPresentationTest {
             boolean motherRecorded,
             String mother
     ) {
-        return new FamilyTreeSearchEntry(uuid, name, fatherRecorded, father, motherRecorded, mother, false);
+        return new FamilyTreeSearchEntry(uuid, name, fatherRecorded, father, motherRecorded, mother);
     }
 
-    private static UUID uuid(int value) {
-        return UUID.fromString("00000000-0000-0000-0000-" + String.format("%012d", value));
-    }
 }

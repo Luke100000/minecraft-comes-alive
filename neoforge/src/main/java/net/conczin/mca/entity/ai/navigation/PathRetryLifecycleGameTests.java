@@ -388,7 +388,7 @@ public final class PathRetryLifecycleGameTests {
             if (routeOpened[0] && villager.blockPosition().equals(destination)) {
                 PathRequestDiagnostics.SearchSnapshot recovered = PathRequestDiagnostics.snapshot(villager);
                 logPhase(lane, "arrived", villager, recovered);
-                helper.assertTrue(recovered.extendedSearches() > blockedSnapshot[0].extendedSearches(),
+                helper.assertTrue(recovered.sinkRequests() > blockedSnapshot[0].sinkRequests(),
                         lane + " reached HOME without an observable retry after the route reopened: " + recovered);
                 helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE).isEmpty(),
                         lane + " reached HOME but retained vanilla failure memory");

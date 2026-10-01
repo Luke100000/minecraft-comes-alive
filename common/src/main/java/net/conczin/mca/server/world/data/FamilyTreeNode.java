@@ -69,12 +69,32 @@ public final class FamilyTreeNode {
                 nbt.getUUID("mother")
         );
         children.addAll(NbtHelper.toList(nbt.getList("children", Tag.TAG_COMPOUND), c -> ((CompoundTag) c).getUUID("uuid")));
-        profession = nbt.getString("profession");
+        if (nbt.contains("profession", Tag.TAG_STRING)) {
+            profession = nbt.getString("profession");
+        }
         deceased = nbt.getBoolean("isDeceased");
         if (nbt.hasUUID("spouse")) {
             partner = nbt.getUUID("spouse");
         }
         relationshipState = RelationshipState.byId(nbt.getInt("marriageState"));
+    }
+
+    static FamilyTreeNode detachedCopy(FamilyTreeNode source, Set<UUID> children) {
+        FamilyTreeNode copy = new FamilyTreeNode(
+                null,
+                source.id,
+                source.name,
+                source.isPlayer,
+                source.gender,
+                source.father,
+                source.mother
+        );
+        copy.profession = source.profession;
+        copy.partner = source.partner;
+        copy.relationshipState = source.relationshipState;
+        copy.deceased = source.deceased;
+        copy.children.addAll(children);
+        return copy;
     }
 
     public static boolean isValid(@Nullable UUID uuid) {
@@ -459,6 +479,7 @@ public final class FamilyTreeNode {
         nbt.putBoolean("isPlayer", isPlayer);
         nbt.putBoolean("isDeceased", deceased);
         nbt.putInt("gender", gender.getId());
+        nbt.putString("profession", profession);
         nbt.putUUID("father", father);
         nbt.putUUID("mother", mother);
         nbt.putUUID("spouse", partner);

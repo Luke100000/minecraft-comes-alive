@@ -6,7 +6,7 @@ import net.minecraft.network.chat.Component;
 
 import java.util.Optional;
 
-public final class FamilyTreeSearchPresentation {
+final class FamilyTreeSearchPresentation {
     private FamilyTreeSearchPresentation() {
     }
 

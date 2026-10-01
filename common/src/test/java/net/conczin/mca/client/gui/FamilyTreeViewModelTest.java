@@ -1,12 +1,11 @@
 package net.conczin.mca.client.gui;
 
+import net.conczin.mca.FamilyTreeTestSupport;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.network.FamilyTreeView;
 import net.conczin.mca.network.s2c.GetFamilyTreeResponse;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
-import net.minecraft.SharedConstants;
 import net.minecraft.Util;
-import net.minecraft.server.Bootstrap;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -16,8 +15,11 @@ import java.util.UUID;
 
 import static net.conczin.mca.network.FamilyTreeView.Direction.ANCESTORS;
 import static net.conczin.mca.network.FamilyTreeView.Direction.DESCENDANTS;
+import static net.conczin.mca.FamilyTreeTestSupport.uuid;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FamilyTreeViewModelTest {
@@ -30,8 +32,7 @@ class FamilyTreeViewModelTest {
 
     @BeforeAll
     static void bootstrapMinecraft() {
-        SharedConstants.tryDetectVersion();
-        Bootstrap.bootStrap();
+        FamilyTreeTestSupport.bootstrapMinecraft();
     }
 
     @Test
@@ -53,6 +54,18 @@ class FamilyTreeViewModelTest {
 
         assertEquals(Set.of(ROOT, PARENT, GRANDPARENT), model.nodes().keySet());
         assertEquals(ROOT, model.focusId());
+    }
+
+    @Test
+    void nodesViewIsStableAndReadOnly() {
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        long request = model.beginFocus(ROOT, viewport(0, 0, 1));
+        model.accept(response(request, ROOT, view(Map.of(ROOT, node(ROOT)), Set.of(), Set.of())));
+
+        Map<UUID, FamilyTreeNode> nodes = model.nodes();
+
+        assertSame(nodes, model.nodes());
+        assertThrows(UnsupportedOperationException.class, () -> nodes.put(CHILD, node(CHILD)));
     }
 
     @Test
@@ -89,10 +102,27 @@ class FamilyTreeViewModelTest {
 
         model.accept(response(request, OTHER, view(Map.of(OTHER, node(OTHER)), Set.of(), Set.of())));
 
-        assertEquals(ROOT, model.layoutRootId());
+        assertEquals(ROOT, model.snapshot().layoutRootId());
         assertEquals(OTHER, model.focusId());
         assertEquals(ROOT, model.snapshot().layoutRootId());
-        assertEquals(OTHER, model.snapshot().focusId());
+    }
+
+    @Test
+    void rootNavigationChangesLayoutRootAndBackRestoresIt() {
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        FamilyTreeViewModel.ViewportState previousViewport = viewport(7, -3, 1.25f);
+        long request = model.beginRootFocus(OTHER, previousViewport);
+
+        model.accept(response(request, OTHER, view(Map.of(OTHER, node(OTHER)), Set.of(), Set.of())));
+
+        assertEquals(OTHER, model.snapshot().layoutRootId());
+        assertEquals(OTHER, model.focusId());
+
+        FamilyTreeViewModel.HistoryEntry restored = model.back().orElseThrow();
+        assertEquals(ROOT, model.snapshot().layoutRootId());
+        assertEquals(ROOT, model.focusId());
+        assertEquals(ROOT, restored.layoutRootId());
+        assertEquals(previousViewport, restored.viewport());
     }
 
     @Test
@@ -110,9 +140,27 @@ class FamilyTreeViewModelTest {
         assertEquals(FamilyTreeViewModel.MergeResult.STALE, result);
         assertEquals(ROOT, model.focusId());
         assertEquals(OTHER, model.pendingFocusId().orElseThrow());
-        assertTrue(model.nodes().containsKey(CHILD));
+        assertFalse(model.nodes().containsKey(CHILD));
         assertTrue(model.loading());
         assertTrue(second > first);
+    }
+
+    @Test
+    void staleExpansionResponseDoesNotMutateGraphOrConsumePendingExpansion() {
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        long initial = model.beginFocus(ROOT, viewport(0, 0, 1));
+        model.accept(response(initial, ROOT, view(Map.of(ROOT, node(ROOT)), Set.of(), Set.of())));
+        long expansion = model.beginExpansion(ROOT, ANCESTORS);
+
+        FamilyTreeViewModel.MergeResult result = model.accept(response(
+                expansion,
+                OTHER,
+                view(Map.of(OTHER, node(OTHER)), Set.of(), Set.of())
+        ));
+
+        assertEquals(FamilyTreeViewModel.MergeResult.STALE, result);
+        assertEquals(Set.of(ROOT), model.nodes().keySet());
+        assertTrue(model.loading());
     }
 
     @Test
@@ -132,7 +180,6 @@ class FamilyTreeViewModelTest {
         assertEquals(FamilyTreeViewModel.MergeResult.NOT_FOUND, result);
         assertEquals(ROOT, model.focusId());
         assertEquals(Set.of(ROOT), model.nodes().keySet());
-        assertTrue(model.unavailable().contains(MISSING));
         assertEquals(MISSING, model.unavailableFocusId().orElseThrow());
         assertFalse(model.loading());
     }
@@ -154,22 +201,48 @@ class FamilyTreeViewModelTest {
         assertEquals(FamilyTreeViewModel.MergeResult.APPLIED, result);
         assertEquals(ROOT, model.focusId());
         assertTrue(model.nodes().containsKey(CHILD));
-        assertFalse(model.continuations().contains(continuation));
+        assertFalse(model.snapshot().continuations().contains(continuation));
     }
 
     @Test
-    void unavailableUuidNeverCreatesSyntheticPerson() {
+    void expansionPrunesReverseContinuationWhenReferencedRelativeIsAlreadyLoaded() {
+        FamilyTreeNode root = node(ROOT);
+        FamilyTreeNode parent = node(PARENT);
+        root.setFather(parent);
+        parent.addChild(ROOT);
+        FamilyTreeView.Continuation ancestorContinuation = new FamilyTreeView.Continuation(ROOT, ANCESTORS);
+        FamilyTreeView.Continuation reverseContinuation = new FamilyTreeView.Continuation(PARENT, DESCENDANTS);
         FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        long initial = model.beginFocus(ROOT, viewport(0, 0, 1));
+        model.accept(response(initial, ROOT, view(Map.of(ROOT, root), Set.of(ancestorContinuation), Set.of())));
+
+        long expansion = model.beginExpansion(ROOT, ANCESTORS);
+        model.accept(response(
+                expansion,
+                ROOT,
+                view(Map.of(PARENT, parent), Set.of(reverseContinuation), Set.of())
+        ));
+
+        assertFalse(model.snapshot().continuations().contains(ancestorContinuation));
+        assertFalse(model.snapshot().continuations().contains(reverseContinuation));
+    }
+
+    @Test
+    void unavailableUuidPrunesContinuationWithoutCreatingSyntheticPerson() {
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        FamilyTreeNode root = node(ROOT);
+        root.addChild(MISSING);
+        FamilyTreeView.Continuation continuation = new FamilyTreeView.Continuation(ROOT, DESCENDANTS);
         long request = model.beginFocus(ROOT, viewport(0, 0, 1));
 
         model.accept(response(
                 request,
                 ROOT,
-                view(Map.of(ROOT, node(ROOT)), Set.of(), Set.of(MISSING))
+                view(Map.of(ROOT, root), Set.of(continuation), Set.of(MISSING))
         ));
 
-        assertTrue(model.unavailable().contains(MISSING));
         assertFalse(model.nodes().containsKey(MISSING));
+        assertFalse(model.snapshot().continuations().contains(continuation));
     }
 
     private static GetFamilyTreeResponse response(long requestId, UUID uuid, FamilyTreeView view) {
@@ -192,7 +265,4 @@ class FamilyTreeViewModelTest {
         return new FamilyTreeViewModel.ViewportState(x, y, zoom);
     }
 
-    private static UUID uuid(int value) {
-        return UUID.fromString("00000000-0000-0000-0000-" + String.format("%012d", value));
-    }
 }

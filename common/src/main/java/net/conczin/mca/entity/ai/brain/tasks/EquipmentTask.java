@@ -28,6 +28,8 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
     private boolean lastArmorWearState;
     private int lastEquipmentRefreshTick = -EQUIPMENT_REFRESH_INTERVAL;
     private EquipmentSet cachedEquipmentSet;
+    private boolean conditionEvaluatedDuringCheck;
+    private boolean checkedWear;
     private boolean equipmentResolvedDuringCheck;
 
     public EquipmentTask(Predicate<VillagerEntityMCA> condition, Function<VillagerEntityMCA, EquipmentSet> set) {
@@ -38,6 +40,7 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA villager) {
+        conditionEvaluatedDuringCheck = false;
         equipmentResolvedDuringCheck = false;
         if (villager.isUsingRecoveryFood()) {
             return false;
@@ -49,6 +52,8 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
         }
 
         boolean wear = condition.test(villager);
+        checkedWear = wear;
+        conditionEvaluatedDuringCheck = true;
         if (wear && (cachedEquipmentSet == null
                 || villager.tickCount - lastEquipmentRefreshTick >= EQUIPMENT_REFRESH_INTERVAL)) {
             lastEquipmentRefreshTick = villager.tickCount;
@@ -92,6 +97,8 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
     protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.start(world, villager, time);
 
+        boolean reuseCheckedCondition = conditionEvaluatedDuringCheck;
+        conditionEvaluatedDuringCheck = false;
         boolean reuseCheckedEquipment = equipmentResolvedDuringCheck;
         equipmentResolvedDuringCheck = false;
         if (villager.isUsingRecoveryFood()) {
@@ -99,7 +106,7 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
         }
 
         lastArmorWearState = villager.getVillagerBrain().getArmorWear();
-        boolean wear = condition.test(villager);
+        boolean wear = reuseCheckedCondition ? checkedWear : condition.test(villager);
         EquipmentSet set = cachedEquipmentSet;
 
         if (wear || villager.getVillagerBrain().getArmorWear()) {

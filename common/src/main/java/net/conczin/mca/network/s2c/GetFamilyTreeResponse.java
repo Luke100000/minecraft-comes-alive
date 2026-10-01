@@ -4,7 +4,6 @@ import net.conczin.mca.ClientProxy;
 import net.conczin.mca.MCA;
 import net.conczin.mca.network.FamilyTreeView;
 import net.conczin.mca.network.HandleablePayload;
-import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -12,7 +11,6 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.world.entity.player.Player;
 
-import java.util.Map;
 import java.util.UUID;
 
 public record GetFamilyTreeResponse(long requestId, UUID uuid, boolean found, FamilyTreeView view) implements HandleablePayload {
@@ -24,10 +22,6 @@ public record GetFamilyTreeResponse(long requestId, UUID uuid, boolean found, Fa
             FamilyTreeView.STREAM_CODEC, GetFamilyTreeResponse::view,
             GetFamilyTreeResponse::new
     );
-
-    public Map<UUID, FamilyTreeNode> family() {
-        return view.nodes();
-    }
 
     @Override
     public void handle(Player player) {

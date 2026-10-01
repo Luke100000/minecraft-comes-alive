@@ -1035,6 +1035,8 @@ public final class MCAGroundPathNavigationGameTests {
         BlockPos surfaceTarget = start.east(80);
         BlockPos logicalTarget = surfaceTarget.above(3);
         prepareFlatPath(helper, start, surfaceTarget);
+        helper.getLevel().setBlock(surfaceTarget.above(2), Blocks.AIR.defaultBlockState(), 3);
+        helper.getLevel().setBlock(logicalTarget, Blocks.AIR.defaultBlockState(), 3);
 
         VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
                 .withAge(0)

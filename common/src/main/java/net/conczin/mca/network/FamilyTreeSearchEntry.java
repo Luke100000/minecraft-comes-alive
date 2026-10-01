@@ -13,8 +13,7 @@ public record FamilyTreeSearchEntry(
         boolean fatherRecorded,
         String father,
         boolean motherRecorded,
-        String mother,
-        boolean deceased
+        String mother
 ) {
     public static final StreamCodec<ByteBuf, FamilyTreeSearchEntry> STREAM_CODEC = StreamCodec.of(
             (buffer, entry) -> {
@@ -24,7 +23,6 @@ public record FamilyTreeSearchEntry(
                 ByteBufCodecs.STRING_UTF8.encode(buffer, entry.father());
                 ByteBufCodecs.BOOL.encode(buffer, entry.motherRecorded());
                 ByteBufCodecs.STRING_UTF8.encode(buffer, entry.mother());
-                ByteBufCodecs.BOOL.encode(buffer, entry.deceased());
             },
             buffer -> new FamilyTreeSearchEntry(
                     UUIDUtil.STREAM_CODEC.decode(buffer),
@@ -32,8 +30,7 @@ public record FamilyTreeSearchEntry(
                     ByteBufCodecs.BOOL.decode(buffer),
                     ByteBufCodecs.STRING_UTF8.decode(buffer),
                     ByteBufCodecs.BOOL.decode(buffer),
-                    ByteBufCodecs.STRING_UTF8.decode(buffer),
-                    ByteBufCodecs.BOOL.decode(buffer)
+                    ByteBufCodecs.STRING_UTF8.decode(buffer)
             )
     );
 }

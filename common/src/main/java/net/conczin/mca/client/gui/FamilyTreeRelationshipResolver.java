@@ -5,7 +5,7 @@ import net.conczin.mca.server.world.data.FamilyTreeNode;
 import java.util.Map;
 import java.util.UUID;
 
-public final class FamilyTreeRelationshipResolver {
+final class FamilyTreeRelationshipResolver {
     public enum Relation {
         SELF,
         FATHER,

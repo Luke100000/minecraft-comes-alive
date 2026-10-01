@@ -1,16 +1,19 @@
 package net.conczin.mca.client.gui;
 
+import net.conczin.mca.FamilyTreeTestSupport;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
-import net.minecraft.SharedConstants;
 import net.minecraft.Util;
-import net.minecraft.server.Bootstrap;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static net.conczin.mca.client.gui.FamilyTreeRelationshipResolver.Relation.CHILD;
 import static net.conczin.mca.client.gui.FamilyTreeRelationshipResolver.Relation.FATHER;
@@ -21,6 +24,7 @@ import static net.conczin.mca.client.gui.FamilyTreeRelationshipResolver.Relation
 import static net.conczin.mca.client.gui.FamilyTreeRelationshipResolver.Relation.PARTNER;
 import static net.conczin.mca.client.gui.FamilyTreeRelationshipResolver.Relation.SELF;
 import static net.conczin.mca.client.gui.FamilyTreeRelationshipResolver.Relation.SIBLING;
+import static net.conczin.mca.FamilyTreeTestSupport.uuid;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class FamilyTreeRelationshipResolverTest {
@@ -36,62 +40,28 @@ class FamilyTreeRelationshipResolverTest {
 
     @BeforeAll
     static void bootstrapMinecraft() {
-        SharedConstants.tryDetectVersion();
-        Bootstrap.bootStrap();
+        FamilyTreeTestSupport.bootstrapMinecraft();
     }
 
-    @Test
-    void resolvesSelf() {
+    @ParameterizedTest
+    @MethodSource("relations")
+    void resolvesRelationship(UUID target, FamilyTreeRelationshipResolver.Relation expected) {
         Fixture fixture = fixture();
-        assertEquals(SELF, FamilyTreeRelationshipResolver.resolve(ROOT, ROOT, fixture.nodes));
+        assertEquals(expected, FamilyTreeRelationshipResolver.resolve(ROOT, target, fixture.nodes));
     }
 
-    @Test
-    void resolvesFather() {
-        Fixture fixture = fixture();
-        assertEquals(FATHER, FamilyTreeRelationshipResolver.resolve(ROOT, FATHER_ID, fixture.nodes));
-    }
-
-    @Test
-    void resolvesMother() {
-        Fixture fixture = fixture();
-        assertEquals(MOTHER, FamilyTreeRelationshipResolver.resolve(ROOT, MOTHER_ID, fixture.nodes));
-    }
-
-    @Test
-    void resolvesChild() {
-        Fixture fixture = fixture();
-        assertEquals(CHILD, FamilyTreeRelationshipResolver.resolve(ROOT, CHILD_ID, fixture.nodes));
-    }
-
-    @Test
-    void resolvesSibling() {
-        Fixture fixture = fixture();
-        assertEquals(SIBLING, FamilyTreeRelationshipResolver.resolve(ROOT, SIBLING_ID, fixture.nodes));
-    }
-
-    @Test
-    void resolvesGrandparent() {
-        Fixture fixture = fixture();
-        assertEquals(GRANDPARENT, FamilyTreeRelationshipResolver.resolve(ROOT, GRANDPARENT_ID, fixture.nodes));
-    }
-
-    @Test
-    void resolvesGrandchild() {
-        Fixture fixture = fixture();
-        assertEquals(GRANDCHILD, FamilyTreeRelationshipResolver.resolve(ROOT, GRANDCHILD_ID, fixture.nodes));
-    }
-
-    @Test
-    void resolvesPartner() {
-        Fixture fixture = fixture();
-        assertEquals(PARTNER, FamilyTreeRelationshipResolver.resolve(ROOT, PARTNER_ID, fixture.nodes));
-    }
-
-    @Test
-    void unrelatedFallsBackToOther() {
-        Fixture fixture = fixture();
-        assertEquals(OTHER, FamilyTreeRelationshipResolver.resolve(ROOT, OTHER_ID, fixture.nodes));
+    private static Stream<Arguments> relations() {
+        return Stream.of(
+                Arguments.of(ROOT, SELF),
+                Arguments.of(FATHER_ID, FATHER),
+                Arguments.of(MOTHER_ID, MOTHER),
+                Arguments.of(CHILD_ID, CHILD),
+                Arguments.of(SIBLING_ID, SIBLING),
+                Arguments.of(GRANDPARENT_ID, GRANDPARENT),
+                Arguments.of(GRANDCHILD_ID, GRANDCHILD),
+                Arguments.of(PARTNER_ID, PARTNER),
+                Arguments.of(OTHER_ID, OTHER)
+        );
     }
 
     @Test
@@ -141,7 +111,4 @@ class FamilyTreeRelationshipResolverTest {
     private record Fixture(Map<UUID, FamilyTreeNode> nodes) {
     }
 
-    private static UUID uuid(int value) {
-        return UUID.fromString("00000000-0000-0000-0000-" + String.format("%012d", value));
-    }
 }

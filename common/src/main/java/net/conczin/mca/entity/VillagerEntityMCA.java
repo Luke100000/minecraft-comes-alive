@@ -1064,7 +1064,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
             // Player genetics rendering is client-only. Preserve its original visual adjustment without moving the physical box.
             if (isClientSide() && MCAClient.useGeneticsRenderer(vehicle.getUUID())) {
-                float height = CommonVillagerModel.getVillager(vehicle).getRawVerticalScaleFactor();
+                float height = CommonVillagerModel.getVillager(vehicle).getVisualVerticalScaleFactor();
                 offset = offset.multiply(1.0f, height, 1.0f);
                 offset = offset.add(0, (height - 1) * 1.5 - 0.7, 0);
                 this.setPosRaw(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
@@ -1105,17 +1105,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             return SLEEPING_DIMENSIONS;
         }
 
-        float height = getVerticalScaleFactor() * 2.0F;
-        float width = getHorizontalScaleFactor() * 0.6F;
+        float height = getPhysicalVerticalScaleFactor() * 2.0F;
+        float width = getPhysicalHorizontalScaleFactor() * 0.6F;
 
         return EntityDimensions.scalable(width, height).withAttachments(EntityAttachments.builder()
-                .attach(EntityAttachment.VEHICLE, 0.0F, getRawVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F));
-    }
-
-    public float getRawStandingEyeHeight() {
-        float renderedWidth = getRawHorizontalScaleFactor() * 0.6F;
-        float renderedHeight = getRawVerticalScaleFactor() * 2.0F;
-        return EntityDimensions.scalable(renderedWidth, renderedHeight).scale(getScale()).eyeHeight();
+                .attach(EntityAttachment.VEHICLE, 0.0F, getVisualVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F));
     }
 
     @Override

@@ -35,10 +35,6 @@ public record GetFamilyTreeRequest(UUID uuid, int ancestorDepth, int descendantD
         descendantDepth = clampDepth(descendantDepth);
     }
 
-    public GetFamilyTreeRequest(UUID uuid) {
-        this(uuid, DEFAULT_ANCESTOR_DEPTH, DEFAULT_DESCENDANT_DEPTH, 0L);
-    }
-
     private static int clampDepth(int depth) {
         return Math.max(0, Math.min(MAX_DEPTH, depth));
     }
