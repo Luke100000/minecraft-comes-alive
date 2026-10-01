@@ -37,6 +37,8 @@ public class FamilyTreeScreen extends Screen {
     private static final int SEARCH_RESULT_LIMIT = 6;
     private static final float MIN_ZOOM = 0.25F;
     private static final float MAX_ZOOM = 2.0F;
+    static final String DECEASED_MARKER = "☠";
+    static final int DECEASED_MARKER_COLOR = 0xFFA94A3A;
 
     private final Screen parent;
     private final FamilyTreeViewModel viewModel;
@@ -60,6 +62,7 @@ public class FamilyTreeScreen extends Screen {
     private List<FamilyTreeSearchEntry> searchResults = List.of();
     private boolean searchOpen;
     private boolean searchPending;
+    private boolean canvasDragging;
     private long pendingRecenterRequestId = -1L;
 
     public FamilyTreeScreen(UUID entityId) {
@@ -225,7 +228,7 @@ public class FamilyTreeScreen extends Screen {
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
-        if (button == 0 && insideCanvas(mouseX, mouseY)) {
+        if (canvasDragging && button == 0) {
             viewport = new FamilyTreeViewModel.ViewportState(
                     viewport.panX() + deltaX,
                     viewport.panY() + deltaY,
@@ -238,6 +241,7 @@ public class FamilyTreeScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        canvasDragging = false;
         if (button == 0) {
             FamilyTreeSearchEntry searchResult = searchResultAt(mouseX, mouseY);
             if (searchResult != null) {
@@ -259,8 +263,20 @@ public class FamilyTreeScreen extends Screen {
                 }
                 return true;
             }
+            canvasDragging = startsCanvasDrag(button, true, false);
+            if (canvasDragging) {
+                return true;
+            }
         }
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (button == 0) {
+            canvasDragging = false;
+        }
+        return super.mouseReleased(mouseX, mouseY, button);
     }
 
     @Nullable
@@ -387,7 +403,13 @@ public class FamilyTreeScreen extends Screen {
             context.drawCenteredString(font, profession, bounds.centerX(), bounds.top() + 22, 0xFFBFC7CE);
 
             if (node.isDeceased()) {
-                context.drawString(font, "†", bounds.left() + 4, bounds.top() + 4, 0xFFD9D9D9);
+                context.drawString(
+                        font,
+                        DECEASED_MARKER,
+                        bounds.left() + 4,
+                        bounds.top() + 4,
+                        DECEASED_MARKER_COLOR
+                );
             }
         }
     }
@@ -420,9 +442,6 @@ public class FamilyTreeScreen extends Screen {
                         .append(" · ")
                         .append(relationLabel(relation));
                 context.drawCenteredString(font, detail, width / 2, height - 20, 0xFFFFFFFF);
-                if (node.isDeceased() && hovered instanceof PersonTarget) {
-                    context.renderTooltip(font, Component.translatable("gui.family_tree.label.deceased"), mouseX, mouseY);
-                }
             }
         }
 
@@ -580,6 +599,10 @@ public class FamilyTreeScreen extends Screen {
             FamilyTreeViewModel.ViewportState viewport
     ) {
         return model.beginFocus(entry.uuid(), viewport);
+    }
+
+    static boolean startsCanvasDrag(int button, boolean insideCanvas, boolean hasTarget) {
+        return button == 0 && insideCanvas && !hasTarget;
     }
 
     static Optional<UUID> detailPerson(@Nullable HitTarget target, UUID focusId) {

@@ -735,7 +735,6 @@
   "gui.family_tree.search": "Search family",
   "gui.family_tree.no_records": "No family records found",
   "gui.family_tree.loading_family": "Loading family...",
-  "gui.family_tree.label.deceased": "Deceased",
   "gui.family_tree.label.orphan": "Orphan",
   "gui.family_tree.child_of_2": "Child of %1$s and %2$s",
   "gui.family_tree.child_of_1": "Child of %1$s",

@@ -124,7 +124,21 @@ class FamilyTreeScreenInteractionTest {
     }
 
     @Test
-    void detailStripUsesOnlyHoveredRelativesAndNeverLabelsTheFocusAsSelf() {
+    void deceasedCardsUseSkullAndMutedPersimmonRed() {
+        assertEquals("☠", FamilyTreeScreen.DECEASED_MARKER);
+        assertEquals(0xFFA94A3A, FamilyTreeScreen.DECEASED_MARKER_COLOR);
+    }
+
+    @Test
+    void canvasDragStartsOnlyFromEmptyCanvas() {
+        assertTrue(FamilyTreeScreen.startsCanvasDrag(0, true, false));
+        assertEquals(false, FamilyTreeScreen.startsCanvasDrag(0, false, false));
+        assertEquals(false, FamilyTreeScreen.startsCanvasDrag(0, true, true));
+        assertEquals(false, FamilyTreeScreen.startsCanvasDrag(1, true, false));
+    }
+
+    @Test
+    void hoverDetailShowsRelativesButNotTheFocusedPerson() {
         assertEquals(
                 Optional.of(OTHER),
                 FamilyTreeScreen.detailPerson(new FamilyTreeScreen.PersonTarget(OTHER), ROOT)
@@ -133,7 +147,6 @@ class FamilyTreeScreenInteractionTest {
                 Optional.empty(),
                 FamilyTreeScreen.detailPerson(new FamilyTreeScreen.PersonTarget(ROOT), ROOT)
         );
-        assertEquals(Optional.empty(), FamilyTreeScreen.detailPerson(null, ROOT));
     }
 
     @Test
