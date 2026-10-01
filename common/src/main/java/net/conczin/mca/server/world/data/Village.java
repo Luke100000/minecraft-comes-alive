@@ -79,7 +79,7 @@ public class Village implements Iterable<Building> {
     private float taxes;
     private float populationThreshold = 0.75f;
     private float marriageThreshold = 0.5f;
-    private boolean autoScan = Config.getInstance().enableAutoScanByDefault;
+    private boolean autoScan = Config.SERVER.enableAutoScanByDefault.get();
     private BlockBoxExtended box = new BlockBoxExtended(0, 0, 0, 0, 0, 0);
     private long nextMourningTime;
 
@@ -572,7 +572,7 @@ public class Village implements Iterable<Building> {
     public void tick(ServerLevel world, long time) {
         tickMourning(world, time);
         time += getId();
-        boolean taxSeason = time % Config.getInstance().taxSeason == 0;
+        boolean taxSeason = time % Config.SERVER.taxSeason.get() == 0;
         boolean update = time % MOVE_IN_COOLDOWN == 0;
         if (taxSeason && hasBuilding("storage")) villageTaxesManager.taxes(world);
         if (time % 24000 == 0) cleanReputation();
@@ -614,7 +614,7 @@ public class Village implements Iterable<Building> {
     }
 
     private void tickMourning(ServerLevel world, long time) {
-        if (!Config.getInstance().enableMourning) {
+        if (!Config.SERVER.enableMourning.get()) {
             return;
         }
 
@@ -679,16 +679,16 @@ public class Village implements Iterable<Building> {
 
     public void broadCastMessage(ServerLevel world, String event, VillagerEntityMCA suitor, VillagerEntityMCA mate) {
         world.players().stream().filter(player -> PlayerSaveData.get(player).getLastSeenVillageId().orElse(-2) == getId()
-                        || suitor.getVillagerBrain().getMemoriesForPlayer(player).getHearts() > Config.getInstance().heartsToBeConsideredAsFriend
-                        || mate.getVillagerBrain().getMemoriesForPlayer(player).getHearts() > Config.getInstance().heartsToBeConsideredAsFriend)
+                        || suitor.getVillagerBrain().getMemoriesForPlayer(player).getHearts() > Config.SERVER.heartsToBeConsideredAsFriend.get()
+                        || mate.getVillagerBrain().getMemoriesForPlayer(player).getHearts() > Config.SERVER.heartsToBeConsideredAsFriend.get())
                 .forEach(player -> player.displayClientMessage(Component.translatable(event, suitor.getName(), mate.getName()),
-                        !Config.getInstance().showNotificationsAsChat));
+                        !Config.SERVER.showNotificationsAsChat.get()));
     }
 
     public void broadCastMessage(ServerLevel world, String event, String targetName) {
         world.players().stream().filter(player -> PlayerSaveData.get(player).getLastSeenVillageId().orElse(-2) == getId())
                 .forEach(player -> player.displayClientMessage(Component.translatable(event, targetName),
-                        !Config.getInstance().showNotificationsAsChat));
+                        !Config.SERVER.showNotificationsAsChat.get()));
     }
 
     public void markDirty() {
@@ -1220,7 +1220,7 @@ public class Village implements Iterable<Building> {
 
 
     public boolean isVillage() {
-        return getStructureCount() >= Config.getInstance().minimumBuildingsToBeConsideredAVillage;
+        return getStructureCount() >= Config.SERVER.minimumBuildingsToBeConsideredAVillage.get();
     }
 
     public Map<UUID, String> getResidentNames() { return residentNames; }

@@ -55,7 +55,7 @@ public final class CopiedOpenHouseGameTests {
         BlockPos openCavity = helper.absolutePos(new BlockPos(36, 6, 6));
         BlockPos headBlockedCavity = helper.absolutePos(new BlockPos(37, 6, 7));
         SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(
-                level, seed, Config.getInstance().maxBuildingSize, Config.getInstance().maxBuildingRadius);
+                level, seed, Config.SERVER.maxBuildingSize.get(), Config.SERVER.maxBuildingRadius.get());
 
         helper.assertTrue(scan.result() == Building.validationResult.SUCCESS,
                 "reported lower-floor scan failed: " + scan.result());
@@ -69,13 +69,12 @@ public final class CopiedOpenHouseGameTests {
     @GameTest(batch = "mca_copied_open_house_rooms", templateNamespace = "mca",
             template = TEMPLATE, timeoutTicks = 240, skyAccess = true)
     public static void everyCopiedHouseRoomComponentValidates(GameTestHelper helper) {
-        Config config = Config.getInstance();
         List<String> failures = new ArrayList<>();
 
         for (BlockPos relativeSeed : STOREY_SEEDS) {
             BlockPos seed = helper.absolutePos(relativeSeed);
             SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(
-                    helper.getLevel(), seed, config.maxBuildingSize, config.maxBuildingRadius);
+                    helper.getLevel(), seed, Config.SERVER.maxBuildingSize.get(), Config.SERVER.maxBuildingRadius.get());
             if (scan.result() != Building.validationResult.SUCCESS) {
                 failures.add(relativeSeed + "=" + scan.result());
                 continue;
@@ -85,7 +84,7 @@ public final class CopiedOpenHouseGameTests {
                     "copied house scan from " + relativeSeed + " produced no Room components");
 
             List<BuildingRoomScanner.Result> rooms = BuildingRoomScanner.partition(
-                    helper.getLevel(), seed, config.maxBuildingSize, 0, scan);
+                    helper.getLevel(), seed, Config.SERVER.maxBuildingSize.get(), 0, scan);
             helper.assertTrue(rooms.size() == components.size(),
                     "copied house materialization changed component count at " + relativeSeed
                             + ": components=" + components.size() + " rooms=" + rooms.size());
@@ -115,10 +114,9 @@ public final class CopiedOpenHouseGameTests {
     @GameTest(batch = "mca_copied_open_house_registration", templateNamespace = "mca",
             template = TEMPLATE, timeoutTicks = 280, skyAccess = true)
     public static void initialRegistrationPreservesFloorButRegistersOnlySelectedRoom(GameTestHelper helper) {
-        Config config = Config.getInstance();
         BlockPos seed = helper.absolutePos(MAIN_STOREY_SEED);
         SelectedFloorScanner.Result floorScan = SelectedFloorScanner.scan(
-                helper.getLevel(), seed, config.maxBuildingSize, config.maxBuildingRadius);
+                helper.getLevel(), seed, Config.SERVER.maxBuildingSize.get(), Config.SERVER.maxBuildingRadius.get());
         helper.assertTrue(floorScan.result() == Building.validationResult.SUCCESS,
                 "copied main floor scan failed: " + floorScan.result());
 
@@ -164,10 +162,9 @@ public final class CopiedOpenHouseGameTests {
     @GameTest(batch = "mca_copied_open_house_add_room", templateNamespace = "mca",
             template = TEMPLATE, timeoutTicks = 280, skyAccess = true)
     public static void registeredLowerRoomLeavesSiblingAsAddRoom(GameTestHelper helper) {
-        Config config = Config.getInstance();
         BlockPos lowerSeed = helper.absolutePos(LOWER_STOREY_SEED);
         SelectedFloorScanner.Result floorScan = SelectedFloorScanner.scan(
-                helper.getLevel(), lowerSeed, config.maxBuildingSize, config.maxBuildingRadius);
+                helper.getLevel(), lowerSeed, Config.SERVER.maxBuildingSize.get(), Config.SERVER.maxBuildingRadius.get());
         helper.assertTrue(floorScan.result() == Building.validationResult.SUCCESS,
                 "copied lower-floor scan failed: " + floorScan.result());
 
@@ -496,8 +493,8 @@ public final class CopiedOpenHouseGameTests {
                         == Village.RoomScanMode.UPDATE_ROOM,
                 "adding the basement changed the registered upper storey action");
         SelectedFloorScanner.Result upperScan = SelectedFloorScanner.scan(
-                helper.getLevel(), upper, Config.getInstance().maxBuildingSize,
-                Config.getInstance().maxBuildingRadius);
+                helper.getLevel(), upper, Config.SERVER.maxBuildingSize.get(),
+                Config.SERVER.maxBuildingRadius.get());
         helper.assertTrue(upperScan.result() == Building.validationResult.SUCCESS,
                 "adding the basement broke the upper fresh Floor scan: " + upperScan.result());
         helper.succeed();

@@ -1,27 +1,21 @@
 package net.conczin.mca;
 
-import com.google.gson.Gson;
-import net.minecraft.SharedConstants;
-import net.minecraft.server.Bootstrap;
-import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConfigPathfindingTest {
-    private static final Gson GSON = new Gson();
-
-    @BeforeAll
-    static void bootstrapMinecraft() {
-        SharedConstants.tryDetectVersion();
-        Bootstrap.bootStrap();
-    }
-
     @Test
-    void missingPathfindingDistanceUses160Default() {
-        Config config = GSON.fromJson("{\"version\":2}", Config.class);
+    void pathfindingDefaultsAndBoundsAreNativeConfigValues() {
+        assertEquals(160, Config.SERVER.villagerPathfindingDistance.getDefault());
+        assertEquals(48, Config.SERVER.villagerFollowRange.getDefault());
 
-        assertEquals(160, config.getVillagerPathfindingDistance());
-        assertEquals(48, config.getVillagerFollowRange());
+        assertTrue(Config.SERVER.villagerPathfindingDistance.getSpec().test(16));
+        assertTrue(Config.SERVER.villagerPathfindingDistance.getSpec().test(256));
+        assertFalse(Config.SERVER.villagerPathfindingDistance.getSpec().test(257));
+        assertTrue(Config.SERVER.villagerFollowRange.getSpec().test(64));
+        assertFalse(Config.SERVER.villagerFollowRange.getSpec().test(65));
     }
 }

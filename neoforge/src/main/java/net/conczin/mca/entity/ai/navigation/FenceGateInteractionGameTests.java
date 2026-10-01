@@ -50,13 +50,13 @@ public final class FenceGateInteractionGameTests {
                 .spawn(MobSpawnType.STRUCTURE);
         villager.setNoAi(true);
 
-        Config config = Config.getInstance();
-        boolean original = config.villagersInteractWithFenceGates;
+        var fenceGateInteraction = Config.SERVER.villagersInteractWithFenceGates;
+        boolean original = fenceGateInteraction.get();
         try {
             MCAWalkNodeEvaluator evaluator = new MCAWalkNodeEvaluator();
             PathfindingContext context = new PathfindingContext(helper.getLevel(), villager);
 
-            config.villagersInteractWithFenceGates = true;
+            fenceGateInteraction.set(true);
             helper.assertTrue(PathingBlockInteraction.isOpenable(helper.getLevel().getBlockState(gatePos)),
                     "enabled fence-gate interaction did not make the gate openable");
             helper.assertTrue(evaluator.getPathType(context, gatePos.getX(), gatePos.getY(), gatePos.getZ()) == PathType.WALKABLE_DOOR,
@@ -68,7 +68,7 @@ public final class FenceGateInteractionGameTests {
                     "open fence gate did not use vanilla passable pathing: MCA=" + openGateType
                             + ", vanilla=" + vanillaOpenGateType);
 
-            config.villagersInteractWithFenceGates = false;
+            fenceGateInteraction.set(false);
             helper.assertTrue(!PathingBlockInteraction.isOpenable(helper.getLevel().getBlockState(gatePos)),
                     "disabled fence-gate interaction still allowed the gate to be opened");
             helper.assertTrue(evaluator.getPathType(context, gatePos.getX(), gatePos.getY(), gatePos.getZ()) == PathType.FENCE,
@@ -76,7 +76,7 @@ public final class FenceGateInteractionGameTests {
 
             helper.succeed();
         } finally {
-            config.villagersInteractWithFenceGates = original;
+            fenceGateInteraction.set(original);
             villager.discard();
         }
     }

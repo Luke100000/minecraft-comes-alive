@@ -38,7 +38,7 @@ public final class PathfindingBlacklist {
     }
 
     private static void refreshCacheIfNeeded() {
-        List<String> configured = Config.getInstance().unSafeBlocksToTeleportOn;
+        List<? extends String> configured = Config.SERVER.unSafeBlocksToTeleportOn.get();
         int size = configured.size();
         int hash = configured.hashCode();
 
@@ -51,7 +51,7 @@ public final class PathfindingBlacklist {
         cachedHash = hash;
     }
 
-    private static List<Predicate<BlockState>> buildMatchers(List<String> configured, String configName) {
+    private static List<Predicate<BlockState>> buildMatchers(List<? extends String> configured, String configName) {
         List<Predicate<BlockState>> matchers = new ArrayList<>();
 
         for (String entry : configured) {

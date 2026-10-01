@@ -279,7 +279,7 @@ public class AdminCommand {
             heldStack = player.getMainHandItem();
 
             if (heldStack.getItem() instanceof BabyItem) {
-                heldStack.set(DataComponentsMCA.BABY_AGE, Config.getInstance().babyItemGrowUpTime);
+                heldStack.set(DataComponentsMCA.BABY_AGE, Config.SERVER.babyItemGrowUpTime.get());
                 success("Baby is old enough to place now.", ctx);
             } else {
                 fail("Hold a baby first.", ctx);

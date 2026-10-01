@@ -99,7 +99,7 @@ public class BabyItem extends Item {
     }
 
     private static boolean canGrow(int age) {
-        return age >= Config.getServerConfig().babyItemGrowUpTime;
+        return age >= Config.SERVER.babyItemGrowUpTime.get();
     }
 
     private static boolean isReadyToGrowUp(ItemStack stack) {
@@ -235,7 +235,7 @@ public class BabyItem extends Item {
 
                         // set proper dialogue type
                         Memories memories = child.getVillagerBrain().getMemoriesForPlayer(ply);
-                        memories.setHearts(Config.getInstance().childInitialHearts);
+                        memories.setHearts(Config.SERVER.childInitialHearts.get());
                     });
         }
 

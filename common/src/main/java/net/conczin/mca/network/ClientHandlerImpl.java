@@ -51,7 +51,7 @@ public class ClientHandlerImpl implements ClientHandler {
             case INTERACT:
                 if (client.player != null) {
                     ItemStack item = client.player.getItemInHand(InteractionHand.MAIN_HAND);
-                    boolean isOnBlacklist = Config.getInstance().villagerInteractionItemBlacklist.contains(BuiltInRegistries.ITEM.getKey(item.getItem()).toString());
+                    boolean isOnBlacklist = Config.SERVER.villagerInteractionItemBlacklist.get().contains(BuiltInRegistries.ITEM.getKey(item.getItem()).toString());
                     if (!isOnBlacklist) {
                         VillagerLike<?> villager = (VillagerLike<?>) client.level.getEntity(message.villager());
                         client.setScreen(new InteractScreen(villager));
@@ -232,12 +232,6 @@ public class ClientHandlerImpl implements ClientHandler {
     @Override
     public void handleDestinyGuiRequest(OpenDestinyGuiRequest message) {
         MCAClient.getDestinyManager().requestOpen(message.allowTeleportation(), message.destinations());
-    }
-
-    @Override
-    public void handleConfigResponse(ConfigResponse message) {
-        Config.setServerConfig(message.getConfig());
-        MCAClient.refreshPlayerDataDependentDimensions();
     }
 
     @Override

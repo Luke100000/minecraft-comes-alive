@@ -42,5 +42,5 @@ def translate_missing(asset_dir):
 
 if __name__ == "__main__":
     assets_dir = Path(__file__).resolve().parents[1] / "common/src/main/resources/assets"
-    for asset in ("mca_books", "mca_dialogue", "mca"):
+    for asset in ("mca_books", "mca_dialogue", "mca_config", "mca"):
         translate_missing(assets_dir / asset)

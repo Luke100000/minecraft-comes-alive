@@ -36,7 +36,7 @@ public class VillageTaxesManager {
     }
 
     public void taxes(ServerLevel world) {
-        double taxes = Config.getInstance().taxesFactor * village.getPopulation() * village.getTaxes() + world.random.nextDouble();
+        double taxes = Config.SERVER.taxesFactor.get().floatValue() * village.getPopulation() * village.getTaxes() + world.random.nextDouble();
         int moodImpact = 0;
 
         //response
@@ -75,12 +75,17 @@ public class VillageTaxesManager {
             taxes *= 1.5;
         }
 
+        Map<String, Float> taxValues = Config.SERVER.taxesMap();
+
         //choose as many items as possible
         while (taxes > 0.0) {
             double finalTaxes = taxes;
 
             // create a weighted list of all available items
-            List<String> valids = Config.getInstance().taxesMap.entrySet().stream()
+            List<String> valids = taxValues.entrySet().stream()
+                    // Keep the loop progressing even if invalid values bypass native correction.
+                    .filter(e -> Float.isFinite(e.getValue()) && e.getValue() > 0
+                            && finalTaxes - e.getValue() < finalTaxes)
                     .filter(e -> e.getValue() * world.random.nextFloat() < finalTaxes)
                     .map(Map.Entry::getKey)
                     .toList();
@@ -98,7 +103,7 @@ public class VillageTaxesManager {
             }
 
             // pay the price
-            taxes -= Config.getInstance().taxesMap.get(itemName);
+            taxes -= taxValues.get(itemName);
 
             // stack it or create a new item
             Optional<ItemStack> stack = village.storageBuffer.stream().filter(i -> i.is(item) && i.getCount() < i.getMaxStackSize()).findAny();

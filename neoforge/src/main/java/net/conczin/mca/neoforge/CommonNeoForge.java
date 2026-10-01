@@ -32,8 +32,13 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.event.config.ModConfigEvent;
+import net.neoforged.neoforge.common.ModConfigSpec;
 import net.neoforged.neoforge.event.AddReloadListenerEvent;
 import net.neoforged.neoforge.event.OnDatapackSyncEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
@@ -56,8 +61,25 @@ import java.util.function.Consumer;
 @Mod(MCA.MOD_ID)
 @EventBusSubscriber(modid = MCA.MOD_ID)
 public final class CommonNeoForge {
-    static {
+    public CommonNeoForge(IEventBus modEventBus, ModContainer modContainer) {
         MCA.platformHelper = new NeoforgePlatformHelper();
+
+        modEventBus.addListener(CommonNeoForge::onConfigLoad);
+        modEventBus.addListener(CommonNeoForge::onConfigReload);
+        modContainer.registerConfig(ModConfig.Type.COMMON, Config.COMMON_SPEC, Config.COMMON_FILE_NAME);
+        modContainer.registerConfig(ModConfig.Type.SERVER, Config.SERVER_SPEC, Config.SERVER_FILE_NAME);
+        modContainer.registerConfig(ModConfig.Type.CLIENT, Config.CLIENT_SPEC, Config.CLIENT_FILE_NAME);
+    }
+
+    private static void onConfigLoad(ModConfigEvent.Loading event) {
+        Config.migrateLegacy(event.getConfig());
+    }
+
+    private static void onConfigReload(ModConfigEvent.Reloading event) {
+        if (event.getConfig().getSpec() == Config.SERVER_SPEC) {
+            MCA.getServer().ifPresent(server -> server.execute(() ->
+                    DestinyLocationResolver.refreshCachedDestinations(server, Config.SERVER)));
+        }
     }
 
     private static <T> void registerHelper(RegisterEvent event, Registry<T> register, Consumer<MCA.RegisterHelper<T>> consumer) {
@@ -154,13 +176,14 @@ public final class CommonNeoForge {
 
     @SubscribeEvent
     public static void onServerStarted(ServerStartedEvent event) {
-        DestinyLocationResolver.refreshCachedDestinations(event.getServer(), Config.getInstance());
+        DestinyLocationResolver.refreshCachedDestinations(event.getServer(), Config.SERVER);
     }
 
     @SubscribeEvent
     public static void onDatapackSync(OnDatapackSyncEvent event) {
         if (event.getPlayer() == null) {
-            DestinyLocationResolver.refreshCachedDestinations(event.getPlayerList().getServer(), Config.getInstance());
+            var server = event.getPlayerList().getServer();
+            DestinyLocationResolver.refreshCachedDestinations(server, Config.SERVER);
         }
     }
 
@@ -191,7 +214,7 @@ public final class CommonNeoForge {
 
     @SubscribeEvent
     public static void registerNetwork(final RegisterPayloadHandlersEvent event) {
-        MessagesMCA.register(new NeoForgeRegistrar(event.registrar("1")));
+        MessagesMCA.register(new NeoForgeRegistrar(event.registrar("2")));
         Network.registerSender(PacketDistributor::sendToPlayer);
         Network.registerClientSender(PacketDistributor::sendToServer);
     }

@@ -123,7 +123,7 @@ public interface Messenger extends EntityWrapper {
     default Component sendChatMessage(Component message, Entity receiver) {
         message = transformMessage(message);
 
-        MutableComponent prefix = Component.literal(Config.getInstance().villagerChatPrefix)
+        MutableComponent prefix = Component.literal(Config.SERVER.villagerChatPrefix.get())
                 .append(asEntity().getDisplayName())
                 .append(": ");
 

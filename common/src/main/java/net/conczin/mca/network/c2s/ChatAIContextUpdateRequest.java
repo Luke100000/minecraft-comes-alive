@@ -58,8 +58,8 @@ public record ChatAIContextUpdateRequest(Target target, ResourceKey<Level> dimen
                 }
             }
             case WORLD -> {
-                Config.getInstance().villagerChatAISystemPrompt = prompt;
-                Config.getInstance().save();
+                Config.COMMON.villagerChatAISystemPrompt.set(prompt);
+                Config.saveCommon();
             }
         }
     }

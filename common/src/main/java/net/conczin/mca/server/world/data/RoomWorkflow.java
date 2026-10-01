@@ -71,7 +71,7 @@ public final class RoomWorkflow {
         SelectedFloorScanner.Result floorScan = structureScan.scan();
         List<RoomPartitioner.Component> components = BuildingRoomScanner.components(world, floorScan);
         BuildingRoomScanner.Result selectedGeometry = BuildingRoomScanner.materializeSelected(
-                structureScan.source(), Config.getInstance().maxBuildingSize, floor.id(),
+                structureScan.source(), Config.SERVER.maxBuildingSize.get(), floor.id(),
                 floorScan.floor(), components);
         BuildingScanResult selected = roomResultFromGeometry(
                 village, candidate, floor, selectedGeometry);
@@ -122,7 +122,7 @@ public final class RoomWorkflow {
         List<RoomPartitioner.Component> components = analysis.observation() == null
                 ? BuildingRoomScanner.components(world, fresh.scan()) : analysis.components();
         BuildingRoomScanner.Result selected = BuildingRoomScanner.materializeSelected(
-                scanSeed, Config.getInstance().maxBuildingSize, floor.id(),
+                scanSeed, Config.SERVER.maxBuildingSize.get(), floor.id(),
                 fresh.scannedFloor(), components);
         BuildingScanResult addition = roomResultFromGeometry(
                 village, refreshed, refreshedFloor, selected);
@@ -200,7 +200,7 @@ public final class RoomWorkflow {
                 .sameCellPositions(analysis.observation().scan().floor())
                 ? analysis.components() : BuildingRoomScanner.components(world, structureScan.scan());
         BuildingRoomScanner.Result geometry = BuildingRoomScanner.materializeSelected(
-                plan.scanSeed(), Config.getInstance().maxBuildingSize,
+                plan.scanSeed(), Config.SERVER.maxBuildingSize.get(),
                 attachmentFloor.id(), structureScan.scannedFloor(), components);
         return roomResultFromGeometry(village, candidate, attachmentFloor, geometry)
                 .withSource(source)
@@ -273,7 +273,7 @@ public final class RoomWorkflow {
         }
 
         BuildingRoomScanner.Result geometry = BuildingRoomScanner.materialize(
-                fresh.source(), Config.getInstance().maxBuildingSize, persistedFloor.id(),
+                fresh.source(), Config.SERVER.maxBuildingSize.get(), persistedFloor.id(),
                 fresh.scannedFloor(), components, selectedComponent);
         BuildingScanResult selected = materializeRoom(village, refreshed, refreshedFloor, geometry);
         if (selected.result() != Building.validationResult.SUCCESS) {

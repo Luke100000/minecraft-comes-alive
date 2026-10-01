@@ -52,11 +52,11 @@ public interface SchedulesMCA {
     }
 
     static Schedule getTypeSchedule(LivingEntity entity, boolean allowNightOwl, Schedule normalSchedule, Schedule nightSchedule) {
-        return (allowNightOwl && entity.getRandom().nextFloat() < Config.getInstance().nightOwlChance) ? nightSchedule : normalSchedule;
+        return (allowNightOwl && entity.getRandom().nextFloat() < Config.SERVER.nightOwlChance.get().floatValue()) ? nightSchedule : normalSchedule;
     }
 
     static Schedule getTypeSchedule(LivingEntity entity, Schedule normalSchedule, Schedule nightSchedule) {
-        return getTypeSchedule(entity, Config.getInstance().allowAnyNightOwl, normalSchedule, nightSchedule);
+        return getTypeSchedule(entity, Config.SERVER.allowAnyNightOwl.get(), normalSchedule, nightSchedule);
     }
 
     static Schedule getTypeSchedule(LivingEntity entity, boolean allowNightOwl) {
@@ -64,6 +64,6 @@ public interface SchedulesMCA {
     }
 
     static Schedule getTypeSchedule(LivingEntity entity) {
-        return getTypeSchedule(entity, Config.getInstance().allowAnyNightOwl);
+        return getTypeSchedule(entity, Config.SERVER.allowAnyNightOwl.get());
     }
 }

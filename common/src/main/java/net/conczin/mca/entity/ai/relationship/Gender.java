@@ -80,15 +80,15 @@ public enum Gender {
     }
 
     public float getHorizontalScaleFactor() {
-        return this == Gender.FEMALE ? Config.getInstance().femaleVillagerWidthFactor :
-                this == Gender.MALE ? Config.getInstance().maleVillagerWidthFactor :
-                        (Config.getInstance().femaleVillagerWidthFactor + Config.getInstance().maleVillagerWidthFactor) * 0.5f;
+        return this == Gender.FEMALE ? Config.SERVER.femaleVillagerWidthFactor.get().floatValue() :
+                this == Gender.MALE ? Config.SERVER.maleVillagerWidthFactor.get().floatValue() :
+                        (Config.SERVER.femaleVillagerWidthFactor.get().floatValue() + Config.SERVER.maleVillagerWidthFactor.get().floatValue()) * 0.5f;
     }
 
     public float getScaleFactor() {
-        return this == Gender.FEMALE ? Config.getInstance().femaleVillagerHeightFactor :
-                this == Gender.MALE ? Config.getInstance().maleVillagerHeightFactor :
-                        (Config.getInstance().femaleVillagerHeightFactor + Config.getInstance().maleVillagerHeightFactor) * 0.5f;
+        return this == Gender.FEMALE ? Config.SERVER.femaleVillagerHeightFactor.get().floatValue() :
+                this == Gender.MALE ? Config.SERVER.maleVillagerHeightFactor.get().floatValue() :
+                        (Config.SERVER.femaleVillagerHeightFactor.get().floatValue() + Config.SERVER.maleVillagerHeightFactor.get().floatValue()) * 0.5f;
     }
 }
 

@@ -1,7 +1,5 @@
 package net.conczin.mca.server;
 
-import com.google.gson.Gson;
-import net.conczin.mca.CommonConfig;
 import net.conczin.mca.Config;
 import net.conczin.mca.destiny.DestinyDestination;
 import net.minecraft.core.Holder;
@@ -22,8 +20,6 @@ import java.util.Optional;
 @GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class DestinyLocationResolverGameTests {
-    private static final Gson GSON = new Gson();
-
     private DestinyLocationResolverGameTests() {
     }
 
@@ -48,11 +44,11 @@ public final class DestinyLocationResolverGameTests {
 
     @GameTest(batch = "mca_destiny_dimensions", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void resolverUsesGeneratorPlacementsForDestinationDimensions(GameTestHelper helper) {
-        CommonConfig config = new CommonConfig();
-        config.destinySpawnLocations = List.of("somewhere", "minecraft:village_plains");
-        config.autoDiscoverDestinyLocations = false;
-
-        List<DestinyDestination> destinations = DestinyLocationResolver.resolve(helper.getLevel().getServer(), config);
+        List<DestinyDestination> destinations;
+        try (var ignored = overrideDestinyConfig(
+                List.of("somewhere", "minecraft:village_plains"), false, false, List.of())) {
+            destinations = DestinyLocationResolver.resolve(helper.getLevel().getServer(), Config.SERVER);
+        }
 
         helper.assertTrue(
                 destinations.contains(new DestinyDestination("somewhere", Optional.empty())),
@@ -71,11 +67,11 @@ public final class DestinyLocationResolverGameTests {
 
     @GameTest(batch = "mca_destiny_dimensions", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void structureTagUsesMemberPlacementsForDestinationDimensions(GameTestHelper helper) {
-        CommonConfig config = new CommonConfig();
-        config.destinySpawnLocations = List.of("#minecraft:village");
-        config.autoDiscoverDestinyLocations = false;
-
-        List<DestinyDestination> destinations = DestinyLocationResolver.resolve(helper.getLevel().getServer(), config);
+        List<DestinyDestination> destinations;
+        try (var ignored = overrideDestinyConfig(
+                List.of("#minecraft:village"), false, false, List.of())) {
+            destinations = DestinyLocationResolver.resolve(helper.getLevel().getServer(), Config.SERVER);
+        }
 
         helper.assertTrue(
                 destinations.contains(new DestinyDestination("#minecraft:village", Optional.of(Level.OVERWORLD))),
@@ -90,15 +86,11 @@ public final class DestinyLocationResolverGameTests {
 
     @GameTest(batch = "mca_destiny_dimensions", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void dimensionBlacklistRemovesValidDestinationDimension(GameTestHelper helper) {
-        CommonConfig config = GSON.fromJson("""
-                {
-                  "destinySpawnLocations": ["minecraft:bastion_remnant"],
-                  "autoDiscoverDestinyLocations": false,
-                  "destinyDimensionBlacklist": ["minecraft:the_nether"]
-                }
-                """, CommonConfig.class);
-
-        List<DestinyDestination> destinations = DestinyLocationResolver.resolve(helper.getLevel().getServer(), config);
+        List<DestinyDestination> destinations;
+        try (var ignored = overrideDestinyConfig(
+                List.of("minecraft:bastion_remnant"), false, false, List.of("minecraft:the_nether"))) {
+            destinations = DestinyLocationResolver.resolve(helper.getLevel().getServer(), Config.SERVER);
+        }
 
         helper.assertTrue(
                 !destinations.contains(new DestinyDestination("minecraft:bastion_remnant", Optional.of(Level.NETHER))),
@@ -109,15 +101,11 @@ public final class DestinyLocationResolverGameTests {
 
     @GameTest(batch = "mca_destiny_dimensions", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void overworldOnlyKeepsDimensionlessAndOverworldDestinations(GameTestHelper helper) {
-        CommonConfig config = GSON.fromJson("""
-                {
-                  "destinySpawnLocations": ["somewhere", "minecraft:village_plains", "minecraft:bastion_remnant"],
-                  "autoDiscoverDestinyLocations": false,
-                  "destinyOverworldOnly": true
-                }
-                """, CommonConfig.class);
-
-        List<DestinyDestination> destinations = DestinyLocationResolver.resolve(helper.getLevel().getServer(), config);
+        List<DestinyDestination> destinations;
+        try (var ignored = overrideDestinyConfig(
+                List.of("somewhere", "minecraft:village_plains", "minecraft:bastion_remnant"), false, true, List.of())) {
+            destinations = DestinyLocationResolver.resolve(helper.getLevel().getServer(), Config.SERVER);
+        }
 
         helper.assertTrue(
                 destinations.contains(new DestinyDestination("somewhere", Optional.empty())),
@@ -136,16 +124,12 @@ public final class DestinyLocationResolverGameTests {
 
     @GameTest(batch = "mca_destiny_dimensions", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void cachedDestinationsStayStableUntilExplicitRefresh(GameTestHelper helper) {
-        CommonConfig config = new CommonConfig();
-        config.destinySpawnLocations = List.of("somewhere");
-        config.autoDiscoverDestinyLocations = false;
-
         var server = helper.getLevel().getServer();
-        try {
-            DestinyLocationResolver.refreshCachedDestinations(server, config);
+        try (var ignored = overrideDestinyConfig(List.of("somewhere"), false, false, List.of())) {
+            DestinyLocationResolver.refreshCachedDestinations(server, Config.SERVER);
             List<DestinyDestination> cached = DestinyLocationResolver.getCachedDestinations(server);
 
-            config.destinySpawnLocations = List.of("minecraft:village_plains");
+            Config.SERVER.destinySpawnLocations.set(List.of("minecraft:village_plains"));
 
             helper.assertTrue(
                     cached.equals(DestinyLocationResolver.getCachedDestinations(server)),
@@ -156,8 +140,42 @@ public final class DestinyLocationResolverGameTests {
                     "cached Destiny destinations should preserve the startup snapshot"
             );
         } finally {
-            DestinyLocationResolver.refreshCachedDestinations(server, Config.getInstance());
+            DestinyLocationResolver.refreshCachedDestinations(server, Config.SERVER);
         }
         helper.succeed();
+    }
+
+    private static DestinyConfigOverride overrideDestinyConfig(
+            List<String> locations,
+            boolean autoDiscover,
+            boolean overworldOnly,
+            List<String> dimensionBlacklist
+    ) {
+        DestinyConfigOverride previous = new DestinyConfigOverride(
+                List.copyOf(Config.SERVER.destinySpawnLocations.get()),
+                Config.SERVER.autoDiscoverDestinyLocations.get(),
+                Config.SERVER.destinyOverworldOnly.get(),
+                List.copyOf(Config.SERVER.destinyDimensionBlacklist.get())
+        );
+        Config.SERVER.destinySpawnLocations.set(List.copyOf(locations));
+        Config.SERVER.autoDiscoverDestinyLocations.set(autoDiscover);
+        Config.SERVER.destinyOverworldOnly.set(overworldOnly);
+        Config.SERVER.destinyDimensionBlacklist.set(List.copyOf(dimensionBlacklist));
+        return previous;
+    }
+
+    private record DestinyConfigOverride(
+            List<String> locations,
+            boolean autoDiscover,
+            boolean overworldOnly,
+            List<String> dimensionBlacklist
+    ) implements AutoCloseable {
+        @Override
+        public void close() {
+            Config.SERVER.destinySpawnLocations.set(locations);
+            Config.SERVER.autoDiscoverDestinyLocations.set(autoDiscover);
+            Config.SERVER.destinyOverworldOnly.set(overworldOnly);
+            Config.SERVER.destinyDimensionBlacklist.set(dimensionBlacklist);
+        }
     }
 }

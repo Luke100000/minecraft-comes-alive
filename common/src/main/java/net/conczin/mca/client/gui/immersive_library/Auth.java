@@ -77,7 +77,7 @@ public class Auth {
 
     public static void authenticate(String username) {
         currentToken = newToken();
-        String url = Config.getInstance().immersiveLibraryUrl + "/v1/login?state=" + createDataState(username, currentToken);
+        String url = Config.CLIENT.immersiveLibraryUrl.get() + "/v1/login?state=" + createDataState(username, currentToken);
         Util.getPlatform().openUri(url);
     }
 }

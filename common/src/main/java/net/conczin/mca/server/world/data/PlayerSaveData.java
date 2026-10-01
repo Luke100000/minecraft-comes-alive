@@ -225,13 +225,13 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     protected void onLeave(Player self, Village village) {
-        if (Config.getInstance().enterVillageNotification && village.isVillage()) {
+        if (Config.SERVER.enterVillageNotification.get() && village.isVillage()) {
             self.displayClientMessage(Component.translatable("gui.village.left", village.getName()).withStyle(ChatFormatting.GOLD), true);
         }
     }
 
     protected void onEnter(Player self, Village village) {
-        if (Config.getInstance().enterVillageNotification && village.isVillage()) {
+        if (Config.SERVER.enterVillageNotification.get() && village.isVillage()) {
             self.displayClientMessage(Component.translatable("gui.village.welcome", village.getName()).withStyle(ChatFormatting.GOLD), true);
         }
         village.onEnter(world);
@@ -296,7 +296,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public void sendMail(Letter pages) {
-        if (Config.getInstance().enableVillagerMailingPlayers) {
+        if (Config.SERVER.enableVillagerMailingPlayers.get()) {
             inbox.add(pages);
         }
         setDirty();

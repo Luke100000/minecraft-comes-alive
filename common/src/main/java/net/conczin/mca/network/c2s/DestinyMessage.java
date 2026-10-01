@@ -68,7 +68,7 @@ public record DestinyMessage(Optional<DestinyDestination> destination) implement
             return;
         }
 
-        if (!Config.getInstance().allowDestinyTeleportation || selectedDestination.dimension().isEmpty()) {
+        if (!Config.SERVER.allowDestinyTeleportation.get() || selectedDestination.dimension().isEmpty()) {
             return;
         }
 

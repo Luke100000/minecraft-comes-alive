@@ -15,7 +15,7 @@ public class BouquetItem extends RelationshipItem {
 
     @Override
     protected int getHeartsRequired() {
-        return Config.getInstance().bouquetHeartsRequirement;
+        return Config.SERVER.bouquetHeartsRequirement.get();
     }
 
     @Override

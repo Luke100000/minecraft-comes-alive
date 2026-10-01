@@ -214,14 +214,14 @@ public final class WanderOrTeleportToTargetTaskGameTests {
 
         WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
         long startedAt = helper.getLevel().getGameTime();
-        Config config = Config.getInstance();
-        int originalPathfindingDistance = config.villagerPathfindingDistance;
+        var pathfindingDistance = Config.SERVER.villagerPathfindingDistance;
+        int originalPathfindingDistance = pathfindingDistance.get();
         try {
-            config.villagerPathfindingDistance = 160;
+            pathfindingDistance.set(160);
             helper.assertTrue(sink.tryStart(helper.getLevel(), villager, startedAt),
                     "movement sink did not start the nearby extended detour");
         } finally {
-            config.villagerPathfindingDistance = originalPathfindingDistance;
+            pathfindingDistance.set(originalPathfindingDistance);
         }
         Path path = villager.getNavigation().getPath();
         helper.assertTrue(path != null && path.canReach(),
@@ -300,7 +300,7 @@ public final class WanderOrTeleportToTargetTaskGameTests {
             template = "bastion/blocks/air", timeoutTicks = 2_400)
     public static void brainDrivenLongDistanceWalkArrivesAfterMultipleSegmentsAndTimeoutWindow(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(4, 1, 4));
-        int pathHorizon = Math.max(Config.getInstance().getVillagerPathfindingDistance(), 48);
+        int pathHorizon = Math.max(Config.SERVER.villagerPathfindingDistance(), 48);
         BlockPos destination = start.east(pathHorizon * 2 + 64);
         ChunkPos startChunk = new ChunkPos(start);
         ChunkPos targetChunk = new ChunkPos(destination);
@@ -512,8 +512,8 @@ public final class WanderOrTeleportToTargetTaskGameTests {
     @GameTest(batch = "mca_normal_night_sleep", templateNamespace = "mca",
             template = "gametest/isolated_ai_arena", timeoutTicks = 700)
     public static void normalNightVillagersAcquireHomesAndSleep(GameTestHelper helper) {
-        boolean mourningEnabled = Config.getInstance().enableMourning;
-        Config.getInstance().enableMourning = false;
+        boolean mourningEnabled = Config.SERVER.enableMourning.get();
+        Config.SERVER.enableMourning.set(false);
         BlockPos center = helper.absolutePos(new BlockPos(56, 1, 56));
         prepareFlatArea(helper, center, 24, 3);
         helper.getLevel().setDayTime(13_000L);
@@ -569,7 +569,7 @@ public final class WanderOrTeleportToTargetTaskGameTests {
                 }
             }
             if (sleeping == villagers.length) {
-                Config.getInstance().enableMourning = mourningEnabled;
+                Config.SERVER.enableMourning.set(mourningEnabled);
                 for (VillagerEntityMCA villager : villagers) {
                     villager.discard();
                 }
@@ -581,7 +581,7 @@ public final class WanderOrTeleportToTargetTaskGameTests {
                 return;
             }
 
-            Config.getInstance().enableMourning = mourningEnabled;
+            Config.SERVER.enableMourning.set(mourningEnabled);
             StringBuilder state = new StringBuilder();
             PoiManager poiManager = helper.getLevel().getPoiManager();
             for (int index = 0; index < villagers.length; index++) {
@@ -687,7 +687,7 @@ public final class WanderOrTeleportToTargetTaskGameTests {
             template = "bastion/blocks/air", timeoutTicks = 80)
     public static void usefulPartialLongDistancePathChainsImmediately(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
-        BlockPos destination = start.east(Config.getInstance().getVillagerPathfindingDistance() + 32);
+        BlockPos destination = start.east(Config.SERVER.villagerPathfindingDistance() + 32);
         prepareFlatPath(helper, start, destination);
 
         VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())

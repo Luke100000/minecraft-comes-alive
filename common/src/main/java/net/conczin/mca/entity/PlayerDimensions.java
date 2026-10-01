@@ -25,7 +25,7 @@ public final class PlayerDimensions {
     }
 
     public static Optional<Scale> getScale(Player player) {
-        if (!Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
+        if (!Config.SERVER.scalePlayerHitboxWithSizeAndWidth.get()) {
             return Optional.empty();
         }
 

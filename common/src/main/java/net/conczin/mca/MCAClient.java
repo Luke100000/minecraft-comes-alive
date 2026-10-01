@@ -8,7 +8,6 @@ import net.conczin.mca.entity.PlayerDimensions;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.network.Network;
-import net.conczin.mca.network.c2s.ConfigRequest;
 import net.conczin.mca.network.c2s.PlayerDataRequest;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Player;
@@ -29,8 +28,10 @@ public class MCAClient {
         playerData.clear();
         playerDataRequests.clear();
         ClientSkinCatalog.clear();
-        Network.sendToServer(new ConfigRequest());
         ClientSkinCatalog.sync();
+        // SERVER config is synchronized before entering play; refresh dimensions that
+        // previously depended on MCA's removed ConfigResponse callback.
+        refreshPlayerDataDependentDimensions();
     }
 
     public static Optional<VillagerLike<?>> getPlayerData(UUID uuid) {
@@ -49,7 +50,7 @@ public class MCAClient {
         boolean isTTSPackActive = Minecraft.getInstance().getResourceManager().listPacks().anyMatch(pack -> {
             return pack.packId().contains("MCAVoices");
         });
-        return !isTTSPackActive && Minecraft.getInstance().options.languageCode.equals("en_us") && !Config.getInstance().enableOnlineTTS;
+        return !isTTSPackActive && Minecraft.getInstance().options.languageCode.equals("en_us") && !Config.CLIENT.enableOnlineTTS.get();
     }
 
     public static Optional<VillagerLike<?>> getGeneticsPlayerData(UUID uuid) {
@@ -69,7 +70,7 @@ public class MCAClient {
 
     public static boolean renderArms(UUID uuid, String key) {
         return useVillagerRenderer(uuid) &&
-               Config.getInstance().playerRendererBlacklist.entrySet().stream()
+               Config.CLIENT.playerRendererBlacklist().entrySet().stream()
                        .filter(entry -> entry.getValue().equals("arms") || entry.getValue().equals(key))
                        .noneMatch(entry -> MCA.platformHelper.isModLoaded(entry.getKey()));
     }
@@ -118,27 +119,27 @@ public class MCAClient {
     }
 
     private static boolean needsPlayerDataForDimensions() {
-        return Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth
-                || Config.getInstance().scaleEyeHeightWithPlayerHeight;
+        return Config.SERVER.scalePlayerHitboxWithSizeAndWidth.get()
+                || Config.CLIENT.scaleEyeHeightWithPlayerHeight.get();
     }
 
     public static boolean isPlayerRendererAllowed() {
-        return Config.getInstance().enableVillagerPlayerModel &&
-               Config.getInstance().playerRendererBlacklist.entrySet().stream()
+        return Config.CLIENT.enableVillagerPlayerModel.get() &&
+               Config.CLIENT.playerRendererBlacklist().entrySet().stream()
                        .filter(entry -> entry.getValue().equals("all") || entry.getValue().equals("block_player"))
                        .noneMatch(entry -> MCA.platformHelper.isModLoaded(entry.getKey()));
     }
 
     public static boolean isVillagerRendererAllowed() {
-        return !Config.getInstance().forceVillagerPlayerModel &&
-               Config.getInstance().playerRendererBlacklist.entrySet().stream()
+        return !Config.CLIENT.forceVillagerPlayerModel.get() &&
+               Config.CLIENT.playerRendererBlacklist().entrySet().stream()
                        .filter(entry -> entry.getValue().equals("all") || entry.getValue().equals("block_villager"))
                        .noneMatch(entry -> MCA.platformHelper.isModLoaded(entry.getKey()));
     }
 
     public static boolean areShadersAllowed(String key) {
-        return Config.getInstance().enablePlayerShaders &&
-               Config.getInstance().playerRendererBlacklist.entrySet().stream()
+        return Config.CLIENT.enablePlayerShaders.get() &&
+               Config.CLIENT.playerRendererBlacklist().entrySet().stream()
                        .filter(entry -> entry.getValue().equals("shaders") || entry.getValue().equals(key))
                        .noneMatch(entry -> MCA.platformHelper.isModLoaded(entry.getKey()));
     }

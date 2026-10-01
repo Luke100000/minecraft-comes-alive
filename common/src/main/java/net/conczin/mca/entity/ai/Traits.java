@@ -87,7 +87,7 @@ public class Traits {
     }
 
     public Set<Trait> getInheritedTraits() {
-        return getTraits().stream().filter(t -> random.nextFloat() < t.inherit * Config.getInstance().traitInheritChance).collect(Collectors.toSet());
+        return getTraits().stream().filter(t -> random.nextFloat() < t.inherit * Config.SERVER.traitInheritChance.get().floatValue()).collect(Collectors.toSet());
     }
 
     public boolean hasTrait(VillagerLike<?> target, Trait trait) {
@@ -135,7 +135,7 @@ public class Traits {
         List<Trait> traits = all();
         float total = (float) traits.stream().mapToDouble(trait -> trait.chance).sum();
         for (Trait trait : traits) {
-            float chance = Config.getInstance().traitChance / total * trait.chance;
+            float chance = Config.SERVER.traitChance.get().floatValue() / total * trait.chance;
             if (random.nextFloat() < chance && trait.isEnabled()) {
                 addTrait(trait);
             }
@@ -193,7 +193,7 @@ public class Traits {
         }
 
         public boolean isEnabled() {
-            Map<String, Boolean> enabledTraits = Config.getServerConfig().enabledTraits;
+            Map<String, Boolean> enabledTraits = Config.SERVER.enabledTraits();
             return enabledTraits.getOrDefault(id.toString(), true);
         }
     }

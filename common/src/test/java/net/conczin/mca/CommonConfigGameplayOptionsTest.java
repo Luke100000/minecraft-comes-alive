@@ -1,66 +1,39 @@
 package net.conczin.mca;
 
-import com.google.gson.Gson;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CommonConfigGameplayOptionsTest {
-    private static final Gson GSON = new Gson();
-
     @Test
     void gameplaySafetyOptionsDefaultEnabled() {
-        CommonConfig config = new CommonConfig();
-
-        assertTrue(config.archerArrowsIgnoreVillagers);
-        assertTrue(config.villagersInteractWithFenceGates);
+        assertTrue(Config.SERVER.archerArrowsIgnoreVillagers.getDefault());
+        assertTrue(Config.SERVER.villagersInteractWithFenceGates.getDefault());
     }
 
     @Test
-    void gameplaySafetyOptionsCanBeDisabledFromServerConfig() {
-        CommonConfig config = GSON.fromJson("""
-                {
-                  "archerArrowsIgnoreVillagers": false,
-                  "villagersInteractWithFenceGates": false
-                }
-                """, CommonConfig.class);
-
-        assertFalse(config.archerArrowsIgnoreVillagers);
-        assertFalse(config.villagersInteractWithFenceGates);
+    void gameplaySafetyOptionsAcceptServerOverrides() {
+        assertTrue(Config.SERVER.archerArrowsIgnoreVillagers.getSpec().test(false));
+        assertTrue(Config.SERVER.villagersInteractWithFenceGates.getSpec().test(false));
     }
 
     @Test
     void destinyDiscoveryDefaultsToAutomaticWithNoBlacklist() {
-        CommonConfig config = new CommonConfig();
-
-        assertTrue(config.autoDiscoverDestinyLocations);
-        assertEquals(java.util.List.of(), config.destinySpawnLocationBlacklist);
-        assertFalse(config.destinyOverworldOnly);
-        assertEquals(java.util.List.of(), config.destinyDimensionBlacklist);
+        assertTrue(Config.SERVER.autoDiscoverDestinyLocations.getDefault());
+        assertEquals(List.of(), Config.SERVER.destinySpawnLocationBlacklist.getDefault());
+        assertFalse(Config.SERVER.destinyOverworldOnly.getDefault());
+        assertEquals(List.of(), Config.SERVER.destinyDimensionBlacklist.getDefault());
     }
 
     @Test
-    void destinyDiscoveryAndBlacklistsCanBeConfigured() {
-        CommonConfig config = GSON.fromJson("""
-                {
-                  "autoDiscoverDestinyLocations": false,
-                  "destinySpawnLocationBlacklist": ["ctov:*", "othermod:*large*"],
-                  "destinyOverworldOnly": true,
-                  "destinyDimensionBlacklist": ["minecraft:the_nether", "some_mod:*"]
-                }
-                """, CommonConfig.class);
-
-        assertFalse(config.autoDiscoverDestinyLocations);
-        assertEquals(
-                java.util.List.of("ctov:*", "othermod:*large*"),
-                config.destinySpawnLocationBlacklist
-        );
-        assertTrue(config.destinyOverworldOnly);
-        assertEquals(
-                java.util.List.of("minecraft:the_nether", "some_mod:*"),
-                config.destinyDimensionBlacklist
-        );
+    void destinyDiscoveryAndBlacklistsAcceptServerOverrides() {
+        assertTrue(Config.SERVER.autoDiscoverDestinyLocations.getSpec().test(false));
+        assertTrue(Config.SERVER.destinySpawnLocationBlacklist.getSpec().test(List.of("ctov:*", "othermod:*large*")));
+        assertTrue(Config.SERVER.destinyOverworldOnly.getSpec().test(true));
+        assertTrue(Config.SERVER.destinyDimensionBlacklist.getSpec().test(List.of("minecraft:the_nether", "some_mod:*")));
     }
 }

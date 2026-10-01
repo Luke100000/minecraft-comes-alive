@@ -157,7 +157,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         SpawnGroupData data = super.finalizeSpawn(world, difficulty, spawnReason, entityData);
 
         if (getAgeState() == AgeState.UNASSIGNED) {
-            if (random.nextFloat() < Config.getInstance().babyZombieChance) {
+            if (random.nextFloat() < Config.SERVER.babyZombieChance.get().floatValue()) {
                 setAgeState(isBaby() ? AgeState.BABY : AgeState.random());
             } else {
                 setAgeState(AgeState.ADULT);
@@ -186,7 +186,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
 
         burned--;
         if (isOnFire()) {
-            burned = Config.getInstance().burnedClothingTickLength;
+            burned = Config.SERVER.burnedClothingTickLength.get();
         }
         if (burned > 0) {
             spawnBurntParticles();

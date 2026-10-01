@@ -35,7 +35,7 @@ public final class PathingBlockInteraction {
     }
 
     public static boolean canInteractWithFenceGate(BlockState state) {
-        return Config.getServerConfig().villagersInteractWithFenceGates && isFenceGate(state);
+        return Config.SERVER.villagersInteractWithFenceGates.get() && isFenceGate(state);
     }
 
     public static boolean isOpenable(BlockState state) {

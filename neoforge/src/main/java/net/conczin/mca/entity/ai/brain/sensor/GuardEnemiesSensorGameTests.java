@@ -21,7 +21,6 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 @GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
@@ -108,8 +107,8 @@ public final class GuardEnemiesSensorGameTests {
             template = "bastion/blocks/air", timeoutTicks = 80)
     public static void guardPriorityConfigChangesAreObservedWithoutRestart(GameTestHelper helper) {
         cleanupTestEntities();
-        Map<String, Integer> previousTargets = Config.getInstance().guardsTargetEntities;
-        boolean previousTargetMonsters = Config.getInstance().guardsTargetMonsters;
+        List<? extends String> previousTargets = List.copyOf(Config.SERVER.guardsTargetEntities.get());
+        boolean previousTargetMonsters = Config.SERVER.guardsTargetMonsters.get();
         try {
             BlockPos guardPos = helper.absolutePos(new BlockPos(3, 2, 3));
             BlockPos targetPos = guardPos.east(8);
@@ -133,8 +132,8 @@ public final class GuardEnemiesSensorGameTests {
             helper.getLevel().addFreshEntity(target);
             TEST_ENTITIES.add(target);
 
-            Config.getInstance().guardsTargetMonsters = false;
-            Config.getInstance().guardsTargetEntities = Map.of("minecraft:zombie", 4);
+            Config.SERVER.guardsTargetMonsters.set(false);
+            Config.SERVER.guardsTargetEntities.set(List.of("minecraft:zombie=4"));
             GuardEnemiesSensor sensor = new GuardEnemiesSensor();
             sensor.doTick(helper.getLevel(), guard);
             helper.assertTrue(
@@ -142,7 +141,7 @@ public final class GuardEnemiesSensorGameTests {
                     "configured zombie priority was not used before the config change"
             );
 
-            Config.getInstance().guardsTargetEntities = Map.of("minecraft:zombie", -1);
+            Config.SERVER.guardsTargetEntities.set(List.of("minecraft:zombie=-1"));
             sensor.doTick(helper.getLevel(), guard);
             helper.assertTrue(
                     guard.getBrain().getMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY).isEmpty(),
@@ -150,8 +149,8 @@ public final class GuardEnemiesSensorGameTests {
             );
             helper.succeed();
         } finally {
-            Config.getInstance().guardsTargetEntities = previousTargets;
-            Config.getInstance().guardsTargetMonsters = previousTargetMonsters;
+            Config.SERVER.guardsTargetEntities.set(previousTargets);
+            Config.SERVER.guardsTargetMonsters.set(previousTargetMonsters);
             cleanupTestEntities();
         }
     }

@@ -27,7 +27,7 @@ public class Names extends SimpleJsonResourceReloadListener {
     }
 
     public static String getCitizenNation(Entity entity) {
-        if (Config.getInstance().useModernUSANamesOnly) {
+        if (Config.SERVER.useModernUSANamesOnly.get()) {
             return "modernusa";
         } else {
             int i = Nationality.get((ServerLevel) entity.level()).getRegionId(entity.blockPosition());

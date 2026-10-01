@@ -35,11 +35,11 @@ public class SpawnQueue {
     }
 
     public static boolean shouldGetConverted(Entity entity) {
-        if (Config.getInstance().fractionOfVanillaVillages <= 0) {
+        if (Config.SERVER.fractionOfVanillaVillages.get().floatValue() <= 0) {
             return true;
         } else {
             int i = Nationality.get((ServerLevel) entity.level()).getRegionId(entity.blockPosition());
-            return Math.floorMod(i, 100) >= Config.getInstance().fractionOfVanillaVillages * 100.0;
+            return Math.floorMod(i, 100) >= Config.SERVER.fractionOfVanillaVillages.get().floatValue() * 100.0;
         }
     }
 
@@ -116,24 +116,24 @@ public class SpawnQueue {
         if (entity instanceof IVillagerEntity villagerEntity && !handlesSpawnReason(villagerEntity.mca$getSpawnReason())) {
             return false;
         }
-        if (Config.getInstance().villagerDimensionBlacklist.contains(entity.getCommandSenderWorld().dimension().location().toString())) {
+        if (Config.SERVER.villagerDimensionBlacklist.get().contains(entity.getCommandSenderWorld().dimension().location().toString())) {
             return false;
         }
-        if (Config.getInstance().overwriteOriginalVillagers
+        if (Config.SERVER.overwriteOriginalVillagers.get()
             && (entity.getClass().equals(Villager.class) ||
-                Config.getInstance().moddedVillagerWhitelist.contains(BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString()) && entity instanceof Villager)
+                Config.SERVER.moddedVillagerWhitelist.get().contains(BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString()) && entity instanceof Villager)
             && shouldGetConverted(entity)
             && !villagerSpawnQueue.contains(entity)) {
             return villagerSpawnQueue.add((Villager) entity);
         }
-        if (Config.getInstance().overwriteOriginalZombieVillagers
+        if (Config.SERVER.overwriteOriginalZombieVillagers.get()
             && (entity.getClass().equals(ZombieVillager.class) ||
-                Config.getInstance().moddedZombieVillagerWhitelist.contains(BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString()) && entity instanceof ZombieVillager)
-            && Config.getInstance().fractionOfVanillaZombies < entity.getRandom().nextFloat()
+                Config.SERVER.moddedZombieVillagerWhitelist.get().contains(BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString()) && entity instanceof ZombieVillager)
+            && Config.SERVER.fractionOfVanillaZombies.get().floatValue() < entity.getRandom().nextFloat()
             && !zombieVillagerSpawnQueue.contains(entity)) {
             return zombieVillagerSpawnQueue.add((ZombieVillager) entity);
         }
-        if (Config.getInstance().overwriteAllZombiesWithZombieVillagers
+        if (Config.SERVER.overwriteAllZombiesWithZombieVillagers.get()
             && entity.getClass().equals(Zombie.class)
             && !zombieSpawnList.contains(entity)) {
             return zombieSpawnList.add((Zombie) entity);
@@ -142,7 +142,7 @@ public class SpawnQueue {
     }
 
     private boolean handlesSpawnReason(MobSpawnType reason) {
-        return Config.getInstance().allowedSpawnReasons.contains(reason.name().toLowerCase(Locale.ROOT));
+        return Config.SERVER.allowedSpawnReasons.get().contains(reason.name().toLowerCase(Locale.ROOT));
     }
 
     public void convert(Villager villager) {

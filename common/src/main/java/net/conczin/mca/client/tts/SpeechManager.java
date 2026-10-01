@@ -34,8 +34,8 @@ public class SpeechManager {
     private final Minecraft client;
     private final LimitedLinkedHashMap<UUID, EntityBoundSoundInstance> currentlyPlaying = new LimitedLinkedHashMap<>(10);
 
-    private final RealtimeSpeechManager realtimeSpeechManager = new RealtimeSpeechManager(Config.getInstance().onlineTTSServer);
-    private final Player2SpeechManager player2SpeechManager = new Player2SpeechManager(Config.getInstance().player2Url);
+    private final RealtimeSpeechManager realtimeSpeechManager = new RealtimeSpeechManager(Config.CLIENT.onlineTTSServer.get());
+    private final Player2SpeechManager player2SpeechManager = new Player2SpeechManager(Config.CLIENT.player2Url.get());
     private final ElevenlabsSpeechManager elevenlabsSpeechManager = new ElevenlabsSpeechManager();
     private final OnlineSpeechManager onlineSpeechManager = new OnlineSpeechManager();
 
@@ -61,7 +61,7 @@ public class SpeechManager {
     public void playPreview(VillagerEntityMCA villager) {
         stopPreview(villager);
         String phrase = VoicePreviewSamples.random(ThreadLocalRandom.current());
-        if (Config.getInstance().enableOnlineTTS) {
+        if (Config.CLIENT.enableOnlineTTS.get()) {
             speak(phrase, villager.getUUID(), villager, true);
         } else {
             tryPlayVoicePackSound(phrase, villager.getUUID(), villager);
@@ -69,7 +69,7 @@ public class SpeechManager {
     }
 
     public boolean canPreviewVoiceTone() {
-        return Config.getInstance().enableOnlineTTS || hasVoicePackSounds();
+        return Config.CLIENT.enableOnlineTTS.get() || hasVoicePackSounds();
     }
 
     public void stopPreview(VillagerEntityMCA villager) {
@@ -123,7 +123,7 @@ public class SpeechManager {
         float gene = villager.getGenetics().getGene(Genetics.VOICE_TONE);
 
         String gender = villager.getGenetics().getGender().binary().getDataName();
-        if (Config.getInstance().enableOnlineTTS) {
+        if (Config.CLIENT.enableOnlineTTS.get()) {
             if (translatable) {
                 if (Language.getInstance().has(phrase)) {
                     phrase = Language.getInstance().getOrDefault(phrase);
@@ -134,7 +134,7 @@ public class SpeechManager {
             }
 
             String gameLang = client.options.languageCode;
-            switch (Config.getInstance().onlineTTSModel) {
+            switch (Config.CLIENT.onlineTTSModel.get()) {
                 case "realtime" ->
                         realtimeSpeechManager.play(phrase, gender, gameLang, pitch, gene, villager, translatable);
                 case "player2" -> player2SpeechManager.play(phrase, gender, gameLang, pitch, gene);
@@ -177,7 +177,7 @@ public class SpeechManager {
         if (client.level != null) {
             long time = client.level.getGameTime();
             if (Math.abs(time - lastHealthCheckTime) > 1200) {
-                boolean enabled = Config.getInstance().villagerChatAIModel.equals("player2");
+                boolean enabled = Config.SERVER.villagerChatAIModel.get().equals("player2");
                 if (firstRun || enabled) {
                     CompletableFuture.runAsync(() -> {
                         if (player2SpeechManager.checkHealth() && firstRun && !enabled) {
@@ -190,4 +190,5 @@ public class SpeechManager {
             }
         }
     }
+
 }

@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
+import net.conczin.mca.CommonConfig;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
@@ -206,8 +207,9 @@ public class OpenAIChatAI extends AbstractChatAIStrategy {
     }
 
     private PreparedRequest prepareRequest(ServerPlayer player, VillagerEntityMCA villager, String msg) {
-        Config config = Config.getInstance();
-        boolean isInHouse = config.villagerChatAIEndpoint.contains("conczin.net");
+        CommonConfig config = Config.COMMON;
+        String endpoint = config.villagerChatAIEndpoint.get();
+        boolean isInHouse = endpoint.contains("conczin.net");
 
         String playerName = Messenger.getName(player);
         String villagerName = villager.getName().getString();
@@ -239,20 +241,21 @@ public class OpenAIChatAI extends AbstractChatAIStrategy {
         );
 
         StringBuilder sb = new StringBuilder();
-        if (isInHouse || config.villagerChatAIIncludeSessionInformation) {
+        if (isInHouse || config.villagerChatAIIncludeSessionInformation.get()) {
             sb.append("[world_id:").append(player.serverLevel().getSeed()).append("]");
             sb.append("[player_id:").append(player.getUUID()).append("]");
             sb.append("[character_id:").append(villager.getUUID()).append("]");
-            if (config.villagerChatAIUseLongTermMemory) {
+            if (config.villagerChatAIUseLongTermMemory.get()) {
                 sb.append("[use_memory:true]");
             }
-            if (config.villagerChatAIUseSharedLongTermMemory) {
+            if (config.villagerChatAIUseSharedLongTermMemory.get()) {
                 sb.append("[shared_memory:true]");
             }
         }
 
-        if (!config.villagerChatAISystemPrompt.isEmpty()) {
-            sb.append(config.villagerChatAISystemPrompt).append("\n");
+        String systemPrompt = config.villagerChatAISystemPrompt.get();
+        if (!systemPrompt.isEmpty()) {
+            sb.append(systemPrompt).append("\n");
         } else if (!isInHouse) {
             sb.append("You are a Minecraft villager, fully immersed in their virtual world, unaware of its artificial nature. You respond based on your description, your role, and your knowledge of the world. You have no knowledge of the real world, and do not realize that you are within Minecraft. You are no assistant! You can be sarcastic, funny, or even rude when appropriate.\n");
         }
@@ -278,7 +281,7 @@ public class OpenAIChatAI extends AbstractChatAIStrategy {
         }
 
         List<TriggerCommandInfo> validCommands;
-        if (config.villagerChatAIUseTools) {
+        if (Config.SERVER.villagerChatAIUseTools.get()) {
             validCommands = TriggerCommandInfos.triggerCommands.stream()
                     .filter(command -> command.isActive == null || command.isActive.test(player, villager))
                     .toList();
@@ -300,9 +303,10 @@ public class OpenAIChatAI extends AbstractChatAIStrategy {
         String system = sb.toString();
         StringBuilder body = new StringBuilder();
         body.append("{");
-        body.append("\"model\": \"").append(config.villagerChatAIModel).append("\",");
+        body.append("\"model\": \"").append(Config.SERVER.villagerChatAIModel.get()).append("\",");
         body.append("\"messages\": [");
-        if (!config.villagerChatAIFuseSystemPrompt) {
+        boolean fuseSystemPrompt = config.villagerChatAIFuseSystemPrompt.get();
+        if (!fuseSystemPrompt) {
             body.append("{\"role\": \"system\", \"content\": ").append(jsonStringQuote(system)).append("},");
         }
         for (DialogueEntry entry : pastDialogue) {
@@ -310,18 +314,18 @@ public class OpenAIChatAI extends AbstractChatAIStrategy {
                     .append("\", \"name\": \"").append(entry.speakerName())
                     .append("\", \"content\": ").append(jsonStringQuote(entry.content())).append("},");
         }
-        String userContent = config.villagerChatAIFuseSystemPrompt ? system + "\n\n" + msg : msg;
+        String userContent = fuseSystemPrompt ? system + "\n\n" + msg : msg;
         body.append("{\"role\": \"user\", \"name\": \"").append(playerName)
                 .append("\", \"content\": ").append(jsonStringQuote(userContent)).append("}");
         body.append("]");
         body.append("}");
 
-        String token = config.villagerChatAIToken;
-        if (token.isEmpty() || config.villagerChatAIEndpoint.contains("conczin.net")) {
+        String token = config.villagerChatAIToken.get();
+        if (token.isEmpty() || endpoint.contains("conczin.net")) {
             token = player.getName().getString();
         }
 
-        return new PreparedRequest(config.villagerChatAIEndpoint, body.toString(), token);
+        return new PreparedRequest(endpoint, body.toString(), token);
     }
 
     private Optional<String> applyAnswer(ServerPlayer player, VillagerEntityMCA villager, String msg, Answer message) {

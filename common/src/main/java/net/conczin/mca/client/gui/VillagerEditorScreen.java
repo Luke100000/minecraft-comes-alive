@@ -409,7 +409,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 y += 4;
 
                 //genes
-                if (!Config.getServerConfig().allowPlayerSizeAdjustment && villagerUUID.equals(playerUUID)) {
+                if (!Config.SERVER.allowPlayerSizeAdjustment.get() && villagerUUID.equals(playerUUID)) {
                     genetics.setGene(Genetics.SIZE, 0.80f);
                     genetics.setGene(Genetics.WIDTH, 0.80f);
                 } else {
@@ -1166,12 +1166,12 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
         String profession = villagerUUID.equals(playerUUID)
                 ? BuiltInRegistries.VILLAGER_PROFESSION.getKey(VillagerProfession.NONE).toString()
                 : BuiltInRegistries.VILLAGER_PROFESSION.getKey(villager.getVillagerData().getProfession()).toString();
-        String mappedProfession = SkinSelection.mapProfession(profession, Config.getInstance().professionConversionsMap);
+        String mappedProfession = SkinSelection.mapProfession(profession, Config.SERVER.professionConversionsMap());
         List<Clothing> options = SkinSelection.clothingForProfession(ClientSkinCatalog.clothing().values(), gender, mappedProfession);
         if (!options.isEmpty()) {
             return options;
         }
-        String fallbackProfession = SkinSelection.mapProfession("minecraft:none", Config.getInstance().professionConversionsMap);
+        String fallbackProfession = SkinSelection.mapProfession("minecraft:none", Config.SERVER.professionConversionsMap());
         return SkinSelection.clothingForProfession(ClientSkinCatalog.clothing().values(), gender, fallbackProfession);
     }
 
@@ -1409,7 +1409,7 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private Traits.Trait[] getValidTraits() {
         return Traits.all().stream().filter(e -> {
             if (villagerUUID.equals(playerUUID)) {
-                return (Config.getInstance().bypassTraitRestrictions || e.isUsableOnPlayer()) && e.isEnabled();
+                return (Config.SERVER.bypassTraitRestrictions.get() || e.isUsableOnPlayer()) && e.isEnabled();
             }
             return e.isEnabled();
         }).toList().toArray(Traits.Trait[]::new);
