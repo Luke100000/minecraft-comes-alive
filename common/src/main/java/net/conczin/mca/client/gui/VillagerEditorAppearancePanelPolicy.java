@@ -1,7 +1,14 @@
 package net.conczin.mca.client.gui;
 
 final class VillagerEditorAppearancePanelPolicy {
+    private static final int MIN_PANEL_WIDTH = 175;
+    private static final int MAX_PANEL_WIDTH = 240;
+
     private VillagerEditorAppearancePanelPolicy() {
+    }
+
+    static int panelWidth(int screenWidth) {
+        return Math.max(MIN_PANEL_WIDTH, Math.min(MAX_PANEL_WIDTH, screenWidth / 4));
     }
 
     static PanelLayout layout(int width) {

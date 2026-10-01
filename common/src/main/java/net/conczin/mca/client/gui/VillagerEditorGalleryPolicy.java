@@ -16,27 +16,24 @@ final class VillagerEditorGalleryPolicy {
     }
 
     static boolean showPreviewControls(String page) {
-        return !usesUnifiedGallery(page);
+        return true;
     }
 
     static GalleryLayout layout(int width, int height) {
-        int centerY = height / 2;
-        int searchY = centerY - 116;
-        int filterY = centerY - 93;
-        boolean compact = width < 560 || height < 300;
-        int columns = compact ? 4 : 6;
+        int searchY = Math.max(8, (height - 450) / 2 + 8);
+        int filterY = searchY + 26;
+        int previewControlsY = height - 58;
+        int footerY = height - 34;
+        int columns = width >= 344 ? 6 : 4;
         int itemsPerPage = columns * 2;
-        int spacing = compact
-                ? Math.min(88, Math.max(48, (width - 24) / columns))
-                : Math.min(72, Math.max(54, (width - 32) / columns));
-        int widthLimitedRadius = Math.max(22, (spacing - 8) / 2);
-        int heightLimitedRadius = Math.max(22, (height - filterY - 66) / 4);
-        int cardRadius = Math.min(compact ? 36 : 32, Math.min(widthLimitedRadius, heightLimitedRadius));
-
-        int row0CenterY = filterY + 20 + 8 + cardRadius;
-        int row1CenterY = row0CenterY + cardRadius * 2 + 8;
-        int footerY = row1CenterY + cardRadius + (compact ? 10 : 34);
-        int previewSize = Math.max(30, cardRadius + 4);
+        int spacing = Math.min(104, (width - 24) / columns);
+        int cardRadius = Math.max(1, (spacing - 8) / 2);
+        int galleryTop = filterY + 28;
+        int rowGap = 8;
+        int heightLimitedRadius = Math.max(1, (previewControlsY - 8 - galleryTop - rowGap) / 4);
+        int cardHalfHeight = Math.min(cardRadius * 3 / 2, heightLimitedRadius);
+        int row0CenterY = galleryTop + cardHalfHeight;
+        int row1CenterY = row0CenterY + cardHalfHeight * 2 + rowGap;
 
         return new GalleryLayout(
                 searchY,
@@ -44,13 +41,21 @@ final class VillagerEditorGalleryPolicy {
                 row0CenterY,
                 row1CenterY,
                 footerY,
+                previewControlsY,
                 columns,
                 itemsPerPage,
                 spacing,
                 cardRadius,
-                previewSize,
-                previewSize
+                cardHalfHeight
         );
+    }
+
+    static float fitPreviewScale(int cardWidth, int cardHeight, float modelHeight, float modelWidth, float zoom) {
+        // Scale is pixels per world unit, not the model's final height in pixels.
+        // Reserve space for the border and clamp zoom to the card's projected bounds.
+        float fit = Math.min(Math.max(1, cardWidth - 12) / Math.max(0.01F, modelWidth),
+                Math.max(1, cardHeight - 12) / Math.max(0.01F, modelHeight));
+        return fit * Math.min(1.0F, 0.9F * zoom);
     }
 
     static <T> List<FilterOption<T>> filterOptions(List<T> filters, Predicate<T> hasItems, T allFilter) {
@@ -68,12 +73,12 @@ final class VillagerEditorGalleryPolicy {
             int row0CenterY,
             int row1CenterY,
             int footerY,
+            int previewControlsY,
             int columns,
             int itemsPerPage,
             int spacing,
             int cardRadius,
-            int previewSize,
-            int hoveredPreviewSize
+            int cardHalfHeight
     ) {
     }
 }

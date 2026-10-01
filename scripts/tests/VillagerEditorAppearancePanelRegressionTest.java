@@ -5,17 +5,22 @@ public final class VillagerEditorAppearancePanelRegressionTest {
     }
 
     public static void main(String[] args) {
-        VillagerEditorAppearancePanelPolicy.PanelLayout layout = VillagerEditorAppearancePanelPolicy.layout(175);
+        assertEquals(175, VillagerEditorAppearancePanelPolicy.panelWidth(427), "compact editor keeps the base appearance width");
+        assertEquals(213, VillagerEditorAppearancePanelPolicy.panelWidth(853), "appearance controls grow with normal widescreen space");
+        assertEquals(240, VillagerEditorAppearancePanelPolicy.panelWidth(1200), "appearance controls stop growing before becoming oversized");
+
+        int panelWidth = VillagerEditorAppearancePanelPolicy.panelWidth(853);
+        VillagerEditorAppearancePanelPolicy.PanelLayout layout = VillagerEditorAppearancePanelPolicy.layout(panelWidth);
 
         int tabsWidth = layout.tabWidth() * 3 + layout.lastTabWidth() + layout.tabGap() * 3;
-        assertEquals(175, tabsWidth, "appearance tabs stay inside the editor column");
+        assertEquals(panelWidth, tabsWidth, "appearance tabs stay inside the editor column");
         assertTrue(layout.tabGap() >= 2, "appearance tabs are visually separated");
 
         int actionsWidth = layout.leftActionWidth() + layout.actionGap() + layout.rightActionWidth();
-        assertEquals(175, actionsWidth, "paired appearance actions stay inside the editor column");
+        assertEquals(panelWidth, actionsWidth, "paired appearance actions stay inside the editor column");
         assertTrue(layout.actionGap() >= 4, "paired actions read as separate controls");
 
-        int cycleCenterWidth = 175 - layout.cycleArrowWidth() * 2;
+        int cycleCenterWidth = panelWidth - layout.cycleArrowWidth() * 2;
         assertTrue(cycleCenterWidth >= 120, "current selection keeps enough room for its label");
         assertTrue(layout.groupGap() > layout.rowGap(), "customization is separated from selection controls");
     }
