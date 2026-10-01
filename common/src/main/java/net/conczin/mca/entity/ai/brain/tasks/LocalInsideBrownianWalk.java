@@ -32,9 +32,7 @@ public final class LocalInsideBrownianWalk {
             public boolean tryStart(ServerLevel level, PathfinderMob mob, long gameTime) {
                 BlockPos origin = mob.blockPosition();
                 if (!retryGate.canReserve(origin, origin, gameTime)) {
-                    PathRequestDiagnostics.recordDeferredProducerRetry(mob,
-                            "LocalInsideBrownianWalk", "none", retryGate.previousOrigin(), "local-step",
-                            gameTime - retryGate.previousAttemptTime());
+                    PathRequestDiagnostics.recordDeferredProducerRetry(mob);
                     return false;
                 }
                 if (!vanilla.tryStart(level, mob, gameTime)) {

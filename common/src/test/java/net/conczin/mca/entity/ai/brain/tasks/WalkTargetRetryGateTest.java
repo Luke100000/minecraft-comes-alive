@@ -55,6 +55,25 @@ class WalkTargetRetryGateTest {
     }
 
     @Test
+    void routeChangeAllowsOneImmediateRetryForTheSameDestination() {
+        WalkTargetRetryGate gate = new WalkTargetRetryGate(100, 16);
+
+        assertTrue(gate.tryReserve(DESTINATION, START, 100));
+        assertFalse(gate.tryReserve(DESTINATION, START, 120));
+
+        gate.resetForRouteChange(DESTINATION.east());
+        assertFalse(gate.tryReserve(DESTINATION, START, 121));
+
+        gate.resetForRouteChange(DESTINATION);
+        assertTrue(gate.tryReserve(DESTINATION, START, 122));
+        assertFalse(gate.tryReserve(DESTINATION, START, 123));
+
+        gate.resetForRouteChange(DESTINATION);
+        assertTrue(gate.tryReserve(DESTINATION, START, 124));
+        assertFalse(gate.tryReserve(DESTINATION, START, 125));
+    }
+
+    @Test
     void meaningfulMovementOrChangedDestinationAllowsImmediateRetry() {
         WalkTargetRetryGate gate = new WalkTargetRetryGate(100, 16);
 

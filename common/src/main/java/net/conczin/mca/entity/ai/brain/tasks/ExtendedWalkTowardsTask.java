@@ -134,11 +134,12 @@ public final class ExtendedWalkTowardsTask {
                                 return true;
                             }
 
-                            long routeInvalidationRevision = entity.getNavigation() instanceof MCAGroundPathNavigation navigation
-                                    ? navigation.retryInvalidationRevision(targetPos)
-                                    : 0L;
-                            boolean routeInvalidated = retryGate.hasNewRouteInvalidation(
-                                    targetPos, routeInvalidationRevision);
+                            boolean routeInvalidated = sameDimension
+                                    && entity.getNavigation() instanceof MCAGroundPathNavigation navigation
+                                    && navigation.consumeRetryInvalidation(targetPos);
+                            if (routeInvalidated) {
+                                retryGate.resetForRouteChange(targetPos);
+                            }
                             Optional<Long> optional = context.tryGet(cantReachWalkTargetSince);
                             long unreachableTicks = optional
                                     .map(since -> world.getGameTime() - since)
@@ -173,9 +174,7 @@ public final class ExtendedWalkTowardsTask {
                                     }
                                 }
                                 if (proposedTarget != null) {
-                                    if (retryGate.tryReserve(targetPos, entity.blockPosition(), time,
-                                            routeInvalidationRevision)) {
-                                        PathRequestDiagnostics.tagDestinationMemory(proposedTarget, destination);
+                                    if (retryGate.tryReserve(targetPos, entity.blockPosition(), time)) {
                                         walkTarget.set(proposedTarget);
                                     } else {
                                         // A partial path can clear vanilla's failure timestamp even
@@ -184,10 +183,7 @@ public final class ExtendedWalkTowardsTask {
                                         if (optional.isEmpty()) {
                                             WalkTargetFailureMemory.record(entity, failureTarget, retryGate.stalledSince());
                                         }
-                                        PathRequestDiagnostics.recordDeferredProducerRetry(entity,
-                                                "ExtendedWalkTowardsTask", destination.toString(),
-                                                retryGate.previousOrigin(), targetPos.toShortString(),
-                                                time - retryGate.previousAttemptTime());
+                                        PathRequestDiagnostics.recordDeferredProducerRetry(entity);
                                     }
                                 }
                             } else {

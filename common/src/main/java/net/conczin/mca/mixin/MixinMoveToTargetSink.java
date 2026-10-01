@@ -81,7 +81,7 @@ abstract class MixinMoveToTargetSink {
             WalkTarget walkTarget,
             long gameTime
     ) {
-        PathRequestDiagnostics.beginSinkRequest(mob, walkTarget);
+        PathRequestDiagnostics.beginSinkRequest(mob);
         try {
             if (!(walkTarget.getTarget() instanceof MultiTargetPositionTracker multiTarget)) {
                 return original.call(navigation, target, reachRange);

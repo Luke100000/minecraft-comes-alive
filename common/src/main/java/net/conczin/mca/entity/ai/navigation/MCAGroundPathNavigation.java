@@ -20,7 +20,6 @@ import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathFinder;
 import net.minecraft.world.level.pathfinder.PathType;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Set;
@@ -38,7 +37,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     private BlockPos failedExtendedTarget;
     private BlockPos failedExtendedOrigin;
     private long failedExtendedAt;
-    private long retryInvalidationRevision;
+    private boolean retryInvalidated;
 
     public MCAGroundPathNavigation(Mob mob, Level level) {
         super(mob, level);
@@ -67,7 +66,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
     @Override
     public Path createPath(BlockPos target, int reachRange) {
-        PathRequestDiagnostics.recordNavigationRequest(this.mob, target);
+        PathRequestDiagnostics.recordNavigationRequest(this.mob);
         WalkTarget walkTarget = this.mob.getBrain()
                 .getMemoryInternal(MemoryModuleType.WALK_TARGET)
                 .orElse(null);
@@ -101,8 +100,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 Path result = super.findPath(region, mob, targets, maxPathLength, reachRange,
                         visitedNodesMultiplier * rangeMultiplier);
                 PathRequestDiagnostics.recordSearch(mob, System.nanoTime() - startedNanos,
-                        maxPathLength > getOrdinaryPathLength(mob), result,
-                        evaluator.expandedNodes());
+                        maxPathLength > getOrdinaryPathLength(mob), evaluator.expandedNodes());
                 return result;
             }
         };
@@ -174,7 +172,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 && (ordinaryPath == null
                 || extendedPath.getDistToTarget() >= ordinaryPath.getDistToTarget()))) {
             if (failedExtendedTarget == null || !failedExtendedTarget.equals(target)) {
-                retryInvalidationRevision = 0L;
+                retryInvalidated = false;
             }
             failedExtendedTarget = target.immutable();
             failedExtendedOrigin = this.mob.blockPosition();
@@ -204,6 +202,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     private void clearFailedExtendedSearch() {
         failedExtendedTarget = null;
         failedExtendedOrigin = null;
+        retryInvalidated = false;
     }
 
     private boolean isExactStaticAirWalkTarget(BlockPos target, WalkTarget walkTarget) {
@@ -300,7 +299,6 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
     @Override
     public void recomputePath() {
-        PathRequestDiagnostics.recordRecomputeCall(this.mob, this.hasDelayedRecomputation, this.path);
         if (!canUpdatePath()) {
             this.hasDelayedRecomputation = true;
             return;
@@ -316,37 +314,42 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         }
 
         Path activePath = this.path;
+        boolean shouldRecompute;
         if (activePath == null || !activePath.canReach()) {
             // A change outside a partial path can make its destination reachable.
-            return true;
-        }
-
-        // MCA's evaluator accepts a closed, hand-operated fence gate as a door,
-        // and accepts that same gate when open. Toggling it cannot invalidate a
-        // route that already reaches its destination; the door behavior opens
-        // it when needed. Leave partial paths to vanilla in case a new route
-        // becomes available, and retain vanilla behavior if gate use is disabled.
-        if (PathingBlockInteraction.canInteractWithFenceGate(this.level.getBlockState(changed))) {
-            return false;
-        }
-
-        // Vanilla's remaining-node-count radius can include blocks many blocks
-        // away from an otherwise reachable route. Only invalidate such routes
-        // for changes near their remaining nodes, including adjacent obstacles,
-        // head clearance and supporting blocks below the villager's feet.
-        int horizontalClearance = Mth.ceil(this.mob.getBbWidth() * 0.5F) + 1;
-        int aboveClearance = Mth.ceil(this.mob.getBbHeight()) + 1;
-        int belowClearance = 2;
-        for (int i = activePath.getNextNodeIndex(); i < activePath.getNodeCount(); i++) {
-            Node node = activePath.getNode(i);
-            if (Math.abs(changed.getX() - node.x) <= horizontalClearance
-                    && Math.abs(changed.getZ() - node.z) <= horizontalClearance
-                    && changed.getY() >= node.y - belowClearance
-                    && changed.getY() <= node.y + aboveClearance) {
-                return true;
+            shouldRecompute = true;
+        } else if (PathingBlockInteraction.canInteractWithFenceGate(this.level.getBlockState(changed))) {
+            // MCA's evaluator accepts a closed, hand-operated fence gate as a door,
+            // so toggling one cannot invalidate an already-reachable route.
+            shouldRecompute = false;
+        } else {
+            // Vanilla's remaining-node-count radius can include blocks many blocks
+            // away from an otherwise reachable route. Only invalidate such routes
+            // for changes near their remaining nodes, including adjacent obstacles,
+            // head clearance and supporting blocks below the villager's feet.
+            int horizontalClearance = Mth.ceil(this.mob.getBbWidth() * 0.5F) + 1;
+            int aboveClearance = Mth.ceil(this.mob.getBbHeight()) + 1;
+            int belowClearance = 2;
+            shouldRecompute = false;
+            for (int i = activePath.getNextNodeIndex(); i < activePath.getNodeCount(); i++) {
+                Node node = activePath.getNode(i);
+                if (Math.abs(changed.getX() - node.x) <= horizontalClearance
+                        && Math.abs(changed.getZ() - node.z) <= horizontalClearance
+                        && changed.getY() >= node.y - belowClearance
+                        && changed.getY() <= node.y + aboveClearance) {
+                    shouldRecompute = true;
+                    break;
+                }
+            }
+            if (!shouldRecompute) {
+                shouldRecompute = changed.closerToCenterThan(this.mob.position(), horizontalClearance + 1.0D);
             }
         }
-        return changed.closerToCenterThan(this.mob.position(), horizontalClearance + 1.0D);
+
+        if (shouldRecompute) {
+            PathRequestDiagnostics.recordBlockRecompute(this.mob, changed, activePath);
+        }
+        return shouldRecompute;
     }
 
     private void recordRetryInvalidation(BlockPos changed) {
@@ -354,19 +357,16 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             return;
         }
         if (changed.distSqr(failedExtendedTarget) <= FAILED_TARGET_INVALIDATION_RADIUS_SQR) {
-            retryInvalidationRevision++;
+            retryInvalidated = true;
         }
     }
 
-    public long retryInvalidationRevision(BlockPos target) {
-        return failedExtendedTarget != null && failedExtendedTarget.equals(target)
-                ? retryInvalidationRevision
-                : 0L;
-    }
-
-    /** Observe vanilla's block-update invalidation before it clears the current path. */
-    public void traceRecomputeFromBlockUpdate(BlockPos changed, BlockState before, BlockState after) {
-        PathRequestDiagnostics.recordBlockRecompute(this.mob, changed, before, after, this.path);
+    public boolean consumeRetryInvalidation(BlockPos target) {
+        if (!retryInvalidated || failedExtendedTarget == null || !failedExtendedTarget.equals(target)) {
+            return false;
+        }
+        retryInvalidated = false;
+        return true;
     }
 
     @Override
@@ -425,10 +425,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 && !WalkTargetFailureMemory.hasFailureFor(villager, destination)) {
             WalkTargetFailureMemory.record(villager, destination, this.level.getGameTime());
         }
-        if (PathRequestDiagnostics.enabled()) {
-            PathRequestDiagnostics.recordDeferredProducerRetry(this.mob, "PartialPathChain", "none",
-                    previousOrigin, destination.toShortString(), 0L);
-        }
+        PathRequestDiagnostics.recordDeferredProducerRetry(this.mob);
     }
 
     @Override

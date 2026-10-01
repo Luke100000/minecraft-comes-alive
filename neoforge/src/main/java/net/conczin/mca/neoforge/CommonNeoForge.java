@@ -7,7 +7,6 @@ import net.conczin.mca.block.BlockEntityTypesMCA;
 import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.SensorsMCA;
-import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
 import net.conczin.mca.entity.interaction.gifts.GiftLoader;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.MessagesMCA;
@@ -146,13 +145,11 @@ public final class CommonNeoForge {
     public static void onServerTick(ServerTickEvent.Post event) {
         ServerInteractionManager.getInstance().tick();
         MCA.setServer(event.getServer());
-        PathRequestDiagnostics.onServerEndTick(event.getServer().overworld().getGameTime());
     }
 
     @SubscribeEvent
     public static void onServerStarting(ServerStartingEvent event) {
         MCA.startExecutorService();
-        PathRequestDiagnostics.onServerStarting();
     }
 
     @SubscribeEvent
@@ -171,7 +168,6 @@ public final class CommonNeoForge {
     public static void onServerStopping(ServerStoppingEvent event) {
         DestinyLocationResolver.clearCachedDestinations(event.getServer());
         MCA.shutdownExecutorService();
-        PathRequestDiagnostics.onServerStopping(event.getServer().overworld().getGameTime());
     }
 
     @SubscribeEvent

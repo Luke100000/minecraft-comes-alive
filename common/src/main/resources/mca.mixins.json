@@ -8,7 +8,6 @@
     "MixinAbstractArrow",
     "MixinAbstractFurnaceBlockEntity",
     "MixinAdvancementRewards",
-    "MixinBrain",
     "MixinCrossbowAttack",
     "MixinEntityType",
     "MixinFishingHookPredicate",
