@@ -2,8 +2,10 @@ package net.conczin.mca.client.gui;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
+import net.conczin.mca.network.FamilyTreeSearchEntry;
 import net.conczin.mca.network.FamilyTreeView;
 import net.conczin.mca.network.Network;
+import net.conczin.mca.network.c2s.FamilyTreeUUIDLookup;
 import net.conczin.mca.network.c2s.GetFamilyTreeRequest;
 import net.conczin.mca.network.s2c.GetFamilyTreeResponse;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
@@ -18,7 +20,6 @@ import net.minecraft.sounds.SoundEvents;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -26,6 +27,10 @@ public class FamilyTreeScreen extends Screen {
     private static final int HEADER_HEIGHT = 30;
     private static final int FOOTER_HEIGHT = 30;
     private static final int FIT_PADDING = 24;
+    private static final int SEARCH_X = 54;
+    private static final int SEARCH_WIDTH = 180;
+    private static final int SEARCH_ROW_HEIGHT = 22;
+    private static final int SEARCH_RESULT_LIMIT = 6;
     private static final float MIN_ZOOM = 0.25F;
     private static final float MAX_ZOOM = 2.0F;
 
@@ -46,6 +51,9 @@ public class FamilyTreeScreen extends Screen {
     private ButtonWidget zoomLabel;
     @Nullable
     private EditBox searchField;
+    private List<FamilyTreeSearchEntry> searchResults = List.of();
+    private boolean searchOpen;
+    private boolean searchPending;
 
     public FamilyTreeScreen(UUID entityId) {
         super(Component.translatable("gui.family_tree.title"));
@@ -61,17 +69,18 @@ public class FamilyTreeScreen extends Screen {
     @Override
     protected void init() {
         int y = 5;
-        addRenderableWidget(new ButtonWidget(5, y, 44, 20, Component.translatable("gui.back"), button -> goBack()));
+        addRenderableWidget(new ButtonWidget(5, y, 44, 20, Component.translatable("gui.family_tree.back"), button -> goBack()));
 
         searchField = addRenderableWidget(new EditBox(
                 font,
-                Math.max(54, width / 2 - 90),
+                SEARCH_X,
                 y + 1,
-                120,
+                140,
                 18,
                 Component.translatable("gui.family_tree.search")
         ));
         searchField.setMaxLength(32);
+        searchField.setResponder(this::searchFamily);
 
         int controlsX = Math.max(width - 278, width / 2 + 36);
         addRenderableWidget(new ButtonWidget(controlsX, y, 20, 20, Component.literal("-"), button -> setZoom(viewport.zoom() - 0.1F)));
@@ -108,6 +117,12 @@ public class FamilyTreeScreen extends Screen {
         }
     }
 
+    public void setSearchResults(List<FamilyTreeSearchEntry> results) {
+        searchPending = false;
+        searchResults = List.copyOf(results);
+        searchOpen = searchField != null && integratedSearchQuery(searchField.getValue()).isPresent();
+    }
+
     private void rebuildLayout() {
         layout = FamilyTreeLayout.layout(viewModel.focusId(), viewModel.snapshot());
     }
@@ -117,6 +132,10 @@ public class FamilyTreeScreen extends Screen {
         if (recenter) {
             viewport = new FamilyTreeViewModel.ViewportState(0, 0, viewport.zoom());
         }
+        sendFocusRequest(id, requestId);
+    }
+
+    private void sendFocusRequest(UUID id, long requestId) {
         Network.sendToServer(new GetFamilyTreeRequest(
                 id,
                 GetFamilyTreeRequest.DEFAULT_ANCESTOR_DEPTH,
@@ -142,6 +161,32 @@ public class FamilyTreeScreen extends Screen {
         });
     }
 
+    private void searchFamily(String value) {
+        Optional<String> query = integratedSearchQuery(value);
+        if (query.isEmpty()) {
+            searchOpen = false;
+            searchPending = false;
+            searchResults = List.of();
+            return;
+        }
+        searchOpen = true;
+        searchPending = true;
+        searchResults = List.of();
+        Network.sendToServer(new FamilyTreeUUIDLookup(query.orElseThrow()));
+    }
+
+    private void selectSearchResult(FamilyTreeSearchEntry entry) {
+        long requestId = beginSearchSelection(viewModel, entry, viewport);
+        viewport = new FamilyTreeViewModel.ViewportState(0, 0, viewport.zoom());
+        searchOpen = false;
+        searchPending = false;
+        searchResults = List.of();
+        if (searchField != null) {
+            searchField.setValue("");
+        }
+        sendFocusRequest(entry.uuid(), requestId);
+    }
+
     private void setZoom(float targetZoom) {
         viewport = zoomAround(viewport, width / 2.0, height / 2.0, width / 2.0, height / 2.0, targetZoom);
         updateZoomLabel();
@@ -162,6 +207,13 @@ public class FamilyTreeScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button == 0) {
+            FamilyTreeSearchEntry searchResult = searchResultAt(mouseX, mouseY);
+            if (searchResult != null) {
+                selectSearchResult(searchResult);
+                return true;
+            }
+        }
         if (button == 0 && insideCanvas(mouseX, mouseY)) {
             Optional<HitTarget> target = hitTargetAt(layout, worldX(mouseX), worldY(mouseY));
             if (target.isPresent()) {
@@ -179,6 +231,19 @@ public class FamilyTreeScreen extends Screen {
             }
         }
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Nullable
+    private FamilyTreeSearchEntry searchResultAt(double mouseX, double mouseY) {
+        if (!searchOpen || searchPending || mouseX < SEARCH_X || mouseX >= SEARCH_X + SEARCH_WIDTH) {
+            return null;
+        }
+        int top = HEADER_HEIGHT + 2;
+        int index = (int) ((mouseY - top) / SEARCH_ROW_HEIGHT);
+        if (mouseY < top || index < 0 || index >= Math.min(searchResults.size(), SEARCH_RESULT_LIMIT)) {
+            return null;
+        }
+        return searchResults.get(index);
     }
 
     @Override
@@ -221,6 +286,7 @@ public class FamilyTreeScreen extends Screen {
         context.disableScissor();
 
         renderFixedChrome(context, mouseX, mouseY);
+        renderSearchOverlay(context, mouseX, mouseY);
         super.render(context, mouseX, mouseY, delta);
     }
 
@@ -310,23 +376,96 @@ public class FamilyTreeScreen extends Screen {
                 0xFFFFFFFF
         );
 
+        Optional<Component> status = statusMessage(viewModel, searchOpen && !searchPending, searchResults);
+        if (searchPending) {
+            status = Optional.of(Component.translatable("gui.family_tree.loading_family"));
+        }
+        if (status.isPresent()) {
+            context.drawCenteredString(font, status.orElseThrow(), width / 2, height - 20, 0xFFFFFFFF);
+        }
+
         PersonTarget detailTarget = hovered instanceof PersonTarget person
                 ? person
                 : viewModel.selection().map(PersonTarget::new).orElse(null);
-        if (detailTarget != null) {
+        if (detailTarget != null && status.isEmpty()) {
             FamilyTreeNode node = viewModel.nodes().get(detailTarget.uuid());
             if (node != null) {
                 FamilyTreeRelationshipResolver.Relation relation =
                         FamilyTreeRelationshipResolver.resolve(viewModel.focusId(), detailTarget.uuid(), viewModel.nodes());
                 Component detail = nodeDisplayName(node).copy()
                         .append(" · ")
-                        .append(Component.literal(relation.name().toLowerCase(Locale.ROOT).replace('_', ' ')));
+                        .append(relationLabel(relation));
                 context.drawCenteredString(font, detail, width / 2, height - 20, 0xFFFFFFFF);
                 if (node.isDeceased() && hovered instanceof PersonTarget) {
                     context.renderTooltip(font, Component.translatable("gui.family_tree.label.deceased"), mouseX, mouseY);
                 }
             }
         }
+
+        if (hovered instanceof ContinuationTarget continuation) {
+            Component label = continuation.direction() == FamilyTreeView.Direction.ANCESTORS
+                    ? Component.translatable("gui.family_tree.more_ancestors")
+                    : Component.translatable("gui.family_tree.more_descendants");
+            context.renderTooltip(font, label, mouseX, mouseY);
+        }
+    }
+
+    private void renderSearchOverlay(GuiGraphics context, int mouseX, int mouseY) {
+        if (!searchOpen) {
+            return;
+        }
+
+        int top = HEADER_HEIGHT + 2;
+        if (searchPending) {
+            context.fill(SEARCH_X, top, SEARCH_X + SEARCH_WIDTH, top + SEARCH_ROW_HEIGHT, 0xEE20262C);
+            context.drawString(
+                    font,
+                    Component.translatable("gui.family_tree.loading_family"),
+                    SEARCH_X + 6,
+                    top + 7,
+                    0xFFFFFFFF
+            );
+            return;
+        }
+
+        if (searchResults.isEmpty()) {
+            context.fill(SEARCH_X, top, SEARCH_X + SEARCH_WIDTH, top + SEARCH_ROW_HEIGHT, 0xEE20262C);
+            context.drawString(
+                    font,
+                    Component.translatable("gui.family_tree.no_records"),
+                    SEARCH_X + 6,
+                    top + 7,
+                    0xFFFFFFFF
+            );
+            return;
+        }
+
+        int count = Math.min(searchResults.size(), SEARCH_RESULT_LIMIT);
+        context.fill(SEARCH_X, top, SEARCH_X + SEARCH_WIDTH, top + count * SEARCH_ROW_HEIGHT, 0xEE20262C);
+        for (int index = 0; index < count; index++) {
+            int rowTop = top + index * SEARCH_ROW_HEIGHT;
+            boolean rowHovered = mouseX >= SEARCH_X
+                    && mouseX < SEARCH_X + SEARCH_WIDTH
+                    && mouseY >= rowTop
+                    && mouseY < rowTop + SEARCH_ROW_HEIGHT;
+            if (rowHovered) {
+                context.fill(SEARCH_X, rowTop, SEARCH_X + SEARCH_WIDTH, rowTop + SEARCH_ROW_HEIGHT, 0xFF43586C);
+            }
+            context.drawString(
+                    font,
+                    searchResultLabel(searchResults.get(index)),
+                    SEARCH_X + 6,
+                    rowTop + 7,
+                    0xFFFFFFFF
+            );
+        }
+    }
+
+    private Component searchResultLabel(FamilyTreeSearchEntry entry) {
+        Component name = FamilyTreeSearchPresentation.displayName(entry);
+        return FamilyTreeSearchPresentation.parentLine(entry)
+                .<Component>map(parent -> Component.empty().append(name).append(" · ").append(parent))
+                .orElse(name);
     }
 
     private void drawBorder(GuiGraphics context, FamilyTreeLayout.Bounds bounds, int color) {
@@ -367,10 +506,60 @@ public class FamilyTreeScreen extends Screen {
         }
     }
 
-    private static Component nodeDisplayName(FamilyTreeNode node) {
+    static Component nodeDisplayName(FamilyTreeNode node) {
         return MCA.isBlankString(node.getName())
-                ? Component.translatable("gui.family_tree.unnamed_villager")
+                ? Component.translatable(node.isPlayer()
+                        ? "gui.family_tree.unnamed_player"
+                        : "gui.family_tree.unnamed_villager")
                 : Component.literal(node.getName());
+    }
+
+    static long beginSearchSelection(
+            FamilyTreeViewModel model,
+            FamilyTreeSearchEntry entry,
+            FamilyTreeViewModel.ViewportState viewport
+    ) {
+        model.select(entry.uuid());
+        return model.beginFocus(entry.uuid(), viewport);
+    }
+
+    static Optional<String> integratedSearchQuery(String value) {
+        if (MCA.isBlankString(value)) {
+            return Optional.empty();
+        }
+        String query = value.trim();
+        return MCA.isBlankString(query) ? Optional.empty() : Optional.of(query);
+    }
+
+    static Optional<Component> statusMessage(
+            FamilyTreeViewModel model,
+            boolean searchOpen,
+            List<FamilyTreeSearchEntry> searchResults
+    ) {
+        if (model.unavailableFocusId().isPresent()) {
+            return Optional.of(Component.translatable("gui.family_tree.family_record_unavailable"));
+        }
+        if (model.loading()) {
+            return Optional.of(Component.translatable("gui.family_tree.loading_family"));
+        }
+        if (searchOpen && searchResults.isEmpty()) {
+            return Optional.of(Component.translatable("gui.family_tree.no_records"));
+        }
+        return Optional.empty();
+    }
+
+    private static Component relationLabel(FamilyTreeRelationshipResolver.Relation relation) {
+        return Component.translatable(switch (relation) {
+            case SELF -> "gui.family_tree.relation.self";
+            case FATHER -> "gui.family_tree.relation.father";
+            case MOTHER -> "gui.family_tree.relation.mother";
+            case CHILD -> "gui.family_tree.relation.child";
+            case SIBLING -> "gui.family_tree.relation.sibling";
+            case GRANDPARENT -> "gui.family_tree.relation.grandparent";
+            case GRANDCHILD -> "gui.family_tree.relation.grandchild";
+            case PARTNER -> "gui.family_tree.relation.partner";
+            case OTHER -> "gui.family_tree.relation.other";
+        });
     }
 
     static FamilyTreeViewModel.ViewportState zoomAround(

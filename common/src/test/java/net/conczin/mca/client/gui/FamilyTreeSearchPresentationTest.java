@@ -5,6 +5,7 @@ import net.minecraft.network.chat.Component;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -72,6 +73,21 @@ class FamilyTreeSearchPresentationTest {
         assertEquals(FamilyTreeSearchPresentation.displayName(first), FamilyTreeSearchPresentation.displayName(second));
         assertNotEquals(entries.get(0).uuid(), entries.get(1).uuid());
         assertEquals(2, entries.stream().map(FamilyTreeSearchEntry::uuid).distinct().count());
+    }
+
+    @Test
+    void unresolvedParentNeverEmitsOrphanTranslation() {
+        FamilyTreeSearchEntry entry = entry(ONE, "Alex", true, "", false, "");
+
+        Optional<Component> parentLine = FamilyTreeSearchPresentation.parentLine(entry);
+
+        assertTrue(parentLine.isEmpty());
+    }
+
+    @Test
+    void emptyStandaloneQueryKeepsPlayerNameSeeding() {
+        assertEquals(Optional.of("Local Player"), FamilyTreeSearchScreen.standaloneSearchQuery(" ", "Local Player"));
+        assertEquals(Optional.of("Alex"), FamilyTreeSearchScreen.standaloneSearchQuery(" Alex ", "Local Player"));
     }
 
     private static FamilyTreeSearchEntry entry(

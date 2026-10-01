@@ -206,7 +206,9 @@ public class ClientHandlerImpl implements ClientHandler {
     @Override
     public void handleFamilyTreeUUIDResponse(FamilyTreeUUIDResponse response) {
         Screen screen = client.screen;
-        if (screen instanceof FamilyTreeSearchScreen gui) {
+        if (screen instanceof FamilyTreeScreen gui) {
+            gui.setSearchResults(response.list());
+        } else if (screen instanceof FamilyTreeSearchScreen gui) {
             gui.setList(response.list());
         }
     }

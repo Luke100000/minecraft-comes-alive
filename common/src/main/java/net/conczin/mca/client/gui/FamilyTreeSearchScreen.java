@@ -15,6 +15,7 @@ import net.minecraft.util.FormattedCharSequence;
 
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public class FamilyTreeSearchScreen extends Screen {
@@ -118,14 +119,17 @@ public class FamilyTreeSearchScreen extends Screen {
     }
 
     private void searchVillager(String value) {
-        String search = value;
-        if (MCA.isBlankString(search) && minecraft.player != null) {
-            search = minecraft.player.getName().getString();
-        }
+        String playerName = minecraft.player == null ? "" : minecraft.player.getName().getString();
+        standaloneSearchQuery(value, playerName)
+                .ifPresent(search -> Network.sendToServer(new FamilyTreeUUIDLookup(search)));
+    }
 
-        if (!MCA.isBlankString(search)) {
-            Network.sendToServer(new FamilyTreeUUIDLookup(search));
+    static Optional<String> standaloneSearchQuery(String value, String playerName) {
+        String search = value == null ? "" : value.trim();
+        if (MCA.isBlankString(search)) {
+            search = playerName == null ? "" : playerName.trim();
         }
+        return MCA.isBlankString(search) ? Optional.empty() : Optional.of(search);
     }
 
     public void setList(List<FamilyTreeSearchEntry> list) {

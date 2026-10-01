@@ -1,11 +1,21 @@
 package net.conczin.mca.client.gui;
 
+import net.conczin.mca.entity.ai.relationship.Gender;
+import net.conczin.mca.network.FamilyTreeSearchEntry;
 import net.conczin.mca.network.FamilyTreeView;
 import net.conczin.mca.network.s2c.GetFamilyTreeResponse;
+import net.conczin.mca.server.world.data.FamilyTreeNode;
+import net.minecraft.SharedConstants;
+import net.minecraft.Util;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.Bootstrap;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static net.conczin.mca.network.FamilyTreeView.Direction.ANCESTORS;
@@ -15,6 +25,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FamilyTreeScreenInteractionTest {
     private static final UUID ROOT = uuid(1);
     private static final UUID OTHER = uuid(2);
+
+    @BeforeAll
+    static void bootstrapMinecraft() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+    }
 
     @Test
     void zoomAroundCursorKeepsWorldPointUnderCursor() {
@@ -122,6 +138,110 @@ class FamilyTreeScreenInteractionTest {
                 Optional.of(new FamilyTreeScreen.ContinuationTarget(ROOT, ANCESTORS)),
                 FamilyTreeScreen.hitTargetAt(result, 0, -70)
         );
+    }
+
+    @Test
+    void selectingIntegratedSearchResultFocusesExactUuidAndPushesHistory() {
+        FamilyTreeViewModel model = loadedModel();
+        FamilyTreeSearchEntry selected = searchEntry(OTHER, "Same Name");
+        FamilyTreeViewModel.ViewportState viewport = new FamilyTreeViewModel.ViewportState(5, 7, 1.25F);
+
+        long requestId = FamilyTreeScreen.beginSearchSelection(model, selected, viewport);
+        model.accept(new GetFamilyTreeResponse(requestId, OTHER, true, view(OTHER)));
+
+        assertEquals(OTHER, model.focusId());
+        FamilyTreeViewModel.HistoryEntry back = model.back().orElseThrow();
+        assertEquals(ROOT, back.focusId());
+        assertEquals(viewport, back.viewport());
+    }
+
+    @Test
+    void duplicateSearchNamesStillSelectByUuid() {
+        FamilyTreeViewModel model = loadedModel();
+        FamilyTreeSearchEntry first = searchEntry(uuid(2), "Same Name");
+        FamilyTreeSearchEntry second = searchEntry(uuid(3), "Same Name");
+
+        FamilyTreeScreen.beginSearchSelection(
+                model,
+                second,
+                new FamilyTreeViewModel.ViewportState(0, 0, 1.0F)
+        );
+
+        assertEquals(Optional.of(second.uuid()), model.pendingFocusId());
+        assertTrue(model.pendingFocusId().filter(id -> !id.equals(first.uuid())).isPresent());
+    }
+
+    @Test
+    void emptyIntegratedQueryHidesResultsAndDoesNotSeedPlayerName() {
+        assertTrue(FamilyTreeScreen.integratedSearchQuery("  ").isEmpty());
+        assertEquals(Optional.of("Alex"), FamilyTreeScreen.integratedSearchQuery(" Alex "));
+    }
+
+    @Test
+    void emptyResultsExposeNoFamilyRecordsState() {
+        FamilyTreeViewModel model = loadedModel();
+
+        assertEquals(
+                Optional.of(Component.translatable("gui.family_tree.no_records")),
+                FamilyTreeScreen.statusMessage(model, true, List.of())
+        );
+    }
+
+    @Test
+    void unavailableLatestFocusLeavesGraphAndExposesUnavailableState() {
+        FamilyTreeViewModel model = loadedModel();
+        long requestId = model.beginFocus(OTHER, new FamilyTreeViewModel.ViewportState(0, 0, 1.0F));
+
+        model.accept(new GetFamilyTreeResponse(requestId, OTHER, false, FamilyTreeView.empty()));
+
+        assertEquals(ROOT, model.focusId());
+        assertTrue(model.nodes().containsKey(ROOT));
+        assertEquals(
+                Optional.of(Component.translatable("gui.family_tree.family_record_unavailable")),
+                FamilyTreeScreen.statusMessage(model, false, List.of())
+        );
+    }
+
+    @Test
+    void blankNodeDisplayNeverUsesQuestionMarkPlaceholder() {
+        FamilyTreeNode node = new FamilyTreeNode(
+                null,
+                ROOT,
+                " ",
+                false,
+                Gender.MALE,
+                Util.NIL_UUID,
+                Util.NIL_UUID
+        );
+
+        Component display = FamilyTreeScreen.nodeDisplayName(node);
+
+        assertEquals(Component.translatable("gui.family_tree.unnamed_villager"), display);
+        assertTrue(!display.getString().contains("???"));
+    }
+
+    private static FamilyTreeViewModel loadedModel() {
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        long requestId = model.beginFocus(ROOT, new FamilyTreeViewModel.ViewportState(0, 0, 1.0F));
+        model.accept(new GetFamilyTreeResponse(requestId, ROOT, true, view(ROOT)));
+        return model;
+    }
+
+    private static FamilyTreeView view(UUID id) {
+        FamilyTreeNode node = new FamilyTreeNode(
+                null,
+                id,
+                "Person",
+                false,
+                Gender.MALE,
+                Util.NIL_UUID,
+                Util.NIL_UUID
+        );
+        return new FamilyTreeView(Map.of(id, node), Set.of(), Set.of());
+    }
+
+    private static FamilyTreeSearchEntry searchEntry(UUID id, String name) {
+        return new FamilyTreeSearchEntry(id, name, false, "", false, "", false);
     }
 
     private static FamilyTreeLayout.Result result(FamilyTreeLayout.Bounds bounds) {
