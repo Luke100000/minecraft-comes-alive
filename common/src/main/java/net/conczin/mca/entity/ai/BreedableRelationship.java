@@ -249,7 +249,7 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
 
         if (item == Items.GOLDEN_APPLE && entity.isBaby()) {
             // increase age by 20 minutes
-            entity.ageUp(1200 * 20);
+            entity.ageUp(1200);
             stack.shrink(1);
             return true;
         }

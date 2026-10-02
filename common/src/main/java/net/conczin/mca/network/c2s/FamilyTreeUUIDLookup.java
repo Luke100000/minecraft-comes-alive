@@ -30,11 +30,13 @@ public record FamilyTreeUUIDLookup(String search) implements HandleablePayload {
                 .map(entry -> new FamilyTreeSearchEntry(
                         entry.id(),
                         entry.getName(),
+                        FamilyTreeNode.isValid(entry.father()),
                         tree.getOrEmpty(entry.father()).map(FamilyTreeNode::getName).orElse(""),
+                        FamilyTreeNode.isValid(entry.mother()),
                         tree.getOrEmpty(entry.mother()).map(FamilyTreeNode::getName).orElse("")))
                 .limit(16)
                 .collect(Collectors.toList());
-        Network.sendToPlayer(new FamilyTreeUUIDResponse(list), player);
+        Network.sendToPlayer(new FamilyTreeUUIDResponse(search, list), player);
     }
 
     @Override

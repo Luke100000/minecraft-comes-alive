@@ -1,5 +1,6 @@
 package net.conczin.mca.entity.ai;
 
+import net.conczin.mca.Config;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.sounds.SoundSource;
@@ -33,10 +34,14 @@ public final class PathingBlockInteraction {
         return state.is(BlockTags.FENCE_GATES, candidate -> candidate.getBlock() instanceof FenceGateBlock);
     }
 
+    public static boolean canInteractWithFenceGate(BlockState state) {
+        return Config.getServerConfig().villagersInteractWithFenceGates && isFenceGate(state);
+    }
+
     public static boolean isOpenable(BlockState state) {
         return isHandOpenableTrapDoor(state)
                 || state.is(BlockTags.MOB_INTERACTABLE_DOORS, candidate -> candidate.getBlock() instanceof DoorBlock)
-                || isFenceGate(state);
+                || canInteractWithFenceGate(state);
     }
 
     /**

@@ -7,7 +7,6 @@ import net.conczin.mca.util.BlockBoxExtended;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.ai.behavior.Behavior;
-import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.ai.util.DefaultRandomPos;
@@ -38,7 +37,7 @@ public class PatrolVillageTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected void start(ServerLevel serverWorld, VillagerEntityMCA villager, long l) {
-        getNextPosition(villager).ifPresent(pos -> BehaviorUtils.setWalkAndLookTargetMemories(villager, pos, speed, completionRange));
+        getNextPosition(villager).ifPresent(pos -> villager.moveTowards(pos, speed, completionRange));
     }
 
     private Optional<BlockPos> getNextPosition(VillagerEntityMCA villager) {

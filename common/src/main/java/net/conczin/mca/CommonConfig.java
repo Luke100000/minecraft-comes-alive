@@ -7,6 +7,16 @@ import java.util.Map;
 public class CommonConfig {
 
     /**
+     * If true, arrows fired by MCA archers pass through villagers instead of hitting them.
+     */
+    public boolean archerArrowsIgnoreVillagers = true;
+
+    /**
+     * If true, MCA villagers may path through and open or close fence gates.
+     */
+    public boolean villagersInteractWithFenceGates = true;
+
+    /**
      * Time (in ticks) until a baby grows up when held as an item.
      */
     public int babyItemGrowUpTime = 24000;
@@ -57,6 +67,30 @@ public class CommonConfig {
             "minecraft:village_savanna",
             "minecraft:ancient_city"
     );
+
+    /**
+     * Automatically adds registered village structures to the Destiny screen.
+     * Disable this to use {@link #destinySpawnLocations} as the complete manual list.
+     */
+    public boolean autoDiscoverDestinyLocations = true;
+
+    /**
+     * Removes matching locations from the Destiny screen after manual and automatic locations are combined.
+     * Supports simple '*' wildcards, including whole namespaces such as "ctov:*".
+     */
+    public List<String> destinySpawnLocationBlacklist = List.of();
+
+    /**
+     * Restricts dimension-bound Destiny destinations to the Overworld.
+     * Dimensionless choices such as "somewhere" remain available.
+     */
+    public boolean destinyOverworldOnly = false;
+
+    /**
+     * Removes Destiny destinations from matching dimensions after Minecraft determines where they can generate.
+     * Supports simple '*' wildcards, including whole namespaces such as "some_mod:*".
+     */
+    public List<String> destinyDimensionBlacklist = List.of();
 
     /**
      * Maps Destiny locations to translation keys for UI text.

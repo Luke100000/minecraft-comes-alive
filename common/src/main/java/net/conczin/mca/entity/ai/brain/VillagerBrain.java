@@ -29,8 +29,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 
-import static net.conczin.mca.entity.ai.MemoryModuleTypeMCA.LAST_GRIEVE;
-
 /**
  * Handles memory and complex bodily functions. Such as walking, and not being a nitwit.
  */
@@ -44,9 +42,6 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     private static final CDataParameter<Boolean> PANICKING = CParameter.create("IsPanicking", false);
     private static final CDataParameter<Boolean> WEAR_ARMOR = CParameter.create("WearArmor", false);
 
-    private static final long GRIEVE_COOLDOWN = 24000 * 7;
-    private static final long GRIEVE_RETRY_DELAY = 1200L;
-    private final Random random = new Random();
     private final E entity;
 
     public VillagerBrain(E entity) {
@@ -259,28 +254,6 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         entity.setTrackedValue(WEAR_ARMOR, s);
     }
 
-    public void setGrieving() {
-        entity.getBrain().setMemory(LAST_GRIEVE, -GRIEVE_COOLDOWN);
-    }
-
-    public void retryGrievingLater() {
-        entity.getBrain().setMemory(LAST_GRIEVE, entity.level().getGameTime() - GRIEVE_COOLDOWN + GRIEVE_RETRY_DELAY);
-    }
-
-    public void justGrieved() {
-        entity.getBrain().setMemory(LAST_GRIEVE, entity.level().getGameTime());
-    }
-
-    public boolean shouldGrieve() {
-        Optional<Long> memory = entity.getBrain().getMemoryInternal(LAST_GRIEVE);
-        if (memory.isPresent()) {
-            return entity.level().getGameTime() - memory.get() > GRIEVE_COOLDOWN;
-        } else {
-            entity.getBrain().setMemory(LAST_GRIEVE, entity.level().getGameTime() - random.nextLong(GRIEVE_COOLDOWN));
-            return false;
-        }
-    }
-
     /**
      * Read the move state from the active memory.
      */
@@ -288,8 +261,6 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         if (getMoveState() == MoveState.FOLLOW && entity.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isEmpty()) {
             if (entity.getBrain().getMemoryInternal(MemoryModuleTypeMCA.STAYING).isPresent()) {
                 entity.setTrackedValue(MOVE_STATE, MoveState.STAY);
-            } else if (entity.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isPresent()) {
-                entity.setTrackedValue(MOVE_STATE, MoveState.FOLLOW);
             } else {
                 entity.setTrackedValue(MOVE_STATE, MoveState.MOVE);
             }

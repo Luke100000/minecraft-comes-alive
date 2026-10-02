@@ -1,42 +1,70 @@
 package net.conczin.mca.server.world.data;
 
-import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Memories;
+import net.conczin.mca.entity.ai.Mourning;
 import net.conczin.mca.resources.API;
 import net.conczin.mca.resources.BuildingTypes;
+import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.server.world.data.villageComponents.*;
 import net.conczin.mca.util.BlockBoxExtended;
 import net.conczin.mca.util.NbtHelper;
 import net.conczin.mca.util.WorldUtils;
+import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.nbt.*;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.TrapDoorBlock;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.*;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class Village implements Iterable<Building> {
+    static final int BUILDING_DATA_VERSION = 2;
     public static final int PLAYER_BORDER_MARGIN = 32;
     public static final int BORDER_MARGIN = 48;
     public static final int MERGE_MARGIN = 64;
     private static final int MOVE_IN_COOLDOWN = 1200;
     private static final long BED_SYNC_TIME = 200;
-
+    private static final int MIN_MOURNING_INTERVAL = 4_000;
+    private static final int MAX_MOURNING_INTERVAL = 9_000;
+    private static final int MOURNING_RETRY = 4_800;
+    private static final int MIN_MOURNING_BURST_SIZE = 2;
+    private static final int MAX_MOURNING_BURST_SIZE = 4;
+    private static final long MOURNING_DAY_START = 1_000L;
+    private static final long MOURNING_DAY_END = 11_000L;
+    private static final long MINECRAFT_DAY = 24_000L;
+    private static final Comparator<AttachmentTarget> ATTACHMENT_TARGET_ORDER = Comparator
+            .comparingInt(AttachmentTarget::gap)
+            .thenComparingInt(AttachmentTarget::buildingId)
+            .thenComparingInt(AttachmentTarget::structureId)
+            .thenComparingInt(AttachmentTarget::floorId);
     public final List<ItemStack> storageBuffer = new LinkedList<>();
 
     private final ServerLevel world;
+    /** Registered functional Rooms. Physical Structures and grouped/open-air sites live separately. */
     private final Map<Integer, Building> buildings = new HashMap<>();
+    private final Map<Integer, ExternalBuilding> externalBuildings = new HashMap<>();
+    private final Map<Integer, Structure> structures = new HashMap<>();
+    private final Map<Integer, LogicalBuilding> logicalBuildings = new HashMap<>();
     private final int id;
     private final VillageGuardsManager villageGuardsManager = new VillageGuardsManager(this);
     private final VillageInnManager villageInnManager = new VillageInnManager(this);
@@ -52,56 +80,42 @@ public class Village implements Iterable<Building> {
     private long lastBedSync;
     private Map<UUID, String> residentNames = new HashMap<>();
     private Map<UUID, Long> residentHomes = new HashMap<>();
-    private float taxes = 0;
+    private float taxes;
     private float populationThreshold = 0.75f;
     private float marriageThreshold = 0.5f;
     private boolean autoScan = Config.getInstance().enableAutoScanByDefault;
     private BlockBoxExtended box = new BlockBoxExtended(0, 0, 0, 0, 0, 0);
+    private long nextMourningTime;
 
     public Village(int id, ServerLevel world) {
         this.id = id;
-
         this.world = world;
     }
 
-    public Village(CompoundTag v, ServerLevel world) {
-        id = v.getInt("id");
-        name = v.getString("name");
-        chatAIPrompt = v.getString("chatAIPrompt");
-        taxes = v.getFloat("taxesFloat");
-        beds = v.getInt("beds");
-        reputation = NbtHelper.toMap(v.getCompound("reputation"), UUID::fromString, i ->
-                NbtHelper.toMap((CompoundTag) i, UUID::fromString, i2 -> ((IntTag) i2).getAsInt())
-        );
-        residentNames = NbtHelper.toMap(v.getCompound("residentNames"), UUID::fromString, Tag::getAsString);
-        residentHomes = NbtHelper.toMap(v.getCompound("residentHomes"), UUID::fromString, i -> ((LongTag) i).getAsLong());
-
-        if (v.contains("populationThresholdFloat")) {
-            populationThreshold = v.getFloat("populationThresholdFloat");
-        }
-        if (v.contains("marriageThresholdFloat")) {
-            marriageThreshold = v.getFloat("marriageThresholdFloat");
-        }
+    public Village(CompoundTag tag, ServerLevel world) {
+        id = tag.getInt("id");
+        name = tag.getString("name");
+        chatAIPrompt = tag.getString("chatAIPrompt");
+        taxes = tag.getFloat("taxesFloat");
+        beds = tag.getInt("beds");
+        reputation = NbtHelper.toMap(tag.getCompound("reputation"), UUID::fromString, value ->
+                NbtHelper.toMap((CompoundTag) value, UUID::fromString, inner -> ((IntTag) inner).getAsInt()));
+        residentNames = NbtHelper.toMap(tag.getCompound("residentNames"), UUID::fromString, Tag::getAsString);
+        residentHomes = NbtHelper.toMap(tag.getCompound("residentHomes"), UUID::fromString, value -> ((LongTag) value).getAsLong());
+        if (tag.contains("populationThresholdFloat")) populationThreshold = tag.getFloat("populationThresholdFloat");
+        if (tag.contains("marriageThresholdFloat")) marriageThreshold = tag.getFloat("marriageThresholdFloat");
+        autoScan = tag.contains("autoScan") ? tag.getBoolean("autoScan") : true;
+        nextMourningTime = tag.getLong("nextMourningTime");
         this.world = world;
 
-        if (v.contains("autoScan")) {
-            autoScan = v.getBoolean("autoScan");
-        } else {
-            autoScan = true;
-        }
-
-        ListTag b = v.getList("buildings", Tag.TAG_COMPOUND);
-        for (int i = 0; i < b.size(); i++) {
-            Building building = new Building(b.getCompound(i));
-
-            if (world == null || BuildingTypes.getInstance().getBuildingTypes().containsKey(building.getType())) {
-                buildings.put(building.getId(), building);
-            }
-        }
-
-        if (!buildings.isEmpty()) {
-            calculateDimensions();
-        }
+        RoomDFU.Result data = RoomDFU.load(tag);
+        buildings.putAll(data.buildings());
+        externalBuildings.putAll(data.externalBuildings());
+        structures.putAll(data.structures());
+        logicalBuildings.putAll(data.logicalBuildings());
+        validateBuildingData();
+        logicalBuildings.values().forEach(this::applyFloorNumbers);
+        if (!buildings.isEmpty() || !externalBuildings.isEmpty() || !structures.isEmpty()) calculateDimensions();
     }
 
     public static Optional<Village> findNearest(Entity entity) {
@@ -127,44 +141,352 @@ public class Village implements Iterable<Building> {
 
     @Override
     public Iterator<Building> iterator() {
-        return buildings.values().iterator();
+        return Stream.concat(buildings.values().stream(), externalBuildings.values().stream().map(Building.class::cast))
+                .iterator();
     }
 
-    public void removeBuilding(int id) {
-        buildings.remove(id);
-        if (!buildings.isEmpty()) {
-            calculateDimensions();
+    public Map<Integer, Building> getBuildings() {
+        return Collections.unmodifiableMap(buildings);
+    }
+
+    public Map<Integer, Structure> getStructures() {
+        return Collections.unmodifiableMap(structures);
+    }
+
+    public Stream<Building> getRooms() {
+        return buildings.values().stream().filter(Building::isFunctionalRoom);
+    }
+
+    public Stream<ExternalBuilding> getExternalBuildings() {
+        return externalBuildings.values().stream();
+    }
+
+    public Map<Integer, ExternalBuilding> getExternalBuildingMap() {
+        return Collections.unmodifiableMap(externalBuildings);
+    }
+
+    public Optional<Building> getBuilding(int id) {
+        Building room = buildings.get(id);
+        return room != null ? Optional.of(room) : Optional.ofNullable(externalBuildings.get(id));
+    }
+
+    public Optional<Structure> getStructure(int id) {
+        return Optional.ofNullable(structures.get(id));
+    }
+
+    public Optional<Structure> getStructureFor(Building room) {
+        return room == null ? Optional.empty() : getStructure(room.getStructureId());
+    }
+
+    public int getLogicalBuildingId(int structureId) {
+        return getStructure(structureId).map(Structure::getLogicalBuildingId).orElse(-1);
+    }
+
+    Optional<LogicalBuilding> getLogicalBuilding(int buildingId) {
+        return Optional.ofNullable(logicalBuildings.get(buildingId));
+    }
+
+    public void registerStructure(Structure structure, Building room) {
+        if (structure == null || structure.getId() < 0 || structure.getLogicalBuildingId() < 0) {
+            throw new IllegalArgumentException("Structure requires valid canonical IDs");
         }
+        if (!roomReferencesStructure(structure, room)) {
+            throw new IllegalArgumentException("Room does not reference the Structure being registered");
+        }
+        if (structures.containsKey(structure.getId())) {
+            throw new IllegalArgumentException("Structure id is already registered: " + structure.getId());
+        }
+        if (buildings.containsKey(room.getId()) || externalBuildings.containsKey(room.getId())) {
+            throw new IllegalArgumentException("Building id is already registered: " + room.getId());
+        }
+        int logicalBuildingId = structure.getLogicalBuildingId();
+
+        structures.put(structure.getId(), structure);
+        buildings.put(room.getId(), room);
+        logicalBuildings.computeIfAbsent(logicalBuildingId, id ->
+                new LogicalBuilding(id, room.getId(), true));
+    }
+
+    public void registerRoom(Building room) {
+        if (room == null || !room.isFunctionalRoom() || room.getId() < 0) {
+            throw new IllegalArgumentException("Only functional Rooms can be registered");
+        }
+        Structure structure = structures.get(room.getStructureId());
+        StructureFloor floor = structure == null ? null : structure.getFloor(room.getFloorId()).orElse(null);
+        if (floor == null || !floorContainsRoomCells(floor, room)) {
+            throw new IllegalArgumentException("Room references missing Structure/Floor");
+        }
+        if (buildings.containsKey(room.getId()) || externalBuildings.containsKey(room.getId())) {
+            throw new IllegalArgumentException("Building id is already registered: " + room.getId());
+        }
+        buildings.put(room.getId(), room);
+    }
+
+    void registerExternalBuilding(ExternalBuilding building) {
+        externalBuildings.put(building.getId(), building);
+    }
+
+    boolean replaceStructureAndRegisterRoom(Structure refreshed, Building room) {
+        if (refreshed == null || room == null || room.getId() < 0) return false;
+        if (buildings.containsKey(room.getId()) || externalBuildings.containsKey(room.getId())) return false;
+        List<Building> floorRooms = getRooms()
+                .filter(existing -> existing.getStructureId() == refreshed.getId())
+                .filter(existing -> existing.getFloorId() == room.getFloorId())
+                .collect(Collectors.toCollection(ArrayList::new));
+        floorRooms.add(room);
+        return publishFloorRefresh(refreshed, room.getFloorId(), floorRooms);
+    }
+
+    /**
+     * Atomically validates and publishes one refreshed Floor together with the complete Room set
+     * that owns that Floor. No Village maps are mutated until the replacement state is valid.
+     */
+    boolean publishFloorRefresh(Structure refreshed,
+                                int floorId,
+                                Collection<Building> replacementRooms) {
+        if (refreshed == null || replacementRooms == null) return false;
+        Structure current = structures.get(refreshed.getId());
+        if (current == null || current.getLogicalBuildingId() != refreshed.getLogicalBuildingId()) return false;
+        StructureFloor refreshedFloor = refreshed.getFloor(floorId).orElse(null);
+        if (refreshedFloor == null) return false;
+
+        List<Building> currentFloorRooms = getRooms()
+                .filter(room -> room.getStructureId() == refreshed.getId())
+                .filter(room -> room.getFloorId() == floorId)
+                .toList();
+        Set<Integer> currentFloorRoomIds = currentFloorRooms.stream()
+                .map(Building::getId)
+                .collect(Collectors.toSet());
+        List<Building> replacements = List.copyOf(replacementRooms);
+        Set<Integer> replacementIds = new HashSet<>();
+        Set<BlockPos> ownedCells = new HashSet<>();
+        for (Building room : replacements) {
+            if (room == null || !room.isFunctionalRoom() || room.getId() < 0
+                    || room.getStructureId() != refreshed.getId()
+                    || room.getFloorId() != floorId
+                    || room.getFloorCells().isEmpty()
+                    || !floorContainsRoomCells(refreshedFloor, room)
+                    || !replacementIds.add(room.getId())) {
+                return false;
+            }
+            Building registered = buildings.get(room.getId());
+            if (registered != null && !currentFloorRoomIds.contains(room.getId())) return false;
+            if (externalBuildings.containsKey(room.getId())) return false;
+            for (BlockPos cell : room.getFloorCells()) {
+                if (!ownedCells.add(cell)) return false;
+            }
+        }
+
+        LogicalBuilding logical = logicalBuildings.get(current.getLogicalBuildingId());
+        if (logical != null && currentFloorRoomIds.contains(logical.mainRoomId())
+                && !replacementIds.contains(logical.mainRoomId())) {
+            return false;
+        }
+
+        Map<Integer, Building> nextBuildings = new HashMap<>(buildings);
+        currentFloorRoomIds.forEach(nextBuildings::remove);
+        for (Building room : replacements) nextBuildings.put(room.getId(), room);
+
+        publishBuildingMutation(() -> {
+            structures.put(refreshed.getId(), refreshed);
+            buildings.clear();
+            buildings.putAll(nextBuildings);
+        });
+        return true;
+    }
+
+    void removeRooms(Collection<Integer> roomIds) {
+        roomIds.forEach(buildings::remove);
+    }
+
+    BuildingStateSnapshot snapshotBuildingState() {
+        return new BuildingStateSnapshot(
+                buildings.values().stream().map(Building::copy).toList(),
+                structures.values().stream().map(Structure::copy).toList(),
+                logicalBuildings.values().stream().map(LogicalBuilding::copy).toList());
+    }
+
+    void publishBuildingMutation(Runnable mutation) {
+        BuildingStateSnapshot snapshot = snapshotBuildingState();
+        try {
+            mutation.run();
+            refreshLogicalBuildings();
+            calculateDimensions();
+            markDirty();
+        } catch (RuntimeException exception) {
+            restoreBuildingState(snapshot);
+            throw exception;
+        }
+    }
+
+    void restoreBuildingState(BuildingStateSnapshot snapshot) {
+        Objects.requireNonNull(snapshot, "snapshot");
+        buildings.clear();
+        snapshot.rooms.forEach(room -> buildings.put(room.getId(), room));
+        structures.clear();
+        snapshot.structures.forEach(structure -> structures.put(structure.getId(), structure));
+        logicalBuildings.clear();
+        snapshot.logicalBuildings.forEach(logical -> logicalBuildings.put(logical.id(), logical));
+        calculateDimensions();
+    }
+
+    static final class BuildingStateSnapshot {
+        private final List<Building> rooms;
+        private final List<Structure> structures;
+        private final List<LogicalBuilding> logicalBuildings;
+
+        private BuildingStateSnapshot(List<Building> rooms,
+                                      List<Structure> structures,
+                                      List<LogicalBuilding> logicalBuildings) {
+            this.rooms = List.copyOf(rooms);
+            this.structures = List.copyOf(structures);
+            this.logicalBuildings = List.copyOf(logicalBuildings);
+        }
+    }
+
+    List<Structure> getBuildingStructures(int buildingId) {
+        return structures.values().stream()
+                .filter(structure -> structure.getLogicalBuildingId() == buildingId)
+                .sorted(Comparator.comparingInt(Structure::getId))
+                .toList();
+    }
+
+    public boolean canRemoveFloor(int buildingId, int floorNumber) {
+        if (floorNumber == 0) return false;
+
+        List<Structure> members = getBuildingStructures(buildingId);
+        if (members.stream().flatMap(structure -> structure.getFloors().stream())
+                .noneMatch(floor -> floor.floorNumber() == floorNumber)) {
+            return false;
+        }
+
+        boolean hasRooms = buildings.values().stream().anyMatch(room ->
+                structures.containsKey(room.getStructureId())
+                        && structures.get(room.getStructureId()).getLogicalBuildingId() == buildingId
+                        && structures.get(room.getStructureId()).getFloor(room.getFloorId())
+                        .map(floor -> floor.floorNumber() == floorNumber)
+                        .orElse(false));
+        if (hasRooms) return false;
+
+        return members.stream()
+                .flatMap(member -> member.getFloors().stream())
+                .noneMatch(candidate -> floorNumber > 0
+                        ? candidate.floorNumber() > floorNumber
+                        : candidate.floorNumber() < floorNumber);
+    }
+
+    boolean removeFloor(int buildingId, int floorNumber) {
+        if (!canRemoveFloor(buildingId, floorNumber)) return false;
+
+        publishBuildingMutation(() -> {
+            for (Structure structure : getBuildingStructures(buildingId)) {
+                List<Integer> floorIds = structure.getFloors().stream()
+                        .filter(floor -> floor.floorNumber() == floorNumber)
+                        .map(StructureFloor::id)
+                        .toList();
+                if (floorIds.isEmpty()) continue;
+                if (floorIds.size() == structure.getFloors().size()) {
+                    structures.remove(structure.getId());
+                } else {
+                    floorIds.forEach(structure::removeFloor);
+                }
+            }
+        });
+        return true;
+    }
+
+    public boolean removeRoom(int roomId) {
+        Building room = buildings.get(roomId);
+        if (room == null || isMainRoom(room)) return false;
+        publishBuildingMutation(() -> buildings.remove(roomId));
+        return true;
+    }
+
+    public boolean removeExternalBuilding(int buildingId) {
+        if (externalBuildings.remove(buildingId) == null) return false;
+        calculateDimensions();
         markDirty();
+        return true;
+    }
+
+    public void removeStructure(int structureId) {
+        if (!structures.containsKey(structureId)) return;
+        publishBuildingMutation(() -> {
+            structures.remove(structureId);
+            buildings.values().removeIf(room -> room.getStructureId() == structureId);
+        });
+    }
+
+    void removeLogicalBuilding(int buildingId) {
+        Set<Integer> structureIds = getBuildingStructures(buildingId).stream()
+                .map(Structure::getId).collect(Collectors.toSet());
+        buildings.values().removeIf(room -> structureIds.contains(room.getStructureId()));
+        structureIds.forEach(structures::remove);
+        logicalBuildings.remove(buildingId);
     }
 
     public Stream<Building> getBuildingsOfType(String type) {
-        return getBuildings().values().stream().filter(b -> b.getType().equals(type));
+        BuildingType definition = BuildingTypes.getInstance().getBuildingType(type);
+        if (definition.grouped()) {
+            return getExternalBuildings().filter(building -> building.getType().equals(type)).map(Building.class::cast);
+        }
+        RoomTypeResolver resolver = RoomTypeResolver.create(this);
+        return getRooms().filter(room -> {
+            BuildingType effective = resolver.effectiveType(room);
+            return effective != null && effective.name().equals(type);
+        });
     }
 
     public Optional<Building> getBuildingAt(Vec3i pos) {
-        return getBuildings().values().stream().filter(b -> b.containsPos(pos)).findAny();
+        return findPhysicalRoomAt(pos).or(() -> getExternalBuildings()
+                .filter(building -> building.containsPos(pos))
+                .min(Comparator.comparingInt(Building::getId)));
+    }
+
+    Optional<Structure> getExactStructureAt(Vec3i pos) {
+        return structures.values().stream()
+                .filter(structure -> structure.containsPos(pos))
+                .min(Comparator.comparingInt(Structure::getId));
+    }
+
+    boolean hasRegisteredFloorOverlap(Structure candidate) {
+        if (candidate == null) return false;
+        for (StructureFloor candidateFloor : candidate.getFloors()) {
+            for (Structure registered : structures.values()) {
+                for (StructureFloor registeredFloor : registered.getFloors()) {
+                    boolean exactCellOverlap = candidateFloor.geometry().cells().stream()
+                            .anyMatch(cell -> registeredFloor.geometry().cellAt(cell.feet()).isPresent());
+                    if (!exactCellOverlap) continue;
+                    boolean permittedAttachmentTransition = candidate.getLogicalBuildingId()
+                            == registered.getLogicalBuildingId()
+                            && !candidateFloor.sameSemanticBand(registeredFloor);
+                    if (!permittedAttachmentTransition) return true;
+                }
+            }
+        }
+        return false;
     }
 
     public void calculateDimensions() {
-        int sx = Integer.MAX_VALUE;
-        int sy = Integer.MAX_VALUE;
-        int sz = Integer.MAX_VALUE;
-        int ex = Integer.MIN_VALUE;
-        int ey = Integer.MIN_VALUE;
-        int ez = Integer.MIN_VALUE;
-
-        for (Building building : buildings.values()) {
-            ex = Math.max(building.getPos1().getX(), ex);
-            sx = Math.min(building.getPos0().getX(), sx);
-
-            ey = Math.max(building.getPos1().getY(), ey);
-            sy = Math.min(building.getPos0().getY(), sy);
-
-            ez = Math.max(building.getPos1().getZ(), ez);
-            sz = Math.min(building.getPos0().getZ(), sz);
+        List<VillageBuilding> all = new ArrayList<>();
+        all.addAll(structures.values());
+        getExternalBuildings().forEach(all::add);
+        if (all.isEmpty()) all.addAll(buildings.values());
+        if (all.isEmpty()) {
+            box = new BlockBoxExtended(0, 0, 0, 0, 0, 0);
+            return;
         }
 
+        int sx = Integer.MAX_VALUE, sy = Integer.MAX_VALUE, sz = Integer.MAX_VALUE;
+        int ex = Integer.MIN_VALUE, ey = Integer.MIN_VALUE, ez = Integer.MIN_VALUE;
+        for (VillageBuilding building : all) {
+            sx = Math.min(sx, building.getPos0().getX());
+            sy = Math.min(sy, building.getPos0().getY());
+            sz = Math.min(sz, building.getPos0().getZ());
+            ex = Math.max(ex, building.getPos1().getX());
+            ey = Math.max(ey, building.getPos1().getY());
+            ez = Math.max(ez, building.getPos1().getZ());
+        }
         box = new BlockBoxExtended(sx, sy, sz, ex, ey, ez);
     }
 
@@ -177,108 +499,48 @@ public class Village implements Iterable<Building> {
     }
 
     public List<String> getResidents(int building) {
-        return getBuilding(building).map(value -> {
-            LongOpenHashSet buildingPositions = new LongOpenHashSet(value.getBlockCount());
-            value.getBlockPosStream().forEach(pos -> buildingPositions.add(pos.asLong()));
-            return residentHomes.entrySet().stream()
-                    .filter(entry -> buildingPositions.contains(entry.getValue().longValue()))
-                    .map(entry -> residentNames.getOrDefault(entry.getKey(), "Unknown"))
-                    .collect(Collectors.toList());
-        }).orElseGet(List::of);
+        return getBuilding(building).map(value -> residentHomes.entrySet().stream().filter(entry -> {
+            BlockPos homePos = BlockPos.of(entry.getValue());
+            if (value.isFunctionalRoom()) {
+                return findPhysicalRoomAt(homePos).map(room -> room.getId() == value.getId()).orElse(false);
+            }
+            return value.containsPos(homePos);
+        }).map(entry -> residentNames.getOrDefault(entry.getKey(), "Unknown")).collect(Collectors.toList())).orElseGet(List::of);
     }
 
-    public float getTaxes() {
-        return taxes;
-    }
+    public float getTaxes() { return taxes; }
+    public void setTaxes(float taxes) { this.taxes = taxes; }
+    public float getPopulationThreshold() { return populationThreshold; }
+    public void setPopulationThreshold(float populationThreshold) { this.populationThreshold = populationThreshold; }
+    public float getMarriageThreshold() { return marriageThreshold; }
+    public void setMarriageThreshold(float marriageThreshold) { this.marriageThreshold = marriageThreshold; }
+    public boolean isAutoScan() { return autoScan; }
+    public void setAutoScan(boolean autoScan) { this.autoScan = autoScan; }
+    public void toggleAutoScan() { setAutoScan(!isAutoScan()); }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public int getId() { return id; }
+    public boolean hasSpace() { return getPopulation() < getMaxPopulation(); }
+    public int getPopulation() { return residentNames.size(); }
+    public Stream<UUID> getResidentsUUIDs() { return residentNames.keySet().stream(); }
 
-    public void setTaxes(float taxes) {
-        this.taxes = taxes;
-    }
-
-    public float getPopulationThreshold() {
-        return populationThreshold;
-    }
-
-    public void setPopulationThreshold(float populationThreshold) {
-        this.populationThreshold = populationThreshold;
-    }
-
-    public float getMarriageThreshold() {
-        return marriageThreshold;
-    }
-
-    public void setMarriageThreshold(float marriageThreshold) {
-        this.marriageThreshold = marriageThreshold;
-    }
-
-    public boolean isAutoScan() {
-        return autoScan;
-    }
-
-    public void setAutoScan(boolean autoScan) {
-        this.autoScan = autoScan;
-    }
-
-    public void toggleAutoScan() {
-        setAutoScan(!isAutoScan());
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public Map<Integer, Building> getBuildings() {
-        return buildings;
-    }
-
-    public Optional<Building> getBuilding(int id) {
-        return Optional.ofNullable(buildings.get(id));
-    }
-
-    public int getId() {
-        return id;
-    }
-
-    public boolean hasSpace() {
-        return getPopulation() < getMaxPopulation();
-    }
-
-    public int getPopulation() {
-        return residentNames.size();
-    }
-
-    public Stream<UUID> getResidentsUUIDs() {
-        return residentNames.keySet().stream();
-    }
-
-    // verify that this bed is not blocked
     public boolean isPositionValidBed(BlockPos pos) {
-        return getBuildingAt(pos).filter(b -> b.getBuildingType().noBeds()).isEmpty();
+        return getBuildingAt(pos).filter(building -> building.getBuildingType().noBeds()).isEmpty();
     }
 
     public List<VillagerEntityMCA> getResidents(ServerLevel world) {
-        return getResidentsUUIDs()
-                .map(world::getEntity)
+        return getResidentsUUIDs().map(world::getEntity)
                 .filter(VillagerEntityMCA.class::isInstance)
-                .map(VillagerEntityMCA.class::cast)
-                .collect(Collectors.toList());
+                .map(VillagerEntityMCA.class::cast).collect(Collectors.toList());
     }
 
     public void updateMaxPopulation() {
-        if (world != null) {
-            Vec3i dimensions = box.getLength();
-            int radius = (int) Math.sqrt(dimensions.getX() * dimensions.getX() + dimensions.getY() * dimensions.getY() + dimensions.getZ() * dimensions.getZ());
-            beds = (int) world.getPoiManager().findAll(
-                    registryEntry -> registryEntry.is(PoiTypes.HOME),
-                    this::isPositionValidBed,
-                    new BlockPos(getCenter()),
-                    radius + BORDER_MARGIN,
-                    PoiManager.Occupancy.ANY).count();
-        }
+        if (world == null) return;
+        Vec3i dimensions = box.getLength();
+        int radius = (int) Math.sqrt(dimensions.getX() * dimensions.getX()
+                + dimensions.getY() * dimensions.getY() + dimensions.getZ() * dimensions.getZ());
+        beds = (int) world.getPoiManager().findAll(entry -> entry.is(PoiTypes.HOME), this::isPositionValidBed,
+                new BlockPos(getCenter()), radius + BORDER_MARGIN, PoiManager.Occupancy.ANY).count();
     }
 
     public int getMaxPopulation() {
@@ -289,30 +551,28 @@ public class Village implements Iterable<Building> {
         return beds;
     }
 
-    public boolean hasStoredResource() {
-        return !storageBuffer.isEmpty();
+    public boolean hasStoredResource() { return !storageBuffer.isEmpty(); }
+
+    public boolean hasBuilding(String type) {
+        BuildingType definition = BuildingTypes.getInstance().getBuildingType(type);
+        if (definition.grouped()) {
+            return getExternalBuildings().anyMatch(building -> building.getType().equals(type) && building.isComplete());
+        }
+        return getBuildingsOfType(type).findAny().isPresent();
     }
 
-    public boolean hasBuilding(String building) {
-        return buildings.values().stream().anyMatch(b -> b.getType().equals(building) && b.isComplete());
+    List<BuildingType> getMatchingRoomTypes(Building candidate) {
+        return candidate == null ? List.of() : List.copyOf(candidate.getVisibleMatchingTypes());
     }
 
     public void tick(ServerLevel world, long time) {
-        // spread performance to avoid lag spikes
+        tickMourning(world, time);
         time += getId();
-
-        boolean isTaxSeason = time % Config.getInstance().taxSeason == 0;
-        boolean isVillageUpdateTime = time % MOVE_IN_COOLDOWN == 0;
-
-        if (isTaxSeason && hasBuilding("storage")) {
-            villageTaxesManager.taxes(world);
-        }
-
-        if (time % 24000 == 0) {
-            cleanReputation();
-        }
-
-        if (isVillageUpdateTime && lastMoveIn + MOVE_IN_COOLDOWN < time && WorldUtils.isChunkLoaded(world, getCenter())) {
+        boolean taxSeason = time % Config.getInstance().taxSeason == 0;
+        boolean update = time % MOVE_IN_COOLDOWN == 0;
+        if (taxSeason && hasBuilding("storage")) villageTaxesManager.taxes(world);
+        if (time % 24000 == 0) cleanReputation();
+        if (update && lastMoveIn + MOVE_IN_COOLDOWN < time && WorldUtils.isChunkLoaded(world, getCenter())) {
             villageGuardsManager.spawnGuards(world);
             villageInnManager.updateInn(world);
             villageMarriageManager.marry(world);
@@ -320,98 +580,651 @@ public class Village implements Iterable<Building> {
         }
     }
 
-    public void onEnter(ServerLevel world) {
-        villageTaxesManager.deliverTaxes(world);
+    long getNextMourningTime() {
+        return nextMourningTime;
     }
 
+    static long calculateNextMourningTime(long now, RandomSource random) {
+        return now + Mth.nextInt(random, MIN_MOURNING_INTERVAL, MAX_MOURNING_INTERVAL);
+    }
+
+    static long calculateMourningRetryTime(long now) {
+        return now + MOURNING_RETRY;
+    }
+
+    static int calculateMourningBurstSize(RandomSource random) {
+        return Mth.nextInt(random, MIN_MOURNING_BURST_SIZE, MAX_MOURNING_BURST_SIZE);
+    }
+
+    static List<BlockPos> selectSafeMourningGraves(List<BlockPos> graves, RandomSource random,
+                                                   Predicate<BlockPos> isSafe) {
+        List<BlockPos> candidates = new ArrayList<>(graves);
+        Util.shuffle(candidates, random);
+        List<BlockPos> safeGraves = new ArrayList<>();
+        int initialChecks = Math.min(MAX_MOURNING_BURST_SIZE, candidates.size());
+        for (int index = 0; index < initialChecks; index++) {
+            BlockPos grave = candidates.get(index);
+            if (isSafe.test(grave)) {
+                safeGraves.add(grave);
+            }
+        }
+        if (safeGraves.isEmpty()) {
+            for (int index = initialChecks; index < candidates.size(); index++) {
+                BlockPos grave = candidates.get(index);
+                if (isSafe.test(grave)) {
+                    safeGraves.add(grave);
+                    break;
+                }
+            }
+        }
+        return safeGraves;
+    }
+
+    static boolean isAmbientMourningTime(long dayTime) {
+        long timeOfDay = Math.floorMod(dayTime, MINECRAFT_DAY);
+        return timeOfDay >= MOURNING_DAY_START && timeOfDay <= MOURNING_DAY_END;
+    }
+
+    private void tickMourning(ServerLevel world, long time) {
+        if (!Config.getInstance().enableMourning) {
+            return;
+        }
+
+        if (nextMourningTime == 0L) {
+            nextMourningTime = calculateNextMourningTime(time, world.random);
+            markDirty();
+            return;
+        }
+
+        if (time < nextMourningTime || !isAmbientMourningTime(world.getDayTime())) {
+            return;
+        }
+
+        MourningBurstResult result = releaseMourningBurst(world, time);
+        nextMourningTime = result == MourningBurstResult.DEFERRED
+                ? calculateMourningRetryTime(time)
+                : calculateNextMourningTime(time, world.random);
+        markDirty();
+    }
+
+    private MourningBurstResult releaseMourningBurst(ServerLevel world, long time) {
+        List<BlockPos> graves = Mourning.getMournableGraves(this, world);
+        if (graves.isEmpty()) {
+            return MourningBurstResult.NO_GRAVES;
+        }
+
+        List<BlockPos> safeGraves = selectSafeMourningGraves(graves, world.random,
+                grave -> Mourning.isSafeToMourn(world, grave));
+        if (safeGraves.isEmpty()) {
+            return MourningBurstResult.DEFERRED;
+        }
+
+        List<VillagerEntityMCA> candidates = getResidents(world).stream()
+                .filter(Mourning::canMournAmbiently)
+                .collect(Collectors.toCollection(ArrayList::new));
+        if (candidates.isEmpty()) {
+            return MourningBurstResult.DEFERRED;
+        }
+
+        Util.shuffle(candidates, world.random);
+        candidates.sort(Comparator.comparingLong(villager -> villager.getBrain()
+                .getMemoryInternal(MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING)
+                .orElse(Long.MIN_VALUE)));
+
+        int count = Math.min(calculateMourningBurstSize(world.random), candidates.size());
+        for (int index = 0; index < count; index++) {
+            VillagerEntityMCA villager = candidates.get(index);
+            villager.getBrain().setMemory(MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING, time);
+            Mourning.start(villager, safeGraves.get(index % safeGraves.size()));
+        }
+        return MourningBurstResult.STARTED;
+    }
+
+    private enum MourningBurstResult {
+        NO_GRAVES,
+        DEFERRED,
+        STARTED
+    }
+
+    public void onEnter(ServerLevel world) { villageTaxesManager.deliverTaxes(world); }
+
     public void broadCastMessage(ServerLevel world, String event, VillagerEntityMCA suitor, VillagerEntityMCA mate) {
-        world.players().stream().filter(p -> PlayerSaveData.get(p).getLastSeenVillageId().orElse(-2) == getId()
-                                             || suitor.getVillagerBrain().getMemoriesForPlayer(p).getHearts() > Config.getInstance().heartsToBeConsideredAsFriend
-                                             || mate.getVillagerBrain().getMemoriesForPlayer(p).getHearts() > Config.getInstance().heartsToBeConsideredAsFriend)
-                .forEach(player -> player.displayClientMessage(Component.translatable(event, suitor.getName(), mate.getName()), !Config.getInstance().showNotificationsAsChat));
+        world.players().stream().filter(player -> PlayerSaveData.get(player).getLastSeenVillageId().orElse(-2) == getId()
+                        || suitor.getVillagerBrain().getMemoriesForPlayer(player).getHearts() > Config.getInstance().heartsToBeConsideredAsFriend
+                        || mate.getVillagerBrain().getMemoriesForPlayer(player).getHearts() > Config.getInstance().heartsToBeConsideredAsFriend)
+                .forEach(player -> player.displayClientMessage(Component.translatable(event, suitor.getName(), mate.getName()),
+                        !Config.getInstance().showNotificationsAsChat));
     }
 
     public void broadCastMessage(ServerLevel world, String event, String targetName) {
-        world.players().stream().filter(p -> PlayerSaveData.get(p).getLastSeenVillageId().orElse(-2) == getId())
-                .forEach(player -> player.displayClientMessage(Component.translatable(event, targetName), !Config.getInstance().showNotificationsAsChat));
+        world.players().stream().filter(player -> PlayerSaveData.get(player).getLastSeenVillageId().orElse(-2) == getId())
+                .forEach(player -> player.displayClientMessage(Component.translatable(event, targetName),
+                        !Config.getInstance().showNotificationsAsChat));
     }
 
     public void markDirty() {
-        VillageManager.get(world).setDirty();
+        if (world != null) VillageManager.get(world).setDirty();
     }
 
-    // removes all villagers no longer living here
     public void cleanReputation() {
         Set<UUID> residents = getResidentsUUIDs().collect(Collectors.toSet());
         for (Map<UUID, Integer> map : reputation.values()) {
-            Set<UUID> toRemove = map.keySet().stream().filter(v -> !residents.contains(v)).collect(Collectors.toSet());
-            for (UUID uuid : toRemove) {
-                map.remove(uuid);
-            }
+            map.keySet().removeIf(uuid -> !residents.contains(uuid));
         }
     }
 
     public void setReputation(Player player, VillagerEntityMCA villager, int rep) {
-        reputation.computeIfAbsent(player.getUUID(), i -> new HashMap<>()).put(villager.getUUID(), rep);
+        reputation.computeIfAbsent(player.getUUID(), ignored -> new HashMap<>()).put(villager.getUUID(), rep);
         markDirty();
     }
 
     public int getReputation(Player player) {
-        return reputation.getOrDefault(player.getUUID(), Collections.emptyMap()).values().stream().mapToInt(i -> i).sum();
+        return reputation.getOrDefault(player.getUUID(), Collections.emptyMap()).values().stream().mapToInt(Integer::intValue).sum();
     }
 
-    public void pushHearts(Player player, int h) {
-        List<Memories> loadedMemories = new ArrayList<>();
+    public void pushHearts(Player player, int hearts) {
+        List<Memories> memories = new ArrayList<>();
         for (UUID uuid : residentNames.keySet()) {
             if (world.getEntity(uuid) instanceof VillagerEntityMCA villager) {
-                loadedMemories.add(villager.getVillagerBrain().getMemoriesForPlayer(player));
+                memories.add(villager.getVillagerBrain().getMemoriesForPlayer(player));
             }
         }
-        if (loadedMemories.isEmpty()) {
-            return;
-        }
-        int splitHearts = (int) Math.ceil((double) h / loadedMemories.size());
-        for (Memories memories : loadedMemories) {
-            memories.modHearts(splitHearts);
-        }
+        if (memories.isEmpty()) return;
+        int split = (int) Math.ceil((double) hearts / memories.size());
+        memories.forEach(memory -> memory.modHearts(split));
         markDirty();
     }
 
-    public void pushMood(int m) {
+    public void pushMood(int mood) {
         for (UUID uuid : residentNames.keySet()) {
             if (world.getEntity(uuid) instanceof VillagerEntityMCA villager) {
-                villager.getVillagerBrain().modifyMoodValue(m);
+                villager.getVillagerBrain().modifyMoodValue(mood);
             }
         }
         markDirty();
     }
 
     public CompoundTag save() {
-        CompoundTag v = new CompoundTag();
-        v.putInt("id", id);
-        v.putString("name", name);
-        v.putString("chatAIPrompt", chatAIPrompt);
-        v.putFloat("taxesFloat", taxes);
-        v.putInt("beds", beds);
-        v.put("reputation", NbtHelper.fromMap(new CompoundTag(), reputation, UUID::toString, i ->
-                NbtHelper.fromMap(new CompoundTag(), i, UUID::toString, IntTag::valueOf)
-        ));
-        v.put("residentNames", NbtHelper.fromMap(new CompoundTag(), residentNames, Object::toString, StringTag::valueOf));
-        v.put("residentHomes", NbtHelper.fromMap(new CompoundTag(), residentHomes, Object::toString, LongTag::valueOf));
-        v.putFloat("populationThresholdFloat", populationThreshold);
-        v.putFloat("marriageThresholdFloat", marriageThreshold);
-        v.put("buildings", NbtHelper.fromList(buildings.values(), Building::save));
-        v.putBoolean("autoScan", autoScan);
-        return v;
+        CompoundTag tag = new CompoundTag();
+        tag.putInt("id", id);
+        tag.putString("name", name);
+        tag.putString("chatAIPrompt", chatAIPrompt);
+        tag.putFloat("taxesFloat", taxes);
+        tag.putInt("beds", beds);
+        tag.put("reputation", NbtHelper.fromMap(new CompoundTag(), reputation, UUID::toString,
+                value -> NbtHelper.fromMap(new CompoundTag(), value, UUID::toString, IntTag::valueOf)));
+        tag.put("residentNames", NbtHelper.fromMap(new CompoundTag(), residentNames, Object::toString, StringTag::valueOf));
+        tag.put("residentHomes", NbtHelper.fromMap(new CompoundTag(), residentHomes, Object::toString, LongTag::valueOf));
+        tag.putFloat("populationThresholdFloat", populationThreshold);
+        tag.putFloat("marriageThresholdFloat", marriageThreshold);
+        tag.putInt("buildingDataVersion", BUILDING_DATA_VERSION);
+        tag.put("buildings", NbtHelper.fromList(buildings.values(), Building::save));
+        tag.put("externalBuildings", NbtHelper.fromList(externalBuildings.values(), Building::save));
+        tag.put("structures", NbtHelper.fromList(structures.values(), Structure::save));
+        tag.put("logicalBuildings", NbtHelper.fromList(logicalBuildings.values(), LogicalBuilding::save));
+        tag.putBoolean("autoScan", autoScan);
+        tag.putLong("nextMourningTime", nextMourningTime);
+        return tag;
     }
 
     public void merge(Village village) {
         buildings.putAll(village.buildings);
+        externalBuildings.putAll(village.externalBuildings);
+        structures.putAll(village.structures);
+        logicalBuildings.putAll(village.logicalBuildings);
+        refreshLogicalBuildings();
         calculateDimensions();
     }
 
-    public boolean isVillage() {
-        return getBuildings().size() >= Config.getInstance().minimumBuildingsToBeConsideredAVillage;
+    public int getStructureCount() {
+        return (int) structures.values().stream().mapToInt(Structure::getLogicalBuildingId).distinct().count()
+                + (int) externalBuildings.values().stream().filter(Building::isComplete).count();
+    }
+
+    public RoomScanPlan getRoomScanPlan(Level level, BlockPos pos) {
+        return RoomScanPlanner.plan(this, level, pos);
+    }
+
+    Optional<AttachmentTarget> selectAttachmentTarget(
+            StructureFloor candidate,
+            Collection<StructureConnector.VerticalConnection> connections) {
+        return selectAttachmentTarget(candidate, connections, List.of());
+    }
+
+    Optional<AttachmentTarget> selectAttachmentTarget(
+            StructureFloor candidate,
+            Collection<StructureConnector.VerticalConnection> verticalConnections,
+            Collection<BlockPos> stairTransitions) {
+        if (candidate == null) return Optional.empty();
+        boolean alreadyRegistered = structures.values().stream()
+                .flatMap(structure -> structure.getFloors().stream())
+                .anyMatch(floor -> floor.geometry().sameCellPositions(candidate.geometry()));
+        if (alreadyRegistered) return Optional.empty();
+        Set<StructureConnector.VerticalConnection> connections = attachmentConnections(
+                candidate, verticalConnections, stairTransitions);
+        if (hasUnprovenAttachmentOverlap(candidate, connections)) return Optional.empty();
+
+        Map<Integer, AttachmentTarget> nearestByBuilding = new HashMap<>();
+        if (!connections.isEmpty()) {
+            for (StructureConnector.VerticalConnection connection : connections) {
+                Structure structure = connection.structure();
+                StructureFloor floor = connection.floor();
+                addAttachmentTarget(nearestByBuilding, structure, floor,
+                        Math.max(0, candidate.verticalGapTo(floor)));
+            }
+        } else {
+            for (Structure structure : structures.values()) {
+                for (StructureFloor floor : structure.getFloors()) {
+                    if (candidate.geometry().footprintIntersectionArea(floor.geometry()) == 0) continue;
+                    int gap = candidate.attachmentGapTo(floor);
+                    if (!hasDirectVerticalAttachmentEvidence(candidate, floor)) continue;
+                    addAttachmentTarget(nearestByBuilding, structure, floor, gap);
+                }
+            }
+        }
+
+        AttachmentTarget nearest = nearestByBuilding.values().stream()
+                .min(ATTACHMENT_TARGET_ORDER).orElse(null);
+        if (nearest == null) return Optional.empty();
+        return nearestByBuilding.values().stream()
+                .anyMatch(target -> target.buildingId() != nearest.buildingId()
+                        && target.gap() == nearest.gap())
+                ? Optional.empty() : Optional.of(nearest);
+    }
+
+    /**
+     * External Floors may attach without a connector only when overlapping exact columns prove that the
+     * two vertical structures physically meet. Canonical cell intervals may either meet directly, or the
+     * lower cell's first ceiling block may touch the upper cell's supporting block.
+     */
+    private static boolean hasDirectVerticalAttachmentEvidence(StructureFloor first, StructureFloor second) {
+        for (FloorGeometry.Cell firstCell : first.geometry().cells()) {
+            for (FloorGeometry.Cell secondCell : second.geometry()
+                    .cellsAtColumn(firstCell.feet().getX(), firstCell.feet().getZ())) {
+                if (verticalIntervalsMeet(firstCell, secondCell)
+                        || structuralShellsTouch(firstCell, secondCell)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean verticalIntervalsMeet(FloorGeometry.Cell first, FloorGeometry.Cell second) {
+        return first.ceilingY() == second.feet().getY()
+                || second.ceilingY() == first.feet().getY();
+    }
+
+    private static boolean structuralShellsTouch(FloorGeometry.Cell first, FloorGeometry.Cell second) {
+        FloorGeometry.Cell lower = first.feet().getY() <= second.feet().getY() ? first : second;
+        FloorGeometry.Cell upper = lower == first ? second : first;
+        int lowerCeilingBlockY = lower.ceilingY();
+        int upperSupportBlockY = upper.feet().getY() - 1;
+        return lowerCeilingBlockY + 1 == upperSupportBlockY;
+    }
+
+    private void addAttachmentTarget(Map<Integer, AttachmentTarget> nearestByBuilding,
+                                     Structure structure,
+                                     StructureFloor floor,
+                                     int gap) {
+        if (structures.get(structure.getId()) != structure) return;
+        if (gap < 0) return;
+        AttachmentTarget target = new AttachmentTarget(
+                structure.getLogicalBuildingId(), structure.getId(), floor.id(), gap);
+        nearestByBuilding.merge(target.buildingId(), target,
+                (first, second) -> ATTACHMENT_TARGET_ORDER.compare(first, second) <= 0 ? first : second);
+    }
+
+    private Set<StructureConnector.VerticalConnection> attachmentConnections(
+            StructureFloor candidate,
+            Collection<StructureConnector.VerticalConnection> verticalConnections,
+            Collection<BlockPos> stairTransitions) {
+        LinkedHashSet<StructureConnector.VerticalConnection> connections = new LinkedHashSet<>();
+        if (verticalConnections != null) connections.addAll(verticalConnections);
+        if (stairTransitions == null) return Set.copyOf(connections);
+
+        for (BlockPos transition : stairTransitions) {
+            for (Structure structure : structures.values()) {
+                for (StructureFloor floor : structure.getFloors()) {
+                    if (floor.geometry().interactionCellAt(
+                            transition.getX(), transition.getY(), transition.getZ()).isPresent()) {
+                        connections.add(new StructureConnector.VerticalConnection(structure, floor));
+                    }
+                }
+            }
+        }
+        return Set.copyOf(connections);
+    }
+
+    private boolean hasUnprovenAttachmentOverlap(
+            StructureFloor candidate,
+            Set<StructureConnector.VerticalConnection> connections) {
+        Set<Integer> provenBuildingIds = connections.stream()
+                .map(connection -> connection.structure().getLogicalBuildingId())
+                .collect(Collectors.toSet());
+        for (Structure structure : structures.values()) {
+            for (StructureFloor floor : structure.getFloors()) {
+                if (!candidate.overlapsFootprint(floor) || candidate.verticalGapTo(floor) >= 0) continue;
+                boolean directlyProven = connections.contains(
+                        new StructureConnector.VerticalConnection(structure, floor));
+                boolean belongsToProvenBuilding = provenBuildingIds.size() == 1
+                        && provenBuildingIds.contains(structure.getLogicalBuildingId())
+                        && !candidate.sameSemanticBand(floor);
+                if (!directlyProven && !belongsToProvenBuilding) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    Optional<Structure> getInteractionStructureAt(BlockPos pos) {
+        return resolveInteractionPosition(pos).map(ResolvedInteraction::structure);
+    }
+
+    Optional<ResolvedInteraction> resolveInteractionPosition(BlockPos pos) {
+        Map<Integer, List<Building>> roomsByStructure = getRooms()
+                .collect(Collectors.groupingBy(Building::getStructureId));
+        BlockState state = world == null ? null : world.getBlockState(pos);
+        if (state != null && state.getBlock() instanceof TrapDoorBlock) {
+            Direction ownerSide = StructureConnector.ownerSide(state);
+            List<BlockPos> connectorColumn = StructureConnector.verticalColumn(world, pos);
+            List<ResolvedInteraction> above = verticalSideInteractions(pos.above(), connectorColumn, roomsByStructure);
+            List<ResolvedInteraction> below = verticalSideInteractions(pos.below(), connectorColumn, roomsByStructure);
+            boolean sharedBoundary = above.stream().anyMatch(first -> below.stream().anyMatch(second ->
+                    first.structure().getId() != second.structure().getId()
+                            || first.position().floor().id() != second.position().floor().id()));
+            if (!connectorColumn.isEmpty() || sharedBoundary) {
+                return uniqueRegisteredRoom(ownerSide == Direction.UP ? above : below);
+            }
+        }
+        return structures.values().stream()
+                .map(structure -> new ResolvedInteraction(structure,
+                        structure.resolveInteractionPosition(pos,
+                                roomsByStructure.getOrDefault(structure.getId(), List.of())).orElse(null)))
+                .filter(resolved -> resolved.position() != null)
+                .min(Comparator
+                        .comparing((ResolvedInteraction resolved) -> resolved.position().room() == null)
+                        .thenComparingInt(resolved -> resolved.structure().getId()));
+    }
+
+    private List<ResolvedInteraction> verticalSideInteractions(BlockPos pos, List<BlockPos> connectorColumn,
+                                                            Map<Integer, List<Building>> roomsByStructure) {
+        return structures.values().stream()
+                .map(structure -> new ResolvedInteraction(structure,
+                        structure.resolveVerticalSide(pos, connectorColumn,
+                                roomsByStructure.getOrDefault(structure.getId(), List.of())).orElse(null)))
+                .filter(resolved -> resolved.position() != null)
+                .toList();
+    }
+
+    private static Optional<ResolvedInteraction> uniqueRegisteredRoom(List<ResolvedInteraction> candidates) {
+        ResolvedInteraction owner = null;
+        for (ResolvedInteraction candidate : candidates) {
+            Building room = candidate.position().room();
+            if (room == null) continue;
+            if (owner != null && owner.position().room().getId() != room.getId()) return Optional.empty();
+            if (owner == null) owner = candidate;
+        }
+        return Optional.ofNullable(owner);
+    }
+
+    public Optional<Building> getMainRoom(Structure structure) {
+        if (structure == null) return Optional.empty();
+        LogicalBuilding logical = logicalBuildings.get(structure.getLogicalBuildingId());
+        if (logical == null || logical.mainRoomId() < 0) return Optional.empty();
+        Building room = buildings.get(logical.mainRoomId());
+        return room != null && room.isFunctionalRoom() ? Optional.of(room) : Optional.empty();
+    }
+
+    public Optional<Building> findPhysicalRoomAt(Vec3i pos) {
+        Optional<Structure> structure = getExactStructureAt(pos);
+        if (structure.isEmpty()) return Optional.empty();
+        Structure.FloorCell resolved = structure.get().resolvePhysicalFloorCell(pos).orElse(null);
+        if (resolved == null) return Optional.empty();
+        return getRooms().filter(room -> room.getStructureId() == structure.get().getId())
+                .filter(room -> room.getFloorId() == resolved.floor().id())
+                .filter(room -> room.ownsFloorCell(resolved.cell().feet()))
+                .min(Comparator.comparingInt(Building::getId));
+    }
+
+    public Optional<Building> findInteractionRoomAt(BlockPos pos) {
+        Optional<Building> resolved = resolveInteractionPosition(pos)
+                .map(ResolvedInteraction::position)
+                .map(Structure.InteractionPosition::room);
+        if (world != null && world.getBlockState(pos).getBlock() instanceof TrapDoorBlock) {
+            return resolved;
+        }
+        return resolved.or(() -> findPhysicalRoomAt(pos));
+    }
+
+    record ResolvedInteraction(Structure structure, Structure.InteractionPosition position) {
+    }
+
+    public boolean isMainRoom(Building room) {
+        if (room == null || !room.isFunctionalRoom()) return false;
+        Structure structure = getStructure(room.getStructureId()).orElse(null);
+        return structure != null && getMainRoom(structure)
+                .map(main -> main.getId() == room.getId()).orElse(false);
+    }
+
+    public boolean setMainRoom(Building room) {
+        Structure structure = getStructureFor(room).orElse(null);
+        if (structure == null) return false;
+        LogicalBuilding logical = logicalBuildings.get(structure.getLogicalBuildingId());
+        if (logical == null || logical.mainRoomId() == room.getId()
+                || !belongsToLogicalBuilding(room, logical.id())) return false;
+        publishBuildingMutation(() -> logical.setMainRoomId(room.getId()));
+        return true;
+    }
+
+    public boolean setBuildingInheritanceEnabled(Building room, boolean enabled) {
+        Structure structure = getStructureFor(room).orElse(null);
+        if (structure == null) return false;
+        LogicalBuilding logical = logicalBuildings.get(structure.getLogicalBuildingId());
+        if (logical == null || logical.inheritanceEnabled() == enabled) return false;
+        publishBuildingMutation(() -> logical.setInheritanceEnabled(enabled));
+        return true;
+    }
+
+    public boolean setRoomContributesToMain(Building room, boolean contributes) {
+        if (room == null || !buildings.containsKey(room.getId())
+                || room.contributesToMain() == contributes) return false;
+        publishBuildingMutation(() -> room.setContributesToMain(contributes));
+        return true;
+    }
+
+    void setRoomType(Building room, String type, boolean forced) {
+        publishBuildingMutation(() -> {
+            room.setType(type);
+            room.setTypeForced(forced);
+        });
+    }
+
+    public Building.validationResult commitRoomInheritanceUpdate(
+            RoomInheritanceUpdate update, String forcedType) {
+        if (update == null || !update.valid()) return Building.validationResult.NOT_IN_BUILDING;
+        Building room = buildings.get(update.roomId());
+        if (room == null || !room.isFunctionalRoom() || isMainRoom(room) != update.mainRoom()) {
+            return Building.validationResult.OVERLAP;
+        }
+
+        boolean currentEnabled = update.mainRoom()
+                ? isBuildingInheritanceEnabled(room)
+                : room.contributesToMain();
+        if (currentEnabled != update.previousEnabled()) return Building.validationResult.OVERLAP;
+        if (forcedType != null && !update.matchesType(forcedType)) {
+            return Building.validationResult.INVALID_TYPE;
+        }
+        if (update.requiresTypeSelection() && forcedType == null) {
+            return Building.validationResult.INVALID_TYPE;
+        }
+        if (currentEnabled == update.enabled()) return Building.validationResult.SUCCESS;
+
+        LogicalBuilding logical = update.mainRoom()
+                ? getStructureFor(room).map(Structure::getLogicalBuildingId).map(logicalBuildings::get).orElse(null)
+                : null;
+        if (update.mainRoom() && logical == null) return Building.validationResult.OVERLAP;
+        String automaticType = !update.enabled() && forcedType == null
+                ? RoomTypeResolver.create(this).resolve(room).updatedType(null) : null;
+        if (!update.enabled() && forcedType == null && automaticType == null) {
+            return Building.validationResult.INVALID_TYPE;
+        }
+
+        publishBuildingMutation(() -> {
+            if (logical != null) logical.setInheritanceEnabled(update.enabled());
+            else room.setContributesToMain(update.enabled());
+            if (!update.enabled()) {
+                room.setType(forcedType != null ? forcedType : automaticType);
+                room.setTypeForced(forcedType != null);
+            }
+        });
+        return Building.validationResult.SUCCESS;
+    }
+
+    public boolean isBuildingInheritanceEnabled(Building room) {
+        Structure structure = getStructureFor(room).orElse(null);
+        if (structure == null) return false;
+        return getLogicalBuilding(structure.getLogicalBuildingId())
+                .map(LogicalBuilding::inheritanceEnabled).orElse(false);
+    }
+
+    void refreshLogicalBuildings() {
+        logicalBuildings.keySet().stream().toList().forEach(this::reconcileLogicalBuilding);
+    }
+
+    private void reconcileLogicalBuilding(int buildingId) {
+        List<Structure> members = getBuildingStructures(buildingId);
+        if (members.isEmpty()) {
+            logicalBuildings.remove(buildingId);
+            return;
+        }
+        LogicalBuilding logical = logicalBuildings.get(buildingId);
+        if (logical == null) return;
+
+        if (!validMainRoom(logical)) logical.setMainRoomId(lowestRoomId(buildingId));
+        if (logical.mainRoomId() < 0) {
+            removeLogicalBuilding(buildingId);
+            return;
+        }
+        applyFloorNumbers(logical);
+    }
+
+    private boolean validMainRoom(LogicalBuilding logical) {
+        if (logical.mainRoomId() < 0) return lowestRoomId(logical.id()) < 0;
+        return belongsToLogicalBuilding(buildings.get(logical.mainRoomId()), logical.id());
+    }
+
+    private boolean belongsToLogicalBuilding(Building room, int buildingId) {
+        Structure structure = room == null ? null : structures.get(room.getStructureId());
+        return structure != null && structure.getLogicalBuildingId() == buildingId
+                && structure.getFloor(room.getFloorId()).isPresent();
+    }
+
+    private int lowestRoomId(int buildingId) {
+        return buildings.values().stream()
+                .filter(Building::isFunctionalRoom)
+                .filter(room -> belongsToLogicalBuilding(room, buildingId))
+                .mapToInt(Building::getId).min().orElse(-1);
+    }
+
+    private void applyFloorNumbers(LogicalBuilding logical) {
+        StructureFloor ground = groundFloor(logical).orElse(null);
+        if (ground == null) return;
+        List<Structure> members = getBuildingStructures(logical.id());
+        List<StructureFloor> floors = members.stream()
+                .flatMap(structure -> structure.getFloors().stream())
+                .toList();
+        if (floors.stream().anyMatch(floor -> floor.floorNumber() != 0)) {
+            int groundNumber = ground.floorNumber();
+            for (Structure structure : members) {
+                for (StructureFloor floor : structure.getFloors()) {
+                    structure.setFloorNumber(floor.id(), floor.floorNumber() - groundNumber);
+                }
+            }
+            repairFloorNumberCollisions(members, ground.anchorY());
+            return;
+        }
+        Map<StructureFloor, Integer> numbers = StructureFloor.floorNumbers(
+                floors, ground);
+        for (Structure structure : members) {
+            for (StructureFloor floor : structure.getFloors()) {
+                Integer number = numbers.get(floor);
+                if (number != null) structure.setFloorNumber(floor.id(), number);
+            }
+        }
+    }
+
+    private static void repairFloorNumberCollisions(List<Structure> structures, int groundAnchorY) {
+        List<OwnedFloor> floors = structures.stream()
+                .flatMap(structure -> structure.getFloors().stream().map(floor -> new OwnedFloor(structure, floor)))
+                .toList();
+
+        StructureFloor reference = floors.stream()
+                .map(OwnedFloor::floor)
+                .filter(floor -> floor.floorNumber() == 0)
+                .min(Comparator.comparingInt(floor -> Math.abs(floor.anchorY() - groundAnchorY)))
+                .orElse(null);
+        if (reference == null) return;
+
+        List<OwnedFloor> above = floors.stream()
+                .filter(owned -> owned.floor().anchorY() > groundAnchorY)
+                .sorted(Comparator.comparingInt(owned -> owned.floor().anchorY()))
+                .toList();
+        StructureFloor previous = reference;
+        for (OwnedFloor owned : above) {
+            StructureFloor floor = owned.floor();
+            if (floor.floorNumber() == previous.floorNumber() && !floor.sameSemanticBand(previous)) {
+                int floorNumber = previous.floorNumber() + 1;
+                owned.structure().setFloorNumber(floor.id(), floorNumber);
+                floor = floor.withFloorNumber(floorNumber);
+            }
+            previous = floor;
+        }
+
+        List<OwnedFloor> below = floors.stream()
+                .filter(owned -> owned.floor().anchorY() < groundAnchorY)
+                .sorted(Comparator.comparingInt((OwnedFloor owned) -> owned.floor().anchorY()).reversed())
+                .toList();
+        previous = reference;
+        for (OwnedFloor owned : below) {
+            StructureFloor floor = owned.floor();
+            if (floor.floorNumber() == previous.floorNumber() && !floor.sameSemanticBand(previous)) {
+                int floorNumber = previous.floorNumber() - 1;
+                owned.structure().setFloorNumber(floor.id(), floorNumber);
+                floor = floor.withFloorNumber(floorNumber);
+            }
+            previous = floor;
+        }
+    }
+
+    private record OwnedFloor(Structure structure, StructureFloor floor) {
+    }
+
+    private void validateBuildingData() {
+        for (Structure structure : structures.values()) {
+            if (!logicalBuildings.containsKey(structure.getLogicalBuildingId())) {
+                throw new IllegalArgumentException("Structure " + structure.getId()
+                        + " references missing logical building " + structure.getLogicalBuildingId());
+            }
+        }
+        for (Building room : buildings.values()) {
+            Structure structure = structures.get(room.getStructureId());
+            StructureFloor floor = structure == null ? null : structure.getFloor(room.getFloorId()).orElse(null);
+            if (!room.isFunctionalRoom() || floor == null || !floorContainsRoomCells(floor, room)) {
+                throw new IllegalArgumentException("Room " + room.getId() + " references missing Structure/Floor");
+            }
+        }
+        for (LogicalBuilding logical : logicalBuildings.values()) {
+            if (!validMainRoom(logical)) {
+                throw new IllegalArgumentException("Logical building " + logical.id()
+                        + " has invalid Main Room " + logical.mainRoomId());
+            }
+            if (groundFloor(logical).isEmpty()) {
+                throw new IllegalArgumentException("Logical building " + logical.id()
+                        + " cannot derive Ground Floor from Main Room " + logical.mainRoomId());
+            }
+        }
     }
 
     public boolean updateResident(VillagerEntityMCA e) {
@@ -461,13 +1274,46 @@ public class Village implements Iterable<Building> {
         return ResidentHomeAssignments.deduplicate(residentHomes) > 0;
     }
 
-    public Map<UUID, String> getResidentNames() {
-        return residentNames;
+    private static boolean floorContainsRoomCells(StructureFloor floor, Building room) {
+        return !room.getFloorCells().isEmpty()
+                && room.getFloorCells().stream().allMatch(cell -> floor.geometry().cellAt(cell).isPresent());
     }
 
-    public void removeResident(VillagerEntityMCA villager) {
-        removeResident(villager.getUUID());
+    private static boolean roomReferencesStructure(Structure structure, Building room) {
+        if (structure == null || room == null || !room.isFunctionalRoom() || room.getId() < 0
+                || room.getStructureId() != structure.getId()) {
+            return false;
+        }
+        StructureFloor floor = structure.getFloor(room.getFloorId()).orElse(null);
+        return floor != null && floorContainsRoomCells(floor, room);
     }
+
+    record AttachmentTarget(int buildingId, int structureId, int floorId, int gap) {
+    }
+
+    public enum RoomScanMode {
+        ADD_BUILDING, ADD_ROOM, UPDATE_ROOM, ADD_ATTACHMENT;
+
+        public boolean isAttachment() {
+            return this == ADD_ATTACHMENT;
+        }
+    }
+
+    private Optional<StructureFloor> groundFloor(LogicalBuilding logical) {
+        if (logical == null || logical.mainRoomId() < 0) return Optional.empty();
+        Building main = buildings.get(logical.mainRoomId());
+        if (!belongsToLogicalBuilding(main, logical.id())) return Optional.empty();
+        Structure structure = structures.get(main.getStructureId());
+        return structure.getFloor(main.getFloorId());
+    }
+
+
+    public boolean isVillage() {
+        return getStructureCount() >= Config.getInstance().minimumBuildingsToBeConsideredAVillage;
+    }
+
+    public Map<UUID, String> getResidentNames() { return residentNames; }
+    public void removeResident(VillagerEntityMCA villager) { removeResident(villager.getUUID()); }
 
     public void removeResident(UUID uuid) {
         residentNames.remove(uuid);
@@ -476,9 +1322,7 @@ public class Village implements Iterable<Building> {
         markDirty();
     }
 
-    public VillageGuardsManager getVillageGuardsManager() {
-        return villageGuardsManager;
-    }
+    public VillageGuardsManager getVillageGuardsManager() { return villageGuardsManager; }
 
     public Optional<CivilRegistryManager> getCivilRegistry() {
         return world != null ? Optional.of(CivilRegistryManager.get(world, this)) : Optional.empty();
