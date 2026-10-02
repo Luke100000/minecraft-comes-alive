@@ -221,9 +221,13 @@ public final class Structure implements VillageBuilding {
     }
 
     boolean replaceFloorGeometry(int floorId, StructureFloor scannedFloor) {
+        return replaceFloorGeometry(floorId, scannedFloor == null ? null : scannedFloor.geometry());
+    }
+
+    boolean replaceFloorGeometry(int floorId, FloorGeometry scannedFloor) {
         StructureFloor existing = floors.get(floorId);
         if (existing == null || scannedFloor == null) return false;
-        floors.put(floorId, new StructureFloor(floorId, existing.floorNumber(), scannedFloor.geometry()));
+        floors.put(floorId, new StructureFloor(floorId, existing.floorNumber(), scannedFloor));
         if (floorId == 0) originGeometryApproximate = false;
         recomputeBoundsFromFloors();
         return true;

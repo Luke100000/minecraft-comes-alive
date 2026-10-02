@@ -1,9 +1,14 @@
 package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.entity.ai.relationship.Gender;
+import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.FamilyTreeTestSupport;
 import net.conczin.mca.network.FamilyTreeView;
+import net.minecraft.Util;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
+import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -256,6 +261,70 @@ class FamilyTreeViewBuilderTest {
         Optional<FamilyTreeView> view = FamilyTreeViewBuilder.build(tree(), ROOT, 2, 2);
 
         assertTrue(view.isEmpty());
+    }
+
+    @Test
+    void builderIncludesOnlyGravesForReturnedNodes() {
+        FamilyTree tree = tree();
+        node(tree, ROOT, Gender.MALE);
+        UUID unrelated = uuid(90_000);
+        GlobalPos rootGrave = GlobalPos.of(Level.NETHER, new BlockPos(4, 70, 9));
+        GlobalPos unrelatedGrave = GlobalPos.of(Level.END, new BlockPos(40, 80, 90));
+        Map<UUID, GlobalPos> graves = Map.of(ROOT, rootGrave, unrelated, unrelatedGrave);
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(
+                tree,
+                ROOT,
+                0,
+                0,
+                id -> Optional.ofNullable(graves.get(id))
+        ).orElseThrow();
+
+        assertEquals(Map.of(ROOT, rootGrave), view.graves());
+        assertEquals(Set.of(ROOT), view.nodes().keySet());
+    }
+
+    @Test
+    void widowedRootRetainsDeceasedPartnerSoExactGraveRemainsReachable() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = tree.getOrCreate(ROOT, ROOT.toString(), Gender.MALE, true);
+        FamilyTreeNode partner = node(tree, PARTNER, Gender.FEMALE);
+        root.updatePartner(partner);
+        partner.updatePartner(root);
+        partner.setDeceased(true);
+        GlobalPos grave = GlobalPos.of(Level.OVERWORLD, new BlockPos(12, 70, 8));
+
+        root.updatePartner(null, RelationshipState.WIDOW);
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(
+                tree,
+                ROOT,
+                0,
+                0,
+                id -> PARTNER.equals(id) ? Optional.of(grave) : Optional.empty()
+        ).orElseThrow();
+
+        assertEquals(PARTNER, root.partner());
+        assertEquals(ROOT, partner.partner());
+        assertEquals(RelationshipState.WIDOW, root.getRelationshipState());
+        assertEquals(Set.of(ROOT, PARTNER), view.nodes().keySet());
+        assertEquals(Map.of(PARTNER, grave), view.graves());
+    }
+
+    @Test
+    void endingRelationshipNormallyStillClearsPartnerFromBothSides() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = tree.getOrCreate(ROOT, ROOT.toString(), Gender.MALE, true);
+        FamilyTreeNode partner = node(tree, PARTNER, Gender.FEMALE);
+        root.updatePartner(partner);
+        partner.updatePartner(root);
+
+        root.updatePartner(null, RelationshipState.SINGLE);
+
+        assertEquals(Util.NIL_UUID, root.partner());
+        assertEquals(Util.NIL_UUID, partner.partner());
+        assertEquals(RelationshipState.SINGLE, root.getRelationshipState());
+        assertEquals(RelationshipState.SINGLE, partner.getRelationshipState());
     }
 
     private static FamilyTree tree() {

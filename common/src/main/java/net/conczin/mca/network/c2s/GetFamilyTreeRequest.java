@@ -7,6 +7,7 @@ import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.GetFamilyTreeResponse;
 import net.conczin.mca.server.world.data.FamilyTree;
 import net.conczin.mca.server.world.data.FamilyTreeViewBuilder;
+import net.conczin.mca.server.world.data.GraveyardManager;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -42,7 +43,8 @@ public record GetFamilyTreeRequest(UUID uuid, int ancestorDepth, int descendantD
     @Override
     public void handleServer(ServerPlayer player) {
         FamilyTree tree = FamilyTree.get(player.serverLevel());
-        FamilyTreeViewBuilder.build(tree, uuid, ancestorDepth, descendantDepth)
+        GraveyardManager graveyardManager = GraveyardManager.getGlobal(player.serverLevel());
+        FamilyTreeViewBuilder.build(tree, uuid, ancestorDepth, descendantDepth, graveyardManager::getOccupiedGrave)
                 .ifPresentOrElse(
                         view -> Network.sendToPlayer(new GetFamilyTreeResponse(requestId, uuid, true, view), player),
                         () -> Network.sendToPlayer(new GetFamilyTreeResponse(requestId, uuid, false, FamilyTreeView.empty()), player)

@@ -106,6 +106,25 @@ class VillageFloorSystemTest {
     }
 
     @Test
+    void insertingPhysicalFloorBetweenExistingFloorsRenumbersUpperFloor() {
+        Village village = new Village(1, null);
+        Structure original = structure(10, 77,
+                TestStructureFloors.create(0, 64, 68, 0, region(64)),
+                TestStructureFloors.create(1, 72, 76, 1, region(72)));
+        registerStructure(village, original, room(100, 10, 0, true));
+        village.refreshLogicalBuildings();
+
+        Structure inserted = structure(20, 77,
+                TestStructureFloors.create(0, 68, 72, 1, region(68)));
+        registerStructure(village, inserted, room(101, 20, 0, true));
+        village.refreshLogicalBuildings();
+
+        assertEquals(0, original.getFloor(0).orElseThrow().floorNumber());
+        assertEquals(1, inserted.getFloor(0).orElseThrow().floorNumber());
+        assertEquals(2, original.getFloor(1).orElseThrow().floorNumber());
+    }
+
+    @Test
     void floorNumbersAreRebuiltFromLogicalGroundAfterSaveLoad() {
         Village village = new Village(1, null);
         Structure low = structure(10, 77, floor(0, 40), floor(1, 44));

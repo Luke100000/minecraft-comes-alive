@@ -1,6 +1,7 @@
 package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.network.FamilyTreeView;
+import net.minecraft.core.GlobalPos;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -10,6 +11,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 public final class FamilyTreeViewBuilder {
     public static final int MAX_DEPTH = 8;
@@ -18,6 +20,16 @@ public final class FamilyTreeViewBuilder {
     }
 
     public static Optional<FamilyTreeView> build(FamilyTree tree, UUID root, int ancestorDepth, int descendantDepth) {
+        return build(tree, root, ancestorDepth, descendantDepth, id -> Optional.empty());
+    }
+
+    public static Optional<FamilyTreeView> build(
+            FamilyTree tree,
+            UUID root,
+            int ancestorDepth,
+            int descendantDepth,
+            Function<UUID, Optional<GlobalPos>> graveLookup
+    ) {
         Optional<FamilyTreeNode> rootNode = tree.getOrEmpty(root);
         if (rootNode.isEmpty()) {
             return Optional.empty();
@@ -63,7 +75,10 @@ public final class FamilyTreeViewBuilder {
         includePartners(tree, nodes, unavailable);
 
         unavailable.removeAll(nodes.keySet());
-        return Optional.of(new FamilyTreeView(snapshotNodes(tree, nodes, continuations), continuations, unavailable));
+        Map<UUID, FamilyTreeNode> snapshots = snapshotNodes(tree, nodes, continuations);
+        Map<UUID, GlobalPos> graves = new LinkedHashMap<>();
+        snapshots.keySet().forEach(id -> graveLookup.apply(id).ifPresent(grave -> graves.put(id, grave)));
+        return Optional.of(new FamilyTreeView(snapshots, continuations, unavailable, graves));
     }
 
     private static int clampDepth(int depth) {

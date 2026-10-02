@@ -493,6 +493,36 @@ public final class ArcherCombatMovementGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_archer_escape_gate", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void emergencyEscapeCanRouteThroughClosedHandOperableGate(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        prepareFlatArea(helper, start, 8);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        Zombie threat = spawnTarget(helper, start.east(3));
+        archer.setOnGround(true);
+
+        setWallColumn(helper, start.north());
+        setWallColumn(helper, start.south());
+        setWallColumn(helper, start.east());
+        helper.getLevel().setBlock(start.west(), Blocks.OAK_FENCE_GATE.defaultBlockState(), 3);
+        for (int offset = 1; offset <= 6; offset++) {
+            setWallColumn(helper, start.west(offset).north());
+            setWallColumn(helper, start.west(offset).south());
+        }
+
+        var escapeTarget = RangedCombatPositioning.findEmergencyEscapeTarget(
+                archer, List.of(threat), List.of(threat), 6.0D
+        ).orElseThrow(() -> new AssertionError("closed hand-operable gate hid the only escape lane"));
+        var path = archer.getNavigation().createPath(escapeTarget.getPathTargets(archer), 0);
+
+        helper.assertTrue(path != null && path.canReach(),
+                "MCA navigation could not reach the escape lane through the closed gate");
+        helper.assertTrue(path.getTarget().getX() < start.getX() - 1,
+                "escape target stopped at the closed gate instead of routing through it: " + path.getTarget());
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_archer_escape_topology", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
     public static void escapeTargetSetRejectsDeadEndPocketForUpwardOnwardRoute(GameTestHelper helper) {
         cleanupTestEntities();

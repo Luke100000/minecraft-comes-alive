@@ -285,6 +285,39 @@ public final class ExtendedWalkTowardsTaskGameTests {
         );
     }
 
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void repeatedShortHomeTripsDoNotInheritFailureAge(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        BlockPos start = villager.blockPosition();
+        BlockPos home = start.east(2);
+        setHome(villager, home);
+        OneShot<VillagerEntityMCA> task = createTask(ignored -> true);
+        long started = helper.getLevel().getGameTime();
+        try {
+            for (int trip = 0; trip < 4; trip++) {
+                long time = started + trip * 4L;
+                villager.setPos(Vec3.atBottomCenterOf(start));
+                villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+                task.tryStart(helper.getLevel(), villager, time);
+                helper.assertTrue(villager.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET),
+                        "completed short trip delayed the next departure to the same HOME");
+                helper.assertTrue(!villager.getBrain().hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
+                        "successful short trip inherited a stale failure episode");
+                // Report arrival while WALK_TARGET still exists, as during a Brain tick.
+                villager.setPos(Vec3.atBottomCenterOf(home));
+                task.tryStart(helper.getLevel(), villager, time + 1L);
+                villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+                // Also exercise arrival after the sink has erased WALK_TARGET.
+                task.tryStart(helper.getLevel(), villager, time + 2L);
+                helper.assertTrue(villager.getBrain().getMemory(MemoryModuleType.HOME).isPresent(),
+                        "successful short trip released HOME");
+            }
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
     private static void assertFactoryKeepsRealDestination(
             GameTestHelper helper,
             VillagerEntityMCA villager,

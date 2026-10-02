@@ -8,8 +8,10 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -67,13 +69,30 @@ final class RoomDFU {
             LogicalBuilding logical = new LogicalBuilding((CompoundTag) value);
             putUnique(logicalBuildings, logical.id(), logical, "Logical building");
         }
+        validateDisjointRoomOwnership(rooms.values());
         return new Result(rooms, external, structures, logicalBuildings);
+    }
+
+    private static void validateDisjointRoomOwnership(Collection<Building> rooms) {
+        Map<FloorRef, Set<BlockPos>> ownedCells = new HashMap<>();
+        for (Building room : rooms) {
+            Set<BlockPos> floorCells = ownedCells.computeIfAbsent(
+                    new FloorRef(room.getStructureId(), room.getFloorId()), ignored -> new HashSet<>());
+            for (BlockPos cell : room.getFloorCells()) {
+                if (!floorCells.add(cell)) {
+                    throw new IllegalArgumentException("Canonical Rooms overlap at floor cell " + cell);
+                }
+            }
+        }
     }
 
     private static <T> void putUnique(Map<Integer, T> target, int id, T value, String kind) {
         if (target.putIfAbsent(id, value) != null) {
             throw new IllegalArgumentException("Duplicate canonical " + kind + " id " + id);
         }
+    }
+
+    private record FloorRef(int structureId, int floorId) {
     }
 
     private static Result migrateUpstreamFloorCleanSquash(CompoundTag villageTag) {

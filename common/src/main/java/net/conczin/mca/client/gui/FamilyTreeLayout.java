@@ -16,8 +16,8 @@ import java.util.Set;
 import java.util.UUID;
 
 final class FamilyTreeLayout {
-    public static final int CARD_WIDTH = 110;
-    public static final int CARD_HEIGHT = 40;
+    public static final int CARD_WIDTH = 128;
+    public static final int CARD_HEIGHT = 64;
     public static final int HORIZONTAL_GAP = 18;
     public static final int GENERATION_GAP = 56;
     public static final int PARTNER_GAP = 26;

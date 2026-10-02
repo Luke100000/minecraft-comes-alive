@@ -209,7 +209,7 @@ class VillageManagerExpandedRoomCommitTest {
         replacement.setTypeForced(true);
         RegisteredRoomUpdate update = new RegisteredRoomUpdate(
                 Building.validationResult.SUCCESS, BlockPos.ZERO, village, refreshed,
-                10, 0, 100, replacement, List.of("music_store", "workshop"));
+                100, replacement, List.of("music_store", "workshop"));
         VillageManager manager = new VillageManager(null);
         Set<BlockPos> siblingCells = Set.copyOf(sibling.getFloorCells());
 
@@ -239,7 +239,7 @@ class VillageManagerExpandedRoomCommitTest {
         replacement.setTypeForced(false);
         RegisteredRoomUpdate update = new RegisteredRoomUpdate(
                 Building.validationResult.SUCCESS, BlockPos.ZERO, village, current.copy(),
-                10, 0, 100, replacement, List.of());
+                100, replacement, List.of());
         VillageManager manager = new VillageManager(null);
 
         assertEquals(Building.validationResult.SUCCESS,

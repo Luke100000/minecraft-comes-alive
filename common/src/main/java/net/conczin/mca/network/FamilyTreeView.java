@@ -2,6 +2,7 @@ package net.conczin.mca.network;
 
 import io.netty.buffer.ByteBuf;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -17,7 +18,8 @@ import java.util.UUID;
 public record FamilyTreeView(
         Map<UUID, FamilyTreeNode> nodes,
         Set<Continuation> continuations,
-        Set<UUID> unavailable
+        Set<UUID> unavailable,
+        Map<UUID, GlobalPos> graves
 ) {
     public static final int MAX_NODES = 256;
     public static final int MAX_CONTINUATIONS = MAX_NODES * 2;
@@ -48,13 +50,28 @@ public record FamilyTreeView(
             UUIDUtil.STREAM_CODEC,
             MAX_UNAVAILABLE
     );
+    private static final StreamCodec<FriendlyByteBuf, Map<UUID, GlobalPos>> GRAVES_CODEC = ByteBufCodecs.map(
+            HashMap::new,
+            UUIDUtil.STREAM_CODEC,
+            GlobalPos.STREAM_CODEC,
+            MAX_NODES
+    );
 
     public static final StreamCodec<FriendlyByteBuf, FamilyTreeView> STREAM_CODEC = StreamCodec.composite(
             NODES_CODEC, FamilyTreeView::nodes,
             CONTINUATIONS_CODEC, FamilyTreeView::continuations,
             UUID_SET_CODEC, FamilyTreeView::unavailable,
+            GRAVES_CODEC, FamilyTreeView::graves,
             FamilyTreeView::new
     );
+
+    public FamilyTreeView(
+            Map<UUID, FamilyTreeNode> nodes,
+            Set<Continuation> continuations,
+            Set<UUID> unavailable
+    ) {
+        this(nodes, continuations, unavailable, Map.of());
+    }
 
     public FamilyTreeView {
         if (nodes.size() > MAX_NODES) {
@@ -73,15 +90,22 @@ public record FamilyTreeView(
         if (unavailable.size() > MAX_UNAVAILABLE) {
             throw new IllegalArgumentException("Family tree view exceeds unavailable-record budget: " + unavailable.size());
         }
+        if (graves.size() > MAX_NODES) {
+            throw new IllegalArgumentException("Family tree view exceeds grave budget: " + graves.size());
+        }
+        if (!nodes.keySet().containsAll(graves.keySet())) {
+            throw new IllegalArgumentException("Family tree view contains grave for node outside the bounded view");
+        }
         Map<UUID, FamilyTreeNode> detachedNodes = new LinkedHashMap<>(nodes.size());
         nodes.forEach((id, node) -> detachedNodes.put(id, new FamilyTreeNode(null, node.save())));
         nodes = Map.copyOf(detachedNodes);
         continuations = Set.copyOf(continuations);
         unavailable = Set.copyOf(unavailable);
+        graves = Map.copyOf(graves);
     }
 
     public static FamilyTreeView empty() {
-        return new FamilyTreeView(Map.of(), Set.of(), Set.of());
+        return new FamilyTreeView(Map.of(), Set.of(), Set.of(), Map.of());
     }
 
     public record Continuation(UUID anchor, Direction direction) {

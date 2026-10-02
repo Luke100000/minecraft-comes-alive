@@ -227,16 +227,8 @@ public class Village implements Iterable<Building> {
     }
 
     boolean replaceStructureAndRegisterRoom(Structure refreshed, Building room) {
-        if (refreshed == null || room == null || !room.isFunctionalRoom() || room.getId() < 0) return false;
-        Structure current = structures.get(refreshed.getId());
-        if (current == null || current.getLogicalBuildingId() != refreshed.getLogicalBuildingId()) return false;
+        if (refreshed == null || room == null || room.getId() < 0) return false;
         if (buildings.containsKey(room.getId()) || externalBuildings.containsKey(room.getId())) return false;
-        if (room.getStructureId() != refreshed.getId()) return false;
-
-        StructureFloor floor = refreshed.getFloor(room.getFloorId()).orElse(null);
-        if (floor == null || room.getFloorCells().isEmpty() || !floorContainsRoomCells(floor, room)) {
-            return false;
-        }
         List<Building> floorRooms = getRooms()
                 .filter(existing -> existing.getStructureId() == refreshed.getId())
                 .filter(existing -> existing.getFloorId() == room.getFloorId())
@@ -1150,6 +1142,7 @@ public class Village implements Iterable<Building> {
                     structure.setFloorNumber(floor.id(), floor.floorNumber() - groundNumber);
                 }
             }
+            repairFloorNumberCollisions(members, ground.anchorY());
             return;
         }
         Map<StructureFloor, Integer> numbers = StructureFloor.floorNumbers(
@@ -1160,6 +1153,52 @@ public class Village implements Iterable<Building> {
                 if (number != null) structure.setFloorNumber(floor.id(), number);
             }
         }
+    }
+
+    private static void repairFloorNumberCollisions(List<Structure> structures, int groundAnchorY) {
+        List<OwnedFloor> floors = structures.stream()
+                .flatMap(structure -> structure.getFloors().stream().map(floor -> new OwnedFloor(structure, floor)))
+                .toList();
+
+        StructureFloor reference = floors.stream()
+                .map(OwnedFloor::floor)
+                .filter(floor -> floor.floorNumber() == 0)
+                .min(Comparator.comparingInt(floor -> Math.abs(floor.anchorY() - groundAnchorY)))
+                .orElse(null);
+        if (reference == null) return;
+
+        List<OwnedFloor> above = floors.stream()
+                .filter(owned -> owned.floor().anchorY() > groundAnchorY)
+                .sorted(Comparator.comparingInt(owned -> owned.floor().anchorY()))
+                .toList();
+        StructureFloor previous = reference;
+        for (OwnedFloor owned : above) {
+            StructureFloor floor = owned.floor();
+            if (floor.floorNumber() == previous.floorNumber() && !floor.sameSemanticBand(previous)) {
+                int floorNumber = previous.floorNumber() + 1;
+                owned.structure().setFloorNumber(floor.id(), floorNumber);
+                floor = floor.withFloorNumber(floorNumber);
+            }
+            previous = floor;
+        }
+
+        List<OwnedFloor> below = floors.stream()
+                .filter(owned -> owned.floor().anchorY() < groundAnchorY)
+                .sorted(Comparator.comparingInt((OwnedFloor owned) -> owned.floor().anchorY()).reversed())
+                .toList();
+        previous = reference;
+        for (OwnedFloor owned : below) {
+            StructureFloor floor = owned.floor();
+            if (floor.floorNumber() == previous.floorNumber() && !floor.sameSemanticBand(previous)) {
+                int floorNumber = previous.floorNumber() - 1;
+                owned.structure().setFloorNumber(floor.id(), floorNumber);
+                floor = floor.withFloorNumber(floorNumber);
+            }
+            previous = floor;
+        }
+    }
+
+    private record OwnedFloor(Structure structure, StructureFloor floor) {
     }
 
     private void validateBuildingData() {

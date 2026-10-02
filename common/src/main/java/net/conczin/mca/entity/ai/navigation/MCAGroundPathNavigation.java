@@ -31,13 +31,26 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     private static final int FALL_RESYNC_HORIZONTAL_DISTANCE = 2;
     private static final int FALL_RESYNC_MIN_VERTICAL_DROP = 2;
     private static final long FAILED_EXTENDED_RETRY_TICKS = 100L;
+    private static final long MAX_FAILED_EXTENDED_RETRY_TICKS = 800L;
     private static final double FAILED_EXTENDED_RETRY_MOVE_DISTANCE_SQR = 16.0D;
     private static final double FAILED_TARGET_INVALIDATION_RADIUS_SQR = 9.0D;
     private final ClimbTraversal climbTraversal;
-    private BlockPos failedExtendedTarget;
-    private BlockPos failedExtendedOrigin;
-    private long failedExtendedAt;
-    private boolean retryInvalidated;
+    private FailedExtendedSearch failedExtendedSearch;
+    private boolean recomputingPath;
+
+    private static final class FailedExtendedSearch {
+        private final BlockPos target;
+        private final BlockPos origin;
+        private long attemptedAt;
+        private long retryTicks = FAILED_EXTENDED_RETRY_TICKS;
+        private boolean invalidated;
+
+        private FailedExtendedSearch(BlockPos target, BlockPos origin, long attemptedAt) {
+            this.target = target.immutable();
+            this.origin = origin.immutable();
+            this.attemptedAt = attemptedAt;
+        }
+    }
 
     public MCAGroundPathNavigation(Mob mob, Level level) {
         super(mob, level);
@@ -70,6 +83,12 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         WalkTarget walkTarget = this.mob.getBrain()
                 .getMemoryInternal(MemoryModuleType.WALK_TARGET)
                 .orElse(null);
+        if (this.recomputingPath && walkTarget != null
+                && walkTarget.getTarget() instanceof MultiTargetPositionTracker multiTarget) {
+            // Brain retains the logical target and can refresh endpoints after a
+            // block change; vanilla navigation remembers only its last chosen one.
+            return this.createPath(multiTarget.getPathTargets(this.mob), 8, false, reachRange);
+        }
         if (isExactStaticAirWalkTarget(target, walkTarget)) {
             return this.createPath(Set.of(target), 8, false, reachRange);
         }
@@ -122,6 +141,14 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                     (float)Config.getInstance().getVillagerPathfindingDistance(),
                     ordinaryPathLength
             );
+            if (!suppressExtended && this.failedExtendedSearch != null
+                    && extendedPathLength > ordinaryPathLength) {
+                // A previous full search already exhausted the ordinary frontier.
+                // Retry that search directly instead of expanding it twice.
+                Path path = super.createPath(targets, radiusOffset, above, reachRange, extendedPathLength);
+                updateFailedExtendedSearch(target, path, null);
+                return path;
+            }
             if (requiresExtendedPath(this.mob, target)) {
                 boolean useExtended = !suppressExtended && hasFailureEvidenceFor(target)
                         && extendedPathLength > ordinaryPathLength;
@@ -171,38 +198,39 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 && !isUsefulPartialPath(extendedPath, target)
                 && (ordinaryPath == null
                 || extendedPath.getDistToTarget() >= ordinaryPath.getDistToTarget()))) {
-            if (failedExtendedTarget == null || !failedExtendedTarget.equals(target)) {
-                retryInvalidated = false;
+            if (this.failedExtendedSearch == null || !this.failedExtendedSearch.target.equals(target)) {
+                this.failedExtendedSearch = new FailedExtendedSearch(target, this.mob.blockPosition(),
+                        this.level.getGameTime());
+            } else {
+                this.failedExtendedSearch.attemptedAt = this.level.getGameTime();
+                this.failedExtendedSearch.retryTicks = Math.min(MAX_FAILED_EXTENDED_RETRY_TICKS,
+                        this.failedExtendedSearch.retryTicks * 2L);
             }
-            failedExtendedTarget = target.immutable();
-            failedExtendedOrigin = this.mob.blockPosition();
-            failedExtendedAt = this.level.getGameTime();
         } else {
             clearFailedExtendedSearch();
         }
     }
 
     private boolean skipRepeatedFailedExtendedSearch(BlockPos target) {
-        if (failedExtendedTarget == null || !failedExtendedTarget.equals(target)) {
+        FailedExtendedSearch failure = this.failedExtendedSearch;
+        if (failure == null) {
             return false;
         }
-        if (!hasFailureEvidenceFor(target)
-                || this.mob.blockPosition().distSqr(failedExtendedOrigin) >= FAILED_EXTENDED_RETRY_MOVE_DISTANCE_SQR) {
+        if (!failure.target.equals(target) || !hasFailureEvidenceFor(target)
+                || this.mob.blockPosition().distSqr(failure.origin) >= FAILED_EXTENDED_RETRY_MOVE_DISTANCE_SQR) {
             clearFailedExtendedSearch();
             return false;
         }
-        long elapsed = this.level.getGameTime() - failedExtendedAt;
-        if (elapsed < 0L || elapsed >= FAILED_EXTENDED_RETRY_TICKS) {
+        long elapsed = this.level.getGameTime() - failure.attemptedAt;
+        if (elapsed < 0L) {
             clearFailedExtendedSearch();
             return false;
         }
-        return true;
+        return elapsed < failure.retryTicks;
     }
 
     private void clearFailedExtendedSearch() {
-        failedExtendedTarget = null;
-        failedExtendedOrigin = null;
-        retryInvalidated = false;
+        this.failedExtendedSearch = null;
     }
 
     private boolean isExactStaticAirWalkTarget(BlockPos target, WalkTarget walkTarget) {
@@ -303,7 +331,12 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             this.hasDelayedRecomputation = true;
             return;
         }
-        super.recomputePath();
+        this.recomputingPath = true;
+        try {
+            super.recomputePath();
+        } finally {
+            this.recomputingPath = false;
+        }
     }
 
     @Override
@@ -353,19 +386,21 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     }
 
     private void recordRetryInvalidation(BlockPos changed) {
-        if (failedExtendedTarget == null || !hasFailureEvidenceFor(failedExtendedTarget)) {
+        FailedExtendedSearch failure = this.failedExtendedSearch;
+        if (failure == null || !hasFailureEvidenceFor(failure.target)) {
             return;
         }
-        if (changed.distSqr(failedExtendedTarget) <= FAILED_TARGET_INVALIDATION_RADIUS_SQR) {
-            retryInvalidated = true;
+        if (changed.distSqr(failure.target) <= FAILED_TARGET_INVALIDATION_RADIUS_SQR) {
+            failure.invalidated = true;
         }
     }
 
     public boolean consumeRetryInvalidation(BlockPos target) {
-        if (!retryInvalidated || failedExtendedTarget == null || !failedExtendedTarget.equals(target)) {
+        FailedExtendedSearch failure = this.failedExtendedSearch;
+        if (failure == null || !failure.invalidated || !failure.target.equals(target)) {
             return false;
         }
-        retryInvalidated = false;
+        clearFailedExtendedSearch();
         return true;
     }
 
@@ -406,7 +441,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         // Hand an unproductive continuation back to the destination's Brain
         // failure clock; its producer owns the next retry and eventual give-up.
         if (this.mob.blockPosition().distSqr(completedPath.getNodePos(0)) < 4.0D) {
-            recordTerminalPartialFailure(destination, completedPath.getNodePos(0));
+            recordTerminalPartialFailure(destination);
             return;
         }
         Path nextPath = this.createPath(destination, 0);
@@ -414,13 +449,13 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 || (!nextPath.canReach() && !isUsefulPartialPath(nextPath, destination))) {
             // A completed partial remains installed after a failed continuation.
             // Without failure evidence, this same search runs every tick.
-            recordTerminalPartialFailure(destination, completedPath.getNodePos(0));
+            recordTerminalPartialFailure(destination);
             return;
         }
         this.moveTo(nextPath, walkTarget.getSpeedModifier());
     }
 
-    private void recordTerminalPartialFailure(BlockPos destination, BlockPos previousOrigin) {
+    private void recordTerminalPartialFailure(BlockPos destination) {
         if (this.mob instanceof VillagerEntityMCA villager
                 && !WalkTargetFailureMemory.hasFailureFor(villager, destination)) {
             WalkTargetFailureMemory.record(villager, destination, this.level.getGameTime());
@@ -488,11 +523,6 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             }
         }
 
-        for (int index = currentIndex; index < path.getNodeCount(); index++) {
-            if (path.getNodePos(index).getY() <= feetY + 1) {
-                return;
-            }
-        }
         this.stop();
     }
 

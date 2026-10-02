@@ -368,8 +368,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (current == null || current.getLogicalBuildingId() != refreshed.getLogicalBuildingId()) {
             return Building.validationResult.NOT_IN_BUILDING;
         }
-        if (room.getId() >= 0 || room.getStructureId() != refreshed.getId()
-                || refreshed.getFloor(room.getFloorId()).isEmpty()) {
+        if (room.getId() >= 0) {
             return Building.validationResult.OVERLAP;
         }
 
@@ -445,24 +444,18 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
 
         Village village = update.village();
-        Structure structure = village == null
-                ? null : village.getStructure(update.structureId()).orElse(null);
-        if (structure == null || structure.getFloor(update.floorId()).isEmpty()) {
+        Building current = village == null ? null : village.getBuilding(update.expectedRoomId()).orElse(null);
+        if (current == null || !current.isFunctionalRoom()) {
+            return Building.validationResult.OVERLAP;
+        }
+        Structure structure = village.getStructureFor(current).orElse(null);
+        if (structure == null || structure.getFloor(current.getFloorId()).isEmpty()) {
             return Building.validationResult.NOT_IN_BUILDING;
         }
-        if (update.refreshedStructure() == null
-                || update.refreshedStructure().getId() != update.structureId()
-                || update.refreshedStructure().getFloor(update.floorId()).isEmpty()) {
-            return Building.validationResult.OVERLAP;
-        }
-
-        Building current = village.getBuilding(update.expectedRoomId()).orElse(null);
-        if (current == null || current.getStructureId() != update.structureId()
-                || current.getFloorId() != update.floorId()) {
-            return Building.validationResult.OVERLAP;
-        }
+        Structure refreshed = update.refreshedStructure();
         Building replacement = update.replacementRoom() == null ? null : update.replacementRoom().copy();
-        StructureFloor refreshedFloor = update.refreshedStructure().getFloor(update.floorId()).orElse(null);
+        StructureFloor refreshedFloor = refreshed == null || refreshed.getId() != current.getStructureId()
+                ? null : refreshed.getFloor(current.getFloorId()).orElse(null);
         if (replacement == null || refreshedFloor == null
                 || replacement.getId() != current.getId()
                 || replacement.getStructureId() != current.getStructureId()
@@ -473,8 +466,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
 
         List<Building> siblingRooms = village.getRooms()
-                .filter(room -> room.getStructureId() == update.structureId())
-                .filter(room -> room.getFloorId() == update.floorId())
+                .filter(room -> room.getStructureId() == current.getStructureId())
+                .filter(room -> room.getFloorId() == current.getFloorId())
                 .filter(room -> room.getId() != current.getId())
                 .toList();
         if (siblingRooms.stream().anyMatch(room -> refreshedFloor.geometry().roomIdentityOverlapCount(
@@ -502,7 +495,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
         List<Building> replacementRooms = new ArrayList<>(siblingRooms);
         replacementRooms.add(replacement);
-        return village.publishFloorRefresh(update.refreshedStructure(), update.floorId(), replacementRooms)
+        return village.publishFloorRefresh(refreshed, current.getFloorId(), replacementRooms)
                 ? Building.validationResult.SUCCESS
                 : Building.validationResult.OVERLAP;
     }

@@ -55,7 +55,8 @@ final class WalkTargetRetryGate {
         return true;
     }
 
-    void resetForRouteChange(BlockPos destination) {
+    /** Completion or a changed route ends the matching retry episode. */
+    void reset(BlockPos destination) {
         if (previousDestination != null && previousDestination.equals(destination)) {
             previousDestination = null;
         }

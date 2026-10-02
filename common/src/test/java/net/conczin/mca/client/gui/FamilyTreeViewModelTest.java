@@ -6,6 +6,9 @@ import net.conczin.mca.network.FamilyTreeView;
 import net.conczin.mca.network.s2c.GetFamilyTreeResponse;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.minecraft.Util;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
+import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -245,6 +248,61 @@ class FamilyTreeViewModelTest {
         assertFalse(model.snapshot().continuations().contains(continuation));
     }
 
+    @Test
+    void appliedResponseAddsExactGrave() {
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        GlobalPos grave = GlobalPos.of(Level.NETHER, new BlockPos(12, 64, -31));
+        long request = model.beginFocus(ROOT, viewport(0, 0, 1));
+
+        model.accept(response(
+                request,
+                ROOT,
+                view(Map.of(ROOT, node(ROOT)), Set.of(), Set.of(), Map.of(ROOT, grave))
+        ));
+
+        assertEquals(Map.of(ROOT, grave), model.graves());
+    }
+
+    @Test
+    void newerAppliedResponseWithoutGraveRemovesCachedGraveForReturnedNode() {
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        GlobalPos grave = GlobalPos.of(Level.OVERWORLD, new BlockPos(3, 70, 8));
+        long initial = model.beginFocus(ROOT, viewport(0, 0, 1));
+        model.accept(response(
+                initial,
+                ROOT,
+                view(Map.of(ROOT, node(ROOT)), Set.of(), Set.of(), Map.of(ROOT, grave))
+        ));
+
+        long refresh = model.beginFocus(ROOT, viewport(0, 0, 1));
+        model.accept(response(refresh, ROOT, view(Map.of(ROOT, node(ROOT)), Set.of(), Set.of())));
+
+        assertTrue(model.graves().isEmpty());
+    }
+
+    @Test
+    void staleResponseDoesNotMutateGraveCache() {
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        GlobalPos rootGrave = GlobalPos.of(Level.OVERWORLD, new BlockPos(3, 70, 8));
+        GlobalPos childGrave = GlobalPos.of(Level.END, new BlockPos(30, 80, 9));
+        long initial = model.beginFocus(ROOT, viewport(0, 0, 1));
+        model.accept(response(
+                initial,
+                ROOT,
+                view(Map.of(ROOT, node(ROOT)), Set.of(), Set.of(), Map.of(ROOT, rootGrave))
+        ));
+        long stale = model.beginFocus(CHILD, viewport(0, 0, 1));
+        model.beginFocus(OTHER, viewport(0, 0, 1));
+
+        assertEquals(FamilyTreeViewModel.MergeResult.STALE, model.accept(response(
+                stale,
+                CHILD,
+                view(Map.of(CHILD, node(CHILD)), Set.of(), Set.of(), Map.of(CHILD, childGrave))
+        )));
+
+        assertEquals(Map.of(ROOT, rootGrave), model.graves());
+    }
+
     private static GetFamilyTreeResponse response(long requestId, UUID uuid, FamilyTreeView view) {
         return new GetFamilyTreeResponse(requestId, uuid, true, view);
     }
@@ -255,6 +313,15 @@ class FamilyTreeViewModelTest {
             Set<UUID> unavailable
     ) {
         return new FamilyTreeView(nodes, continuations, unavailable);
+    }
+
+    private static FamilyTreeView view(
+            Map<UUID, FamilyTreeNode> nodes,
+            Set<FamilyTreeView.Continuation> continuations,
+            Set<UUID> unavailable,
+            Map<UUID, GlobalPos> graves
+    ) {
+        return new FamilyTreeView(nodes, continuations, unavailable, graves);
     }
 
     private static FamilyTreeNode node(UUID id) {

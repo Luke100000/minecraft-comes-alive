@@ -8,11 +8,14 @@ import net.conczin.mca.network.s2c.FamilyTreeUUIDResponse;
 import net.conczin.mca.network.s2c.GetFamilyTreeResponse;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.minecraft.Util;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -185,6 +188,52 @@ class FamilyTreeViewCodecTest {
         assertThrows(
                 IllegalArgumentException.class,
                 () -> new FamilyTreeView(Map.of(ROOT, root), Set.of(), Set.of())
+        );
+    }
+
+    @Test
+    void familyTreeViewRoundTripPreservesExactGraves() {
+        FamilyTreeNode rootNode = new FamilyTreeNode(
+                null,
+                ROOT,
+                "Root",
+                false,
+                Gender.MALE,
+                Util.NIL_UUID,
+                Util.NIL_UUID
+        );
+        GlobalPos grave = GlobalPos.of(Level.NETHER, new BlockPos(12, 64, -31));
+        FamilyTreeView view = new FamilyTreeView(
+                Map.of(ROOT, rootNode),
+                Set.of(),
+                Set.of(),
+                Map.of(ROOT, grave)
+        );
+
+        FamilyTreeView decoded = roundTrip(FamilyTreeView.STREAM_CODEC, view);
+
+        assertEquals(Map.of(ROOT, grave), decoded.graves());
+    }
+
+    @Test
+    void familyTreeViewRejectsOversizedGraveMap() {
+        FamilyTreeNode rootNode = new FamilyTreeNode(
+                null,
+                ROOT,
+                "Root",
+                false,
+                Gender.MALE,
+                Util.NIL_UUID,
+                Util.NIL_UUID
+        );
+        Map<UUID, GlobalPos> graves = new LinkedHashMap<>();
+        for (int index = 0; index < FamilyTreeView.MAX_NODES + 1; index++) {
+            graves.put(uuid(30_000 + index), GlobalPos.of(Level.OVERWORLD, new BlockPos(index, 64, 0)));
+        }
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new FamilyTreeView(Map.of(ROOT, rootNode), Set.of(), Set.of(), graves)
         );
     }
 

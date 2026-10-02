@@ -6,7 +6,7 @@ import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
-import net.conczin.mca.entity.ai.navigation.PathfindingBlacklist;
+import net.conczin.mca.entity.ai.navigation.TeleportBlockBlacklist;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -21,9 +21,22 @@ import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 
 public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
     private boolean extendedMovementLifetime;
-    private BlockPos detourDestination;
-    private BlockPos detourStep;
-    private double detourDistance;
+    private Detour detour;
+
+    private enum DetourPhase { FLANKING, CROSSING }
+
+    private static final class Detour {
+        private final BlockPos destination;
+        private final BlockPos step;
+        private double distance;
+        private DetourPhase phase = DetourPhase.FLANKING;
+
+        private Detour(BlockPos destination, BlockPos step, double distance) {
+            this.destination = destination.immutable();
+            this.step = step.immutable();
+            this.distance = distance;
+        }
+    }
 
     @Override
     protected boolean timedOut(long gameTime) {
@@ -119,11 +132,11 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         }
 
         BlockPos destination = walkTarget.getTarget().currentBlockPosition();
-        if (this.detourDestination != null && !this.detourDestination.equals(destination)) {
+        if (this.detour != null && !this.detour.destination.equals(destination)) {
             clearDetour();
         }
 
-        if (this.detourDestination == null) {
+        if (this.detour == null) {
             if (completedPath.canReach()
                     || MCAGroundPathNavigation.isUsefulPartialPath(completedPath, destination)) {
                 return false;
@@ -131,7 +144,15 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
             return beginDetour(entity, walkTarget, destination);
         }
 
-        Path destinationPath = entity.getNavigation().createPath(destination, 0);
+        boolean routeChanged = entity.getNavigation() instanceof MCAGroundPathNavigation navigation
+                && navigation.consumeRetryInvalidation(destination);
+        // Short flank legs deliberately move sideways, so immediately searching
+        // HOME again often just returns the route back to the obstacle's start.
+        // Re-probe after enough lateral travel to attempt a crossing, or a route change.
+        Path destinationPath = this.detour.phase == DetourPhase.CROSSING || routeChanged
+                || this.detour.distance >= MCAGroundPathNavigation.getOrdinaryPathLength(entity)
+                ? entity.getNavigation().createPath(destination, 0)
+                : null;
         if (destinationPath != null && destinationPath.canReach()) {
             clearDetour();
             clearFailure(entity);
@@ -139,7 +160,7 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
             return true;
         }
 
-        if (BlockPos.ZERO.equals(this.detourStep)) {
+        if (this.detour.phase == DetourPhase.CROSSING) {
             if (MCAGroundPathNavigation.isUsefulPartialPath(destinationPath, destination)) {
                 entity.getNavigation().moveTo(destinationPath, walkTarget.getSpeedModifier());
                 return true;
@@ -148,10 +169,10 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
             return false;
         }
 
-        if (this.detourDistance >= MCAGroundPathNavigation.getOrdinaryPathLength(entity)) {
+        if (this.detour.distance >= MCAGroundPathNavigation.getOrdinaryPathLength(entity)) {
             Path crossing = tryCrossObstacle(entity, destination);
             if (crossing != null) {
-                this.detourStep = BlockPos.ZERO;
+                this.detour.phase = DetourPhase.CROSSING;
                 entity.getNavigation().moveTo(crossing, walkTarget.getSpeedModifier());
                 return true;
             }
@@ -192,9 +213,7 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
             );
             Path path = entity.getNavigation().createPath(candidate, 0);
             if (path != null && path.canReach() && path.getNodeCount() > 1) {
-                this.detourDestination = destination.immutable();
-                this.detourStep = candidate.subtract(origin);
-                this.detourDistance = horizontalDistance(origin, candidate);
+                this.detour = new Detour(destination, candidate.subtract(origin), horizontalDistance(origin, candidate));
                 this.extendedMovementLifetime = true;
                 entity.getNavigation().moveTo(path, walkTarget.getSpeedModifier());
                 return true;
@@ -213,18 +232,14 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
     }
 
     private Path continueFlank(Mob entity) {
-        if (this.detourStep == null) {
-            return null;
-        }
-
-        double flankX = this.detourStep.getX() * 0.5D;
-        double flankZ = this.detourStep.getZ() * 0.5D;
+        double flankX = this.detour.step.getX() * 0.5D;
+        double flankZ = this.detour.step.getZ() * 0.5D;
         double stepDistance = Math.sqrt(flankX * flankX + flankZ * flankZ);
         double maxDetourDistance = Math.max(
                 Config.getInstance().getVillagerPathfindingDistance(),
                 MCAGroundPathNavigation.getOrdinaryPathLength(entity)
         );
-        if (stepDistance < 1.0D || this.detourDistance + stepDistance > maxDetourDistance) {
+        if (stepDistance < 1.0D || this.detour.distance + stepDistance > maxDetourDistance) {
             return null;
         }
 
@@ -246,18 +261,18 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         if (progress < 1.0D) {
             return null;
         }
-        this.detourDistance += progress;
+        this.detour.distance += progress;
         return path;
     }
 
     private Path tryCrossObstacle(Mob entity, BlockPos destination) {
-        double flankLength = horizontalDistance(BlockPos.ZERO, this.detourStep);
+        double flankLength = horizontalDistance(BlockPos.ZERO, this.detour.step);
         if (flankLength < 1.0D) {
             return null;
         }
 
-        double forwardX = this.detourStep.getZ() / flankLength;
-        double forwardZ = -this.detourStep.getX() / flankLength;
+        double forwardX = this.detour.step.getZ() / flankLength;
+        double forwardZ = -this.detour.step.getX() / flankLength;
         double destinationX = destination.getX() + 0.5D - entity.getX();
         double destinationZ = destination.getZ() + 0.5D - entity.getZ();
         if (forwardX * destinationX + forwardZ * destinationZ < 0.0D) {
@@ -290,9 +305,7 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
     }
 
     private void clearDetour() {
-        this.detourDestination = null;
-        this.detourStep = null;
-        this.detourDistance = 0.0D;
+        this.detour = null;
     }
 
     private static boolean shouldYieldToEmergencyCombat(Mob entity) {
@@ -328,50 +341,27 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         super.tick(world, entity, l);
     }
 
-    private void tryTeleport(ServerLevel world, Mob entity, BlockPos targetPos) {
-        for (int i = 0; i < 10; ++i) {
-            int j = this.getRandomInt(entity, -3, 3);
-            int k = this.getRandomInt(entity, -1, 1);
-            int l = this.getRandomInt(entity, -3, 3);
-            boolean bl = this.tryTeleportTo(world, entity, targetPos, targetPos.getX() + j, targetPos.getY() + k, targetPos.getZ() + l);
-            if (bl) {
+    private static void tryTeleport(ServerLevel world, Mob entity, BlockPos targetPos) {
+        for (int attempt = 0; attempt < 10; attempt++) {
+            int dx = entity.getRandom().nextInt(7) - 3;
+            int dy = entity.getRandom().nextInt(3) - 1;
+            int dz = entity.getRandom().nextInt(7) - 3;
+            if (Math.abs(dx) < 2 && Math.abs(dz) < 2) {
+                continue;
+            }
+            BlockPos candidate = targetPos.offset(dx, dy, dz);
+            if (canTeleportTo(world, entity, candidate)) {
+                entity.teleportTo(candidate.getX() + 0.5D, candidate.getY(), candidate.getZ() + 0.5D);
                 return;
             }
         }
     }
 
-    private boolean tryTeleportTo(ServerLevel world, Mob entity, BlockPos targetPos, int x, int y, int z) {
-        if (Math.abs((double) x - targetPos.getX()) < 2.0D && Math.abs((double) z - targetPos.getZ()) < 2.0D) {
+    private static boolean canTeleportTo(ServerLevel world, Mob entity, BlockPos pos) {
+        if (WalkNodeEvaluator.getPathTypeStatic(entity, pos.mutable()) != PathType.WALKABLE
+                || TeleportBlockBlacklist.isBlocked(world.getBlockState(pos.below()))) {
             return false;
-        } else if (!this.canTeleportTo(world, entity, new BlockPos(x, y, z))) {
-            return false;
-        } else {
-            entity.teleportTo((double) x + 0.5D, y, (double) z + 0.5D);
-            return true;
         }
-    }
-
-    private boolean canTeleportTo(ServerLevel world, Mob entity, BlockPos pos) {
-        PathType pathNodeType = WalkNodeEvaluator.getPathTypeStatic(entity, pos.mutable());
-        if (pathNodeType != PathType.WALKABLE) {
-            return false;
-        } else {
-            if (!isAreaSafe(world, pos.below())) {
-                return false;
-            } else {
-                BlockPos blockPos = pos.subtract(entity.blockPosition());
-                return world.noCollision(entity, entity.getBoundingBox().move(blockPos));
-            }
-        }
-    }
-
-    private int getRandomInt(Mob entity, int min, int max) {
-        return entity.getRandom().nextInt(max - min + 1) + min;
-    }
-
-    private boolean isAreaSafe(ServerLevel world, BlockPos pos) {
-        // The following conditions define whether it is logically
-        // safe for the entity to teleport to the specified pos within world
-        return !PathfindingBlacklist.isBlocked(world.getBlockState(pos));
+        return world.noCollision(entity, entity.getBoundingBox().move(pos.subtract(entity.blockPosition())));
     }
 }

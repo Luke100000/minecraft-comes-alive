@@ -2,6 +2,7 @@ package net.conczin.mca.client.gui;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
+import net.conczin.mca.client.resources.Icon;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.network.FamilyTreeSearchEntry;
 import net.conczin.mca.network.FamilyTreeView;
@@ -9,7 +10,6 @@ import net.conczin.mca.network.Network;
 import net.conczin.mca.network.c2s.FamilyTreeUUIDLookup;
 import net.conczin.mca.network.c2s.GetFamilyTreeRequest;
 import net.conczin.mca.network.s2c.GetFamilyTreeResponse;
-import net.conczin.mca.registry.ItemsMCA;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.Util;
@@ -18,8 +18,12 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.LinkedHashMap;
@@ -35,7 +39,6 @@ public class FamilyTreeScreen extends Screen {
     private static final int HEADER_MARGIN = 5;
     private static final int HEADER_GAP = 4;
     private static final int SEARCH_MAX_WIDTH = 180;
-    private static final int SEARCH_MIN_WIDTH = 80;
     private static final int BACK_WIDTH = 44;
     private static final int DONE_WIDTH = 72;
     private static final int ZOOM_BUTTON_WIDTH = 20;
@@ -49,9 +52,13 @@ public class FamilyTreeScreen extends Screen {
     private static final long SEARCH_DEBOUNCE_MS = 150L;
     private static final float MIN_ZOOM = 0.25F;
     private static final float MAX_ZOOM = 2.0F;
+    private static final long COPY_FEEDBACK_MS = 1_500L;
+    private static final String GRAVE_ICON = "grave";
     static final String DECEASED_MARKER = "☠";
     static final int DECEASED_MARKER_COLOR = 0xFFA94A3A;
-    static final int WEDDING_RING_VISIBLE_EDGE_INSET = 3;
+    private static final int DECEASED_MARKER_TEXT_INSET = 20;
+    private static final int DECEASED_WITH_GRAVE_TEXT_INSET = 38;
+    static final int PARTNER_ICON_VISIBLE_EDGE_INSET = 3;
 
     private final Screen parent;
     private final FamilyTreeViewModel viewModel;
@@ -79,6 +86,9 @@ public class FamilyTreeScreen extends Screen {
     private boolean searchPending;
     private boolean canvasDragging;
     private long pendingRecenterRequestId = -1L;
+    @Nullable
+    private Component actionFeedback;
+    private long actionFeedbackUntilMs;
 
     public FamilyTreeScreen(UUID entityId) {
         super(Component.translatable("gui.family_tree.title"));
@@ -284,11 +294,21 @@ public class FamilyTreeScreen extends Screen {
             }
         }
         if (button == 0 && insideCanvas(mouseX, mouseY)) {
-            Optional<HitTarget> target = hitTargetAt(layout, worldX(mouseX), worldY(mouseY));
+            Optional<HitTarget> target = hitTargetAt(
+                    layout,
+                    viewModel.nodes(),
+                    viewModel.graves(),
+                    worldX(mouseX),
+                    worldY(mouseY)
+            );
             if (target.isPresent()) {
                 Minecraft.getInstance().getSoundManager()
                         .play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1));
-                if (target.get() instanceof PersonTarget person) {
+                if (target.get() instanceof GraveTarget graveTarget) {
+                    Minecraft.getInstance().keyboardHandler.setClipboard(graveClipboardText(graveTarget.grave()));
+                    actionFeedback = Component.translatable("gui.family_tree.grave.copied");
+                    actionFeedbackUntilMs = Util.getMillis() + COPY_FEEDBACK_MS;
+                } else if (target.get() instanceof PersonTarget person) {
                     if (!person.uuid().equals(viewModel.focusId())) {
                         requestFocus(person.uuid(), true);
                     }
@@ -347,7 +367,13 @@ public class FamilyTreeScreen extends Screen {
         context.fill(0, HEADER_HEIGHT, width, height - FOOTER_HEIGHT, 0x66000000);
 
         hovered = insideCanvas(mouseX, mouseY)
-                ? hitTargetAt(layout, worldX(mouseX), worldY(mouseY)).orElse(null)
+                ? hitTargetAt(
+                        layout,
+                        viewModel.nodes(),
+                        viewModel.graves(),
+                        worldX(mouseX),
+                        worldY(mouseY)
+                ).orElse(null)
                 : null;
 
         context.enableScissor(0, HEADER_HEIGHT, width, height - FOOTER_HEIGHT);
@@ -382,15 +408,31 @@ public class FamilyTreeScreen extends Screen {
             if (edge.type() == FamilyTreeLayout.EdgeType.PARTNER) {
                 FamilyTreeNode fromNode = nodes.get(edge.from());
                 FamilyTreeNode toNode = nodes.get(edge.to());
-                if (fromNode != null
-                        && toNode != null
-                        && showsWeddingRing(fromNode.getRelationshipState(), toNode.getRelationshipState())) {
-                    FamilyTreeLayout.Bounds ring = partnerRingBounds(from.bounds(), to.bounds());
+                Optional<RelationshipState> relationshipState = fromNode == null || toNode == null
+                        ? Optional.empty()
+                        : partnerRelationshipState(
+                                fromNode.getRelationshipState(),
+                                toNode.getRelationshipState()
+                        );
+                if (relationshipState.isPresent()) {
+                    FamilyTreeLayout.Bounds iconBounds = partnerIconBounds(from.bounds(), to.bounds());
                     int left = Math.min(x1, x2);
                     int right = Math.max(x1, x2);
-                    context.hLine(left, ring.left() + WEDDING_RING_VISIBLE_EDGE_INSET, y1, 0xFFE0E0E0);
-                    context.hLine(ring.right() - WEDDING_RING_VISIBLE_EDGE_INSET, right, y1, 0xFFE0E0E0);
-                    context.renderItem(ItemsMCA.WEDDING_RING.getDefaultInstance(), ring.left(), ring.top());
+                    context.hLine(left, iconBounds.left() + PARTNER_ICON_VISIBLE_EDGE_INSET, y1, 0xFFE0E0E0);
+                    context.hLine(iconBounds.right() - PARTNER_ICON_VISIBLE_EDGE_INSET, right, y1, 0xFFE0E0E0);
+                    Icon icon = MCAScreens.getInstance().getIcon(relationshipState.orElseThrow().getIcon());
+                    context.blit(
+                            InteractScreen.ICON_TEXTURES,
+                            iconBounds.left(),
+                            iconBounds.top(),
+                            0,
+                            icon.u(),
+                            icon.v(),
+                            16,
+                            16,
+                            256,
+                            256
+                    );
                 } else {
                     context.hLine(Math.min(x1, x2), Math.max(x1, x2), y1, 0xFFE0E0E0);
                 }
@@ -417,6 +459,8 @@ public class FamilyTreeScreen extends Screen {
 
     private void renderCards(GuiGraphics context, Map<UUID, FamilyTreeNode> nodes) {
         UUID focusId = viewModel.focusId();
+        UUID layoutRootId = viewModel.layoutRootId();
+        Map<UUID, GlobalPos> graves = viewModel.graves();
         for (FamilyTreeLayout.Card card : layout.cards()) {
             FamilyTreeNode node = nodes.get(card.uuid());
             if (node == null) {
@@ -441,19 +485,37 @@ public class FamilyTreeScreen extends Screen {
                     focused ? 0xFFFFFFFF : 0xFF9AA7B2
             );
 
-            String name = nodeDisplayName(node).getString();
+            CardPresentation presentation = cardPresentation(layoutRootId, node, nodes);
             int textWidth = FamilyTreeLayout.CARD_WIDTH - 12;
-            if (font.width(name) > textWidth) {
-                String ellipsis = "...";
-                name = font.plainSubstrByWidth(name, Math.max(0, textWidth - font.width(ellipsis))) + ellipsis;
-            }
-            context.drawCenteredString(font, name, bounds.centerX(), bounds.top() + 7, 0xFFFFFFFF);
+            int nameTextWidth = node.isDeceased()
+                    ? textWidth - (graves.containsKey(card.uuid()) ? DECEASED_WITH_GRAVE_TEXT_INSET : DECEASED_MARKER_TEXT_INSET)
+                    : textWidth;
+            drawCenteredEllipsized(context, presentation.name(), bounds.centerX(), bounds.top() + 5, nameTextWidth, presentation.nameColor());
+            drawCenteredEllipsized(context, presentation.identity(), bounds.centerX(), bounds.top() + 17, textWidth, 0xFFBFC7CE);
+            drawCenteredEllipsized(context, presentation.relationship(), bounds.centerX(), bounds.top() + 29, textWidth, 0xFFD9E4EE);
 
-            String profession = node.getProfessionText().getString();
-            if (font.width(profession) > textWidth) {
-                profession = font.plainSubstrByWidth(profession, textWidth);
+            int statusY = bounds.top() + 41;
+            if (presentation.relationshipState() != null) {
+                drawRelationshipStatus(
+                        context,
+                        presentation.relationshipState(),
+                        node.getRelationshipState(),
+                        bounds.centerX(),
+                        statusY,
+                        textWidth
+                );
+                statusY += 10;
             }
-            context.drawCenteredString(font, profession, bounds.centerX(), bounds.top() + 22, 0xFFBFC7CE);
+            if (presentation.orphan()) {
+                drawCenteredEllipsized(
+                        context,
+                        Component.translatable("gui.family_tree.label.orphan"),
+                        bounds.centerX(),
+                        statusY,
+                        textWidth,
+                        0xFFB0B0B0
+                );
+            }
 
             if (node.isDeceased()) {
                 context.drawString(
@@ -463,8 +525,65 @@ public class FamilyTreeScreen extends Screen {
                         bounds.top() + 4,
                         DECEASED_MARKER_COLOR
                 );
+                if (graves.containsKey(card.uuid())) {
+                    Icon icon = MCAScreens.getInstance().getIcon(GRAVE_ICON);
+                    FamilyTreeLayout.Bounds graveBounds = graveIconBounds(bounds);
+                    context.blit(
+                            InteractScreen.ICON_TEXTURES,
+                            graveBounds.left(),
+                            graveBounds.top(),
+                            0,
+                            icon.u(),
+                            icon.v(),
+                            16,
+                            16,
+                            256,
+                            256
+                    );
+                }
             }
         }
+    }
+
+    private void drawRelationshipStatus(
+            GuiGraphics context,
+            Component text,
+            RelationshipState state,
+            int centerX,
+            int y,
+            int maxWidth
+    ) {
+        int iconSize = 8;
+        int iconGap = 3;
+        String label = ellipsizedText(text, maxWidth - iconSize - iconGap);
+        int left = centerX - (iconSize + iconGap + font.width(label)) / 2;
+        Icon icon = MCAScreens.getInstance().getIcon(state.getIcon());
+        context.pose().pushPose();
+        context.pose().translate(left, y, 0);
+        context.pose().scale(0.5F, 0.5F, 1.0F);
+        context.blit(InteractScreen.ICON_TEXTURES, 0, 0, 0, icon.u(), icon.v(), 16, 16, 256, 256);
+        context.pose().popPose();
+        context.drawString(font, label, left + iconSize + iconGap, y, 0xFFD8C98C);
+    }
+
+    private void drawCenteredEllipsized(
+            GuiGraphics context,
+            Component text,
+            int centerX,
+            int y,
+            int maxWidth,
+            int color
+    ) {
+        context.drawCenteredString(font, ellipsizedText(text, maxWidth), centerX, y, color);
+    }
+
+    private String ellipsizedText(Component text, int maxWidth) {
+        String value = text.getString();
+        if (font.width(value) > maxWidth) {
+            String ellipsis = "...";
+            value = font.plainSubstrByWidth(value, Math.max(0, maxWidth - font.width(ellipsis))) + ellipsis;
+        }
+        return value;
     }
 
     private void renderFixedChrome(
@@ -487,6 +606,13 @@ public class FamilyTreeScreen extends Screen {
         if (searchPending) {
             status = Optional.of(Component.translatable("gui.family_tree.loading_family"));
         }
+        if (actionFeedback != null) {
+            if (Util.getMillis() < actionFeedbackUntilMs) {
+                status = Optional.of(actionFeedback);
+            } else {
+                actionFeedback = null;
+            }
+        }
         if (status.isPresent()) {
             context.drawCenteredString(font, status.orElseThrow(), width / 2, height - 20, 0xFFFFFFFF);
         }
@@ -506,7 +632,21 @@ public class FamilyTreeScreen extends Screen {
             }
         }
 
-        if (hovered instanceof ContinuationTarget continuation) {
+        if (hovered instanceof GraveTarget graveTarget) {
+            GlobalPos grave = graveTarget.grave();
+            context.renderTooltip(
+                    font,
+                    Component.translatable(
+                            "gui.family_tree.grave.tooltip",
+                            graveDimensionLabel(grave.dimension()),
+                            grave.pos().getX(),
+                            grave.pos().getY(),
+                            grave.pos().getZ()
+                    ),
+                    mouseX,
+                    mouseY
+            );
+        } else if (hovered instanceof ContinuationTarget continuation) {
             Component label = continuation.direction() == FamilyTreeView.Direction.ANCESTORS
                     ? Component.translatable("gui.family_tree.more_ancestors")
                     : Component.translatable("gui.family_tree.more_descendants");
@@ -615,13 +755,12 @@ public class FamilyTreeScreen extends Screen {
                 + FIT_WIDTH
                 + HEADER_GAP
                 + CENTER_WIDTH;
+        int controlsLeft = Math.max(HEADER_MARGIN, (screenWidth - fixedControlsWidth) / 2);
         int searchWidth = Math.max(
-                SEARCH_MIN_WIDTH,
-                Math.min(SEARCH_MAX_WIDTH, screenWidth - HEADER_MARGIN * 2 - CONTROL_GROUP_GAP - fixedControlsWidth)
+                1,
+                Math.min(SEARCH_MAX_WIDTH, controlsLeft - HEADER_MARGIN - CONTROL_GROUP_GAP)
         );
-        int controlsWidth = searchWidth + CONTROL_GROUP_GAP + fixedControlsWidth;
-        int controlsLeft = Math.max(HEADER_MARGIN, (screenWidth - controlsWidth) / 2);
-        int zoomOutX = controlsLeft + searchWidth + CONTROL_GROUP_GAP;
+        int zoomOutX = controlsLeft;
         int zoomLabelX = zoomOutX + ZOOM_BUTTON_WIDTH + CONTROL_GAP;
         int zoomInX = zoomLabelX + ZOOM_LABEL_WIDTH + CONTROL_GAP;
         int fitX = zoomInX + ZOOM_BUTTON_WIDTH + CONTROL_GROUP_GAP;
@@ -629,7 +768,7 @@ public class FamilyTreeScreen extends Screen {
         return new HeaderLayout(
                 HEADER_MARGIN,
                 Math.max(HEADER_MARGIN, screenWidth - HEADER_MARGIN - DONE_WIDTH),
-                controlsLeft,
+                HEADER_MARGIN,
                 searchWidth,
                 zoomOutX,
                 zoomLabelX,
@@ -653,7 +792,7 @@ public class FamilyTreeScreen extends Screen {
                 : Component.literal(node.getName());
     }
 
-    static FamilyTreeLayout.Bounds partnerRingBounds(
+    static FamilyTreeLayout.Bounds partnerIconBounds(
             FamilyTreeLayout.Bounds from,
             FamilyTreeLayout.Bounds to
     ) {
@@ -662,8 +801,72 @@ public class FamilyTreeScreen extends Screen {
         return new FamilyTreeLayout.Bounds(centerX - 8, centerX + 8, centerY - 8, centerY + 8);
     }
 
-    static boolean showsWeddingRing(RelationshipState from, RelationshipState to) {
-        return from.isMarried() || to.isMarried();
+    static Optional<RelationshipState> partnerRelationshipState(RelationshipState from, RelationshipState to) {
+        if (from == RelationshipState.MARRIED_TO_PLAYER || to == RelationshipState.MARRIED_TO_PLAYER) {
+            return Optional.of(RelationshipState.MARRIED_TO_PLAYER);
+        }
+        if (from != RelationshipState.SINGLE) {
+            return Optional.of(from);
+        }
+        if (to != RelationshipState.SINGLE) {
+            return Optional.of(to);
+        }
+        return Optional.empty();
+    }
+
+    static FamilyTreeLayout.Bounds graveIconBounds(FamilyTreeLayout.Bounds cardBounds) {
+        int left = cardBounds.left() + 14;
+        int top = cardBounds.top() + 1;
+        return new FamilyTreeLayout.Bounds(left, left + 16, top, top + 16);
+    }
+
+    static String graveClipboardText(GlobalPos grave) {
+        return grave.pos().getX() + " " + grave.pos().getY() + " " + grave.pos().getZ();
+    }
+
+    static Component graveDimensionLabel(ResourceKey<Level> dimension) {
+        ResourceLocation id = dimension.location();
+        return Component.translatableWithFallback(
+                "dimension." + id.getNamespace() + "." + id.getPath().replace('/', '.'),
+                id.toString()
+        );
+    }
+
+    static CardPresentation cardPresentation(
+            UUID layoutRootId,
+            FamilyTreeNode node,
+            Map<UUID, FamilyTreeNode> nodes
+    ) {
+        Component identity = node.isPlayer()
+                ? Component.translatable("gui.family_tree.player")
+                : node.getProfessionText().copy()
+                        .append(" · ")
+                        .append(Component.translatable("gui.family_tree.villager"));
+        FamilyTreeRelationshipResolver.Relation relation =
+                FamilyTreeRelationshipResolver.resolve(layoutRootId, node.id(), nodes);
+        Component relationshipState = node.getRelationshipState() == RelationshipState.SINGLE
+                ? null
+                : Component.translatable("marriage." + node.getRelationshipState().base().getIcon());
+        return new CardPresentation(
+                nodeDisplayName(node),
+                0xFF000000 | node.gender().getColor(),
+                identity,
+                relationLabel(relation),
+                relationshipState,
+                isOrphan(node, nodes)
+        );
+    }
+
+    static boolean isOrphan(FamilyTreeNode node, Map<UUID, FamilyTreeNode> nodes) {
+        return missingOrDeceased(node.father(), nodes) && missingOrDeceased(node.mother(), nodes);
+    }
+
+    private static boolean missingOrDeceased(UUID parentId, Map<UUID, FamilyTreeNode> nodes) {
+        if (!FamilyTreeNode.isValid(parentId)) {
+            return true;
+        }
+        FamilyTreeNode parent = nodes.get(parentId);
+        return parent == null || parent.isDeceased();
     }
 
     static Optional<String> integratedSearchQuery(String value) {
@@ -798,6 +1001,26 @@ public class FamilyTreeScreen extends Screen {
     }
 
     static Optional<HitTarget> hitTargetAt(FamilyTreeLayout.Result result, int worldX, int worldY) {
+        return hitTargetAt(result, Map.of(), Map.of(), worldX, worldY);
+    }
+
+    static Optional<HitTarget> hitTargetAt(
+            FamilyTreeLayout.Result result,
+            Map<UUID, FamilyTreeNode> nodes,
+            Map<UUID, GlobalPos> graves,
+            int worldX,
+            int worldY
+    ) {
+        for (FamilyTreeLayout.Card card : result.cards()) {
+            FamilyTreeNode node = nodes.get(card.uuid());
+            GlobalPos grave = graves.get(card.uuid());
+            if (node != null
+                    && node.isDeceased()
+                    && grave != null
+                    && graveIconBounds(card.bounds()).contains(worldX, worldY)) {
+                return Optional.of(new GraveTarget(card.uuid(), grave));
+            }
+        }
         for (FamilyTreeLayout.ContinuationControl continuation : result.continuations()) {
             if (continuation.bounds().contains(worldX, worldY)) {
                 return Optional.of(new ContinuationTarget(continuation.anchor(), continuation.direction()));
@@ -811,13 +1034,26 @@ public class FamilyTreeScreen extends Screen {
         return Optional.empty();
     }
 
-    sealed interface HitTarget permits PersonTarget, ContinuationTarget {
+    sealed interface HitTarget permits PersonTarget, GraveTarget, ContinuationTarget {
     }
 
     record PersonTarget(UUID uuid) implements HitTarget {
     }
 
+    record GraveTarget(UUID uuid, GlobalPos grave) implements HitTarget {
+    }
+
     record RelationshipDetail(UUID uuid, FamilyTreeRelationshipResolver.Relation relation) {
+    }
+
+    record CardPresentation(
+            Component name,
+            int nameColor,
+            Component identity,
+            Component relationship,
+            @Nullable Component relationshipState,
+            boolean orphan
+    ) {
     }
 
     record ContinuationTarget(UUID anchor, FamilyTreeView.Direction direction) implements HitTarget {

@@ -3,6 +3,7 @@ package net.conczin.mca.client.gui;
 import net.conczin.mca.network.FamilyTreeView;
 import net.conczin.mca.network.s2c.GetFamilyTreeResponse;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
+import net.minecraft.core.GlobalPos;
 
 import java.util.ArrayDeque;
 import java.util.Collections;
@@ -43,6 +44,8 @@ final class FamilyTreeViewModel {
 
     private final Map<UUID, FamilyTreeNode> nodes = new LinkedHashMap<>();
     private final Map<UUID, FamilyTreeNode> nodesView = Collections.unmodifiableMap(nodes);
+    private final Map<UUID, GlobalPos> graves = new LinkedHashMap<>();
+    private final Map<UUID, GlobalPos> gravesView = Collections.unmodifiableMap(graves);
     private final Set<FamilyTreeView.Continuation> continuations = new LinkedHashSet<>();
     private final Set<UUID> unavailable = new LinkedHashSet<>();
     private final Deque<HistoryEntry> history = new ArrayDeque<>();
@@ -133,6 +136,8 @@ final class FamilyTreeViewModel {
     }
 
     private void merge(FamilyTreeView view) {
+        view.nodes().keySet().forEach(graves::remove);
+        graves.putAll(view.graves());
         nodes.putAll(view.nodes());
         continuations.addAll(view.continuations());
         unavailable.addAll(view.unavailable());
@@ -174,12 +179,20 @@ final class FamilyTreeViewModel {
         return focusId;
     }
 
+    UUID layoutRootId() {
+        return layoutRootId;
+    }
+
     Optional<UUID> previousFocusId() {
         return history.isEmpty() ? Optional.empty() : Optional.of(history.peek().focusId());
     }
 
     public Map<UUID, FamilyTreeNode> nodes() {
         return nodesView;
+    }
+
+    public Map<UUID, GlobalPos> graves() {
+        return gravesView;
     }
 
     public Optional<UUID> pendingFocusId() {

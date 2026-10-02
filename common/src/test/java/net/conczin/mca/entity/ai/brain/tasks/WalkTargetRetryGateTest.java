@@ -61,14 +61,14 @@ class WalkTargetRetryGateTest {
         assertTrue(gate.tryReserve(DESTINATION, START, 100));
         assertFalse(gate.tryReserve(DESTINATION, START, 120));
 
-        gate.resetForRouteChange(DESTINATION.east());
+        gate.reset(DESTINATION.east());
         assertFalse(gate.tryReserve(DESTINATION, START, 121));
 
-        gate.resetForRouteChange(DESTINATION);
+        gate.reset(DESTINATION);
         assertTrue(gate.tryReserve(DESTINATION, START, 122));
         assertFalse(gate.tryReserve(DESTINATION, START, 123));
 
-        gate.resetForRouteChange(DESTINATION);
+        gate.reset(DESTINATION);
         assertTrue(gate.tryReserve(DESTINATION, START, 124));
         assertFalse(gate.tryReserve(DESTINATION, START, 125));
     }
@@ -153,5 +153,25 @@ class WalkTargetRetryGateTest {
         assertEquals(122L, gate.stalledSince());
         assertFalse(gate.noteProgress(DESTINATION.east(), START.east(10), 123),
                 "progress toward a different target cannot clear failure for this destination");
+    }
+
+    @Test
+    void completingRepeatedShortTripsStartsFreshRetryEpisodes() {
+        WalkTargetRetryGate gate = new WalkTargetRetryGate(100, 16, 1);
+        BlockPos nearbyDestination = START.east(2);
+
+        for (int trip = 0; trip < 4; trip++) {
+            long started = 100L + trip * 4L;
+            assertTrue(gate.tryReserve(nearbyDestination, START, started),
+                    "a completed short trip must not delay another departure to the same destination");
+            assertEquals(started, gate.stalledSince(), "a new trip must not inherit old failure age");
+            assertTrue(gate.tryReserve(nearbyDestination, START, started + 1L),
+                    "each new trip retains its own early retry");
+            assertFalse(gate.tryReserve(nearbyDestination, START, started + 2L),
+                    "an unfinished trip still backs off after its early retry");
+            assertFalse(gate.noteProgress(nearbyDestination, nearbyDestination, started + 3L),
+                    "the two-block trip must remain below the ordinary progress threshold");
+            gate.reset(nearbyDestination);
+        }
     }
 }

@@ -8,7 +8,13 @@ import net.conczin.mca.network.FamilyTreeView;
 import net.conczin.mca.network.s2c.GetFamilyTreeResponse;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.minecraft.Util;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -21,6 +27,7 @@ import java.util.UUID;
 import static net.conczin.mca.network.FamilyTreeView.Direction.ANCESTORS;
 import static net.conczin.mca.FamilyTreeTestSupport.uuid;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FamilyTreeScreenInteractionTest {
@@ -58,23 +65,26 @@ class FamilyTreeScreenInteractionTest {
     }
 
     @Test
-    void headerKeepsNavigationBalancedAndCentersTheControlRow() {
+    void headerFloatsSearchLeftAndCentersControlsIndependently() {
         FamilyTreeScreen.HeaderLayout header = FamilyTreeScreen.headerLayout(854);
 
         assertEquals(5, header.backX());
         assertEquals(854 - 5 - 72, header.doneX());
-        assertEquals(234, header.searchX());
-        assertEquals(566, header.centerX());
-        assertTrue(header.searchWidth() <= 180);
+        assertEquals(5, header.searchX());
+        assertEquals(180, header.searchWidth());
+        assertEquals(327, header.zoomOutX());
+        assertEquals(473, header.centerX());
     }
 
     @Test
-    void headerShrinksSearchInsteadOfPushingControlsOffSmallScreens() {
+    void headerShrinksSearchBeforeOverlappingCenteredControls() {
         FamilyTreeScreen.HeaderLayout header = FamilyTreeScreen.headerLayout(320);
 
-        assertTrue(header.searchWidth() >= 80);
         assertEquals(5, header.searchX());
-        assertEquals(261, header.centerX());
+        assertEquals(49, header.searchWidth());
+        assertEquals(60, header.zoomOutX());
+        assertEquals(206, header.centerX());
+        assertTrue(header.searchX() + header.searchWidth() < header.zoomOutX());
     }
 
     @Test
@@ -133,27 +143,102 @@ class FamilyTreeScreenInteractionTest {
     }
 
     @Test
-    void weddingRingIsCenteredOnPartnerConnection() {
+    void partnerIconIsCenteredOnPartnerConnection() {
         FamilyTreeLayout.Bounds left = new FamilyTreeLayout.Bounds(-123, -13, -20, 20);
         FamilyTreeLayout.Bounds right = new FamilyTreeLayout.Bounds(13, 123, -20, 20);
 
         assertEquals(
                 new FamilyTreeLayout.Bounds(-8, 8, -8, 8),
-                FamilyTreeScreen.partnerRingBounds(left, right)
+                FamilyTreeScreen.partnerIconBounds(left, right)
         );
-        assertEquals(3, FamilyTreeScreen.WEDDING_RING_VISIBLE_EDGE_INSET);
+        assertEquals(3, FamilyTreeScreen.PARTNER_ICON_VISIBLE_EDGE_INSET);
     }
 
     @Test
-    void weddingRingOnlyDecoratesMarriageConnections() {
-        assertTrue(FamilyTreeScreen.showsWeddingRing(
-                RelationshipState.MARRIED_TO_VILLAGER,
-                RelationshipState.MARRIED_TO_VILLAGER
-        ));
-        assertEquals(false, FamilyTreeScreen.showsWeddingRing(
-                RelationshipState.ENGAGED,
-                RelationshipState.ENGAGED
-        ));
+    void partnerConnectionUsesRelationshipStateIcon() {
+        assertEquals(
+                Optional.of(RelationshipState.MARRIED_TO_PLAYER),
+                FamilyTreeScreen.partnerRelationshipState(
+                        RelationshipState.MARRIED_TO_VILLAGER,
+                        RelationshipState.MARRIED_TO_PLAYER
+                )
+        );
+        assertEquals(
+                Optional.of(RelationshipState.ENGAGED),
+                FamilyTreeScreen.partnerRelationshipState(RelationshipState.ENGAGED, RelationshipState.ENGAGED)
+        );
+        assertEquals(
+                Optional.of(RelationshipState.PROMISED),
+                FamilyTreeScreen.partnerRelationshipState(RelationshipState.PROMISED, RelationshipState.PROMISED)
+        );
+        assertEquals(
+                Optional.of(RelationshipState.WIDOW),
+                FamilyTreeScreen.partnerRelationshipState(RelationshipState.WIDOW, RelationshipState.SINGLE)
+        );
+        assertTrue(FamilyTreeScreen.partnerRelationshipState(
+                RelationshipState.SINGLE,
+                RelationshipState.SINGLE
+        ).isEmpty());
+    }
+
+    @Test
+    void cardPresentationRestoresOriginDetailsAndUsesStableRootRelationship() {
+        FamilyTreeNode mother = new FamilyTreeNode(
+                null,
+                ROOT,
+                "Elita",
+                false,
+                Gender.FEMALE,
+                Util.NIL_UUID,
+                Util.NIL_UUID
+        );
+        FamilyTreeNode child = new FamilyTreeNode(
+                null,
+                OTHER,
+                "Alex",
+                true,
+                Gender.MALE,
+                ROOT,
+                Util.NIL_UUID
+        );
+        mother.addChild(OTHER);
+        mother.setRelationshipState(RelationshipState.MARRIED_TO_PLAYER);
+        Map<UUID, FamilyTreeNode> nodes = Map.of(ROOT, mother, OTHER, child);
+
+        FamilyTreeScreen.CardPresentation motherCard = FamilyTreeScreen.cardPresentation(ROOT, mother, nodes);
+        FamilyTreeScreen.CardPresentation childCard = FamilyTreeScreen.cardPresentation(ROOT, child, nodes);
+
+        assertEquals("Elita", motherCard.name().getString());
+        assertEquals(0xFFA649A4, motherCard.nameColor());
+        assertEquals(
+                mother.getProfessionText().copy()
+                        .append(" · ")
+                        .append(Component.translatable("gui.family_tree.villager")),
+                motherCard.identity()
+        );
+        assertEquals(Component.translatable("gui.family_tree.relation.self"), motherCard.relationship());
+        assertEquals(Component.translatable("marriage.married"), motherCard.relationshipState());
+        assertEquals(Component.translatable("gui.family_tree.player"), childCard.identity());
+        assertEquals(Component.translatable("gui.family_tree.relation.child"), childCard.relationship());
+    }
+
+    @Test
+    void orphanCardStateMatchesOriginMissingOrDeceasedParentRule() {
+        FamilyTreeNode child = node(OTHER, "Sima");
+        assertTrue(FamilyTreeScreen.isOrphan(child, Map.of(OTHER, child)));
+
+        FamilyTreeNode livingParent = node(ROOT, "Sug");
+        child.setFather(livingParent);
+        assertFalse(FamilyTreeScreen.isOrphan(child, Map.of(ROOT, livingParent, OTHER, child)));
+
+        livingParent.setDeceased(true);
+        assertTrue(FamilyTreeScreen.isOrphan(child, Map.of(ROOT, livingParent, OTHER, child)));
+    }
+
+    @Test
+    void richerCardsReserveEnoughFixedSpaceForFiveLines() {
+        assertEquals(128, FamilyTreeLayout.CARD_WIDTH);
+        assertEquals(64, FamilyTreeLayout.CARD_HEIGHT);
     }
 
     @Test
@@ -219,6 +304,80 @@ class FamilyTreeScreenInteractionTest {
                 Optional.of(new FamilyTreeScreen.ContinuationTarget(ROOT, ANCESTORS)),
                 FamilyTreeScreen.hitTargetAt(result, 0, -70)
         );
+    }
+
+    @Test
+    void graveClipboardTextUsesPlainCoordinatesOnly() {
+        GlobalPos grave = GlobalPos.of(Level.NETHER, new BlockPos(123, 64, -456));
+
+        assertEquals("123 64 -456", FamilyTreeScreen.graveClipboardText(grave));
+    }
+
+    @Test
+    void graveIconHitTargetWinsOverPersonCard() {
+        FamilyTreeNode deceased = node(ROOT, "Sug");
+        deceased.setDeceased(true);
+        FamilyTreeLayout.Card card = new FamilyTreeLayout.Card(
+                ROOT,
+                new FamilyTreeLayout.Bounds(-64, 64, -32, 32)
+        );
+        FamilyTreeLayout.Result result = new FamilyTreeLayout.Result(
+                List.of(card),
+                List.of(),
+                List.of(),
+                card.bounds()
+        );
+        GlobalPos grave = GlobalPos.of(Level.OVERWORLD, new BlockPos(12, 70, 8));
+        FamilyTreeLayout.Bounds graveBounds = FamilyTreeScreen.graveIconBounds(card.bounds());
+
+        assertEquals(
+                Optional.of(new FamilyTreeScreen.GraveTarget(ROOT, grave)),
+                FamilyTreeScreen.hitTargetAt(
+                        result,
+                        Map.of(ROOT, deceased),
+                        Map.of(ROOT, grave),
+                        graveBounds.centerX(),
+                        graveBounds.centerY()
+                )
+        );
+    }
+
+    @Test
+    void cardWithoutExactGraveHasNoGraveTarget() {
+        FamilyTreeNode deceased = node(ROOT, "Sug");
+        deceased.setDeceased(true);
+        FamilyTreeLayout.Card card = new FamilyTreeLayout.Card(
+                ROOT,
+                new FamilyTreeLayout.Bounds(-64, 64, -32, 32)
+        );
+        FamilyTreeLayout.Result result = new FamilyTreeLayout.Result(
+                List.of(card),
+                List.of(),
+                List.of(),
+                card.bounds()
+        );
+        FamilyTreeLayout.Bounds graveBounds = FamilyTreeScreen.graveIconBounds(card.bounds());
+
+        assertEquals(
+                Optional.of(new FamilyTreeScreen.PersonTarget(ROOT)),
+                FamilyTreeScreen.hitTargetAt(
+                        result,
+                        Map.of(ROOT, deceased),
+                        Map.of(),
+                        graveBounds.centerX(),
+                        graveBounds.centerY()
+                )
+        );
+    }
+
+    @Test
+    void dimensionLabelUsesReadableFallbackForCustomDimension() {
+        ResourceKey<Level> custom = ResourceKey.create(
+                Registries.DIMENSION,
+                ResourceLocation.fromNamespaceAndPath("example", "forgotten_realm")
+        );
+
+        assertEquals("example:forgotten_realm", FamilyTreeScreen.graveDimensionLabel(custom).getString());
     }
 
     @Test

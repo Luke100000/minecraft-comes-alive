@@ -11,20 +11,19 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.function.Predicate;
 
-public final class PathfindingBlacklist {
-    private static int cachedSize = -1;
-    private static int cachedHash;
-    private static List<Predicate<BlockState>> cachedMatchers = List.of();
+public final class TeleportBlockBlacklist {
+    private static MatcherSnapshot snapshot;
 
-    private PathfindingBlacklist() {
+    private TeleportBlockBlacklist() {
     }
 
     public static boolean isBlocked(BlockState state) {
         refreshCacheIfNeeded();
-        return matches(state, cachedMatchers);
+        return matches(state, snapshot.matchers());
     }
 
     private static boolean matches(BlockState state, List<Predicate<BlockState>> matchers) {
@@ -39,16 +38,17 @@ public final class PathfindingBlacklist {
 
     private static void refreshCacheIfNeeded() {
         List<String> configured = Config.getInstance().unSafeBlocksToTeleportOn;
-        int size = configured.size();
-        int hash = configured.hashCode();
-
-        if (size == cachedSize && hash == cachedHash) {
+        if (snapshot != null && snapshot.configured().equals(configured)) {
             return;
         }
 
-        cachedMatchers = buildMatchers(configured, "unSafeBlocksToTeleportOn");
-        cachedSize = size;
-        cachedHash = hash;
+        // Equality avoids stale matchers for different lists with the same hash.
+        // Preserve null entries, which the matcher parser deliberately ignores.
+        snapshot = new MatcherSnapshot(Collections.unmodifiableList(new ArrayList<>(configured)),
+                buildMatchers(configured, "unSafeBlocksToTeleportOn"));
+    }
+
+    private record MatcherSnapshot(List<String> configured, List<Predicate<BlockState>> matchers) {
     }
 
     private static List<Predicate<BlockState>> buildMatchers(List<String> configured, String configName) {

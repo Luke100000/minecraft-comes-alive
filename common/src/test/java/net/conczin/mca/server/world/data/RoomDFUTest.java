@@ -352,6 +352,17 @@ class RoomDFUTest {
     }
 
     @Test
+    void canonicalVillageLoadRejectsOverlappingRoomOwnership() {
+        CompoundTag malformed = canonicalVillage().save();
+        ListTag rooms = malformed.getList("buildings", net.minecraft.nbt.Tag.TAG_COMPOUND);
+        CompoundTag overlapping = rooms.getCompound(0).copy();
+        overlapping.putInt("id", 11);
+        rooms.add(overlapping);
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
     void duplicateCanonicalExternalBuildingIdsAreRejectedBeforeMapInsertion() {
         Village village = canonicalVillage();
         ExternalBuilding external = new ExternalBuilding(new BlockPos(20, 64, 20));

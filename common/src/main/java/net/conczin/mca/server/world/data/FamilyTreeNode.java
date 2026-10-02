@@ -211,6 +211,12 @@ public final class FamilyTreeNode {
     }
 
     public void updatePartner(@Nullable Entity newPartner, @Nullable RelationshipState state) {
+        if (newPartner == null && state == RelationshipState.WIDOW && !partner.equals(Util.NIL_UUID)) {
+            relationshipState = RelationshipState.WIDOW;
+            markDirty();
+            return;
+        }
+
         //cancel relationship with previous partner
         if (!this.partner.equals(Util.NIL_UUID) && (newPartner == null || !this.partner.equals(newPartner.getUUID()))) {
             getRoot().getOrEmpty(this.partner).ifPresent(n -> {
