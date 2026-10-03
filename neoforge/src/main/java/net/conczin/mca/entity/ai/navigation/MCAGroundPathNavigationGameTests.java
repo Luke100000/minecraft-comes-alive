@@ -357,7 +357,7 @@ public final class MCAGroundPathNavigationGameTests {
             villager.setOnGround(true);
             villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
             villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
-                    new WalkTarget(new LongDistancePathTarget(destination), 0.5F, 0));
+                    new WalkTarget(new PersistentPathTarget(destination), 0.5F, 0));
             Path path = villager.getNavigation().createPath(destination, 0);
             helper.assertTrue(path != null && MCAGroundPathNavigation.isUsefulPartialPath(path, destination),
                     "fixture did not create a useful bounded partial path");
@@ -399,7 +399,7 @@ public final class MCAGroundPathNavigationGameTests {
             villager.setOnGround(true);
             villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
             villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
-                    new WalkTarget(new LongDistancePathTarget(destination), 0.5F, 0));
+                    new WalkTarget(new PersistentPathTarget(destination), 0.5F, 0));
             Path completed = villager.getNavigation().createPath(destination, 0);
             helper.assertTrue(completed != null && MCAGroundPathNavigation.isUsefulPartialPath(completed, destination),
                     "fixture could not create an initial useful partial path");
@@ -567,7 +567,7 @@ public final class MCAGroundPathNavigationGameTests {
         villager.setOnGround(true);
         villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
         villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
-                new WalkTarget(new LongDistancePathTarget(destination), 0.5F, 0));
+                new WalkTarget(new PersistentPathTarget(destination), 0.5F, 0));
         Path partial = villager.getNavigation().createPath(destination, 0);
         helper.assertTrue(partial != null && !partial.canReach() && !partial.isDone()
                         && villager.getNavigation().moveTo(partial, 0.0D),
@@ -995,7 +995,7 @@ public final class MCAGroundPathNavigationGameTests {
                 "fixture ordinary path did not stop at its normal bounded horizon");
 
         villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
-                new WalkTarget(new LongDistancePathTarget(target), 0.5F, 0));
+                new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
         Path progressive = villager.getNavigation().createPath(target, 0);
         helper.assertTrue(progressive != null && progressive.getEndNode() != null,
                 "long-distance WALK_TARGET did not receive a progressive path result");
@@ -1047,7 +1047,7 @@ public final class MCAGroundPathNavigationGameTests {
         villager.setNoAi(true);
         villager.setOnGround(true);
         villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
-                new WalkTarget(new LongDistancePathTarget(logicalTarget), 0.5F, 1));
+                new WalkTarget(new PersistentPathTarget(logicalTarget), 0.5F, 1));
 
         Path ordinary = villager.getNavigation().createPath(logicalTarget, 1);
         helper.assertTrue(ordinary != null && ordinary.getEndNode() != null && !ordinary.canReach(),
@@ -1093,7 +1093,7 @@ public final class MCAGroundPathNavigationGameTests {
         villager.setOnGround(true);
 
         villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
-                new WalkTarget(new LongDistancePathTarget(oldTarget), 0.5F, 0));
+                new WalkTarget(new PersistentPathTarget(oldTarget), 0.5F, 0));
         Path oldPath = villager.getNavigation().createPath(oldTarget, 0);
         helper.assertTrue(oldPath != null && !oldPath.canReach(),
                 "fixture old destination did not establish an ordinary progressive path");
@@ -1101,7 +1101,7 @@ public final class MCAGroundPathNavigationGameTests {
         WalkTargetFailureMemory.record(villager, oldTarget, oldFailureSince);
 
         villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
-                new WalkTarget(new LongDistancePathTarget(newTarget), 0.5F, 0));
+                new WalkTarget(new PersistentPathTarget(newTarget), 0.5F, 0));
         Path freshPath = villager.getNavigation().createPath(newTarget, 0);
 
         helper.assertTrue(freshPath != null && !freshPath.canReach(),
@@ -1139,7 +1139,7 @@ public final class MCAGroundPathNavigationGameTests {
         villager.setNoAi(true);
         villager.setOnGround(true);
         villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
-                new WalkTarget(new LongDistancePathTarget(target), 0.5F, 0));
+                new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
 
         Config config = Config.getInstance();
         int originalPathfindingDistance = config.villagerPathfindingDistance;
@@ -1181,7 +1181,7 @@ public final class MCAGroundPathNavigationGameTests {
         villager.setOnGround(true);
         villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
         villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
-                new WalkTarget(new LongDistancePathTarget(target), 1.0F, 0));
+                new WalkTarget(new PersistentPathTarget(target), 1.0F, 0));
 
         Path firstSegment = villager.getNavigation().createPath(target, 0);
         helper.assertTrue(firstSegment != null && !firstSegment.canReach(),
@@ -1206,7 +1206,7 @@ public final class MCAGroundPathNavigationGameTests {
 
     @GameTest(batch = "mca_navigation_nearby_detour", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 600)
-    public static void nearbyStaticTargetCanTakeRouteLongerThanFollowRange(GameTestHelper helper) {
+    public static void nearbyPersistentTargetCanTakeRouteLongerThanFollowRange(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(40, 1, 40));
         BlockPos target = start.east(2);
         prepareFlatArea(helper, start, 30, 3);
@@ -1236,7 +1236,8 @@ public final class MCAGroundPathNavigationGameTests {
         helper.assertTrue(ordinary != null && !ordinary.canReach(),
                 "fixture ordinary path unexpectedly solved a detour longer than 48 blocks");
 
-        villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.5F, 0));
+        villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
         Config config = Config.getInstance();
         int originalPathfindingDistance = config.villagerPathfindingDistance;
         Path extended;
@@ -1271,7 +1272,7 @@ public final class MCAGroundPathNavigationGameTests {
 
     @GameTest(batch = "mca_navigation_progressive_budget", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 80)
-    public static void longDistanceStaticTargetKeepsBoundedBudget(GameTestHelper helper) {
+    public static void longDistancePersistentTargetKeepsBoundedBudget(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(40, 1, 40));
         BlockPos target = start.east(80);
         prepareFlatArea(helper, start.east(40), 45, 3);
@@ -1299,7 +1300,8 @@ public final class MCAGroundPathNavigationGameTests {
         try {
             config.villagerPathfindingDistance = 160;
 
-            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.5F, 0));
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
             Path progressive = villager.getNavigation().createPath(target, 0);
             helper.assertTrue(progressive != null && !progressive.canReach(),
                     "far static search consumed the enlarged detour budget in one pass");
@@ -1344,7 +1346,8 @@ public final class MCAGroundPathNavigationGameTests {
         villager.setNoAi(true);
         villager.setOnGround(true);
         villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
-        villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.5F, 0));
+        villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
 
         Config config = Config.getInstance();
         int originalPathfindingDistance = config.villagerPathfindingDistance;
@@ -1404,7 +1407,8 @@ public final class MCAGroundPathNavigationGameTests {
         villager.setNoAi(true);
         villager.setOnGround(true);
         villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
-        villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.5F, 0));
+        villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
 
         Config config = Config.getInstance();
         int originalPathfindingDistance = config.villagerPathfindingDistance;
@@ -1431,7 +1435,8 @@ public final class MCAGroundPathNavigationGameTests {
                 fresh.setNoAi(true);
                 fresh.setOnGround(true);
                 fresh.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
-                fresh.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.5F, 0));
+                fresh.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                        new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
                 Path freshPath = fresh.getNavigation().createPath(target, 0);
                 helper.assertTrue(freshPath != null && freshPath.canReach(),
                         "opened detour is not navigable without backoff; path=" + summarizePath(freshPath));
@@ -1490,7 +1495,7 @@ public final class MCAGroundPathNavigationGameTests {
         villager.setOnGround(true);
         villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
         villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
-                new WalkTarget(new LongDistancePathTarget(target), 0.5F, 0));
+                new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
 
         Config config = Config.getInstance();
         int originalPathfindingDistance = config.villagerPathfindingDistance;
@@ -1551,8 +1556,8 @@ public final class MCAGroundPathNavigationGameTests {
                     "indoor Brownian walk did not start under a roof");
             WalkTarget published = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
                     .orElseThrow();
-            helper.assertTrue(published.getTarget() instanceof LocalInsideBrownianWalk.BrownianTarget,
-                    "indoor Brownian walk did not mark its local destination");
+            helper.assertTrue(!(published.getTarget() instanceof PersistentPathTarget),
+                    "indoor Brownian walk incorrectly published persistent navigation intent");
             helper.assertTrue(published.getTarget().currentBlockPosition().distManhattan(start) <= 3,
                     "indoor Brownian walk selected a nonlocal destination");
             villager.discard();
@@ -1642,9 +1647,9 @@ public final class MCAGroundPathNavigationGameTests {
                 helper.assertTrue(stroll.tryStart(helper.getLevel(), villager, gameTime),
                         "existing walk-target rejection consumed the indoor-stroll cooldown");
                 helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
-                                .filter(target -> target.getTarget() instanceof LocalInsideBrownianWalk.BrownianTarget)
+                                .filter(target -> !(target.getTarget() instanceof PersistentPathTarget))
                                 .isPresent(),
-                        "newly eligible indoor stroll did not publish a local destination");
+                        "newly eligible indoor stroll published persistent navigation intent");
                 helper.succeed();
             } finally {
                 villager.discard();
@@ -1699,9 +1704,9 @@ public final class MCAGroundPathNavigationGameTests {
                         helper.assertTrue(stroll.tryStart(helper.getLevel(), villager, indoorTime),
                                 "outdoor rejection consumed the indoor-stroll cooldown");
                         helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
-                                        .filter(target -> target.getTarget() instanceof LocalInsideBrownianWalk.BrownianTarget)
+                                        .filter(target -> !(target.getTarget() instanceof PersistentPathTarget))
                                         .isPresent(),
-                                "newly indoor stroll did not publish a local destination");
+                                "newly indoor stroll published persistent navigation intent");
                     } finally {
                         villager.discard();
                     }
@@ -1713,52 +1718,64 @@ public final class MCAGroundPathNavigationGameTests {
         });
     }
 
-    @GameTest(batch = "mca_navigation_local_brownian", templateNamespace = "minecraft",
+    @GameTest(batch = "mca_navigation_target_scope", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 80)
-    public static void localBrownianTargetDoesNotSearchWholeWallDetour(GameTestHelper helper) {
-        BlockPos start = helper.absolutePos(new BlockPos(40, 1, 40));
-        BlockPos target = start.east(2);
-        prepareFlatArea(helper, start, 30, 3);
-        for (int z = -23; z <= 23; z++) {
-            BlockPos wall = start.offset(1, 0, z);
-            for (int y = 0; y < 3; y++) {
-                helper.getLevel().setBlock(wall.above(y), Blocks.STONE.defaultBlockState(), 3);
-            }
-        }
+    public static void onlyExplicitPersistentTargetEscalatesFarPathSearch(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(4, 1, 4));
+        BlockPos target = start.east(80);
+        prepareFlatPath(helper, start, target);
 
-        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+        VillagerEntityMCA ordinaryVillager = VillagerFactory.newVillager(helper.getLevel())
                 .withAge(0)
                 .withPosition(Vec3.atBottomCenterOf(start))
                 .spawn(MobSpawnType.STRUCTURE);
-        villager.refreshBrain(helper.getLevel());
-        villager.getBrain().removeAllBehaviors();
-        villager.setNoAi(true);
-        villager.setOnGround(true);
-        villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
+        ordinaryVillager.refreshBrain(helper.getLevel());
+        ordinaryVillager.getBrain().removeAllBehaviors();
+        ordinaryVillager.setNoAi(true);
+        ordinaryVillager.setOnGround(true);
+        ordinaryVillager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
+
+        VillagerEntityMCA persistentVillager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(start))
+                .spawn(MobSpawnType.STRUCTURE);
+        persistentVillager.refreshBrain(helper.getLevel());
+        persistentVillager.getBrain().removeAllBehaviors();
+        persistentVillager.setNoAi(true);
+        persistentVillager.setOnGround(true);
+        persistentVillager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
 
         Config config = Config.getInstance();
         int originalPathfindingDistance = config.villagerPathfindingDistance;
         try {
             config.villagerPathfindingDistance = 160;
-            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
-                    new WalkTarget(new LocalInsideBrownianWalk.BrownianTarget(target), 0.5F, 0));
-            Path local = villager.getNavigation().createPath(target, 0);
-            helper.assertTrue(local != null && !local.canReach(),
-                    "local Brownian destination consumed the extended detour search");
+            ordinaryVillager.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.5F, 0));
+            Path ordinaryProbe = ordinaryVillager.getNavigation().createPath(target, 0);
+            helper.assertTrue(ordinaryProbe != null && !ordinaryProbe.canReach(),
+                    "fixture ordinary disposable path unexpectedly reached the far target");
+            WalkTargetFailureMemory.record(ordinaryVillager, target, helper.getLevel().getGameTime());
+            PathRequestDiagnostics.SearchSnapshot ordinaryBefore = PathRequestDiagnostics.snapshot(ordinaryVillager);
+            ordinaryVillager.getNavigation().createPath(target, 0);
+            PathRequestDiagnostics.SearchSnapshot ordinaryAfter = PathRequestDiagnostics.snapshot(ordinaryVillager);
+            helper.assertTrue(ordinaryAfter.extendedSearches() == ordinaryBefore.extendedSearches(),
+                    "ordinary disposable destination escalated into an extended path search");
 
-            WalkTargetFailureMemory.record(villager, target, helper.getLevel().getGameTime());
-            Path retry = villager.getNavigation().createPath(target, 0);
-            helper.assertTrue(retry != null && !retry.canReach(),
-                    "failed local Brownian destination consumed the extended detour search");
-
-            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.5F, 0));
-            Path deliberate = villager.getNavigation().createPath(target, 0);
-            helper.assertTrue(deliberate != null && deliberate.canReach(),
-                    "ordinary nearby destination lost its legitimate long detour");
+            persistentVillager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+            Path persistentProbe = persistentVillager.getNavigation().createPath(target, 0);
+            helper.assertTrue(persistentProbe != null && !persistentProbe.canReach(),
+                    "fixture persistent path unexpectedly reached the far target before retry");
+            WalkTargetFailureMemory.record(persistentVillager, target, helper.getLevel().getGameTime());
+            PathRequestDiagnostics.SearchSnapshot persistentBefore = PathRequestDiagnostics.snapshot(persistentVillager);
+            persistentVillager.getNavigation().createPath(target, 0);
+            PathRequestDiagnostics.SearchSnapshot persistentAfter = PathRequestDiagnostics.snapshot(persistentVillager);
+            helper.assertTrue(persistentAfter.extendedSearches() > persistentBefore.extendedSearches(),
+                    "explicit persistent destination did not receive an extended path search");
         } finally {
             config.villagerPathfindingDistance = originalPathfindingDistance;
         }
-        villager.discard();
+        ordinaryVillager.discard();
+        persistentVillager.discard();
         helper.succeed();
     }
 

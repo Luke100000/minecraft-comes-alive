@@ -103,7 +103,7 @@ public final class PathRetryLifecycleGameTests {
             villager.setOnGround(true);
             villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
             villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
-                    new WalkTarget(new LongDistancePathTarget(destination), 0.5F, 0));
+                    new WalkTarget(new PersistentPathTarget(destination), 0.5F, 0));
 
             MoveToTargetSink sink = vanillaSink ? new MoveToTargetSink() : new WanderOrTeleportToTargetTask();
             long started = helper.getLevel().getGameTime();
@@ -149,7 +149,7 @@ public final class PathRetryLifecycleGameTests {
             long started = helper.getLevel().getGameTime();
             producer.trigger(helper.getLevel(), villager, started);
             helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
-                            .map(target -> target.getTarget() instanceof LongDistancePathTarget).orElse(false),
+                            .map(target -> target.getTarget() instanceof PersistentPathTarget).orElse(false),
                     "fixture did not publish HOME long-distance transit");
             WalkTargetFailureMemory.record(villager, destination, started);
 
@@ -369,7 +369,7 @@ public final class PathRetryLifecycleGameTests {
                     fresh.setOnGround(true);
                     fresh.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
                     fresh.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
-                            new WalkTarget(destination, 1.0F, 0));
+                            new WalkTarget(new PersistentPathTarget(destination), 1.0F, 0));
                     Path freshPath = fresh.getNavigation().createPath(destination, 0);
                     MCA.LOGGER.info("[MCA Path Lifecycle] lane={} fresh opened-route path={} target={} end={} reachable={}",
                             lane, freshPath, freshPath == null ? null : freshPath.getTarget(),

@@ -126,7 +126,8 @@ public final class NavigationRecoveryGameTests {
         int previousHorizon = config.villagerPathfindingDistance;
         try {
             config.villagerPathfindingDistance = 160;
-            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.5F, 0));
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
             MCAGroundPathNavigation navigation = (MCAGroundPathNavigation) villager.getNavigation();
             Path blocked = navigation.createPath(target, 0);
             helper.assertTrue(blocked != null && !blocked.canReach(), "sealed detour fixture was reachable");
@@ -174,7 +175,8 @@ public final class NavigationRecoveryGameTests {
             }
         }
         VillagerEntityMCA villager = spawnStationary(helper, start);
-        villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.5F, 0));
+        villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
         long began = helper.getLevel().getGameTime();
         villager.getNavigation().createPath(target, 0);
         WalkTargetFailureMemory.record(villager, target, began);
