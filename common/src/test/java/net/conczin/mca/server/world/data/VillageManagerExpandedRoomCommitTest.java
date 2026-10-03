@@ -12,6 +12,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VillageManagerExpandedRoomCommitTest {
@@ -24,18 +25,18 @@ class VillageManagerExpandedRoomCommitTest {
     @Test
     void existingStructureRefreshCommitsFloorAndNewRoomTogether() {
         Village village = new Village(1, null);
-        BuildingFloorRegion oldRegion = region(64, 0, 1);
+        TestFloorFootprint oldRegion = region(64, 0, 1);
         Structure current = new Structure(10, BlockPos.ZERO, List.of(
                 TestStructureFloors.create(0, 64, 68, 0, oldRegion)));
         Building main = room(100, 10, 0, oldRegion);
         village.registerStructure(current, main);
 
-        BuildingFloorRegion freshRegion = region(64, 0, 3);
+        TestFloorFootprint freshRegion = region(64, 0, 3);
         Structure refreshed = current.copy();
         assertTrue(refreshed.replaceFloorGeometry(0,
                 TestStructureFloors.create(0, 64, 68, 0, freshRegion)));
 
-        BuildingFloorRegion newRoomRegion = region(64, 2, 3);
+        TestFloorFootprint newRoomRegion = region(64, 2, 3);
         Building added = room(-1, 10, 0, newRoomRegion);
         BuildingScanResult scan = new BuildingScanResult(
                 Building.validationResult.SUCCESS,
@@ -55,9 +56,73 @@ class VillageManagerExpandedRoomCommitTest {
     }
 
     @Test
+    void failedRoomAdditionPublicationLeavesScanReusableAndDoesNotConsumeId() {
+        ThrowOnceMarkDirtyVillage village = new ThrowOnceMarkDirtyVillage();
+        Structure structure = new Structure(10, BlockPos.ZERO, List.of(
+                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 3))));
+        Building main = room(100, 10, 0, region(64, 0, 1));
+        village.registerStructure(structure, main);
+
+        Building added = room(-1, 10, 0, region(64, 2, 3));
+        BuildingScanResult scan = new BuildingScanResult(
+                Building.validationResult.SUCCESS,
+                new BlockPos(2, 64, 0),
+                added,
+                List.of("building"),
+                village);
+        VillageManager manager = new VillageManager(null);
+        village.failNextMarkDirty();
+
+        assertThrows(IllegalStateException.class,
+                () -> manager.commitRoomAddition(scan, "building"));
+        assertEquals(-1, added.getId());
+        assertEquals(1, village.getRooms().count());
+
+        assertEquals(Building.validationResult.SUCCESS,
+                manager.commitRoomAddition(scan, "building"));
+        assertEquals(0, village.getRooms()
+                .filter(room -> room.getId() != main.getId())
+                .findFirst().orElseThrow().getId());
+    }
+
+    @Test
+    void failedInitialRoomPublicationLeavesPendingScanReusableAndDoesNotConsumeIds() {
+        ThrowOnceMarkDirtyVillage village = new ThrowOnceMarkDirtyVillage();
+        Structure pending = new Structure(-1, BlockPos.ZERO, List.of(
+                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 1))));
+        Building added = room(-1, -1, 0, region(64, 0, 1));
+        BuildingScanResult scan = new BuildingScanResult(
+                Building.validationResult.SUCCESS,
+                BlockPos.ZERO,
+                added,
+                List.of("building"),
+                village).withPendingStructure(pending);
+        VillageManager manager = new VillageManager(null);
+        village.failNextMarkDirty();
+
+        assertThrows(IllegalStateException.class,
+                () -> manager.commitRoomAddition(scan, "building"));
+        assertEquals(-1, pending.getId());
+        assertEquals(-1, pending.getLogicalBuildingId());
+        assertEquals(-1, added.getId());
+        assertEquals(-1, added.getStructureId());
+        assertEquals(0, village.getStructures().size());
+        assertEquals(0, village.getRooms().count());
+
+        assertEquals(Building.validationResult.SUCCESS,
+                manager.commitRoomAddition(scan, "building"));
+        Structure committedStructure = village.getStructures().values().stream().findFirst().orElseThrow();
+        Building committedRoom = village.getRooms().findFirst().orElseThrow();
+        assertEquals(0, committedStructure.getId());
+        assertEquals(0, committedStructure.getLogicalBuildingId());
+        assertEquals(1, committedRoom.getId());
+        assertEquals(0, committedRoom.getStructureId());
+    }
+
+    @Test
     void rejectedAtomicFloorRefreshLeavesStructureAndRoomsUntouched() {
         Village village = new Village(1, null);
-        BuildingFloorRegion oldRegion = region(64, 0, 1);
+        TestFloorFootprint oldRegion = region(64, 0, 1);
         Structure current = new Structure(10, BlockPos.ZERO, List.of(
                 TestStructureFloors.create(0, 64, 68, 0, oldRegion)));
         Building main = room(100, 10, 0, oldRegion);
@@ -71,7 +136,7 @@ class VillageManagerExpandedRoomCommitTest {
         assertTrue(refreshed.replaceFloorGeometry(0,
                 TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 3))));
         Building invalidReplacement = room(100, 10, 0,
-                BuildingFloorRegion.fromFootprint(64, Set.of(
+                TestFloorFootprint.fromFootprint(64, Set.of(
                         new BlockPos(0, 64, 0), new BlockPos(4, 64, 0))));
 
         assertFalse(village.publishFloorRefresh(refreshed, 0, List.of(invalidReplacement)));
@@ -83,7 +148,7 @@ class VillageManagerExpandedRoomCommitTest {
     @Test
     void floorRefreshAllowsUnregisteredRoomComponents() {
         Village village = new Village(1, null);
-        BuildingFloorRegion oldRegion = region(64, 0, 1);
+        TestFloorFootprint oldRegion = region(64, 0, 1);
         Structure current = new Structure(10, BlockPos.ZERO, List.of(
                 TestStructureFloors.create(0, 64, 68, 0, oldRegion)));
         Building main = room(100, 10, 0, oldRegion);
@@ -144,7 +209,7 @@ class VillageManagerExpandedRoomCommitTest {
         replacement.setTypeForced(true);
         RegisteredRoomUpdate update = new RegisteredRoomUpdate(
                 Building.validationResult.SUCCESS, BlockPos.ZERO, village, refreshed,
-                10, 0, 100, replacement, List.of("music_store", "workshop"));
+                100, replacement, List.of("music_store", "workshop"));
         VillageManager manager = new VillageManager(null);
         Set<BlockPos> siblingCells = Set.copyOf(sibling.getFloorCells());
 
@@ -174,7 +239,7 @@ class VillageManagerExpandedRoomCommitTest {
         replacement.setTypeForced(false);
         RegisteredRoomUpdate update = new RegisteredRoomUpdate(
                 Building.validationResult.SUCCESS, BlockPos.ZERO, village, current.copy(),
-                10, 0, 100, replacement, List.of());
+                100, replacement, List.of());
         VillageManager manager = new VillageManager(null);
 
         assertEquals(Building.validationResult.SUCCESS,
@@ -184,14 +249,14 @@ class VillageManagerExpandedRoomCommitTest {
         assertFalse(committed.isTypeForced());
     }
 
-    private static BuildingFloorRegion region(int y, int minX, int maxX) {
+    private static TestFloorFootprint region(int y, int minX, int maxX) {
         Set<BlockPos> cells = java.util.stream.IntStream.rangeClosed(minX, maxX)
                 .mapToObj(x -> new BlockPos(x, y, 0))
                 .collect(java.util.stream.Collectors.toSet());
-        return BuildingFloorRegion.fromFootprint(y, cells);
+        return TestFloorFootprint.fromFootprint(y, cells);
     }
 
-    private static Building room(int id, int structureId, int floorId, BuildingFloorRegion region) {
+    private static Building room(int id, int structureId, int floorId, TestFloorFootprint region) {
         Building room = new Building(region.cells().iterator().next());
         room.setId(id);
         room.setStructureId(structureId);
@@ -199,8 +264,29 @@ class VillageManagerExpandedRoomCommitTest {
         int minX = region.cells().stream().mapToInt(BlockPos::getX).min().orElseThrow();
         int maxX = region.cells().stream().mapToInt(BlockPos::getX).max().orElseThrow();
         room.setGeometry(new BlockPos(minX, region.anchorY(), 0),
-                new BlockPos(maxX, region.anchorY() + 3, 0), region);
+                new BlockPos(maxX, region.anchorY() + 3, 0), region.cells());
         return room;
+    }
+
+    private static final class ThrowOnceMarkDirtyVillage extends Village {
+        private boolean failNextMarkDirty;
+
+        private ThrowOnceMarkDirtyVillage() {
+            super(1, null);
+        }
+
+        private void failNextMarkDirty() {
+            failNextMarkDirty = true;
+        }
+
+        @Override
+        public void markDirty() {
+            if (failNextMarkDirty) {
+                failNextMarkDirty = false;
+                throw new IllegalStateException("forced dirty failure");
+            }
+            super.markDirty();
+        }
     }
 
 }

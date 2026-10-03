@@ -6,6 +6,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.resources.Identifier;
 
 import java.util.*;
+import java.util.stream.Stream;
 
 /** Single derived view for Room-local and Main Room inherited POIs/type matching. */
 public final class RoomTypeResolver {
@@ -68,6 +69,20 @@ public final class RoomTypeResolver {
                 resolve(room, findMainRoom(room)));
     }
 
+    /** Type-only queries need a POI snapshot only when contributions can change the Main Room's type. */
+    BuildingType effectiveType(Building room) {
+        if (room == null) return null;
+        if (room.isTypeForced() || !room.isFunctionalRoom()) return room.getBuildingType();
+
+        LogicalBuilding logicalBuilding = logicalBuilding(room);
+        if (logicalBuilding == null || !logicalBuilding.inheritanceEnabled()
+                || !sameRoom(room, findMainRoom(room))
+                || contributingRooms(room).findAny().isEmpty()) {
+            return room.getBuildingType();
+        }
+        return resolve(room).effectiveType();
+    }
+
     /**
      * Client-facing Room presentation. Inherited Rooms share the Main Room's effective
      * type for colour/icon rendering without changing their persisted direct type.
@@ -92,11 +107,7 @@ public final class RoomTypeResolver {
                     own, Map.of(), own, List.of(), inheritanceEnabled);
         }
 
-        List<Building> contributors = roomsByBuilding.getOrDefault(logicalBuildingId(room), List.of()).stream()
-                .filter(Building::isFunctionalRoom)
-                .filter(candidate -> !sameRoom(candidate, room))
-                .filter(Building::contributesToMain)
-                .filter(candidate -> !candidate.getBlocks().isEmpty())
+        List<Building> contributors = contributingRooms(room)
                 .sorted(Comparator.comparingInt(Building::getId))
                 .toList();
 
@@ -107,6 +118,14 @@ public final class RoomTypeResolver {
         Map<Identifier, LinkedHashSet<BlockPos>> effective = mutable(own);
         merge(effective, inheritedPoi);
         return new Context(room, mainRoom, own, inheritedPoi, toLists(effective), contributors, true);
+    }
+
+    private Stream<Building> contributingRooms(Building room) {
+        return roomsByBuilding.getOrDefault(logicalBuildingId(room), List.of()).stream()
+                .filter(Building::isFunctionalRoom)
+                .filter(candidate -> !sameRoom(candidate, room))
+                .filter(Building::contributesToMain)
+                .filter(candidate -> !candidate.getBlocks().isEmpty());
     }
 
     private static boolean sameRoom(Building first, Building second) {

@@ -35,6 +35,36 @@ public final class CopiedOpenHouseGameTests {
     private CopiedOpenHouseGameTests() {
     }
 
+    @GameTest(batch = "mca_copied_open_house_wall_cavity", templateNamespace = "mca",
+            template = TEMPLATE, timeoutTicks = 240, skyAccess = true)
+    public static void carvedWallCavityStopsAtSolidColumn(GameTestHelper helper) {
+        // Reproduce the live MCA Floor NBT Test edits from the diagnose trace without changing the fixture.
+        // GameTest relative Y is template-NBT Y + 1.
+        var level = helper.getLevel();
+        level.setBlock(helper.absolutePos(new BlockPos(34, 6, 6)), Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(helper.absolutePos(new BlockPos(35, 6, 6)), Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(helper.absolutePos(new BlockPos(35, 7, 6)), Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(helper.absolutePos(new BlockPos(36, 5, 6)), Blocks.STRIPPED_OAK_WOOD.defaultBlockState(), 3);
+        level.setBlock(helper.absolutePos(new BlockPos(36, 6, 6)), Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(helper.absolutePos(new BlockPos(36, 7, 6)), Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(helper.absolutePos(new BlockPos(36, 7, 7)), Blocks.AIR.defaultBlockState(), 3);
+        level.setBlock(helper.absolutePos(new BlockPos(37, 6, 7)), Blocks.AIR.defaultBlockState(), 3);
+
+        BlockPos seed = helper.absolutePos(new BlockPos(20, 7, 13));
+        BlockPos openCavity = helper.absolutePos(new BlockPos(36, 6, 6));
+        BlockPos headBlockedCavity = helper.absolutePos(new BlockPos(37, 6, 7));
+        SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(
+                level, seed, Config.getInstance().maxBuildingSize, Config.getInstance().maxBuildingRadius);
+
+        helper.assertTrue(scan.result() == Building.validationResult.SUCCESS,
+                "reported lower-floor scan failed: " + scan.result());
+        helper.assertTrue(scan.floor().cellAt(openCavity).isPresent(),
+                "carved two-block passage was not reflected in live Floor geometry");
+        helper.assertTrue(scan.floor().cellAt(headBlockedCavity).isEmpty(),
+                "solid wall continuation became structural Floor geometry");
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_copied_open_house_rooms", templateNamespace = "mca",
             template = TEMPLATE, timeoutTicks = 240, skyAccess = true)
     public static void everyCopiedHouseRoomComponentValidates(GameTestHelper helper) {
@@ -195,7 +225,7 @@ public final class CopiedOpenHouseGameTests {
 
         for (BlockPos relative : LOWER_STAIR_SEEDS) {
             RoomScanPlan plan = village.getRoomScanPlan(helper.getLevel(), helper.absolutePos(relative));
-            helper.assertTrue(plan.mode() == Village.RoomScanMode.ADD_BASEMENT,
+            helper.assertTrue(plan.mode() == Village.RoomScanMode.ADD_ATTACHMENT,
                     "lower staircase " + relative + " offered " + plan.mode());
             helper.assertTrue(plan.targetBuildingId() == buildingId,
                     "lower staircase selected another house at " + relative);
@@ -205,9 +235,7 @@ public final class CopiedOpenHouseGameTests {
         roomIds.add(mainRoom.getId());
         for (BlockPos relative : List.of(LOWER_STOREY_SEED, UPPER_STOREY_SEED)) {
             BlockPos source = helper.absolutePos(relative);
-            Village.RoomScanMode mode = relative.equals(LOWER_STOREY_SEED)
-                    ? Village.RoomScanMode.ADD_BASEMENT : Village.RoomScanMode.ADD_FLOOR;
-            commit(helper, workflow, workflow.analyzeAttachedRoom(source, mode, buildingId));
+            commit(helper, workflow, workflow.analyzeAttachedRoom(source, buildingId));
             Building room = village.findInteractionRoomAt(source).orElseThrow();
             helper.assertTrue(village.getStructureFor(room).orElseThrow().getLogicalBuildingId() == buildingId,
                     "attachment created another house at " + relative);
@@ -276,7 +304,7 @@ public final class CopiedOpenHouseGameTests {
         for (int index = 0; index < lowerRooms.size(); index++) {
             BlockPos source = helper.absolutePos(lowerRooms.get(index));
             RoomScanPlan plan = village.getRoomScanPlan(helper.getLevel(), source);
-            helper.assertTrue(plan.mode() == Village.RoomScanMode.ADD_BASEMENT,
+            helper.assertTrue(plan.mode() == Village.RoomScanMode.ADD_ATTACHMENT,
                     "lower room " + lowerRooms.get(index) + " offered " + plan.mode());
             helper.assertTrue(plan.targetBuildingId() == buildingId,
                     "lower room " + lowerRooms.get(index) + " targeted another house");
@@ -299,8 +327,7 @@ public final class CopiedOpenHouseGameTests {
             }
 
             attached.add(plan.selectedAttachmentFloor().geometry());
-            commit(helper, workflow, workflow.analyzeAttachedRoom(
-                    source, Village.RoomScanMode.ADD_BASEMENT, buildingId));
+            commit(helper, workflow, workflow.analyzeAttachedRoom(source, buildingId));
         }
         helper.succeed();
     }
@@ -325,9 +352,9 @@ public final class CopiedOpenHouseGameTests {
             Village village = manager.findNearestVillage(main, Village.MERGE_MARGIN).orElseThrow();
             BlockPos source = helper.absolutePos(relative);
             RoomScanPlan plan = village.getRoomScanPlan(helper.getLevel(), source);
-            helper.assertTrue(plan.mode() == Village.RoomScanMode.ADD_BASEMENT,
+            helper.assertTrue(plan.mode() == Village.RoomScanMode.ADD_ATTACHMENT,
                     "staircase did not select the lower Floor at " + relative);
-            BuildingScanResult scan = workflow.analyzeAttachedRoom(source, plan.mode(), plan.targetBuildingId());
+            BuildingScanResult scan = workflow.analyzeAttachedRoom(source, plan.targetBuildingId());
             helper.assertTrue(scan.result() == Building.validationResult.SUCCESS,
                     "staircase attachment failed at " + relative + ": " + scan.result());
             Set<BlockPos> selectedCells = scan.building().getFloorCells();
@@ -357,22 +384,22 @@ public final class CopiedOpenHouseGameTests {
         commit(helper, workflow, workflow.analyzeBuildingAddition(main));
         Village village = manager.findNearestVillage(main, Village.MERGE_MARGIN).orElseThrow();
         RoomScanPlan expected = village.getRoomScanPlan(helper.getLevel(), lower);
-        helper.assertTrue(expected.mode() == Village.RoomScanMode.ADD_BASEMENT,
+        helper.assertTrue(expected.mode() == Village.RoomScanMode.ADD_ATTACHMENT,
                 "lower Room did not offer an attachment");
         int before = village.getStructures().size();
         BlockState original = helper.getLevel().getBlockState(lower);
         helper.getLevel().setBlockAndUpdate(lower, Blocks.STONE.defaultBlockState());
         BuildingScanResult changed = workflow.analyzeAttachedRoom(
-                village, expected, expected.mode(), expected.targetBuildingId());
+                village, expected, expected.targetBuildingId());
         helper.assertTrue(changed.result() != Building.validationResult.SUCCESS,
                 "confirmation accepted changed Floor geometry");
         helper.assertTrue(village.getStructures().size() == before,
                 "rejected confirmation mutated the house");
         helper.getLevel().setBlockAndUpdate(lower, original);
         commit(helper, workflow, workflow.analyzeAttachedRoom(
-                village, expected, expected.mode(), expected.targetBuildingId()));
+                village, expected, expected.targetBuildingId()));
         BuildingScanResult duplicate = workflow.analyzeAttachedRoom(
-                village, expected, expected.mode(), expected.targetBuildingId());
+                village, expected, expected.targetBuildingId());
         helper.assertTrue(duplicate.result() != Building.validationResult.SUCCESS,
                 "stale confirmation accepted an already registered attachment");
         helper.assertTrue(village.getStructures().size() == before + 1,
@@ -398,18 +425,31 @@ public final class CopiedOpenHouseGameTests {
         Building mainRoom = village.findInteractionRoomAt(mainSeed).orElseThrow();
         Structure structure = village.getStructureFor(mainRoom).orElseThrow();
         int logicalBuildingId = structure.getLogicalBuildingId();
+        BlockPos upperSeed = helper.absolutePos(UPPER_STOREY_SEED);
+        var mainCellsAtUpperColumn = structure.getFloors().stream()
+                .flatMap(floor -> floor.geometry().cellsAtColumn(upperSeed.getX(), upperSeed.getZ()).stream())
+                .toList();
+        var mainColumnStates = mainCellsAtUpperColumn.stream()
+                .flatMap(cell -> java.util.stream.IntStream.rangeClosed(cell.feet().getY(), upperSeed.getY())
+                        .mapToObj(y -> y + "=" + helper.getLevel().getBlockState(
+                                new BlockPos(upperSeed.getX(), y, upperSeed.getZ())).getBlock()))
+                .toList();
 
         RoomScanPlan lowerPlan = village.getRoomScanPlan(
                 helper.getLevel(), helper.absolutePos(LOWER_STOREY_SEED));
-        helper.assertTrue(lowerPlan.mode() == Village.RoomScanMode.ADD_BASEMENT,
+        helper.assertTrue(lowerPlan.mode() == Village.RoomScanMode.ADD_ATTACHMENT,
                 "copied lower storey should attach as basement, got " + lowerPlan.mode());
         helper.assertTrue(lowerPlan.targetBuildingId() == logicalBuildingId,
                 "copied lower storey targeted a different logical building");
 
         RoomScanPlan upperPlan = village.getRoomScanPlan(
-                helper.getLevel(), helper.absolutePos(UPPER_STOREY_SEED));
-        helper.assertTrue(upperPlan.mode() == Village.RoomScanMode.ADD_FLOOR,
-                "copied upper storey should attach as floor, got " + upperPlan.mode());
+                helper.getLevel(), upperSeed);
+        helper.assertTrue(upperPlan.mode() == Village.RoomScanMode.ADD_ATTACHMENT,
+                "copied upper storey should attach as floor, got " + upperPlan.mode()
+                        + " upperSeed=" + upperSeed
+                        + " mainCellsAtUpperColumn=" + mainCellsAtUpperColumn
+                        + " mainColumnStates=" + mainColumnStates
+                        + " resolvedRoom=" + village.findInteractionRoomAt(upperSeed).map(Building::getId));
         helper.assertTrue(upperPlan.targetBuildingId() == logicalBuildingId,
                 "copied upper storey targeted a different logical building");
         helper.succeed();
@@ -429,8 +469,7 @@ public final class CopiedOpenHouseGameTests {
         Building mainRoom = village.findInteractionRoomAt(main).orElseThrow();
         int buildingId = village.getStructureFor(mainRoom).orElseThrow().getLogicalBuildingId();
 
-        BuildingScanResult upperAddition = workflow.analyzeAttachedRoom(
-                upper, Village.RoomScanMode.ADD_FLOOR, buildingId);
+        BuildingScanResult upperAddition = workflow.analyzeAttachedRoom(upper, buildingId);
         helper.assertTrue(upperAddition.result() == Building.validationResult.SUCCESS,
                 "upper registration before basement failed: " + upperAddition.result());
         commit(helper, workflow, upperAddition);
@@ -439,13 +478,12 @@ public final class CopiedOpenHouseGameTests {
                 "registered upper storey was not selectable before adding the basement");
 
         RoomScanPlan lowerPlan = village.getRoomScanPlan(helper.getLevel(), lower);
-        helper.assertTrue(lowerPlan.mode() == Village.RoomScanMode.ADD_BASEMENT,
+        helper.assertTrue(lowerPlan.mode() == Village.RoomScanMode.ADD_ATTACHMENT,
                 "upper registration changed basement plan to " + lowerPlan.mode());
         helper.assertTrue(lowerPlan.targetBuildingId() == buildingId,
                 "upper registration changed basement target to " + lowerPlan.targetBuildingId());
 
-        BuildingScanResult basementAddition = workflow.analyzeAttachedRoom(
-                lower, Village.RoomScanMode.ADD_BASEMENT, buildingId);
+        BuildingScanResult basementAddition = workflow.analyzeAttachedRoom(lower, buildingId);
         helper.assertTrue(basementAddition.result() == Building.validationResult.SUCCESS,
                 "basement registration after upper failed: " + basementAddition.result());
         commit(helper, workflow, basementAddition);

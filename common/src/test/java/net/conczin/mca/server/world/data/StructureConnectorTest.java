@@ -83,7 +83,7 @@ class StructureConnectorTest {
 
     private static StructureFloor floor(int anchorY, int ceilingY) {
         return TestStructureFloors.create(0, anchorY, ceilingY, 0,
-                BuildingFloorRegion.fromFootprint(anchorY, Set.of(
+                TestFloorFootprint.fromFootprint(anchorY, Set.of(
                         new BlockPos(0, anchorY, 0),
                         new BlockPos(1, anchorY, 0),
                         new BlockPos(0, anchorY, 1),

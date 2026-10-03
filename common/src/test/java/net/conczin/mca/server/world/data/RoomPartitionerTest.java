@@ -6,7 +6,9 @@ import org.junit.jupiter.api.Test;
 
 import java.util.AbstractCollection;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -366,6 +368,47 @@ class RoomPartitionerTest {
 
         assertEquals(exactCellsFirst, RoomPartitioner.owner(List.of(boundsFirst, exactCellsFirst)));
         assertEquals(exactCellsFirst, RoomPartitioner.owner(List.of(exactCellsFirst, boundsFirst)));
+    }
+
+    @Test
+    void equalAreaVerticalBoundaryAndPerimeterPoiOwnershipIgnoreInputOrder() {
+        BlockPos boundary = new BlockPos(2, 64, 0);
+        BlockPos sharedPerimeter = new BlockPos(2, 65, 1);
+        List<FloorGeometry.Cell> cells = List.of(
+                cell(0, 64, 0), cell(0, 64, 1), cell(1, 64, 0), cell(1, 64, 1),
+                cell(2, 64, 0),
+                cell(3, 64, 0), cell(3, 64, 1), cell(4, 64, 0), cell(4, 64, 1));
+        Set<BlockPos> expectedLeftPoi = null;
+        Set<BlockPos> expectedRightPoi = null;
+
+        for (boolean reverse : List.of(false, true)) {
+            List<FloorGeometry.Cell> ordered = new ArrayList<>(cells);
+            if (reverse) Collections.reverse(ordered);
+            FloorGeometry floor = geometry(new LinkedHashSet<>(ordered), Map.of());
+            List<RoomPartitioner.Component> parts = RoomPartitioner.partition(
+                    floor, transitions(floor), Map.of(), Set.of(boundary));
+            RoomPartitioner.Component left = parts.stream()
+                    .filter(component -> component.contains(new BlockPos(0, 64, 0)))
+                    .findFirst().orElseThrow();
+            RoomPartitioner.Component right = parts.stream()
+                    .filter(component -> component.contains(new BlockPos(4, 64, 0)))
+                    .findFirst().orElseThrow();
+
+            assertEquals(2, parts.size());
+            assertTrue(left.contains(boundary), "equal-sized Rooms must assign the boundary canonically");
+            assertFalse(right.contains(boundary));
+            Set<BlockPos> leftPoi = RoomPoiEvidence.candidates(parts, left);
+            Set<BlockPos> rightPoi = RoomPoiEvidence.candidates(parts, right);
+            assertTrue(leftPoi.contains(sharedPerimeter));
+            assertFalse(rightPoi.contains(sharedPerimeter));
+            if (expectedLeftPoi == null) {
+                expectedLeftPoi = leftPoi;
+                expectedRightPoi = rightPoi;
+            } else {
+                assertEquals(expectedLeftPoi, leftPoi);
+                assertEquals(expectedRightPoi, rightPoi);
+            }
+        }
     }
 
     private static FloorGeometry geometry(Set<FloorGeometry.Cell> cells,

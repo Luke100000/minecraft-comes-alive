@@ -7,11 +7,15 @@ import it.unimi.dsi.fastutil.longs.LongSet;
 import net.conczin.mca.util.NbtHelper;
 import net.conczin.mca.util.WorldUtils;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.SectionPos;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.LongTag;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
@@ -27,24 +31,45 @@ import java.util.stream.StreamSupport;
  * Tracks the positions where a tombstone may be found and whether it is filled or empty.
  */
 public class GraveyardManager extends SavedData {
+    private static final String OCCUPIED_GRAVES_KEY = "OccupiedGraves";
+
     private final Map<TombstoneState, Long2ObjectMap<ChunkBase>> tombstones = new EnumMap<>(TombstoneState.class);
+    private final Map<UUID, GlobalPos> occupiedGraves = new HashMap<>();
 
     public GraveyardManager(ServerLevel world) {
     }
 
     public GraveyardManager(CompoundTag nbt, HolderLookup.Provider provider) {
-        tombstones.putAll(NbtHelper.toMap(nbt, TombstoneState::valueOf, v -> {
-            CompoundTag vv = (CompoundTag) v;
+        for (TombstoneState state : TombstoneState.values()) {
+            Optional<CompoundTag> stored = nbt.getCompound(state.name());
+            if (stored.isEmpty()) {
+                continue;
+            }
+            CompoundTag vv = stored.orElseThrow();
             Long2ObjectMap<ChunkBase> map = new Long2ObjectOpenHashMap<>();
             vv.keySet().forEach(key -> {
                 map.put(Long.parseLong(key), new Chunk((ListTag) vv.get(key)));
             });
-            return map;
-        }));
+            tombstones.put(state, map);
+        }
+        nbt.getList(OCCUPIED_GRAVES_KEY).ifPresent(entries -> entries.forEach(value -> {
+                CompoundTag entry = (CompoundTag) value;
+                Optional<UUID> uuid = entry.read("Uuid", UUIDUtil.CODEC);
+                if (uuid.isEmpty() || !entry.contains("Grave")) {
+                    return;
+                }
+                GlobalPos.CODEC.parse(NbtOps.INSTANCE, entry.get("Grave"))
+                        .result()
+                        .ifPresent(grave -> occupiedGraves.put(uuid.orElseThrow(), grave));
+            }));
     }
 
     public static GraveyardManager get(ServerLevel world) {
         return WorldUtils.loadData(world, GraveyardManager::new, GraveyardManager::new, "mca_graveyard");
+    }
+
+    public static GraveyardManager getGlobal(ServerLevel world) {
+        return get(world.getServer().overworld());
     }
 
     private static long getChunkPos(BlockPos pos) {
@@ -67,7 +92,43 @@ public class GraveyardManager extends SavedData {
                 }
             });
         }
+        synchronized (occupiedGraves) {
+            ListTag entries = new ListTag();
+            occupiedGraves.forEach((uuid, grave) -> {
+                CompoundTag entry = new CompoundTag();
+                entry.store("Uuid", UUIDUtil.CODEC, uuid);
+                GlobalPos.CODEC.encodeStart(NbtOps.INSTANCE, grave).result().ifPresent(tag -> entry.put("Grave", tag));
+                if (entry.contains("Grave")) {
+                    entries.add(entry);
+                }
+            });
+            if (!entries.isEmpty()) {
+                nbt.put(OCCUPIED_GRAVES_KEY, entries);
+            }
+        }
         return nbt;
+    }
+
+    public Optional<GlobalPos> getOccupiedGrave(UUID deceasedId) {
+        synchronized (occupiedGraves) {
+            return Optional.ofNullable(occupiedGraves.get(deceasedId));
+        }
+    }
+
+    public void setOccupiedGrave(UUID deceasedId, GlobalPos grave) {
+        synchronized (occupiedGraves) {
+            if (!Objects.equals(occupiedGraves.put(deceasedId, grave), grave)) {
+                setDirty();
+            }
+        }
+    }
+
+    public void clearOccupiedGrave(UUID deceasedId, GlobalPos grave) {
+        synchronized (occupiedGraves) {
+            if (occupiedGraves.remove(deceasedId, grave)) {
+                setDirty();
+            }
+        }
     }
 
     public void setTombstoneState(BlockPos pos, TombstoneState state) {

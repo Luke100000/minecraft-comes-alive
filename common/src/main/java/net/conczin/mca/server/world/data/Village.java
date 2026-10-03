@@ -14,6 +14,7 @@ import net.conczin.mca.util.NbtHelper;
 import net.conczin.mca.util.WorldUtils;
 import net.minecraft.util.Util;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.nbt.*;
@@ -27,8 +28,11 @@ import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.TrapDoorBlock;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.*;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -41,6 +45,7 @@ public class Village implements Iterable<Building> {
     private static final long BED_SYNC_TIME = 200;
     private static final int MIN_MOURNING_INTERVAL = 4_000;
     private static final int MAX_MOURNING_INTERVAL = 9_000;
+    private static final int MOURNING_RETRY = 4_800;
     private static final int MIN_MOURNING_BURST_SIZE = 2;
     private static final int MAX_MOURNING_BURST_SIZE = 4;
     private static final long MOURNING_DAY_START = 1_000L;
@@ -221,16 +226,8 @@ public class Village implements Iterable<Building> {
     }
 
     boolean replaceStructureAndRegisterRoom(Structure refreshed, Building room) {
-        if (refreshed == null || room == null || !room.isFunctionalRoom() || room.getId() < 0) return false;
-        Structure current = structures.get(refreshed.getId());
-        if (current == null || current.getLogicalBuildingId() != refreshed.getLogicalBuildingId()) return false;
+        if (refreshed == null || room == null || room.getId() < 0) return false;
         if (buildings.containsKey(room.getId()) || externalBuildings.containsKey(room.getId())) return false;
-        if (room.getStructureId() != refreshed.getId()) return false;
-
-        StructureFloor floor = refreshed.getFloor(room.getFloorId()).orElse(null);
-        if (floor == null || room.getFloorCells().isEmpty() || !floorContainsRoomCells(floor, room)) {
-            return false;
-        }
         List<Building> floorRooms = getRooms()
                 .filter(existing -> existing.getStructureId() == refreshed.getId())
                 .filter(existing -> existing.getFloorId() == room.getFloorId())
@@ -289,18 +286,12 @@ public class Village implements Iterable<Building> {
         currentFloorRoomIds.forEach(nextBuildings::remove);
         for (Building room : replacements) nextBuildings.put(room.getId(), room);
 
-        BuildingStateSnapshot snapshot = snapshotBuildingState();
-        try {
+        publishBuildingMutation(() -> {
             structures.put(refreshed.getId(), refreshed);
             buildings.clear();
             buildings.putAll(nextBuildings);
-            reconcileLogicalBuilding(refreshed.getLogicalBuildingId());
-            calculateDimensions();
-            return true;
-        } catch (RuntimeException exception) {
-            restoreBuildingState(snapshot);
-            throw exception;
-        }
+        });
+        return true;
     }
 
     void removeRooms(Collection<Integer> roomIds) {
@@ -312,6 +303,19 @@ public class Village implements Iterable<Building> {
                 buildings.values().stream().map(Building::copy).toList(),
                 structures.values().stream().map(Structure::copy).toList(),
                 logicalBuildings.values().stream().map(LogicalBuilding::copy).toList());
+    }
+
+    void publishBuildingMutation(Runnable mutation) {
+        BuildingStateSnapshot snapshot = snapshotBuildingState();
+        try {
+            mutation.run();
+            refreshLogicalBuildings();
+            calculateDimensions();
+            markDirty();
+        } catch (RuntimeException exception) {
+            restoreBuildingState(snapshot);
+            throw exception;
+        }
     }
 
     void restoreBuildingState(BuildingStateSnapshot snapshot) {
@@ -373,31 +377,27 @@ public class Village implements Iterable<Building> {
     boolean removeFloor(int buildingId, int floorNumber) {
         if (!canRemoveFloor(buildingId, floorNumber)) return false;
 
-        for (Structure structure : getBuildingStructures(buildingId)) {
-            List<Integer> floorIds = structure.getFloors().stream()
-                    .filter(floor -> floor.floorNumber() == floorNumber)
-                    .map(StructureFloor::id)
-                    .toList();
-            if (floorIds.isEmpty()) continue;
-            if (floorIds.size() == structure.getFloors().size()) {
-                structures.remove(structure.getId());
-            } else {
-                floorIds.forEach(structure::removeFloor);
+        publishBuildingMutation(() -> {
+            for (Structure structure : getBuildingStructures(buildingId)) {
+                List<Integer> floorIds = structure.getFloors().stream()
+                        .filter(floor -> floor.floorNumber() == floorNumber)
+                        .map(StructureFloor::id)
+                        .toList();
+                if (floorIds.isEmpty()) continue;
+                if (floorIds.size() == structure.getFloors().size()) {
+                    structures.remove(structure.getId());
+                } else {
+                    floorIds.forEach(structure::removeFloor);
+                }
             }
-        }
-        refreshLogicalBuildings();
-        calculateDimensions();
-        markDirty();
+        });
         return true;
     }
 
     public boolean removeRoom(int roomId) {
         Building room = buildings.get(roomId);
         if (room == null || isMainRoom(room)) return false;
-        buildings.remove(roomId);
-        refreshLogicalBuildings();
-        calculateDimensions();
-        markDirty();
+        publishBuildingMutation(() -> buildings.remove(roomId));
         return true;
     }
 
@@ -409,14 +409,11 @@ public class Village implements Iterable<Building> {
     }
 
     public void removeStructure(int structureId) {
-        Structure removed = structures.remove(structureId);
-        if (removed == null) return;
-        int buildingId = removed.getLogicalBuildingId();
-        buildings.values().removeIf(room -> room.getStructureId() == structureId);
-        if (getBuildingStructures(buildingId).isEmpty()) logicalBuildings.remove(buildingId);
-        else reconcileLogicalBuilding(buildingId);
-        calculateDimensions();
-        markDirty();
+        if (!structures.containsKey(structureId)) return;
+        publishBuildingMutation(() -> {
+            structures.remove(structureId);
+            buildings.values().removeIf(room -> room.getStructureId() == structureId);
+        });
     }
 
     void removeLogicalBuilding(int buildingId) {
@@ -434,7 +431,7 @@ public class Village implements Iterable<Building> {
         }
         RoomTypeResolver resolver = RoomTypeResolver.create(this);
         return getRooms().filter(room -> {
-            BuildingType effective = resolver.resolve(room).effectiveType();
+            BuildingType effective = resolver.effectiveType(room);
             return effective != null && effective.name().equals(type);
         });
     }
@@ -590,8 +587,36 @@ public class Village implements Iterable<Building> {
         return now + Mth.nextInt(random, MIN_MOURNING_INTERVAL, MAX_MOURNING_INTERVAL);
     }
 
+    static long calculateMourningRetryTime(long now) {
+        return now + MOURNING_RETRY;
+    }
+
     static int calculateMourningBurstSize(RandomSource random) {
         return Mth.nextInt(random, MIN_MOURNING_BURST_SIZE, MAX_MOURNING_BURST_SIZE);
+    }
+
+    static List<BlockPos> selectSafeMourningGraves(List<BlockPos> graves, RandomSource random,
+                                                   Predicate<BlockPos> isSafe) {
+        List<BlockPos> candidates = new ArrayList<>(graves);
+        Util.shuffle(candidates, random);
+        List<BlockPos> safeGraves = new ArrayList<>();
+        int initialChecks = Math.min(MAX_MOURNING_BURST_SIZE, candidates.size());
+        for (int index = 0; index < initialChecks; index++) {
+            BlockPos grave = candidates.get(index);
+            if (isSafe.test(grave)) {
+                safeGraves.add(grave);
+            }
+        }
+        if (safeGraves.isEmpty()) {
+            for (int index = initialChecks; index < candidates.size(); index++) {
+                BlockPos grave = candidates.get(index);
+                if (isSafe.test(grave)) {
+                    safeGraves.add(grave);
+                    break;
+                }
+            }
+        }
+        return safeGraves;
     }
 
     static boolean isAmbientMourningTime(long dayTime) {
@@ -614,22 +639,32 @@ public class Village implements Iterable<Building> {
             return;
         }
 
-        nextMourningTime = calculateNextMourningTime(time, world.getRandom());
-        releaseMourningBurst(world, time);
+        MourningBurstResult result = releaseMourningBurst(world, time);
+        nextMourningTime = result == MourningBurstResult.DEFERRED
+                ? calculateMourningRetryTime(time)
+                : calculateNextMourningTime(time, world.getRandom());
+        markDirty();
     }
 
-    private void releaseMourningBurst(ServerLevel world, long time) {
+    private MourningBurstResult releaseMourningBurst(ServerLevel world, long time) {
         List<BlockPos> graves = Mourning.getMournableGraves(this, world);
         if (graves.isEmpty()) {
-            markDirty();
-            return;
+            return MourningBurstResult.NO_GRAVES;
+        }
+
+        List<BlockPos> safeGraves = selectSafeMourningGraves(graves, world.getRandom(),
+                grave -> Mourning.isSafeToMourn(world, grave));
+        if (safeGraves.isEmpty()) {
+            return MourningBurstResult.DEFERRED;
         }
 
         List<VillagerEntityMCA> candidates = getResidents(world).stream()
                 .filter(Mourning::canMournAmbiently)
                 .collect(Collectors.toCollection(ArrayList::new));
+        if (candidates.isEmpty()) {
+            return MourningBurstResult.DEFERRED;
+        }
 
-        Util.shuffle(graves, world.getRandom());
         Util.shuffle(candidates, world.getRandom());
         candidates.sort(Comparator.comparingLong(villager -> villager.getBrain()
                 .getMemoryInternal(MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING)
@@ -639,9 +674,15 @@ public class Village implements Iterable<Building> {
         for (int index = 0; index < count; index++) {
             VillagerEntityMCA villager = candidates.get(index);
             villager.getBrain().setMemory(MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING, time);
-            Mourning.start(villager, graves.get(index % graves.size()));
+            Mourning.start(villager, safeGraves.get(index % safeGraves.size()));
         }
-        markDirty();
+        return MourningBurstResult.STARTED;
+    }
+
+    private enum MourningBurstResult {
+        NO_GRAVES,
+        DEFERRED,
+        STARTED
     }
 
     public void onEnter(ServerLevel world) { villageTaxesManager.deliverTaxes(world); }
@@ -883,6 +924,19 @@ public class Village implements Iterable<Building> {
     Optional<ResolvedInteraction> resolveInteractionPosition(BlockPos pos) {
         Map<Integer, List<Building>> roomsByStructure = getRooms()
                 .collect(Collectors.groupingBy(Building::getStructureId));
+        BlockState state = world == null ? null : world.getBlockState(pos);
+        if (state != null && state.getBlock() instanceof TrapDoorBlock) {
+            Direction ownerSide = StructureConnector.ownerSide(state);
+            List<BlockPos> connectorColumn = StructureConnector.verticalColumn(world, pos);
+            List<ResolvedInteraction> above = verticalSideInteractions(pos.above(), connectorColumn, roomsByStructure);
+            List<ResolvedInteraction> below = verticalSideInteractions(pos.below(), connectorColumn, roomsByStructure);
+            boolean sharedBoundary = above.stream().anyMatch(first -> below.stream().anyMatch(second ->
+                    first.structure().getId() != second.structure().getId()
+                            || first.position().floor().id() != second.position().floor().id()));
+            if (!connectorColumn.isEmpty() || sharedBoundary) {
+                return uniqueRegisteredRoom(ownerSide == Direction.UP ? above : below);
+            }
+        }
         return structures.values().stream()
                 .map(structure -> new ResolvedInteraction(structure,
                         structure.resolveInteractionPosition(pos,
@@ -891,6 +945,27 @@ public class Village implements Iterable<Building> {
                 .min(Comparator
                         .comparing((ResolvedInteraction resolved) -> resolved.position().room() == null)
                         .thenComparingInt(resolved -> resolved.structure().getId()));
+    }
+
+    private List<ResolvedInteraction> verticalSideInteractions(BlockPos pos, List<BlockPos> connectorColumn,
+                                                            Map<Integer, List<Building>> roomsByStructure) {
+        return structures.values().stream()
+                .map(structure -> new ResolvedInteraction(structure,
+                        structure.resolveVerticalSide(pos, connectorColumn,
+                                roomsByStructure.getOrDefault(structure.getId(), List.of())).orElse(null)))
+                .filter(resolved -> resolved.position() != null)
+                .toList();
+    }
+
+    private static Optional<ResolvedInteraction> uniqueRegisteredRoom(List<ResolvedInteraction> candidates) {
+        ResolvedInteraction owner = null;
+        for (ResolvedInteraction candidate : candidates) {
+            Building room = candidate.position().room();
+            if (room == null) continue;
+            if (owner != null && owner.position().room().getId() != room.getId()) return Optional.empty();
+            if (owner == null) owner = candidate;
+        }
+        return Optional.ofNullable(owner);
     }
 
     public Optional<Building> getMainRoom(Structure structure) {
@@ -903,13 +978,7 @@ public class Village implements Iterable<Building> {
 
     public Optional<Building> findPhysicalRoomAt(Vec3i pos) {
         Optional<Structure> structure = getExactStructureAt(pos);
-        if (structure.isEmpty()) {
-            BlockPos query = new BlockPos(pos.getX(), pos.getY(), pos.getZ());
-            return getRooms()
-                    .filter(room -> room.containsPos(pos))
-                    .filter(room -> room.getFloorCells().isEmpty() || room.ownsFloorCell(query))
-                    .min(Comparator.comparingInt(Building::getId));
-        }
+        if (structure.isEmpty()) return Optional.empty();
         Structure.FloorCell resolved = structure.get().resolvePhysicalFloorCell(pos).orElse(null);
         if (resolved == null) return Optional.empty();
         return getRooms().filter(room -> room.getStructureId() == structure.get().getId())
@@ -919,10 +988,13 @@ public class Village implements Iterable<Building> {
     }
 
     public Optional<Building> findInteractionRoomAt(BlockPos pos) {
-        return resolveInteractionPosition(pos)
+        Optional<Building> resolved = resolveInteractionPosition(pos)
                 .map(ResolvedInteraction::position)
-                .map(Structure.InteractionPosition::room)
-                .or(() -> findPhysicalRoomAt(pos));
+                .map(Structure.InteractionPosition::room);
+        if (world != null && world.getBlockState(pos).getBlock() instanceof TrapDoorBlock) {
+            return resolved;
+        }
+        return resolved.or(() -> findPhysicalRoomAt(pos));
     }
 
     record ResolvedInteraction(Structure structure, Structure.InteractionPosition position) {
@@ -941,9 +1013,7 @@ public class Village implements Iterable<Building> {
         LogicalBuilding logical = logicalBuildings.get(structure.getLogicalBuildingId());
         if (logical == null || logical.mainRoomId() == room.getId()
                 || !belongsToLogicalBuilding(room, logical.id())) return false;
-        logical.setMainRoomId(room.getId());
-        applyFloorNumbers(logical);
-        markDirty();
+        publishBuildingMutation(() -> logical.setMainRoomId(room.getId()));
         return true;
     }
 
@@ -952,17 +1022,22 @@ public class Village implements Iterable<Building> {
         if (structure == null) return false;
         LogicalBuilding logical = logicalBuildings.get(structure.getLogicalBuildingId());
         if (logical == null || logical.inheritanceEnabled() == enabled) return false;
-        logical.setInheritanceEnabled(enabled);
-        markDirty();
+        publishBuildingMutation(() -> logical.setInheritanceEnabled(enabled));
         return true;
     }
 
     public boolean setRoomContributesToMain(Building room, boolean contributes) {
         if (room == null || !buildings.containsKey(room.getId())
                 || room.contributesToMain() == contributes) return false;
-        room.setContributesToMain(contributes);
-        markDirty();
+        publishBuildingMutation(() -> room.setContributesToMain(contributes));
         return true;
+    }
+
+    void setRoomType(Building room, String type, boolean forced) {
+        publishBuildingMutation(() -> {
+            room.setType(type);
+            room.setTypeForced(forced);
+        });
     }
 
     public Building.validationResult commitRoomInheritanceUpdate(
@@ -985,27 +1060,24 @@ public class Village implements Iterable<Building> {
         }
         if (currentEnabled == update.enabled()) return Building.validationResult.SUCCESS;
 
-        String automaticType = null;
-        if (!update.enabled() && forcedType == null) {
-            automaticType = RoomTypeResolver.create(this).resolve(room).updatedType(null);
-            if (automaticType == null) return Building.validationResult.INVALID_TYPE;
+        LogicalBuilding logical = update.mainRoom()
+                ? getStructureFor(room).map(Structure::getLogicalBuildingId).map(logicalBuildings::get).orElse(null)
+                : null;
+        if (update.mainRoom() && logical == null) return Building.validationResult.OVERLAP;
+        String automaticType = !update.enabled() && forcedType == null
+                ? RoomTypeResolver.create(this).resolve(room).updatedType(null) : null;
+        if (!update.enabled() && forcedType == null && automaticType == null) {
+            return Building.validationResult.INVALID_TYPE;
         }
 
-        boolean changed = update.mainRoom()
-                ? setBuildingInheritanceEnabled(room, update.enabled())
-                : setRoomContributesToMain(room, update.enabled());
-        if (!changed) return Building.validationResult.OVERLAP;
-
-        if (!update.enabled()) {
-            if (forcedType != null) {
-                room.setType(forcedType);
-                room.setTypeForced(true);
-            } else {
-                room.setType(automaticType);
-                room.setTypeForced(false);
+        publishBuildingMutation(() -> {
+            if (logical != null) logical.setInheritanceEnabled(update.enabled());
+            else room.setContributesToMain(update.enabled());
+            if (!update.enabled()) {
+                room.setType(forcedType != null ? forcedType : automaticType);
+                room.setTypeForced(forcedType != null);
             }
-            markDirty();
-        }
+        });
         return Building.validationResult.SUCCESS;
     }
 
@@ -1069,6 +1141,7 @@ public class Village implements Iterable<Building> {
                     structure.setFloorNumber(floor.id(), floor.floorNumber() - groundNumber);
                 }
             }
+            repairFloorNumberCollisions(members, ground.anchorY());
             return;
         }
         Map<StructureFloor, Integer> numbers = StructureFloor.floorNumbers(
@@ -1079,6 +1152,52 @@ public class Village implements Iterable<Building> {
                 if (number != null) structure.setFloorNumber(floor.id(), number);
             }
         }
+    }
+
+    private static void repairFloorNumberCollisions(List<Structure> structures, int groundAnchorY) {
+        List<OwnedFloor> floors = structures.stream()
+                .flatMap(structure -> structure.getFloors().stream().map(floor -> new OwnedFloor(structure, floor)))
+                .toList();
+
+        StructureFloor reference = floors.stream()
+                .map(OwnedFloor::floor)
+                .filter(floor -> floor.floorNumber() == 0)
+                .min(Comparator.comparingInt(floor -> Math.abs(floor.anchorY() - groundAnchorY)))
+                .orElse(null);
+        if (reference == null) return;
+
+        List<OwnedFloor> above = floors.stream()
+                .filter(owned -> owned.floor().anchorY() > groundAnchorY)
+                .sorted(Comparator.comparingInt(owned -> owned.floor().anchorY()))
+                .toList();
+        StructureFloor previous = reference;
+        for (OwnedFloor owned : above) {
+            StructureFloor floor = owned.floor();
+            if (floor.floorNumber() == previous.floorNumber() && !floor.sameSemanticBand(previous)) {
+                int floorNumber = previous.floorNumber() + 1;
+                owned.structure().setFloorNumber(floor.id(), floorNumber);
+                floor = floor.withFloorNumber(floorNumber);
+            }
+            previous = floor;
+        }
+
+        List<OwnedFloor> below = floors.stream()
+                .filter(owned -> owned.floor().anchorY() < groundAnchorY)
+                .sorted(Comparator.comparingInt((OwnedFloor owned) -> owned.floor().anchorY()).reversed())
+                .toList();
+        previous = reference;
+        for (OwnedFloor owned : below) {
+            StructureFloor floor = owned.floor();
+            if (floor.floorNumber() == previous.floorNumber() && !floor.sameSemanticBand(previous)) {
+                int floorNumber = previous.floorNumber() - 1;
+                owned.structure().setFloorNumber(floor.id(), floorNumber);
+                floor = floor.withFloorNumber(floorNumber);
+            }
+            previous = floor;
+        }
+    }
+
+    private record OwnedFloor(Structure structure, StructureFloor floor) {
     }
 
     private void validateBuildingData() {
@@ -1172,10 +1291,10 @@ public class Village implements Iterable<Building> {
     }
 
     public enum RoomScanMode {
-        ADD_BUILDING, ADD_ROOM, UPDATE_ROOM, ADD_FLOOR, ADD_BASEMENT;
+        ADD_BUILDING, ADD_ROOM, UPDATE_ROOM, ADD_ATTACHMENT;
 
         public boolean isAttachment() {
-            return this == ADD_FLOOR || this == ADD_BASEMENT;
+            return this == ADD_ATTACHMENT;
         }
     }
 

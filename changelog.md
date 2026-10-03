@@ -107,6 +107,8 @@
 * Fixed villager brain refreshes losing live memories, including guard combat state when switching to Follow.
 * Fixed recovery food replacing or deleting a villager's held weapon/tool, with proper eating and cancellation behavior.
 * Fixed scaled player hitboxes not being refreshed and synchronized when joining a server.
+* Fixed adding skins to the server-wide pool not working without cheats in singleplayer.
+* Fixed custom player size and hitbox resetting after changing dimensions.
 
 # 8.1.11
 

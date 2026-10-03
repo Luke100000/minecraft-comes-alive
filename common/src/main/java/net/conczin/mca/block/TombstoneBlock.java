@@ -4,6 +4,7 @@ import net.conczin.mca.entity.Infectable;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Mourning;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.relationship.CompassionateEntity;
 import net.conczin.mca.entity.ai.relationship.EntityRelationship;
 import net.conczin.mca.entity.ai.relationship.Gender;
@@ -14,7 +15,9 @@ import net.conczin.mca.util.localization.FlowingText;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Direction.Axis;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
@@ -62,6 +65,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -376,13 +380,12 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
                         }
 
                         if (entity instanceof VillagerEntityMCA villager) {
-                            villager.getBrain().eraseMemory(MemoryModuleTypeMCA.LAST_GRIEVE);
                             villager.getBrain().eraseMemory(MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING);
                             Mourning.clear(villager);
                             villager.getBrain().eraseMemory(MemoryModuleType.PATH);
                             villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
                             villager.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
-                            villager.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+                            WalkTargetFailureMemory.clear(villager);
                         }
 
                         if (entity instanceof Infectable infectable) {
@@ -409,6 +412,7 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
         }
 
         public void setEntity(@Nullable Entity entity) {
+            Optional<UUID> previousUuid = getEntityUuid();
             entityData = Optional.ofNullable(entity).map(e -> new EntityData(
                     writeEntityToNbt(e),
                     e.getName().getString(),
@@ -424,12 +428,26 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
                 ((TombstoneBlock) getBlockState().getBlock()).updateNeighbors(getBlockState(), level, worldPosition);
 
                 if (!level.isClientSide()) {
-                    GraveyardManager.get((ServerLevel) level).setTombstoneState(worldPosition,
+                    GraveyardManager graveyardManager = GraveyardManager.get((ServerLevel) level);
+                    GraveyardManager globalGraveyardManager = GraveyardManager.getGlobal((ServerLevel) level);
+                    GlobalPos grave = GlobalPos.of(level.dimension(), worldPosition);
+                    previousUuid.ifPresent(uuid -> globalGraveyardManager.clearOccupiedGrave(uuid, grave));
+                    getEntityUuid().ifPresent(uuid -> globalGraveyardManager.setOccupiedGrave(uuid, grave));
+                    graveyardManager.setTombstoneState(worldPosition,
                             hasEntity() ? GraveyardManager.TombstoneState.FILLED : GraveyardManager.TombstoneState.EMPTY
                     );
                     sync();
                 }
             }
+        }
+
+        @Override
+        public void preRemoveSideEffects(BlockPos pos, BlockState state) {
+            if (level instanceof ServerLevel serverLevel) {
+                GlobalPos grave = GlobalPos.of(serverLevel.dimension(), pos);
+                getEntityUuid().ifPresent(uuid -> GraveyardManager.getGlobal(serverLevel).clearOccupiedGrave(uuid, grave));
+            }
+            super.preRemoveSideEffects(pos, state);
         }
 
         public boolean hasEntity() {
@@ -442,6 +460,12 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
 
         public Optional<String> getEntityName() {
             return entityData.map(e -> e.name);
+        }
+
+        public Optional<UUID> getEntityUuid() {
+            return entityData
+                    .map(e -> e.nbt)
+                    .flatMap(nbt -> nbt.read("UUID", UUIDUtil.CODEC));
         }
 
         public FlowingText getOrCreateEntityName(Function<Component, FlowingText> factory) {
@@ -520,6 +544,10 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
                     .filter(data -> data.type() == BlockEntityTypesMCA.TOMBSTONE)
                     .map(TypedEntityData::copyTagWithoutId)
                     .map(EntityData::new);
+            if (hasLevel() && !level.isClientSide()) {
+                GlobalPos grave = GlobalPos.of(level.dimension(), worldPosition);
+                getEntityUuid().ifPresent(uuid -> GraveyardManager.getGlobal((ServerLevel) level).setOccupiedGrave(uuid, grave));
+            }
         }
 
         public void writeToStack(ItemStack stack) {
