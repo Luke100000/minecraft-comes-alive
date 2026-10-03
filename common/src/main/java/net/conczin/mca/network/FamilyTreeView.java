@@ -19,6 +19,7 @@ public record FamilyTreeView(
         Map<UUID, FamilyTreeNode> nodes,
         Set<Continuation> continuations,
         Set<UUID> unavailable,
+        Set<UUID> orphans,
         Map<UUID, GlobalPos> graves
 ) {
     public static final int MAX_NODES = 256;
@@ -50,6 +51,11 @@ public record FamilyTreeView(
             UUIDUtil.STREAM_CODEC,
             MAX_UNAVAILABLE
     );
+    private static final StreamCodec<FriendlyByteBuf, Set<UUID>> ORPHAN_SET_CODEC = ByteBufCodecs.collection(
+            HashSet::new,
+            UUIDUtil.STREAM_CODEC,
+            MAX_NODES
+    );
     private static final StreamCodec<FriendlyByteBuf, Map<UUID, GlobalPos>> GRAVES_CODEC = ByteBufCodecs.map(
             HashMap::new,
             UUIDUtil.STREAM_CODEC,
@@ -61,17 +67,10 @@ public record FamilyTreeView(
             NODES_CODEC, FamilyTreeView::nodes,
             CONTINUATIONS_CODEC, FamilyTreeView::continuations,
             UUID_SET_CODEC, FamilyTreeView::unavailable,
+            ORPHAN_SET_CODEC, FamilyTreeView::orphans,
             GRAVES_CODEC, FamilyTreeView::graves,
             FamilyTreeView::new
     );
-
-    public FamilyTreeView(
-            Map<UUID, FamilyTreeNode> nodes,
-            Set<Continuation> continuations,
-            Set<UUID> unavailable
-    ) {
-        this(nodes, continuations, unavailable, Map.of());
-    }
 
     public FamilyTreeView {
         if (nodes.size() > MAX_NODES) {
@@ -90,22 +89,29 @@ public record FamilyTreeView(
         if (unavailable.size() > MAX_UNAVAILABLE) {
             throw new IllegalArgumentException("Family tree view exceeds unavailable-record budget: " + unavailable.size());
         }
+        if (orphans.size() > MAX_NODES) {
+            throw new IllegalArgumentException("Family tree view exceeds orphan-status budget: " + orphans.size());
+        }
+        if (!nodes.keySet().containsAll(orphans)) {
+            throw new IllegalArgumentException("Family tree view contains orphan status for node outside the bounded view");
+        }
         if (graves.size() > MAX_NODES) {
             throw new IllegalArgumentException("Family tree view exceeds grave budget: " + graves.size());
         }
         if (!nodes.keySet().containsAll(graves.keySet())) {
             throw new IllegalArgumentException("Family tree view contains grave for node outside the bounded view");
         }
-        Map<UUID, FamilyTreeNode> detachedNodes = new LinkedHashMap<>(nodes.size());
-        nodes.forEach((id, node) -> detachedNodes.put(id, new FamilyTreeNode(null, node.save())));
-        nodes = Map.copyOf(detachedNodes);
+        Map<UUID, FamilyTreeNode> ownedNodes = new LinkedHashMap<>(nodes.size());
+        nodes.forEach((id, node) -> ownedNodes.put(id, new FamilyTreeNode(null, node.save())));
+        nodes = Map.copyOf(ownedNodes);
         continuations = Set.copyOf(continuations);
         unavailable = Set.copyOf(unavailable);
+        orphans = Set.copyOf(orphans);
         graves = Map.copyOf(graves);
     }
 
     public static FamilyTreeView empty() {
-        return new FamilyTreeView(Map.of(), Set.of(), Set.of(), Map.of());
+        return new FamilyTreeView(Map.of(), Set.of(), Set.of(), Set.of(), Map.of());
     }
 
     public record Continuation(UUID anchor, Direction direction) {

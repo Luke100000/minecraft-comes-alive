@@ -18,6 +18,29 @@ public final class RoomWorkflow {
     }
 
     public Outcome addBuilding(BlockPos source, String selectedType) {
+        return addBuilding(source, -1, selectedType);
+    }
+
+    public Outcome addBuilding(BlockPos source, int expectedTargetBuildingId, String selectedType) {
+        Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
+        if (village != null) {
+            RoomScanPlanner.Analysis analysis = RoomScanPlanner.analyze(village, world, source);
+            RoomScanPlan plan = analysis.plan();
+            if (plan.mode() == Village.RoomScanMode.ADD_ATTACHMENT) {
+                if (expectedTargetBuildingId >= 0
+                        && plan.targetBuildingId() != expectedTargetBuildingId) {
+                    return Outcome.failed(
+                            Building.validationResult.NOT_IN_BUILDING, source, expectedTargetBuildingId);
+                }
+                Outcome outcome = commitAddition(
+                        analyzeAttachedRoom(village, analysis, expectedTargetBuildingId), selectedType);
+                return withProspectiveFloorNumber(outcome, plan.prospectiveFloorNumber());
+            }
+            if (expectedTargetBuildingId >= 0) {
+                return Outcome.failed(
+                        Building.validationResult.NOT_IN_BUILDING, source, expectedTargetBuildingId);
+            }
+        }
         return commitAddition(analyzeBuildingAddition(source), selectedType);
     }
 
@@ -31,8 +54,7 @@ public final class RoomWorkflow {
         if (expectedRoomId >= 0 && plan.mode() != Village.RoomScanMode.UPDATE_ROOM) {
             return Outcome.failed(Building.validationResult.NOT_IN_BUILDING, source, expectedRoomId);
         }
-        if (selectedType != null && expectedRoomId < 0
-                && plan.mode() == Village.RoomScanMode.UPDATE_ROOM) {
+        if (expectedRoomId < 0 && plan.mode() == Village.RoomScanMode.UPDATE_ROOM) {
             return Outcome.failed(Building.validationResult.IDENTICAL, source, expectedRoomId);
         }
         return switch (plan.mode()) {

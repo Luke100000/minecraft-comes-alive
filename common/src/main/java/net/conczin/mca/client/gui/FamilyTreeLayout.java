@@ -23,7 +23,12 @@ final class FamilyTreeLayout {
     public static final int PARTNER_GAP = 26;
 
     private static final int CONTINUATION_SIZE = 18;
-    private static final Comparator<UUID> UUID_ORDER = Comparator.comparing(UUID::toString);
+    private static final Comparator<UUID> UUID_ORDER = (one, two) -> {
+        int mostSignificant = Long.compareUnsigned(one.getMostSignificantBits(), two.getMostSignificantBits());
+        return mostSignificant != 0
+                ? mostSignificant
+                : Long.compareUnsigned(one.getLeastSignificantBits(), two.getLeastSignificantBits());
+    };
 
     private FamilyTreeLayout() {
     }
@@ -300,7 +305,7 @@ final class FamilyTreeLayout {
     ) {
         return source.stream()
                 .sorted(Comparator
-                        .comparing((FamilyTreeView.Continuation item) -> item.anchor().toString())
+                        .comparing(FamilyTreeView.Continuation::anchor, UUID_ORDER)
                         .thenComparing(item -> item.direction().ordinal()))
                 .filter(item -> boundsById.containsKey(item.anchor()))
                 .map(item -> {
@@ -413,7 +418,7 @@ final class FamilyTreeLayout {
 
     private record EdgeKey(UUID one, UUID two, EdgeType type) {
         private static EdgeKey ordered(UUID one, UUID two, EdgeType type) {
-            if (one.toString().compareTo(two.toString()) <= 0) {
+            if (UUID_ORDER.compare(one, two) <= 0) {
                 return new EdgeKey(one, two, type);
             }
             return new EdgeKey(two, one, type);

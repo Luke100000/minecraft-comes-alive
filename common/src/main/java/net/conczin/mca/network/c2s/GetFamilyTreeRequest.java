@@ -19,8 +19,8 @@ import java.util.UUID;
 
 public record GetFamilyTreeRequest(UUID uuid, int ancestorDepth, int descendantDepth, long requestId) implements HandleablePayload {
     public static final int MAX_DEPTH = FamilyTreeViewBuilder.MAX_DEPTH;
-    public static final int DEFAULT_ANCESTOR_DEPTH = MAX_DEPTH;
-    public static final int DEFAULT_DESCENDANT_DEPTH = MAX_DEPTH;
+    public static final int DEFAULT_ANCESTOR_DEPTH = 4;
+    public static final int DEFAULT_DESCENDANT_DEPTH = 4;
 
     public static final CustomPacketPayload.Type<GetFamilyTreeRequest> TYPE = new CustomPacketPayload.Type<>(MCA.locate("get_family_tree_request"));
     public static final StreamCodec<FriendlyByteBuf, GetFamilyTreeRequest> STREAM_CODEC = StreamCodec.composite(

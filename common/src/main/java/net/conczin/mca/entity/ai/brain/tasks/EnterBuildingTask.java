@@ -27,7 +27,7 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
 
     protected void start(ServerLevel serverWorld, VillagerEntityMCA villager, long l) {
         getNextPosition(villager)
-                .ifPresent(pos -> villager.moveTowards(pos, this.speed, getCompletionRange()));
+                .ifPresent(pos -> villager.moveTowardsPersistent(pos, this.speed, getCompletionRange()));
     }
 
     protected Optional<Building> getNearestBuilding(VillagerEntityMCA villager) {

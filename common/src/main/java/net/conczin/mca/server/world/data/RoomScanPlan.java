@@ -51,9 +51,13 @@ public record RoomScanPlan(Optional<Building> currentRoom,
     }
 
     public static RoomScanPlan updateRoom(Building room, BlockPos source) {
+        return updateRoom(room, source, source);
+    }
+
+    static RoomScanPlan updateRoom(Building room, BlockPos source, BlockPos scanSeed) {
         if (room == null) throw new IllegalArgumentException("Update Room requires a selected Room");
         return new RoomScanPlan(Optional.of(room), Village.RoomScanMode.UPDATE_ROOM,
-                NO_TARGET_BUILDING, NO_PROSPECTIVE_FLOOR, source, source,
+                NO_TARGET_BUILDING, NO_PROSPECTIVE_FLOOR, source, scanSeed,
                 room.getStructureId(), room.getFloorId(), null);
     }
 

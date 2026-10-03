@@ -8,16 +8,6 @@ final class BlueprintMapFootprint {
     private BlueprintMapFootprint() {
     }
 
-    static Set<Cell> rectangle(int minX, int minZ, int maxX, int maxZ) {
-        LinkedHashSet<Cell> cells = new LinkedHashSet<>();
-        for (int z = minZ; z <= maxZ; z++) {
-            for (int x = minX; x <= maxX; x++) {
-                cells.add(new Cell(x, z));
-            }
-        }
-        return cells;
-    }
-
     static Set<Cell> fromBlockPositions(Collection<BlockPos> positions) {
         if (positions == null || positions.isEmpty()) return Set.of();
         return positions.stream()
