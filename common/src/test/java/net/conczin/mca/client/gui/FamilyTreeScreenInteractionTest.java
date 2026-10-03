@@ -65,6 +65,13 @@ class FamilyTreeScreenInteractionTest {
     }
 
     @Test
+    void cardOutlineNeverBecomesThinnerThanOneScreenPixel() {
+        for (float zoom : new float[]{0.25F, 0.5F, 1.0F, 1.37F, 2.0F}) {
+            assertEquals(Math.max(1.0F, zoom), FamilyTreeScreen.cardOutlineWorldThickness(zoom) * zoom, 0.0001F);
+        }
+    }
+
+    @Test
     void headerFloatsSearchLeftAndCentersControlsIndependently() {
         FamilyTreeScreen.HeaderLayout header = FamilyTreeScreen.headerLayout(854);
 
