@@ -16,14 +16,11 @@ dependencies {
         }
     }
     runtimeOnly "maven.modrinth:sodium:${sodium_neoforge_version}"
-    // No compatible 26.3 NeoForge builds are available for these dev-only helpers.
-    //runtimeOnly "maven.modrinth:jei:${jei_neoforge_version}"
+    runtimeOnly "maven.modrinth:jei:${jei_neoforge_version}"
     //runtimeOnly "maven.modrinth:iris:${iris_neoforge_version}"
-    //runtimeOnly "maven.modrinth:ferrite-core:${ferritecore_neoforge_version}"
-    //runtimeOnly "maven.modrinth:immediatelyfast:${immediatelyfast_neoforge_version}"
-    // PacketFixer 3.3.6 crashes on NeoForge 26.3's Mixin API during startup
-    // (missing IMixinConfigPlugin#getRefMapperConfig), so keep it out of dev/runtime runs.
-    //runtimeOnly "maven.modrinth:packet-fixer:${packetfixer_neoforge_version}"
+    runtimeOnly "maven.modrinth:ferrite-core:${ferritecore_neoforge_version}"
+    runtimeOnly "maven.modrinth:immediatelyfast:${immediatelyfast_neoforge_version}"
+    runtimeOnly "maven.modrinth:packet-fixer:${packetfixer_neoforge_version}"
 }
 
 neoForge {

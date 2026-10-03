@@ -9,12 +9,11 @@ dependencies {
     implementation "net.fabricmc.fabric-api:fabric-api:${fabric_api_version}"
 
     localRuntime "maven.modrinth:sodium:${sodium_fabric_version}"
+    localRuntime "maven.modrinth:jei:${jei_fabric_version}"
     //localRuntime "maven.modrinth:iris:${iris_fabric_version}"
-    //localRuntime "maven.modrinth:packet-fixer:${packetfixer_fabric_version}"
-    // No 26.3-compatible Fabric builds are published yet for these dev-only helpers.
-    //localRuntime "maven.modrinth:jei:${jei_fabric_version}"
-    //localRuntime "maven.modrinth:ferrite-core:${ferritecore_fabric_version}"
-    //localRuntime "maven.modrinth:immediatelyfast:${immediatelyfast_fabric_version}"
+    localRuntime "maven.modrinth:ferrite-core:${ferritecore_fabric_version}"
+    localRuntime "maven.modrinth:immediatelyfast:${immediatelyfast_fabric_version}"
+    localRuntime "maven.modrinth:packet-fixer:${packetfixer_fabric_version}"
 
     testImplementation platform('org.junit:junit-bom:6.1.3')
     testImplementation 'org.junit.jupiter:junit-jupiter'
