@@ -147,6 +147,21 @@ public final class WanderOrTeleportToTargetTaskGameTests {
 
         brain.eraseMemory(MemoryModuleType.PATH);
         brain.setMemory(MemoryModuleType.WALK_TARGET,
+                new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+        WanderOrTeleportToTargetTask nearbyPersistentSink = new WanderOrTeleportToTargetTask();
+        helper.assertTrue(nearbyPersistentSink.tryStart(helper.getLevel(), villager, startedAt),
+                "nearby persistent movement sink did not start");
+        Path nearbyPath = villager.getNavigation().getPath();
+        helper.assertTrue(nearbyPath != null && nearbyPath.canReach() && !nearbyPath.isDone(),
+                "nearby persistent fixture did not have unfinished reachable navigation");
+        nearbyPersistentSink.tickOrStop(helper.getLevel(), villager, startedAt + 251L);
+        helper.assertTrue(villager.getNavigation().getPath() == nearbyPath
+                        && brain.hasMemoryValue(MemoryModuleType.WALK_TARGET),
+                "nearby persistent travel discarded unfinished navigation at vanilla's behavior deadline");
+        nearbyPersistentSink.doStop(helper.getLevel(), villager, startedAt + 251L);
+
+        brain.eraseMemory(MemoryModuleType.PATH);
+        brain.setMemory(MemoryModuleType.WALK_TARGET,
                 new WalkTarget(new PersistentPathTarget(farStaticTarget), 0.5F, 0));
 
         WanderOrTeleportToTargetTask persistentSink = new WanderOrTeleportToTargetTask();
@@ -176,6 +191,53 @@ public final class WanderOrTeleportToTargetTaskGameTests {
 
         movingTarget.discard();
         villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_walk_target_intent_change", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void changedTargetIntentUsesCurrentMovementLifetime(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
+        BlockPos target = start.east(6);
+        prepareFlatArea(helper, start, 10, 2);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start)).spawn(EntitySpawnReason.STRUCTURE);
+        villager.refreshBrain(helper.getLevel());
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+        var brain = villager.getBrain();
+        long startedAt = helper.getLevel().getGameTime();
+        try {
+            for (int offset : new int[]{0, 2}) {
+                brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.5F, 0));
+                WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
+                helper.assertTrue(sink.tryStart(helper.getLevel(), villager, startedAt),
+                        "ordinary movement did not start before intent change");
+                Path activePath = villager.getNavigation().getPath();
+                brain.setMemory(MemoryModuleType.WALK_TARGET,
+                        new WalkTarget(new PersistentPathTarget(target.east(offset)), 0.5F, 0));
+                sink.tickOrStop(helper.getLevel(), villager, startedAt + 251L);
+                helper.assertTrue(brain.hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                                && villager.getNavigation().getPath() == activePath
+                                && !villager.getNavigation().isDone(),
+                        "persistent intent inherited the ordinary timeout after a target shift of " + offset);
+                sink.doStop(helper.getLevel(), villager, startedAt + 251L);
+
+                brain.setMemory(MemoryModuleType.WALK_TARGET,
+                        new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+                sink = new WanderOrTeleportToTargetTask();
+                helper.assertTrue(sink.tryStart(helper.getLevel(), villager, startedAt),
+                        "persistent movement did not start before intent change");
+                brain.setMemory(MemoryModuleType.WALK_TARGET,
+                        new WalkTarget(target.east(offset), 0.5F, 0));
+                sink.tickOrStop(helper.getLevel(), villager, startedAt + 251L);
+                helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                                && villager.getNavigation().isDone(),
+                        "ordinary intent retained persistent lifetime after a target shift of " + offset);
+            }
+        } finally {
+            villager.discard();
+        }
         helper.succeed();
     }
 

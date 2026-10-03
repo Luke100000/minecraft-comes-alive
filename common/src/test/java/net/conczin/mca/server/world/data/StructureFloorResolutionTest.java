@@ -2,6 +2,7 @@ package net.conczin.mca.server.world.data;
 
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.Bootstrap;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -136,6 +137,57 @@ class StructureFloorResolutionTest {
         assertEquals(room, interaction.room());
         assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
         assertEquals(room, plan.currentRoom().orElseThrow());
+    }
+
+    @Test
+    void snapshotTrapdoorOwnerSideSelectsTheSameVerticalRoomSide() {
+        BlockPos lowerCell = new BlockPos(0, 63, 0);
+        BlockPos trapdoor = new BlockPos(0, 64, 0);
+        BlockPos upperCell = new BlockPos(0, 65, 0);
+        StructureFloor lowerFloor = TestStructureFloors.create(0, 63, 64, -1,
+                TestFloorFootprint.fromFootprint(63, Set.of(lowerCell)),
+                List.of(new FloorConnector.Marker(
+                        trapdoor, FloorConnector.Type.TRAPDOOR, lowerCell, Direction.UP)));
+        StructureFloor upperFloor = TestStructureFloors.create(0, 65, 69, 0,
+                TestFloorFootprint.fromFootprint(65, Set.of(upperCell)),
+                List.of(new FloorConnector.Marker(
+                        trapdoor, FloorConnector.Type.TRAPDOOR, upperCell, Direction.UP)));
+        Structure lower = new Structure(10, lowerCell, List.of(lowerFloor));
+        Structure upper = new Structure(11, upperCell, List.of(upperFloor));
+        lower.setLogicalBuildingId(10);
+        upper.setLogicalBuildingId(10);
+        Building lowerRoom = room(100, 10, 0, Set.of(lowerCell));
+        Building upperRoom = room(101, 11, 0, Set.of(upperCell));
+        Village village = new Village(1, null);
+        village.registerStructure(lower, lowerRoom);
+        village.registerStructure(upper, upperRoom);
+
+        RoomScanPlan plan = village.getRoomScanPlan(null, trapdoor);
+
+        assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
+        assertEquals(upperRoom, plan.currentRoom().orElseThrow());
+    }
+
+    @Test
+    void oldSnapshotSharedTrapdoorDoesNotGuessBetweenVerticalRooms() {
+        BlockPos lowerCell = new BlockPos(0, 63, 0);
+        BlockPos trapdoor = new BlockPos(0, 64, 0);
+        BlockPos upperCell = new BlockPos(0, 65, 0);
+        StructureFloor lowerFloor = TestStructureFloors.create(0, 63, 64, -1,
+                TestFloorFootprint.fromFootprint(63, Set.of(lowerCell)),
+                List.of(new FloorConnector.Marker(trapdoor, FloorConnector.Type.TRAPDOOR, lowerCell)));
+        StructureFloor upperFloor = TestStructureFloors.create(0, 65, 69, 0,
+                TestFloorFootprint.fromFootprint(65, Set.of(upperCell)),
+                List.of(new FloorConnector.Marker(trapdoor, FloorConnector.Type.TRAPDOOR, upperCell)));
+        Structure lower = new Structure(10, lowerCell, List.of(lowerFloor));
+        Structure upper = new Structure(11, upperCell, List.of(upperFloor));
+        lower.setLogicalBuildingId(10);
+        upper.setLogicalBuildingId(10);
+        Village village = new Village(1, null);
+        village.registerStructure(lower, room(100, 10, 0, Set.of(lowerCell)));
+        village.registerStructure(upper, room(101, 11, 0, Set.of(upperCell)));
+
+        assertTrue(village.resolveInteractionPosition(null, trapdoor).isEmpty());
     }
 
     @Test

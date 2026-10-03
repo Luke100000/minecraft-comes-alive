@@ -157,7 +157,7 @@ public class FishingTask extends AbstractChoreTask {
                 }
             }
         } else {
-            villager.moveTowards(targetWater);
+            villager.moveTowardsPersistent(targetWater, 0.5F, 1);
         }
 
     }

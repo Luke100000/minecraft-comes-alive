@@ -210,9 +210,9 @@ public class ClientHandlerImpl implements ClientHandler {
     public void handleFamilyTreeUUIDResponse(FamilyTreeUUIDResponse response) {
         Screen screen = client.gui.screen();
         if (screen instanceof FamilyTreeScreen gui) {
-            gui.setSearchResults(response.search(), response.list());
+            gui.setSearchResults(response.requestId(), response.search(), response.list());
         } else if (screen instanceof FamilyTreeSearchScreen gui) {
-            gui.setList(response.search(), response.list());
+            gui.setList(response.requestId(), response.search(), response.list());
         }
     }
 

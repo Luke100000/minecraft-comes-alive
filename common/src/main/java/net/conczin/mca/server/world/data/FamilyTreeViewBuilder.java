@@ -38,148 +38,98 @@ public final class FamilyTreeViewBuilder {
         Map<UUID, FamilyTreeNode> nodes = new LinkedHashMap<>();
         Set<FamilyTreeView.Continuation> continuations = new LinkedHashSet<>();
         Set<UUID> unavailable = new LinkedHashSet<>();
-        Map<UUID, Integer> ancestorRemaining = new LinkedHashMap<>();
-        Map<UUID, Integer> descendantRemaining = new LinkedHashMap<>();
+        FamilyTreeNode.LineageTraversal ancestors = new FamilyTreeNode.LineageTraversal(
+                FamilyTreeNode.LineageDirection.ANCESTORS
+        );
+        FamilyTreeNode.LineageTraversal descendants = new FamilyTreeNode.LineageTraversal(
+                FamilyTreeNode.LineageDirection.DESCENDANTS
+        );
 
         FamilyTreeNode rootEntry = rootNode.orElseThrow();
         nodes.put(root, rootEntry);
         includePartners(tree, nodes, unavailable);
 
-        walkAncestors(
-                tree,
+        walkLineage(
+                ancestors,
                 rootEntry,
                 clampDepth(ancestorDepth),
                 nodes,
                 continuations,
-                unavailable,
-                ancestorRemaining
+                unavailable
         );
-        walkDescendants(
-                tree,
+        walkLineage(
+                descendants,
                 rootEntry,
                 clampDepth(descendantDepth),
                 nodes,
                 continuations,
-                unavailable,
-                descendantRemaining
+                unavailable
         );
         includePartnerLineage(
                 tree,
                 nodes,
                 continuations,
                 unavailable,
-                ancestorRemaining,
-                descendantRemaining
+                ancestors,
+                descendants
         );
         includeRootSiblings(tree, rootEntry, nodes, continuations, unavailable);
         includePartners(tree, nodes, unavailable);
 
         unavailable.removeAll(nodes.keySet());
         Map<UUID, FamilyTreeNode> snapshots = snapshotNodes(tree, nodes, continuations);
+        Set<UUID> orphans = collectOrphans(tree, snapshots.values());
         Map<UUID, GlobalPos> graves = new LinkedHashMap<>();
         snapshots.keySet().forEach(id -> graveLookup.apply(id).ifPresent(grave -> graves.put(id, grave)));
-        return Optional.of(new FamilyTreeView(snapshots, continuations, unavailable, graves));
+        return Optional.of(new FamilyTreeView(snapshots, continuations, unavailable, orphans, graves));
+    }
+
+    private static Set<UUID> collectOrphans(FamilyTree tree, Iterable<FamilyTreeNode> nodes) {
+        Set<UUID> orphans = new LinkedHashSet<>();
+        for (FamilyTreeNode node : nodes) {
+            if (tree.isOrphan(node)) {
+                orphans.add(node.id());
+            }
+        }
+        return orphans;
     }
 
     private static int clampDepth(int depth) {
         return Math.max(0, Math.min(MAX_DEPTH, depth));
     }
 
-    private static void walkAncestors(
-            FamilyTree tree,
+    private static void walkLineage(
+            FamilyTreeNode.LineageTraversal traversal,
             FamilyTreeNode node,
             int remainingDepth,
             Map<UUID, FamilyTreeNode> nodes,
             Set<FamilyTreeView.Continuation> continuations,
-            Set<UUID> unavailable,
-            Map<UUID, Integer> visitedRemaining
-    ) {
-        if (!shouldVisit(node.id(), remainingDepth, visitedRemaining)) {
-            return;
-        }
-        if (remainingDepth == 0) {
-            if (hasResolvableUnseenReference(tree, node.streamParents().iterator(), nodes, unavailable)) {
-                addContinuation(continuations, node.id(), FamilyTreeView.Direction.ANCESTORS);
-            }
-            return;
-        }
-
-        for (UUID parentId : node.streamParents().toList()) {
-            Optional<FamilyTreeNode> parentNode = tree.getOrEmpty(parentId);
-            if (parentNode.isEmpty()) {
-                addUnavailable(unavailable, parentId);
-                continue;
-            }
-            FamilyTreeNode parent = parentNode.orElseThrow();
-            if (!nodes.containsKey(parentId) && !tryAddNode(nodes, parentId, parent)) {
-                addContinuation(continuations, node.id(), FamilyTreeView.Direction.ANCESTORS);
-                continue;
-            }
-            walkAncestors(tree, parent, remainingDepth - 1, nodes, continuations, unavailable, visitedRemaining);
-        }
-    }
-
-    private static void walkDescendants(
-            FamilyTree tree,
-            FamilyTreeNode node,
-            int remainingDepth,
-            Map<UUID, FamilyTreeNode> nodes,
-            Set<FamilyTreeView.Continuation> continuations,
-            Set<UUID> unavailable,
-            Map<UUID, Integer> visitedRemaining
-    ) {
-        if (!shouldVisit(node.id(), remainingDepth, visitedRemaining)) {
-            return;
-        }
-        if (remainingDepth == 0) {
-            if (hasResolvableUnseenReference(tree, node.streamChildren().iterator(), nodes, unavailable)) {
-                addContinuation(continuations, node.id(), FamilyTreeView.Direction.DESCENDANTS);
-            }
-            return;
-        }
-
-        Iterator<UUID> childIds = node.streamChildren().iterator();
-        while (childIds.hasNext()) {
-            UUID childId = childIds.next();
-            Optional<FamilyTreeNode> childNode = tree.getOrEmpty(childId);
-            if (childNode.isEmpty()) {
-                addUnavailable(unavailable, childId);
-                continue;
-            }
-            FamilyTreeNode child = childNode.orElseThrow();
-            if (!nodes.containsKey(childId) && !tryAddNode(nodes, childId, child)) {
-                addContinuation(continuations, node.id(), FamilyTreeView.Direction.DESCENDANTS);
-                break;
-            }
-            walkDescendants(tree, child, remainingDepth - 1, nodes, continuations, unavailable, visitedRemaining);
-        }
-    }
-
-    private static boolean shouldVisit(UUID id, int remainingDepth, Map<UUID, Integer> visitedRemaining) {
-        Integer previousRemaining = visitedRemaining.get(id);
-        if (previousRemaining != null && previousRemaining >= remainingDepth) {
-            return false;
-        }
-        visitedRemaining.put(id, remainingDepth);
-        return true;
-    }
-
-    private static boolean hasResolvableUnseenReference(
-            FamilyTree tree,
-            Iterator<UUID> references,
-            Map<UUID, FamilyTreeNode> nodes,
             Set<UUID> unavailable
     ) {
-        while (references.hasNext()) {
-            UUID reference = references.next();
-            Optional<FamilyTreeNode> related = tree.getOrEmpty(reference);
-            if (related.isEmpty()) {
-                addUnavailable(unavailable, reference);
-            } else if (!nodes.containsKey(reference)) {
-                return true;
+        FamilyTreeView.Direction direction = switch (traversal.direction()) {
+            case ANCESTORS -> FamilyTreeView.Direction.ANCESTORS;
+            case DESCENDANTS -> FamilyTreeView.Direction.DESCENDANTS;
+        };
+        traversal.walk(node, remainingDepth, (source, relativeId, relative, depth) -> {
+            if (relative == null) {
+                addUnavailable(unavailable, relativeId);
+                return FamilyTreeNode.TraversalDecision.CONTINUE;
             }
-        }
-        return false;
+            if (depth == 0) {
+                if (!nodes.containsKey(relativeId)) {
+                    addContinuation(continuations, source.id(), direction);
+                    return FamilyTreeNode.TraversalDecision.STOP;
+                }
+                return FamilyTreeNode.TraversalDecision.CONTINUE;
+            }
+            if (!nodes.containsKey(relativeId) && !tryAddNode(nodes, relativeId, relative)) {
+                addContinuation(continuations, source.id(), direction);
+                return direction == FamilyTreeView.Direction.DESCENDANTS
+                        ? FamilyTreeNode.TraversalDecision.STOP
+                        : FamilyTreeNode.TraversalDecision.CONTINUE;
+            }
+            return FamilyTreeNode.TraversalDecision.DESCEND;
+        });
     }
 
     private static void includeRootSiblings(
@@ -217,8 +167,8 @@ public final class FamilyTreeViewBuilder {
             Map<UUID, FamilyTreeNode> nodes,
             Set<FamilyTreeView.Continuation> continuations,
             Set<UUID> unavailable,
-            Map<UUID, Integer> ancestorRemaining,
-            Map<UUID, Integer> descendantRemaining
+            FamilyTreeNode.LineageTraversal ancestors,
+            FamilyTreeNode.LineageTraversal descendants
     ) {
         for (FamilyTreeNode node : List.copyOf(nodes.values())) {
             UUID partnerId = node.partner();
@@ -237,29 +187,27 @@ public final class FamilyTreeViewBuilder {
                 continue;
             }
 
-            Integer ancestorDepth = ancestorRemaining.get(node.id());
+            Integer ancestorDepth = ancestors.remainingDepth(node.id());
             if (ancestorDepth != null) {
-                walkAncestors(
-                        tree,
+                walkLineage(
+                        ancestors,
                         partner,
                         ancestorDepth,
                         nodes,
                         continuations,
-                        unavailable,
-                        ancestorRemaining
+                        unavailable
                 );
             }
 
-            Integer descendantDepth = descendantRemaining.get(node.id());
+            Integer descendantDepth = descendants.remainingDepth(node.id());
             if (descendantDepth != null) {
-                walkDescendants(
-                        tree,
+                walkLineage(
+                        descendants,
                         partner,
                         descendantDepth,
                         nodes,
                         continuations,
-                        unavailable,
-                        descendantRemaining
+                        unavailable
                 );
             }
         }

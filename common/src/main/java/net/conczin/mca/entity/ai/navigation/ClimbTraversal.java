@@ -232,8 +232,7 @@ final class ClimbTraversal {
     }
 
     private void applyMotion(Context context, double controlledY, double speedModifier) {
-        BlockPos climbablePos = findAttachedClimbable(context.climbableNode().asBlockPos());
-        Vec3 anchor = getClimbableAnchor(climbablePos);
+        Vec3 anchor = getClimbableAnchor(context.climbableNode().asBlockPos());
         double targetY = context.targetNode().y;
         boolean continuingExit = isContinuingExit(context);
 
@@ -455,21 +454,6 @@ final class ClimbTraversal {
                 : 0.75F - this.mob.getBbWidth() / 2.0F;
         return Math.abs(this.mob.getX() - (climbableNode.x + 0.5D)) < maxDistanceToWaypoint
                 && Math.abs(this.mob.getZ() - (climbableNode.z + 0.5D)) < maxDistanceToWaypoint;
-    }
-
-    private BlockPos findAttachedClimbable(BlockPos fallback) {
-        BlockPos mobPos = this.mob.blockPosition();
-        if (isClimbable(mobPos)) {
-            return mobPos;
-        }
-
-        BlockPos above = mobPos.above();
-        if (isClimbable(above)) {
-            return above;
-        }
-
-        BlockPos below = mobPos.below();
-        return isClimbable(below) ? below : fallback;
     }
 
     private record Context(

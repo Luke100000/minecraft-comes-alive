@@ -77,7 +77,7 @@ class BlueprintTooltipHierarchyTest {
         BlueprintTooltipFactory factory = BlueprintTooltipFactory.create(
                 fixture.village(), RoomTypeResolver.create(fixture.village()));
 
-        List<String> lines = factory.tooltip(fixture.groundRoom(), null, true).stream()
+        List<String> lines = tooltip(factory, fixture, fixture.groundRoom(), null, true).stream()
                 .map(component -> component.getString())
                 .toList();
 
@@ -92,7 +92,7 @@ class BlueprintTooltipHierarchyTest {
         BlueprintTooltipFactory factory = BlueprintTooltipFactory.create(
                 fixture.village(), RoomTypeResolver.create(fixture.village()));
 
-        List<String> lines = factory.tooltip(fixture.upperRoom(), 1, false).stream()
+        List<String> lines = tooltip(factory, fixture, fixture.upperRoom(), 1, false).stream()
                 .map(component -> component.getString())
                 .toList();
 
@@ -134,7 +134,7 @@ class BlueprintTooltipHierarchyTest {
         BlueprintTooltipFactory factory = BlueprintTooltipFactory.create(
                 fixture.village(), RoomTypeResolver.create(fixture.village()));
 
-        List<String> lines = factory.tooltip(fixture.groundRoom(), 0, true).stream()
+        List<String> lines = tooltip(factory, fixture, fixture.groundRoom(), 0, true).stream()
                 .map(component -> component.getString())
                 .toList();
 
@@ -180,7 +180,7 @@ class BlueprintTooltipHierarchyTest {
         BlueprintTooltipFactory factory = BlueprintTooltipFactory.create(
                 fixture.village(), RoomTypeResolver.create(fixture.village()));
 
-        List<String> lines = factory.tooltip(fixture.groundRoom(), null, true).stream()
+        List<String> lines = tooltip(factory, fixture, fixture.groundRoom(), null, true).stream()
                 .map(Component::getString)
                 .toList();
 
@@ -213,6 +213,18 @@ class BlueprintTooltipHierarchyTest {
         setRoomGeometry(upper, new BlockPos(0, 68, 0));
         village.registerRoom(upper);
         return new Fixture(village, ground, upper);
+    }
+
+    private static List<Component> tooltip(BlueprintTooltipFactory factory,
+                                           Fixture fixture,
+                                           Building building,
+                                           Integer floorOrdinal,
+                                           boolean structureHover) {
+        return factory.tooltip(
+                building,
+                floorOrdinal,
+                structureHover,
+                fixture.village().getLogicalBuildingId(building.getStructureId()));
     }
 
     private static StructureFloor floor(int id, int anchorY, int ceilingY, int floorNumber) throws Exception {

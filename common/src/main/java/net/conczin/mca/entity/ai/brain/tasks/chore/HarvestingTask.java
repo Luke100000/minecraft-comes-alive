@@ -178,7 +178,7 @@ public class HarvestingTask extends AbstractChoreTask {
 
     @Override
     protected void tick(ServerLevel world, VillagerEntityMCA villager, long time) {
-        villager.moveTowards(currentPos);
+        villager.moveTowardsPersistent(currentPos, 0.5F, 1);
 
         // work
         if (villager.distanceToSqr(Vec3.atBottomCenterOf(currentPos)) <= 6) {

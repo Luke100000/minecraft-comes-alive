@@ -1,8 +1,12 @@
 package net.conczin.mca.entity.ai;
 
+import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
+import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.brain.tasks.WanderOrTeleportToTargetTask;
+import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
+import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.conczin.mca.neoforge.gametest.GameTest;
@@ -23,10 +27,11 @@ public final class ResidencyGoHomeGameTests {
     private ResidencyGoHomeGameTests() {
     }
 
-    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    @GameTest(batch = "mca_go_home_extended_search", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
     public static void distantPersistentMoveTowardsUsesCentralExtendedNavigation(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(2, 1, 2));
-        prepareFlatArea(helper, start, 32, 2);
+        prepareFlatArea(helper, start, 86, 2);
 
         VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
                 .withAge(0)
@@ -37,7 +42,7 @@ public final class ResidencyGoHomeGameTests {
         villager.setOnGround(true);
         villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
 
-        int targetDistance = 24;
+        int targetDistance = 80;
         BlockPos home = start.east(targetDistance);
         villager.getBrain().setMemory(
                 MemoryModuleType.HOME,
@@ -55,13 +60,28 @@ public final class ResidencyGoHomeGameTests {
         helper.assertTrue(walkTarget.getCloseEnoughDist() == 1,
                 "Go Home changed its existing close-enough distance");
 
-        Path path = villager.getNavigation().createPath(home, 0);
-        helper.assertTrue(path != null && path.canReach(),
-                "central MCA navigation did not extend Go Home beyond FOLLOW_RANGE");
-        helper.assertTrue(path.getTarget().equals(home),
-                "Go Home path stopped targeting the real HOME position");
+        Config config = Config.getInstance();
+        int previousDistance = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 160;
+            helper.assertTrue(targetDistance > MCAGroundPathNavigation.getOrdinaryPathLength(villager),
+                    "fixture did not exceed the ordinary MCA horizon");
+            Path first = villager.getNavigation().createPath(home, 0);
+            helper.assertTrue(MCAGroundPathNavigation.isUsefulPartialPath(first, home),
+                    "first distant request did not prefer a bounded useful segment");
+            helper.assertTrue(PathRequestDiagnostics.snapshot(villager).extendedSearches() == 0,
+                    "first distant request unnecessarily expanded the search horizon");
 
-        villager.discard();
+            WalkTargetFailureMemory.record(villager, home, helper.getLevel().getGameTime());
+            Path recovered = villager.getNavigation().createPath(home, 0);
+            helper.assertTrue(recovered != null && recovered.canReach() && recovered.getTarget().equals(home),
+                    "central MCA navigation did not recover the persistent destination after failure");
+            helper.assertTrue(PathRequestDiagnostics.snapshot(villager).extendedSearches() == 1,
+                    "recovery did not exercise an actual extended search");
+        } finally {
+            config.villagerPathfindingDistance = previousDistance;
+            villager.discard();
+        }
         helper.succeed();
     }
 
