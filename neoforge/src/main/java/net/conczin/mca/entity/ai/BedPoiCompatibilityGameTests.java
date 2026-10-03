@@ -5,9 +5,11 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockBehaviour;
@@ -21,6 +23,8 @@ import org.jetbrains.annotations.Nullable;
 /** Test-only registration for a vanilla-style bed deliberately absent from #minecraft:beds. */
 @EventBusSubscriber(modid = MCA.MOD_ID)
 public final class BedPoiCompatibilityGameTests {
+    private static final ResourceKey<Block> UNTAGGED_BED_KEY = ResourceKey.create(
+            Registries.BLOCK, MCA.locate("gametest_untagged_bed"));
     private static BedBlock untaggedBed;
 
     private BedPoiCompatibilityGameTests() {
@@ -32,8 +36,11 @@ public final class BedPoiCompatibilityGameTests {
             return;
         }
 
-        event.register(Registries.BLOCK, MCA.locate("gametest_untagged_bed"), () -> {
-            untaggedBed = new TestBedBlock(BlockBehaviour.Properties.of().strength(0.2F).noOcclusion());
+        event.register(Registries.BLOCK, UNTAGGED_BED_KEY.identifier(), () -> {
+            untaggedBed = new TestBedBlock(BlockBehaviour.Properties.of()
+                    .strength(0.2F)
+                    .noOcclusion()
+                    .setId(UNTAGGED_BED_KEY));
             return untaggedBed;
         });
     }
