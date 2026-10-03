@@ -3,6 +3,7 @@ package net.conczin.mca.network;
 import io.netty.buffer.Unpooled;
 import net.conczin.mca.FamilyTreeTestSupport;
 import net.conczin.mca.entity.ai.relationship.Gender;
+import net.conczin.mca.network.c2s.FamilyTreeUUIDLookup;
 import net.conczin.mca.network.c2s.GetFamilyTreeRequest;
 import net.conczin.mca.network.s2c.FamilyTreeUUIDResponse;
 import net.conczin.mca.network.s2c.GetFamilyTreeResponse;
@@ -62,7 +63,9 @@ class FamilyTreeViewCodecTest {
                         new FamilyTreeView.Continuation(ROOT, ANCESTORS),
                         new FamilyTreeView.Continuation(ROOT, DESCENDANTS)
                 ),
-                Set.of(UNAVAILABLE)
+                Set.of(UNAVAILABLE),
+                Set.of(ROOT),
+                Map.of()
         );
         GetFamilyTreeResponse response = new GetFamilyTreeResponse(41L, ROOT, true, view);
 
@@ -76,11 +79,12 @@ class FamilyTreeViewCodecTest {
         assertEquals(rootNode.save(), decoded.view().nodes().get(ROOT).save());
         assertEquals(view.continuations(), decoded.view().continuations());
         assertEquals(Set.of(UNAVAILABLE), decoded.view().unavailable());
+        assertEquals(Set.of(ROOT), decoded.view().orphans());
     }
 
     @Test
     void missingResponseRoundTripsWithEmptyView() {
-        FamilyTreeView empty = new FamilyTreeView(Map.of(), Set.of(), Set.of());
+        FamilyTreeView empty = FamilyTreeView.empty();
         GetFamilyTreeResponse response = new GetFamilyTreeResponse(42L, ROOT, false, empty);
 
         GetFamilyTreeResponse decoded = roundTrip(GetFamilyTreeResponse.STREAM_CODEC, response);
@@ -101,9 +105,9 @@ class FamilyTreeViewCodecTest {
     }
 
     @Test
-    void defaultRequestLoadsEightGenerationsPerDirection() {
-        assertEquals(8, GetFamilyTreeRequest.DEFAULT_ANCESTOR_DEPTH);
-        assertEquals(8, GetFamilyTreeRequest.DEFAULT_DESCENDANT_DEPTH);
+    void defaultRequestLoadsFourGenerationsPerDirection() {
+        assertEquals(4, GetFamilyTreeRequest.DEFAULT_ANCESTOR_DEPTH);
+        assertEquals(4, GetFamilyTreeRequest.DEFAULT_DESCENDANT_DEPTH);
         assertEquals(8, GetFamilyTreeRequest.MAX_DEPTH);
     }
 
@@ -145,7 +149,7 @@ class FamilyTreeViewCodecTest {
     }
 
     @Test
-    void searchResponseRoundTripsTheQueryThatProducedItsResults() {
+    void searchPayloadsRoundTripTheRequestIdentityThatProducedTheirResults() {
         FamilyTreeSearchEntry entry = new FamilyTreeSearchEntry(
                 ROOT,
                 "Root",
@@ -154,10 +158,15 @@ class FamilyTreeViewCodecTest {
                 false,
                 ""
         );
-        FamilyTreeUUIDResponse response = new FamilyTreeUUIDResponse("root", java.util.List.of(entry));
+        FamilyTreeUUIDLookup request = new FamilyTreeUUIDLookup(73L, "root");
+        FamilyTreeUUIDResponse response = new FamilyTreeUUIDResponse(73L, "root", java.util.List.of(entry));
 
+        FamilyTreeUUIDLookup decodedRequest = roundTrip(FamilyTreeUUIDLookup.STREAM_CODEC, request);
         FamilyTreeUUIDResponse decoded = roundTrip(FamilyTreeUUIDResponse.STREAM_CODEC, response);
 
+        assertEquals(73L, decodedRequest.requestId());
+        assertEquals("root", decodedRequest.search());
+        assertEquals(73L, decoded.requestId());
         assertEquals("root", decoded.search());
         assertEquals(java.util.List.of(entry), decoded.list());
     }
@@ -170,7 +179,10 @@ class FamilyTreeViewCodecTest {
             nodes.put(id, new FamilyTreeNode(null, id, id.toString(), false, Gender.MALE, Util.NIL_UUID, Util.NIL_UUID));
         }
 
-        assertThrows(IllegalArgumentException.class, () -> new FamilyTreeView(nodes, Set.of(), Set.of()));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new FamilyTreeView(nodes, Set.of(), Set.of(), Set.of(), Map.of())
+        );
     }
 
     @Test
@@ -190,7 +202,7 @@ class FamilyTreeViewCodecTest {
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new FamilyTreeView(Map.of(ROOT, root), Set.of(), Set.of())
+                () -> new FamilyTreeView(Map.of(ROOT, root), Set.of(), Set.of(), Set.of(), Map.of())
         );
     }
 
@@ -208,6 +220,7 @@ class FamilyTreeViewCodecTest {
         GlobalPos grave = GlobalPos.of(Level.NETHER, new BlockPos(12, 64, -31));
         FamilyTreeView view = new FamilyTreeView(
                 Map.of(ROOT, rootNode),
+                Set.of(),
                 Set.of(),
                 Set.of(),
                 Map.of(ROOT, grave)
@@ -236,7 +249,31 @@ class FamilyTreeViewCodecTest {
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> new FamilyTreeView(Map.of(ROOT, rootNode), Set.of(), Set.of(), graves)
+                () -> new FamilyTreeView(Map.of(ROOT, rootNode), Set.of(), Set.of(), Set.of(), graves)
+        );
+    }
+
+    @Test
+    void familyTreeViewRejectsOrphanMetadataOutsideBoundedNodes() {
+        FamilyTreeNode rootNode = new FamilyTreeNode(
+                null,
+                ROOT,
+                "Root",
+                false,
+                Gender.MALE,
+                Util.NIL_UUID,
+                Util.NIL_UUID
+        );
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> new FamilyTreeView(
+                        Map.of(ROOT, rootNode),
+                        Set.of(),
+                        Set.of(),
+                        Set.of(UNAVAILABLE),
+                        Map.of()
+                )
         );
     }
 

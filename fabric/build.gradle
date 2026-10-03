@@ -15,6 +15,14 @@ dependencies {
     //localRuntime "maven.modrinth:jei:${jei_fabric_version}"
     //localRuntime "maven.modrinth:ferrite-core:${ferritecore_fabric_version}"
     //localRuntime "maven.modrinth:immediatelyfast:${immediatelyfast_fabric_version}"
+
+    testImplementation platform('org.junit:junit-bom:6.1.3')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
 }
 
 def devUsername = providers.gradleProperty('mca_dev_username').orElse('Dev').get()

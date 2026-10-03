@@ -922,12 +922,16 @@ public class Village implements Iterable<Building> {
     }
 
     Optional<ResolvedInteraction> resolveInteractionPosition(BlockPos pos) {
+        return resolveInteractionPosition(world, pos);
+    }
+
+    Optional<ResolvedInteraction> resolveInteractionPosition(Level level, BlockPos pos) {
         Map<Integer, List<Building>> roomsByStructure = getRooms()
                 .collect(Collectors.groupingBy(Building::getStructureId));
-        BlockState state = world == null ? null : world.getBlockState(pos);
+        BlockState state = level == null ? null : level.getBlockState(pos);
         if (state != null && state.getBlock() instanceof TrapDoorBlock) {
             Direction ownerSide = StructureConnector.ownerSide(state);
-            List<BlockPos> connectorColumn = StructureConnector.verticalColumn(world, pos);
+            List<BlockPos> connectorColumn = StructureConnector.verticalColumn(level, pos);
             List<ResolvedInteraction> above = verticalSideInteractions(pos.above(), connectorColumn, roomsByStructure);
             List<ResolvedInteraction> below = verticalSideInteractions(pos.below(), connectorColumn, roomsByStructure);
             boolean sharedBoundary = above.stream().anyMatch(first -> below.stream().anyMatch(second ->
@@ -935,6 +939,26 @@ public class Village implements Iterable<Building> {
                             || first.position().floor().id() != second.position().floor().id()));
             if (!connectorColumn.isEmpty() || sharedBoundary) {
                 return uniqueRegisteredRoom(ownerSide == Direction.UP ? above : below);
+            }
+        }
+        if (state != null && FloorConnector.Type.fromBlockState(state) == FloorConnector.Type.LADDER) {
+            List<ResolvedInteraction> candidates = verticalSideInteractions(
+                    pos, StructureConnector.verticalColumn(level, pos), roomsByStructure);
+            Optional<ResolvedInteraction> resolved = uniqueRegisteredRoom(candidates);
+            if (resolved.isPresent()) return resolved;
+        }
+        if (level == null) {
+            PersistedTrapdoor persistedTrapdoor = persistedTrapdoor(pos);
+            if (persistedTrapdoor.present()) {
+                List<BlockPos> connectorColumn = List.of(pos);
+                List<ResolvedInteraction> above = verticalSideInteractions(pos.above(), connectorColumn, roomsByStructure);
+                List<ResolvedInteraction> below = verticalSideInteractions(pos.below(), connectorColumn, roomsByStructure);
+                if (persistedTrapdoor.ownerSide() != null) {
+                    return uniqueRegisteredRoom(persistedTrapdoor.ownerSide() == Direction.UP ? above : below);
+                }
+                List<ResolvedInteraction> candidates = Stream.concat(above.stream(), below.stream()).toList();
+                Optional<ResolvedInteraction> unique = uniqueRegisteredRoom(candidates);
+                if (unique.isPresent() || candidates.size() > 1) return unique;
             }
         }
         return structures.values().stream()
@@ -945,6 +969,25 @@ public class Village implements Iterable<Building> {
                 .min(Comparator
                         .comparing((ResolvedInteraction resolved) -> resolved.position().room() == null)
                         .thenComparingInt(resolved -> resolved.structure().getId()));
+    }
+
+    private PersistedTrapdoor persistedTrapdoor(BlockPos pos) {
+        List<FloorConnector.Marker> markers = structures.values().stream()
+                .flatMap(structure -> structure.getFloors().stream())
+                .flatMap(floor -> floor.connectors().stream())
+                .filter(marker -> marker.type() == FloorConnector.Type.TRAPDOOR && marker.pos().equals(pos))
+                .toList();
+        if (markers.isEmpty()) return new PersistedTrapdoor(false, null);
+        List<Direction> ownerSides = markers.stream()
+                .map(FloorConnector.Marker::ownerSide)
+                .filter(Objects::nonNull)
+                .distinct()
+                .limit(2)
+                .toList();
+        return new PersistedTrapdoor(true, ownerSides.size() == 1 ? ownerSides.getFirst() : null);
+    }
+
+    private record PersistedTrapdoor(boolean present, Direction ownerSide) {
     }
 
     private List<ResolvedInteraction> verticalSideInteractions(BlockPos pos, List<BlockPos> connectorColumn,

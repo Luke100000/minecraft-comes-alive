@@ -63,11 +63,11 @@ final class BlueprintMapGeometry {
     }
 
     private List<MapFootprintLayer> allRoomLayers() {
-        if (allRoomLayers == null) allRoomLayers = buildRoomLayers(null);
+        if (allRoomLayers == null) allRoomLayers = buildRoomLayers();
         return allRoomLayers;
     }
 
-    private List<MapFootprintLayer> buildRoomLayers(Integer selectedFloor) {
+    private List<MapFootprintLayer> buildRoomLayers() {
         List<Building> rooms = village.getRooms()
                 .sorted(Comparator.comparingInt((Building room) ->
                                 village.getLogicalBuildingId(room.getStructureId()))
@@ -76,7 +76,6 @@ final class BlueprintMapGeometry {
         List<MapFootprintLayer> layers = new ArrayList<>();
         for (Building room : rooms) {
             int floorNum = room.getFloorNumber(village);
-            if (selectedFloor != null && floorNum != selectedFloor) continue;
             Set<BlueprintMapFootprint.Cell> footprintCells = roomFootprint(room);
             if (footprintCells.isEmpty()) continue;
             BlueprintMapFootprint.Shape shape = BlueprintMapFootprint.shape(footprintCells);

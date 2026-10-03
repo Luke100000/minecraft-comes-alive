@@ -129,6 +129,89 @@ class FamilyTreeViewModelTest {
     }
 
     @Test
+    void rootNavigationInvalidatesPendingExpansionFromPreviousLayout() {
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        long initial = model.beginFocus(ROOT, viewport(0, 0, 1));
+        model.accept(response(initial, ROOT, view(Map.of(ROOT, node(ROOT)), Set.of(), Set.of())));
+        long oldExpansion = model.beginExpansion(ROOT, ANCESTORS);
+        long rootRequest = model.beginRootFocus(OTHER, viewport(4, 5, 1));
+        model.accept(response(rootRequest, OTHER, view(Map.of(OTHER, node(OTHER)), Set.of(), Set.of())));
+
+        FamilyTreeViewModel.MergeResult result = model.accept(response(
+                oldExpansion,
+                ROOT,
+                view(Map.of(GRANDPARENT, node(GRANDPARENT)), Set.of(), Set.of())
+        ));
+
+        assertEquals(FamilyTreeViewModel.MergeResult.STALE, result);
+        assertFalse(model.nodes().containsKey(GRANDPARENT));
+        assertFalse(model.loading());
+    }
+
+    @Test
+    void backInvalidatesPendingExpansionFromLayoutBeingLeft() {
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        long rootRequest = model.beginRootFocus(OTHER, viewport(2, 3, 1));
+        model.accept(response(rootRequest, OTHER, view(Map.of(OTHER, node(OTHER)), Set.of(), Set.of())));
+        long oldExpansion = model.beginExpansion(OTHER, DESCENDANTS);
+
+        model.back().orElseThrow();
+        FamilyTreeViewModel.MergeResult result = model.accept(response(
+                oldExpansion,
+                OTHER,
+                view(Map.of(CHILD, node(CHILD)), Set.of(), Set.of())
+        ));
+
+        assertEquals(FamilyTreeViewModel.MergeResult.STALE, result);
+        assertFalse(model.nodes().containsKey(CHILD));
+        assertFalse(model.loading());
+    }
+
+    @Test
+    void failedRootNavigationKeepsPendingExpansionForCurrentLayout() {
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        long initial = model.beginFocus(ROOT, viewport(0, 0, 1));
+        model.accept(response(initial, ROOT, view(Map.of(ROOT, node(ROOT)), Set.of(), Set.of())));
+        long expansion = model.beginExpansion(ROOT, ANCESTORS);
+        long missingRoot = model.beginRootFocus(MISSING, viewport(4, 5, 1));
+
+        assertEquals(FamilyTreeViewModel.MergeResult.NOT_FOUND, model.accept(new GetFamilyTreeResponse(
+                missingRoot,
+                MISSING,
+                false,
+                FamilyTreeView.empty()
+        )));
+        assertTrue(model.loading());
+
+        assertEquals(FamilyTreeViewModel.MergeResult.APPLIED, model.accept(response(
+                expansion,
+                ROOT,
+                view(Map.of(PARENT, node(PARENT)), Set.of(), Set.of())
+        )));
+        assertTrue(model.nodes().containsKey(PARENT));
+        assertFalse(model.loading());
+    }
+
+    @Test
+    void backWithinSameLayoutKeepsPendingExpansion() {
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        long childFocus = model.beginFocus(CHILD, viewport(0, 0, 1));
+        model.accept(response(childFocus, CHILD, view(Map.of(CHILD, node(CHILD)), Set.of(), Set.of())));
+        long expansion = model.beginExpansion(CHILD, DESCENDANTS);
+
+        model.back().orElseThrow();
+
+        assertTrue(model.loading());
+        assertEquals(FamilyTreeViewModel.MergeResult.APPLIED, model.accept(response(
+                expansion,
+                CHILD,
+                view(Map.of(GRANDPARENT, node(GRANDPARENT)), Set.of(), Set.of())
+        )));
+        assertTrue(model.nodes().containsKey(GRANDPARENT));
+        assertFalse(model.loading());
+    }
+
+    @Test
     void staleFocusResponseDoesNotReplaceNewerPendingState() {
         FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
         long first = model.beginFocus(CHILD, viewport(0, 0, 1));
@@ -303,6 +386,35 @@ class FamilyTreeViewModelTest {
         assertEquals(Map.of(ROOT, rootGrave), model.graves());
     }
 
+    @Test
+    void orphanMetadataSurvivesUnrelatedPartialMergeAndRefreshesReturnedNodes() {
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        long initial = model.beginFocus(ROOT, viewport(0, 0, 1));
+        model.accept(response(
+                initial,
+                ROOT,
+                view(Map.of(ROOT, node(ROOT)), Set.of(), Set.of(), Set.of(ROOT), Map.of())
+        ));
+
+        long unrelated = model.beginFocus(OTHER, viewport(0, 0, 1));
+        model.accept(response(
+                unrelated,
+                OTHER,
+                view(Map.of(OTHER, node(OTHER)), Set.of(), Set.of(), Set.of(), Map.of())
+        ));
+
+        assertEquals(Set.of(ROOT), model.orphans());
+
+        long refresh = model.beginFocus(ROOT, viewport(0, 0, 1));
+        model.accept(response(
+                refresh,
+                ROOT,
+                view(Map.of(ROOT, node(ROOT)), Set.of(), Set.of(), Set.of(), Map.of())
+        ));
+
+        assertTrue(model.orphans().isEmpty());
+    }
+
     private static GetFamilyTreeResponse response(long requestId, UUID uuid, FamilyTreeView view) {
         return new GetFamilyTreeResponse(requestId, uuid, true, view);
     }
@@ -312,7 +424,7 @@ class FamilyTreeViewModelTest {
             Set<FamilyTreeView.Continuation> continuations,
             Set<UUID> unavailable
     ) {
-        return new FamilyTreeView(nodes, continuations, unavailable);
+        return new FamilyTreeView(nodes, continuations, unavailable, Set.of(), Map.of());
     }
 
     private static FamilyTreeView view(
@@ -321,7 +433,17 @@ class FamilyTreeViewModelTest {
             Set<UUID> unavailable,
             Map<UUID, GlobalPos> graves
     ) {
-        return new FamilyTreeView(nodes, continuations, unavailable, graves);
+        return new FamilyTreeView(nodes, continuations, unavailable, Set.of(), graves);
+    }
+
+    private static FamilyTreeView view(
+            Map<UUID, FamilyTreeNode> nodes,
+            Set<FamilyTreeView.Continuation> continuations,
+            Set<UUID> unavailable,
+            Set<UUID> orphans,
+            Map<UUID, GlobalPos> graves
+    ) {
+        return new FamilyTreeView(nodes, continuations, unavailable, orphans, graves);
     }
 
     private static FamilyTreeNode node(UUID id) {

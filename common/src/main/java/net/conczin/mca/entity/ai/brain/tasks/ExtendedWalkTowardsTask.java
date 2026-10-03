@@ -150,6 +150,12 @@ public final class ExtendedWalkTowardsTask {
 
     private static void noteJourneyProgress(VillagerEntityMCA entity, WalkTargetRetryGate retryGate,
                                             BlockPos destination, @Nullable WalkTarget currentTarget, long time) {
+        // A flank or its return leg has not established a route to the destination.
+        // Navigation clears failure itself when the detour finds a reachable path.
+        if (entity.getNavigation() instanceof MCAGroundPathNavigation navigation
+                && navigation.isTakingDetourTo(destination)) {
+            return;
+        }
         // Only this destination's transit (or the gap between segments) can
         // refresh its failure age. Combat movement belongs to another producer.
         boolean ownsMovement = currentTarget == null

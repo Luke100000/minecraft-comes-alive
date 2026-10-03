@@ -102,7 +102,7 @@ public class ChoppingTask extends AbstractChoreTask {
             return;
         }
 
-        villager.moveTowards(targetTree);
+        villager.moveTowardsPersistent(targetTree, 0.5F, 1);
 
         BlockState state = world.getBlockState(targetTree);
         if (state.is(BlockTags.LOGS)) {

@@ -3,6 +3,7 @@ package net.conczin.mca.server.world.data;
 import net.minecraft.core.BlockPos;
 import net.minecraft.SharedConstants;
 import net.minecraft.server.Bootstrap;
+import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -91,6 +92,26 @@ class RoomWorkflowTest {
         assertEquals(-1, outcome.expectedTargetId());
     }
 
+    @Test
+    void initialAddRoomRejectsRoomThatAppearedAfterSnapshot() {
+        BlockPos source = new BlockPos(4, 8, 12);
+        StructureFloor floor = new StructureFloor(3, 0,
+                new FloorGeometry(List.of(new FloorGeometry.Cell(source, source.getY() + 3)), Map.of()));
+        Structure structure = new Structure(7, source, List.of(floor));
+        Building room = new Building(source);
+        room.setId(21);
+        room.setStructureId(structure.getId());
+        room.setFloorId(floor.id());
+        StaleRoomVillage village = new StaleRoomVillage(structure, floor, room);
+
+        RoomWorkflow.Outcome outcome = new RoomWorkflow(new CountingManager(village), null)
+                .scanRoom(source, -1, null);
+
+        assertEquals(RoomWorkflow.Status.FAILED, outcome.status());
+        assertEquals(Building.validationResult.IDENTICAL, outcome.result());
+        assertEquals(-1, outcome.expectedTargetId());
+    }
+
     private static BuildingScanResult scan(BlockPos source, List<String> types) {
         return new BuildingScanResult(
                 Building.validationResult.SUCCESS,
@@ -144,7 +165,7 @@ class RoomWorkflowTest {
         }
 
         @Override
-        Optional<ResolvedInteraction> resolveInteractionPosition(BlockPos pos) {
+        Optional<ResolvedInteraction> resolveInteractionPosition(Level level, BlockPos pos) {
             resolveCalls++;
             return Optional.of(new ResolvedInteraction(
                     structure, new Structure.InteractionPosition(floor, null)));
@@ -164,7 +185,7 @@ class RoomWorkflowTest {
         }
 
         @Override
-        Optional<ResolvedInteraction> resolveInteractionPosition(BlockPos pos) {
+        Optional<ResolvedInteraction> resolveInteractionPosition(Level level, BlockPos pos) {
             return Optional.of(new ResolvedInteraction(
                     structure, new Structure.InteractionPosition(floor, room)));
         }

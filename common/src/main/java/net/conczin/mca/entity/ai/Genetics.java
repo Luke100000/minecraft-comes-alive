@@ -106,7 +106,7 @@ public class Genetics implements Iterable<Genetics.Gene> {
         Entity owningEntity = entity.asEntity();
         int seaLevel = owningEntity.level() instanceof ServerLevel serverLevel
                 ? serverLevel.getChunkSource().getGenerator().getSeaLevel()
-                : owningEntity.level().getSeaLevel();
+                : owningEntity.level().getSeaLevel(); // client only is always 63Y
         float height = owningEntity.blockPosition().getY();
         height -= seaLevel;
         height /= 128;

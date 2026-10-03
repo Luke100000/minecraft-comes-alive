@@ -2,6 +2,7 @@ package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.util.NbtHelper;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
@@ -56,9 +57,13 @@ public final class FloorConnector {
         }
     }
 
-    public record Marker(BlockPos pos, Type type, BlockPos floorCell) {
+    public record Marker(BlockPos pos, Type type, BlockPos floorCell, Direction ownerSide) {
         public Marker(BlockPos pos, Type type) {
-            this(pos, type, pos);
+            this(pos, type, pos, null);
+        }
+
+        public Marker(BlockPos pos, Type type, BlockPos floorCell) {
+            this(pos, type, floorCell, null);
         }
 
         public Marker {
@@ -72,6 +77,7 @@ public final class FloorConnector {
             tag.put("pos", NbtHelper.encodeBlockPos(pos));
             tag.putString("type", type.serializedName());
             if (!floorCell.equals(pos)) tag.put("floorCell", NbtHelper.encodeBlockPos(floorCell));
+            if (ownerSide != null) tag.putString("ownerSide", ownerSide.getName());
             return tag;
         }
 
@@ -82,8 +88,11 @@ public final class FloorConnector {
             BlockPos floorCell = tag.contains("floorCell")
                     ? NbtHelper.decodeBlockPos(tag.get("floorCell"))
                     : pos;
+            Direction ownerSide = tag.contains("ownerSide")
+                    ? Direction.byName(tag.getString("ownerSide").orElse(""))
+                    : null;
             return pos == null || type == null || floorCell == null
-                    ? null : new Marker(pos, type, floorCell);
+                    ? null : new Marker(pos, type, floorCell, ownerSide);
         }
     }
 }

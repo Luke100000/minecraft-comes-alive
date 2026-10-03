@@ -35,6 +35,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 public class FamilyTreeScreen extends Screen {
@@ -43,8 +44,6 @@ public class FamilyTreeScreen extends Screen {
     private static final int FIT_PADDING = 24;
     private static final int HEADER_MARGIN = 5;
     private static final int HEADER_GAP = 4;
-    private static final int SEARCH_MAX_WIDTH = 180;
-    private static final int BACK_WIDTH = 44;
     private static final int DONE_WIDTH = 72;
     private static final int ZOOM_BUTTON_WIDTH = 20;
     private static final int ZOOM_LABEL_WIDTH = 48;
@@ -76,6 +75,7 @@ public class FamilyTreeScreen extends Screen {
             new FamilyTreeLayout.Bounds(0, 0, 0, 0)
     );
     private Map<UUID, FamilyTreeLayout.Card> cardsById = Map.of();
+    private Map<UUID, CardPresentation> cardPresentations = Map.of();
     private FamilyTreeViewModel.ViewportState viewport =
             new FamilyTreeViewModel.ViewportState(0, 0, 1.0F);
     @Nullable
@@ -85,8 +85,10 @@ public class FamilyTreeScreen extends Screen {
     @Nullable
     private EditBox searchField;
     private int searchX;
-    private int searchWidth = SEARCH_MAX_WIDTH;
+    private int searchWidth = 1;
     private List<FamilyTreeSearchEntry> searchResults = List.of();
+    @Nullable
+    private FamilyTreeSearchDebouncer.Request expectedSearchRequest;
     private boolean searchOpen;
     private boolean searchPending;
     private boolean canvasDragging;
@@ -113,14 +115,6 @@ public class FamilyTreeScreen extends Screen {
         searchWidth = header.searchWidth();
         int topY = 5;
         int controlsY = 29;
-        addRenderableWidget(new ButtonWidget(
-                header.backX(),
-                topY,
-                BACK_WIDTH,
-                20,
-                Component.translatable("gui.family_tree.back"),
-                button -> goBack()
-        ));
         addRenderableWidget(new ButtonWidget(
                 header.doneX(),
                 topY,
@@ -183,23 +177,28 @@ public class FamilyTreeScreen extends Screen {
         }
     }
 
-    public void setSearchResults(String search, List<FamilyTreeSearchEntry> results) {
-        if (searchField == null
+    public void setSearchResults(long requestId, String search, List<FamilyTreeSearchEntry> results) {
+        if (expectedSearchRequest == null
+                || !expectedSearchRequest.matches(requestId, search)
+                || searchField == null
                 || integratedSearchQuery(searchField.getValue()).filter(search::equals).isEmpty()) {
             return;
         }
+        expectedSearchRequest = null;
         searchPending = false;
         searchResults = List.copyOf(results);
         searchOpen = true;
     }
 
     private void rebuildLayout() {
-        layout = FamilyTreeLayout.layout(viewModel.snapshot());
+        FamilyTreeViewModel.Snapshot snapshot = viewModel.snapshot();
+        layout = FamilyTreeLayout.layout(snapshot);
         Map<UUID, FamilyTreeLayout.Card> index = new LinkedHashMap<>();
         for (FamilyTreeLayout.Card card : layout.cards()) {
             index.put(card.uuid(), card);
         }
         cardsById = Map.copyOf(index);
+        cardPresentations = cardPresentations(viewModel.focusId(), snapshot.nodes(), viewModel.orphans());
     }
 
     private void requestFocus(UUID id, boolean recenter) {
@@ -224,22 +223,11 @@ public class FamilyTreeScreen extends Screen {
         Network.sendToServer(new GetFamilyTreeRequest(target.anchor(), ancestors, descendants, requestId));
     }
 
-    private void goBack() {
-        viewModel.back().ifPresent(entry -> {
-            pendingRecenterRequestId = -1L;
-            viewport = entry.viewport();
-            updateZoomLabel();
-            rebuildLayout();
-            if (!viewModel.nodes().containsKey(entry.focusId())) {
-                requestFocus(entry.focusId(), false);
-            }
-        });
-    }
-
     private void searchFamily(String value) {
         Optional<String> query = integratedSearchQuery(value);
         if (query.isEmpty()) {
             searchDebouncer.clear();
+            expectedSearchRequest = null;
             searchOpen = false;
             searchPending = false;
             searchResults = List.of();
@@ -248,14 +236,17 @@ public class FamilyTreeScreen extends Screen {
         searchOpen = true;
         searchPending = true;
         searchResults = List.of();
-        searchDebouncer.schedule(query.orElseThrow(), Util.getMillis());
+        expectedSearchRequest = searchDebouncer.schedule(query.orElseThrow(), Util.getMillis());
     }
 
     @Override
     public void tick() {
         super.tick();
         searchDebouncer.poll(Util.getMillis())
-                .ifPresent(query -> Network.sendToServer(new FamilyTreeUUIDLookup(query)));
+                .ifPresent(request -> Network.sendToServer(new FamilyTreeUUIDLookup(
+                        request.requestId(),
+                        request.query()
+                )));
     }
 
     private void selectSearchResult(FamilyTreeSearchEntry entry) {
@@ -271,7 +262,14 @@ public class FamilyTreeScreen extends Screen {
     }
 
     private void setZoom(float targetZoom) {
-        viewport = zoomAround(viewport, width / 2.0, height / 2.0, width / 2.0, height / 2.0, targetZoom);
+        viewport = zoomAround(
+                viewport,
+                width / 2.0,
+                canvasCenterY(),
+                width / 2.0,
+                canvasCenterY(),
+                targetZoom
+        );
         updateZoomLabel();
     }
 
@@ -298,6 +296,17 @@ public class FamilyTreeScreen extends Screen {
             FamilyTreeSearchEntry searchResult = searchResultAt(mouseX, mouseY);
             if (searchResult != null) {
                 selectSearchResult(searchResult);
+                return true;
+            }
+            if (searchOverlayContains(
+                    mouseX,
+                    mouseY,
+                    searchOpen,
+                    searchPending,
+                    searchX,
+                    searchWidth,
+                    searchResults.size()
+            )) {
                 return true;
             }
         }
@@ -350,6 +359,25 @@ public class FamilyTreeScreen extends Screen {
             return null;
         }
         return searchResults.get(index);
+    }
+
+    static boolean searchOverlayContains(
+            double mouseX,
+            double mouseY,
+            boolean searchOpen,
+            boolean searchPending,
+            int searchX,
+            int searchWidth,
+            int resultCount
+    ) {
+        if (!searchOpen || mouseX < searchX || mouseX >= searchX + searchWidth) {
+            return false;
+        }
+        int rows = searchPending || resultCount == 0
+                ? 1
+                : Math.min(resultCount, SEARCH_RESULT_LIMIT);
+        int top = HEADER_HEIGHT + 2;
+        return mouseY >= top && mouseY < top + rows * SEARCH_ROW_HEIGHT;
     }
 
     @Override
@@ -468,7 +496,6 @@ public class FamilyTreeScreen extends Screen {
 
     private void renderCards(GuiGraphicsExtractor context, Map<UUID, FamilyTreeNode> nodes) {
         UUID focusId = viewModel.focusId();
-        UUID layoutRootId = viewModel.layoutRootId();
         Map<UUID, GlobalPos> graves = viewModel.graves();
         for (FamilyTreeLayout.Card card : layout.cards()) {
             FamilyTreeNode node = nodes.get(card.uuid());
@@ -488,7 +515,10 @@ public class FamilyTreeScreen extends Screen {
             context.fill(bounds.left(), bounds.top(), bounds.right(), bounds.bottom(), background);
             renderCardOutline(context, bounds, viewport.zoom(), focused ? 0xFFFFFFFF : 0xFF9AA7B2);
 
-            CardPresentation presentation = cardPresentation(layoutRootId, node, nodes);
+            CardPresentation presentation = cardPresentations.get(card.uuid());
+            if (presentation == null) {
+                continue;
+            }
             int textWidth = FamilyTreeLayout.CARD_WIDTH - 12;
             int nameTextWidth = node.isDeceased()
                     ? textWidth - (graves.containsKey(card.uuid()) ? DECEASED_WITH_GRAVE_TEXT_INSET : DECEASED_MARKER_TEXT_INSET)
@@ -796,17 +826,13 @@ public class FamilyTreeScreen extends Screen {
                 + HEADER_GAP
                 + CENTER_WIDTH;
         int controlsLeft = Math.max(HEADER_MARGIN, (screenWidth - fixedControlsWidth) / 2);
-        int searchWidth = Math.max(
-                1,
-                Math.min(SEARCH_MAX_WIDTH, controlsLeft - HEADER_MARGIN - CONTROL_GROUP_GAP)
-        );
+        int searchWidth = Math.max(1, controlsLeft - HEADER_MARGIN - CONTROL_GROUP_GAP);
         int zoomOutX = controlsLeft;
         int zoomLabelX = zoomOutX + ZOOM_BUTTON_WIDTH + CONTROL_GAP;
         int zoomInX = zoomLabelX + ZOOM_LABEL_WIDTH + CONTROL_GAP;
         int fitX = zoomInX + ZOOM_BUTTON_WIDTH + CONTROL_GROUP_GAP;
         int centerX = fitX + FIT_WIDTH + HEADER_GAP;
         return new HeaderLayout(
-                HEADER_MARGIN,
                 Math.max(HEADER_MARGIN, screenWidth - HEADER_MARGIN - DONE_WIDTH),
                 HEADER_MARGIN,
                 searchWidth,
@@ -873,17 +899,16 @@ public class FamilyTreeScreen extends Screen {
     }
 
     static CardPresentation cardPresentation(
-            UUID layoutRootId,
+            UUID relationshipFocusId,
             FamilyTreeNode node,
-            Map<UUID, FamilyTreeNode> nodes
+            Map<UUID, FamilyTreeNode> nodes,
+            Set<UUID> orphans
     ) {
         Component identity = node.isPlayer()
                 ? Component.translatable("gui.family_tree.player")
-                : node.getProfessionText().copy()
-                        .append(" · ")
-                        .append(Component.translatable("gui.family_tree.villager"));
+                : node.getProfessionText();
         FamilyTreeRelationshipResolver.Relation relation =
-                FamilyTreeRelationshipResolver.resolve(layoutRootId, node.id(), nodes);
+                FamilyTreeRelationshipResolver.resolve(relationshipFocusId, node.id(), nodes);
         Component relationshipState = node.getRelationshipState() == RelationshipState.SINGLE
                 ? null
                 : Component.translatable("marriage." + node.getRelationshipState().base().getIcon());
@@ -893,20 +918,21 @@ public class FamilyTreeScreen extends Screen {
                 identity,
                 relationLabel(relation),
                 relationshipState,
-                isOrphan(node, nodes)
+                orphans.contains(node.id())
         );
     }
 
-    static boolean isOrphan(FamilyTreeNode node, Map<UUID, FamilyTreeNode> nodes) {
-        return missingOrDeceased(node.father(), nodes) && missingOrDeceased(node.mother(), nodes);
-    }
-
-    private static boolean missingOrDeceased(UUID parentId, Map<UUID, FamilyTreeNode> nodes) {
-        if (!FamilyTreeNode.isValid(parentId)) {
-            return true;
-        }
-        FamilyTreeNode parent = nodes.get(parentId);
-        return parent == null || parent.isDeceased();
+    static Map<UUID, CardPresentation> cardPresentations(
+            UUID relationshipFocusId,
+            Map<UUID, FamilyTreeNode> nodes,
+            Set<UUID> orphans
+    ) {
+        Map<UUID, CardPresentation> presentations = new LinkedHashMap<>(nodes.size());
+        nodes.forEach((id, node) -> presentations.put(
+                id,
+                cardPresentation(relationshipFocusId, node, nodes, orphans)
+        ));
+        return Map.copyOf(presentations);
     }
 
     static Optional<String> integratedSearchQuery(String value) {
@@ -956,7 +982,7 @@ public class FamilyTreeScreen extends Screen {
 
     private static Component relationLabel(FamilyTreeRelationshipResolver.Relation relation) {
         return Component.translatable(switch (relation) {
-            case SELF -> "gui.family_tree.relation.self";
+            case SELF -> "gui.family_tree.relation.selected";
             case FATHER -> "gui.family_tree.relation.father";
             case MOTHER -> "gui.family_tree.relation.mother";
             case CHILD -> "gui.family_tree.relation.child";
@@ -1100,7 +1126,6 @@ public class FamilyTreeScreen extends Screen {
     }
 
     record HeaderLayout(
-            int backX,
             int doneX,
             int searchX,
             int searchWidth,
