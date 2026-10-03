@@ -340,7 +340,7 @@ public class Residency {
                         Math.sqrt(entity.blockPosition().distSqr(home.pos()))
                 );
             }
-            entity.moveTowards(home.pos());
+            entity.moveTowardsPersistent(home.pos(), 0.5F, 1);
             entity.sendChatMessage(player, "interaction.gohome.success");
         }, () -> entity.sendChatMessage(player, "interaction.gohome.fail.nohome"));
     }

@@ -2,7 +2,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
-import net.conczin.mca.entity.ai.navigation.LongDistancePathTarget;
+import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
@@ -80,7 +80,7 @@ public final class ExtendedWalkTowardsTask {
                             }
 
                             if (currentWalkTarget != null) {
-                                if (!preserveCurrentWalkTarget(entity, retryGate, globalPos, currentWalkTarget)) {
+                                if (!preserveCurrentWalkTarget(entity, retryGate, globalPos, currentWalkTarget, policy)) {
                                     walkTarget.erase();
                                     WalkTargetFailureMemory.clear(entity);
                                 }
@@ -161,15 +161,18 @@ public final class ExtendedWalkTowardsTask {
     }
 
     private static boolean preserveCurrentWalkTarget(VillagerEntityMCA entity, WalkTargetRetryGate retryGate,
-                                                     GlobalPos destination, WalkTarget currentTarget) {
+                                                     GlobalPos destination, WalkTarget currentTarget, Policy policy) {
         PositionTracker tracker = currentTarget.getTarget();
         boolean matchesDestination = destination.dimension() == entity.level().dimension()
                 && tracker.currentBlockPosition().equals(destination.pos());
         if (matchesDestination && isReached(entity, currentTarget)) {
             completeJourney(entity, retryGate, destination.pos());
         }
-        return !(tracker instanceof LongDistancePathTarget)
-                || (matchesDestination && MCAGroundPathNavigation.requiresExtendedPath(entity, destination.pos()));
+        if (!(tracker instanceof PersistentPathTarget)) {
+            return true;
+        }
+        return matchesDestination && (policy.finalTargetResolver() == NO_FINAL_TARGET_OVERRIDE
+                || MCAGroundPathNavigation.requiresExtendedPath(entity, destination.pos()));
     }
 
     @Nullable
@@ -177,7 +180,7 @@ public final class ExtendedWalkTowardsTask {
                                                 float speed, int completionRange, Policy policy) {
         BlockPos targetPos = destination.pos();
         if (MCAGroundPathNavigation.requiresExtendedPath(entity, targetPos)) {
-            return new WalkTarget(new LongDistancePathTarget(targetPos), speed, completionRange);
+            return new WalkTarget(new PersistentPathTarget(targetPos), speed, completionRange);
         }
 
         Optional<? extends PositionTracker> finalTarget = policy.finalTargetResolver().resolve(world, entity, destination);
@@ -189,7 +192,7 @@ public final class ExtendedWalkTowardsTask {
         }
         return targetPos.distManhattan(entity.blockPosition()) <= completionRange
                 ? null
-                : new WalkTarget(targetPos, speed, completionRange);
+                : new WalkTarget(new PersistentPathTarget(targetPos), speed, completionRange);
     }
 
     private static boolean isReached(VillagerEntityMCA entity, WalkTarget target) {

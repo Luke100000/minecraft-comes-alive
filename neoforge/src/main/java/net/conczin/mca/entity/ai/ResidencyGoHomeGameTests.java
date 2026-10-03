@@ -24,7 +24,7 @@ public final class ResidencyGoHomeGameTests {
     }
 
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
-    public static void distantMoveTowardsUsesCentralExtendedNavigation(GameTestHelper helper) {
+    public static void distantPersistentMoveTowardsUsesCentralExtendedNavigation(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(2, 1, 2));
         prepareFlatArea(helper, start, 32, 2);
 
@@ -46,7 +46,7 @@ public final class ResidencyGoHomeGameTests {
         villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
         villager.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
 
-        villager.moveTowards(home);
+        villager.moveTowardsPersistent(home, 0.5F, 1);
 
         var walkTarget = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
                 .orElseThrow(() -> new AssertionError("Go Home did not publish a WALK_TARGET"));
@@ -88,7 +88,7 @@ public final class ResidencyGoHomeGameTests {
         villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
         villager.getBrain().eraseMemory(MemoryModuleType.PATH);
         villager.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
-        villager.moveTowards(home);
+        villager.moveTowardsPersistent(home, 0.5F, 1);
 
         WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
         long startedAt = helper.getLevel().getGameTime();

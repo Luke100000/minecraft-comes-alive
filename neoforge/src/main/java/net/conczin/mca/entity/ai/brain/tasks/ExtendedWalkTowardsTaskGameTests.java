@@ -3,13 +3,14 @@ package net.conczin.mca.entity.ai.brain.tasks;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
-import net.conczin.mca.entity.ai.navigation.LongDistancePathTarget;
+import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.conczin.mca.neoforge.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.behavior.OneShot;
 import net.minecraft.world.entity.ai.behavior.SetWalkTargetFromBlockMemory;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -20,6 +21,7 @@ import net.minecraft.world.phys.Vec3;
 import net.conczin.mca.neoforge.gametest.GameTestHolder;
 import net.conczin.mca.neoforge.gametest.PrefixGameTestTemplate;
 
+import java.util.Optional;
 import java.util.function.Predicate;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
@@ -118,9 +120,9 @@ public final class ExtendedWalkTowardsTaskGameTests {
 
         var walkTarget = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
                 .orElseThrow(() -> new AssertionError("long-distance HOME did not publish a walk target"));
-        helper.assertTrue(walkTarget.getTarget() instanceof LongDistancePathTarget,
+        helper.assertTrue(walkTarget.getTarget() instanceof PersistentPathTarget,
                 "HOME beyond FOLLOW_RANGE did not use the long-distance path policy");
-        LongDistancePathTarget target = (LongDistancePathTarget)walkTarget.getTarget();
+        PersistentPathTarget target = (PersistentPathTarget)walkTarget.getTarget();
         helper.assertTrue(target.currentBlockPosition().equals(home),
                 "long-distance HOME replaced the real destination with an intermediate point");
 
@@ -164,8 +166,8 @@ public final class ExtendedWalkTowardsTaskGameTests {
 
         var walkTarget = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
                 .orElseThrow(() -> new AssertionError("ordinary HOME did not publish a walk target"));
-        helper.assertTrue(!(walkTarget.getTarget() instanceof LongDistancePathTarget),
-                "target inside the 48-block ordinary navigation range was classified as long-distance from sensing range");
+        helper.assertTrue(walkTarget.getTarget() instanceof PersistentPathTarget,
+                "persistent HOME inside ordinary navigation range lost its recovery intent");
         helper.assertTrue(walkTarget.getTarget().currentBlockPosition().equals(home),
                 "ordinary HOME did not retain its real destination");
         helper.assertTrue(villager.getAttributeValue(Attributes.FOLLOW_RANGE) == followRangeBefore,
@@ -186,8 +188,8 @@ public final class ExtendedWalkTowardsTaskGameTests {
         task.tryStart(helper.getLevel(), villager, gameTime);
         WalkTarget first = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
                 .orElseThrow(() -> new AssertionError("initial nearby HOME did not publish a walk target"));
-        helper.assertTrue(!(first.getTarget() instanceof LongDistancePathTarget),
-                "fixture nearby HOME unexpectedly used the long-distance path policy");
+        helper.assertTrue(first.getTarget() instanceof PersistentPathTarget,
+                "nearby HOME did not publish persistent navigation intent");
         helper.assertTrue(first.getTarget().currentBlockPosition().equals(home),
                 "initial nearby HOME walk target did not match the logical destination");
 
@@ -215,7 +217,7 @@ public final class ExtendedWalkTowardsTaskGameTests {
 
         var walkTarget = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
                 .orElseThrow(() -> new AssertionError("retry before timeout did not republish the destination"));
-        helper.assertTrue(walkTarget.getTarget() instanceof LongDistancePathTarget,
+        helper.assertTrue(walkTarget.getTarget() instanceof PersistentPathTarget,
                 "retry before timeout did not preserve long-distance path intent");
         helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
                         .filter(timestamp -> timestamp == firstFailure)
@@ -257,7 +259,7 @@ public final class ExtendedWalkTowardsTaskGameTests {
         setHome(villager, newHome);
         villager.getBrain().setMemory(
                 MemoryModuleType.WALK_TARGET,
-                new WalkTarget(new LongDistancePathTarget(oldHome), 0.5F, 0)
+                new WalkTarget(new PersistentPathTarget(oldHome), 0.5F, 0)
         );
         villager.getBrain().setMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE,
                 helper.getLevel().getGameTime() - 10L);
@@ -269,6 +271,48 @@ public final class ExtendedWalkTowardsTaskGameTests {
                 "changed destination left the stale long-distance walk target active");
         helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE).isEmpty(),
                 "changed destination retained failure state from the stale long-distance route");
+
+        villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_persistent_final_handoff", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void persistentTransitHandsOffToSemanticFinalTargetInsideOrdinaryRange(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        BlockPos start = villager.blockPosition();
+        BlockPos home = start.east(80);
+        BlockPos finalApproach = home.west(2);
+        setHome(villager, home);
+
+        OneShot<VillagerEntityMCA> task = ExtendedWalkTowardsTask.createWithFinalTarget(
+                MemoryModuleType.HOME,
+                0.5F,
+                1,
+                TEST_TIMEOUT,
+                ignored -> false,
+                ignored -> { },
+                (world, entity, destination) -> Optional.of(new BlockPosTracker(finalApproach))
+        );
+        long gameTime = helper.getLevel().getGameTime();
+        task.tryStart(helper.getLevel(), villager, gameTime);
+        helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                        .filter(target -> target.getTarget() instanceof PersistentPathTarget)
+                        .isPresent(),
+                "far persistent destination did not start with the transit target");
+
+        villager.setPos(Vec3.atBottomCenterOf(home.west(10)));
+        task.tryStart(helper.getLevel(), villager, gameTime + 1L);
+        helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty(),
+                "persistent transit target was retained after entering final-target range");
+
+        task.tryStart(helper.getLevel(), villager, gameTime + 2L);
+        WalkTarget finalTarget = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                .orElseThrow(() -> new AssertionError("semantic final target was not published after transit handoff"));
+        helper.assertTrue(!(finalTarget.getTarget() instanceof PersistentPathTarget),
+                "semantic final target was replaced by persistent transit state");
+        helper.assertTrue(finalTarget.getTarget().currentBlockPosition().equals(finalApproach),
+                "semantic final target did not retain its resolved approach position");
 
         villager.discard();
         helper.succeed();
@@ -337,7 +381,7 @@ public final class ExtendedWalkTowardsTaskGameTests {
 
         WalkTarget walkTarget = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
                 .orElseThrow(() -> new AssertionError(label + " did not publish a walk target"));
-        helper.assertTrue(walkTarget.getTarget() instanceof LongDistancePathTarget,
+        helper.assertTrue(walkTarget.getTarget() instanceof PersistentPathTarget,
                 label + " did not use MCA's persistent long-distance target policy");
         helper.assertTrue(walkTarget.getTarget().currentBlockPosition().equals(target),
                 label + " replaced the real POI with an intermediate destination");

@@ -11,6 +11,7 @@ import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
 import net.conczin.mca.entity.ai.chatAI.ChatAI;
 import net.conczin.mca.entity.ai.chatAI.ChatAIContext;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
+import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.conczin.mca.entity.ai.relationship.*;
 import net.conczin.mca.entity.interaction.VillagerCommandHandler;
 import net.conczin.mca.registry.*;
@@ -1578,6 +1579,12 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     public void moveTowards(BlockPos pos, float speed, int closeEnoughDist) {
         this.brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(pos, speed, closeEnoughDist));
+        this.lookAt(pos);
+    }
+
+    public void moveTowardsPersistent(BlockPos pos, float speed, int closeEnoughDist) {
+        this.brain.setMemory(MemoryModuleType.WALK_TARGET,
+                new WalkTarget(new PersistentPathTarget(pos), speed, closeEnoughDist));
         this.lookAt(pos);
     }
 

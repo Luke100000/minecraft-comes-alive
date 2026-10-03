@@ -4,6 +4,7 @@ import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
+import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.conczin.mca.entity.ai.navigation.TeleportBlockBlacklist;
@@ -11,7 +12,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.behavior.MoveToTargetSink;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
@@ -89,13 +89,13 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
                 && walkTarget != null && path.getTarget().equals(walkTarget.getTarget().currentBlockPosition())
                 && path.getEndNode().walkedDistance > MCAGroundPathNavigation.getOrdinaryPathLength(entity);
         this.extendedMovementLifetime = walkTarget != null
-                && walkTarget.getTarget() instanceof BlockPosTracker
+                && walkTarget.getTarget() instanceof PersistentPathTarget
                 && (longReachableRoute || MCAGroundPathNavigation.requiresExtendedPath(
                         entity,
                         walkTarget.getTarget().currentBlockPosition()
                 ));
         if (walkTarget != null
-                && walkTarget.getTarget() instanceof BlockPosTracker
+                && walkTarget.getTarget() instanceof PersistentPathTarget
                 && path != null
                 && !entity.getNavigation().isStuck()
                 && MCAGroundPathNavigation.isUsefulPartialPath(
@@ -126,7 +126,7 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
     }
 
     private boolean continueDetour(Mob entity, WalkTarget walkTarget, Path completedPath) {
-        if (!(walkTarget.getTarget() instanceof BlockPosTracker)) {
+        if (!(walkTarget.getTarget() instanceof PersistentPathTarget)) {
             clearDetour();
             return false;
         }
