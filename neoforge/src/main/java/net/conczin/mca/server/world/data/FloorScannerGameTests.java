@@ -1595,6 +1595,29 @@ public final class FloorScannerGameTests {
                         lowerFloor, upperFloor),
                 "ladder/trapdoor column did not attach the two floors");
 
+        Structure structure = new Structure(10, lowerMin, List.of(lowerFloor, upperFloor));
+        Building lowerRoom = new Building(lowerMin);
+        lowerRoom.setId(100);
+        lowerRoom.setStructureId(structure.getId());
+        lowerRoom.setFloorId(lowerFloor.id());
+        lowerRoom.setGeometry(lower.min(), lower.max(), lower.floor().cells().stream()
+                .map(FloorGeometry.Cell::feet).collect(Collectors.toSet()));
+        Building upperRoom = new Building(upperMin);
+        upperRoom.setId(101);
+        upperRoom.setStructureId(structure.getId());
+        upperRoom.setFloorId(upperFloor.id());
+        upperRoom.setGeometry(upper.min(), upper.max(), upper.floor().cells().stream()
+                .map(FloorGeometry.Cell::feet).collect(Collectors.toSet()));
+        Village village = new Village(1, level);
+        village.registerStructure(structure, lowerRoom);
+        village.registerRoom(upperRoom);
+
+        RoomScanPlan stackedLadderPlan = RoomScanPlanner.plan(village, level, connector.above());
+        helper.assertTrue(stackedLadderPlan.mode() == Village.RoomScanMode.UPDATE_ROOM,
+                "stacked ladder interaction selected " + stackedLadderPlan.mode());
+        helper.assertTrue(stackedLadderPlan.currentRoom().orElse(null) == lowerRoom,
+                "stacked ladder interaction did not resolve through the lower persisted ladder marker");
+
         Set<FloorGeometry.Cell> combinedCells = new HashSet<>(lower.floor().cells());
         combinedCells.addAll(upper.floor().cells());
         Set<SelectedFloorScanner.Transition> combinedTransitions = new HashSet<>(lower.transitions());

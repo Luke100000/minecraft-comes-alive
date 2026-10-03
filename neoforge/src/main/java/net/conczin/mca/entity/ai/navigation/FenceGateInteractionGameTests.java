@@ -235,6 +235,78 @@ public final class FenceGateInteractionGameTests {
         });
     }
 
+    @GameTest(batch = "mca_partial_stair_fence", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 40)
+    public static void partialStairBesideFenceDoesNotInventRaisedStart(GameTestHelper helper) {
+        BlockPos feet = helper.absolutePos(new BlockPos(5, 2, 5));
+        VillagerEntityMCA villager = partialStairFenceVillager(helper, feet);
+        PathNavigationRegion region = new PathNavigationRegion(helper.getLevel(), feet.offset(-4, -2, -4), feet.offset(4, 5, 4));
+        MCAWalkNodeEvaluator evaluator = new MCAWalkNodeEvaluator();
+        evaluator.prepare(region, villager);
+        try {
+            Node start = evaluator.getStart();
+            helper.assertTrue(start.asBlockPos().equals(feet),
+                    "Partial stair beside fence invented a raised start before the villager jumped: start="
+                            + start.asBlockPos() + ", actual=" + villager.position());
+            helper.succeed();
+        } finally {
+            evaluator.done();
+            villager.discard();
+        }
+    }
+
+    @GameTest(batch = "mca_partial_stair_fence", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void villagerLeavesPartialStairBesideFenceWithoutStalling(GameTestHelper helper) {
+        BlockPos feet = helper.absolutePos(new BlockPos(5, 2, 5));
+        VillagerEntityMCA villager = partialStairFenceVillager(helper, feet);
+        villager.refreshBrain(helper.getLevel());
+        villager.getBrain().removeAllBehaviors();
+        villager.setNoAi(false);
+        BlockPos target = feet.north().above();
+        var path = villager.getNavigation().createPath(target, 0);
+        helper.assertTrue(path != null && path.canReach(), "Partial stair has no usable route around its fence");
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "Partial stair route did not start");
+        helper.succeedWhen(() -> {
+            helper.assertTrue(villager.blockPosition().equals(target),
+                    "Villager stalled beside the fence at " + villager.position());
+            villager.discard();
+        });
+    }
+
+    private static VillagerEntityMCA partialStairFenceVillager(GameTestHelper helper, BlockPos feet) {
+        preparePlanterFixture(helper, feet);
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                helper.getLevel().setBlock(feet.offset(dx, -1, dz), Blocks.SPRUCE_PLANKS.defaultBlockState(), 3);
+            }
+        }
+        helper.getLevel().setBlock(feet.north(), Blocks.SPRUCE_STAIRS.defaultBlockState()
+                .setValue(StairBlock.FACING, Direction.NORTH).setValue(StairBlock.HALF, Half.BOTTOM), 3);
+        helper.getLevel().setBlock(feet.south(), Blocks.SPRUCE_STAIRS.defaultBlockState()
+                .setValue(StairBlock.FACING, Direction.SOUTH).setValue(StairBlock.HALF, Half.BOTTOM), 3);
+        for (int dz = -1; dz <= 1; dz++) {
+            helper.getLevel().setBlock(feet.east().offset(0, 0, dz), Blocks.SPRUCE_PLANKS.defaultBlockState(), 3);
+        }
+        helper.getLevel().setBlock(feet, Blocks.SPRUCE_FENCE.defaultBlockState()
+                .setValue(BlockStateProperties.EAST, true), 3);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withGender(net.conczin.mca.entity.ai.relationship.Gender.FEMALE)
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(feet)).spawn(MobSpawnType.STRUCTURE);
+        villager.getTraits().removeTrait(Traits.DWARFISM);
+        villager.getTraits().removeTrait(Traits.TOUGH);
+        villager.getTraits().removeTrait(Traits.WEAK);
+        villager.setNoAi(true);
+        villager.getGenetics().setGene(Genetics.SIZE, 0.5532416F);
+        villager.getGenetics().setGene(Genetics.WIDTH, 0.53190565F);
+        villager.refreshDimensions();
+        villager.setPos(feet.getX() + 0.505684383D, feet.getY() + 0.5D, feet.getZ() + 0.91454658D);
+        villager.setOnGround(true);
+        helper.assertTrue(helper.getLevel().noCollision(villager, villager.getBoundingBox()),
+                "Captured partial-stair start is not collision-free");
+        return villager;
+    }
+
     private static BlockPos preparePlanterFixture(GameTestHelper helper, BlockPos feet) {
         for (BlockPos pos : BlockPos.betweenClosed(feet.offset(-3, -1, -3), feet.offset(3, 3, 3))) {
             helper.getLevel().setBlock(pos, pos.getY() == feet.getY() - 1

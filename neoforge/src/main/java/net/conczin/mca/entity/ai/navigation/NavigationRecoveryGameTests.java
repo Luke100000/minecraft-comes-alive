@@ -4,7 +4,9 @@ import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
+import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTask;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.LivingEntity;
@@ -29,6 +31,63 @@ import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
 @PrefixGameTestTemplate(false)
 public final class NavigationRecoveryGameTests {
     private NavigationRecoveryGameTests() {
+    }
+
+    @GameTest(batch = "mca_detour_failure_age", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void sidewaysDetourDoesNotEraseDestinationFailure(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(65, 1, 65));
+        BlockPos target = start.east(2);
+        prepareFlatArea(helper, start, 61, 3);
+        for (int z = -55; z <= 55; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        Config config = Config.getInstance();
+        int previousDistance = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 160;
+            villager.getBrain().setMemory(MemoryModuleType.HOME,
+                    GlobalPos.of(helper.getLevel().dimension(), target));
+            var producer = ExtendedWalkTowardsTask.createWithoutPoiRelease(
+                    MemoryModuleType.HOME, 0.5F, 0, 19, ignored -> false, ignored -> {});
+            long began = helper.getLevel().getGameTime();
+            producer.tryStart(helper.getLevel(), villager, began);
+            var navigation = villager.getNavigation();
+            Path blocked = navigation.createPath(target, 0);
+            helper.assertTrue(blocked != null && !blocked.canReach()
+                            && !MCAGroundPathNavigation.isUsefulPartialPath(blocked, target),
+                    "fixture did not exhaust the route at the wall");
+            WalkTargetFailureMemory.record(villager, target, began);
+            navigation.moveTo(blocked, 0.5D);
+            while (!blocked.isDone()) {
+                blocked.advance();
+            }
+            navigation.tick();
+            Path flank = navigation.getPath();
+            helper.assertTrue(flank != null && flank.canReach() && !flank.getTarget().equals(target),
+                    "fixture did not start a sideways recovery leg");
+            // Advance the lifecycle to a real point on the selected flank. This
+            // checks failure ownership, rather than villager travel physics.
+            BlockPos sideways = flank.getNodePos(flank.getNodeCount() / 2);
+            helper.assertTrue(sideways.distSqr(start) >= 16.0D,
+                    "flank did not move beyond the producer's progress threshold");
+            villager.setPos(Vec3.atBottomCenterOf(sideways));
+            producer.tryStart(helper.getLevel(), villager, began + 1L);
+            helper.assertTrue(WalkTargetFailureMemory.hasFailureFor(villager, target)
+                            && villager.getBrain().getMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                            .filter(since -> since == began).isPresent(),
+                    "sideways movement erased the unresolved destination's failure age");
+            helper.assertTrue(villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElseThrow()
+                            .getTarget().currentBlockPosition().equals(target),
+                    "preserving failure evidence interrupted the logical journey");
+        } finally {
+            config.villagerPathfindingDistance = previousDistance;
+            villager.discard();
+        }
+        helper.succeed();
     }
 
     @GameTest(batch = "mca_navigation_owned_detour", templateNamespace = "minecraft",

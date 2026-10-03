@@ -107,10 +107,10 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         double modeledFloor = this.getFloorLevel(mobPos);
         if (!selectedStart.asBlockPos().equals(mobPos)
             && startBox.minY > modeledFloor + RAISED_START_EPSILON
-            && !canSweepBoxTo(selectedStart, startBox)) {
-            // Vanilla can choose a raised bounding-box corner as the start node on partial blocks. If the mob's
-            // real raised box cannot physically sweep to that corner, start from the mob cell so A* can evaluate
-            // the real exits instead of accepting an impossible first transition.
+            && (getMobBoxAt(selectedStart).minY - startBox.minY > this.mob.maxUpStep()
+                || !canSweepBoxTo(selectedStart, startBox))) {
+            // A raised start must be reachable from the real box without assuming a jump already happened.
+            // Start from the mob cell so A* evaluates the actual exits from partial blocks.
             return this.getStartNode(mobPos);
         }
         return selectedStart;

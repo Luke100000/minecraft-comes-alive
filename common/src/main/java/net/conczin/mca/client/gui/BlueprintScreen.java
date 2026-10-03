@@ -59,8 +59,10 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final int POSITION_MARRIAGE = 40;
     private static final ResourceLocation ICON_TEXTURES = MCA.locate("textures/buildings.png");
     private static final int MAP_HALF_SIZE = 75;
-    private static final int TITLE_OFFSET = 96;
-    private static final int LAYOUT_HEIGHT = 225;
+    private static final int MAP_MAX_HALF_SIZE = 90;
+    private static final int MAP_TITLE_GAP = 29;
+    private static final int MAP_CONTROL_ROWS_HEIGHT = 46;
+    private static final int LAYOUT_MARGIN = 12;
     private static final int MAP_INNER_MARGIN = 6;
     private static final float MAP_MAX_FIT_SCALE = 2.0f;
     private static final int MAP_CONTROL_GAP = 2;
@@ -72,6 +74,7 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final int PLAYER_HEAD_ICON_SIZE = 16;
     private static final int MAP_SIDE_CONTROL_GUTTER = 14;
     private static final int MAP_SIDE_CONTROL_WIDTH = 110;
+    private static final int NAVIGATION_WIDTH = 80;
     private static final int MAP_NAVIGATION_OFFSET = 180;
     private static final float MAP_MIN_SCALE = 0.5F;
     private static final float MAP_MAX_SCALE = 4.0F;
@@ -229,10 +232,10 @@ public class BlueprintScreen extends ExtendedScreen {
         //page selection
         int layoutY = layoutBaseY();
         int bx = width / 2 - MAP_NAVIGATION_OFFSET;
-        int by = layoutY - 56;
+        int by = height / 2 - 56;
         if (!page.equals("rename") && (!page.equals("empty") && !page.equals("waiting"))) {
             for (String p : new String[]{"map", "rank", "catalog", "villagers", "rules"}) {
-                ButtonWidget widget = new ButtonWidget(bx, by, 80, 20, Component.translatable("gui.blueprint." + p), b -> setPage(p));
+                ButtonWidget widget = new ButtonWidget(bx, by, NAVIGATION_WIDTH, 20, Component.translatable("gui.blueprint." + p), b -> setPage(p));
                 addRenderableWidget(widget);
                 if (page.equals(p) || ("advanced".equals(page) && "map".equals(p))) {
                     widget.active = false;
@@ -250,8 +253,8 @@ public class BlueprintScreen extends ExtendedScreen {
                 }));
                 break;
             case "map", "advanced": {
-                bx = width / 2 + MAP_HALF_SIZE + MAP_SIDE_CONTROL_GUTTER;
-                int floorControlY = layoutY + 87;
+                bx = width / 2 + mapHalfSize() + MAP_SIDE_CONTROL_GUTTER;
+                int floorControlY = layoutY + 8 + mapHalfSize() + 4;
 
                 // Map and Advanced are two control modes over the same map view. Keep all
                 // display/navigation controls shared so Advanced cannot lose floor controls,
@@ -674,7 +677,7 @@ public class BlueprintScreen extends ExtendedScreen {
         final PoseStack matrices = context.pose();
         //name
         matrices.pushPose();
-        matrices.translate(width / 2, layoutBaseY() - TITLE_OFFSET, 0.0D);
+        matrices.translate(width / 2, layoutTitleY(), 0.0D);
         matrices.scale(2.0f, 2.0f, 2.0f);
         if (isVillage) {
             context.drawCenteredString(font, village.getName(), 0, 0, 0xffffffff);
@@ -685,7 +688,7 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void renderStats(GuiGraphics context) {
-        int x = width / 2 + (page.equals("rank") ? -70 : 105);
+        int x = width / 2 + (page.equals("rank") ? -70 : mapHalfSize() + 30);
         int y = layoutBaseY() - 50;
 
         //rank
@@ -703,7 +706,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
         if (!village.isAutoScan() && structureCount <= 1) {
             context.drawCenteredString(font, Component.translatable("gui.blueprint.autoScanDisabled"),
-                    width / 2, layoutBaseY() - 77, 0xaaffffff);
+                    width / 2, layoutBaseY() + 8 - mapHalfSize() - 10, 0xaaffffff);
         }
 
         LocalPlayer player = minecraft == null ? null : minecraft.player;
@@ -812,7 +815,7 @@ public class BlueprintScreen extends ExtendedScreen {
     private float getMapScale() {
         if (!mapScaleFit || village == null) return mapScale;
         int horizontalSpan = Math.max(village.getBox().getXSpan(), village.getBox().getZSpan());
-        int usablePixels = (MAP_HALF_SIZE - MAP_INNER_MARGIN) * 2;
+        int usablePixels = (mapHalfSize() - MAP_INNER_MARGIN) * 2;
         return Math.min((float) usablePixels / Math.max(1, horizontalSpan), MAP_MAX_FIT_SCALE);
     }
 
@@ -862,16 +865,27 @@ public class BlueprintScreen extends ExtendedScreen {
                 && mouseY >= viewport.top() && mouseY < viewport.bottom();
     }
 
+    private int mapHalfSize() {
+        int horizontalSpace = width / 2 - MAP_SIDE_CONTROL_WIDTH - MAP_SIDE_CONTROL_GUTTER - LAYOUT_MARGIN;
+        int verticalSpace = (height - MAP_TITLE_GAP - MAP_CONTROL_ROWS_HEIGHT - 2 * LAYOUT_MARGIN) / 2;
+        return Math.max(MAP_HALF_SIZE, Math.min(MAP_MAX_HALF_SIZE, Math.min(horizontalSpace, verticalSpace)));
+    }
+
+    private int layoutTitleY() {
+        int layoutHeight = mapHalfSize() * 2 + MAP_TITLE_GAP + MAP_CONTROL_ROWS_HEIGHT;
+        return (height - layoutHeight) / 2;
+    }
+
     private int layoutBaseY() {
-        // Share one anchor across sections so navigation stays fixed while both map rows fit.
-        return (height - LAYOUT_HEIGHT) / 2 + TITLE_OFFSET;
+        // Share one anchor across sections; only the map grows with the available GUI area.
+        return layoutTitleY() + MAP_TITLE_GAP + mapHalfSize() - 8;
     }
 
     private BlueprintMapViewport currentViewport() {
         return BlueprintMapViewport.create(
                 width / 2,
                 layoutBaseY() + 8,
-                MAP_HALF_SIZE,
+                mapHalfSize(),
                 mapCenterX,
                 mapCenterZ,
                 getMapScale()
@@ -1225,13 +1239,13 @@ public class BlueprintScreen extends ExtendedScreen {
         final PoseStack matrices = context.pose();
         //title
         matrices.pushPose();
-        matrices.translate(width / 2, layoutBaseY() - TITLE_OFFSET, 0.0D);
+        matrices.translate(width / 2, layoutTitleY(), 0.0D);
         matrices.scale(2.0f, 2.0f, 2.0f);
         context.drawCenteredString(font, Component.translatable("gui.blueprint.catalogFull"), 0, 0, 0xffffffff);
         matrices.popPose();
 
         //explanation
-        context.drawCenteredString(font, Component.translatable("gui.blueprint.catalogHint").withStyle(ChatFormatting.GRAY), width / 2, layoutBaseY() - 74, 0xffffffff);
+        context.drawCenteredString(font, Component.translatable("gui.blueprint.catalogHint").withStyle(ChatFormatting.GRAY), width / 2, layoutTitleY() + 22, 0xffffffff);
 
         //building
         int x = width / 2 + 35;

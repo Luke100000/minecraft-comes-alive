@@ -942,6 +942,12 @@ public class Village implements Iterable<Building> {
                 return uniqueRegisteredRoom(ownerSide == Direction.UP ? above : below);
             }
         }
+        if (state != null && FloorConnector.Type.fromBlockState(state) == FloorConnector.Type.LADDER) {
+            List<ResolvedInteraction> candidates = verticalSideInteractions(
+                    pos, StructureConnector.verticalColumn(level, pos), roomsByStructure);
+            Optional<ResolvedInteraction> resolved = uniqueRegisteredRoom(candidates);
+            if (resolved.isPresent()) return resolved;
+        }
         if (level == null) {
             PersistedTrapdoor persistedTrapdoor = persistedTrapdoor(pos);
             if (persistedTrapdoor.present()) {

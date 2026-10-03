@@ -270,6 +270,10 @@ class BlueprintScreenMapInteractionTest {
 
             List<AbstractWidget> initialNavigation = screen.children().stream().skip(1).limit(5)
                     .map(AbstractWidget.class::cast).toList();
+            assertEquals(screen.width / 2 - 180, initialNavigation.getFirst().getX(),
+                    "Keep navigation at its original horizontal position");
+            assertEquals(screen.height / 2 - 56, initialNavigation.getFirst().getY(),
+                    "Keep navigation at its original vertical position");
             for (String section : List.of("rank", "catalog", "villagers", "rules", "map")) {
                 var sectionButton = screen.children().stream()
                         .filter(child -> child instanceof net.minecraft.client.gui.components.Button button
@@ -325,7 +329,7 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
-    void mapGrowsIntoAvailableSpaceWithoutScalingButtonsAndRefitsAfterResize() throws Exception {
+    void mapGrowthStaysModestWithoutScalingButtonsAndRefitsAfterResize() throws Exception {
         BlueprintScreen screen = new BlueprintScreen();
         setField(screen, "village", new Village(1, null));
         setField(screen, "page", "map");
@@ -340,8 +344,8 @@ class BlueprintScreenMapInteractionTest {
         screen.height = 496;
         screen.init();
         BlueprintMapViewport expanded = (BlueprintMapViewport) currentViewport.invoke(screen);
-        assertTrue(expanded.halfSize() >= compact.halfSize() * 2,
-                "Use extra GUI space for a visibly larger map");
+        assertTrue(expanded.halfSize() > compact.halfSize(), "Allow modest growth with extra GUI space");
+        assertTrue(expanded.halfSize() <= 90, "Limit map diameter to 20 percent above its original size");
         assertEquals(427, expanded.centerX());
         assertTrue(expanded.top() >= 29, "Reserve title space");
         for (var child : screen.children()) {
@@ -355,6 +359,9 @@ class BlueprintScreenMapInteractionTest {
         assertTrue(floorPrevious.getY() >= expanded.bottom(), "Keep controls below expanded map");
         AbstractWidget playerCentered = (AbstractWidget) getField(screen, "playerCenteredButton");
         assertTrue(playerCentered.getX() >= expanded.right(), "Keep side controls outside expanded map");
+        AbstractWidget navigation = (AbstractWidget) screen.children().get(1);
+        assertTrue(navigation.getX() + navigation.getWidth() < expanded.left(),
+                "Leave a gap between original navigation and expanded map");
 
         screen.width = 427;
         screen.height = 248;

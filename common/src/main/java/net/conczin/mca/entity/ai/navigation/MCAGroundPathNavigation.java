@@ -78,6 +78,10 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         return this.climbTraversal.hasPathContext(this.path, this.tick);
     }
 
+    public boolean isTakingDetourTo(BlockPos destination) {
+        return this.detour != null && this.detour.destination.equals(destination);
+    }
+
     public boolean isControllingClimbableMovement() {
         return this.climbTraversal.ownsMovement(this.path, this.tick);
     }
