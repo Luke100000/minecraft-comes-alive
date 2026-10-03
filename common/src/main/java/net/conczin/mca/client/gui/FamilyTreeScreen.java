@@ -486,13 +486,7 @@ public class FamilyTreeScreen extends Screen {
             }
 
             context.fill(bounds.left(), bounds.top(), bounds.right(), bounds.bottom(), background);
-            context.outline(
-                    bounds.left(),
-                    bounds.top(),
-                    bounds.right() - bounds.left(),
-                    bounds.bottom() - bounds.top(),
-                    focused ? 0xFFFFFFFF : 0xFF9AA7B2
-            );
+            renderCardOutline(context, bounds, viewport.zoom(), focused ? 0xFFFFFFFF : 0xFF9AA7B2);
 
             CardPresentation presentation = cardPresentation(layoutRootId, node, nodes);
             int textWidth = FamilyTreeLayout.CARD_WIDTH - 12;
@@ -553,6 +547,41 @@ public class FamilyTreeScreen extends Screen {
                 }
             }
         }
+    }
+
+    private static void renderCardOutline(
+            GuiGraphicsExtractor context,
+            FamilyTreeLayout.Bounds bounds,
+            float zoom,
+            int color
+    ) {
+        float thickness = cardOutlineWorldThickness(zoom);
+        float width = bounds.right() - bounds.left();
+        float height = bounds.bottom() - bounds.top();
+        renderOutlineQuad(context, bounds.left(), bounds.top(), width, thickness, color);
+        renderOutlineQuad(context, bounds.left(), bounds.bottom() - thickness, width, thickness, color);
+        renderOutlineQuad(context, bounds.left(), bounds.top() + thickness, thickness, height - thickness * 2.0F, color);
+        renderOutlineQuad(context, bounds.right() - thickness, bounds.top() + thickness, thickness, height - thickness * 2.0F, color);
+    }
+
+    private static void renderOutlineQuad(
+            GuiGraphicsExtractor context,
+            float x,
+            float y,
+            float width,
+            float height,
+            int color
+    ) {
+        Matrix3x2fStack pose = context.pose();
+        pose.pushMatrix();
+        pose.translate(x, y);
+        pose.scale(width, height);
+        context.fill(0, 0, 1, 1, color);
+        pose.popMatrix();
+    }
+
+    static float cardOutlineWorldThickness(float zoom) {
+        return Math.max(1.0F, 1.0F / zoom);
     }
 
     private void drawRelationshipStatus(

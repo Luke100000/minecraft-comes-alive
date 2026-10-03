@@ -56,6 +56,7 @@ import net.minecraft.world.level.block.Rotation;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.RegisterGameTestsEvent;
+import net.neoforged.neoforge.registries.RegisterEvent;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -114,6 +115,17 @@ public final class McaGameTestRegistration {
     );
 
     private McaGameTestRegistration() {
+    }
+
+    @SubscribeEvent
+    public static void registerEnvironmentDefinitionTypes(RegisterEvent event) {
+        if (event.getRegistryKey() == Registries.TEST_ENVIRONMENT_DEFINITION_TYPE) {
+            event.register(
+                    Registries.TEST_ENVIRONMENT_DEFINITION_TYPE,
+                    MCA.locate("batch_teardown"),
+                    () -> BatchTeardownEnvironment.CODEC
+            );
+        }
     }
 
     @SubscribeEvent
@@ -204,8 +216,10 @@ public final class McaGameTestRegistration {
     }
 
     private static final class BatchTeardownEnvironment implements TestEnvironmentDefinition<Unit> {
+        private static final MapCodec<BatchTeardownEnvironment> CODEC =
+                MapCodec.unit(() -> new BatchTeardownEnvironment(List.of()));
+
         private final List<Method> callbacks;
-        private final MapCodec<BatchTeardownEnvironment> codec = MapCodec.unit(this);
 
         private BatchTeardownEnvironment(List<Method> callbacks) {
             this.callbacks = List.copyOf(callbacks);
@@ -223,7 +237,7 @@ public final class McaGameTestRegistration {
 
         @Override
         public MapCodec<BatchTeardownEnvironment> codec() {
-            return codec;
+            return CODEC;
         }
     }
 
