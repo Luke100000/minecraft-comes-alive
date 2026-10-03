@@ -56,6 +56,18 @@ final class BuildingRoomScanner {
                 bounds.min(), bounds.max());
     }
 
+    static Result materializeSelected(
+            BlockPos source,
+            int maxSize,
+            int floorId,
+            FloorGeometry floor,
+            List<RoomPartitioner.Component> components) {
+        RoomPartitioner.Component component = RoomPartitioner.select(source, floor, components);
+        return component == null
+                ? Result.failure(Building.validationResult.TOO_SMALL, source)
+                : materialize(source, maxSize, floorId, floor, components, component);
+    }
+
     record Result(Building.validationResult status,
                   BlockPos seed,
                   int floorId,

@@ -53,12 +53,16 @@ final class StructureScanner {
     static Result scanReportedStructure(Level world,
                                         BlockPos source,
                                         Collection<Structure> existing) {
-        Result exact = scanAtSeed(world, source, source, existing, -1, -1);
+        Config config = Config.getInstance();
+        SelectedFloorScanner.Observation observation = new SelectedFloorScanner.Observation(
+                world, config.maxBuildingSize, config.maxBuildingRadius);
+        Result exact = resultFromObservedFloor(source, observation.selected(source), existing, -1, -1);
         if (exact.result() == Building.validationResult.SUCCESS) return exact;
 
         for (Direction direction : HORIZONTAL) {
             BlockPos candidate = source.relative(direction);
-            Result adjacent = scanAtSeed(world, source, candidate, existing, -1, -1);
+            Result adjacent = resultFromObservedFloor(
+                    candidate, observation.selected(candidate), existing, -1, -1);
             if (adjacent.result() == Building.validationResult.SUCCESS) return adjacent;
         }
         return Result.failure(exact.result(), source);
@@ -334,16 +338,14 @@ final class StructureScanner {
             return new Result(result, source, null);
         }
 
-        StructureFloor floor() {
-            FloorGeometry floor = scannedFloor();
-            return floor == null ? null : new StructureFloor(0, 0, floor);
+        Structure toStructure(int id) {
+            return toStructure(id, 0);
         }
 
-        Structure toStructure(int id) {
-            StructureFloor floor = floor();
+        Structure toStructure(int id, int floorNumber) {
+            FloorGeometry floor = scannedFloor();
             if (floor == null) throw new IllegalStateException("Cannot materialize a failed Structure scan");
-            StructureFloor assigned = new StructureFloor(0, floor.floorNumber(), floor.geometry());
-            return new Structure(id, source, List.of(assigned));
+            return new Structure(id, source, List.of(new StructureFloor(0, floorNumber, floor)));
         }
     }
 

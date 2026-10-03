@@ -23,6 +23,28 @@ class RoomPoiEvidenceTest {
     }
 
     @Test
+    void perimeterEvidenceStopsBeforePhysicalCeiling() {
+        FloorGeometry.Cell cell = new FloorGeometry.Cell(new BlockPos(1, 64, 1), 68);
+        var room = new RoomPartitioner.Component(Set.of(cell));
+
+        Set<BlockPos> candidates = RoomPoiEvidence.candidates(Set.of(room), room);
+
+        assertTrue(candidates.contains(new BlockPos(0, 67, 1)));
+        assertFalse(candidates.contains(new BlockPos(0, 68, 1)));
+    }
+
+    @Test
+    void perimeterEvidenceDoesNotExpandThroughThickWall() {
+        FloorGeometry.Cell cell = new FloorGeometry.Cell(new BlockPos(1, 64, 1), 68);
+        var room = new RoomPartitioner.Component(Set.of(cell));
+
+        Set<BlockPos> candidates = RoomPoiEvidence.candidates(Set.of(room), room);
+
+        assertTrue(candidates.contains(new BlockPos(0, 65, 1)));
+        assertFalse(candidates.contains(new BlockPos(-1, 65, 1)));
+    }
+
+    @Test
     void unevenWalkableRoomKeepsPoiEvidenceThroughFloorCeiling() {
         FloorGeometry.Cell low = new FloorGeometry.Cell(new BlockPos(0, 64, 0), 68);
         FloorGeometry.Cell middle = new FloorGeometry.Cell(new BlockPos(1, 65, 0), 70);

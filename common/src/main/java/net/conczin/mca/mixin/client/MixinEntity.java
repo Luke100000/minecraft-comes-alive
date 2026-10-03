@@ -27,7 +27,7 @@ public abstract class MixinEntity {
         }
 
         return MCAClient.getGeneticsRendererData(player.getUUID())
-                .map(villager -> original * villager.getVerticalScaleFactor())
+                .map(villager -> original * villager.getVisualVerticalScaleFactor())
                 .orElse(original);
     }
 }

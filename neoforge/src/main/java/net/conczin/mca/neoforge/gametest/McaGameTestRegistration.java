@@ -1,17 +1,40 @@
 package net.conczin.mca.neoforge.gametest;
 
+import com.mojang.serialization.MapCodec;
 import net.conczin.mca.MCA;
+import net.conczin.mca.block.TombstoneBlockGameTests;
+import net.conczin.mca.entity.VillagerBedAlignmentGameTests;
+import net.conczin.mca.entity.VillagerCarryPositionGameTests;
 import net.conczin.mca.entity.VillagerRecoveryFoodGameTests;
+import net.conczin.mca.entity.VillagerVoicePitchGameTests;
 import net.conczin.mca.entity.ai.ChoreToolMatchingGameTests;
+import net.conczin.mca.entity.ai.ResidencyGoHomeGameTests;
+import net.conczin.mca.entity.ai.ResidencySetHomeGameTests;
 import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensorGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherArrowFriendlyFireGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ArcherBowTrajectoryGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherCombatMovementGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherSpiderCombatGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.DoorInteractionGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.EnterBuildingGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ExtendedFindPointOfInterestTaskGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTaskGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ValidateNearbyPoiGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.WanderOrTeleportToTargetTaskGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.chore.AbstractChoreTaskGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.chore.ChoppingTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.FishingTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.HarvestingTaskGameTests;
+import net.conczin.mca.entity.ai.navigation.AutonomousPathfindingGameTests;
 import net.conczin.mca.entity.ai.navigation.FenceGateInteractionGameTests;
+import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigationGameTests;
+import net.conczin.mca.entity.ai.navigation.MCAWalkNodeEvaluatorLookupGameTests;
+import net.conczin.mca.entity.ai.navigation.McaSparkFullBrainProfileGameTests;
+import net.conczin.mca.entity.ai.navigation.McaSparkPathProfileGameTests;
+import net.conczin.mca.entity.ai.navigation.NavigationRecoveryGameTests;
+import net.conczin.mca.entity.ai.navigation.PathRetryLifecycleGameTests;
 import net.conczin.mca.entity.ai.navigation.StairWallPathfindingGameTests;
+import net.conczin.mca.server.DestinyLocationResolverGameTests;
 import net.conczin.mca.server.world.data.CopiedOpenHouseGameTests;
 import net.conczin.mca.server.world.data.FloorScannerGameTests;
 import net.conczin.mca.server.world.data.ReportedFloorInteractionGameTests;
@@ -26,6 +49,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Unit;
 import net.minecraft.world.level.block.Rotation;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -34,6 +59,8 @@ import net.neoforged.neoforge.event.RegisterGameTestsEvent;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -46,14 +73,36 @@ public final class McaGameTestRegistration {
     private static final Identifier LEGACY_AIR_TEMPLATE = Identifier.withDefaultNamespace("bastion/blocks/air");
     private static final Identifier ISOLATED_AIR_TEMPLATE = MCA.locate("ported_1_21_1/isolated_air");
     private static final List<Class<?>> TEST_CLASSES = List.of(
+            DestinyLocationResolverGameTests.class,
+            TombstoneBlockGameTests.class,
+            VillagerBedAlignmentGameTests.class,
+            VillagerCarryPositionGameTests.class,
             VillagerRecoveryFoodGameTests.class,
+            VillagerVoicePitchGameTests.class,
             ChoreToolMatchingGameTests.class,
+            ResidencyGoHomeGameTests.class,
+            ResidencySetHomeGameTests.class,
             GuardEnemiesSensorGameTests.class,
             ArcherArrowFriendlyFireGameTests.class,
+            ArcherBowTrajectoryGameTests.class,
             ArcherCombatMovementGameTests.class,
             ArcherSpiderCombatGameTests.class,
             DoorInteractionGameTests.class,
+            EnterBuildingGameTests.class,
+            ExtendedFindPointOfInterestTaskGameTests.class,
+            ExtendedWalkTowardsTaskGameTests.class,
+            ValidateNearbyPoiGameTests.class,
+            WanderOrTeleportToTargetTaskGameTests.class,
+            AbstractChoreTaskGameTests.class,
+            ChoppingTaskGameTests.class,
             FenceGateInteractionGameTests.class,
+            AutonomousPathfindingGameTests.class,
+            MCAGroundPathNavigationGameTests.class,
+            MCAWalkNodeEvaluatorLookupGameTests.class,
+            McaSparkFullBrainProfileGameTests.class,
+            McaSparkPathProfileGameTests.class,
+            NavigationRecoveryGameTests.class,
+            PathRetryLifecycleGameTests.class,
             StairWallPathfindingGameTests.class,
             FishingTaskGameTests.class,
             HarvestingTaskGameTests.class,
@@ -68,9 +117,25 @@ public final class McaGameTestRegistration {
 
     @SubscribeEvent
     public static void register(RegisterGameTestsEvent event) {
-        Map<String, Holder<TestEnvironmentDefinition<?>>> environments = new HashMap<>();
+        registerClasses(event, TEST_CLASSES);
+    }
 
-        for (Class<?> testClass : TEST_CLASSES) {
+    public static void registerClasses(RegisterGameTestsEvent event, Collection<Class<?>> testClasses) {
+        Map<String, Holder<TestEnvironmentDefinition<?>>> environments = new HashMap<>();
+        Map<String, List<Method>> teardownMethods = new HashMap<>();
+
+        for (Class<?> testClass : testClasses) {
+            for (Method method : testClass.getDeclaredMethods()) {
+                AfterBatch afterBatch = method.getAnnotation(AfterBatch.class);
+                if (afterBatch == null) continue;
+                if (!Modifier.isStatic(method.getModifiers())) {
+                    throw new IllegalStateException("MCA AfterBatch callback must be static: " + method);
+                }
+                teardownMethods.computeIfAbsent(afterBatch.batch(), ignored -> new ArrayList<>()).add(method);
+            }
+        }
+
+        for (Class<?> testClass : testClasses) {
             for (Method method : testClass.getDeclaredMethods()) {
                 GameTest metadata = method.getAnnotation(GameTest.class);
                 if (metadata == null) continue;
@@ -85,7 +150,9 @@ public final class McaGameTestRegistration {
                         metadata.batch(),
                         batch -> event.registerEnvironment(
                                 MCA.locate("ported_1_21_1/" + batch.toLowerCase(Locale.ROOT)),
-                                new TestEnvironmentDefinition.AllOf()
+                                teardownMethods.containsKey(batch)
+                                        ? new BatchTeardownEnvironment(teardownMethods.get(batch))
+                                        : new TestEnvironmentDefinition.AllOf()
                         )
                 );
 
@@ -118,6 +185,43 @@ public final class McaGameTestRegistration {
                 ResourceKey<Consumer<GameTestHelper>> functionKey = ResourceKey.create(Registries.TEST_FUNCTION, testId);
                 event.registerTest(testId, new PortedGameTest(functionKey, data, method));
             }
+        }
+    }
+
+    private static void invokeBatchCallback(Method method, ServerLevel level) {
+        try {
+            method.invoke(null, level);
+        } catch (InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException runtimeException) throw runtimeException;
+            if (cause instanceof Error error) throw error;
+            throw new RuntimeException(cause);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static final class BatchTeardownEnvironment implements TestEnvironmentDefinition<Unit> {
+        private final List<Method> callbacks;
+        private final MapCodec<BatchTeardownEnvironment> codec = MapCodec.unit(this);
+
+        private BatchTeardownEnvironment(List<Method> callbacks) {
+            this.callbacks = List.copyOf(callbacks);
+        }
+
+        @Override
+        public Unit setup(ServerLevel level) {
+            return Unit.INSTANCE;
+        }
+
+        @Override
+        public void teardown(ServerLevel level, Unit saveData) {
+            callbacks.forEach(callback -> invokeBatchCallback(callback, level));
+        }
+
+        @Override
+        public MapCodec<BatchTeardownEnvironment> codec() {
+            return codec;
         }
     }
 

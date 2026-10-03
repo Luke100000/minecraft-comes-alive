@@ -47,8 +47,8 @@ public final class VillagerRenderStateHooks {
             return;
         }
 
-        float horizontalBaseScale = entity instanceof VillagerLike<?> villagerEntity ? villagerEntity.getHorizontalScaleFactor() : 1.0F;
-        float verticalBaseScale = entity instanceof VillagerLike<?> villagerEntity ? villagerEntity.getVerticalScaleFactor() : 1.0F;
+        float horizontalBaseScale = entity instanceof VillagerLike<?> villagerEntity ? villagerEntity.getPhysicalHorizontalScaleFactor() : 1.0F;
+        float verticalBaseScale = entity instanceof VillagerLike<?> villagerEntity ? villagerEntity.getPhysicalVerticalScaleFactor() : 1.0F;
         float horizontalRatio = visuals.rawHorizontalScaleFactor() / Math.max(horizontalBaseScale, 1.0E-4F);
         float verticalRatio = visuals.rawVerticalScaleFactor() / Math.max(verticalBaseScale, 1.0E-4F);
 

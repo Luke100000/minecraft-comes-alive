@@ -51,7 +51,6 @@ import java.util.Optional;
 public class VillagerTasksMCA {
     private static final float GRIEVING_WALK_SPEED = 0.5F;
     private static final int GRIEVING_PATH_TIMEOUT = 1200;
-    private static final long GRIEVING_RETRY_DELAY = 1200L;
 
     public static final ImmutableList<MemoryModuleType<?>> MEMORY_TYPES = ImmutableList.of(
             MemoryModuleType.HOME,
@@ -91,13 +90,15 @@ public class VillagerTasksMCA {
             MemoryModuleTypeMCA.WEARS_ARMOR,
             MemoryModuleTypeMCA.SMALL_BOUNTY,
             MemoryModuleTypeMCA.HIT_BY_PLAYER,
-            MemoryModuleTypeMCA.LAST_GRIEVE,
             MemoryModuleTypeMCA.MOURNING_SITE,
             MemoryModuleTypeMCA.MOURNING_POSITION,
             MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING,
             MemoryModuleTypeMCA.MOURNING_RETRY_AT,
+            MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND,
+            MemoryModuleTypeMCA.MOURNING_FLOWER,
             MemoryModuleTypeMCA.FORCED_HOME,
-            MemoryModuleTypeMCA.RANGED_COMBAT_STATE
+            MemoryModuleTypeMCA.RANGED_COMBAT_STATE,
+            MemoryModuleTypeMCA.CANT_REACH_WALK_TARGET
     );
 
     public static final ImmutableList<SensorType<? extends Sensor<? super Villager>>> SENSOR_TYPES = ImmutableList.of(
@@ -364,6 +365,10 @@ public class VillagerTasksMCA {
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getGuardPanicPackage(float speedModifier) {
         float f = speedModifier * 1.5F;
         return ImmutableList.of(
+                Pair.of(0, new ConditionalTask<>(
+                        UpdateActivityFromSchedule.create(),
+                        villager -> !guardTooHurt(villager)
+                )),
                 Pair.of(1, VillagerCalmDown.create()),
                 Pair.of(2, SetWalkTargetAwayFrom.entity(MemoryModuleType.NEAREST_HOSTILE, f, 6, false)),
                 Pair.of(2, SetWalkTargetAwayFrom.entity(MemoryModuleType.HURT_BY_ENTITY, f, 6, false)),
@@ -448,43 +453,16 @@ public class VillagerTasksMCA {
     }
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getGrievingPackage() {
-        MournAtGraveTask mournAtGrave = new MournAtGraveTask();
         return ImmutableList.of(
-                Pair.of(2, ExtendedWalkTowardsTask.create(
+                Pair.of(0, new EnterGraveyardTask()),
+                Pair.of(1, new MournAtGraveTask()),
+                Pair.of(2, ExtendedWalkTowardsTask.createWithoutPoiRelease(
                         MemoryModuleTypeMCA.MOURNING_POSITION,
                         GRIEVING_WALK_SPEED,
                         0,
-                        Config.getInstance().getVillagerPathfindingDistance(),
                         GRIEVING_PATH_TIMEOUT,
                         villager -> true,
-                        villager -> { },
-                        villager -> !mournAtGrave.hasArrived()
-                )),
-                Pair.of(0, new SequenceTask<>(
-                        ImmutableMap.of(MemoryModuleType.WALK_TARGET, MemoryStatus.VALUE_ABSENT),
-                        ImmutableList.of(
-                                new EnterGraveyardTask(GRIEVING_WALK_SPEED),
-                                mournAtGrave,
-                                new LambdaTask<>((v) -> {
-                                    boolean completed = mournAtGrave.hasCompleted();
-                                    boolean targetStillMournable = EnterGraveyardTask.hasMournableSite(v);
-
-                                    if (completed || !targetStillMournable) {
-                                        Mourning.clear(v);
-                                    } else {
-                                        v.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION);
-                                        v.getBrain().eraseMemory(MemoryModuleType.PATH);
-                                        v.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-                                        v.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
-                                        v.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
-                                        v.getBrain().setMemory(
-                                                MemoryModuleTypeMCA.MOURNING_RETRY_AT,
-                                                v.level().getGameTime() + GRIEVING_RETRY_DELAY);
-                                    }
-                                    v.getBrain().updateActivityFromSchedule(v.level().environmentAttributes(), v.level().getGameTime(), v.position());
-                                })
-
-                        )
+                        Mourning::retry
                 ))
         );
     }
@@ -520,7 +498,7 @@ public class VillagerTasksMCA {
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getRestPackage(float speed) {
         return ImmutableList.of(
                 // try to reach the bed, and if not a set home, forget if out of range
-                Pair.of(2, ExtendedWalkTowardsTask.createWithFinalTarget(MemoryModuleType.HOME, speed, 1, Config.getInstance().getVillagerPathfindingDistance(), 1200, (v) -> {
+                Pair.of(2, ExtendedWalkTowardsTask.createWithFinalTarget(MemoryModuleType.HOME, speed, 1, 1200, (v) -> {
                     Optional<Boolean> memory = v.getBrain().getMemoryInternal(MemoryModuleTypeMCA.FORCED_HOME);
                     boolean forced = memory != null && memory.isPresent();
                     if (forced) {
@@ -540,11 +518,20 @@ public class VillagerTasksMCA {
                     return memory == null || memory.isEmpty();
                 })),
                 Pair.of(3, new SleepInBed()),
-                Pair.of(5, new RunOne<>(ImmutableMap.of(MemoryModuleType.HOME, MemoryStatus.VALUE_ABSENT), ImmutableList.of(
+                // An already-active REST activity may linger for a tick after an
+                // archer acquires ATTACK_TARGET. Do not let its random stroll or
+                // village-seeking behavior fight the combat movement controller.
+                Pair.of(5, new RunOne<>(ImmutableMap.of(
+                        MemoryModuleType.HOME, MemoryStatus.VALUE_ABSENT,
+                        MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT
+                ), ImmutableList.of(
                         Pair.of(SetClosestHomeAsWalkTarget.create(speed), 1),
-                        Pair.of(InsideBrownianWalk.create(speed), 4),
+                        Pair.of(LocalInsideBrownianWalk.create(speed), 4),
                         Pair.of(GoToClosestVillage.create(speed, 4), 2),
-                        Pair.of(new DoNothing(20, 40), 2)))),
+                        // Outside a village these waypoints form a home-seeking journey. Do not insert a
+                        // 1-2 second idle between legs; keep normal homeless idling once the villager arrives.
+                        Pair.of(new ConditionalTask<>(new DoNothing(20, 40),
+                                v -> v.level() instanceof ServerLevel level && level.isVillage(v.blockPosition())), 2)))),
                 Pair.of(99, UpdateActivityFromSchedule.create()));
     }
 
@@ -574,14 +561,17 @@ public class VillagerTasksMCA {
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getIdlePackage(float speedModifier) {
         return ImmutableList.of(
                 Pair.of(1, new EnterFavoredBuildingTask(0.5f)),
-                Pair.of(2, new RunOne<>(ImmutableList.of(
-                        Pair.of(InteractWith.of(EntitiesMCA.FEMALE_VILLAGER, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2), 2),
-                        Pair.of(InteractWith.of(EntitiesMCA.MALE_VILLAGER, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2), 2),
-                        Pair.of(InteractWith.of(EntityTypes.CAT, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2), 1),
-                        Pair.of(VillageBoundRandomStroll.create(speedModifier), 1),
-                        Pair.of(SetWalkTargetFromLookTarget.create(speedModifier, 2), 1),
-                        Pair.of(new JumpOnBed(speedModifier), 1),
-                        Pair.of(new DoNothing(30, 60), 1))
+                Pair.of(2, new RunOne<>(
+                        ImmutableMap.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT),
+                        ImmutableList.of(
+                                Pair.of(InteractWith.of(EntitiesMCA.FEMALE_VILLAGER, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2), 2),
+                                Pair.of(InteractWith.of(EntitiesMCA.MALE_VILLAGER, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2), 2),
+                                Pair.of(InteractWith.of(EntityTypes.CAT, 8, MemoryModuleType.INTERACTION_TARGET, speedModifier, 2), 1),
+                                Pair.of(VillageBoundRandomStroll.create(speedModifier), 1),
+                                Pair.of(SetWalkTargetFromLookTarget.create(speedModifier, 2), 1),
+                                Pair.of(new JumpOnBed(speedModifier), 1),
+                                Pair.of(new DoNothing(30, 60), 1)
+                        )
                 )),
                 Pair.of(3, new GiveGiftToHero(100)),
                 Pair.of(3, SetLookAndInteract.create(EntityTypes.PLAYER, 4)),

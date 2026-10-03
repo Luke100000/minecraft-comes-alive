@@ -74,7 +74,7 @@ public final class BuildingDiagnostics {
                 id(structureAt), id(interactionStructure), id(nearestStructure),
                 room == null ? "none" : room.getId(), room == null ? "none" : room.getFloorId());
 
-        StructureFloor freshPlayerFloor = null;
+        FloorGeometry freshPlayerFloor = null;
         if (inspected != null) {
             boolean contains = inspected.containsPos(pos);
             Structure.InteractionPosition interaction = inspected
@@ -122,21 +122,19 @@ public final class BuildingDiagnostics {
                     : StructureScanner.scanExistingFloor(
                     world, inspected, selectedFloor, pos, village.getStructures().values());
             freshPlayerFloor = scan.result() == Building.validationResult.SUCCESS
-                    ? scan.floor()
+                    ? scan.scannedFloor()
                     : null;
             log(traceId, "freshFloorScan persistedFloor={} result={} scanSeed={} bounds={}..{} freshFloor={}",
                     floor(selectedFloor), scan.result(), scan.source(), scan.min(), scan.max(),
                     floor(freshPlayerFloor));
-            logFloorDifference(traceId,
-                    selectedFloor == null ? List.of() : List.of(selectedFloor),
-                    scan.floor() == null ? List.of() : List.of(scan.floor()), verbose);
+            logFloorDifference(traceId, selectedFloor, scan.scannedFloor(), verbose);
         }
 
         Building.validationResult analysis = switch (plan.mode()) {
             case ADD_BUILDING -> roomWorkflow.analyzeBuildingAddition(pos).result();
             case ADD_ROOM -> roomWorkflow.analyzeRoom(pos).result();
-            case ADD_FLOOR, ADD_BASEMENT -> roomWorkflow.analyzeAttachedRoom(
-                    village, plan, plan.mode(), plan.targetBuildingId()).result();
+            case ADD_ATTACHMENT -> roomWorkflow.analyzeAttachedRoom(
+                    village, plan, plan.targetBuildingId()).result();
             case UPDATE_ROOM -> room == null
                     ? Building.validationResult.NOT_IN_BUILDING
                     : roomWorkflow.analyzeRegisteredRoomUpdate(village, room.getId(), pos).result();
@@ -214,7 +212,7 @@ public final class BuildingDiagnostics {
         return switch (plan.mode()) {
             case UPDATE_ROOM -> StructuralPosition.REGISTERED_ROOM;
             case ADD_ROOM -> StructuralPosition.ATTACHABLE_ROOM;
-            case ADD_BUILDING, ADD_FLOOR, ADD_BASEMENT -> StructuralPosition.OUTSIDE;
+            case ADD_BUILDING, ADD_ATTACHMENT -> StructuralPosition.OUTSIDE;
         };
     }
 
@@ -224,7 +222,7 @@ public final class BuildingDiagnostics {
                                   Structure structure,
                                   Collection<Building> rooms,
                                   Building room,
-                                  StructureFloor freshPlayerFloor,
+                                  FloorGeometry freshPlayerFloor,
                                   BlockPos pos,
                                   ServerLevel world) {
         if (structure == null) {
@@ -262,50 +260,43 @@ public final class BuildingDiagnostics {
     }
 
     private static void logFloorDifference(long traceId,
-                                           List<StructureFloor> persistent,
-                                           List<StructureFloor> fresh,
+                                           StructureFloor persistent,
+                                           FloorGeometry fresh,
                                            boolean verbose) {
-        List<Integer> persistentAnchors = persistent.stream().map(StructureFloor::anchorY).toList();
-        List<Integer> freshAnchors = fresh.stream().map(StructureFloor::anchorY).toList();
-        if (!persistentAnchors.equals(freshAnchors)) {
-            log(traceId, "floorMismatch persistentAnchors={} freshAnchors={}", persistentAnchors, freshAnchors);
+        Integer persistentAnchor = persistent == null ? null : persistent.anchorY();
+        Integer freshAnchor = fresh == null ? null : fresh.anchorY();
+        if (!Objects.equals(persistentAnchor, freshAnchor)) {
+            log(traceId, "floorMismatch persistentAnchor={} freshAnchor={}", persistentAnchor, freshAnchor);
         }
 
-        boolean geometryMismatch = false;
-        for (StructureFloor persistentFloor : persistent) {
-            StructureFloor freshFloor = fresh.stream()
-                    .filter(candidate -> candidate.anchorY() == persistentFloor.anchorY())
-                    .findFirst().orElse(null);
-            if (freshFloor == null) continue;
-            if (persistentFloor.geometry().sameExactGeometry(freshFloor.geometry())) continue;
-
-            Set<FloorGeometry.Cell> persistentCells = persistentFloor.geometry().cells();
-            Set<FloorGeometry.Cell> freshCells = freshFloor.geometry().cells();
-
-            geometryMismatch = true;
+        boolean geometryMismatch = persistent != null && fresh != null
+                && !persistent.geometry().sameExactGeometry(fresh);
+        if (geometryMismatch) {
+            Set<FloorGeometry.Cell> persistentCells = persistent.geometry().cells();
+            Set<FloorGeometry.Cell> freshCells = fresh.cells();
             LinkedHashSet<FloorGeometry.Cell> added = new LinkedHashSet<>(freshCells);
             added.removeAll(persistentCells);
             LinkedHashSet<FloorGeometry.Cell> removed = new LinkedHashSet<>(persistentCells);
             removed.removeAll(freshCells);
-            boolean sameProjectedFootprint = persistentFloor.geometry().sameProjectedFootprint(freshFloor.geometry());
-            boolean connectorsChanged = !persistentFloor.geometry().connectorTypesByCell()
-                    .equals(freshFloor.geometry().connectorTypesByCell());
+            boolean sameProjectedFootprint = persistent.geometry().sameProjectedFootprint(fresh);
+            boolean connectorsChanged = !persistent.geometry().connectorTypesByCell()
+                    .equals(fresh.connectorTypesByCell());
             if (verbose) {
                 log(traceId, "floorGeometryMismatch anchorY={} persistentCells={} freshCells={} "
                                 + "sameProjectedFootprint={} connectorsChanged={} addedCells={} removedCells={} "
                                 + "addedSample={} removedSample={}",
-                        persistentFloor.anchorY(), persistentCells.size(), freshCells.size(),
+                        persistent.anchorY(), persistentCells.size(), freshCells.size(),
                         sameProjectedFootprint, connectorsChanged, added.size(), removed.size(),
                         sampleCells(added), sampleCells(removed));
             } else {
                 log(traceId, "floorGeometryMismatch anchorY={} persistentCells={} freshCells={} "
                                 + "sameProjectedFootprint={} connectorsChanged={} addedCells={} removedCells={}",
-                        persistentFloor.anchorY(), persistentCells.size(), freshCells.size(),
+                        persistent.anchorY(), persistentCells.size(), freshCells.size(),
                         sameProjectedFootprint, connectorsChanged, added.size(), removed.size());
             }
         }
-        if (persistentAnchors.equals(freshAnchors) && !geometryMismatch) {
-            log(traceId, "floorMismatch none anchors={}", persistentAnchors);
+        if (Objects.equals(persistentAnchor, freshAnchor) && !geometryMismatch) {
+            log(traceId, "floorMismatch none anchor={}", persistentAnchor);
         }
     }
 
@@ -349,6 +340,12 @@ public final class BuildingDiagnostics {
         return floor == null ? "none"
                 : "id=" + floor.id() + " number=" + floor.floorNumber() + " @"
                 + floor.anchorY() + ".." + floor.maxPhysicalCeilingY() + " area=" + floor.area();
+    }
+
+    private static String floor(FloorGeometry floor) {
+        return floor == null ? "none"
+                : "@" + floor.anchorY() + ".." + floor.maxPhysicalCeilingY()
+                + " area=" + floor.footprintArea();
     }
 
     private static String id(Structure structure) {

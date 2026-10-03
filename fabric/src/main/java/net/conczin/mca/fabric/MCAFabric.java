@@ -135,7 +135,9 @@ public final class MCAFabric implements ModInitializer {
         Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB, mcaTab, build);
 
         // Register events
-        ServerLifecycleEvents.SERVER_STARTING.register(server -> MCA.startExecutorService());
+        ServerLifecycleEvents.SERVER_STARTING.register(server -> {
+            MCA.startExecutorService();
+        });
         ServerLifecycleEvents.SERVER_STARTED.register(server ->
                 DestinyLocationResolver.refreshCachedDestinations(server, Config.getInstance())
         );

@@ -6,6 +6,7 @@ import com.mojang.datafixers.DataFixerBuilder;
 import com.mojang.datafixers.schemas.Schema;
 import com.mojang.serialization.Dynamic;
 import net.conczin.mca.datafix.fixes.NoAgingAgeLockFix;
+import net.conczin.mca.datafix.fixes.MourningSiteMemoryFix;
 import net.conczin.mca.datafix.fixes.PersonalityAndTraitsFix;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
@@ -113,6 +114,7 @@ public final class McaDataFixers {
         builder.addFixer(new PersonalityAndTraitsFix(versionOne));
         Schema versionTwo = builder.addSchema(2, Schema::new);
         builder.addFixer(new NoAgingAgeLockFix(versionTwo));
+        builder.addFixer(new MourningSiteMemoryFix(versionTwo));
         return builder.build().fixer();
     }
 }

@@ -38,7 +38,8 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.permissions.Permissions;
+import net.minecraft.server.permissions.Permission;
+import net.minecraft.server.permissions.PermissionLevel;
 import net.minecraft.util.ARGB;
 import net.minecraft.util.Mth;
 import net.minecraft.util.ProblemReporter;
@@ -1220,7 +1221,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         List<TooltipButtonWidget> widgets = new LinkedList<>();
 
         // subscribe
-        if (isOp() || Config.getServerConfig().allowEveryoneToAddContentGlobally) {
+        if (canEditServerWideContent()) {
             widgets.add(new ToggleableTooltipIconButtonWidget(0, 0, 0, 3 * 16,
                     getServerContentById(content.contentid()).isPresent(),
                     Component.translatable("gui.skin_library.subscribe"),
@@ -1551,11 +1552,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         return Minecraft.getInstance().player == null ? "Unknown" : Minecraft.getInstance().player.getGameProfile().name();
     }
 
-    private boolean isOp() {
-        return Minecraft.getInstance().player != null
-                && Minecraft.getInstance().player.permissions().hasPermission(Permissions.COMMANDS_GAMEMASTER);
-    }
-
     private String encodeCurrentImage() throws IOException {
         Path tempPath = Files.createTempFile("mca-skin-library-upload-", ".png");
         try {
@@ -1564,6 +1560,17 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         } finally {
             Files.deleteIfExists(tempPath);
         }
+    }
+
+    private boolean canEditServerWideContent() {
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.hasSingleplayerServer()) {
+            return true;
+        }
+        return minecraft.player != null
+               && minecraft.player.permissions().hasPermission(new Permission.HasCommandLevel(
+                        PermissionLevel.byId(Config.getServerConfig().addContentGloballyPermissionLevel)
+                ));
     }
 
     private void setSelectionPage(int p) {

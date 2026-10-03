@@ -5,7 +5,7 @@ import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Mourning;
-import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.ai.behavior.Behavior;
 
@@ -22,24 +22,39 @@ public class GrieveTask extends Behavior<VillagerEntityMCA> {
             return false;
         }
 
-        Optional<BlockPos> site = entity.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE);
+        Optional<GlobalPos> site = entity.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE);
         if (site.isEmpty()) {
             return false;
         }
 
-        if (site.filter(grave -> Mourning.isMournableTombstone(world, grave)).isEmpty()) {
-            Mourning.clear(entity);
+        if (!site.orElseThrow().dimension().equals(world.dimension())) {
             return false;
         }
 
-        return entity.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_RETRY_AT)
-                .filter(retryAt -> world.getGameTime() >= retryAt)
-                .isPresent();
+        Optional<Long> retryAt = entity.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_RETRY_AT);
+        if (retryAt.isPresent() && world.getGameTime() < retryAt.orElseThrow()) {
+            return false;
+        }
+
+        if (Mourning.isTemporarilyBlocked(entity)) {
+            return false;
+        }
+
+        if (Mourning.isKnownInvalidSite(entity)) {
+            Mourning.finish(entity);
+            return false;
+        }
+
+        if (Mourning.isAssignedGraveUnsafe(entity)) {
+            Mourning.deferUnsafe(entity);
+            return false;
+        }
+
+        return true;
     }
 
     @Override
     protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
-        villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE)
-                .ifPresent(grave -> Mourning.start(villager, grave));
+        Mourning.resume(villager);
     }
 }
