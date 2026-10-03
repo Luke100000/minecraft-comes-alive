@@ -22,8 +22,8 @@ public class VillagerPlayerModel<T extends LivingEntity & VillagerLike<T>> exten
     @Nullable
     private T currentVillager;
 
-    public VillagerPlayerModel(ModelPart root) {
-        super(root, false);
+    public VillagerPlayerModel(ModelPart root, boolean slim) {
+        super(root, slim);
         hidePlayerWears();
     }
 

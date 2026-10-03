@@ -126,11 +126,13 @@ public abstract class VillagerLayer<
     }
 
     public static boolean canUse(ResourceLocation texture) {
+        if (texture == null) {
+            return false;
+        }
         return TEXTURE_EXIST_CACHE.computeIfAbsent(texture, s -> {
-            if (texture != null && texture.getNamespace().equals("immersive_library")) {
-                return true;
-            }
-            return texture != null && Minecraft.getInstance().getResourceManager().getResource(texture).isPresent();
+            return s.getNamespace().equals("immersive_library")
+                    || (s.getNamespace().equals(MCA.MOD_ID) && s.getPath().startsWith("dynamic/"))
+                    || Minecraft.getInstance().getResourceManager().getResource(s).isPresent();
         });
     }
 

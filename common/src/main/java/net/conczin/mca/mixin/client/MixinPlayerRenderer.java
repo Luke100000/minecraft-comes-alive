@@ -10,6 +10,7 @@ import net.conczin.mca.client.model.HairOverlayModel;
 import net.conczin.mca.client.model.MCALayerDefinitions;
 import net.conczin.mca.client.model.MCAModelLayers;
 import net.conczin.mca.client.model.VillagerOverlayModel;
+import net.conczin.mca.client.render.DynamicSkinCache;
 import net.conczin.mca.client.render.layer.ClothingLayer;
 import net.conczin.mca.client.render.layer.FaceLayer;
 import net.conczin.mca.client.render.layer.HairLayer;
@@ -39,6 +40,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractClientPlayer, PlayerModel<AbstractClientPlayer>> {
     @Unique
     private ClothingLayer<AbstractClientPlayer> mca$clothingLayer;
+    @Unique
+    private boolean mca$slim;
 
     public MixinPlayerRenderer(EntityRendererProvider.Context ctx, PlayerModel<AbstractClientPlayer> model, float shadowRadius) {
         super(ctx, model, shadowRadius);
@@ -55,6 +58,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
 
     @Inject(method = "<init>(Lnet/minecraft/client/renderer/entity/EntityRendererProvider$Context;Z)V", at = @At("TAIL"))
     private void mca$injectInit(EntityRendererProvider.Context ctx, boolean slim, CallbackInfo ci) {
+        mca$slim = slim;
         if (!MCAClient.isPlayerRendererAllowed()) {
             return;
         }
@@ -75,7 +79,8 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
                         slim ? MCAModelLayers.VILLAGER_CLOTHING_SLIM : MCAModelLayers.VILLAGER_CLOTHING,
                         slim
                 ),
-                "normal"
+                "normal",
+                slim
         );
         addLayer(mca$clothingLayer);
         addLayer(new HairLayer<>(
@@ -139,9 +144,11 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
             at = @At("RETURN")
     )
     private ResourceLocation mca$useVillagerSkin(ResourceLocation original, AbstractClientPlayer player) {
-        return MCAClient.useVillagerRenderer(player.getUUID())
-                ? SkinExporter.getSkin(MCAClient.resolveVillager(player))
-                : original;
+        if (!MCAClient.useVillagerRenderer(player.getUUID())) {
+            return original;
+        }
+        ResourceLocation skin = SkinExporter.getSkin(MCAClient.resolveVillager(player));
+        return mca$slim ? DynamicSkinCache.getOrCreateSlimTexture(skin) : skin;
     }
 
     @Inject(method = "scale(Lnet/minecraft/client/player/AbstractClientPlayer;Lcom/mojang/blaze3d/vertex/PoseStack;F)V", at = @At("TAIL"))
@@ -183,6 +190,9 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
         skinArm.visible = true;
         var villager = MCAClient.resolveVillager(player);
         ResourceLocation skin = SkinExporter.getSkin(villager);
+        if (mca$slim) {
+            skin = DynamicSkinCache.getOrCreateSlimTexture(skin);
+        }
         if (VillagerLayer.canUse(skin)) {
             mca$renderArmPart(matrices, buffers, light, skin, SkinExporter.getSkinColor(villager), skinArm);
         }

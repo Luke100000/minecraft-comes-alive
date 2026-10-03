@@ -16,6 +16,9 @@ dependencies {
     //runtimeOnly "maven.modrinth:iris:${iris_neoforge_version}"
     runtimeOnly "maven.modrinth:ferrite-core:${ferritecore_neoforge_version}"
     //runtimeOnly "maven.modrinth:packet-fixer:${packetfixer_neoforge_version}"
+    runtimeOnly "maven.modrinth:entity-model-features:${emf_neoforge_version}"
+    runtimeOnly "maven.modrinth:entitytexturefeatures:${etf_neoforge_version}"
+    runtimeOnly "maven.modrinth:h1E7sQNL:${cpm_neoforge_version}"
 }
 
 neoForge {

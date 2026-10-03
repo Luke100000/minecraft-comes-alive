@@ -4,6 +4,7 @@ import com.mojang.blaze3d.platform.NativeImage;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
 import net.conczin.mca.client.resources.SkinExporter;
+import net.conczin.mca.client.resources.SkinPorter;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ZombieVillagerEntityMCA;
 import net.conczin.mca.entity.ai.Genetics;
@@ -29,6 +30,16 @@ public final class DynamicSkinCache {
 
     private static final Set<SkinKey> INCOMPLETE_CACHE = new HashSet<>();
     private static final Set<SkinKey> INCOMPLETE_FACE_CACHE = new HashSet<>();
+    private static final Map<ResourceLocation, ResourceLocation> SLIM_TEXTURE_CACHE = new MaxSizeHashMap<>(128) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<ResourceLocation, ResourceLocation> eldest) {
+            boolean remove = super.removeEldestEntry(eldest);
+            if (remove) {
+                releaseDynamicTexture(eldest.getValue());
+            }
+            return remove;
+        }
+    };
     private static final Map<SkinKey, ResourceLocation> CACHE = new MaxSizeHashMap<>(128) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<SkinKey, ResourceLocation> eldest) {
@@ -58,10 +69,49 @@ public final class DynamicSkinCache {
     public static void clear() {
         CACHE.values().forEach(DynamicSkinCache::releaseDynamicTexture);
         FACE_CACHE.values().forEach(DynamicSkinCache::releaseDynamicTexture);
+        SLIM_TEXTURE_CACHE.values().forEach(DynamicSkinCache::releaseDynamicTexture);
         CACHE.clear();
         FACE_CACHE.clear();
+        SLIM_TEXTURE_CACHE.clear();
         INCOMPLETE_CACHE.clear();
         INCOMPLETE_FACE_CACHE.clear();
+    }
+
+    public static ResourceLocation getOrCreateSlimTexture(ResourceLocation source) {
+        if (source == null) {
+            return null;
+        }
+        ResourceLocation cached = SLIM_TEXTURE_CACHE.get(source);
+        if (cached != null) {
+            return cached;
+        }
+
+        NativeImage image = SkinExporter.loadTexture(source);
+        if (image == null) {
+            return source;
+        }
+        if (image.getWidth() != 64 || image.getHeight() != 64) {
+            image.close();
+            return source;
+        }
+
+        boolean registered = false;
+        try {
+            SkinPorter.convertDefaultToSlim(image);
+            ResourceLocation id = MCA.locate("dynamic/slim/" + UUID.nameUUIDFromBytes(
+                    source.toString().getBytes(StandardCharsets.UTF_8)));
+            Minecraft.getInstance().getTextureManager().register(id, new DynamicTexture(image));
+            registered = true;
+            SLIM_TEXTURE_CACHE.put(source, id);
+            return id;
+        } catch (Exception exception) {
+            MCA.LOGGER.error("Failed to generate slim MCA texture {}", source, exception);
+            return source;
+        } finally {
+            if (!registered) {
+                image.close();
+            }
+        }
     }
 
     public static ResourceLocation getOrCreateStitchedSkin(Entity entity) {

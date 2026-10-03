@@ -14,6 +14,7 @@ public final class MCAModelLayers {
 
     public static final ModelLayerLocation ZOMBIE_VILLAGER_FACE = layer("zombie_villager", "face");
     public static final ModelLayerLocation ZOMBIE_VILLAGER_CLOTHING = layer("zombie_villager", "clothing");
+    public static final ModelLayerLocation ZOMBIE_VILLAGER_CLOTHING_SLIM = layer("zombie_villager", "clothing_slim");
     public static final ModelLayerLocation ZOMBIE_VILLAGER_HAIR = layer("zombie_villager", "hair");
 
     public static final ModelLayerLocation PLAYER_ATTACHMENTS = layer("player", "mca_attachments");

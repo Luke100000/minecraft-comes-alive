@@ -32,6 +32,8 @@ public final class MCALayerDefinitions {
                 () -> LayerDefinition.create(MCAModelGeometry.overlayData(new CubeDeformation(0.01F), false), 64, 64));
         register.accept(MCAModelLayers.ZOMBIE_VILLAGER_CLOTHING,
                 () -> LayerDefinition.create(MCAModelGeometry.overlayData(new CubeDeformation(ZOMBIE_VILLAGER_CLOTHING_DILATION), false), 64, 64));
+        register.accept(MCAModelLayers.ZOMBIE_VILLAGER_CLOTHING_SLIM,
+                () -> LayerDefinition.create(MCAModelGeometry.overlayData(new CubeDeformation(ZOMBIE_VILLAGER_CLOTHING_DILATION), true), 64, 64));
         register.accept(MCAModelLayers.ZOMBIE_VILLAGER_HAIR,
                 () -> LayerDefinition.create(MCAModelGeometry.hairData(ZOMBIE_VILLAGER_HAIR_DILATION), 64, 64));
 

@@ -6,8 +6,8 @@ import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.world.entity.LivingEntity;
 
 public final class ZombieVillagerPlayerModel<T extends LivingEntity & VillagerLike<T>> extends VillagerPlayerModel<T> {
-    public ZombieVillagerPlayerModel(ModelPart root) {
-        super(root);
+    public ZombieVillagerPlayerModel(ModelPart root, boolean slim) {
+        super(root, slim);
     }
 
     @Override

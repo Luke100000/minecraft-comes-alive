@@ -31,6 +31,7 @@ import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
@@ -374,6 +375,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
                 }
 
                 y = doubleGeneSliders(y, Genetics.VOICE_TONE, Genetics.VOICE);
+
+                addSlimToggle(width / 2, y);
+                y += 22;
 
                 //age
                 if (!villagerUUID.equals(playerUUID)) {
@@ -1623,6 +1627,14 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
             addRenderableWidget(new TooltipButtonWidget(x, y, DATA_WIDTH, 20, "gui.villager_editor.model_blacklist_hint", b -> {
             })).active = false;
         }
+    }
+
+    protected void addSlimToggle(int x, int y) {
+        addRenderableWidget(CycleButton.onOffBuilder(villager.isSlim())
+                .create(x, y, DATA_WIDTH / 2, 20, Component.translatable("gui.villager_editor.slim"), (button, slim) -> {
+                    villager.setSlim(slim);
+                    sendCommandLocked("sync");
+                }));
     }
 
     private boolean beginEditorCommand() {

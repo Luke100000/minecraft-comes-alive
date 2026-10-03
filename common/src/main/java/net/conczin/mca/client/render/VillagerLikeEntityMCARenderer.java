@@ -26,17 +26,32 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 
-public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> extends HumanoidMobRenderer<T, PlayerModel<T>> {
+public abstract class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> extends HumanoidMobRenderer<T, PlayerModel<T>> {
     private static final double CARRIED_NAME_TAG_Y = 0.63;
+    private final PlayerModel<T> wideModel;
+    private final PlayerModel<T> slimModel;
 
-    public VillagerLikeEntityMCARenderer(EntityRendererProvider.Context ctx, PlayerModel<T> model) {
+    protected VillagerLikeEntityMCARenderer(EntityRendererProvider.Context ctx, PlayerModel<T> model, PlayerModel<T> slimModel) {
         super(ctx, model, 0.5F);
+        this.wideModel = model;
+        this.slimModel = slimModel;
         addLayer(new HumanoidArmorLayer<>(
                 this,
                 new MCAArmorModel<>(ctx.bakeLayer(MCAModelLayers.VILLAGER_INNER_ARMOR)),
                 new MCAArmorModel<>(ctx.bakeLayer(MCAModelLayers.VILLAGER_OUTER_ARMOR)),
                 ctx.getModelManager()
         ));
+    }
+
+    @Override
+    public void render(T villager, float yaw, float tickDelta, PoseStack matrices, MultiBufferSource buffers, int light) {
+        PlayerModel<T> previousModel = model;
+        model = villager.isSlim() ? slimModel : wideModel;
+        try {
+            super.render(villager, yaw, tickDelta, matrices, buffers, light);
+        } finally {
+            model = previousModel;
+        }
     }
 
     protected VillagerOverlayModel<T> createOverlay(
@@ -104,7 +119,8 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> exte
 
     @Override
     public ResourceLocation getTextureLocation(T mobEntity) {
-        return SkinExporter.getSkin(mobEntity);
+        ResourceLocation skin = SkinExporter.getSkin(mobEntity);
+        return mobEntity.isSlim() ? DynamicSkinCache.getOrCreateSlimTexture(skin) : skin;
     }
 
     @Override
