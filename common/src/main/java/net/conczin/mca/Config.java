@@ -200,12 +200,13 @@ public final class Config extends CommonConfig {
     public double villagerMinTeleportationDistance = 128;
 
     /**
-     * Maximum pathfinding distance used when villagers walk to long-range memories such as beds.
+     * Maximum geometric path horizon used for long-range villager destinations such as beds.
+     * This is separate from the vanilla FOLLOW_RANGE attribute and does not increase sensing range.
      */
-    public int villagerPathfindingDistance = 80;
+    public int villagerPathfindingDistance = 160;
 
     /**
-     * Maximum follow-range attribute for villagers. Affects how far they pursue entities and how large the pathfinding search budget is.
+     * Vanilla follow-range attribute for villagers. Affects how far they pursue entities and the baseline pathfinder search budget.
      * Smaller values improve performance at the cost of reduced detection range.
      */
     public int villagerFollowRange = 48;
@@ -822,7 +823,7 @@ public final class Config extends CommonConfig {
     /**
      * List of blocks or tags that villagers will not teleport onto.
      */
-    public List<String> villagerPathfindingBlacklist = List.of(
+    public List<String> unSafeBlocksToTeleportOn = List.of(
             "#minecraft:climbable",
             "#minecraft:fence_gates",
             "#minecraft:fences",
@@ -833,20 +834,6 @@ public final class Config extends CommonConfig {
             "#minecraft:trapdoors",
             "#minecraft:walls"
     );
-
-    /**
-     * Blocks or tags that should trigger exact villager body clearance checks during pathfinding.
-     * Use this for small decorative blocks with awkward collision shapes, such as lanterns.
-     */
-    public List<String> villagerPathfindingCollisionCheckBlocks = List.of(
-            "#mca:villager_pathfinding_collision_checks"
-    );
-
-    /**
-     * If enabled, villagers run exact body clearance checks for every accepted path node.
-     * This can help with unusual modded collision issues, but is more expensive in busy villages.
-     */
-    public boolean villagerPathfindingCheckAllNodeCollisions = false;
 
     /**
      * Structures that can be mentioned in Rumors conversation options.

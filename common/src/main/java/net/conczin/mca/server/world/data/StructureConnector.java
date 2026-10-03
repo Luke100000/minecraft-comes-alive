@@ -5,8 +5,10 @@ import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.LadderBlock;
+import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.level.block.state.properties.Half;
 
 import java.util.*;
 
@@ -38,6 +40,16 @@ final class StructureConnector {
                 && !verticalColumnFromConnector(world, pos).isEmpty();
     }
 
+    /** An open cell above a ladder or a trapdoor in a contiguous ladder column. */
+    static boolean isVerticalTopExit(Level world, BlockPos pos) {
+        BlockState state = world.getBlockState(pos);
+        if (!state.getFluidState().isEmpty() || !state.getCollisionShape(world, pos).isEmpty()) {
+            return false;
+        }
+        BlockPos connector = verticalInteractionConnector(world, pos);
+        return pos.below().equals(connector) && isVertical(world, connector);
+    }
+
     static BlockPos normalize(BlockPos pos, BlockState state) {
         if (state.getBlock() instanceof DoorBlock) {
             return normalizeDoorHalf(pos, state.getValue(DoorBlock.HALF));
@@ -49,11 +61,17 @@ final class StructureConnector {
         return half == DoubleBlockHalf.UPPER ? pos.below() : pos;
     }
 
-    /** Room ownership follows the door's Minecraft FACING side, regardless of open state or hinge. */
+    /** The mounted side of a boundary: doors use FACING; trapdoors use their vertical HALF. */
+    static Direction ownerSide(BlockState state) {
+        if (state.getBlock() instanceof DoorBlock) return state.getValue(DoorBlock.FACING);
+        if (state.getBlock() instanceof TrapDoorBlock) {
+            return state.getValue(TrapDoorBlock.HALF) == Half.TOP ? Direction.UP : Direction.DOWN;
+        }
+        return null;
+    }
+
     static Direction doorOwnerSide(BlockState state) {
-        return state.getBlock() instanceof DoorBlock
-                ? state.getValue(DoorBlock.FACING)
-                : null;
+        return state.getBlock() instanceof DoorBlock ? ownerSide(state) : null;
     }
 
     static Map<BlockPos, Direction> doorOwnerSides(Level world, FloorGeometry geometry) {
@@ -97,15 +115,6 @@ final class StructureConnector {
         return List.copyOf(result.values());
     }
 
-    static Map<BlockPos, FloorConnector.Type> connectorTypesForFloor(
-            Level world, Collection<BlockPos> connectors, FloorGeometry geometry) {
-        LinkedHashMap<BlockPos, FloorConnector.Type> result = new LinkedHashMap<>();
-        for (FloorConnector.Marker marker : connectorMarkersForFloor(world, connectors, geometry)) {
-            result.putIfAbsent(marker.floorCell(), marker.type());
-        }
-        return Map.copyOf(result);
-    }
-
     private static boolean closerToFloorCell(FloorConnector.Marker candidate,
                                              FloorConnector.Marker existing) {
         int candidateDistance = Math.abs(candidate.pos().getY() - candidate.floorCell().getY());
@@ -142,7 +151,7 @@ final class StructureConnector {
     }
 
     /** Returns the vertical connector column for an occupied connector or its immediate open top-exit cell. */
-    private static List<BlockPos> verticalColumn(Level world, BlockPos pos) {
+    static List<BlockPos> verticalColumn(Level world, BlockPos pos) {
         BlockPos connector = verticalInteractionConnector(world, pos);
         return connector == null ? List.of() : verticalColumnFromConnector(world, connector);
     }

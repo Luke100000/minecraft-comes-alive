@@ -22,6 +22,7 @@ import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /** Discovers one exact selected Floor while using Minecraft surface heights only for movement. */
 final class SelectedFloorScanner {
@@ -93,28 +94,29 @@ final class SelectedFloorScanner {
             int maxRadius) {
         FloorBandClassifier classifier = new FloorBandClassifier(
                 world, new FloorBand(traversalSeed.feet().getY()), provider);
-        SelectedFloorScan scan = traverseSelectedFloor(
+        TraversalScan traversal = traverseSelectedFloor(
                 world, traversalSeed, ceilings, maxSize, maxRadius, provider, classifier);
-        if (scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) {
-            return Result.failure(scan.result(), traversalSeed.feet());
+        if (traversal.result() != Building.validationResult.SUCCESS) {
+            return Result.failure(traversal.result(), traversalSeed.feet());
         }
-        scan = retainEnclosedRegions(
-                world, traversalSeed, scan, ceilings, maxRadius, provider, classifier);
-        if (scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) {
-            return Result.failure(scan.result(), traversalSeed.feet());
+        traversal = retainEnclosedRegions(
+                world, traversalSeed, traversal, ceilings, maxRadius, provider, classifier);
+        if (traversal.result() != Building.validationResult.SUCCESS) {
+            return Result.failure(traversal.result(), traversalSeed.feet());
         }
+        MaterializedFloor materialized = materializeStructuralFloor(world, traversal, ceilings, classifier);
 
-        LinkedHashSet<BlockPos> connectors = new LinkedHashSet<>(scan.connectors());
-        for (FloorGeometry.Cell cell : scan.floor().cells()) {
+        LinkedHashSet<BlockPos> connectors = new LinkedHashSet<>(traversal.connectors());
+        for (FloorGeometry.Cell cell : materialized.floor().cells()) {
             collectVerticalConnectors(world, cell, connectors);
         }
-        if (scan.floor().cells().size() + connectors.size() > maxSize) {
+        if (materialized.floor().cells().size() + connectors.size() > maxSize) {
             return Result.failure(Building.validationResult.BLOCK_LIMIT, traversalSeed.feet());
         }
-        FloorGeometry floor = new FloorGeometry(scan.floor().cells(),
-                StructureConnector.connectorMarkersForFloor(world, connectors, scan.floor()));
+        FloorGeometry floor = new FloorGeometry(materialized.floor().cells(),
+                StructureConnector.connectorMarkersForFloor(world, connectors, materialized.floor()));
         return success(traversalSeed.feet(), floor,
-                scan.transitions(), scan.verticalBoundaryCells(), scan.adjacentFloorSeeds());
+                materialized.transitions(), traversal.verticalBoundaryCells(), traversal.adjacentFloorSeeds());
     }
 
     private static Optional<SurfaceCell> resolveSeedCell(
@@ -153,13 +155,13 @@ final class SelectedFloorScanner {
         return Optional.empty();
     }
 
-    private static SelectedFloorScan traverseSelectedFloor(Level world,
-                                             SurfaceCell seed,
-                                             FloorCeilingResolver ceilings,
-                                             int maxSize,
-                                             int maxRadius,
-                                             StepProvider provider,
-                                             FloorBandClassifier classifier) {
+    private static TraversalScan traverseSelectedFloor(Level world,
+                                                       SurfaceCell seed,
+                                                       FloorCeilingResolver ceilings,
+                                                       int maxSize,
+                                                       int maxRadius,
+                                                       StepProvider provider,
+                                                       FloorBandClassifier classifier) {
         SurfaceCell anchor = seed;
         ArrayDeque<SurfaceCell> queue = new ArrayDeque<>();
         Set<BlockPos> queued = new HashSet<>();
@@ -174,7 +176,7 @@ final class SelectedFloorScanner {
         while (!queue.isEmpty()) {
             SurfaceCell current = queue.removeFirst();
             if (horizontalDistance(current.feet(), anchor.feet()) >= maxRadius) {
-                return SelectedFloorScan.failure(Building.validationResult.SIZE_LIMIT);
+                return TraversalScan.failure(Building.validationResult.SIZE_LIMIT);
             }
             cells.put(current.feet(), current);
             List<HorizontalStep> steps = StructureConnector.isHorizontalBoundary(
@@ -204,13 +206,11 @@ final class SelectedFloorScanner {
                 }
             }
             if (cells.size() + connectors.size() > maxSize) {
-                return SelectedFloorScan.failure(Building.validationResult.BLOCK_LIMIT);
+                return TraversalScan.failure(Building.validationResult.BLOCK_LIMIT);
             }
         }
 
-        FloorGeometry floor = new FloorGeometry(cells.values().stream()
-                .map(SurfaceCell::canonical).collect(java.util.stream.Collectors.toSet()), Map.of());
-        return new SelectedFloorScan(Building.validationResult.SUCCESS, floor,
+        return new TraversalScan(Building.validationResult.SUCCESS, cells,
                 Set.copyOf(transitions), Set.copyOf(verticalBoundaryCells),
                 Set.copyOf(adjacentFloorSeeds), Set.copyOf(connectors));
     }
@@ -276,73 +276,208 @@ final class SelectedFloorScanner {
                 .count();
     }
 
-    private static SelectedFloorScan retainEnclosedRegions(
+    private static TraversalScan retainEnclosedRegions(
             Level world,
             SurfaceCell seed,
-            SelectedFloorScan selected,
+            TraversalScan traversal,
             FloorCeilingResolver ceilings,
             int maxRadius,
             StepProvider provider,
             FloorBandClassifier classifier) {
-        Map<BlockPos, FloorConnector.Type> connectorTypes = StructureConnector.connectorTypesForFloor(
-                world, selected.connectors(), selected.floor());
-        Set<BlockPos> boundaryCells = connectorTypes.entrySet().stream()
-                .filter(entry -> entry.getValue().roomBoundary())
-                .map(Map.Entry::getKey)
-                .collect(java.util.stream.Collectors.toSet());
-        Map<BlockPos, List<BlockPos>> neighbors = Transition.neighborIndex(selected.transitions());
-        Set<BlockPos> floorCells = selected.floor().cells().stream()
-                .map(FloorGeometry.Cell::feet)
-                .collect(java.util.stream.Collectors.toSet());
-        List<Set<BlockPos>> regions = connectedRegions(floorCells, boundaryCells, neighbors);
+        Set<BlockPos> traversalCells = traversal.cells().keySet();
+        Set<BlockPos> boundaryCells = traversal.connectors().stream()
+                .filter(traversalCells::contains)
+                .collect(Collectors.toSet());
+        Map<BlockPos, List<BlockPos>> neighbors = Transition.neighborIndex(traversal.transitions());
+        List<Set<BlockPos>> regions = connectedRegions(traversalCells, boundaryCells, neighbors);
         Set<BlockPos> exteriorCells = new HashSet<>();
 
         for (Set<BlockPos> region : regions) {
             BlockPos representative = region.stream()
                     .min(CELL_ORDER)
                     .orElseThrow();
-            SurfaceCell regionSeed = inspectSurfaceCell(world, representative, ceilings).orElse(null);
-            if (regionSeed != null && reachesExterior(
+            SurfaceCell regionSeed = traversal.cells().get(representative);
+            if (reachesExterior(
                     world, regionSeed, seed.feet(), ceilings, maxRadius, provider, classifier)) {
                 exteriorCells.addAll(region);
             }
         }
 
         if (exteriorCells.contains(seed.feet())) {
-            return SelectedFloorScan.failure(Building.validationResult.NOT_IN_BUILDING);
+            return TraversalScan.failure(Building.validationResult.NOT_IN_BUILDING);
         }
 
-        Set<BlockPos> allowed = new HashSet<>(floorCells);
+        Set<BlockPos> allowed = new HashSet<>(traversalCells);
         allowed.removeAll(exteriorCells);
         Set<BlockPos> reachable = connectedCells(seed.feet(), allowed, neighbors, new HashSet<>());
         if (reachable.isEmpty()) {
-            return SelectedFloorScan.failure(Building.validationResult.NOT_IN_BUILDING);
+            return TraversalScan.failure(Building.validationResult.NOT_IN_BUILDING);
         }
 
-        Set<FloorGeometry.Cell> cells = selected.floor().cells().stream()
-                .filter(cell -> reachable.contains(cell.feet()))
-                .collect(java.util.stream.Collectors.toSet());
-        Set<Transition> transitions = selected.transitions().stream()
+        Map<BlockPos, SurfaceCell> retainedCells = new HashMap<>();
+        for (BlockPos pos : reachable) {
+            retainedCells.put(pos, traversal.cells().get(pos));
+        }
+        Set<Transition> transitions = traversal.transitions().stream()
                 .filter(transition -> reachable.contains(transition.first())
                         && reachable.contains(transition.second()))
-                .collect(java.util.stream.Collectors.toSet());
-        Set<BlockPos> verticalBoundaryCells = selected.verticalBoundaryCells().stream()
+                .collect(Collectors.toSet());
+        Set<BlockPos> verticalBoundaryCells = traversal.verticalBoundaryCells().stream()
                 .filter(reachable::contains)
-                .collect(java.util.stream.Collectors.toSet());
-        Set<BlockPos> connectors = selected.connectors().stream()
+                .collect(Collectors.toSet());
+        Set<BlockPos> connectors = traversal.connectors().stream()
                 .filter(connector -> reachable.contains(StructureConnector.normalize(
                         connector, world.getBlockState(connector))))
-                .collect(java.util.stream.Collectors.toSet());
+                .collect(Collectors.toSet());
         Set<BlockPos> adjacentFloorSeeds = adjacentFloorSeedsForRetainedFloor(
                 world, ceilings, reachable, provider, classifier);
-        SelectedFloorScan retainedFloor = new SelectedFloorScan(
+        return new TraversalScan(
                 Building.validationResult.SUCCESS,
-                new FloorGeometry(cells, Map.of()),
+                retainedCells,
                 transitions,
                 verticalBoundaryCells,
                 adjacentFloorSeeds,
                 connectors);
-        return retainedFloor;
+    }
+
+    /**
+     * Traversal proves enclosure; it is not the canonical Floor. Build structural ownership once
+     * from the retained traversal evidence, including supported interior columns occupied by blocks.
+     * Ambiguous full-block head obstructions need independent surrounding floor evidence so a
+     * one-block wall cavity cannot manufacture Floor ownership.
+     */
+    private static MaterializedFloor materializeStructuralFloor(
+            Level world,
+            TraversalScan traversal,
+            FloorCeilingResolver ceilings,
+            FloorBandClassifier classifier) {
+        LinkedHashMap<BlockPos, SurfaceCell> floorCells = new LinkedHashMap<>();
+        Set<Long> ownedColumns = new HashSet<>();
+        LinkedHashSet<Transition> transitions = new LinkedHashSet<>(traversal.transitions());
+        ArrayDeque<SurfaceCell> queue = new ArrayDeque<>();
+        Set<BlockPos> structuralOnlyCells = new HashSet<>();
+
+        for (SurfaceCell traversalCell : traversal.cells().values().stream()
+                .sorted(Comparator.comparing(SurfaceCell::feet, CELL_ORDER))
+                .toList()) {
+            floorCells.put(traversalCell.feet(), traversalCell);
+            ownedColumns.add(FloorGeometry.columnKey(
+                    traversalCell.feet().getX(), traversalCell.feet().getZ()));
+            queue.addLast(traversalCell);
+        }
+
+        while (!queue.isEmpty()) {
+            SurfaceCell current = queue.removeFirst();
+            for (Direction direction : HORIZONTAL) {
+                BlockPos candidatePos = current.feet().relative(direction);
+                SurfaceCell existing = floorCells.get(candidatePos);
+                if (existing != null) {
+                    if (structuralOnlyCells.contains(current.feet())) {
+                        transitions.add(new Transition(current.feet(), existing.feet()));
+                    }
+                    continue;
+                }
+                long candidateColumn = FloorGeometry.columnKey(candidatePos.getX(), candidatePos.getZ());
+                if (ownedColumns.contains(candidateColumn)) continue;
+                SurfaceCell candidate = resolveStructuralNeighbor(
+                        world, candidatePos, current, ceilings, classifier).orElse(null);
+                if (candidate == null) continue;
+
+                floorCells.put(candidatePos, candidate);
+                ownedColumns.add(candidateColumn);
+                structuralOnlyCells.add(candidatePos);
+                transitions.add(new Transition(current.feet(), candidatePos));
+                queue.addLast(candidate);
+            }
+        }
+
+        return new MaterializedFloor(
+                new FloorGeometry(floorCells.values().stream()
+                        .map(SurfaceCell::canonical)
+                        .toList(), Map.of()),
+                Set.copyOf(transitions));
+    }
+
+    private static Optional<SurfaceCell> resolveStructuralNeighbor(
+            Level world,
+            BlockPos feet,
+            SurfaceCell adjacent,
+            FloorCeilingResolver ceilings,
+            FloorBandClassifier classifier) {
+        // A climbable opening belongs to the enclosed Floor beside it even though the ladder's
+        // narrow collision shape is not a walking surface. It stays out of traversal discovery.
+        if (StructureConnector.isVerticalTopExit(world, feet)) {
+            OptionalDouble handoffY = interactionHandoffY(world, feet, ceilings);
+            OptionalInt ceilingY = ceilings.ceilingY(feet);
+            if (handoffY.isEmpty() || ceilingY.isEmpty() || !hasInteriorHeadroom(world, feet)) {
+                return Optional.empty();
+            }
+            return Optional.of(new SurfaceCell(feet, handoffY.getAsDouble(),
+                    Math.min(ceilingY.getAsInt(), adjacent.ceilingY())));
+        }
+        BlockState state = world.getBlockState(feet);
+        if (!state.getFluidState().isEmpty()
+                || StructureConnector.isConnector(state)
+                || isExplicitStairTransitionCell(world, feet)) {
+            return Optional.empty();
+        }
+
+        OptionalDouble surfaceY = floorSurfaceLevel(world, feet);
+        if (surfaceY.isEmpty() || !canStep(adjacent.surfaceY(), surfaceY.getAsDouble())) {
+            return Optional.empty();
+        }
+
+        if (isTraversalOccupancyAllowed(world, feet)) {
+            if (hasInteriorHeadroom(world, feet)) return Optional.empty();
+            BlockPos head = feet.above();
+            if (world.getBlockState(head).isCollisionShapeFullBlock(world, head)
+                    && !hasSurroundingFloorEvidence(
+                    world, feet, surfaceY.getAsDouble(), ceilings, classifier)) {
+                return Optional.empty();
+            }
+            return Optional.of(new SurfaceCell(
+                    feet, surfaceY.getAsDouble(), adjacent.ceilingY()));
+        }
+
+        for (int y = feet.getY() + 1; y < adjacent.ceilingY(); y++) {
+            BlockPos interior = new BlockPos(feet.getX(), y, feet.getZ());
+            if (!isOpen(world, interior)) continue;
+            OptionalInt ceilingY = ceilings.ceilingY(interior);
+            if (ceilingY.isPresent()) {
+                int localCeilingY = Math.min(ceilingY.getAsInt(), adjacent.ceilingY());
+                SurfaceCell topSurface = inspectSurfaceCell(world, interior, ceilings).orElse(null);
+                if (topSurface != null && !classifier.decision(topSurface).owned()) {
+                    localCeilingY = interior.getY();
+                }
+                return Optional.of(new SurfaceCell(feet, surfaceY.getAsDouble(), localCeilingY));
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static boolean hasSurroundingFloorEvidence(
+            Level world,
+            BlockPos feet,
+            double surfaceY,
+            FloorCeilingResolver ceilings,
+            FloorBandClassifier classifier) {
+        int neighbors = 0;
+        for (Direction direction : HORIZONTAL) {
+            BlockPos horizontal = feet.relative(direction);
+            boolean ownedNeighbor = false;
+            for (SurfaceProbe landing : findLandings(world, surfaceY, horizontal)) {
+                OptionalInt ceilingY = ceilings.ceilingY(landing.feet());
+                if (ceilingY.isEmpty()) continue;
+                SurfaceCell cell = new SurfaceCell(landing.feet(), landing.surfaceY(), ceilingY.getAsInt());
+                FloorBandDecision decision = classifier.decision(cell);
+                if (decision.owned() && decision.continueTraversal()) {
+                    ownedNeighbor = true;
+                    break;
+                }
+            }
+            if (ownedNeighbor && ++neighbors >= 2) return true;
+        }
+        return false;
     }
 
     private static Set<BlockPos> adjacentFloorSeedsForRetainedFloor(
@@ -549,13 +684,31 @@ final class SelectedFloorScanner {
             FloorBandClassifier classifier) {
         Boolean known = classifier.exterior.get(start.feet());
         if (known != null) return known;
-        ArrayDeque<SurfaceCell> queue = new ArrayDeque<>();
-        Set<BlockPos> visited = new HashSet<>();
-        queue.addLast(start);
-        visited.add(start.feet());
+        ArrayDeque<SurfaceCell> floorQueue = new ArrayDeque<>();
+        ArrayDeque<BlockPos> openQueue = new ArrayDeque<>();
+        Set<BlockPos> visitedFloor = new HashSet<>();
+        Set<BlockPos> visitedOpen = new HashSet<>();
+        floorQueue.addLast(start);
+        visitedFloor.add(start.feet());
 
-        while (!queue.isEmpty()) {
-            SurfaceCell current = queue.removeFirst();
+        while (!floorQueue.isEmpty() || !openQueue.isEmpty()) {
+            if (!openQueue.isEmpty()) {
+                BlockPos open = openQueue.removeFirst();
+                if (horizontalDistance(open, scanAnchor) >= maxRadius - 1) {
+                    classifier.exterior.put(start.feet(), true);
+                    return true;
+                }
+                for (Direction direction : HORIZONTAL) {
+                    BlockPos next = open.relative(direction);
+                    if (visitedOpen.contains(next) || !isOpenPassage(world, next)) continue;
+                    if (horizontalDistance(next, scanAnchor) >= maxRadius) continue;
+                    visitedOpen.add(next);
+                    openQueue.addLast(next);
+                }
+                continue;
+            }
+
+            SurfaceCell current = floorQueue.removeFirst();
             if (horizontalDistance(current.feet(), scanAnchor) >= maxRadius - 1) {
                 classifier.exterior.put(start.feet(), true);
                 return true;
@@ -566,16 +719,19 @@ final class SelectedFloorScanner {
                 return true;
             }
             if (Boolean.FALSE.equals(reachable)) continue;
-            if (hasOpenAirEscape(world, current, scanAnchor, maxRadius)) {
-                classifier.exterior.put(start.feet(), true);
-                return true;
+            for (Direction direction : HORIZONTAL) {
+                BlockPos opening = current.feet().relative(direction);
+                if (!findLandings(world, current.surfaceY(), opening).isEmpty()) continue;
+                if (isOpenPassage(world, opening) && visitedOpen.add(opening)) {
+                    openQueue.addLast(opening);
+                }
             }
 
             for (FloorStep step : floorSteps(world, new SurfaceProbe(current.feet(), current.surfaceY()))) {
                 if (step.connector() != null) continue;
                 SurfaceProbe landing = step.landing();
                 BlockPos next = landing.feet();
-                if (visited.contains(next)) continue;
+                if (visitedFloor.contains(next)) continue;
                 SurfaceCell probe = new SurfaceCell(next, landing.surfaceY(), next.getY() + 2);
                 FloorBandDecision decision = classifier.decision(probe);
                 if (!decision.owned() || !decision.continueTraversal()) continue;
@@ -586,36 +742,12 @@ final class SelectedFloorScanner {
                     return true;
                 }
                 SurfaceCell cell = new SurfaceCell(next, landing.surfaceY(), ceiling.getAsInt());
-                visited.add(next);
-                queue.addLast(cell);
+                visitedFloor.add(next);
+                floorQueue.addLast(cell);
             }
         }
         // Exhausting the traversal proves every visited cell has no route outside.
-        visited.forEach(cell -> classifier.exterior.put(cell, false));
-        return false;
-    }
-
-    private static boolean hasOpenAirEscape(
-            Level world, SurfaceCell current, BlockPos scanAnchor, int maxRadius) {
-        ArrayDeque<BlockPos> queue = new ArrayDeque<>();
-        Set<BlockPos> visited = new HashSet<>();
-        for (Direction direction : HORIZONTAL) {
-            BlockPos opening = current.feet().relative(direction);
-            if (!findLandings(world, current.surfaceY(), opening).isEmpty()) continue;
-            if (isOpenPassage(world, opening) && visited.add(opening)) queue.addLast(opening);
-        }
-
-        while (!queue.isEmpty()) {
-            BlockPos open = queue.removeFirst();
-            if (horizontalDistance(open, scanAnchor) >= maxRadius - 1) return true;
-            for (Direction direction : HORIZONTAL) {
-                BlockPos next = open.relative(direction);
-                if (visited.contains(next) || !isOpenPassage(world, next)) continue;
-                if (horizontalDistance(next, scanAnchor) >= maxRadius) continue;
-                visited.add(next);
-                queue.addLast(next);
-            }
-        }
+        visitedFloor.forEach(cell -> classifier.exterior.put(cell, false));
         return false;
     }
 
@@ -682,17 +814,9 @@ final class SelectedFloorScanner {
 
     private static OptionalDouble interactionHandoffY(
             Level world, BlockPos pos, FloorCeilingResolver ceilings) {
-        if (!isVerticalConnectorTopExit(world, pos)) return OptionalDouble.empty();
+        if (!StructureConnector.isVerticalTopExit(world, pos)) return OptionalDouble.empty();
         if (inspectSurfaceCell(world, pos.above(), ceilings).isPresent()) return OptionalDouble.empty();
         return OptionalDouble.of(pos.getY());
-    }
-
-    private static boolean isVerticalConnectorTopExit(Level world, BlockPos pos) {
-        if (!isOpen(world, pos)) return false;
-        BlockPos connector = StructureConnector.verticalInteractionConnector(world, pos);
-        return connector != null
-                && connector.equals(pos.below())
-                && StructureConnector.isVertical(world, connector);
     }
 
     private static boolean hasInteriorHeadroom(Level world, BlockPos feet) {
@@ -824,22 +948,26 @@ final class SelectedFloorScanner {
         List<HorizontalStep> steps(SurfaceCell cell);
     }
 
-    record SelectedFloorScan(Building.validationResult result,
-                      FloorGeometry floor,
-                      Set<Transition> transitions,
-                      Set<BlockPos> verticalBoundaryCells,
-                      Set<BlockPos> adjacentFloorSeeds,
-                      Set<BlockPos> connectors) {
-        SelectedFloorScan {
+    private record TraversalScan(Building.validationResult result,
+                                 Map<BlockPos, SurfaceCell> cells,
+                                 Set<Transition> transitions,
+                                 Set<BlockPos> verticalBoundaryCells,
+                                 Set<BlockPos> adjacentFloorSeeds,
+                                 Set<BlockPos> connectors) {
+        TraversalScan {
+            cells = cells == null ? Map.of() : Map.copyOf(cells);
             transitions = transitions == null ? Set.of() : Set.copyOf(transitions);
             verticalBoundaryCells = verticalBoundaryCells == null ? Set.of() : Set.copyOf(verticalBoundaryCells);
             adjacentFloorSeeds = adjacentFloorSeeds == null ? Set.of() : Set.copyOf(adjacentFloorSeeds);
             connectors = connectors == null ? Set.of() : Set.copyOf(connectors);
         }
 
-        static SelectedFloorScan failure(Building.validationResult result) {
-            return new SelectedFloorScan(result, null, Set.of(), Set.of(), Set.of(), Set.of());
+        static TraversalScan failure(Building.validationResult result) {
+            return new TraversalScan(result, Map.of(), Set.of(), Set.of(), Set.of(), Set.of());
         }
+    }
+
+    private record MaterializedFloor(FloorGeometry floor, Set<Transition> transitions) {
     }
 
     private record SurfaceProbe(BlockPos feet, double surfaceY) {

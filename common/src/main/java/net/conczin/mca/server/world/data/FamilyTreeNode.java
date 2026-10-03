@@ -77,6 +77,24 @@ public final class FamilyTreeNode {
         relationshipState = RelationshipState.byId(nbt.getInt("marriageState").orElse(0));
     }
 
+    static FamilyTreeNode detachedCopy(FamilyTreeNode source, Set<UUID> children) {
+        FamilyTreeNode copy = new FamilyTreeNode(
+                null,
+                source.id,
+                source.name,
+                source.isPlayer,
+                source.gender,
+                source.father,
+                source.mother
+        );
+        copy.profession = source.profession;
+        copy.partner = source.partner;
+        copy.relationshipState = source.relationshipState;
+        copy.deceased = source.deceased;
+        copy.children.addAll(children);
+        return copy;
+    }
+
     public static boolean isValid(@Nullable UUID uuid) {
         return uuid != null && !Util.NIL_UUID.equals(uuid);
     }
@@ -191,6 +209,12 @@ public final class FamilyTreeNode {
     }
 
     public void updatePartner(@Nullable Entity newPartner, @Nullable RelationshipState state) {
+        if (newPartner == null && state == RelationshipState.WIDOW && !partner.equals(Util.NIL_UUID)) {
+            relationshipState = RelationshipState.WIDOW;
+            markDirty();
+            return;
+        }
+
         //cancel relationship with previous partner
         if (!this.partner.equals(Util.NIL_UUID) && (newPartner == null || !this.partner.equals(newPartner.getUUID()))) {
             getRoot().getOrEmpty(this.partner).ifPresent(n -> {

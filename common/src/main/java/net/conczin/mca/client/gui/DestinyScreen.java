@@ -17,6 +17,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import org.joml.Matrix3x2fStack;
 import org.lwjgl.glfw.GLFW;
@@ -65,6 +66,7 @@ public class DestinyScreen extends VillagerEditorScreen {
     private static final int DESTINY_BUTTON_GAP = 4;
     private static final int DESTINY_BUTTON_HORIZONTAL_PADDING = 16;
     private static final int DESTINY_DIMENSION_SELECTOR_MAX_WIDTH = 400;
+    private static final int DESTINY_DIMENSION_SELECTOR_MARGIN = 14;
     private final LinkedList<Component> story = new LinkedList<>();
     private final boolean allowTeleportation;
     private DestinyDestination destination;
@@ -226,10 +228,11 @@ public class DestinyScreen extends VillagerEditorScreen {
         Map<ResourceKey<Level>, List<DestinyDestination>> byDimension = groupDestinationsByDimension(destinations);
 
         if (!byDimension.isEmpty()) {
-            ensureSelectedDimension(List.copyOf(byDimension.keySet()));
+            List<ResourceKey<Level>> dimensions = List.copyOf(byDimension.keySet());
+            ensureSelectedDimension(dimensions);
             boolean showDimensionSelector = byDimension.size() > 1;
             if (showDimensionSelector) {
-                drawDimensionSelector(List.copyOf(byDimension.keySet()));
+                drawDimensionSelector(dimensions);
             }
 
             List<DestinyDestination> dimensionDestinations = byDimension.get(selectedDestinyDimension);
@@ -282,7 +285,6 @@ public class DestinyScreen extends VillagerEditorScreen {
             return;
         }
 
-        Minecraft minecraft = Minecraft.getInstance();
         ResourceKey<Level> currentDimension = minecraft.level == null ? null : minecraft.level.dimension();
         if (currentDimension != null && dimensions.contains(currentDimension)) {
             selectedDestinyDimension = currentDimension;
@@ -303,9 +305,10 @@ public class DestinyScreen extends VillagerEditorScreen {
     }
 
     private void drawDimensionSelector(List<ResourceKey<Level>> dimensions) {
-        int selectorWidth = Math.min(DESTINY_DIMENSION_SELECTOR_MAX_WIDTH, width) - 28;
-        int buttonWidth = selectorWidth / dimensions.size();
-        int buttonX = (width - buttonWidth * dimensions.size()) / 2;
+        int selectorWidth = Math.min(DESTINY_DIMENSION_SELECTOR_MAX_WIDTH, width)
+                - DESTINY_DIMENSION_SELECTOR_MARGIN * 2;
+        int buttonWidth = Mth.roundToward(selectorWidth / dimensions.size(), 2);
+        int buttonX = Mth.roundToward((width - selectorWidth) / 2, 2);
         int buttonY = height / 2 - 28;
 
         for (ResourceKey<Level> dimension : dimensions) {
@@ -423,7 +426,6 @@ public class DestinyScreen extends VillagerEditorScreen {
         if (page.equals("general") && (this.page == null || this.page.equals("loading"))) {
             page = "intro";
         }
-
         if (page.equals("destiny") && !allowTeleportation) {
             Network.sendToServer(DestinyMessage.close());
             MCAClient.getDestinyManager().allowClosing();

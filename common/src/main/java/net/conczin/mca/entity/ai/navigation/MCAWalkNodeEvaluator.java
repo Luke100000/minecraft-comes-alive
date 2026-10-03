@@ -2,13 +2,15 @@ package net.conczin.mca.entity.ai.navigation;
 
 import it.unimi.dsi.fastutil.longs.Long2BooleanMap;
 import it.unimi.dsi.fastutil.longs.Long2BooleanOpenHashMap;
-import net.conczin.mca.Config;
 import net.conczin.mca.entity.ai.PathingBlockInteraction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.PathNavigationRegion;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.pathfinder.Node;
@@ -18,6 +20,9 @@ import net.minecraft.world.level.pathfinder.PathfindingContext;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.BooleanOp;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
 public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
@@ -30,6 +35,20 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     private final BlockPos.MutableBlockPos climbablePos = new BlockPos.MutableBlockPos();
     private final BlockPos.MutableBlockPos collisionPos = new BlockPos.MutableBlockPos();
     private Node startNode;
+    private boolean countExpandedNodes;
+    private int expandedNodes;
+
+    @Override
+    public void prepare(PathNavigationRegion region, Mob mob) {
+        this.expandedNodes = 0;
+        this.countExpandedNodes = PathRequestDiagnostics.enabled();
+        super.prepare(region, mob);
+    }
+
+    /** Neighbor expansions, not heap pops: reached goals and range-cutoff nodes are excluded. */
+    int expandedNodes() {
+        return this.expandedNodes;
+    }
 
     @Override
     public void done() {
@@ -119,6 +138,9 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
 
     @Override
     public int getNeighbors(Node[] nodes, Node origin) {
+        if (this.countExpandedNodes) {
+            this.expandedNodes++;
+        }
         int nodeCount = super.getNeighbors(nodes, origin);
         nodeCount = rejectBlockedRaisedStartTransitions(nodes, nodeCount, origin);
         nodeCount = rejectBlockedRaisedBarrierTransitions(nodes, nodeCount, origin);
@@ -144,17 +166,27 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         return nodeCount;
     }
 
-    private int addDescendingClimbableEntries(Node[] nodes, int nodeCount, BlockPos origin) {
+    int addDescendingClimbableEntries(Node[] nodes, int nodeCount, BlockPos origin) {
         for (Direction direction : Direction.Plane.HORIZONTAL) {
             BlockPos edge = origin.relative(direction);
             for (int drop = 1; drop <= MAX_CLIMBABLE_VERTICAL_OFFSET; drop++) {
                 BlockPos candidate = edge.below(drop);
-                if (isClimbable(candidate)) {
+                long key = candidate.asLong();
+                if (this.climbableCache.get(key)) {
                     nodeCount = addClimbableNode(nodes, nodeCount, candidate);
                     break;
                 }
 
+                // Non-climbable candidates still need their state for trapdoors
+                // and solid-floor termination. Read it once rather than asking
+                // isClimbable() to fetch it and immediately fetching it again.
                 BlockState state = this.currentContext.getBlockState(candidate);
+                boolean climbable = state.is(BlockTags.CLIMBABLE);
+                this.climbableCache.put(key, climbable);
+                if (climbable) {
+                    nodeCount = addClimbableNode(nodes, nodeCount, candidate);
+                    break;
+                }
                 if (PathingBlockInteraction.isHandOpenableTrapDoor(state)) {
                     continue;
                 }
@@ -192,7 +224,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     }
 
     private int rejectBlockedRaisedBarrierTransitions(Node[] nodes, int nodeCount, Node origin) {
-        AABB originBox = getMobBoxAt(origin);
+        AABB originBox = null;
         int writeIndex = 0;
         for (int readIndex = 0; readIndex < nodeCount; readIndex++) {
             Node candidate = nodes[readIndex];
@@ -200,12 +232,19 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
                 continue;
             }
 
-            AABB destinationBox = getMobBoxAt(candidate);
             BlockState support = this.currentContext.getBlockState(
                     this.collisionPos.set(candidate.x, candidate.y - 1, candidate.z)
             );
-            boolean raisedBarrierTop = destinationBox.minY > originBox.minY + RAISED_START_EPSILON
-                    && isBarrierSupport(support);
+            if (!isBarrierSupport(support)) {
+                nodes[writeIndex++] = candidate;
+                continue;
+            }
+
+            if (originBox == null) {
+                originBox = getMobBoxAt(origin);
+            }
+            AABB destinationBox = getMobBoxAt(candidate);
+            boolean raisedBarrierTop = destinationBox.minY > originBox.minY + RAISED_START_EPSILON;
             if (!raisedBarrierTop || canSweepBoxTo(candidate, originBox)) {
                 nodes[writeIndex++] = candidate;
             }
@@ -273,11 +312,20 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
 
     @Override
     public PathType getPathType(PathfindingContext context, int x, int y, int z) {
-        if (isClimbable(context, x, y, z)) {
+        // The same state also determines hand-openable gate handling. Reuse it
+        // for climbable classification instead of fetching this block twice.
+        BlockState state = context.getBlockState(this.climbablePos.set(x, y, z));
+        boolean climbable = state.is(BlockTags.CLIMBABLE);
+        if (context == this.currentContext) {
+            this.climbableCache.put(BlockPos.asLong(x, y, z), climbable);
+        }
+        if (state.is(Blocks.SCAFFOLDING)) {
+            return super.getPathType(context, x, y, z);
+        }
+        if (climbable) {
             return PathType.WALKABLE;
         }
 
-        BlockState state = context.getBlockState(this.climbablePos.set(x, y, z));
         if (PathingBlockInteraction.canInteractWithFenceGate(state)
                 && !state.getValue(BlockStateProperties.OPEN)) {
             // Vanilla treats closed fence gates as FENCE, so a path can never contain
@@ -331,18 +379,12 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     }
 
     private boolean hasBlockClearance(Node node) {
-        AABB clearanceBox = getMobBoxAt(node);
-        if (!Config.getInstance().villagerPathfindingCheckAllNodeCollisions
-                && !PathfindingBlacklist.overlapsSpecialCollisionBlock(this.currentContext.level(), clearanceBox)) {
-            return true;
-        }
-
         long key = BlockPos.asLong(node.x, node.y, node.z);
         if (this.clearanceCache.containsKey(key)) {
             return this.clearanceCache.get(key);
         }
 
-        boolean hasClearance = hasExactBlockClearance(clearanceBox);
+        boolean hasClearance = hasExactBlockClearance(getMobBoxAt(node));
         this.clearanceCache.put(key, hasClearance);
         return hasClearance;
     }
@@ -381,7 +423,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
 
     private AABB getMobBoxAt(Node node) {
         AABB box = this.mob.getBoundingBox();
-        double floorY = this.getFloorLevel(this.collisionPos.set(node.x, node.y, node.z));
+        double floorY = getStandingFloorY(node, box);
         double centerX = (box.minX + box.maxX) * 0.5D;
         double centerZ = (box.minZ + box.maxZ) * 0.5D;
         return box.move(
@@ -389,6 +431,40 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
                 floorY + FLOOR_EPSILON - box.minY,
                 node.z + 0.5D - centerZ
         );
+    }
+    private double getStandingFloorY(Node node, AABB mobBox) {
+        BlockPos pos = this.collisionPos.set(node.x, node.y, node.z);
+        double floorY = this.getFloorLevel(pos);
+        BlockState state = this.currentContext.getBlockState(pos);
+        if (state.isAir() || !state.isPathfindable(PathComputationType.LAND)) {
+            return floorY;
+        }
+
+        VoxelShape collisionShape = state.getCollisionShape(this.currentContext.level(), pos);
+        if (collisionShape.isEmpty()) {
+            return floorY;
+        }
+
+        double surfaceY = collisionShape.max(Direction.Axis.Y);
+        if (surfaceY > 1.0D) {
+            return floorY;
+        }
+
+        double halfWidth = mobBox.getXsize() * 0.5D;
+        double halfDepth = mobBox.getZsize() * 0.5D;
+        VoxelShape footprint = Shapes.box(
+                0.5D - halfWidth,
+                Math.max(0.0D, surfaceY - BOX_EPSILON),
+                0.5D - halfDepth,
+                0.5D + halfWidth,
+                surfaceY,
+                0.5D + halfDepth
+        );
+        if (Shapes.joinIsNotEmpty(footprint, collisionShape, BooleanOp.ONLY_FIRST)) {
+            return floorY;
+        }
+
+        return Math.max(floorY, node.y + surfaceY);
     }
     private boolean canSweepBoxTo(Node candidate, AABB startBox) {
         AABB destinationBox = getMobBoxAt(candidate);

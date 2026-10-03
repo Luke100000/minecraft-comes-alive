@@ -91,7 +91,6 @@ public final class VillagerFishingLineLayer extends RenderLayer<VillagerRenderSt
         });
         poseStack.popPose();
     }
-
     private static float fraction(int value, int total) {
         return (float) value / total;
     }

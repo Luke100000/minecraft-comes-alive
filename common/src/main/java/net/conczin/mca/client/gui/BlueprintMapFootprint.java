@@ -1,6 +1,6 @@
 package net.conczin.mca.client.gui;
 
-import net.conczin.mca.server.world.data.BuildingFloorRegion;
+import net.minecraft.core.BlockPos;
 
 import java.util.*;
 
@@ -18,27 +18,11 @@ final class BlueprintMapFootprint {
         return cells;
     }
 
-    static Set<Cell> fromFloorRegion(BuildingFloorRegion region) {
-        if (region == null) return Set.of();
-        LinkedHashSet<Cell> cells = new LinkedHashSet<>();
-        for (BuildingFloorRegion.Component component : region.components()) {
-            cells.addAll(fromComponent(component));
-        }
-        return cells;
-    }
-
-    static Set<Cell> fromComponent(BuildingFloorRegion.Component component) {
-        if (component.spans().isEmpty()) {
-            return Set.of();
-        }
-
-        LinkedHashSet<Cell> cells = new LinkedHashSet<>();
-        for (BuildingFloorRegion.Span span : component.spans()) {
-            for (int x = span.minX(); x <= span.maxX(); x++) {
-                cells.add(new Cell(x, span.z()));
-            }
-        }
-        return cells;
+    static Set<Cell> fromBlockPositions(Collection<BlockPos> positions) {
+        if (positions == null || positions.isEmpty()) return Set.of();
+        return positions.stream()
+                .map(pos -> new Cell(pos.getX(), pos.getZ()))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
     /**

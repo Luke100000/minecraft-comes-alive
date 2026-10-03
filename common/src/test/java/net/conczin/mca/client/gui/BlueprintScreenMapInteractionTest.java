@@ -5,7 +5,7 @@ import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.network.c2s.ReportBuildingMessage;
 import net.conczin.mca.server.world.data.Building;
-import net.conczin.mca.server.world.data.BuildingFloorRegion;
+import net.conczin.mca.server.world.data.TestFloorFootprint;
 import net.conczin.mca.server.world.data.RoomScanPlan;
 import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.StructureFloor;
@@ -499,8 +499,7 @@ class BlueprintScreenMapInteractionTest {
         otherRoom.setStructureId(20);
         registerStructure(village, other, otherRoom);
 
-        RoomScanPlan plan = new RoomScanPlan(Optional.of(currentRoom), Village.RoomScanMode.UPDATE_ROOM,
-                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 0);
+        RoomScanPlan plan = RoomScanPlan.updateRoom(currentRoom, BlockPos.ZERO);
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, 1);
 
         assertTrue(state.visible());
@@ -519,8 +518,8 @@ class BlueprintScreenMapInteractionTest {
         main.setFloorId(1);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = new RoomScanPlan(Optional.empty(), Village.RoomScanMode.ADD_BASEMENT,
-                10, -1, BlockPos.ZERO, BlockPos.ZERO, -1, -1, structure.getFloor(0).orElseThrow());
+        RoomScanPlan plan = RoomScanPlan.attachment(
+                10, -1, BlockPos.ZERO, BlockPos.ZERO, structure.getFloor(0).orElseThrow());
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, -1);
 
         assertFalse(state.visible());
@@ -536,8 +535,7 @@ class BlueprintScreenMapInteractionTest {
         Building main = room(1);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.UPDATE_ROOM,
-                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 0);
+        RoomScanPlan plan = RoomScanPlan.updateRoom(main, BlockPos.ZERO);
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, 1);
 
         assertTrue(state.visible());
@@ -553,8 +551,7 @@ class BlueprintScreenMapInteractionTest {
         Building main = room(1);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.UPDATE_ROOM,
-                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 0);
+        RoomScanPlan plan = RoomScanPlan.updateRoom(main, BlockPos.ZERO);
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, 0);
 
         assertTrue(state.visible());
@@ -573,8 +570,7 @@ class BlueprintScreenMapInteractionTest {
         Building main = room(1);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.UPDATE_ROOM,
-                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 0);
+        RoomScanPlan plan = RoomScanPlan.updateRoom(main, BlockPos.ZERO);
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, 1);
 
         assertTrue(state.visible());
@@ -594,8 +590,7 @@ class BlueprintScreenMapInteractionTest {
         main.setFloorId(2);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.UPDATE_ROOM,
-                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 2);
+        RoomScanPlan plan = RoomScanPlan.updateRoom(main, BlockPos.ZERO);
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, -1);
 
         assertTrue(state.visible());
@@ -615,8 +610,7 @@ class BlueprintScreenMapInteractionTest {
         main.setFloorId(2);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.UPDATE_ROOM,
-                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 2);
+        RoomScanPlan plan = RoomScanPlan.updateRoom(main, BlockPos.ZERO);
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, -2);
 
         assertTrue(state.visible());
@@ -675,19 +669,13 @@ class BlueprintScreenMapInteractionTest {
                 region(anchorY));
     }
 
-    private static BuildingFloorRegion region(int anchorY) throws Exception {
-        Method fromFootprint = BuildingFloorRegion.class.getDeclaredMethod(
-                "fromFootprint", int.class, java.util.Collection.class);
-        fromFootprint.setAccessible(true);
-        return (BuildingFloorRegion) fromFootprint.invoke(null, anchorY,
-                Set.of(new BlockPos(0, anchorY, 0)));
+    private static TestFloorFootprint region(int anchorY) throws Exception {
+        return TestFloorFootprint.fromFootprint(
+                anchorY, Set.of(new BlockPos(0, anchorY, 0)));
     }
 
-    private static BuildingFloorRegion region(BlockPos cell) throws Exception {
-        Method fromFootprint = BuildingFloorRegion.class.getDeclaredMethod(
-                "fromFootprint", int.class, java.util.Collection.class);
-        fromFootprint.setAccessible(true);
-        return (BuildingFloorRegion) fromFootprint.invoke(null, cell.getY(), Set.of(cell));
+    private static TestFloorFootprint region(BlockPos cell) throws Exception {
+        return TestFloorFootprint.fromFootprint(cell.getY(), Set.of(cell));
     }
 
     private static void setRoomGeometry(Building room, BlockPos cell) throws Exception {
@@ -731,7 +719,7 @@ class BlueprintScreenMapInteractionTest {
     private static void ensureRoomOwnership(Structure structure, Building room) throws Exception {
         if (!room.getFloorCells().isEmpty()) return;
         StructureFloor floor = structure.getFloor(room.getFloorId()).orElseThrow();
-        BlockPos cell = floor.region().cells().iterator().next();
+        BlockPos cell = new BlockPos(structure.getPos0().getX(), floor.anchorY(), structure.getPos0().getZ());
         setRoomGeometry(room, cell);
     }
 }

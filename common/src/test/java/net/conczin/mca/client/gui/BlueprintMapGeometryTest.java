@@ -4,7 +4,7 @@ import com.google.gson.JsonObject;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.server.world.data.Building;
-import net.conczin.mca.server.world.data.BuildingFloorRegion;
+import net.conczin.mca.server.world.data.TestFloorFootprint;
 import net.conczin.mca.server.world.data.FloorConnector;
 import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.StructureFloor;
@@ -259,11 +259,8 @@ class BlueprintMapGeometryTest {
         return structure;
     }
 
-    private static BuildingFloorRegion region(int anchorY,
+    private static TestFloorFootprint region(int anchorY,
                                               FloorConnector.Marker... connectors) throws Exception {
-        Method fromFootprint = BuildingFloorRegion.class.getDeclaredMethod(
-                "fromFootprint", int.class, java.util.Collection.class);
-        fromFootprint.setAccessible(true);
         Set<BlockPos> cells = new LinkedHashSet<>();
         cells.add(new BlockPos(0, anchorY, 0));
         cells.add(new BlockPos(1, anchorY, 0));
@@ -271,8 +268,7 @@ class BlueprintMapGeometryTest {
         for (FloorConnector.Marker connector : connectors) {
             cells.add(connector.floorCell());
         }
-        return (BuildingFloorRegion) fromFootprint.invoke(null, anchorY,
-                cells);
+        return TestFloorFootprint.fromFootprint(anchorY, cells);
     }
 
     private static Building room(int id, int structureId, int floorId, BlockPos source) {
@@ -306,16 +302,12 @@ class BlueprintMapGeometryTest {
         int minZ = cells.stream().mapToInt(BlockPos::getZ).min().orElseThrow();
         int maxX = cells.stream().mapToInt(BlockPos::getX).max().orElseThrow();
         int maxZ = cells.stream().mapToInt(BlockPos::getZ).max().orElseThrow();
-        Method fromFootprint = BuildingFloorRegion.class.getDeclaredMethod(
-                "fromFootprint", int.class, java.util.Collection.class);
-        fromFootprint.setAccessible(true);
-        BuildingFloorRegion region = (BuildingFloorRegion) fromFootprint.invoke(null, floorY, cells);
         Method setGeometry = Building.class.getDeclaredMethod(
-                "setGeometry", BlockPos.class, BlockPos.class, BuildingFloorRegion.class);
+                "setGeometry", BlockPos.class, BlockPos.class, java.util.Collection.class);
         setGeometry.setAccessible(true);
         setGeometry.invoke(room,
                 new BlockPos(minX, floorY, minZ),
                 new BlockPos(maxX, floorY + 3, maxZ),
-                region);
+                cells);
     }
 }

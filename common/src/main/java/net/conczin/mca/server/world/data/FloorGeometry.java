@@ -14,7 +14,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/** Exact physical geometry for one semantic Floor. */
+/** Exact structural ownership geometry for one semantic Floor; cells need not be traversable. */
 final class FloorGeometry {
     private final Set<Cell> cells;
     private final Map<BlockPos, FloorConnector.Type> connectorTypesByCell;
@@ -140,14 +140,6 @@ final class FloorGeometry {
         return cellsAtColumn(x, z).stream()
                 .filter(cell -> y == cell.feet().getY() - 1)
                 .max(Comparator.comparingInt(cell -> cell.feet().getY()));
-    }
-
-    BuildingFloorRegion projection() {
-        int y = anchorY();
-        Set<BlockPos> projected = cells.stream()
-                .map(cell -> new BlockPos(cell.feet().getX(), y, cell.feet().getZ()))
-                .collect(Collectors.toUnmodifiableSet());
-        return BuildingFloorRegion.fromFootprint(y, projected);
     }
 
     boolean sameProjectedFootprint(FloorGeometry other) {

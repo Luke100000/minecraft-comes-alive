@@ -175,7 +175,7 @@ class RoomScanPlannerTest {
         RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
                 observation(source, scannedFloor(68, 72, 0, 3)));
 
-        assertEquals(Village.RoomScanMode.ADD_FLOOR, plan.mode());
+        assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, plan.mode());
         assertEquals(20, plan.targetBuildingId());
         assertEquals(1, plan.prospectiveFloorNumber());
     }
@@ -209,7 +209,7 @@ class RoomScanPlannerTest {
         RoomScanPlan plan = RoomScanPlanner.planFresh(
                 village, source, observation(source, upper, Set.of(new BlockPos(0, 67, 0))));
 
-        assertEquals(Village.RoomScanMode.ADD_FLOOR, plan.mode());
+        assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, plan.mode());
         assertEquals(20, plan.targetBuildingId());
         assertEquals(1, plan.prospectiveFloorNumber());
     }
@@ -227,7 +227,7 @@ class RoomScanPlannerTest {
         RoomScanPlan plan = RoomScanPlanner.planFresh(
                 village, source, observation(source, primary, Set.of(new BlockPos(0, 64, 0))));
 
-        assertEquals(Village.RoomScanMode.ADD_BASEMENT, plan.mode());
+        assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, plan.mode());
         assertEquals(20, plan.targetBuildingId());
         assertEquals(-1, plan.prospectiveFloorNumber());
         assertTrue(plan.selectedAttachmentFloor() != null
@@ -271,7 +271,7 @@ class RoomScanPlannerTest {
         RoomScanPlan plan = RoomScanPlanner.planFresh(
                 village, source, observation(source, primary, Set.of(new BlockPos(0, 64, 0))));
 
-        assertEquals(Village.RoomScanMode.ADD_FLOOR, plan.mode());
+        assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, plan.mode());
         assertEquals(20, plan.targetBuildingId());
         assertEquals(1, plan.prospectiveFloorNumber());
     }
@@ -289,7 +289,7 @@ class RoomScanPlannerTest {
         RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
                 observation(source, primary, Set.of(new BlockPos(0, 64, 0))));
 
-        assertEquals(Village.RoomScanMode.ADD_BASEMENT, plan.mode());
+        assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, plan.mode());
         assertTrue(plan.selectedAttachmentFloor() != null
                 && plan.selectedAttachmentFloor().geometry().sameCellPositions(primary),
                 "attachment planning must keep the selected Floor instead of substituting another scanned Floor");
@@ -351,7 +351,7 @@ class RoomScanPlannerTest {
     }
 
     private static Structure structure(int id, int logicalBuildingId, StructureFloor floor) {
-        Structure structure = new Structure(id, floor.region().cells().iterator().next(), List.of(floor));
+        Structure structure = new Structure(id, floor.geometry().cells().iterator().next().feet(), List.of(floor));
         structure.setLogicalBuildingId(logicalBuildingId);
         return structure;
     }
@@ -361,7 +361,7 @@ class RoomScanPlannerTest {
                 .mapToObj(x -> new BlockPos(x, anchorY, 0))
                 .collect(java.util.stream.Collectors.toSet());
         return TestStructureFloors.create(id, anchorY, ceilingY, 0,
-                BuildingFloorRegion.fromFootprint(anchorY, cells));
+                TestFloorFootprint.fromFootprint(anchorY, cells));
     }
 
     private static FloorGeometry scannedFloor(int anchorY, int ceilingY, int minX, int maxX) {

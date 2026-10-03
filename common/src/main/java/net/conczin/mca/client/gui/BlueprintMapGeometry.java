@@ -226,13 +226,7 @@ final class BlueprintMapGeometry {
     }
 
     private static Set<BlueprintMapFootprint.Cell> roomFootprint(Building building) {
-        Set<BlueprintMapFootprint.Cell> cells = building.getFloorRegion()
-                .map(BlueprintMapFootprint::fromFloorRegion)
-                .orElseGet(Set::of);
-        if (!cells.isEmpty()) return cells;
-        BlockPos min = building.getRawPos0();
-        BlockPos max = building.getRawPos1();
-        return BlueprintMapFootprint.rectangle(min.getX(), min.getZ(), max.getX(), max.getZ());
+        return BlueprintMapFootprint.fromBlockPositions(building.getFloorCells());
     }
 
     /** Always returns a point inside the actual visible footprint closest to its centroid. */

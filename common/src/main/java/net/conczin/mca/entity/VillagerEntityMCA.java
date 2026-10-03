@@ -60,7 +60,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
-import net.minecraft.world.entity.ai.control.MoveControl;
+import net.minecraft.world.entity.ai.control.BodyRotationControl;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
@@ -92,6 +92,7 @@ import net.minecraft.world.item.component.SuspiciousStewEffects;
 import net.minecraft.world.item.consume_effects.ApplyStatusEffectsConsumeEffect;
 import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.storage.TagValueInput;
@@ -138,13 +139,14 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.UNASSIGNED);
     long lastCooldown = 0L;
     private PlayerModel playerModel;
+    @Nullable
+    private MCAFishingBobberEntity fishingBobber;
     private int despawnDelay;
     private int burned;
     private long lastHit = 0;
     private int prevVisualAge;
     private boolean ageStateEventsEnabled;
     private boolean interactedWith;
-    private int lastAppliedHealthLevel = Integer.MIN_VALUE;
     private double lastAppliedHealthBonus = Double.NaN;
     private boolean recoveryFoodUseActive;
     private boolean completingRecoveryFoodUse;
@@ -172,7 +174,15 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         this.setPathfindingMalus(PathType.WATER_BORDER, 16.0F);
         this.setPathfindingMalus(PathType.TRAPDOOR, 8.0F);
         this.setPathfindingMalus(PathType.ON_TOP_OF_TRAPDOOR, 8.0F);
-        this.getNavigation().setRequiredPathLength((float) Config.getInstance().getVillagerPathfindingDistance());
+        this.setPathfindingMalus(PathType.WATER, 16.0F);
+    }
+
+    @Override
+    protected BodyRotationControl createBodyControl() {
+        return new MCABodyRotationControl(
+                this,
+                () -> this.isUsingItem() && this.getUseItem().getItem() instanceof ProjectileWeaponItem
+        );
     }
 
     @Override
@@ -183,20 +193,24 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     public Vec3 handleRelativeFrictionAndCalculateMovement(Vec3 input, float friction) {
         Vec3 movement = super.handleRelativeFrictionAndCalculateMovement(input, friction);
-        if (getNavigation() instanceof MCAGroundPathNavigation navigation) {
-            double controlledY = navigation.getControlledClimbableVelocity();
-            if (!Double.isNaN(controlledY)) {
-                return new Vec3(movement.x(), controlledY, movement.z());
-            }
-        }
-        return movement;
+        return getNavigation() instanceof MCAGroundPathNavigation navigation
+                ? navigation.adjustClimbableTravelMovement(movement)
+                : movement;
+    }
+
+    @Override
+    public boolean isDescending() {
+        return super.isDescending()
+                || getNavigation() instanceof MCAGroundPathNavigation navigation
+                && navigation.isDescendingThroughScaffolding();
     }
 
     @Override
     public void setJumping(boolean jumping) {
         boolean navigationControlsClimb = this.getNavigation() instanceof MCAGroundPathNavigation navigation
                 && navigation.isControllingClimbableMovement();
-        super.setJumping(jumping && !this.onClimbable() && !navigationControlsClimb);
+        boolean climbableSuppressesJump = this.onClimbable() && !this.getInBlockState().is(Blocks.SCAFFOLDING);
+        super.setJumping(jumping && !climbableSuppressesJump && !navigationControlsClimb);
     }
 
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
@@ -257,6 +271,15 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     public PlayerModel getPlayerModel() {
         return playerModel;
+    }
+
+    @Nullable
+    public MCAFishingBobberEntity getFishingBobber() {
+        return fishingBobber;
+    }
+
+    void setFishingBobber(@Nullable MCAFishingBobberEntity fishingBobber) {
+        this.fishingBobber = fishingBobber;
     }
 
     @Override
@@ -1058,11 +1081,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         int level = this.getVillagerData().level() - 1;
         double bonus = Config.getInstance().villagerHealthBonusPerLevel * level;
 
-        if (level == lastAppliedHealthLevel && bonus == lastAppliedHealthBonus) {
+        if (bonus == lastAppliedHealthBonus) {
             return;
         }
 
-        lastAppliedHealthLevel = level;
         lastAppliedHealthBonus = bonus;
 
         AttributeInstance instance = this.getAttributes().getInstance(Attributes.MAX_HEALTH);
@@ -1184,7 +1206,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             if (isClientSide() && MCAClient.useGeneticsRenderer(vehicle.getUUID())) {
                 VillagerLike<?> playerData = MCAClient.getGeneticsRendererData(vehicle.getUUID()).orElse(null);
                 if (playerData != null) {
-                    float height = playerData.getRawVerticalScaleFactor();
+                    float height = playerData.getVisualVerticalScaleFactor();
                     offset = offset.multiply(1.0f, height, 1.0f);
                     offset = offset.add(0, (height - 1) * 1.5 - 0.7, 0);
                     this.setPosRaw(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
@@ -1226,11 +1248,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             return SLEEPING_DIMENSIONS;
         }
 
-        float height = getVerticalScaleFactor() * 2.0F;
-        float width = getHorizontalScaleFactor() * 0.6F;
+        float height = getPhysicalVerticalScaleFactor() * 2.0F;
+        float width = getPhysicalHorizontalScaleFactor() * 0.6F;
 
         return EntityDimensions.scalable(width, height).withAttachments(EntityAttachments.builder()
-                .attach(EntityAttachment.VEHICLE, 0.0F, getRawVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F));
+                .attach(EntityAttachment.VEHICLE, 0.0F, getVisualVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F));
     }
 
     @Override
@@ -1273,8 +1295,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             VillagerTrackerManager.update(this);
         }
     }
-
-
     @Override
     public void teleportTo(double destX, double destY, double destZ) {
         if (isPassenger()) {
@@ -1824,21 +1844,16 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (weaponStack.getItem() instanceof BowItem) {
             ItemStack projectile = this.getProjectile(weaponStack);
             AbstractArrow arrowEntity = ProjectileUtil.getMobArrow(this, projectile, pullProgress, weaponStack);
-            double xd = target.getX() - this.getX();
-            double zd = target.getZ() - this.getZ();
-            double horizontalDistance = Math.sqrt(xd * xd + zd * zd);
-            double flightTicks = horizontalDistance / 1.6D;
-            double gravityCompensation = 0.025D * flightTicks * Math.max(0.0D, flightTicks - 1.0D);
-            double yd = getFriendlyArrowAimY(target) - arrowEntity.getY() + gravityCompensation;
+            Vec3 shot = RangedWeaponHelper.calculateBowShotVector(
+                    arrowEntity.position(),
+                    target.position(),
+                    target.getBbHeight()
+            );
             Projectile.spawnProjectileUsingShoot(
-                    arrowEntity, serverLevel, projectile, xd, yd, zd, 1.6F, FRIENDLY_ARROW_UNCERTAINTY
+                    arrowEntity, serverLevel, projectile, shot.x, shot.y, shot.z, 1.6F, FRIENDLY_ARROW_UNCERTAINTY
             );
             this.playSound(SoundEvents.SKELETON_SHOOT, 1.0F, 1.0F / (this.getRandom().nextFloat() * 0.4F + 0.8F));
         }
-    }
-
-    private static double getFriendlyArrowAimY(LivingEntity target) {
-        return target.getY(target.getBbHeight() <= 1.0F ? 0.5D : 1.0D / 3.0D);
     }
 
     @Override

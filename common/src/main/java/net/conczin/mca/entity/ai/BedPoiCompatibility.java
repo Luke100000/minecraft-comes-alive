@@ -22,6 +22,34 @@ public final class BedPoiCompatibility {
     private BedPoiCompatibility() {
     }
 
+    /**
+     * The lowest-level compatibility contract used everywhere MCA reasons about beds.
+     *
+     * <p>Do not replace this with a block tag check: MCA deliberately supports
+     * vanilla-style modded beds implemented as {@link BedBlock} subclasses even when
+     * they are absent from {@code #minecraft:beds}.</p>
+     */
+    public static boolean isCompatibleBedState(BlockState state) {
+        return state.getBlock() instanceof BedBlock
+                && state.hasProperty(BedBlock.FACING)
+                && state.hasProperty(BedBlock.PART)
+                && state.hasProperty(BedBlock.OCCUPIED);
+    }
+
+    /**
+     * The canonical state represented by a HOME POI.
+     */
+    public static boolean isHomePoiState(BlockState state) {
+        return isCompatibleBedState(state) && state.getValue(BedBlock.PART) == BedPart.HEAD;
+    }
+
+    /**
+     * A HOME POI that may currently be acquired by a villager.
+     */
+    public static boolean isAvailableHomePoiState(BlockState state) {
+        return isHomePoiState(state) && !state.getValue(BedBlock.OCCUPIED);
+    }
+
     public static Stream<BlockState> homeStates(Block block) {
         if (!(block instanceof BedBlock)) {
             return Stream.empty();
@@ -30,8 +58,7 @@ public final class BedPoiCompatibility {
         return block.getStateDefinition()
                 .getPossibleStates()
                 .stream()
-                .filter(state -> state.hasProperty(BedBlock.PART))
-                .filter(state -> state.getValue(BedBlock.PART) == BedPart.HEAD);
+                .filter(BedPoiCompatibility::isHomePoiState);
     }
 
     public static Set<BlockState> unregisteredModdedHomeStates() {

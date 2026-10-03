@@ -17,7 +17,7 @@ public final class Structure implements VillageBuilding {
 
     private int id;
     private int logicalBuildingId;
-    private int nextFloorId;
+    private boolean originGeometryApproximate;
     private BlockPos source;
     private BlockPos min;
     private BlockPos max;
@@ -29,7 +29,6 @@ public final class Structure implements VillageBuilding {
         this.source = source.immutable();
         for (StructureFloor floor : floors) {
             putFloorUnique(floor);
-            nextFloorId = Math.max(nextFloorId, floor.id() + 1);
         }
         recomputeBoundsFromFloors();
     }
@@ -37,12 +36,11 @@ public final class Structure implements VillageBuilding {
     public Structure(CompoundTag tag) {
         id = tag.getInt("id").orElse(0);
         logicalBuildingId = tag.getInt("buildingId").orElse(id);
-        nextFloorId = tag.getInt("nextFloorId").orElse(0);
+        originGeometryApproximate = tag.getBoolean("originGeometryApproximate").orElse(false);
         source = NbtHelper.decodeBlockPos(tag.get("source"));
         for (StructureFloor floor : NbtHelper.toList(tag.getList("floors").orElseGet(net.minecraft.nbt.ListTag::new),
                 value -> StructureFloor.load((CompoundTag) value))) {
             putFloorUnique(floor);
-            nextFloorId = Math.max(nextFloorId, floor.id() + 1);
         }
         recomputeBoundsFromFloors();
     }
@@ -59,7 +57,9 @@ public final class Structure implements VillageBuilding {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
         tag.putInt("buildingId", getLogicalBuildingId());
-        tag.putInt("nextFloorId", nextFloorId);
+        if (originGeometryApproximate) {
+            tag.putBoolean("originGeometryApproximate", true);
+        }
         tag.put("source", NbtHelper.encodeBlockPos(source));
         tag.put("floors", NbtHelper.fromList(getFloors(), StructureFloor::save));
         return tag;
@@ -71,6 +71,14 @@ public final class Structure implements VillageBuilding {
 
     void setLogicalBuildingId(int logicalBuildingId) {
         this.logicalBuildingId = logicalBuildingId;
+    }
+
+    void setOriginGeometryApproximate(boolean originGeometryApproximate) {
+        this.originGeometryApproximate = originGeometryApproximate;
+    }
+
+    boolean hasOriginGeometryApproximation() {
+        return originGeometryApproximate;
     }
 
     public Optional<StructureFloor> getFloor(int floorId) {
@@ -157,6 +165,32 @@ public final class Structure implements VillageBuilding {
                 resolved.floor(), roomAtCell(localRooms, resolved.floor(), resolved.cell().feet())));
     }
 
+    /** Use exact geometry first, then the scan's connector evidence when a ladder occupies the column. */
+    Optional<InteractionPosition> resolveVerticalSide(BlockPos pos, List<BlockPos> connectorColumn,
+                                                      Collection<Building> structureRooms) {
+        Collection<Building> localRooms = structureRooms == null ? List.of() : structureRooms;
+        FloorCell physical = resolvePhysicalFloorCell(pos).orElse(null);
+        if (physical != null) {
+            return Optional.of(new InteractionPosition(physical.floor(),
+                    roomAtCell(localRooms, physical.floor(), physical.cell().feet())));
+        }
+        if (connectorColumn.isEmpty()) return Optional.empty();
+        StructureFloor floor = floorAtHeight(pos.getY()).orElse(null);
+        if (floor == null) return Optional.empty();
+        Building owner = null;
+        boolean matched = false;
+        for (FloorConnector.Marker marker : floor.connectors()) {
+            if (!marker.type().vertical() || !connectorColumn.contains(marker.pos())) continue;
+            matched = true;
+            Building candidate = roomAtCell(localRooms, floor, marker.floorCell());
+            if (candidate == null || owner != null && owner != candidate) {
+                return Optional.of(new InteractionPosition(floor, null));
+            }
+            owner = candidate;
+        }
+        return matched ? Optional.of(new InteractionPosition(floor, owner)) : Optional.empty();
+    }
+
     private static Building roomAtCell(Collection<Building> rooms, StructureFloor floor, BlockPos feet) {
         return rooms.stream()
                 .filter(room -> room.getFloorId() == floor.id())
@@ -182,14 +216,19 @@ public final class Structure implements VillageBuilding {
     Structure copy() {
         Structure copy = new Structure(id, source, getFloors());
         copy.logicalBuildingId = logicalBuildingId;
-        copy.nextFloorId = nextFloorId;
+        copy.originGeometryApproximate = originGeometryApproximate;
         return copy;
     }
 
     boolean replaceFloorGeometry(int floorId, StructureFloor scannedFloor) {
+        return replaceFloorGeometry(floorId, scannedFloor == null ? null : scannedFloor.geometry());
+    }
+
+    boolean replaceFloorGeometry(int floorId, FloorGeometry scannedFloor) {
         StructureFloor existing = floors.get(floorId);
         if (existing == null || scannedFloor == null) return false;
-        floors.put(floorId, new StructureFloor(floorId, existing.floorNumber(), scannedFloor.geometry()));
+        floors.put(floorId, new StructureFloor(floorId, existing.floorNumber(), scannedFloor));
+        if (floorId == 0) originGeometryApproximate = false;
         recomputeBoundsFromFloors();
         return true;
     }

@@ -114,7 +114,7 @@ public class ClientHandlerImpl implements ClientHandler {
     public void handleFamilyTreeResponse(GetFamilyTreeResponse message) {
         Screen screen = client.screen;
         if (screen instanceof FamilyTreeScreen gui) {
-            gui.setFamilyData(message.uuid(), message.family());
+            gui.acceptFamilyData(message);
         }
     }
 
@@ -209,8 +209,10 @@ public class ClientHandlerImpl implements ClientHandler {
     @Override
     public void handleFamilyTreeUUIDResponse(FamilyTreeUUIDResponse response) {
         Screen screen = client.screen;
-        if (screen instanceof FamilyTreeSearchScreen gui) {
-            gui.setList(response.list());
+        if (screen instanceof FamilyTreeScreen gui) {
+            gui.setSearchResults(response.search(), response.list());
+        } else if (screen instanceof FamilyTreeSearchScreen gui) {
+            gui.setList(response.search(), response.list());
         }
     }
 
