@@ -16,6 +16,10 @@ accessible method net/minecraft/world/entity/npc/villager/Villager setUnhappy ()
 # Widen MoveControl.rotlerp for task usage
 accessible method net/minecraft/world/entity/ai/control/MoveControl rotlerp (FFF)F
 
+# Reuse PathNavigation's effective ordinary-search horizon instead of mirroring
+# vanilla's required-path-length policy in MCA.
+accessible method net/minecraft/world/entity/ai/navigation/PathNavigation getMaxPathLength ()F
+
 # Reuse vanilla's fishing-line curve primitive for MCA villager bobbers.
 accessible method net/minecraft/client/renderer/entity/FishingHookRenderer stringVertex (FFFLcom/mojang/blaze3d/vertex/VertexConsumer;Lcom/mojang/blaze3d/vertex/PoseStack$Pose;FFF)V
 

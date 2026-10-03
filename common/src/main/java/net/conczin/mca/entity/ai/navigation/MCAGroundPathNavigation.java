@@ -7,7 +7,6 @@ import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
@@ -23,7 +22,6 @@ import net.minecraft.world.phys.Vec3;
 import java.util.Set;
 
 public class MCAGroundPathNavigation extends GroundPathNavigation {
-    private static final float REQUIRED_PATH_LENGTH = 48.0F;
     private static final int FALL_RESYNC_LOOKAHEAD = 2;
     private static final int FALL_RESYNC_HORIZONTAL_DISTANCE = 2;
     private static final int FALL_RESYNC_MIN_VERTICAL_DROP = 2;
@@ -284,7 +282,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     }
 
     public static float getOrdinaryPathLength(Mob mob) {
-        return Math.max((float)mob.getAttributeValue(Attributes.FOLLOW_RANGE), REQUIRED_PATH_LENGTH);
+        return mob.getNavigation().getMaxPathLength();
     }
 
     public static boolean isUsefulPartialPath(Path path, BlockPos destination) {
