@@ -24,7 +24,6 @@ import java.util.Set;
 
 public class MCAGroundPathNavigation extends GroundPathNavigation {
     private static final float REQUIRED_PATH_LENGTH = 48.0F;
-    private static final int VISITED_NODES_PER_BLOCK = 16;
     private static final int FALL_RESYNC_LOOKAHEAD = 2;
     private static final int FALL_RESYNC_HORIZONTAL_DISTANCE = 2;
     private static final int FALL_RESYNC_MIN_VERTICAL_DROP = 2;
@@ -98,22 +97,16 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         MCAWalkNodeEvaluator evaluator = new MCAWalkNodeEvaluator();
         this.nodeEvaluator = evaluator;
         evaluator.setCanOpenDoors(true);
-        int requiredPathBudget = Mth.floor(REQUIRED_PATH_LENGTH * VISITED_NODES_PER_BLOCK);
         return new PathFinder(evaluator, maxVisitedNodes) {
             @Override
             public Path findPath(PathNavigationRegion region, Mob mob, Set<BlockPos> targets,
                                  float maxPathLength, int reachRange, float visitedNodesMultiplier) {
-                float rangeMultiplier = Math.max(
-                        1.0F,
-                        maxPathLength * VISITED_NODES_PER_BLOCK / requiredPathBudget
-                );
                 if (!PathRequestDiagnostics.enabled()) {
-                    return super.findPath(region, mob, targets, maxPathLength, reachRange,
-                            visitedNodesMultiplier * rangeMultiplier);
+                    return super.findPath(region, mob, targets, maxPathLength, reachRange, visitedNodesMultiplier);
                 }
                 long startedNanos = System.nanoTime();
                 Path result = super.findPath(region, mob, targets, maxPathLength, reachRange,
-                        visitedNodesMultiplier * rangeMultiplier);
+                        visitedNodesMultiplier);
                 PathRequestDiagnostics.recordSearch(mob, System.nanoTime() - startedNanos,
                         maxPathLength > getOrdinaryPathLength(mob), evaluator.expandedNodes());
                 return result;
@@ -141,7 +134,8 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                     && extendedPathLength > ordinaryPathLength) {
                 // A previous full search already exhausted the ordinary frontier.
                 // Retry that search directly instead of expanding it twice.
-                Path path = super.createPath(targets, radiusOffset, above, reachRange, extendedPathLength);
+                Path path = createPathWithLength(targets, radiusOffset, above, reachRange,
+                        extendedPathLength, ordinaryPathLength);
                 updateFailedExtendedSearch(target, path, null);
                 return path;
             }
@@ -151,9 +145,8 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 float pathLength = useExtended
                         ? extendedPathLength
                         : ordinaryPathLength;
-                Path path = super.createPath(
-                        targets, radiusOffset, above, reachRange, pathLength
-                );
+                Path path = createPathWithLength(targets, radiusOffset, above, reachRange,
+                        pathLength, ordinaryPathLength);
                 if (useExtended) {
                     updateFailedExtendedSearch(target, path, null);
                 } else if (suppressExtended) {
@@ -165,7 +158,8 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 return path;
             }
 
-            Path ordinaryPath = super.createPath(targets, radiusOffset, above, reachRange, ordinaryPathLength);
+            Path ordinaryPath = createPathWithLength(targets, radiusOffset, above, reachRange,
+                    ordinaryPathLength, ordinaryPathLength);
             if (ordinaryPath != null && ordinaryPath.canReach()) {
                 clearFailedExtendedSearch();
             }
@@ -181,11 +175,28 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 return ordinaryPath;
             }
 
-            Path extendedPath = super.createPath(targets, radiusOffset, above, reachRange, extendedPathLength);
+            Path extendedPath = createPathWithLength(targets, radiusOffset, above, reachRange,
+                    extendedPathLength, ordinaryPathLength);
             updateFailedExtendedSearch(target, extendedPath, ordinaryPath);
             return preferEscalatedPath(ordinaryPath, extendedPath);
         }
-        return super.createPath(targets, radiusOffset, above, reachRange, ordinaryPathLength);
+        return createPathWithLength(targets, radiusOffset, above, reachRange,
+                ordinaryPathLength, ordinaryPathLength);
+    }
+
+    private Path createPathWithLength(Set<BlockPos> targets, int radiusOffset, boolean above, int reachRange,
+                                      float pathLength, float ordinaryPathLength) {
+        float budgetMultiplier = Math.max(1.0F, pathLength / ordinaryPathLength);
+        if (budgetMultiplier > 1.0F) {
+            this.setMaxVisitedNodesMultiplier(budgetMultiplier);
+        }
+        try {
+            return super.createPath(targets, radiusOffset, above, reachRange, pathLength);
+        } finally {
+            if (budgetMultiplier > 1.0F) {
+                this.resetMaxVisitedNodesMultiplier();
+            }
+        }
     }
 
     private void updateFailedExtendedSearch(BlockPos target, Path extendedPath, Path ordinaryPath) {
