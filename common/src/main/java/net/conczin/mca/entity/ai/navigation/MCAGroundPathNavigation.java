@@ -4,7 +4,6 @@ import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.PathingBlockInteraction;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
-import net.conczin.mca.entity.ai.brain.tasks.LocalInsideBrownianWalk;
 import net.minecraft.core.BlockPos;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
@@ -121,7 +120,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 .getMemoryInternal(MemoryModuleType.WALK_TARGET)
                 .orElse(null);
         float ordinaryPathLength = getOrdinaryPathLength(this.mob);
-        if (targetsCurrentStaticWalkTarget(targets, walkTarget)) {
+        if (targetsCurrentPersistentWalkTarget(targets, walkTarget)) {
             BlockPos target = walkTarget.getTarget().currentBlockPosition();
             // Invalidate even when the next ordinary path is useful and returns early.
             // Otherwise a villager can move away, make progress, and come back to a
@@ -167,7 +166,6 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             if (ordinaryPath == null
                     || ordinaryPath.canReach()
                     || isUsefulPartialPath(ordinaryPath, target)
-                    || walkTarget.getTarget() instanceof LocalInsideBrownianWalk.BrownianTarget
                     || extendedPathLength <= ordinaryPathLength) {
                 return ordinaryPath;
             }
@@ -269,9 +267,9 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 || (distanceComparison == 0 && candidate.getNodeCount() < current.getNodeCount());
     }
 
-    private static boolean targetsCurrentStaticWalkTarget(Set<BlockPos> targets, WalkTarget walkTarget) {
+    private static boolean targetsCurrentPersistentWalkTarget(Set<BlockPos> targets, WalkTarget walkTarget) {
         if (walkTarget == null
-                || !(walkTarget.getTarget() instanceof BlockPosTracker)
+                || !(walkTarget.getTarget() instanceof PersistentPathTarget)
                 || targets.size() != 1) {
             return false;
         }
@@ -391,11 +389,11 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     @Override
     public void tick() {
         super.tick();
-        chainCompletedStaticWalkTarget();
+        chainCompletedPersistentWalkTarget();
         this.climbTraversal.tick(this.path, this.speedModifier, this.tick);
     }
 
-    private void chainCompletedStaticWalkTarget() {
+    private void chainCompletedPersistentWalkTarget() {
         Path completedPath = this.path;
         if (completedPath == null
                 || !completedPath.isDone()
@@ -407,7 +405,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         WalkTarget walkTarget = this.mob.getBrain()
                 .getMemoryInternal(MemoryModuleType.WALK_TARGET)
                 .orElse(null);
-        if (walkTarget == null || !(walkTarget.getTarget() instanceof BlockPosTracker)) {
+        if (walkTarget == null || !(walkTarget.getTarget() instanceof PersistentPathTarget)) {
             return;
         }
         if (this.mob instanceof VillagerEntityMCA villager

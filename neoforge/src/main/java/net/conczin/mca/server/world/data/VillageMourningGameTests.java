@@ -11,7 +11,7 @@ import net.conczin.mca.entity.ai.Mourning;
 import net.conczin.mca.entity.ai.brain.tasks.EnterGraveyardTask;
 import net.conczin.mca.entity.ai.brain.tasks.GrieveTask;
 import net.conczin.mca.entity.ai.brain.tasks.MournAtGraveTask;
-import net.conczin.mca.entity.ai.navigation.LongDistancePathTarget;
+import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.conczin.mca.entity.ai.relationship.RelationshipType;
 import net.conczin.mca.registry.BlocksMCA;
 import net.minecraft.util.Util;
@@ -318,9 +318,9 @@ public final class VillageMourningGameTests {
         var walkTarget = mourner.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
         helper.assertTrue(walkTarget != null,
                 "distant mourning did not publish a walk target on its first brain tick");
-        helper.assertTrue(walkTarget.getTarget() instanceof LongDistancePathTarget,
+        helper.assertTrue(walkTarget.getTarget() instanceof PersistentPathTarget,
                 "distant mourning did not use long-distance path intent");
-        LongDistancePathTarget target = (LongDistancePathTarget)walkTarget.getTarget();
+        PersistentPathTarget target = (PersistentPathTarget)walkTarget.getTarget();
         helper.assertTrue(target.currentBlockPosition().equals(mourningPosition),
                 "distant mourning replaced the real graveside destination with an intermediate point");
         helper.succeed();
