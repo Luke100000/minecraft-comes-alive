@@ -65,15 +65,15 @@ class FamilyTreeScreenInteractionTest {
     }
 
     @Test
-    void headerFloatsSearchLeftAndCentersControlsIndependently() {
+    void headerExpandsSearchToAvailableSpaceBeforeCenteredControls() {
         FamilyTreeScreen.HeaderLayout header = FamilyTreeScreen.headerLayout(854);
 
-        assertEquals(5, header.backX());
         assertEquals(854 - 5 - 72, header.doneX());
         assertEquals(5, header.searchX());
-        assertEquals(180, header.searchWidth());
+        assertEquals(316, header.searchWidth());
         assertEquals(327, header.zoomOutX());
         assertEquals(473, header.centerX());
+        assertEquals(6, header.zoomOutX() - (header.searchX() + header.searchWidth()));
     }
 
     @Test
@@ -85,6 +85,16 @@ class FamilyTreeScreenInteractionTest {
         assertEquals(60, header.zoomOutX());
         assertEquals(206, header.centerX());
         assertTrue(header.searchX() + header.searchWidth() < header.zoomOutX());
+    }
+
+    @Test
+    void searchOverlayConsumesClicksAcrossLoadingEmptyAndResultRows() {
+        assertTrue(FamilyTreeScreen.searchOverlayContains(20, 60, true, true, 5, 180, 0));
+        assertTrue(FamilyTreeScreen.searchOverlayContains(20, 60, true, false, 5, 180, 0));
+        assertTrue(FamilyTreeScreen.searchOverlayContains(20, 100, true, false, 5, 180, 3));
+        assertFalse(FamilyTreeScreen.searchOverlayContains(20, 123, true, false, 5, 180, 3));
+        assertFalse(FamilyTreeScreen.searchOverlayContains(190, 60, true, false, 5, 180, 3));
+        assertFalse(FamilyTreeScreen.searchOverlayContains(20, 60, false, false, 5, 180, 3));
     }
 
     @Test
@@ -182,7 +192,7 @@ class FamilyTreeScreenInteractionTest {
     }
 
     @Test
-    void cardPresentationRestoresOriginDetailsAndUsesStableRootRelationship() {
+    void cardPresentationCacheUsesCurrentFocusForRelationships() {
         FamilyTreeNode mother = new FamilyTreeNode(
                 null,
                 ROOT,
@@ -205,34 +215,32 @@ class FamilyTreeScreenInteractionTest {
         mother.setRelationshipState(RelationshipState.MARRIED_TO_PLAYER);
         Map<UUID, FamilyTreeNode> nodes = Map.of(ROOT, mother, OTHER, child);
 
-        FamilyTreeScreen.CardPresentation motherCard = FamilyTreeScreen.cardPresentation(ROOT, mother, nodes);
-        FamilyTreeScreen.CardPresentation childCard = FamilyTreeScreen.cardPresentation(ROOT, child, nodes);
+        Map<UUID, FamilyTreeScreen.CardPresentation> presentations =
+                FamilyTreeScreen.cardPresentations(OTHER, nodes, Set.of());
+        FamilyTreeScreen.CardPresentation motherCard = presentations.get(ROOT);
+        FamilyTreeScreen.CardPresentation childCard = presentations.get(OTHER);
 
         assertEquals("Elita", motherCard.name().getString());
         assertEquals(0xFFA649A4, motherCard.nameColor());
         assertEquals(
-                mother.getProfessionText().copy()
-                        .append(" · ")
-                        .append(Component.translatable("gui.family_tree.villager")),
+                Component.translatable("entity.minecraft.villager.mca.none"),
                 motherCard.identity()
         );
-        assertEquals(Component.translatable("gui.family_tree.relation.self"), motherCard.relationship());
+        assertEquals(Component.translatable("gui.family_tree.relation.father"), motherCard.relationship());
         assertEquals(Component.translatable("marriage.married"), motherCard.relationshipState());
         assertEquals(Component.translatable("gui.family_tree.player"), childCard.identity());
-        assertEquals(Component.translatable("gui.family_tree.relation.child"), childCard.relationship());
+        assertEquals(Component.translatable("gui.family_tree.relation.selected"), childCard.relationship());
     }
 
     @Test
-    void orphanCardStateMatchesOriginMissingOrDeceasedParentRule() {
+    void orphanCardStateUsesAuthoritativeViewMetadata() {
         FamilyTreeNode child = node(OTHER, "Sima");
-        assertTrue(FamilyTreeScreen.isOrphan(child, Map.of(OTHER, child)));
-
         FamilyTreeNode livingParent = node(ROOT, "Sug");
         child.setFather(livingParent);
-        assertFalse(FamilyTreeScreen.isOrphan(child, Map.of(ROOT, livingParent, OTHER, child)));
+        Map<UUID, FamilyTreeNode> boundedNodes = Map.of(OTHER, child);
 
-        livingParent.setDeceased(true);
-        assertTrue(FamilyTreeScreen.isOrphan(child, Map.of(ROOT, livingParent, OTHER, child)));
+        assertFalse(FamilyTreeScreen.cardPresentation(ROOT, child, boundedNodes, Set.of()).orphan());
+        assertTrue(FamilyTreeScreen.cardPresentation(ROOT, child, boundedNodes, Set.of(OTHER)).orphan());
     }
 
     @Test
@@ -389,7 +397,9 @@ class FamilyTreeScreenInteractionTest {
         FamilyTreeView family = new FamilyTreeView(
                 Map.of(ROOT, parent, OTHER, child),
                 Set.of(),
-                Set.of()
+                Set.of(),
+                Set.of(),
+                Map.of()
         );
         FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
         FamilyTreeViewModel.ViewportState viewport = new FamilyTreeViewModel.ViewportState(0, 0, 1.0F);
@@ -472,7 +482,7 @@ class FamilyTreeScreenInteractionTest {
     }
 
     private static FamilyTreeView view(UUID id) {
-        return new FamilyTreeView(Map.of(id, node(id, "Person")), Set.of(), Set.of());
+        return new FamilyTreeView(Map.of(id, node(id, "Person")), Set.of(), Set.of(), Set.of(), Map.of());
     }
 
     private static FamilyTreeNode node(UUID id, String name) {

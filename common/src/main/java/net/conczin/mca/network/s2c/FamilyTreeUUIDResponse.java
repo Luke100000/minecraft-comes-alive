@@ -12,9 +12,10 @@ import net.minecraft.world.entity.player.Player;
 
 import java.util.List;
 
-public record FamilyTreeUUIDResponse(String search, List<FamilyTreeSearchEntry> list) implements HandleablePayload {
+public record FamilyTreeUUIDResponse(long requestId, String search, List<FamilyTreeSearchEntry> list) implements HandleablePayload {
     public static final CustomPacketPayload.Type<FamilyTreeUUIDResponse> TYPE = new CustomPacketPayload.Type<>(MCA.locate("family_tree_uuid_response"));
     public static final StreamCodec<FriendlyByteBuf, FamilyTreeUUIDResponse> STREAM_CODEC = StreamCodec.composite(
+            ByteBufCodecs.VAR_LONG, FamilyTreeUUIDResponse::requestId,
             ByteBufCodecs.STRING_UTF8, FamilyTreeUUIDResponse::search,
             FamilyTreeSearchEntry.STREAM_CODEC.apply(ByteBufCodecs.list(16)), FamilyTreeUUIDResponse::list,
             FamilyTreeUUIDResponse::new

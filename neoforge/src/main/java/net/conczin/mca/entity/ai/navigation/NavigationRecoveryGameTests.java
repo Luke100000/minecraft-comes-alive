@@ -31,6 +31,50 @@ public final class NavigationRecoveryGameTests {
     private NavigationRecoveryGameTests() {
     }
 
+    @GameTest(batch = "mca_navigation_owned_detour", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void completedPersistentPathStartsDetourWithoutMcaMovementSink(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(65, 1, 65));
+        BlockPos target = start.east(2);
+        prepareFlatArea(helper, start, 61, 3);
+        for (int z = -55; z <= 55; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        Config config = Config.getInstance();
+        int previousDistance = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 160;
+            villager.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+            var navigation = villager.getNavigation();
+            Path blocked = navigation.createPath(target, 0);
+            helper.assertTrue(blocked != null && !blocked.canReach()
+                            && !MCAGroundPathNavigation.isUsefulPartialPath(blocked, target),
+                    "fixture did not exhaust the search at the long wall: " + blocked);
+            WalkTargetFailureMemory.record(villager, target, helper.getLevel().getGameTime());
+            navigation.moveTo(blocked, 0.5D);
+            while (!blocked.isDone()) {
+                blocked.advance();
+            }
+            navigation.tick();
+            Path flank = navigation.getPath();
+            helper.assertTrue(flank != null && !flank.isDone() && flank.canReach()
+                            && !flank.getTarget().equals(target),
+                    "navigation did not own long-wall recovery without the MCA sink: " + flank);
+            helper.assertTrue(villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElseThrow()
+                            .getTarget().currentBlockPosition().equals(target),
+                    "navigation replaced the logical destination with a flank waypoint");
+        } finally {
+            config.villagerPathfindingDistance = previousDistance;
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 20)
     public static void recomputationSelectsRemainingEquivalentEndpoint(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(10, 1, 10));

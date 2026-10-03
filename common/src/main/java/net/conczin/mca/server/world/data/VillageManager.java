@@ -580,9 +580,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (village == null) return BuildingEditResult.NO_BUILDING;
         if (floorNumber == Integer.MIN_VALUE) return BuildingEditResult.NO_FLOOR;
 
-        Building room = village.findInteractionRoomAt(pos).orElse(null);
-        if (room == null) return BuildingEditResult.NO_ROOM;
-        Structure structure = village.getStructureFor(room).orElse(null);
+        RoomScanPlan plan = village.getRoomScanPlan(world, pos);
+        Structure structure = village.getStructure(plan.targetStructureId()).orElse(null);
         if (structure == null) return BuildingEditResult.NO_BUILDING;
         if (expectedBuildingId >= 0
                 && structure.getLogicalBuildingId() != expectedBuildingId) {

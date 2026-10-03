@@ -52,23 +52,6 @@ class FamilyTreeLayoutTest {
     }
 
     @Test
-    void changingFocusDoesNotReorientTheBranch() {
-        FamilyTreeNode root = node(ROOT);
-        FamilyTreeNode partner = node(PARTNER);
-        FamilyTreeNode father = node(FATHER);
-        root.updatePartner(partner);
-        root.setFather(father);
-        Map<UUID, FamilyTreeNode> nodes = nodes(root, partner, father);
-
-        FamilyTreeLayout.Result rootFocused = layout(ROOT, ROOT, nodes, Set.of());
-        FamilyTreeLayout.Result partnerFocused = layout(ROOT, PARTNER, nodes, Set.of());
-
-        for (UUID id : nodes.keySet()) {
-            assertEquals(card(rootFocused, id).bounds(), card(partnerFocused, id).bounds());
-        }
-    }
-
-    @Test
     void twoParentsOccupyGenerationAboveAnchor() {
         FamilyTreeNode root = node(ROOT);
         FamilyTreeNode father = node(FATHER);
@@ -283,17 +266,8 @@ class FamilyTreeLayoutTest {
             Map<UUID, FamilyTreeNode> nodes,
             Set<FamilyTreeView.Continuation> continuations
     ) {
-        return layout(ROOT, ROOT, nodes, continuations);
-    }
-
-    private static FamilyTreeLayout.Result layout(
-            UUID layoutRoot,
-            UUID focus,
-            Map<UUID, FamilyTreeNode> nodes,
-            Set<FamilyTreeView.Continuation> continuations
-    ) {
         FamilyTreeViewModel.Snapshot snapshot =
-                new FamilyTreeViewModel.Snapshot(layoutRoot, nodes, continuations);
+                new FamilyTreeViewModel.Snapshot(ROOT, nodes, continuations);
         return FamilyTreeLayout.layout(snapshot);
     }
 

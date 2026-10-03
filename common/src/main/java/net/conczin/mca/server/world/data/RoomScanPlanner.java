@@ -41,7 +41,8 @@ final class RoomScanPlanner {
         RoomScanPlan freshPlan = planFresh(village, source, observation, components);
         Building verticalExitRoom = resolveVerticalExitRoom(village, level, source, observation, components, freshPlan);
         if (verticalExitRoom != null) {
-            return new Analysis(RoomScanPlan.updateRoom(verticalExitRoom, source), observation, components);
+            return new Analysis(RoomScanPlan.updateRoom(verticalExitRoom, source, observation.seed()),
+                    observation, components);
         }
         if (persistedFloorPlan == null) {
             return new Analysis(freshPlan, observation, components);
@@ -63,11 +64,13 @@ final class RoomScanPlanner {
                                                     List<RoomPartitioner.Component> components,
                                                     RoomScanPlan plan) {
         FloorGeometry floor = observation.scan().floor();
-        if (plan.mode() != Village.RoomScanMode.ADD_ROOM || floor.cellAt(source).isEmpty()
+        FloorGeometry.Cell exitCell = floor.interactionCellAt(source.getX(), source.getY(), source.getZ())
+                .orElse(null);
+        if (plan.mode() != Village.RoomScanMode.ADD_ROOM || exitCell == null
                 || !StructureConnector.isVerticalTopExit(level, source)) {
             return null;
         }
-        RoomPartitioner.Component selected = selectFreshComponent(floor, source, components);
+        RoomPartitioner.Component selected = selectFreshComponent(floor, exitCell.feet(), components);
         if (selected == null) return null;
         List<Building> owners = village.getRooms()
                 .filter(room -> room.getStructureId() == plan.targetStructureId()
@@ -113,8 +116,22 @@ final class RoomScanPlanner {
             RoomPartitioner.Component selected = selectFreshComponent(
                     observation.scan().floor(), observation.seed(), components);
             if (selected != null) {
+                SelectedFloorScanner.Result scan = observation.scan();
+                BlockPos supportedSource = scan.supportedSource();
+                // A nearby connector handoff discovers a Floor, not ownership of its Room.
+                boolean directSelection = source.equals(supportedSource) || source.above().equals(supportedSource);
+                List<Building> owners = village.getRooms()
+                        .filter(room -> room.getStructureId() == expansion.structureId()
+                                && room.getFloorId() == expansion.floorId())
+                        .filter(room -> room.ownsFloorCell(source)
+                                || directSelection && room.ownsFloorCell(scan.seed()))
+                        .limit(2)
+                        .toList();
+                if (owners.size() == 1) {
+                    return RoomScanPlan.updateRoom(owners.getFirst(), source, scan.seed());
+                }
                 return RoomScanPlan.addRoom(
-                        expansion.structureId(), expansion.floorId(), source, selected.nearestCell(observation.seed()));
+                        expansion.structureId(), expansion.floorId(), source, observation.seed());
             }
         }
 

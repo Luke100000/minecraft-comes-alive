@@ -5,6 +5,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.PathingBlockInteraction;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
@@ -19,6 +20,7 @@ import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathFinder;
 import net.minecraft.world.level.pathfinder.PathType;
+import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Set;
@@ -36,6 +38,22 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     private final ClimbTraversal climbTraversal;
     private FailedExtendedSearch failedExtendedSearch;
     private boolean recomputingPath;
+    private Detour detour;
+
+    private enum DetourPhase { FLANKING, CROSSING }
+
+    private static final class Detour {
+        private final BlockPos destination;
+        private final BlockPos step;
+        private double distance;
+        private DetourPhase phase = DetourPhase.FLANKING;
+
+        private Detour(BlockPos destination, BlockPos step, double distance) {
+            this.destination = destination.immutable();
+            this.step = step.immutable();
+            this.distance = distance;
+        }
+    }
 
     private static final class FailedExtendedSearch {
         private final BlockPos target;
@@ -405,8 +423,218 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     @Override
     public void tick() {
         super.tick();
+        recoverCompletedPersistentWalkTarget();
         chainCompletedPersistentWalkTarget();
         this.climbTraversal.tick(this.path, this.speedModifier, this.tick);
+    }
+
+    @Override
+    public void stop() {
+        clearDetour();
+        super.stop();
+    }
+
+    private void recoverCompletedPersistentWalkTarget() {
+        if (this.path == null) {
+            clearDetour();
+            return;
+        }
+        if (!this.path.isDone() && this.detour == null) {
+            return;
+        }
+        WalkTarget walkTarget = this.mob.getBrain()
+                .getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        if (walkTarget == null || !(walkTarget.getTarget() instanceof PersistentPathTarget)) {
+            clearDetour();
+            return;
+        }
+        BlockPos destination = walkTarget.getTarget().currentBlockPosition();
+        if (this.detour != null && !this.detour.destination.equals(destination)) {
+            clearDetour();
+        }
+        if (!this.path.isDone() || this.isStuck()) {
+            return;
+        }
+        if (destination.distManhattan(this.mob.blockPosition()) <= walkTarget.getCloseEnoughDist()) {
+            clearDetour();
+            return;
+        }
+        if (this.detour != null || (!this.path.canReach() && !isUsefulPartialPath(this.path, destination))) {
+            if (!continueDetour(walkTarget)) {
+                recordTerminalPartialFailure(destination);
+                // A failed flank must return to the producer's retry clock, rather
+                // than repeat the same searches on every navigation tick.
+                this.stop();
+            }
+        }
+    }
+
+    private boolean continueDetour(WalkTarget walkTarget) {
+        BlockPos destination = walkTarget.getTarget().currentBlockPosition();
+        if (this.detour == null) {
+            return beginDetour(walkTarget, destination);
+        }
+
+        boolean routeChanged = consumeRetryInvalidation(destination);
+        // Short flank legs deliberately move sideways, so immediately searching
+        // HOME again often just returns the route back to the obstacle's start.
+        // Re-probe after enough lateral travel to attempt a crossing, or a route change.
+        Path destinationPath = this.detour.phase == DetourPhase.CROSSING || routeChanged
+                || this.detour.distance >= getOrdinaryPathLength(this.mob)
+                ? this.createPath(destination, 0)
+                : null;
+        if (destinationPath != null && destinationPath.canReach()) {
+            clearDetour();
+            clearFailure(this.mob);
+            this.moveTo(destinationPath, walkTarget.getSpeedModifier());
+            return true;
+        }
+
+        if (this.detour.phase == DetourPhase.CROSSING) {
+            if (isUsefulPartialPath(destinationPath, destination)) {
+                this.moveTo(destinationPath, walkTarget.getSpeedModifier());
+                return true;
+            }
+            clearDetour();
+            return false;
+        }
+
+        if (this.detour.distance >= getOrdinaryPathLength(this.mob)) {
+            Path crossing = tryCrossObstacle(destination);
+            if (crossing != null) {
+                this.detour.phase = DetourPhase.CROSSING;
+                this.moveTo(crossing, walkTarget.getSpeedModifier());
+                return true;
+            }
+        }
+
+        Path continuation = continueFlank();
+        if (continuation == null) {
+            clearDetour();
+            return false;
+        }
+
+        this.moveTo(continuation, walkTarget.getSpeedModifier());
+        return true;
+    }
+
+    private boolean beginDetour(WalkTarget walkTarget, BlockPos destination) {
+        if (!hasWalkableApproach(destination)) {
+            return false;
+        }
+
+        BlockPos origin = this.mob.blockPosition();
+        double dx = destination.getX() + 0.5D - this.mob.getX();
+        double dz = destination.getZ() + 0.5D - this.mob.getZ();
+        double horizontalDistance = Math.sqrt(dx * dx + dz * dz);
+        if (horizontalDistance < 1.0D) {
+            return false;
+        }
+
+        double probeDistance = getOrdinaryPathLength(this.mob) * 0.5D;
+        double flankX = -dz / horizontalDistance * probeDistance;
+        double flankZ = dx / horizontalDistance * probeDistance;
+        int preferredSide = ((destination.getX() ^ destination.getZ() ^ this.mob.getId()) & 1) == 0 ? 1 : -1;
+        for (int side : new int[]{preferredSide, -preferredSide}) {
+            BlockPos candidate = BlockPos.containing(
+                    this.mob.getX() + flankX * side,
+                    this.mob.getY(),
+                    this.mob.getZ() + flankZ * side
+            );
+            Path path = this.createPath(candidate, 0);
+            if (path != null && path.canReach() && path.getNodeCount() > 1) {
+                this.detour = new Detour(destination, candidate.subtract(origin), horizontalDistance(origin, candidate));
+                this.moveTo(path, walkTarget.getSpeedModifier());
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasWalkableApproach(BlockPos destination) {
+        for (Direction direction : Direction.Plane.HORIZONTAL) {
+            if (WalkNodeEvaluator.getPathTypeStatic(this.mob, destination.relative(direction).mutable()) == PathType.WALKABLE) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private Path continueFlank() {
+        double flankX = this.detour.step.getX() * 0.5D;
+        double flankZ = this.detour.step.getZ() * 0.5D;
+        double stepDistance = Math.sqrt(flankX * flankX + flankZ * flankZ);
+        double maxDetourDistance = Math.max(
+                Config.getInstance().getVillagerPathfindingDistance(),
+                getOrdinaryPathLength(this.mob)
+        );
+        if (stepDistance < 1.0D || this.detour.distance + stepDistance > maxDetourDistance) {
+            return null;
+        }
+
+        BlockPos origin = this.mob.blockPosition();
+        BlockPos candidate = BlockPos.containing(
+                this.mob.getX() + flankX,
+                this.mob.getY(),
+                this.mob.getZ() + flankZ
+        );
+        Path path = this.createPath(candidate, 0);
+        if (path == null
+                || path.getNodeCount() < 2
+                || (!path.canReach() && !isUsefulPartialPath(path, candidate))
+                || path.getEndNode() == null) {
+            return null;
+        }
+
+        double progress = horizontalDistance(origin, path.getEndNode().asBlockPos());
+        if (progress < 1.0D) {
+            return null;
+        }
+        this.detour.distance += progress;
+        return path;
+    }
+
+    private Path tryCrossObstacle(BlockPos destination) {
+        double flankLength = horizontalDistance(BlockPos.ZERO, this.detour.step);
+        if (flankLength < 1.0D) {
+            return null;
+        }
+
+        double forwardX = this.detour.step.getZ() / flankLength;
+        double forwardZ = -this.detour.step.getX() / flankLength;
+        double destinationX = destination.getX() + 0.5D - this.mob.getX();
+        double destinationZ = destination.getZ() + 0.5D - this.mob.getZ();
+        if (forwardX * destinationX + forwardZ * destinationZ < 0.0D) {
+            forwardX = -forwardX;
+            forwardZ = -forwardZ;
+        }
+
+        double probeDistance = getOrdinaryPathLength(this.mob) * 0.25D;
+        BlockPos candidate = BlockPos.containing(
+                this.mob.getX() + forwardX * probeDistance,
+                this.mob.getY(),
+                this.mob.getZ() + forwardZ * probeDistance
+        );
+        Path path = this.createPath(candidate, 0);
+        return path != null && path.canReach() && path.getNodeCount() > 1 ? path : null;
+    }
+
+    private static double horizontalDistance(BlockPos first, BlockPos second) {
+        double dx = first.getX() - second.getX();
+        double dz = first.getZ() - second.getZ();
+        return Math.sqrt(dx * dx + dz * dz);
+    }
+
+    private static void clearFailure(Mob entity) {
+        if (entity instanceof VillagerEntityMCA villager) {
+            WalkTargetFailureMemory.clear(villager);
+        } else {
+            entity.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+        }
+    }
+
+    private void clearDetour() {
+        this.detour = null;
     }
 
     private void chainCompletedPersistentWalkTarget() {
@@ -430,8 +658,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         }
 
         BlockPos destination = walkTarget.getTarget().currentBlockPosition();
-        if (!completedPath.getTarget().equals(destination)
-                || destination.distManhattan(this.mob.blockPosition()) <= walkTarget.getCloseEnoughDist()
+        if (destination.distManhattan(this.mob.blockPosition()) <= walkTarget.getCloseEnoughDist()
                 || !isUsefulPartialPath(completedPath, destination)) {
             return;
         }

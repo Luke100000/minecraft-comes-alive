@@ -14,6 +14,7 @@ import java.util.*;
 
 /** Connector mechanics: classification, Floor-cell projection and connector-relative Floor handoff. */
 final class StructureConnector {
+    private static final int MAX_VERTICAL_EXIT_DISTANCE = 2;
     private static final Direction[] HORIZONTAL = {
             Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
     };
@@ -40,14 +41,14 @@ final class StructureConnector {
                 && !verticalColumnFromConnector(world, pos).isEmpty();
     }
 
-    /** An open cell above a ladder or a trapdoor in a contiguous ladder column. */
+    /** An open top exit, including a Floor opening one block above the end of the climb. */
     static boolean isVerticalTopExit(Level world, BlockPos pos) {
         BlockState state = world.getBlockState(pos);
         if (!state.getFluidState().isEmpty() || !state.getCollisionShape(world, pos).isEmpty()) {
             return false;
         }
         BlockPos connector = verticalInteractionConnector(world, pos);
-        return pos.below().equals(connector) && isVertical(world, connector);
+        return connector != null && !pos.equals(connector) && isVertical(world, connector);
     }
 
     static BlockPos normalize(BlockPos pos, BlockState state) {
@@ -151,18 +152,24 @@ final class StructureConnector {
         return Set.of(selected.immutable());
     }
 
-    /** Returns the vertical connector column for an occupied connector or its immediate open top-exit cell. */
+    /** Returns the connector column for an occupied connector or its short open top exit. */
     static List<BlockPos> verticalColumn(Level world, BlockPos pos) {
         BlockPos connector = verticalInteractionConnector(world, pos);
         return connector == null ? List.of() : verticalColumnFromConnector(world, connector);
     }
 
     static BlockPos verticalInteractionConnector(Level world, BlockPos pos) {
-        if (isVerticalElement(world.getBlockState(pos))) return pos;
-        if (!world.getBlockState(pos).getCollisionShape(world, pos).isEmpty()) return null;
-
-        BlockPos below = pos.below();
-        return isVerticalElement(world.getBlockState(below)) ? below : null;
+        // The climb can end at the support layer's underside: one air block then separates it
+        // from the adjoining Floor's feet. Do not bridge solids, fluids or taller shafts.
+        for (int depth = 0; depth <= MAX_VERTICAL_EXIT_DISTANCE; depth++) {
+            BlockPos candidate = pos.below(depth);
+            BlockState state = world.getBlockState(candidate);
+            if (isVerticalElement(state)) return candidate;
+            if (!state.getFluidState().isEmpty() || !state.getCollisionShape(world, candidate).isEmpty()) {
+                return null;
+            }
+        }
+        return null;
     }
 
     private static List<BlockPos> verticalColumnFromConnector(Level world, BlockPos connector) {

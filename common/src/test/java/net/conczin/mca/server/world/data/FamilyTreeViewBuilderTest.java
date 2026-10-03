@@ -17,11 +17,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static net.conczin.mca.network.FamilyTreeView.Direction.ANCESTORS;
 import static net.conczin.mca.network.FamilyTreeView.Direction.DESCENDANTS;
 import static net.conczin.mca.FamilyTreeTestSupport.uuid;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FamilyTreeViewBuilderTest {
@@ -123,6 +125,36 @@ class FamilyTreeViewBuilderTest {
     }
 
     @Test
+    void orphanMetadataUsesFullTreePastTheBoundedView() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode father = node(tree, FATHER, Gender.MALE);
+        FamilyTreeNode grandfather = node(tree, PATERNAL_GRANDFATHER, Gender.MALE);
+        root.setFather(father);
+        father.setFather(grandfather);
+
+        FamilyTreeView livingParentView = FamilyTreeViewBuilder.build(tree, ROOT, 1, 0).orElseThrow();
+
+        assertFalse(livingParentView.nodes().containsKey(PATERNAL_GRANDFATHER));
+        assertEquals(Set.of(), livingParentView.orphans());
+
+        grandfather.setDeceased(true);
+        FamilyTreeView deceasedParentView = FamilyTreeViewBuilder.build(tree, ROOT, 1, 0).orElseThrow();
+
+        assertEquals(Set.of(FATHER), deceasedParentView.orphans());
+    }
+
+    @Test
+    void nodeWithoutRecordedParentsIsAnOrphan() {
+        FamilyTree tree = tree();
+        node(tree, ROOT, Gender.MALE);
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, 0, 0).orElseThrow();
+
+        assertEquals(Set.of(ROOT), view.orphans());
+    }
+
+    @Test
     void boundaryWithResolvableChildrenCreatesDescendantContinuation() {
         FamilyTree tree = tree();
         FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
@@ -164,6 +196,28 @@ class FamilyTreeViewBuilderTest {
         assertEquals(Set.of(ROOT, CHILD), view.nodes().keySet());
         assertEquals(Set.of(), view.continuations());
         assertEquals(Set.of(), view.unavailable());
+    }
+
+    @Test
+    void viewLineageMatchesCanonicalNodeRelativeTraversal() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode father = node(tree, FATHER, Gender.MALE);
+        FamilyTreeNode grandfather = node(tree, PATERNAL_GRANDFATHER, Gender.MALE);
+        FamilyTreeNode child = node(tree, CHILD, Gender.FEMALE);
+        FamilyTreeNode grandchild = node(tree, GRANDCHILD, Gender.MALE);
+        root.setFather(father);
+        father.setFather(grandfather);
+        child.setFather(root);
+        grandchild.setFather(child);
+
+        Set<UUID> canonical = root.getRelatives(2, 2).collect(Collectors.toSet());
+        FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, 2, 2).orElseThrow();
+        Set<UUID> fromView = view.nodes().keySet().stream()
+                .filter(id -> !ROOT.equals(id))
+                .collect(Collectors.toSet());
+
+        assertEquals(canonical, fromView);
     }
 
     @Test
@@ -254,6 +308,41 @@ class FamilyTreeViewBuilderTest {
         assertEquals(ROOT.toString(), snapshot.getName());
         assertTrue(snapshot.children().size() <= 1);
         assertTrue(!snapshot.children().contains(uuid(9_999)));
+    }
+
+    @Test
+    void familyTreeViewDefensivelyDetachesDirectLiveNodes() {
+        FamilyTree tree = tree();
+        FamilyTreeNode liveRoot = node(tree, ROOT, Gender.MALE);
+
+        FamilyTreeView view = new FamilyTreeView(
+                Map.of(ROOT, liveRoot),
+                Set.of(),
+                Set.of(),
+                Set.of(),
+                Map.of()
+        );
+        liveRoot.setName("mutated after view construction");
+
+        assertEquals(ROOT.toString(), view.nodes().get(ROOT).getName());
+    }
+
+    @Test
+    void familyTreeViewDefensivelyCopiesAlreadyDetachedNodes() {
+        FamilyTree tree = tree();
+        FamilyTreeNode liveRoot = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode detachedRoot = new FamilyTreeNode(null, liveRoot.save());
+
+        FamilyTreeView view = new FamilyTreeView(
+                Map.of(ROOT, detachedRoot),
+                Set.of(),
+                Set.of(),
+                Set.of(),
+                Map.of()
+        );
+        detachedRoot.setName("mutated after view construction");
+
+        assertEquals(ROOT.toString(), view.nodes().get(ROOT).getName());
     }
 
     @Test

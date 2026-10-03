@@ -29,7 +29,7 @@ public class FamilyTreeSearchScreen extends Screen {
     private final FamilyTreeSearchDebouncer searchDebouncer = new FamilyTreeSearchDebouncer(SEARCH_DEBOUNCE_MS);
     private ButtonWidget buttonPage;
     private int pageNumber;
-    private String pendingSearch;
+    private FamilyTreeSearchDebouncer.Request expectedSearchRequest;
 
     public FamilyTreeSearchScreen() {
         super(Component.translatable("gui.family_tree.title"));
@@ -113,22 +113,24 @@ public class FamilyTreeSearchScreen extends Screen {
         Optional<String> query = standaloneSearchQuery(value, playerName);
         if (query.isEmpty()) {
             searchDebouncer.clear();
-            pendingSearch = null;
+            expectedSearchRequest = null;
             list = List.of();
             pageNumber = 0;
             return;
         }
-        pendingSearch = query.orElseThrow();
         list = List.of();
         pageNumber = 0;
-        searchDebouncer.schedule(pendingSearch, Util.getMillis());
+        expectedSearchRequest = searchDebouncer.schedule(query.orElseThrow(), Util.getMillis());
     }
 
     @Override
     public void tick() {
         super.tick();
         searchDebouncer.poll(Util.getMillis())
-                .ifPresent(search -> Network.sendToServer(new FamilyTreeUUIDLookup(search)));
+                .ifPresent(request -> Network.sendToServer(new FamilyTreeUUIDLookup(
+                        request.requestId(),
+                        request.query()
+                )));
     }
 
     static Optional<String> standaloneSearchQuery(String value, String playerName) {
@@ -139,10 +141,11 @@ public class FamilyTreeSearchScreen extends Screen {
         return MCA.isBlankString(search) ? Optional.empty() : Optional.of(search);
     }
 
-    public void setList(String search, List<FamilyTreeSearchEntry> list) {
-        if (!search.equals(pendingSearch)) {
+    public void setList(long requestId, String search, List<FamilyTreeSearchEntry> list) {
+        if (expectedSearchRequest == null || !expectedSearchRequest.matches(requestId, search)) {
             return;
         }
+        expectedSearchRequest = null;
         this.list = List.copyOf(list);
         pageNumber = Math.min(pageNumber, pageCount() - 1);
     }

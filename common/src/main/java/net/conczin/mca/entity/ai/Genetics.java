@@ -104,9 +104,8 @@ public class Genetics implements Iterable<Genetics.Gene> {
         }
 
         Entity owningEntity = entity.asEntity();
-        int seaLevel = owningEntity.level() instanceof ServerLevel serverLevel
-                ? serverLevel.getChunkSource().getGenerator().getSeaLevel()
-                : owningEntity.level().getSeaLevel();
+        ServerLevel serverLevel = (ServerLevel) owningEntity.level();
+        int seaLevel = serverLevel.getChunkSource().getGenerator().getSeaLevel();
         float height = owningEntity.blockPosition().getY();
         height -= seaLevel;
         height /= 128;

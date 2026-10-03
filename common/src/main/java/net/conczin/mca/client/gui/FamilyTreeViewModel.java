@@ -46,6 +46,8 @@ final class FamilyTreeViewModel {
     private final Map<UUID, FamilyTreeNode> nodesView = Collections.unmodifiableMap(nodes);
     private final Map<UUID, GlobalPos> graves = new LinkedHashMap<>();
     private final Map<UUID, GlobalPos> gravesView = Collections.unmodifiableMap(graves);
+    private final Set<UUID> orphans = new LinkedHashSet<>();
+    private final Set<UUID> orphansView = Collections.unmodifiableSet(orphans);
     private final Set<FamilyTreeView.Continuation> continuations = new LinkedHashSet<>();
     private final Set<UUID> unavailable = new LinkedHashSet<>();
     private final Deque<HistoryEntry> history = new ArrayDeque<>();
@@ -112,6 +114,9 @@ final class FamilyTreeViewModel {
             merge(response.view());
             focusId = response.uuid();
             if (nextLayoutRoot != null) {
+                if (!nextLayoutRoot.equals(layoutRootId)) {
+                    pendingExpansions.clear();
+                }
                 layoutRootId = nextLayoutRoot;
             }
             unavailableFocusId = null;
@@ -138,6 +143,8 @@ final class FamilyTreeViewModel {
     private void merge(FamilyTreeView view) {
         view.nodes().keySet().forEach(graves::remove);
         graves.putAll(view.graves());
+        orphans.removeAll(view.nodes().keySet());
+        orphans.addAll(view.orphans());
         nodes.putAll(view.nodes());
         continuations.addAll(view.continuations());
         unavailable.addAll(view.unavailable());
@@ -166,6 +173,9 @@ final class FamilyTreeViewModel {
             return Optional.empty();
         }
         HistoryEntry entry = history.pop();
+        if (!entry.layoutRootId().equals(layoutRootId)) {
+            pendingExpansions.clear();
+        }
         layoutRootId = entry.layoutRootId();
         focusId = entry.focusId();
         pendingFocusId = null;
@@ -193,6 +203,10 @@ final class FamilyTreeViewModel {
 
     public Map<UUID, GlobalPos> graves() {
         return gravesView;
+    }
+
+    public Set<UUID> orphans() {
+        return orphansView;
     }
 
     public Optional<UUID> pendingFocusId() {

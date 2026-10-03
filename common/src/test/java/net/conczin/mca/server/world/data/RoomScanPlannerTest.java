@@ -42,6 +42,72 @@ class RoomScanPlannerTest {
     }
 
     @Test
+    void supportedBandDescentUsesTheExactSelectedRoomCell() {
+        Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
+        BlockPos selectedCell = new BlockPos(2, 64, 0);
+        Building room = room(100, 20, 0, Set.of(selectedCell));
+        Village village = village(persisted, room);
+        BlockPos source = new BlockPos(4, 67, 0);
+
+        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
+                observation(selectedCell, source, scannedFloor(64, 68, 0, 3), Set.of()));
+
+        assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
+        assertEquals(room, plan.currentRoom().orElseThrow());
+        assertEquals(source, plan.interactionSource());
+        assertEquals(selectedCell, plan.scanSeed());
+    }
+
+    @Test
+    void unsupportedHandoffDoesNotClaimTheSelectedCellsRoom() {
+        Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
+        BlockPos selectedCell = new BlockPos(2, 64, 0);
+        Building room = room(100, 20, 0, Set.of(selectedCell));
+        Village village = village(persisted, room);
+        BlockPos source = new BlockPos(4, 67, 0);
+
+        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
+                observation(selectedCell, null, scannedFloor(64, 68, 0, 3), Set.of()));
+
+        assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
+        assertTrue(plan.currentRoom().isEmpty());
+        assertEquals(selectedCell, plan.scanSeed());
+    }
+
+    @Test
+    void exactRoomCellRemainsOwnedWhenItsFloorGeometryIsStale() {
+        Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 4));
+        BlockPos source = new BlockPos(4, 64, 0);
+        Building room = room(100, 20, 0, Set.of(source));
+        Village village = village(persisted, room);
+        BlockPos selectedCell = new BlockPos(2, 64, 0);
+        assertTrue(persisted.replaceFloorGeometry(0, scannedFloor(64, 68, 0, 3)));
+
+        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
+                observation(selectedCell, selectedCell, scannedFloor(64, 68, 0, 3), Set.of()));
+
+        assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
+        assertEquals(room, plan.currentRoom().orElseThrow());
+        assertEquals(selectedCell, plan.scanSeed());
+    }
+
+    @Test
+    void freshCellDoesNotBorrowRoomOwnershipFromAnotherHeight() {
+        Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 6));
+        Building room = room(100, 20, 0, Set.of(new BlockPos(6, 64, 0)));
+        Village village = village(persisted, room);
+        BlockPos source = new BlockPos(6, 65, 0);
+        FloorGeometry fresh = new FloorGeometry(Set.of(
+                cell(0, 64), cell(1, 64), cell(2, 64), cell(3, 64),
+                cell(4, 64), cell(5, 64), cell(6, 65)), Map.of());
+
+        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source, observation(source, fresh));
+
+        assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
+        assertTrue(plan.currentRoom().isEmpty());
+    }
+
+    @Test
     void staircaseTransitionOverlapDoesNotInventRegisteredRoomIdentity() {
         Structure persisted = structure(20, 20, floor(0, 88, 91, 0, 3));
         Building room = room(100, 20, 0, Set.of(
@@ -86,14 +152,14 @@ class RoomScanPlannerTest {
     }
 
     @Test
-    void addedRoomUsesSameNearestCellRuleAsRoomMaterialization() {
+    void addedRoomKeepsTheScannersExactSelectedCell() {
         Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
         Building room = room(100, 20, 0, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
         Village village = village(persisted, room);
         BlockPos door = new BlockPos(4, 64, 0);
-        BlockPos expectedSeed = new BlockPos(5, 65, 0);
+        BlockPos expectedSeed = new BlockPos(6, 64, 0);
         BlockPos source = new BlockPos(6, 65, 0);
         FloorGeometry fresh = new FloorGeometry(Set.of(
                 cell(0, 64), cell(1, 64), cell(2, 64), cell(3, 64), cell(4, 64),
@@ -361,9 +427,20 @@ class RoomScanPlannerTest {
             BlockPos source,
             FloorGeometry floor,
             Set<BlockPos> transitionSeeds) {
+        BlockPos selectedCell = floor.interactionCellAt(source.getX(), source.getY(), source.getZ())
+                .map(FloorGeometry.Cell::feet).orElse(source);
+        return observation(selectedCell, source, floor, transitionSeeds);
+    }
+
+    private static StructureScanner.FloorObservation observation(
+            BlockPos selectedCell,
+            BlockPos supportedSource,
+            FloorGeometry floor,
+            Set<BlockPos> transitionSeeds) {
         return new StructureScanner.FloorObservation(
-                source, new SelectedFloorScanner.Result(Building.validationResult.SUCCESS,
-                floor, source, source, transitions(floor), Set.of(), transitionSeeds), List.of());
+                new SelectedFloorScanner.Result(Building.validationResult.SUCCESS,
+                floor, selectedCell, supportedSource, selectedCell, selectedCell,
+                transitions(floor), Set.of(), transitionSeeds), List.of());
     }
 
     private static Structure structure(int id, int logicalBuildingId, StructureFloor floor) {

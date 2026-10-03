@@ -59,17 +59,20 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final int POSITION_MARRIAGE = 40;
     private static final ResourceLocation ICON_TEXTURES = MCA.locate("textures/buildings.png");
     private static final int MAP_HALF_SIZE = 75;
+    private static final int TITLE_OFFSET = 96;
+    private static final int LAYOUT_HEIGHT = 225;
     private static final int MAP_INNER_MARGIN = 6;
     private static final float MAP_MAX_FIT_SCALE = 2.0f;
     private static final int MAP_CONTROL_GAP = 2;
     private static final int MAP_ICONS_BUTTON_WIDTH = 47;
     private static final int MAP_TERRAIN_BUTTON_WIDTH = 52;
     private static final int MAP_SCALE_BUTTON_WIDTH = 47;
-    private static final int PLAYER_CENTERED_BUTTON_WIDTH = 110;
+    private static final int PLAYER_CENTERED_BUTTON_WIDTH = 88;
     private static final int PLAYER_HEAD_BUTTON_SIZE = 20;
     private static final int PLAYER_HEAD_ICON_SIZE = 16;
     private static final int MAP_SIDE_CONTROL_GUTTER = 14;
-    private static final int MAP_SIDE_CONTROL_WIDTH = 132;
+    private static final int MAP_SIDE_CONTROL_WIDTH = 110;
+    private static final int MAP_NAVIGATION_OFFSET = 180;
     private static final float MAP_MIN_SCALE = 0.5F;
     private static final float MAP_MAX_SCALE = 4.0F;
     private static final double MAP_ZOOM_FACTOR = 1.1D;
@@ -224,8 +227,9 @@ public class BlueprintScreen extends ExtendedScreen {
         addRenderableWidget(new ButtonWidget(5, 5, 20, 20, Component.translatable("gui.button.backarrow"), b -> setPage("close")));
 
         //page selection
-        int bx = width / 2 - 180;
-        int by = height / 2 - 56;
+        int layoutY = layoutBaseY();
+        int bx = width / 2 - MAP_NAVIGATION_OFFSET;
+        int by = layoutY - 56;
         if (!page.equals("rename") && (!page.equals("empty") && !page.equals("waiting"))) {
             for (String p : new String[]{"map", "rank", "catalog", "villagers", "rules"}) {
                 ButtonWidget widget = new ButtonWidget(bx, by, 80, 20, Component.translatable("gui.blueprint." + p), b -> setPage(p));
@@ -240,19 +244,19 @@ public class BlueprintScreen extends ExtendedScreen {
         switch (page) {
             case "empty":
                 bx = width / 2 - 48;
-                by = height / 2;
+                by = layoutY;
                 addRenderableWidget(new TooltipButtonWidget(bx, by + 5, 96, 20, "gui.blueprint.addBuilding", b -> {
                     Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.ADD_BUILDING));
                 }));
                 break;
             case "map", "advanced": {
                 bx = width / 2 + MAP_HALF_SIZE + MAP_SIDE_CONTROL_GUTTER;
-                int floorControlY = height / 2 + 87;
+                int floorControlY = layoutY + 87;
 
                 // Map and Advanced are two control modes over the same map view. Keep all
                 // display/navigation controls shared so Advanced cannot lose floor controls,
                 // building icons, scale selection, or player centering.
-                int floorControlX = width / 2 - 75;
+                int floorControlX = width / 2 - MAP_HALF_SIZE;
                 floorPreviousButton = addRenderableWidget(new ButtonWidget(floorControlX, floorControlY, 24, 20,
                         Component.literal("<"), b -> changeSelectedFloor(-1)));
                 floorLabelButton = addRenderableWidget(new ButtonWidget(floorControlX + 26, floorControlY, 98, 20,
@@ -307,7 +311,7 @@ public class BlueprintScreen extends ExtendedScreen {
                 if ("advanced".equals(page)) {
                     // Advanced is a map sub-view: expose settlement-level settings while
                     // preserving the shared map display controls above.
-                    SideControlColumn column = new SideControlColumn(bx, height / 2 - 56);
+                    SideControlColumn column = new SideControlColumn(bx, layoutY - 56);
                     MutableComponent text = Component.translatable("gui.blueprint.autoScan");
                     if (village.isAutoScan()) {
                         text.withStyle(ChatFormatting.GREEN);
@@ -347,7 +351,7 @@ public class BlueprintScreen extends ExtendedScreen {
                 } else {
                     // A grouped POI such as the town bell keeps the settlement alive, but
                     // rooms still need a complete physical Structure to attach to.
-                    SideControlColumn column = new SideControlColumn(bx, height / 2 - 56 + 22 * 3);
+                    SideControlColumn column = new SideControlColumn(bx, layoutY - 56 + 22 * 3);
                     structureScanButton = column.addTooltip(
                             "gui.blueprint.addStructure", b -> requestPrimaryStructureScan());
                     removeRoomButton = column.addTooltip("gui.blueprint.removeRoom", b -> {
@@ -380,7 +384,7 @@ public class BlueprintScreen extends ExtendedScreen {
                 int col = 0;
                 int size = 21;
                 int x = width / 2 - 4 * size - 8;
-                int y = (int) (height / 2.0 - 2.0 * size);
+                int y = layoutY - 2 * size;
                 catalogButtons.clear();
                 for (BuildingType bt : BuildingTypes.getInstance()) {
                     if (bt.visible()) {
@@ -410,41 +414,41 @@ public class BlueprintScreen extends ExtendedScreen {
                 }
                 break;
             case "villagers":
-                addRenderableWidget(new ButtonWidget(width / 2 - 24 - 20, height / 2 + 54, 20, 20, Component.literal("<"), b -> {
+                addRenderableWidget(new ButtonWidget(width / 2 - 24 - 20, layoutY + 54, 20, 20, Component.literal("<"), b -> {
                     if (pageNumber > 0) {
                         pageNumber--;
                     }
                 }));
-                addRenderableWidget(new ButtonWidget(width / 2 + 24, height / 2 + 54, 20, 20, Component.literal(">"), b -> {
+                addRenderableWidget(new ButtonWidget(width / 2 + 24, layoutY + 54, 20, 20, Component.literal(">"), b -> {
                     if (pageNumber < Math.ceil(village.getPopulation() / 9.0) - 1) {
                         pageNumber++;
                     }
                 }));
-                buttonPage = addRenderableWidget(new ButtonWidget(width / 2 - 24, height / 2 + 54, 48, 20, Component.literal("0/0)"), b -> {
+                buttonPage = addRenderableWidget(new ButtonWidget(width / 2 - 24, layoutY + 54, 48, 20, Component.literal("0/0)"), b -> {
                 }));
                 break;
             case "rules":
                 //taxes
-                buttonTaxes = createValueChanger(width / 2, height / 2 + POSITION_TAXES + 10, 80, 20, b -> changeTaxes(b ? 0.125f : -0.125f), Component.translatable("gui.blueprint.tooltip.taxes"));
+                buttonTaxes = createValueChanger(width / 2, layoutY + POSITION_TAXES + 10, 80, 20, b -> changeTaxes(b ? 0.125f : -0.125f), Component.translatable("gui.blueprint.tooltip.taxes"));
                 toggleButtons(buttonTaxes, false);
 
                 //birth threshold
-                buttonBirths = createValueChanger(width / 2, height / 2 + POSITION_BIRTH + 10, 80, 20, b -> changePopulationThreshold(b ? 0.125f : -0.125f), Component.translatable("gui.blueprint.tooltip.births"));
+                buttonBirths = createValueChanger(width / 2, layoutY + POSITION_BIRTH + 10, 80, 20, b -> changePopulationThreshold(b ? 0.125f : -0.125f), Component.translatable("gui.blueprint.tooltip.births"));
                 toggleButtons(buttonBirths, false);
 
                 //marriage threshold
-                buttonMarriage = createValueChanger(width / 2, height / 2 + POSITION_MARRIAGE + 10, 80, 20, b -> changeMarriageThreshold(b ? 0.125f : -0.125f), Component.translatable("gui.blueprint.tooltip.marriage"));
+                buttonMarriage = createValueChanger(width / 2, layoutY + POSITION_MARRIAGE + 10, 80, 20, b -> changeMarriageThreshold(b ? 0.125f : -0.125f), Component.translatable("gui.blueprint.tooltip.marriage"));
                 toggleButtons(buttonMarriage, false);
                 break;
             case "rename":
-                EditBox field = addRenderableWidget(new EditBox(font, width / 2 - 65, height / 2 - 16, 130, 20, Component.translatable("gui.blueprint.renameVillage")));
+                EditBox field = addRenderableWidget(new EditBox(font, width / 2 - 65, layoutY - 16, 130, 20, Component.translatable("gui.blueprint.renameVillage")));
                 field.setMaxLength(32);
                 field.setValue(village.getName());
 
-                addRenderableWidget(new ButtonWidget(width / 2 - 66, height / 2 + 8, 64, 20, Component.translatable("gui.blueprint.cancel"), b -> {
+                addRenderableWidget(new ButtonWidget(width / 2 - 66, layoutY + 8, 64, 20, Component.translatable("gui.blueprint.cancel"), b -> {
                     setPage("map");
                 }));
-                addRenderableWidget(new ButtonWidget(width / 2 + 2, height / 2 + 8, 64, 20, Component.translatable("gui.blueprint.rename"), b -> {
+                addRenderableWidget(new ButtonWidget(width / 2 + 2, layoutY + 8, 64, 20, Component.translatable("gui.blueprint.rename"), b -> {
                     Network.sendToServer(new RenameVillageMessage(village.getId(), field.getValue()));
                     village.setName(field.getValue());
                     setPage("map");
@@ -476,9 +480,9 @@ public class BlueprintScreen extends ExtendedScreen {
 
         switch (page) {
             case "waiting" ->
-                    context.drawCenteredString(font, Component.translatable("gui.blueprint.waiting"), width / 2, height / 2, 0xffaaaaaa);
+                    context.drawCenteredString(font, Component.translatable("gui.blueprint.waiting"), width / 2, layoutBaseY(), 0xffaaaaaa);
             case "empty" ->
-                    context.drawCenteredString(font, Component.translatable("gui.blueprint.empty"), width / 2, height / 2 - 20, 0xffaaaaaa);
+                    context.drawCenteredString(font, Component.translatable("gui.blueprint.empty"), width / 2, layoutBaseY() - 20, 0xffaaaaaa);
             case "map" -> {
                 renderStats(context);
                 renderName(context);
@@ -536,13 +540,11 @@ public class BlueprintScreen extends ExtendedScreen {
         Building room = plan.currentRoom().orElse(null);
         int expectedTargetId = switch (action) {
             case FORCE_TYPE, SET_MAIN_ROOM, REMOVE_ROOM -> room == null ? -1 : room.getId();
-            case REMOVE_FLOOR -> room == null ? -1 : village.getLogicalBuildingId(room.getStructureId());
-            case REMOVE -> room != null
-                    ? village.getLogicalBuildingId(room.getStructureId())
-                    : village.getLogicalBuildingId(plan.targetStructureId());
+            case REMOVE_FLOOR, REMOVE -> village.getLogicalBuildingId(plan.targetStructureId());
             default -> -1;
         };
-        if (expectedTargetId < 0 || action == ReportBuildingMessage.Action.REMOVE_FLOOR && selectedFloor == null) {
+        if (expectedTargetId < 0 || action == ReportBuildingMessage.Action.REMOVE_FLOOR
+                && (selectedFloor == null || !village.canRemoveFloor(expectedTargetId, selectedFloor))) {
             return Optional.empty();
         }
         String data = switch (action) {
@@ -582,13 +584,10 @@ public class BlueprintScreen extends ExtendedScreen {
         BlockPos position = minecraft.player.blockPosition();
         if (!position.equals(lastRoomScanPosition) || cachedRoomScanPlan == null) {
             lastRoomScanPosition = position.immutable();
-            cachedRoomScanPlan = getSnapshotRoomScanPlan(village, position);
+            // UI preview only; the server recomputes the plan against ServerLevel before committing.
+            cachedRoomScanPlan = village.getRoomScanPlan(minecraft.level, position);
         }
         return cachedRoomScanPlan;
-    }
-
-    static RoomScanPlan getSnapshotRoomScanPlan(Village village, BlockPos position) {
-        return village.getRoomScanPlan(null, position);
     }
 
     private String getStructureScanTranslationKey(Village.RoomScanMode mode) {
@@ -617,7 +616,7 @@ public class BlueprintScreen extends ExtendedScreen {
         boolean roomRegistered = scanContext.mode() == Village.RoomScanMode.UPDATE_ROOM;
         boolean insideBuilding = roomRegistered || scanContext.mode() == Village.RoomScanMode.ADD_ROOM;
         RemovalControlState removalState = removalControlState(village, scanContext, selectedFloorOrdinal);
-        int y = height / 2 - 56 + 22 * 3;
+        int y = layoutBaseY() - 56 + 22 * 3;
 
         structureScanButton.setMessage(getStructureScanTranslationKey(primaryMode));
         structureScanButton.setTooltip(Tooltip.create(Component.translatable(
@@ -647,14 +646,14 @@ public class BlueprintScreen extends ExtendedScreen {
                                                    Integer selectedFloor) {
         if (village == null || scanContext == null) return RemovalControlState.hidden();
 
-        Building room = scanContext.currentRoom().orElse(null);
-        if (room == null) return RemovalControlState.hidden();
-
         if (selectedFloor != null
-                && village.canRemoveFloor(village.getLogicalBuildingId(room.getStructureId()), selectedFloor)) {
+                && village.canRemoveFloor(village.getLogicalBuildingId(scanContext.targetStructureId()), selectedFloor)) {
             return new RemovalControlState(true, true, ReportBuildingMessage.Action.REMOVE_FLOOR,
                     "gui.blueprint.removeFloor", "gui.blueprint.removeFloor.tooltip");
         }
+
+        Building room = scanContext.currentRoom().orElse(null);
+        if (room == null) return RemovalControlState.hidden();
 
         boolean mainRoom = village.isMainRoom(room);
         return new RemovalControlState(true, !mainRoom, ReportBuildingMessage.Action.REMOVE_ROOM,
@@ -675,18 +674,19 @@ public class BlueprintScreen extends ExtendedScreen {
         final PoseStack matrices = context.pose();
         //name
         matrices.pushPose();
+        matrices.translate(width / 2, layoutBaseY() - TITLE_OFFSET, 0.0D);
         matrices.scale(2.0f, 2.0f, 2.0f);
         if (isVillage) {
-            context.drawCenteredString(font, village.getName(), width / 4, height / 4 - 48, 0xffffffff);
+            context.drawCenteredString(font, village.getName(), 0, 0, 0xffffffff);
         } else {
-            context.drawCenteredString(font, Component.translatable("gui.blueprint.settlement"), width / 4, height / 4 - 48, 0xffffffff);
+            context.drawCenteredString(font, Component.translatable("gui.blueprint.settlement"), 0, 0, 0xffffffff);
         }
         matrices.popPose();
     }
 
     private void renderStats(GuiGraphics context) {
         int x = width / 2 + (page.equals("rank") ? -70 : 105);
-        int y = height / 2 - 50;
+        int y = layoutBaseY() - 50;
 
         //rank
         Component rankStr = Component.translatable(rank.getTranslationKey());
@@ -703,7 +703,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
         if (!village.isAutoScan() && structureCount <= 1) {
             context.drawCenteredString(font, Component.translatable("gui.blueprint.autoScanDisabled"),
-                    width / 2, height / 2 - 112, 0xaaffffff);
+                    width / 2, layoutBaseY() - 77, 0xaaffffff);
         }
 
         LocalPlayer player = minecraft == null ? null : minecraft.player;
@@ -862,10 +862,15 @@ public class BlueprintScreen extends ExtendedScreen {
                 && mouseY >= viewport.top() && mouseY < viewport.bottom();
     }
 
+    private int layoutBaseY() {
+        // Share one anchor across sections so navigation stays fixed while both map rows fit.
+        return (height - LAYOUT_HEIGHT) / 2 + TITLE_OFFSET;
+    }
+
     private BlueprintMapViewport currentViewport() {
         return BlueprintMapViewport.create(
                 width / 2,
-                height / 2 + 8,
+                layoutBaseY() + 8,
                 MAP_HALF_SIZE,
                 mapCenterX,
                 mapCenterZ,
@@ -1204,7 +1209,7 @@ public class BlueprintScreen extends ExtendedScreen {
             return;
         }
 
-        int y = height / 2 + 5;
+        int y = layoutBaseY() + 5;
         int x = width / 2 - 70;
 
         //tasks
@@ -1220,16 +1225,17 @@ public class BlueprintScreen extends ExtendedScreen {
         final PoseStack matrices = context.pose();
         //title
         matrices.pushPose();
+        matrices.translate(width / 2, layoutBaseY() - TITLE_OFFSET, 0.0D);
         matrices.scale(2.0f, 2.0f, 2.0f);
-        context.drawCenteredString(font, Component.translatable("gui.blueprint.catalogFull"), width / 4, height / 4 - 52, 0xffffffff);
+        context.drawCenteredString(font, Component.translatable("gui.blueprint.catalogFull"), 0, 0, 0xffffffff);
         matrices.popPose();
 
         //explanation
-        context.drawCenteredString(font, Component.translatable("gui.blueprint.catalogHint").withStyle(ChatFormatting.GRAY), width / 2, height / 2 - 82, 0xffffffff);
+        context.drawCenteredString(font, Component.translatable("gui.blueprint.catalogHint").withStyle(ChatFormatting.GRAY), width / 2, layoutBaseY() - 74, 0xffffffff);
 
         //building
         int x = width / 2 + 35;
-        int y = height / 2 - 50;
+        int y = layoutBaseY() - 50;
         if (selectedBuilding != null) {
             Building currentRoom = selectedBuilding.grouped()
                     ? null : getPlayerRoomScanPlan().currentRoom().orElse(null);
@@ -1300,7 +1306,7 @@ public class BlueprintScreen extends ExtendedScreen {
         for (int i = 0; i < 9; i++) {
             int index = i + pageNumber * 9;
             if (index < villager.size()) {
-                int y = height / 2 - 51 + i * 11;
+                int y = layoutBaseY() - 51 + i * 11;
                 boolean hover = isMouseWithin(width / 2 - 50, y - 1, 100, 11);
                 context.drawCenteredString(font, Component.literal(villager.get(index).getValue()), width / 2, y, hover ? 0xFFD7D784 : 0xFFFFFFFF);
                 if (hover) {
@@ -1318,27 +1324,27 @@ public class BlueprintScreen extends ExtendedScreen {
         buttonBirths[0].setMessage(Component.literal((int) (village.getPopulationThreshold() * 100) + "%"));
 
         //taxes
-        context.drawCenteredString(font, Component.translatable("gui.blueprint.taxes"), width / 2, height / 2 + POSITION_TAXES, 0xffffffff);
+        context.drawCenteredString(font, Component.translatable("gui.blueprint.taxes"), width / 2, layoutBaseY() + POSITION_TAXES, 0xffffffff);
         if (!rank.isAtLeast(Rank.MERCHANT)) {
-            context.drawCenteredString(font, Component.translatable("gui.blueprint.rankTooLow"), width / 2, height / 2 + POSITION_TAXES + 15, 0xffffffff);
+            context.drawCenteredString(font, Component.translatable("gui.blueprint.rankTooLow"), width / 2, layoutBaseY() + POSITION_TAXES + 15, 0xffffffff);
             toggleButtons(buttonTaxes, false);
         } else {
             toggleButtons(buttonTaxes, true);
         }
 
         //births
-        context.drawCenteredString(font, Component.translatable("gui.blueprint.birth"), width / 2, height / 2 + POSITION_BIRTH, 0xffffffff);
+        context.drawCenteredString(font, Component.translatable("gui.blueprint.birth"), width / 2, layoutBaseY() + POSITION_BIRTH, 0xffffffff);
         if (!rank.isAtLeast(Rank.NOBLE)) {
-            context.drawCenteredString(font, Component.translatable("gui.blueprint.rankTooLow"), width / 2, height / 2 + POSITION_BIRTH + 15, 0xffffffff);
+            context.drawCenteredString(font, Component.translatable("gui.blueprint.rankTooLow"), width / 2, layoutBaseY() + POSITION_BIRTH + 15, 0xffffffff);
             toggleButtons(buttonBirths, false);
         } else {
             toggleButtons(buttonBirths, true);
         }
 
         //marriages
-        context.drawCenteredString(font, Component.translatable("gui.blueprint.marriage"), width / 2, height / 2 + POSITION_MARRIAGE, 0xffffffff);
+        context.drawCenteredString(font, Component.translatable("gui.blueprint.marriage"), width / 2, layoutBaseY() + POSITION_MARRIAGE, 0xffffffff);
         if (!rank.isAtLeast(Rank.MAYOR)) {
-            context.drawCenteredString(font, Component.translatable("gui.blueprint.rankTooLow"), width / 2, height / 2 + POSITION_MARRIAGE + 15, 0xffffffff);
+            context.drawCenteredString(font, Component.translatable("gui.blueprint.rankTooLow"), width / 2, layoutBaseY() + POSITION_MARRIAGE + 15, 0xffffffff);
             toggleButtons(buttonMarriage, false);
         } else {
             toggleButtons(buttonMarriage, true);

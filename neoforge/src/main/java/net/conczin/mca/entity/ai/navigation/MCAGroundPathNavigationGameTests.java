@@ -50,6 +50,44 @@ public final class MCAGroundPathNavigationGameTests {
     private MCAGroundPathNavigationGameTests() {
     }
 
+    @GameTest(batch = "mca_vine_column_descent", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void descendingVinePathLeavesCurrentColumn(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(5, 5, 5));
+        BlockPos target = start.west().below(3).south();
+        prepareFlatArea(helper, start.below(3), 3, 6);
+        BlockState leaves = Blocks.JUNGLE_LEAVES.defaultBlockState()
+                .setValue(BlockStateProperties.PERSISTENT, true);
+        BlockState vine = Blocks.VINE.defaultBlockState().setValue(BlockStateProperties.EAST, true);
+        for (int drop = 1; drop <= 3; drop++) {
+            helper.getLevel().setBlock(start.below(drop), leaves, 3);
+            helper.getLevel().setBlock(start.west().below(drop), vine, 3);
+        }
+        helper.getLevel().setBlock(start.east(), leaves, 3);
+        helper.getLevel().setBlock(start, vine, 3);
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start)).spawn(MobSpawnType.STRUCTURE);
+        villager.refreshBrain(helper.getLevel());
+        villager.getBrain().removeAllBehaviors();
+        villager.setOnGround(true);
+        helper.assertTrue(villager.onClimbable(), "fixture villager is not in its original vine column");
+        Path path = new Path(List.of(
+                new Node(start.getX(), start.getY(), start.getZ()),
+                new Node(start.getX() - 1, start.getY() - 2, start.getZ()),
+                new Node(start.getX() - 1, start.getY() - 3, start.getZ()),
+                new Node(target.getX(), target.getY(), target.getZ())
+        ), target, true);
+        path.setNextNodeIndex(1);
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "vine descent route did not start");
+        helper.succeedWhen(() -> {
+            helper.assertTrue(villager.blockPosition().equals(target),
+                    "villager stayed above leaves instead of entering adjacent descending vines: "
+                            + villager.position() + "; " + summarizePath(villager.getNavigation().getPath()));
+            villager.discard();
+        });
+    }
+
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 20)
     public static void sameHeightScaffoldingUsesGroundNavigationWithoutCentering(GameTestHelper helper) {
         BlockPos current = helper.absolutePos(new BlockPos(4, 1, 4));

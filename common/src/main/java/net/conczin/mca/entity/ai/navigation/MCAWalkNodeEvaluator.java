@@ -143,7 +143,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         }
         int nodeCount = super.getNeighbors(nodes, origin);
         nodeCount = rejectBlockedRaisedStartTransitions(nodes, nodeCount, origin);
-        nodeCount = rejectBlockedRaisedBarrierTransitions(nodes, nodeCount, origin);
+        nodeCount = rejectBlockedRaisedTransitions(nodes, nodeCount, origin);
         if (!isClimbable(origin.x, origin.y, origin.z)) {
             return addDescendingClimbableEntries(nodes, nodeCount, origin.asBlockPos());
         }
@@ -223,13 +223,27 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         return writeIndex;
     }
 
-    private int rejectBlockedRaisedBarrierTransitions(Node[] nodes, int nodeCount, Node origin) {
+    private int rejectBlockedRaisedTransitions(Node[] nodes, int nodeCount, Node origin) {
         AABB originBox = null;
         int writeIndex = 0;
         for (int readIndex = 0; readIndex < nodeCount; readIndex++) {
             Node candidate = nodes[readIndex];
             if (candidate == null) {
                 continue;
+            }
+
+            if (candidate.y > origin.y && candidate.x != origin.x && candidate.z != origin.z) {
+                if (originBox == null) {
+                    originBox = getMobBoxAt(origin);
+                }
+                AABB destinationBox = getMobBoxAt(candidate);
+                BlockPos originPos = this.collisionPos.set(origin.x, origin.y, origin.z);
+                if (destinationBox.minY - originBox.minY > this.mob.maxUpStep()
+                        && this.currentContext.getBlockState(originPos)
+                                .getCollisionShape(this.currentContext.level(), originPos).isEmpty()
+                        && !canApproachDiagonalJump(origin, candidate, originBox)) {
+                    continue;
+                }
             }
 
             BlockState support = this.currentContext.getBlockState(
@@ -254,6 +268,28 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             nodes[index] = null;
         }
         return writeIndex;
+    }
+
+    private boolean canApproachDiagonalJump(Node origin, Node candidate, AABB originBox) {
+        double dx = candidate.x + 0.5D - (originBox.minX + originBox.maxX) * 0.5D;
+        double dz = candidate.z + 0.5D - (originBox.minZ + originBox.maxZ) * 0.5D;
+        double jumpRangeSqr = Math.max(1.0F, this.mob.getBbWidth());
+        double approachFraction = 1.0D - Math.sqrt(jumpRangeSqr / (dx * dx + dz * dz));
+        if (approachFraction <= 0.0D) {
+            return true;
+        }
+        // Entity collision can step over low edges; one tall edge also permits sliding into
+        // MoveControl's jump range. Only tall edging on both sides blocks the diagonal approach.
+        AABB approachBox = originBox.move(dx * approachFraction, this.mob.maxUpStep(), dz * approachFraction);
+        return !blocksJumpApproach(candidate.x, origin.y, origin.z, approachBox)
+                || !blocksJumpApproach(origin.x, origin.y, candidate.z, approachBox);
+    }
+
+    private boolean blocksJumpApproach(int x, int y, int z, AABB approachBox) {
+        BlockPos pos = this.collisionPos.set(x, y, z);
+        VoxelShape shape = this.currentContext.getBlockState(pos).getCollisionShape(this.currentContext.level(), pos);
+        return !shape.isEmpty() && Shapes.joinIsNotEmpty(
+                Shapes.create(approachBox.move(-x, -y, -z)), shape, BooleanOp.AND);
     }
 
     private static boolean isBarrierSupport(BlockState state) {

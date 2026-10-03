@@ -12,7 +12,6 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
@@ -66,10 +65,42 @@ public final class EnterBuildingGameTests {
                 "building beyond FOLLOW_RANGE did not publish a walk target");
         helper.assertTrue(walkTarget.getTarget().currentBlockPosition().equals(buildingTarget),
                 "building travel replaced the real destination with an intermediate point");
-        helper.assertTrue(walkTarget.getTarget().getClass() == BlockPosTracker.class,
-                "enter-building caller still opted into a special long-distance target");
 
         villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_building_wall_recovery", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void buildingVisitFindsRouteAroundLongWall(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(35, 1, 35));
+        BlockPos target = start.east(2);
+        prepareFlatArea(helper, start, 30, 3);
+        for (int z = -23; z <= 23; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start)).spawn(MobSpawnType.STRUCTURE);
+        villager.refreshBrain(helper.getLevel());
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+        villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
+        Config config = Config.getInstance();
+        int previousDistance = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 160;
+            EnterBuildingTask task = new FixedTargetEnterBuildingTask(0.5F, target);
+            helper.assertTrue(task.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime()),
+                    "building visit did not publish its destination");
+            var path = villager.getNavigation().createPath(target, 0);
+            helper.assertTrue(path != null && path.canReach() && path.getTarget().equals(target),
+                    "building visit lost long-wall recovery: " + path);
+        } finally {
+            config.villagerPathfindingDistance = previousDistance;
+            villager.discard();
+        }
         helper.succeed();
     }
 

@@ -726,6 +726,7 @@
   "gui.family_tree.more_ancestors": "More ancestors",
   "gui.family_tree.more_descendants": "More descendants",
   "gui.family_tree.relation.self": "Self",
+  "gui.family_tree.relation.selected": "Selected",
   "gui.family_tree.relation.father": "Father",
   "gui.family_tree.relation.mother": "Mother",
   "gui.family_tree.relation.child": "Child",

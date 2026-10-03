@@ -57,6 +57,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
 import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.control.BodyRotationControl;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -1428,9 +1429,21 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     public void moveTowardsPersistent(BlockPos pos, float speed, int closeEnoughDist) {
-        this.brain.setMemory(MemoryModuleType.WALK_TARGET,
-                new WalkTarget(new PersistentPathTarget(pos), speed, closeEnoughDist));
-        this.lookAt(pos);
+        WalkTarget walkTarget = this.brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        if (walkTarget != null
+                && walkTarget.getTarget() instanceof PersistentPathTarget
+                && walkTarget.getTarget().currentBlockPosition().equals(pos)
+                && walkTarget.getSpeedModifier() == speed
+                && walkTarget.getCloseEnoughDist() == closeEnoughDist) {
+            // Chores repeat their intent each tick, but either sink can clear its
+            // memory independently. Retain the walk request and restore looking
+            // through its existing static tracker when needed.
+            if (this.brain.getMemoryInternal(MemoryModuleType.LOOK_TARGET).orElse(null) != walkTarget.getTarget()) {
+                this.brain.setMemory(MemoryModuleType.LOOK_TARGET, walkTarget.getTarget());
+            }
+            return;
+        }
+        BehaviorUtils.setWalkAndLookTargetMemories(this, new PersistentPathTarget(pos), speed, closeEnoughDist);
     }
 
     public void moveTowards(BlockPos pos, float speed) {

@@ -4,15 +4,18 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.SharedConstants;
 import net.minecraft.server.Bootstrap;
+import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VillageManagerExpectedTargetTest {
     private static final BlockPos SOURCE = new BlockPos(4, 70, -3);
@@ -54,6 +57,97 @@ class VillageManagerExpectedTargetTest {
 
         assertEquals(VillageManager.BuildingEditResult.TARGET_CHANGED, result);
         assertFalse(village.floorRemoved);
+    }
+
+    @Test
+    void removeEmptyPersistedFloorWithoutStandingInARoom() {
+        for (int floorNumber : List.of(-1, 1)) {
+            Village village = emptyFloorVillage(floorNumber);
+            VillageManager manager = new TargetManager(village);
+            BlockPos source = SOURCE.above(8 * floorNumber);
+            assertTrue(village.findInteractionRoomAt(source).isEmpty());
+            assertEquals(Village.RoomScanMode.ADD_ROOM, village.getRoomScanPlan(null, source).mode());
+
+            assertEquals(VillageManager.BuildingEditResult.SUCCESS,
+                    manager.removeFloor(source, floorNumber, 10, 10, 1));
+            assertTrue(village.getStructure(10).orElseThrow().getFloor(1).isEmpty());
+            assertTrue(village.getBuilding(22).isPresent());
+        }
+    }
+
+    @Test
+    void emptyFloorRemovalRejectsStaleTargetsWithoutMutation() {
+        Village village = emptyFloorVillage(1);
+        VillageManager manager = new TargetManager(village);
+        BlockPos source = SOURCE.above(8);
+
+        assertEquals(VillageManager.BuildingEditResult.TARGET_CHANGED,
+                manager.removeFloor(source, 1, 11, 10, 1));
+        assertEquals(VillageManager.BuildingEditResult.TARGET_CHANGED,
+                manager.removeFloor(source, 1, 10, 10, 99));
+        assertEquals(VillageManager.BuildingEditResult.TARGET_CHANGED,
+                manager.removeFloor(source, -1, 10, 10, 1));
+        assertTrue(village.getStructure(10).orElseThrow().getFloor(1).isPresent());
+    }
+
+    @Test
+    void emptyFloorRemovalRequiresAnInteractionStructure() {
+        Village village = emptyFloorVillage(1);
+        VillageManager manager = new TargetManager(village);
+
+        assertEquals(VillageManager.BuildingEditResult.NO_BUILDING,
+                manager.removeFloor(SOURCE.offset(20, 8, 0), 1, 10, 10, 1));
+        assertTrue(village.getStructure(10).orElseThrow().getFloor(1).isPresent());
+    }
+
+    @Test
+    void emptyFloorRemovalCannotTargetAnotherLogicalBuilding() {
+        Village village = emptyFloorVillage(1);
+        BlockPos otherSource = SOURCE.offset(20, 0, 0);
+        Structure other = new Structure(30, otherSource, List.of(new StructureFloor(0, 0,
+                new FloorGeometry(List.of(new FloorGeometry.Cell(otherSource, otherSource.getY() + 4)), Map.of()))));
+        Building otherRoom = room(32);
+        otherRoom.setStructureId(30);
+        otherRoom.setGeometry(otherSource, otherSource.above(3), Set.of(otherSource));
+        village.registerStructure(other, otherRoom);
+        VillageManager manager = new TargetManager(village);
+
+        assertEquals(VillageManager.BuildingEditResult.TARGET_CHANGED,
+                manager.removeFloor(otherSource, 1, 10, 10, 1));
+        assertTrue(village.getStructure(10).orElseThrow().getFloor(1).isPresent());
+    }
+
+    @Test
+    void unregisteredComponentCannotRemoveAFloorWithAnotherRegisteredRoom() {
+        Village village = emptyFloorVillage(1);
+        BlockPos source = SOURCE.above(8);
+        Building upperRoom = room(23);
+        upperRoom.setFloorId(1);
+        BlockPos roomSource = source.east();
+        upperRoom.setGeometry(roomSource, roomSource.above(3), Set.of(roomSource));
+        village.registerRoom(upperRoom);
+        VillageManager manager = new TargetManager(village);
+        assertEquals(Village.RoomScanMode.ADD_ROOM, village.getRoomScanPlan(null, source).mode());
+
+        assertEquals(VillageManager.BuildingEditResult.NO_FLOOR,
+                manager.removeFloor(source, 1, 10, 10, 1));
+        assertTrue(village.getStructure(10).orElseThrow().getFloor(1).isPresent());
+        assertTrue(village.getBuilding(23).isPresent());
+    }
+
+    private static Village emptyFloorVillage(int floorNumber) {
+        Village village = new Village(1, null);
+        BlockPos upper = SOURCE.above(8 * floorNumber);
+        Structure structure = new Structure(10, SOURCE, List.of(
+                new StructureFloor(0, 0, new FloorGeometry(
+                        List.of(new FloorGeometry.Cell(SOURCE, SOURCE.getY() + 4)), Map.of())),
+                new StructureFloor(1, floorNumber, new FloorGeometry(
+                        List.of(new FloorGeometry.Cell(upper, upper.getY() + 4),
+                                new FloorGeometry.Cell(upper.east(), upper.getY() + 4)), Map.of()))));
+        Building main = room(22);
+        main.setGeometry(SOURCE, SOURCE.above(3), Set.of(SOURCE));
+        village.registerStructure(structure, main);
+        return village;
     }
 
     @Test
@@ -134,6 +228,16 @@ class VillageManagerExpectedTargetTest {
         @Override
         public Optional<Building> findInteractionRoomAt(BlockPos pos) {
             return Optional.of(room);
+        }
+
+        @Override
+        public RoomScanPlan getRoomScanPlan(Level level, BlockPos pos) {
+            return RoomScanPlan.updateRoom(room, pos);
+        }
+
+        @Override
+        public Optional<Structure> getStructure(int id) {
+            return id == structure.getId() ? Optional.of(structure) : Optional.empty();
         }
 
         @Override
