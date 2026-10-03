@@ -3,11 +3,13 @@ package net.conczin.mca.server.world.data;
 import net.minecraft.core.BlockPos;
 import net.minecraft.SharedConstants;
 import net.minecraft.server.Bootstrap;
+import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -310,6 +312,20 @@ class RoomScanPlannerTest {
     }
 
     @Test
+    void persistedInteractionLookupUsesTheLevelAwareVillageResolver() {
+        Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
+        Building room = room(100, 20, 0, Set.of(new BlockPos(0, 64, 0)));
+        LevelAwareVillage village = new LevelAwareVillage(persisted, room);
+        BlockPos source = new BlockPos(8, 70, 8);
+
+        RoomScanPlan plan = RoomScanPlanner.plan(village, null, source);
+
+        assertTrue(village.levelAwareResolverUsed);
+        assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
+        assertEquals(room, plan.currentRoom().orElseThrow());
+    }
+
+    @Test
     void unownedDoorCellDoesNotBorrowAdjacentRegisteredRoom() {
         BlockPos door = new BlockPos(4, 64, 0);
         FloorGeometry geometry = new FloorGeometry(Set.of(
@@ -399,5 +415,26 @@ class RoomScanPlannerTest {
         int minY = cells.stream().mapToInt(BlockPos::getY).min().orElseThrow();
         room.setGeometry(new BlockPos(minX, minY, 0), new BlockPos(maxX, minY + 3, 0), cells);
         return room;
+    }
+
+    private static final class LevelAwareVillage extends Village {
+        private final Structure structure;
+        private final Building room;
+        private boolean levelAwareResolverUsed;
+
+        private LevelAwareVillage(Structure structure, Building room) {
+            super(1, null);
+            this.structure = structure;
+            this.room = room;
+        }
+
+        @Override
+        Optional<ResolvedInteraction> resolveInteractionPosition(Level level, BlockPos pos) {
+            levelAwareResolverUsed = true;
+            return Optional.of(new ResolvedInteraction(
+                    structure,
+                    new Structure.InteractionPosition(structure.getFloor(room.getFloorId()).orElseThrow(), room)
+            ));
+        }
     }
 }

@@ -1977,6 +1977,36 @@ public final class FloorScannerGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_floor_generic_add_attachment", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void genericAddBuildingActionDiscoversBasementAttachment(GameTestHelper helper) {
+        BlockPos basementMin = helper.absolutePos(new BlockPos(6, 2, 6));
+        BlockPos groundMin = basementMin.above(4);
+        buildClosedRoom(helper, basementMin, 4, 4);
+        buildClosedRoom(helper, groundMin, 4, 4);
+
+        VillageManager manager = new VillageManager(helper.getLevel());
+        RoomWorkflow workflow = new RoomWorkflow(manager, helper.getLevel());
+        BlockPos groundSeed = groundMin.offset(1, 0, 1);
+        BuildingScanResult initialScan = workflow.analyzeBuildingAddition(groundSeed);
+        String initialType = initialScan.isAmbiguous() ? initialScan.matchingTypes().getFirst() : null;
+        helper.assertTrue(workflow.commitAddition(initialScan, initialType).status() == RoomWorkflow.Status.COMMITTED,
+                "initial ground room was not committed");
+
+        Village village = manager.findNearestVillage(groundSeed, Village.MERGE_MARGIN).orElseThrow();
+        int expectedBuildingId = village.getStructures().values().stream()
+                .findFirst().orElseThrow().getLogicalBuildingId();
+        BlockPos basementSeed = basementMin.offset(1, 0, 1);
+
+        RoomWorkflow.Outcome outcome = workflow.addBuilding(basementSeed, null);
+
+        helper.assertTrue(outcome.expectedTargetId() == expectedBuildingId,
+                "generic add targeted " + outcome.expectedTargetId() + " instead of building " + expectedBuildingId);
+        helper.assertTrue(outcome.prospectiveFloorNumber() == -1,
+                "generic add did not preserve the basement floor number: " + outcome.prospectiveFloorNumber());
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_floor_uneven_cave", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 100)
     public static void unevenCaveRemainsOneStoreyAcrossThreeIntegerHeights(GameTestHelper helper) {

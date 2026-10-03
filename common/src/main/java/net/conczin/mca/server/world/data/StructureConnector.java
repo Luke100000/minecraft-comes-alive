@@ -102,7 +102,8 @@ final class StructureConnector {
                 verticalFloorMembershipCells(connector, state, geometry)
                         .forEach(floorCell -> {
                             FloorConnector.Marker candidate = new FloorConnector.Marker(
-                                    connector, type, floorCell);
+                                    connector, type, floorCell,
+                                    type == FloorConnector.Type.TRAPDOOR ? ownerSide(state) : null);
                             FloorConnector.Marker existing = result.get(floorCell);
                             if (existing == null || closerToFloorCell(candidate, existing)) {
                                 result.put(floorCell, candidate);

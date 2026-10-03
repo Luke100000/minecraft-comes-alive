@@ -104,7 +104,6 @@ public class BlueprintScreen extends ExtendedScreen {
     private TooltipButtonWidget inheritanceButton;
     private TooltipButtonWidget mainRoomButton;
     private TooltipButtonWidget structureScanButton;
-    private TooltipButtonWidget attachmentScanButton;
     private TooltipButtonWidget removeRoomButton;
     private ButtonWidget removeBuildingButton;
     private boolean selectPlayerFloorOnNextVillageResponse;
@@ -185,8 +184,16 @@ public class BlueprintScreen extends ExtendedScreen {
 
     @Override
     public void init() {
-        Network.sendToServer(new GetVillageRequest());
-        setPage("waiting");
+        if (needsVillageRequestOnInit()) {
+            Network.sendToServer(new GetVillageRequest());
+            setPage("waiting");
+            return;
+        }
+        setPage(page == null ? "map" : page);
+    }
+
+    boolean needsVillageRequestOnInit() {
+        return village == null;
     }
 
     private void setPage(String page) {
@@ -210,7 +217,6 @@ public class BlueprintScreen extends ExtendedScreen {
         inheritanceButton = null;
         mainRoomButton = null;
         structureScanButton = null;
-        attachmentScanButton = null;
         removeRoomButton = null;
         removeBuildingButton = null;
 
@@ -317,11 +323,18 @@ public class BlueprintScreen extends ExtendedScreen {
                             Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.FULL_SCAN)));
                     addInheritanceControl(column);
                     column.addTooltip("gui.blueprint.restrictAccess", b ->
-                            Network.sendToServer(new ReportBuildingMessage(
-                                    ReportBuildingMessage.Action.FORCE_TYPE, "blocked")));
+                            targetedEditMessage(
+                                    ReportBuildingMessage.Action.FORCE_TYPE,
+                                    village, getPlayerRoomScanPlan(), selectedFloorOrdinal)
+                                    .ifPresent(Network::sendToServer));
                     mainRoomButton = column.addTooltip("gui.blueprint.setMainRoom", b -> {
-                        selectPlayerFloorOnNextVillageResponse = true;
-                        Network.sendToServer(new ReportBuildingMessage(ReportBuildingMessage.Action.SET_MAIN_ROOM));
+                        targetedEditMessage(
+                                ReportBuildingMessage.Action.SET_MAIN_ROOM,
+                                village, getPlayerRoomScanPlan(), selectedFloorOrdinal)
+                                .ifPresent(message -> {
+                                    selectPlayerFloorOnNextVillageResponse = true;
+                                    Network.sendToServer(message);
+                                });
                     });
                     updateMainRoomControl(getPlayerRoomScanPlan());
                     if (isVillage) {
@@ -336,23 +349,22 @@ public class BlueprintScreen extends ExtendedScreen {
                     // rooms still need a complete physical Structure to attach to.
                     SideControlColumn column = new SideControlColumn(bx, height / 2 - 56 + 22 * 3);
                     structureScanButton = column.addTooltip(
-                            "gui.blueprint.addBuilding", b -> requestPrimaryStructureScan());
-                    attachmentScanButton = column.addTooltip(
-                            "gui.blueprint.addFloor", b -> requestAttachmentScan());
+                            "gui.blueprint.addStructure", b -> requestPrimaryStructureScan());
                     removeRoomButton = column.addTooltip("gui.blueprint.removeRoom", b -> {
+                        RoomScanPlan plan = getPlayerRoomScanPlan();
                         RemovalControlState state = removalControlState(
-                                village, getPlayerRoomScanPlan(), selectedFloorOrdinal);
+                                village, plan, selectedFloorOrdinal);
                         if (state.visible() && state.active() && state.action() != null) {
-                            ReportBuildingMessage message = state.action() == ReportBuildingMessage.Action.REMOVE_FLOOR
-                                    ? new ReportBuildingMessage(state.action(), String.valueOf(selectedFloorOrdinal))
-                                    : new ReportBuildingMessage(state.action());
-                            Network.sendToServer(message);
+                            targetedEditMessage(state.action(), village, plan, selectedFloorOrdinal)
+                                    .ifPresent(Network::sendToServer);
                         }
                     });
                     removeBuildingButton = column.addButton(
                             Component.translatable("gui.blueprint.removeBuilding"), b ->
-                                    Network.sendToServer(new ReportBuildingMessage(
-                                            ReportBuildingMessage.Action.REMOVE)));
+                                    targetedEditMessage(
+                                            ReportBuildingMessage.Action.REMOVE,
+                                            village, getPlayerRoomScanPlan(), selectedFloorOrdinal)
+                                            .ifPresent(Network::sendToServer));
 
                     addRenderableWidget(new ButtonWidget(
                             bx, floorControlY + 22, MAP_SIDE_CONTROL_WIDTH, 20,
@@ -498,20 +510,64 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void requestPrimaryStructureScan() {
-        Village.RoomScanMode mode = getPlayerRoomScanPlan().mode();
-        sendStructureScan(mode.isAttachment() ? Village.RoomScanMode.ADD_BUILDING : mode, null);
-    }
-
-    private void requestAttachmentScan() {
         RoomScanPlan plan = getPlayerRoomScanPlan();
-        if (!plan.mode().isAttachment()) return;
-        sendStructureScan(plan.mode(), Integer.toString(plan.targetBuildingId()));
+        sendStructureScan(plan.mode(), plan);
     }
 
-    private void sendStructureScan(Village.RoomScanMode mode, String targetBuildingId) {
+    private void sendStructureScan(Village.RoomScanMode mode, RoomScanPlan plan) {
         selectPlayerFloorOnNextVillageResponse = true;
-        Network.sendToServer(new ReportBuildingMessage(
-                getStructureScanAction(mode), targetBuildingId));
+        Network.sendToServer(structureScanMessage(mode, plan));
+    }
+
+    static ReportBuildingMessage structureScanMessage(Village.RoomScanMode mode, RoomScanPlan plan) {
+        int expectedTargetId = switch (mode) {
+            case UPDATE_ROOM -> plan.currentRoom().map(Building::getId).orElse(-1);
+            case ADD_ATTACHMENT -> plan.targetBuildingId();
+            default -> -1;
+        };
+        return new ReportBuildingMessage(getStructureScanAction(mode), null, expectedTargetId);
+    }
+
+    static Optional<ReportBuildingMessage> targetedEditMessage(ReportBuildingMessage.Action action,
+                                                                Village village,
+                                                                RoomScanPlan plan,
+                                                                Integer selectedFloor) {
+        if (village == null || plan == null) return Optional.empty();
+        Building room = plan.currentRoom().orElse(null);
+        int expectedTargetId = switch (action) {
+            case FORCE_TYPE, SET_MAIN_ROOM, REMOVE_ROOM -> room == null ? -1 : room.getId();
+            case REMOVE_FLOOR -> room == null ? -1 : village.getLogicalBuildingId(room.getStructureId());
+            case REMOVE -> room != null
+                    ? village.getLogicalBuildingId(room.getStructureId())
+                    : village.getLogicalBuildingId(plan.targetStructureId());
+            default -> -1;
+        };
+        if (expectedTargetId < 0 || action == ReportBuildingMessage.Action.REMOVE_FLOOR && selectedFloor == null) {
+            return Optional.empty();
+        }
+        String data = switch (action) {
+            case FORCE_TYPE -> "blocked";
+            case REMOVE_FLOOR -> floorRemovalData(village, expectedTargetId, selectedFloor);
+            default -> null;
+        };
+        if (action == ReportBuildingMessage.Action.REMOVE_FLOOR && data == null) return Optional.empty();
+        return Optional.of(new ReportBuildingMessage(action, data, expectedTargetId));
+    }
+
+    private static String floorRemovalData(Village village, int logicalBuildingId, int floorNumber) {
+        FloorTarget target = village.getStructures().values().stream()
+                .filter(structure -> village.getLogicalBuildingId(structure.getId()) == logicalBuildingId)
+                .flatMap(structure -> structure.getFloors().stream()
+                        .filter(floor -> floor.floorNumber() == floorNumber)
+                        .map(floor -> new FloorTarget(structure.getId(), floor.id())))
+                .min(Comparator.comparingInt(FloorTarget::structureId)
+                        .thenComparingInt(FloorTarget::floorId))
+                .orElse(null);
+        return target == null ? null
+                : floorNumber + ":" + target.structureId() + ":" + target.floorId();
+    }
+
+    private record FloorTarget(int structureId, int floorId) {
     }
 
     void cancelPendingFloorSelection() {
@@ -526,23 +582,22 @@ public class BlueprintScreen extends ExtendedScreen {
         BlockPos position = minecraft.player.blockPosition();
         if (!position.equals(lastRoomScanPosition) || cachedRoomScanPlan == null) {
             lastRoomScanPosition = position.immutable();
-            cachedRoomScanPlan = village.getRoomScanPlan(minecraft.level, position);
+            cachedRoomScanPlan = getSnapshotRoomScanPlan(village, position);
         }
         return cachedRoomScanPlan;
     }
 
+    static RoomScanPlan getSnapshotRoomScanPlan(Village village, BlockPos position) {
+        return village.getRoomScanPlan(null, position);
+    }
+
     private String getStructureScanTranslationKey(Village.RoomScanMode mode) {
         return switch (mode) {
-            case ADD_BUILDING -> "gui.blueprint.addBuilding";
+            case ADD_BUILDING -> "gui.blueprint.addStructure";
             case ADD_ROOM -> "gui.blueprint.addRoom";
             case UPDATE_ROOM -> "gui.blueprint.updateRoom";
             case ADD_ATTACHMENT -> "gui.blueprint.addFloor";
         };
-    }
-
-    private static String getAttachmentScanTranslationKey(RoomScanPlan plan) {
-        return plan.prospectiveFloorNumber() < 0
-                ? "gui.blueprint.addBasement" : "gui.blueprint.addFloor";
     }
 
     private void updateMapControls(RoomScanPlan scanContext) {
@@ -558,9 +613,7 @@ public class BlueprintScreen extends ExtendedScreen {
     private void updateStructureScanControl(RoomScanPlan scanContext) {
         if (structureScanButton == null) return;
 
-        boolean attachment = scanContext.mode().isAttachment();
-        Village.RoomScanMode primaryMode = attachment
-                ? Village.RoomScanMode.ADD_BUILDING : scanContext.mode();
+        Village.RoomScanMode primaryMode = scanContext.mode();
         boolean roomRegistered = scanContext.mode() == Village.RoomScanMode.UPDATE_ROOM;
         boolean insideBuilding = roomRegistered || scanContext.mode() == Village.RoomScanMode.ADD_ROOM;
         RemovalControlState removalState = removalControlState(village, scanContext, selectedFloorOrdinal);
@@ -572,23 +625,6 @@ public class BlueprintScreen extends ExtendedScreen {
         structureScanButton.active = true;
         structureScanButton.setY(y);
         y += 22;
-
-        if (attachmentScanButton != null) {
-            attachmentScanButton.visible = attachment;
-            attachmentScanButton.active = attachment;
-            attachmentScanButton.setY(y);
-            if (attachment) {
-                String attachmentKey = getAttachmentScanTranslationKey(scanContext);
-                MutableComponent label = Component.translatable(attachmentKey);
-                if (scanContext.hasProspectiveFloor()) {
-                    label.append(Component.literal(" " + scanContext.prospectiveFloorNumber()));
-                }
-                attachmentScanButton.setMessage(label);
-                attachmentScanButton.setTooltip(Tooltip.create(Component.translatable(
-                        attachmentKey + ".tooltip")));
-                y += 22;
-            }
-        }
 
         if (removeRoomButton != null) {
             removeRoomButton.visible = removalState.visible();
@@ -1039,6 +1075,8 @@ public class BlueprintScreen extends ExtendedScreen {
     private void reconcileSelectedFloor(List<Integer> ordinals) {
         if (ordinals.isEmpty()) {
             selectedFloorOrdinal = null;
+        } else if (ordinals.size() == 1) {
+            selectedFloorOrdinal = ordinals.getFirst();
         } else if (selectedFloorOrdinal != null
                 && !ordinals.contains(selectedFloorOrdinal)) {
             int previous = selectedFloorOrdinal;
@@ -1059,19 +1097,25 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void addInheritanceControl(SideControlColumn column) {
-        Building room = getPlayerRoomScanPlan().currentRoom().orElse(null);
-        if (room == null) return;
+        RoomScanPlan scanContext = getPlayerRoomScanPlan();
+        Building room = scanContext.currentRoom().orElse(null);
         InheritanceControlState state = inheritanceControlState(village, room);
         inheritanceButton = column.addTooltip(
                 Component.translatable(state.labelKey()),
                 Component.translatable(state.tooltipKey()), button -> {
             Building currentRoom = getPlayerRoomScanPlan().currentRoom().orElse(null);
             if (currentRoom == null) return;
-            InheritanceControlState current = inheritanceControlState(village, currentRoom);
-            Network.sendToServer(new ReportBuildingMessage(
-                    ReportBuildingMessage.Action.SET_ROOM_INHERITANCE,
-                    Boolean.toString(current.nextEnabled())));
+            Network.sendToServer(inheritanceMessage(village, currentRoom));
         });
+        updateInheritanceControl(scanContext);
+    }
+
+    static ReportBuildingMessage inheritanceMessage(Village village, Building room) {
+        InheritanceControlState state = inheritanceControlState(village, room);
+        return new ReportBuildingMessage(
+                ReportBuildingMessage.Action.SET_ROOM_INHERITANCE,
+                Boolean.toString(state.nextEnabled()),
+                room == null ? -1 : room.getId());
     }
 
     static InheritanceControlState inheritanceControlState(Village village, Building room) {
@@ -1103,7 +1147,9 @@ public class BlueprintScreen extends ExtendedScreen {
     private void updateInheritanceControl(RoomScanPlan scanContext) {
         if (inheritanceButton == null) return;
         Building room = scanContext.currentRoom().orElse(null);
-        inheritanceButton.active = room != null;
+        boolean available = room != null;
+        inheritanceButton.visible = available;
+        inheritanceButton.active = available;
         if (room == null) return;
         InheritanceControlState state = inheritanceControlState(village, room);
         inheritanceButton.setMessage(Component.translatable(state.labelKey()));
@@ -1222,7 +1268,7 @@ public class BlueprintScreen extends ExtendedScreen {
                     iconX += 18;
                 }
 
-                context.drawString(font, getBlockName(b.getKey()), iconX, textY, 0xffffffff);
+                context.drawString(font, BlueprintTooltipFactory.blockName(b.getKey()), iconX, textY, 0xffffffff);
                 y += 18;
             }
         } else {
@@ -1309,14 +1355,6 @@ public class BlueprintScreen extends ExtendedScreen {
                 .flatMap(blocks -> blocks.stream().findFirst())
                 .map(holder -> new ItemStack(holder.value()))
                 .orElse(ItemStack.EMPTY);
-    }
-
-    private Component getBlockName(ResourceLocation id) {
-        if (BuiltInRegistries.BLOCK.containsKey(id)) {
-            return Component.translatable(BuiltInRegistries.BLOCK.get(id).getDescriptionId());
-        } else {
-            return Component.translatable("tag.block." + id.getNamespace() + "." + id.getPath());
-        }
     }
 
     private void toggleButtons(ButtonWidget[] buttons, boolean active) {

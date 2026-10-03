@@ -533,9 +533,14 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     public BuildingEditResult forceRoomType(BlockPos pos, String type) {
+        return forceRoomType(pos, type, -1);
+    }
+
+    public BuildingEditResult forceRoomType(BlockPos pos, String type, int expectedRoomId) {
         Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
         Building room = village == null ? null : village.findInteractionRoomAt(pos).orElse(null);
         if (room == null) return BuildingEditResult.NO_BUILDING;
+        if (expectedRoomId >= 0 && room.getId() != expectedRoomId) return BuildingEditResult.TARGET_CHANGED;
         boolean forced = !room.getType().equals(type);
         String resolvedType = forced ? type : RoomTypeResolver.create(village).resolve(room).updatedType(null);
         village.setRoomType(room, resolvedType, forced);
@@ -543,17 +548,34 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     public BuildingEditResult removeRoom(BlockPos pos) {
+        return removeRoom(pos, -1);
+    }
+
+    public BuildingEditResult removeRoom(BlockPos pos, int expectedRoomId) {
         Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
         if (village == null) return BuildingEditResult.NO_BUILDING;
         Building room = village.findInteractionRoomAt(pos).orElse(null);
         if (room == null) return village.getRoomScanPlan(world, pos).mode() == Village.RoomScanMode.ADD_ROOM
                 ? BuildingEditResult.NO_ROOM : BuildingEditResult.NO_BUILDING;
+        if (expectedRoomId >= 0 && room.getId() != expectedRoomId) return BuildingEditResult.TARGET_CHANGED;
         if (village.isMainRoom(room)) return BuildingEditResult.MAIN_ROOM;
         return village.removeRoom(room.getId())
                 ? BuildingEditResult.SUCCESS : BuildingEditResult.NO_ROOM;
     }
 
     public BuildingEditResult removeFloor(BlockPos pos, int floorNumber) {
+        return removeFloor(pos, floorNumber, -1);
+    }
+
+    public BuildingEditResult removeFloor(BlockPos pos, int floorNumber, int expectedBuildingId) {
+        return removeFloor(pos, floorNumber, expectedBuildingId, -1, -1);
+    }
+
+    public BuildingEditResult removeFloor(BlockPos pos,
+                                          int floorNumber,
+                                          int expectedBuildingId,
+                                          int expectedStructureId,
+                                          int expectedFloorId) {
         Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
         if (village == null) return BuildingEditResult.NO_BUILDING;
         if (floorNumber == Integer.MIN_VALUE) return BuildingEditResult.NO_FLOOR;
@@ -562,18 +584,57 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (room == null) return BuildingEditResult.NO_ROOM;
         Structure structure = village.getStructureFor(room).orElse(null);
         if (structure == null) return BuildingEditResult.NO_BUILDING;
+        if (expectedBuildingId >= 0
+                && structure.getLogicalBuildingId() != expectedBuildingId) {
+            return BuildingEditResult.TARGET_CHANGED;
+        }
+        if (expectedStructureId >= 0 || expectedFloorId >= 0) {
+            Structure expectedStructure = village.getStructure(expectedStructureId).orElse(null);
+            StructureFloor expectedFloor = expectedStructure == null
+                    ? null : expectedStructure.getFloor(expectedFloorId).orElse(null);
+            if (expectedStructure == null
+                    || expectedFloor == null
+                    || expectedStructure.getLogicalBuildingId() != structure.getLogicalBuildingId()
+                    || expectedFloor.floorNumber() != floorNumber) {
+                return BuildingEditResult.TARGET_CHANGED;
+            }
+        }
 
         return village.removeFloor(structure.getLogicalBuildingId(), floorNumber)
                 ? BuildingEditResult.SUCCESS : BuildingEditResult.NO_FLOOR;
     }
 
+    public BuildingEditResult setMainRoom(BlockPos pos, int expectedRoomId) {
+        Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
+        if (village == null) return BuildingEditResult.NO_BUILDING;
+        Building room = village.findInteractionRoomAt(pos).orElse(null);
+        if (room == null) return BuildingEditResult.NO_ROOM;
+        if (expectedRoomId >= 0 && room.getId() != expectedRoomId) return BuildingEditResult.TARGET_CHANGED;
+        if (village.getStructureFor(room).isEmpty()) return BuildingEditResult.NO_STRUCTURE;
+        village.setMainRoom(room);
+        return BuildingEditResult.SUCCESS;
+    }
+
     public BuildingEditResult removeBuilding(BlockPos pos) {
+        return removeBuilding(pos, -1);
+    }
+
+    public BuildingEditResult removeBuilding(BlockPos pos, int expectedBuildingId) {
         Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
         if (village == null) return BuildingEditResult.NO_BUILDING;
         Building target = village.getBuildingAt(pos).orElse(null);
         if (target instanceof ExternalBuilding) {
+            if (expectedBuildingId >= 0 && target.getId() != expectedBuildingId) {
+                return BuildingEditResult.TARGET_CHANGED;
+            }
             return village.removeExternalBuilding(target.getId())
                     ? BuildingEditResult.SUCCESS : BuildingEditResult.NO_BUILDING;
+        }
+        if (target != null && target.isFunctionalRoom()) {
+            int logicalBuildingId = village.getLogicalBuildingId(target.getStructureId());
+            if (expectedBuildingId >= 0 && logicalBuildingId != expectedBuildingId) {
+                return BuildingEditResult.TARGET_CHANGED;
+            }
         }
         if (target != null && target.isFunctionalRoom() && village.getStructure(target.getStructureId()).isEmpty()) {
             int orphanedStructureId = target.getStructureId();
@@ -586,10 +647,13 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
         Structure structure = target != null && target.isFunctionalRoom()
                 ? village.getStructure(target.getStructureId()).orElse(null)
-                : village.getExactStructureAt(pos)
-                .or(() -> village.getInteractionStructureAt(pos))
-                .orElse(null);
+                 : village.getExactStructureAt(pos)
+                 .or(() -> village.getInteractionStructureAt(pos))
+                 .orElse(null);
         if (structure == null) return BuildingEditResult.NO_BUILDING;
+        if (expectedBuildingId >= 0 && structure.getLogicalBuildingId() != expectedBuildingId) {
+            return BuildingEditResult.TARGET_CHANGED;
+        }
 
         village.publishBuildingMutation(() -> village.removeLogicalBuilding(structure.getLogicalBuildingId()));
 
@@ -633,7 +697,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         NO_BUILDING,
         NO_ROOM,
         NO_FLOOR,
-        MAIN_ROOM
+        MAIN_ROOM,
+        NO_STRUCTURE,
+        TARGET_CHANGED
     }
 
     public void setBuildingCooldown(int buildingCooldown) { this.buildingCooldown = buildingCooldown; }

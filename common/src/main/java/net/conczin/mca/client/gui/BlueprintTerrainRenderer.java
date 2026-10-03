@@ -19,6 +19,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.MapColor;
 
 import java.util.ArrayList;
+import java.util.BitSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,6 +29,11 @@ import java.util.Map;
 final class BlueprintTerrainRenderer {
     private static final int TILE_BLOCK_SIZE = 128;
     private static final int TERRAIN_GRID_SIZE = TILE_BLOCK_SIZE + 2;
+    private static final int SAMPLE_REGION_BLOCK_SIZE = 16;
+    private static final int SAMPLE_REGIONS_PER_AXIS = TILE_BLOCK_SIZE / SAMPLE_REGION_BLOCK_SIZE;
+    private static final int CORE_SAMPLE_REGION_COUNT = SAMPLE_REGIONS_PER_AXIS * SAMPLE_REGIONS_PER_AXIS;
+    private static final int HALO_EDGE_REGION_COUNT = SAMPLE_REGIONS_PER_AXIS * 4;
+    private static final int SAMPLE_REGION_COUNT = CORE_SAMPLE_REGION_COUNT + HALO_EDGE_REGION_COUNT + 4;
     private static final int MAX_CACHED_TILES = 96;
     private static final long INCOMPLETE_TILE_RETRY_TICKS = 20L;
     private static final long TERRAIN_TILE_STALE_TICKS = 600L;
@@ -108,7 +114,8 @@ final class BlueprintTerrainRenderer {
                 workTile = new TerrainTile(workKey.minX(), workKey.minZ());
                 tiles.put(workKey, workTile);
             }
-            workTile.sampleWholeTile(minecraft.level, gameTime);
+            workTile.sampleNextRegion(
+                    minecraft.level, gameTime, viewport.mapCenterX(), viewport.mapCenterZ());
             updateTexture(workTile);
         }
 
@@ -188,6 +195,84 @@ final class BlueprintTerrainRenderer {
                 && cellZ > 0 && cellZ < TERRAIN_GRID_SIZE - 1;
     }
 
+    static SampleRegion sampleRegionBounds(int regionIndex) {
+        if (regionIndex < 0 || regionIndex >= SAMPLE_REGION_COUNT) {
+            throw new IllegalArgumentException("regionIndex out of range: " + regionIndex);
+        }
+        if (regionIndex < CORE_SAMPLE_REGION_COUNT) {
+            int regionX = regionIndex % SAMPLE_REGIONS_PER_AXIS;
+            int regionZ = regionIndex / SAMPLE_REGIONS_PER_AXIS;
+            int minX = regionX * SAMPLE_REGION_BLOCK_SIZE;
+            int minZ = regionZ * SAMPLE_REGION_BLOCK_SIZE;
+            return new SampleRegion(
+                    minX, minZ,
+                    minX + SAMPLE_REGION_BLOCK_SIZE,
+                    minZ + SAMPLE_REGION_BLOCK_SIZE);
+        }
+
+        int haloIndex = regionIndex - CORE_SAMPLE_REGION_COUNT;
+        if (haloIndex < SAMPLE_REGIONS_PER_AXIS) {
+            int minZ = haloIndex * SAMPLE_REGION_BLOCK_SIZE;
+            return new SampleRegion(-1, minZ, 0, minZ + SAMPLE_REGION_BLOCK_SIZE);
+        }
+        haloIndex -= SAMPLE_REGIONS_PER_AXIS;
+        if (haloIndex < SAMPLE_REGIONS_PER_AXIS) {
+            int minZ = haloIndex * SAMPLE_REGION_BLOCK_SIZE;
+            return new SampleRegion(TILE_BLOCK_SIZE, minZ, TILE_BLOCK_SIZE + 1, minZ + SAMPLE_REGION_BLOCK_SIZE);
+        }
+        haloIndex -= SAMPLE_REGIONS_PER_AXIS;
+        if (haloIndex < SAMPLE_REGIONS_PER_AXIS) {
+            int minX = haloIndex * SAMPLE_REGION_BLOCK_SIZE;
+            return new SampleRegion(minX, -1, minX + SAMPLE_REGION_BLOCK_SIZE, 0);
+        }
+        haloIndex -= SAMPLE_REGIONS_PER_AXIS;
+        if (haloIndex < SAMPLE_REGIONS_PER_AXIS) {
+            int minX = haloIndex * SAMPLE_REGION_BLOCK_SIZE;
+            return new SampleRegion(minX, TILE_BLOCK_SIZE, minX + SAMPLE_REGION_BLOCK_SIZE, TILE_BLOCK_SIZE + 1);
+        }
+
+        return switch (haloIndex - SAMPLE_REGIONS_PER_AXIS) {
+            case 0 -> new SampleRegion(-1, -1, 0, 0);
+            case 1 -> new SampleRegion(TILE_BLOCK_SIZE, -1, TILE_BLOCK_SIZE + 1, 0);
+            case 2 -> new SampleRegion(-1, TILE_BLOCK_SIZE, 0, TILE_BLOCK_SIZE + 1);
+            case 3 -> new SampleRegion(TILE_BLOCK_SIZE, TILE_BLOCK_SIZE, TILE_BLOCK_SIZE + 1, TILE_BLOCK_SIZE + 1);
+            default -> throw new IllegalArgumentException("regionIndex out of range: " + regionIndex);
+        };
+    }
+
+    static SampleRegion dirtyTextureBounds(int regionIndex) {
+        SampleRegion region = sampleRegionBounds(regionIndex);
+        return new SampleRegion(
+                Math.max(0, region.minX() - 1),
+                Math.max(0, region.minZ() - 1),
+                Math.min(TILE_BLOCK_SIZE, region.maxX() + 1),
+                Math.min(TILE_BLOCK_SIZE, region.maxZ() + 1));
+    }
+
+    static int nearestPendingRegion(BitSet pendingRegions,
+                                    int tileMinX,
+                                    int tileMinZ,
+                                    double focusX,
+                                    double focusZ) {
+        int nearest = -1;
+        double nearestDistanceSq = Double.POSITIVE_INFINITY;
+        for (int regionIndex = pendingRegions.nextSetBit(0);
+             regionIndex >= 0;
+             regionIndex = pendingRegions.nextSetBit(regionIndex + 1)) {
+            SampleRegion region = sampleRegionBounds(regionIndex);
+            double centerX = tileMinX + (region.minX() + region.maxX()) * 0.5D;
+            double centerZ = tileMinZ + (region.minZ() + region.maxZ()) * 0.5D;
+            double deltaX = centerX - focusX;
+            double deltaZ = centerZ - focusZ;
+            double distanceSq = deltaX * deltaX + deltaZ * deltaZ;
+            if (distanceSq < nearestDistanceSq) {
+                nearestDistanceSq = distanceSq;
+                nearest = regionIndex;
+            }
+        }
+        return nearest;
+    }
+
     private void renderTile(GuiGraphics context, TerrainTile tile) {
         if (tile.terrainTextureLocation == null) return;
 
@@ -197,28 +282,48 @@ final class BlueprintTerrainRenderer {
     }
 
     private void updateTexture(TerrainTile tile) {
+        if (tile.dirtyRegions.isEmpty()) return;
+
         if (tile.terrainTexture == null) {
             NativeImage terrainImage = new NativeImage(TILE_BLOCK_SIZE, TILE_BLOCK_SIZE, true);
-            updatePixels(tile, terrainImage);
+            for (int regionIndex = tile.dirtyRegions.nextSetBit(0);
+                 regionIndex >= 0;
+                 regionIndex = tile.dirtyRegions.nextSetBit(regionIndex + 1)) {
+                updatePixels(tile, terrainImage, dirtyTextureBounds(regionIndex));
+            }
 
             DynamicTexture terrainTexture = new DynamicTexture(terrainImage);
             terrainTexture.setFilter(false, false);
             tile.terrainTexture = terrainTexture;
             tile.terrainTextureLocation = Minecraft.getInstance().getTextureManager()
                     .register("mca_blueprint_terrain", terrainTexture);
+            tile.dirtyRegions.clear();
             return;
         }
 
         NativeImage terrainImage = tile.terrainTexture.getPixels();
         if (terrainImage == null) return;
 
-        updatePixels(tile, terrainImage);
-        tile.terrainTexture.upload();
+        tile.terrainTexture.bind();
+        for (int regionIndex = tile.dirtyRegions.nextSetBit(0);
+             regionIndex >= 0;
+             regionIndex = tile.dirtyRegions.nextSetBit(regionIndex + 1)) {
+            SampleRegion dirty = dirtyTextureBounds(regionIndex);
+            updatePixels(tile, terrainImage, dirty);
+            terrainImage.upload(
+                    0,
+                    dirty.minX(), dirty.minZ(),
+                    dirty.minX(), dirty.minZ(),
+                    dirty.maxX() - dirty.minX(),
+                    dirty.maxZ() - dirty.minZ(),
+                    false, false, false, false);
+        }
+        tile.dirtyRegions.clear();
     }
 
-    private static void updatePixels(TerrainTile tile, NativeImage terrainImage) {
-        for (int pixelX = 0; pixelX < TILE_BLOCK_SIZE; pixelX++) {
-            for (int pixelZ = 0; pixelZ < TILE_BLOCK_SIZE; pixelZ++) {
+    private static void updatePixels(TerrainTile tile, NativeImage terrainImage, SampleRegion bounds) {
+        for (int pixelX = bounds.minX(); pixelX < bounds.maxX(); pixelX++) {
+            for (int pixelZ = bounds.minZ(); pixelZ < bounds.maxZ(); pixelZ++) {
                 int cellX = pixelX + 1;
                 int cellZ = pixelZ + 1;
 
@@ -346,6 +451,9 @@ final class BlueprintTerrainRenderer {
         boolean test(int chunkX, int chunkZ);
     }
 
+    record SampleRegion(int minX, int minZ, int maxX, int maxZ) {
+    }
+
     private static final class TerrainTile {
         private static final int FALLBACK_COLOR = 0x6f766f;
 
@@ -355,6 +463,9 @@ final class BlueprintTerrainRenderer {
         private final int[] terrainColors = new int[TERRAIN_GRID_SIZE * TERRAIN_GRID_SIZE];
         private final int[] waterTints = new int[TERRAIN_GRID_SIZE * TERRAIN_GRID_SIZE];
         private final boolean[] validCells = new boolean[TERRAIN_GRID_SIZE * TERRAIN_GRID_SIZE];
+        private final BitSet pendingRegions = new BitSet(SAMPLE_REGION_COUNT);
+        private final BitSet dirtyRegions = new BitSet(SAMPLE_REGION_COUNT);
+        private final long[] regionRetryAfterGameTimes = new long[SAMPLE_REGION_COUNT];
         private long sampledAtGameTime = Long.MIN_VALUE;
         private long retryAfterGameTime = Long.MIN_VALUE;
         private boolean complete;
@@ -364,6 +475,8 @@ final class BlueprintTerrainRenderer {
         private TerrainTile(int minX, int minZ) {
             this.minX = minX;
             this.minZ = minZ;
+            pendingRegions.set(0, SAMPLE_REGION_COUNT);
+            java.util.Arrays.fill(regionRetryAfterGameTimes, Long.MIN_VALUE);
         }
 
         private int heightAt(int x, int z, int fallbackHeight) {
@@ -404,42 +517,95 @@ final class BlueprintTerrainRenderer {
         }
 
         private void sampleWholeTile(ClientLevel level, long gameTime) {
-            int minBuildHeight = level.getMinBuildHeight();
-            BlockPos.MutableBlockPos surfacePos = new BlockPos.MutableBlockPos();
-            boolean sampledCompletely = true;
+            sampleNextRegion(level, gameTime,
+                    minX + TILE_BLOCK_SIZE * 0.5D,
+                    minZ + TILE_BLOCK_SIZE * 0.5D);
+        }
 
-            for (int cellX = 0; cellX < TERRAIN_GRID_SIZE; cellX++) {
-                for (int cellZ = 0; cellZ < TERRAIN_GRID_SIZE; cellZ++) {
-                    boolean sampled = sampleCell(level, cellX, cellZ, minBuildHeight, surfacePos);
-                    if (!sampled && isCoreSampleCell(cellX, cellZ)) {
-                        sampledCompletely = false;
-                    }
+        private void sampleNextRegion(ClientLevel level,
+                                      long gameTime,
+                                      double focusX,
+                                      double focusZ) {
+            if (complete) {
+                pendingRegions.set(0, SAMPLE_REGION_COUNT);
+                java.util.Arrays.fill(regionRetryAfterGameTimes, Long.MIN_VALUE);
+                complete = false;
+            }
+
+            BitSet readyRegions = new BitSet(SAMPLE_REGION_COUNT);
+            for (int regionIndex = pendingRegions.nextSetBit(0);
+                 regionIndex >= 0;
+                 regionIndex = pendingRegions.nextSetBit(regionIndex + 1)) {
+                long retryAfter = regionRetryAfterGameTimes[regionIndex];
+                if (retryAfter == Long.MIN_VALUE || gameTime >= retryAfter) {
+                    readyRegions.set(regionIndex);
                 }
             }
 
-            sampledAtGameTime = gameTime;
-            complete = sampledCompletely;
-            retryAfterGameTime = sampledCompletely
+            int regionIndex = nearestPendingRegion(readyRegions, minX, minZ, focusX, focusZ);
+            if (regionIndex < 0) {
+                refreshTileState(gameTime);
+                return;
+            }
+
+            SampleRegion region = sampleRegionBounds(regionIndex);
+            int chunkX = SectionPos.blockToSectionCoord(minX + region.minX());
+            int chunkZ = SectionPos.blockToSectionCoord(minZ + region.minZ());
+            LevelChunk chunk = level.getChunkSource().getChunk(chunkX, chunkZ, ChunkStatus.FULL, false);
+            if (chunk == null) {
+                regionRetryAfterGameTimes[regionIndex] = gameTime + INCOMPLETE_TILE_RETRY_TICKS;
+                refreshTileState(gameTime);
+                return;
+            }
+
+            int minBuildHeight = level.getMinBuildHeight();
+            BlockPos.MutableBlockPos surfacePos = new BlockPos.MutableBlockPos();
+            for (int pixelX = region.minX(); pixelX < region.maxX(); pixelX++) {
+                for (int pixelZ = region.minZ(); pixelZ < region.maxZ(); pixelZ++) {
+                    sampleCell(level, chunk, pixelX + 1, pixelZ + 1, minBuildHeight, surfacePos);
+                }
+            }
+            pendingRegions.clear(regionIndex);
+            regionRetryAfterGameTimes[regionIndex] = Long.MIN_VALUE;
+            dirtyRegions.set(regionIndex);
+            refreshTileState(gameTime);
+        }
+
+        private void refreshTileState(long gameTime) {
+            if (pendingRegions.isEmpty()) {
+                complete = true;
+                sampledAtGameTime = gameTime;
+                retryAfterGameTime = Long.MIN_VALUE;
+                return;
+            }
+
+            complete = false;
+            long earliestRetry = Long.MAX_VALUE;
+            boolean hasReadyRegion = false;
+            for (int regionIndex = pendingRegions.nextSetBit(0);
+                 regionIndex >= 0;
+                 regionIndex = pendingRegions.nextSetBit(regionIndex + 1)) {
+                long retryAfter = regionRetryAfterGameTimes[regionIndex];
+                if (retryAfter == Long.MIN_VALUE || gameTime >= retryAfter) {
+                    hasReadyRegion = true;
+                    break;
+                }
+                earliestRetry = Math.min(earliestRetry, retryAfter);
+            }
+            retryAfterGameTime = hasReadyRegion || earliestRetry == Long.MAX_VALUE
                     ? Long.MIN_VALUE
-                    : gameTime + INCOMPLETE_TILE_RETRY_TICKS;
+                    : earliestRetry;
         }
 
         @SuppressWarnings("deprecation")
         private boolean sampleCell(ClientLevel level,
+                                   LevelChunk chunk,
                                    int cellX,
                                    int cellZ,
                                    int minBuildHeight,
                                    BlockPos.MutableBlockPos surfacePos) {
             int sampleX = minX + cellX - 1;
             int sampleZ = minZ + cellZ - 1;
-            LevelChunk chunk = level.getChunkSource().getChunk(
-                    SectionPos.blockToSectionCoord(sampleX),
-                    SectionPos.blockToSectionCoord(sampleZ),
-                    ChunkStatus.FULL,
-                    false);
-            if (chunk == null) {
-                return false;
-            }
 
             int surfaceHeight = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, sampleX, sampleZ) + 1;
             if (surfaceHeight <= minBuildHeight) {

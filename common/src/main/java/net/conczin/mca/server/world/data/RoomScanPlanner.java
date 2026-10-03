@@ -20,7 +20,7 @@ final class RoomScanPlanner {
         BlockPos source = pos == null ? BlockPos.ZERO : pos.immutable();
         if (village == null || pos == null) return new Analysis(RoomScanPlan.addBuilding(source));
 
-        Village.ResolvedInteraction resolved = village.resolveInteractionPosition(pos).orElse(null);
+        Village.ResolvedInteraction resolved = village.resolveInteractionPosition(level, pos).orElse(null);
         RoomScanPlan persistedFloorPlan = null;
         if (resolved != null) {
             Building room = resolved.position().room();

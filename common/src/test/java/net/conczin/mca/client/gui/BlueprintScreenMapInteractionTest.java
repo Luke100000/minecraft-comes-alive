@@ -1,6 +1,7 @@
 package net.conczin.mca.client.gui;
 
 import com.google.gson.JsonObject;
+import net.conczin.mca.client.gui.widget.TooltipButtonWidget;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.network.c2s.ReportBuildingMessage;
@@ -14,6 +15,7 @@ import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.Bootstrap;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import org.junit.jupiter.api.BeforeAll;
@@ -23,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -31,7 +34,9 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 class BlueprintScreenMapInteractionTest {
     @BeforeAll
@@ -115,6 +120,153 @@ class BlueprintScreenMapInteractionTest {
         assertEquals(true, getField(fresh, "mapCenterAutomatic"));
         assertEquals(0.0D, getDoubleField(fresh, "mapCenterX"), 0.0000001D);
         assertEquals(0.0D, getDoubleField(fresh, "mapCenterZ"), 0.0000001D);
+    }
+
+    @Test
+    void loadedBlueprintDoesNotNeedAnotherInitialVillageRequestWhenResumed() throws Exception {
+        BlueprintScreen screen = new BlueprintScreen();
+        assertTrue(screen.needsVillageRequestOnInit());
+
+        setField(screen, "village", new Village(1, null));
+
+        assertFalse(screen.needsVillageRequestOnInit());
+    }
+
+    @Test
+    void soleAvailableFloorCannotRemainAllFloors() throws Exception {
+        BlueprintScreen screen = new BlueprintScreen();
+        setField(screen, "selectedFloorOrdinal", null);
+        setField(screen, "floorOrdinals", List.of(0));
+
+        Method updateFloorControls = BlueprintScreen.class.getDeclaredMethod("updateFloorControls");
+        updateFloorControls.setAccessible(true);
+        updateFloorControls.invoke(screen);
+
+        assertEquals(0, getField(screen, "selectedFloorOrdinal"));
+    }
+
+    @Test
+    void registeredRoomScanCarriesExpectedRoomId() {
+        Building room = room(42);
+        RoomScanPlan plan = RoomScanPlan.updateRoom(room, BlockPos.ZERO);
+
+        ReportBuildingMessage message = BlueprintScreen.structureScanMessage(
+                Village.RoomScanMode.UPDATE_ROOM, plan);
+
+        assertEquals(ReportBuildingMessage.Action.SCAN_ROOM, message.action());
+        assertEquals(42, message.expectedTargetId());
+    }
+
+    @Test
+    void inheritanceMessageCarriesExpectedRoomId() {
+        Building room = room(43);
+
+        ReportBuildingMessage message = BlueprintScreen.inheritanceMessage(null, room);
+
+        assertEquals(ReportBuildingMessage.Action.SET_ROOM_INHERITANCE, message.action());
+        assertEquals(43, message.expectedTargetId());
+    }
+
+    @Test
+    void destructiveEditMessagesCarryTheDisplayedTargetIdentity() throws Exception {
+        Village village = new Village(1, null);
+        Structure structure = new Structure(10, BlockPos.ZERO, List.of(
+                floor(0, 64, 68, 0),
+                floor(1, 72, 76, 1)));
+        Building currentRoom = room(43);
+        registerStructure(village, structure, currentRoom);
+        RoomScanPlan roomPlan = RoomScanPlan.updateRoom(currentRoom, BlockPos.ZERO);
+
+        ReportBuildingMessage forceType = BlueprintScreen.targetedEditMessage(
+                ReportBuildingMessage.Action.FORCE_TYPE, village, roomPlan, 0).orElseThrow();
+        ReportBuildingMessage mainRoom = BlueprintScreen.targetedEditMessage(
+                ReportBuildingMessage.Action.SET_MAIN_ROOM, village, roomPlan, 0).orElseThrow();
+        ReportBuildingMessage removeRoom = BlueprintScreen.targetedEditMessage(
+                ReportBuildingMessage.Action.REMOVE_ROOM, village, roomPlan, 0).orElseThrow();
+        ReportBuildingMessage removeFloor = BlueprintScreen.targetedEditMessage(
+                ReportBuildingMessage.Action.REMOVE_FLOOR, village, roomPlan, 1).orElseThrow();
+        ReportBuildingMessage removeBuilding = BlueprintScreen.targetedEditMessage(
+                ReportBuildingMessage.Action.REMOVE, village, roomPlan, 0).orElseThrow();
+
+        assertEquals(43, forceType.expectedTargetId());
+        assertEquals("blocked", forceType.data());
+        assertEquals(43, mainRoom.expectedTargetId());
+        assertEquals(43, removeRoom.expectedTargetId());
+        assertEquals(10, removeFloor.expectedTargetId());
+        assertEquals("1:10:1", removeFloor.data());
+        assertEquals(10, removeBuilding.expectedTargetId());
+    }
+
+    @Test
+    void buildingRemovalFromAnUnregisteredRoomUsesPersistedLogicalBuildingIdentity() throws Exception {
+        Village village = new Village(1, null);
+        Structure structure = new Structure(10, BlockPos.ZERO, List.of(floor(0, 64, 68, 0)));
+        Building main = room(43);
+        registerStructure(village, structure, main);
+        RoomScanPlan plan = RoomScanPlan.addRoom(10, 0, BlockPos.ZERO);
+
+        ReportBuildingMessage message = BlueprintScreen.targetedEditMessage(
+                ReportBuildingMessage.Action.REMOVE, village, plan, 0).orElseThrow();
+
+        assertEquals(10, message.expectedTargetId());
+    }
+
+    @Test
+    void blueprintUiRoomContextUsesPersistedSnapshotWithoutClientWorldScanning() throws Exception {
+        BlockPos source = new BlockPos(4, 70, -3);
+        RoomScanPlan expected = RoomScanPlan.addBuilding(source);
+        Village snapshot = new Village(1, null) {
+            @Override
+            public RoomScanPlan getRoomScanPlan(Level level, BlockPos pos) {
+                if (level != null) {
+                    fail("Blueprint UI context must not provide a live client Level to structural scanning");
+                }
+                assertEquals(source, pos);
+                return expected;
+            }
+        };
+
+        Method method;
+        try {
+            method = BlueprintScreen.class.getDeclaredMethod(
+                    "getSnapshotRoomScanPlan", Village.class, BlockPos.class);
+        } catch (NoSuchMethodException exception) {
+            fail("Blueprint UI must have a snapshot-only room-plan path");
+            return;
+        }
+        method.setAccessible(true);
+
+        assertEquals(expected, method.invoke(null, snapshot, source));
+    }
+
+    @Test
+    void inheritanceControlCanAppearAfterEnteringRoomWithoutRebuildingPage() throws Exception {
+        BlueprintScreen screen = new BlueprintScreen();
+        Class<?> columnType = Arrays.stream(BlueprintScreen.class.getDeclaredClasses())
+                .filter(type -> type.getSimpleName().equals("SideControlColumn"))
+                .findFirst().orElseThrow();
+        Constructor<?> constructor = columnType.getDeclaredConstructor(
+                BlueprintScreen.class, int.class, int.class);
+        constructor.setAccessible(true);
+        Object column = constructor.newInstance(screen, 0, 0);
+        Method addInheritanceControl = BlueprintScreen.class.getDeclaredMethod(
+                "addInheritanceControl", columnType);
+        addInheritanceControl.setAccessible(true);
+
+        addInheritanceControl.invoke(screen, column);
+
+        TooltipButtonWidget button = (TooltipButtonWidget) getField(screen, "inheritanceButton");
+        assertNotNull(button);
+        assertFalse(button.visible);
+        assertFalse(button.active);
+
+        Method updateInheritanceControl = BlueprintScreen.class.getDeclaredMethod(
+                "updateInheritanceControl", RoomScanPlan.class);
+        updateInheritanceControl.setAccessible(true);
+        updateInheritanceControl.invoke(screen, RoomScanPlan.updateRoom(room(44), BlockPos.ZERO));
+
+        assertTrue(button.visible);
+        assertTrue(button.active);
     }
 
     @Test
