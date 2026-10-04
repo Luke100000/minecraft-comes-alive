@@ -391,7 +391,7 @@ public final class ServerConfig {
 
                 .comment("Maximum villager lifetime in ticks (Time to grow fully up).")
                 .translation("mca.configuration.villagerMaxAgeTime")
-                .defineInRange("villagerMaxAgeTime", 384000, 0, 100000000);
+                .defineInRange("villagerMaxAgeTime", 384000, 4, 100000000);
         enabledTraits = builder
 
                 .comment("Map of enabled traits. Keys are trait IDs, values are true/false.")

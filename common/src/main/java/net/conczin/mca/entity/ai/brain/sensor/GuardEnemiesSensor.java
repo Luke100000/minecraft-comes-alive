@@ -251,12 +251,14 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             Map<EntityType<?>, Integer> entityPriorities,
             List<ConfiguredTagPriority> tagPriorities
     ) {
+        private static volatile ConfiguredPriorityLookup cachedLookup;
+
         private static ConfiguredPriorityLookup get() {
             Map<String, Integer> configuredPriorities = Config.SERVER.guardsTargetEntities();
-            ConfiguredPriorityLookup lookup = Holder.INSTANCE;
-            if (lookup.sourcePriorities != configuredPriorities) {
+            ConfiguredPriorityLookup lookup = cachedLookup;
+            if (lookup == null || lookup.sourcePriorities != configuredPriorities) {
                 lookup = compile(configuredPriorities);
-                Holder.INSTANCE = lookup;
+                cachedLookup = lookup;
             }
             return lookup;
         }
@@ -302,8 +304,5 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             return Optional.empty();
         }
 
-        private static final class Holder {
-            private static ConfiguredPriorityLookup INSTANCE = compile(Config.SERVER.guardsTargetEntities());
-        }
     }
 }

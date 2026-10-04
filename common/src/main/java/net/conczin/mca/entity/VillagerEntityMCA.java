@@ -101,7 +101,7 @@ import java.util.function.Predicate;
 
 public class VillagerEntityMCA extends Villager implements VillagerLike<VillagerEntityMCA>, MenuProvider, CompassionateEntity<BreedableRelationship>, CrossbowAttackMob {
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("InfectionProgress", 0.0f);
-    private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -Config.SERVER.villagerMaxAgeTime.getDefault());
+    private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", 0);
     private static final float VEHICLE_ATTACHMENT_Y = 0.6F;
     public static final int MAX_NICKNAME_LENGTH = 32;
     static final String CHAT_AI_PROMPT_KEY = "ChatAIPrompt";

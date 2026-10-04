@@ -32,6 +32,8 @@ class ConfigLayoutTest {
     void keepsServerSyncedSettingsInServerConfig() {
         assertEquals(true, Config.SERVER.archerArrowsIgnoreVillagers.getDefault());
         assertEquals(24000, Config.SERVER.babyItemGrowUpTime.getDefault());
+        assertFalse(Config.SERVER.villagerMaxAgeTime.getSpec().test(3));
+        assertTrue(Config.SERVER.villagerMaxAgeTime.getSpec().test(4));
         assertEquals(3, Config.SERVER.addContentGloballyPermissionLevel.getDefault());
         assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("villager_behavior", "enabledTraits")));
         assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("villager_behavior", "babyItemGrowUpTime")));

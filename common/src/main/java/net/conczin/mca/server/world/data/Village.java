@@ -79,13 +79,14 @@ public class Village implements Iterable<Building> {
     private float taxes;
     private float populationThreshold = 0.75f;
     private float marriageThreshold = 0.5f;
-    private boolean autoScan = Config.SERVER.enableAutoScanByDefault.get();
+    private boolean autoScan;
     private BlockBoxExtended box = new BlockBoxExtended(0, 0, 0, 0, 0, 0);
     private long nextMourningTime;
 
     public Village(int id, ServerLevel world) {
         this.id = id;
         this.world = world;
+        this.autoScan = Config.SERVER.enableAutoScanByDefault.get();
     }
 
     public Village(CompoundTag tag, ServerLevel world) {
