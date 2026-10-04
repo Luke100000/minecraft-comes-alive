@@ -46,7 +46,7 @@ public final class MCAFabricClient extends ClientProxyAbstractImpl implements Cl
 
         Network.registerClientSender(ClientPlayNetworking::send);
 
-        if (Config.CLIENT.useSquidwardModels.get()) {
+        if (Config.COMMON.useSquidwardModels.get()) {
             EntityRendererRegistry.register(EntitiesMCA.MALE_VILLAGER, VillagerRenderer::new);
             EntityRendererRegistry.register(EntitiesMCA.FEMALE_VILLAGER, VillagerRenderer::new);
 

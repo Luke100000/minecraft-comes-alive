@@ -6,11 +6,11 @@ import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
-import net.conczin.mca.entity.ai.navigation.PathfindingBlacklist;
+import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
+import net.conczin.mca.entity.ai.navigation.TeleportBlockBlacklist;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.behavior.MoveToTargetSink;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
@@ -19,11 +19,26 @@ import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 
 public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
-    private boolean extendedMovementLifetime;
+    private Mob movingEntity;
 
     @Override
     protected boolean timedOut(long gameTime) {
-        return !this.extendedMovementLifetime && super.timedOut(gameTime);
+        if (!super.timedOut(gameTime)) {
+            return false;
+        }
+        if (this.movingEntity == null) {
+            return true;
+        }
+        // Behavior.tickOrStop checks timedOut before canStillUse and supplies no
+        // entity here. Read the running mob's current journey intent: nearby targets
+        // can grow into long detours, and producers can replace ordinary/persistent
+        // intent without moving far enough for MoveToTargetSink to restart.
+        // Initial distance/path length must never determine persistent lifetime.
+        // Arrival, target removal, emergency combat and navigation's stuck checks
+        // still end the journey. Preserve the timeout-scope and intent-change tests.
+        WalkTarget walkTarget = this.movingEntity.getBrain()
+                .getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        return walkTarget == null || !(walkTarget.getTarget() instanceof PersistentPathTarget);
     }
 
     @Override
@@ -57,28 +72,37 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
     @Override
     protected void start(ServerLevel world, Mob entity, long gameTime) {
         WalkTarget walkTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        this.movingEntity = entity;
         super.start(world, entity, gameTime);
         Path path = entity.getNavigation().getPath();
-        this.extendedMovementLifetime = walkTarget != null
-                && walkTarget.getTarget() instanceof BlockPosTracker
-                && MCAGroundPathNavigation.requiresExtendedPath(
-                        entity,
-                        walkTarget.getTarget().currentBlockPosition()
-                );
         if (walkTarget != null
-                && walkTarget.getTarget() instanceof BlockPosTracker
+                && walkTarget.getTarget() instanceof PersistentPathTarget
                 && path != null
                 && !entity.getNavigation().isStuck()
                 && MCAGroundPathNavigation.isUsefulPartialPath(
-                        path,
-                        walkTarget.getTarget().currentBlockPosition()
+                        path, walkTarget.getTarget().currentBlockPosition()
                 )) {
             if (entity instanceof VillagerEntityMCA villager) {
-                WalkTargetFailureMemory.clear(villager);
+                // A fresh useful segment is optimistic progress and must be able
+                // to chain immediately. A previous failure episode for this same
+                // destination must survive another no-movement partial attempt.
+                BlockPos destination = walkTarget.getTarget().currentBlockPosition();
+                boolean priorFailure = WalkTargetFailureMemory.hasFailureFor(villager, destination)
+                        && villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                        .filter(since -> since < gameTime).isPresent();
+                if (!priorFailure) {
+                    WalkTargetFailureMemory.clear(villager);
+                }
             } else {
                 entity.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
             }
         }
+    }
+
+    @Override
+    protected void stop(ServerLevel world, Mob entity, long gameTime) {
+        this.movingEntity = null;
+        super.stop(world, entity, gameTime);
     }
 
     private static boolean shouldYieldToEmergencyCombat(Mob entity) {
@@ -114,50 +138,27 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         super.tick(world, entity, l);
     }
 
-    private void tryTeleport(ServerLevel world, Mob entity, BlockPos targetPos) {
-        for (int i = 0; i < 10; ++i) {
-            int j = this.getRandomInt(entity, -3, 3);
-            int k = this.getRandomInt(entity, -1, 1);
-            int l = this.getRandomInt(entity, -3, 3);
-            boolean bl = this.tryTeleportTo(world, entity, targetPos, targetPos.getX() + j, targetPos.getY() + k, targetPos.getZ() + l);
-            if (bl) {
+    private static void tryTeleport(ServerLevel world, Mob entity, BlockPos targetPos) {
+        for (int attempt = 0; attempt < 10; attempt++) {
+            int dx = entity.getRandom().nextInt(7) - 3;
+            int dy = entity.getRandom().nextInt(3) - 1;
+            int dz = entity.getRandom().nextInt(7) - 3;
+            if (Math.abs(dx) < 2 && Math.abs(dz) < 2) {
+                continue;
+            }
+            BlockPos candidate = targetPos.offset(dx, dy, dz);
+            if (canTeleportTo(world, entity, candidate)) {
+                entity.teleportTo(candidate.getX() + 0.5D, candidate.getY(), candidate.getZ() + 0.5D);
                 return;
             }
         }
     }
 
-    private boolean tryTeleportTo(ServerLevel world, Mob entity, BlockPos targetPos, int x, int y, int z) {
-        if (Math.abs((double) x - targetPos.getX()) < 2.0D && Math.abs((double) z - targetPos.getZ()) < 2.0D) {
+    private static boolean canTeleportTo(ServerLevel world, Mob entity, BlockPos pos) {
+        if (WalkNodeEvaluator.getPathTypeStatic(entity, pos.mutable()) != PathType.WALKABLE
+                || TeleportBlockBlacklist.isBlocked(world.getBlockState(pos.below()))) {
             return false;
-        } else if (!this.canTeleportTo(world, entity, new BlockPos(x, y, z))) {
-            return false;
-        } else {
-            entity.teleportTo((double) x + 0.5D, y, (double) z + 0.5D);
-            return true;
         }
-    }
-
-    private boolean canTeleportTo(ServerLevel world, Mob entity, BlockPos pos) {
-        PathType pathNodeType = WalkNodeEvaluator.getPathTypeStatic(entity, pos.mutable());
-        if (pathNodeType != PathType.WALKABLE) {
-            return false;
-        } else {
-            if (!isAreaSafe(world, pos.below())) {
-                return false;
-            } else {
-                BlockPos blockPos = pos.subtract(entity.blockPosition());
-                return world.noCollision(entity, entity.getBoundingBox().move(blockPos));
-            }
-        }
-    }
-
-    private int getRandomInt(Mob entity, int min, int max) {
-        return entity.getRandom().nextInt(max - min + 1) + min;
-    }
-
-    private boolean isAreaSafe(ServerLevel world, BlockPos pos) {
-        // The following conditions define whether it is logically
-        // safe for the entity to teleport to the specified pos within world
-        return !PathfindingBlacklist.isBlocked(world.getBlockState(pos));
+        return world.noCollision(entity, entity.getBoundingBox().move(pos.subtract(entity.blockPosition())));
     }
 }

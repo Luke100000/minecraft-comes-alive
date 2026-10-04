@@ -10,8 +10,6 @@ public record RegisteredRoomUpdate(
         BlockPos source,
         Village village,
         Structure refreshedStructure,
-        int structureId,
-        int floorId,
         int expectedRoomId,
         Building replacementRoom,
         List<String> matchingTypes
@@ -21,9 +19,9 @@ public record RegisteredRoomUpdate(
     }
 
     static RegisteredRoomUpdate failure(Building.validationResult result,
-                                        BlockPos source,
-                                        Village village) {
-        return new RegisteredRoomUpdate(result, source, village, null, -1, -1, -1,
+                                         BlockPos source,
+                                         Village village) {
+        return new RegisteredRoomUpdate(result, source, village, null, -1,
                 null, List.of());
     }
 

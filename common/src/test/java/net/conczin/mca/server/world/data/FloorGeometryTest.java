@@ -96,7 +96,7 @@ class FloorGeometryTest {
 
         assertEquals(List.of(lower, upper), geometry.cellsAtColumn(2, 3));
         assertEquals(Set.of(lower, upper), geometry.cells());
-        assertEquals(1, geometry.projection().area());
+        assertEquals(1, geometry.footprintArea());
     }
 
     @Test

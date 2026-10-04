@@ -19,7 +19,10 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -69,7 +72,9 @@ public final class FamilyTreeNode {
                 nbt.getUUID("mother")
         );
         children.addAll(NbtHelper.toList(nbt.getList("children", Tag.TAG_COMPOUND), c -> ((CompoundTag) c).getUUID("uuid")));
-        profession = nbt.getString("profession");
+        if (nbt.contains("profession", Tag.TAG_STRING)) {
+            profession = nbt.getString("profession");
+        }
         deceased = nbt.getBoolean("isDeceased");
         if (nbt.hasUUID("spouse")) {
             partner = nbt.getUUID("spouse");
@@ -77,30 +82,96 @@ public final class FamilyTreeNode {
         relationshipState = RelationshipState.byId(nbt.getInt("marriageState"));
     }
 
+    static FamilyTreeNode detachedCopy(FamilyTreeNode source, Set<UUID> children) {
+        FamilyTreeNode copy = new FamilyTreeNode(
+                null,
+                source.id,
+                source.name,
+                source.isPlayer,
+                source.gender,
+                source.father,
+                source.mother
+        );
+        copy.profession = source.profession;
+        copy.partner = source.partner;
+        copy.relationshipState = source.relationshipState;
+        copy.deceased = source.deceased;
+        copy.children.addAll(children);
+        return copy;
+    }
+
     public static boolean isValid(@Nullable UUID uuid) {
         return uuid != null && !Util.NIL_UUID.equals(uuid);
     }
 
-    private static void gatherParents(FamilyTreeNode current, Set<UUID> family, int depth) {
-        gather(current, family, depth, FamilyTreeNode::streamParents);
-    }
+    enum LineageDirection {
+        ANCESTORS(FamilyTreeNode::streamParents),
+        DESCENDANTS(FamilyTreeNode::streamChildren);
 
-    private static void gatherChildren(FamilyTreeNode current, Set<UUID> family, int depth) {
-        gather(current, family, depth, FamilyTreeNode::streamChildren);
-    }
+        private final Function<FamilyTreeNode, Stream<UUID>> references;
 
-    private static void gather(@Nullable FamilyTreeNode entry, Set<UUID> output, int depth, Function<FamilyTreeNode, Stream<UUID>> walker) {
-        if (entry == null || depth <= 0) {
-            return;
+        LineageDirection(Function<FamilyTreeNode, Stream<UUID>> references) {
+            this.references = references;
         }
-        walker.apply(entry).forEach(id -> {
-            if (!Util.NIL_UUID.equals(id)) {
-                output.add(id); //zero UUIDs are no real members
+
+        Stream<UUID> references(FamilyTreeNode node) {
+            return references.apply(node);
+        }
+    }
+
+    enum TraversalDecision {
+        CONTINUE,
+        DESCEND,
+        STOP
+    }
+
+    @FunctionalInterface
+    interface LineageVisitor {
+        TraversalDecision visit(
+                FamilyTreeNode source,
+                UUID relativeId,
+                @Nullable FamilyTreeNode relative,
+                int remainingDepth
+        );
+    }
+
+    static final class LineageTraversal {
+        private final LineageDirection direction;
+        private final Map<UUID, Integer> visitedRemaining = new HashMap<>();
+
+        LineageTraversal(LineageDirection direction) {
+            this.direction = direction;
+        }
+
+        Integer remainingDepth(UUID id) {
+            return visitedRemaining.get(id);
+        }
+
+        LineageDirection direction() {
+            return direction;
+        }
+
+        void walk(FamilyTreeNode start, int remainingDepth, LineageVisitor visitor) {
+            Integer previousRemaining = visitedRemaining.get(start.id());
+            if (previousRemaining != null && previousRemaining >= remainingDepth) {
+                return;
             }
-            if (depth > 1) {
-                entry.getRoot().getOrEmpty(id).ifPresent(e -> gather(e, output, depth - 1, walker));
+            visitedRemaining.put(start.id(), remainingDepth);
+
+            FamilyTree tree = start.getRoot();
+            Iterator<UUID> relatives = direction.references(start).iterator();
+            while (relatives.hasNext()) {
+                UUID relativeId = relatives.next();
+                FamilyTreeNode relative = tree.getOrEmpty(relativeId).orElse(null);
+                TraversalDecision decision = visitor.visit(start, relativeId, relative, remainingDepth);
+                if (decision == TraversalDecision.STOP) {
+                    return;
+                }
+                if (decision == TraversalDecision.DESCEND && relative != null && remainingDepth > 0) {
+                    walk(relative, remainingDepth - 1, visitor);
+                }
             }
-        });
+        }
     }
 
     public UUID id() {
@@ -181,6 +252,18 @@ public final class FamilyTreeNode {
         return partner;
     }
 
+    /**
+     * Returns the current relationship partner, excluding historical widow data.
+     */
+    public Optional<UUID> activePartner() {
+        if (!isValid(partner)
+                || relationshipState == RelationshipState.SINGLE
+                || relationshipState == RelationshipState.WIDOW) {
+            return Optional.empty();
+        }
+        return Optional.of(partner);
+    }
+
     public RelationshipState getRelationshipState() {
         return relationshipState;
     }
@@ -191,6 +274,12 @@ public final class FamilyTreeNode {
     }
 
     public void updatePartner(@Nullable Entity newPartner, @Nullable RelationshipState state) {
+        if (newPartner == null && state == RelationshipState.WIDOW && !partner.equals(Util.NIL_UUID)) {
+            relationshipState = RelationshipState.WIDOW;
+            markDirty();
+            return;
+        }
+
         //cancel relationship with previous partner
         if (!this.partner.equals(Util.NIL_UUID) && (newPartner == null || !this.partner.equals(newPartner.getUUID()))) {
             getRoot().getOrEmpty(this.partner).ifPresent(n -> {
@@ -233,8 +322,11 @@ public final class FamilyTreeNode {
      */
     public Set<UUID> siblings() {
         Set<UUID> siblings = new HashSet<>();
-
-        streamParents().forEach(parent -> getRoot().getOrEmpty(parent).ifPresent(p -> gatherChildren(p, siblings, 1)));
+        streamParents()
+                .map(getRoot()::getOrEmpty)
+                .flatMap(Optional::stream)
+                .flatMap(FamilyTreeNode::streamChildren)
+                .forEach(siblings::add);
 
         return siblings;
     }
@@ -277,14 +369,29 @@ public final class FamilyTreeNode {
     public Stream<UUID> getRelatives(int parentDepth, int childrenDepth) {
         Set<UUID> family = new HashSet<>();
 
-        //fetch parents and children
-        gatherParents(this, family, parentDepth);
-        gatherChildren(this, family, childrenDepth);
+        collectRelatives(LineageDirection.ANCESTORS, parentDepth, family);
+        collectRelatives(LineageDirection.DESCENDANTS, childrenDepth, family);
 
         //and the caller is not meant either
         family.remove(id);
 
         return family.stream();
+    }
+
+    private void collectRelatives(LineageDirection direction, int depth, Set<UUID> family) {
+        if (depth <= 0) {
+            return;
+        }
+
+        new LineageTraversal(direction).walk(this, depth, (source, relativeId, relative, remainingDepth) -> {
+            if (remainingDepth <= 0) {
+                return TraversalDecision.CONTINUE;
+            }
+            family.add(relativeId);
+            return relative != null && remainingDepth > 1
+                    ? TraversalDecision.DESCEND
+                    : TraversalDecision.CONTINUE;
+        });
     }
 
     public boolean isRelative(UUID with) {
@@ -459,6 +566,7 @@ public final class FamilyTreeNode {
         nbt.putBoolean("isPlayer", isPlayer);
         nbt.putBoolean("isDeceased", deceased);
         nbt.putInt("gender", gender.getId());
+        nbt.putString("profession", profession);
         nbt.putUUID("father", father);
         nbt.putUUID("mother", mother);
         nbt.putUUID("spouse", partner);

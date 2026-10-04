@@ -30,7 +30,7 @@ public record ConfirmBuildingPolymorphMessage(BlockPos source,
         try {
             VillageManager manager = VillageManager.get(player.serverLevel());
             ReportBuildingMessage.executeScanAction(
-                    new RoomWorkflow(manager, player.serverLevel()), player, source,
+                    new RoomWorkflow(manager, player.serverLevel()), player, player.blockPosition(),
                     chosenType, action, expectedTargetId);
         } finally {
             GetVillageRequest.sendResponse(player);

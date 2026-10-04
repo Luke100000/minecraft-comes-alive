@@ -3,6 +3,7 @@ package net.conczin.mca;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 public final class CommonConfig {
+    public final ModConfigSpec.ConfigValue<Boolean> useSquidwardModels;
     public final ModConfigSpec.ConfigValue<String> _read_this_before_using_villager_ai;
     public final ModConfigSpec.ConfigValue<String> villagerChatAIEndpoint;
     public final ModConfigSpec.ConfigValue<String> villagerChatAIToken;
@@ -14,6 +15,15 @@ public final class CommonConfig {
     public final ModConfigSpec.ConfigValue<String> inworldAIToken;
 
     CommonConfig(ModConfigSpec.Builder builder) {
+        builder.translation("mca.configuration.section.villager_behavior").push("villager_behavior");
+        useSquidwardModels = builder
+
+                .comment("If true, villagers use the vanilla \"Squidward\" (nose) model.")
+                .translation("mca.configuration.useSquidwardModels")
+                .gameRestart()
+                .define("useSquidwardModels", false);
+        builder.pop();
+
         builder.translation("mca.configuration.section.ai").push("ai");
         _read_this_before_using_villager_ai = builder
 

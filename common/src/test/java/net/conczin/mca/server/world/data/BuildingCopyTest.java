@@ -66,7 +66,6 @@ class BuildingCopyTest {
         original.setType("library");
         original.setTypeForced(true);
         original.setContributesToMain(false);
-        original.setLastScan(1234L);
         Set<BlockPos> floorCells = Set.of(
                 new BlockPos(3, 8, 11),
                 new BlockPos(4, 8, 11),
@@ -89,14 +88,11 @@ class BuildingCopyTest {
         assertEquals(original.getSourceBlock(), copy.getSourceBlock());
         assertEquals(original.getRawPos0(), copy.getRawPos0());
         assertEquals(original.getRawPos1(), copy.getRawPos1());
-        assertEquals(original.getFloorRegion(), copy.getFloorRegion());
         assertEquals(floorCells, copy.getFloorCells());
         assertEquals(floorCells, new Building(original.save()).getFloorCells());
         assertEquals(List.of(8, 11), original.getFloorCells().stream()
                 .filter(pos -> pos.getX() == 4 && pos.getZ() == 11)
                 .map(BlockPos::getY).sorted().toList());
-        assertEquals(1234L, copy.getLastScan());
-
         copy.addBlock(Blocks.BOOKSHELF, new BlockPos(5, 9, 11));
         assertEquals(1, original.getBlocks().get(bookshelf).size());
         assertEquals(2, copy.getBlocks().get(bookshelf).size());

@@ -55,7 +55,8 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
     public static final Predicate IS_FAMILY = IS_MARRIED.or(IS_RELATIVE);
     public static final Predicate IS_PARENT = (villager, player) -> villager.getRelationships().getFamilyEntry().isParent(player);
     public static final Predicate IS_KID = (villager, player) -> FamilyTree.get(villager.getRelationships().getWorld()).getOrEmpty(player).filter(n -> n.isParent(villager.getRelationships().getUUID())).isPresent();
-    public static final Predicate IS_ORPHAN = (villager, player) -> villager.getRelationships().getFamilyEntry().getParents().allMatch(FamilyTreeNode::isDeceased);
+    public static final Predicate IS_ORPHAN = (villager, player) -> FamilyTree.get(villager.getRelationships().getWorld())
+            .isOrphan(villager.getRelationships().getFamilyEntry());
     protected final T entity;
     private final GiftSaturation giftSaturation = new GiftSaturation();
 

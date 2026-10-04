@@ -45,6 +45,41 @@ neoForge {
             ideName = "NeoForge GameTest Server (${project.path})"
             systemProperty('neoforge.enabledGameTestNamespaces', "${mod_id},minecraft")
         }
+        benchmarkGameTestServer {
+            type.set('gameTestServer')
+            gameDirectory = file('run-abbenchmark/')
+            ideName = "NeoForge A/B GameTest Server (${project.path})"
+            systemProperty('neoforge.enabledGameTestNamespaces', 'mca_ab')
+            systemProperty('mca.pathABBenchmark', 'true')
+            // Exclude development-only StackWalker diagnostics from comparative CPU samples.
+            systemProperty('mca.pathDebug.benchmarkWithoutDiagnostics', 'true')
+        }
+        benchmarkOpenGameTestServer {
+            type.set('gameTestServer')
+            gameDirectory = file('run-abopen/')
+            ideName = "NeoForge Open-Only Path Benchmark (${project.path})"
+            systemProperty('neoforge.enabledGameTestNamespaces', 'mca_ab')
+            systemProperty('mca.pathABBenchmark', 'true')
+            systemProperty('mca.pathABOpenOnly', 'true')
+            // Isolate released navigation costs; regular development runs still retain all path debug logs.
+            systemProperty('mca.pathDebug.benchmarkWithoutDiagnostics', 'true')
+        }
+        searchBudgetGameTestServer {
+            type.set('gameTestServer')
+            def horizon = providers.gradleProperty('mcaSearchHorizon').getOrElse('160')
+            def nodeCap = providers.gradleProperty('mcaSearchNodeCap').getOrElse('0')
+            def runLabel = providers.gradleProperty('mcaSearchRun').getOrElse('first')
+            if (!(horizon ==~ /\d+/) || !(nodeCap ==~ /\d+/) || !(runLabel ==~ /[a-z0-9-]+/)) {
+                throw new GradleException('Search experiment settings must be numeric with a simple run label')
+            }
+            // Each alternative gets its own disposable world; never use a player's save.
+            gameDirectory = file("run-searchbudget-${horizon}-${nodeCap}-${runLabel}/")
+            systemProperty('neoforge.enabledGameTestNamespaces', 'mca_ab')
+            systemProperty('mca.pathSearchBenchmark', 'true')
+            systemProperty('mca.pathSearchHorizon', horizon)
+            systemProperty('mca.pathSearchNodeCap', nodeCap)
+            // Work-count experiment, not a release CPU comparison: keep diagnostics enabled.
+        }
     }
     mods {
         "${mod_id}" {

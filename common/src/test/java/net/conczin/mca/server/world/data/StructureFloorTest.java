@@ -19,7 +19,7 @@ class StructureFloorTest {
         FloorConnector.Marker marker = new FloorConnector.Marker(
                 new BlockPos(4, 64, 7), FloorConnector.Type.TRAPDOOR);
         StructureFloor floor = TestStructureFloors.create(3, 64, 70, 0,
-                BuildingFloorRegion.fromFootprint(64, Set.of(new BlockPos(4, 64, 7))), List.of(marker));
+                TestFloorFootprint.fromFootprint(64, Set.of(new BlockPos(4, 64, 7))), List.of(marker));
 
         CompoundTag saved = floor.save();
         assertEquals(List.of(marker), StructureFloor.load(saved).connectors());
@@ -35,7 +35,7 @@ class StructureFloorTest {
         FloorConnector.Marker marker = new FloorConnector.Marker(
                 ladder, FloorConnector.Type.LADDER, floorCell);
         StructureFloor floor = TestStructureFloors.create(3, 64, 70, 0,
-                BuildingFloorRegion.fromFootprint(64, Set.of(floorCell)), List.of(marker));
+                TestFloorFootprint.fromFootprint(64, Set.of(floorCell)), List.of(marker));
 
         StructureFloor loaded = StructureFloor.load(floor.save());
 
@@ -51,7 +51,7 @@ class StructureFloorTest {
         FloorConnector.Marker marker = new FloorConnector.Marker(
                 connector, FloorConnector.Type.DOOR);
         StructureFloor legacy = TestStructureFloors.create(3, 64, 70, 0,
-                BuildingFloorRegion.fromFootprint(64, Set.of(
+                TestFloorFootprint.fromFootprint(64, Set.of(
                         new BlockPos(0, 64, 0), new BlockPos(2, 64, 0))));
         CompoundTag saved = legacy.save();
         ListTag markers = new ListTag();
@@ -67,7 +67,7 @@ class StructureFloorTest {
     @Test
     void floorNumberRoundTripsAndMissingLegacyValueDefaultsToGround() {
         StructureFloor floor = TestStructureFloors.create(3, 64, 70, -2,
-                BuildingFloorRegion.fromFootprint(64, Set.of(new BlockPos(0, 64, 0))));
+                TestFloorFootprint.fromFootprint(64, Set.of(new BlockPos(0, 64, 0))));
         CompoundTag saved = floor.save();
 
         assertEquals(-2, StructureFloor.load(saved).floorNumber());
@@ -98,14 +98,14 @@ class StructureFloorTest {
 
     @Test
     void attachmentGapUsesSemanticBandsWhenLegacyCeilingsOverlap() {
-        BuildingFloorRegion lowerRegion = BuildingFloorRegion.fromFootprint(
+        TestFloorFootprint lowerRegion = TestFloorFootprint.fromFootprint(
                 88, Set.of(new BlockPos(0, 88, 0)));
-        BuildingFloorRegion upperRegion = BuildingFloorRegion.fromFootprint(
+        TestFloorFootprint upperRegion = TestFloorFootprint.fromFootprint(
                 91, Set.of(new BlockPos(0, 91, 0)));
         StructureFloor staleLower = TestStructureFloors.create(0, 88, 93, 0, lowerRegion);
         StructureFloor upper = TestStructureFloors.create(0, 91, 94, 1, upperRegion);
         StructureFloor sameBand = TestStructureFloors.create(0, 90, 94, 0,
-                BuildingFloorRegion.fromFootprint(90, Set.of(new BlockPos(0, 90, 0))));
+                TestFloorFootprint.fromFootprint(90, Set.of(new BlockPos(0, 90, 0))));
 
         assertEquals(0, upper.attachmentGapTo(staleLower));
         assertEquals(-1, upper.attachmentGapTo(sameBand));

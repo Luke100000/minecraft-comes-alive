@@ -19,7 +19,7 @@ public final class TestStructureFloors {
     public static StructureFloor create(int id,
                                         int anchorY,
                                         int ceilingY,
-                                        BuildingFloorRegion region) {
+                                        TestFloorFootprint region) {
         return create(id, anchorY, ceilingY, 0, region, List.of());
     }
 
@@ -27,7 +27,7 @@ public final class TestStructureFloors {
                                         int anchorY,
                                         int ceilingY,
                                         int floorNumber,
-                                        BuildingFloorRegion region) {
+                                        TestFloorFootprint region) {
         return create(id, anchorY, ceilingY, floorNumber, region, List.of());
     }
 
@@ -35,7 +35,7 @@ public final class TestStructureFloors {
                                         int anchorY,
                                         int ceilingY,
                                         int floorNumber,
-                                        BuildingFloorRegion region,
+                                        TestFloorFootprint region,
                                         Collection<FloorConnector.Marker> markers) {
         List<FloorConnector.Marker> connectors = (markers == null ? List.<FloorConnector.Marker>of() : markers)
                 .stream()

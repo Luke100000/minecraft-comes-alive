@@ -6,6 +6,7 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Node;
@@ -33,14 +34,14 @@ final class ClimbTraversal {
     private final Mob mob;
     private final Level level;
     private int lastMovementControlTick = Integer.MIN_VALUE;
-    private double lastControlledVerticalVelocity = Double.NaN;
+    private double lastControlledVerticalVelocity;
 
     ClimbTraversal(Mob mob, Level level) {
         this.mob = mob;
         this.level = level;
     }
 
-    boolean isActive(@Nullable Path path, int navigationTick) {
+    boolean hasPathContext(@Nullable Path path, int navigationTick) {
         return this.lastMovementControlTick == navigationTick || resolve(path) != null;
     }
 
@@ -53,23 +54,32 @@ final class ClimbTraversal {
         return context != null && ownsMotion(context);
     }
 
-    double controlledVerticalVelocity(int navigationTick) {
-        return this.lastMovementControlTick == navigationTick
-                ? this.lastControlledVerticalVelocity
-                : Double.NaN;
+    Vec3 adjustTravelMovement(Vec3 movement, int navigationTick) {
+        if (this.lastMovementControlTick != navigationTick) {
+            return movement;
+        }
+        return new Vec3(movement.x(), this.lastControlledVerticalVelocity, movement.z());
+    }
+
+    boolean isDescendingScaffolding(@Nullable Path path, int navigationTick) {
+        if (this.lastMovementControlTick != navigationTick || this.lastControlledVerticalVelocity >= 0.0D) {
+            return false;
+        }
+
+        Context context = resolve(path);
+        return context != null
+                && this.level.getBlockState(context.climbableNode().asBlockPos()).is(Blocks.SCAFFOLDING);
     }
 
     void tick(@Nullable Path path, double speedModifier, int navigationTick) {
         Context context = resolve(path);
-        if (context == null) {
+        if (context == null || !ownsMotion(context)) {
             return;
         }
 
-        double controlledY = calculateVerticalVelocity(context);
-        if (!Double.isNaN(controlledY)) {
-            this.lastMovementControlTick = navigationTick;
-            this.lastControlledVerticalVelocity = controlledY;
-        }
+        double controlledY = verticalVelocity(context);
+        this.lastMovementControlTick = navigationTick;
+        this.lastControlledVerticalVelocity = controlledY;
         applyMotion(context, controlledY, speedModifier);
     }
 
@@ -146,7 +156,6 @@ final class ClimbTraversal {
                     nextNode,
                     exitsClimbable ? followingNode : nextNode,
                     true,
-                    exitsClimbable,
                     getVerticalDirection(path, nextNodeIndex)
             );
         }
@@ -158,7 +167,6 @@ final class ClimbTraversal {
                         previousNode,
                         nextNode,
                         false,
-                        true,
                         getVerticalDirection(path, nextNodeIndex - 1)
                 );
             }
@@ -183,7 +191,6 @@ final class ClimbTraversal {
                 endNode,
                 endNode,
                 true,
-                false,
                 getVerticalDirection(path, endNodeIndex)
         );
     }
@@ -225,17 +232,11 @@ final class ClimbTraversal {
     }
 
     private void applyMotion(Context context, double controlledY, double speedModifier) {
-        if (Double.isNaN(controlledY)) {
-            return;
-        }
-
-        BlockPos climbablePos = findAttachedClimbable(context.climbableNode().asBlockPos());
-        Vec3 anchor = getClimbableAnchor(climbablePos);
+        Vec3 anchor = getClimbableAnchor(context.climbableNode().asBlockPos());
         double targetY = context.targetNode().y;
-        boolean continuingUpwardExit = !this.mob.onClimbable() && isContinuingUpwardExit(context);
-        boolean continuingDownwardExit = isContinuingDownwardExit(context);
+        boolean continuingExit = isContinuingExit(context);
 
-        if (!this.mob.onClimbable() && !continuingUpwardExit && !continuingDownwardExit) {
+        if (!this.mob.onClimbable() && !continuingExit) {
             this.mob.getMoveControl().setWantedPosition(
                     anchor.x(),
                     context.climbableNode().y,
@@ -272,24 +273,15 @@ final class ClimbTraversal {
         );
     }
 
-    private double calculateVerticalVelocity(Context context) {
-        boolean continuingUpwardExit = !this.mob.onClimbable() && isContinuingUpwardExit(context);
-        boolean continuingDownwardExit = isContinuingDownwardExit(context);
-        if (!this.mob.onClimbable() && !continuingUpwardExit && !continuingDownwardExit) {
-            if (isEnteringUpwardClimb(context)) {
-                return Mth.clamp(
-                        context.climbableNode().y - this.mob.getY(),
-                        0.0D,
-                        VERTICAL_SPEED
-                );
-            }
-            return Double.NaN;
+    private double verticalVelocity(Context context) {
+        if (!this.mob.onClimbable() && !isContinuingExit(context)) {
+            return Mth.clamp(
+                    context.climbableNode().y - this.mob.getY(),
+                    0.0D,
+                    VERTICAL_SPEED
+            );
         }
 
-        return getControlledVerticalVelocity(context);
-    }
-
-    private double getControlledVerticalVelocity(Context context) {
         double targetY = context.targetNode().y;
         double verticalDelta = targetY - this.mob.getY();
         double controlledY;
@@ -318,9 +310,12 @@ final class ClimbTraversal {
     }
 
     private boolean ownsMotion(Context context) {
+        if (context.verticalDirection() == 0
+                && this.level.getBlockState(context.climbableNode().asBlockPos()).is(Blocks.SCAFFOLDING)) {
+            return false;
+        }
         return this.mob.onClimbable()
-                || isContinuingUpwardExit(context)
-                || isContinuingDownwardExit(context)
+                || isContinuingExit(context)
                 || isEnteringUpwardClimb(context);
     }
 
@@ -329,10 +324,6 @@ final class ClimbTraversal {
                 && context.verticalDirection() > 0
                 && context.climbableNode().y - this.mob.getY() >= 0.5D
                 && isHorizontallyAlignedWithClimbable(context.climbableNode());
-    }
-
-    private boolean hasPassedClimbableTowardExit(Context context) {
-        return progressTowardExit(context) > 0.0D;
     }
 
     private boolean isAtExitHeight(Context context, double targetY) {
@@ -425,16 +416,17 @@ final class ClimbTraversal {
                 && this.mob.getY() > context.climbableNode().y;
     }
 
-    private boolean isContinuingUpwardExit(Context context) {
+    private boolean isContinuingExit(Context context) {
         return hasLeftClimbableUpward(context)
-                && this.mob.getY() <= context.targetNode().y + EXIT_CROSSING_TOLERANCE;
+                && this.mob.getY() <= context.targetNode().y + EXIT_CROSSING_TOLERANCE
+                || isContinuingDownwardExit(context);
     }
 
     private boolean isContinuingDownwardExit(Context context) {
         return !this.mob.onClimbable()
                 && context.exitsClimbable()
                 && context.verticalDirection() < 0
-                && (hasPassedClimbableTowardExit(context)
+                && (progressTowardExit(context) > 0.0D
                 || isLowerExit(context) && isAtExitHeight(context, context.targetNode().y));
     }
 
@@ -464,27 +456,16 @@ final class ClimbTraversal {
                 && Math.abs(this.mob.getZ() - (climbableNode.z + 0.5D)) < maxDistanceToWaypoint;
     }
 
-    private BlockPos findAttachedClimbable(BlockPos fallback) {
-        BlockPos mobPos = this.mob.blockPosition();
-        if (isClimbable(mobPos)) {
-            return mobPos;
-        }
-
-        BlockPos above = mobPos.above();
-        if (isClimbable(above)) {
-            return above;
-        }
-
-        BlockPos below = mobPos.below();
-        return isClimbable(below) ? below : fallback;
-    }
-
     private record Context(
             Node climbableNode,
             Node targetNode,
             boolean pathTargetsClimbable,
-            boolean exitsClimbable,
             int verticalDirection
     ) {
+        boolean exitsClimbable() {
+            return climbableNode.x != targetNode.x
+                    || climbableNode.y != targetNode.y
+                    || climbableNode.z != targetNode.z;
+        }
     }
 }

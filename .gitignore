@@ -40,3 +40,6 @@ forge*changelog.txt
 
 neoforge/run-gametest
 common/logs/
+neoforge/run-abbenchmark
+neoforge/run-abopen
+neoforge/run-searchbudget-*

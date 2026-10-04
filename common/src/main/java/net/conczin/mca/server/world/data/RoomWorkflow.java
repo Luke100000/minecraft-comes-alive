@@ -18,6 +18,29 @@ public final class RoomWorkflow {
     }
 
     public Outcome addBuilding(BlockPos source, String selectedType) {
+        return addBuilding(source, -1, selectedType);
+    }
+
+    public Outcome addBuilding(BlockPos source, int expectedTargetBuildingId, String selectedType) {
+        Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
+        if (village != null) {
+            RoomScanPlanner.Analysis analysis = RoomScanPlanner.analyze(village, world, source);
+            RoomScanPlan plan = analysis.plan();
+            if (plan.mode() == Village.RoomScanMode.ADD_ATTACHMENT) {
+                if (expectedTargetBuildingId >= 0
+                        && plan.targetBuildingId() != expectedTargetBuildingId) {
+                    return Outcome.failed(
+                            Building.validationResult.NOT_IN_BUILDING, source, expectedTargetBuildingId);
+                }
+                Outcome outcome = commitAddition(
+                        analyzeAttachedRoom(village, analysis, expectedTargetBuildingId), selectedType);
+                return withProspectiveFloorNumber(outcome, plan.prospectiveFloorNumber());
+            }
+            if (expectedTargetBuildingId >= 0) {
+                return Outcome.failed(
+                        Building.validationResult.NOT_IN_BUILDING, source, expectedTargetBuildingId);
+            }
+        }
         return commitAddition(analyzeBuildingAddition(source), selectedType);
     }
 
@@ -31,8 +54,7 @@ public final class RoomWorkflow {
         if (expectedRoomId >= 0 && plan.mode() != Village.RoomScanMode.UPDATE_ROOM) {
             return Outcome.failed(Building.validationResult.NOT_IN_BUILDING, source, expectedRoomId);
         }
-        if (selectedType != null && expectedRoomId < 0
-                && plan.mode() == Village.RoomScanMode.UPDATE_ROOM) {
+        if (expectedRoomId < 0 && plan.mode() == Village.RoomScanMode.UPDATE_ROOM) {
             return Outcome.failed(Building.validationResult.IDENTICAL, source, expectedRoomId);
         }
         return switch (plan.mode()) {
@@ -111,7 +133,7 @@ public final class RoomWorkflow {
             return failedRoom(fresh.result(), source, village);
         }
 
-        Structure refreshed = refreshedStructure(structure, floor.id(), fresh.floor());
+        Structure refreshed = refreshedStructure(structure, floor.id(), fresh.scannedFloor());
         if (refreshed == null) {
             return failedRoom(Building.validationResult.OVERLAP, source, village);
         }
@@ -183,14 +205,12 @@ public final class RoomWorkflow {
             return failedRoom(structureScan.result(), source, village);
         }
 
-        StructureFloor scannedFloor = structureScan.floor();
-        if (scannedFloor == null) {
+        if (structureScan.scannedFloor() == null) {
             return failedRoom(Building.validationResult.AMBIGUOUS_STRUCTURE, source, village);
         }
 
-        Structure candidate = structureScan.toStructure(-1);
-        candidate.setFloorNumber(scannedFloor.id(), plan.prospectiveFloorNumber());
-        StructureFloor attachmentFloor = candidate.getFloor(scannedFloor.id()).orElse(null);
+        Structure candidate = structureScan.toStructure(-1, plan.prospectiveFloorNumber());
+        StructureFloor attachmentFloor = candidate.getFloor(0).orElse(null);
         if (attachmentFloor == null) {
             return failedRoom(Building.validationResult.NOT_IN_BUILDING, source, village);
         }
@@ -265,7 +285,7 @@ public final class RoomWorkflow {
             return RegisteredRoomUpdate.failure(Building.validationResult.TOO_SMALL, source, village);
         }
 
-        Structure refreshed = refreshedStructure(structure, persistedFloor.id(), fresh.floor());
+        Structure refreshed = refreshedStructure(structure, persistedFloor.id(), fresh.scannedFloor());
         StructureFloor refreshedFloor = refreshed == null
                 ? null : refreshed.getFloor(persistedFloor.id()).orElse(null);
         if (refreshedFloor == null) {
@@ -305,8 +325,7 @@ public final class RoomWorkflow {
                 .map(BuildingType::name)
                 .toList();
         return new RegisteredRoomUpdate(Building.validationResult.SUCCESS, source, village,
-                refreshed, structure.getId(), persistedFloor.id(), expected.getId(),
-                replacement, matchingTypes);
+                refreshed, expected.getId(), replacement, matchingTypes);
     }
 
     private static boolean hasRegisteredRoomConflict(
@@ -319,7 +338,7 @@ public final class RoomWorkflow {
 
     private static Structure refreshedStructure(Structure structure,
                                                 int floorId,
-                                                StructureFloor floor) {
+                                                FloorGeometry floor) {
         Structure refreshed = structure.copy();
         return refreshed.replaceFloorGeometry(floorId, floor) ? refreshed : null;
     }

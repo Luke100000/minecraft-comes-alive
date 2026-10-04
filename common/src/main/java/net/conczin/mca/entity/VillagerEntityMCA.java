@@ -12,6 +12,7 @@ import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
 import net.conczin.mca.entity.ai.chatAI.ChatAI;
 import net.conczin.mca.entity.ai.chatAI.ChatAIContext;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
+import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.conczin.mca.entity.ai.relationship.*;
 import net.conczin.mca.entity.interaction.VillagerCommandHandler;
 import net.conczin.mca.registry.*;
@@ -56,6 +57,7 @@ import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
 import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.control.BodyRotationControl;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -84,6 +86,7 @@ import net.minecraft.world.item.ProjectileWeaponItem;
 import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -122,6 +125,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.UNASSIGNED);
     long lastCooldown = 0L;
     private PlayerModel playerModel;
+    @Nullable
+    private MCAFishingBobberEntity fishingBobber;
     private int despawnDelay;
     private int burned;
     private long lastHit = 0;
@@ -177,20 +182,24 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     public Vec3 handleRelativeFrictionAndCalculateMovement(Vec3 input, float friction) {
         Vec3 movement = super.handleRelativeFrictionAndCalculateMovement(input, friction);
-        if (getNavigation() instanceof MCAGroundPathNavigation navigation) {
-            double controlledY = navigation.getControlledClimbableVelocity();
-            if (!Double.isNaN(controlledY)) {
-                return new Vec3(movement.x(), controlledY, movement.z());
-            }
-        }
-        return movement;
+        return getNavigation() instanceof MCAGroundPathNavigation navigation
+                ? navigation.adjustClimbableTravelMovement(movement)
+                : movement;
+    }
+
+    @Override
+    public boolean isDescending() {
+        return super.isDescending()
+                || getNavigation() instanceof MCAGroundPathNavigation navigation
+                && navigation.isDescendingThroughScaffolding();
     }
 
     @Override
     public void setJumping(boolean jumping) {
         boolean navigationControlsClimb = this.getNavigation() instanceof MCAGroundPathNavigation navigation
                 && navigation.isControllingClimbableMovement();
-        super.setJumping(jumping && !this.onClimbable() && !navigationControlsClimb);
+        boolean climbableSuppressesJump = this.onClimbable() && !this.getInBlockState().is(Blocks.SCAFFOLDING);
+        super.setJumping(jumping && !climbableSuppressesJump && !navigationControlsClimb);
     }
 
     public static AttributeSupplier.Builder createAttributes() {
@@ -209,6 +218,15 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     public PlayerModel getPlayerModel() {
         return playerModel;
+    }
+
+    @Nullable
+    public MCAFishingBobberEntity getFishingBobber() {
+        return fishingBobber;
+    }
+
+    void setFishingBobber(@Nullable MCAFishingBobberEntity fishingBobber) {
+        this.fishingBobber = fishingBobber;
     }
 
     @Override
@@ -1081,7 +1099,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
             // Player genetics rendering is client-only. Preserve its original visual adjustment without moving the physical box.
             if (isClientSide() && MCAClient.useGeneticsRenderer(vehicle.getUUID())) {
-                float height = CommonVillagerModel.getVillager(vehicle).getRawVerticalScaleFactor();
+                float height = CommonVillagerModel.getVillager(vehicle).getVisualVerticalScaleFactor();
                 offset = offset.multiply(1.0f, height, 1.0f);
                 offset = offset.add(0, (height - 1) * 1.5 - 0.7, 0);
                 this.setPosRaw(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
@@ -1122,17 +1140,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             return SLEEPING_DIMENSIONS;
         }
 
-        float height = getVerticalScaleFactor() * 2.0F;
-        float width = getHorizontalScaleFactor() * 0.6F;
+        float height = getPhysicalVerticalScaleFactor() * 2.0F;
+        float width = getPhysicalHorizontalScaleFactor() * 0.6F;
 
         return EntityDimensions.scalable(width, height).withAttachments(EntityAttachments.builder()
-                .attach(EntityAttachment.VEHICLE, 0.0F, getRawVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F));
-    }
-
-    public float getRawStandingEyeHeight() {
-        float renderedWidth = getRawHorizontalScaleFactor() * 0.6F;
-        float renderedHeight = getRawVerticalScaleFactor() * 2.0F;
-        return EntityDimensions.scalable(renderedWidth, renderedHeight).scale(getScale()).eyeHeight();
+                .attach(EntityAttachment.VEHICLE, 0.0F, getVisualVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F));
     }
 
     @Override
@@ -1447,6 +1459,24 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public void moveTowards(BlockPos pos, float speed, int closeEnoughDist) {
         this.brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(pos, speed, closeEnoughDist));
         this.lookAt(pos);
+    }
+
+    public void moveTowardsPersistent(BlockPos pos, float speed, int closeEnoughDist) {
+        WalkTarget walkTarget = this.brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        if (walkTarget != null
+                && walkTarget.getTarget() instanceof PersistentPathTarget
+                && walkTarget.getTarget().currentBlockPosition().equals(pos)
+                && walkTarget.getSpeedModifier() == speed
+                && walkTarget.getCloseEnoughDist() == closeEnoughDist) {
+            // Chores repeat their intent each tick, but either sink can clear its
+            // memory independently. Retain the walk request and restore looking
+            // through its existing static tracker when needed.
+            if (this.brain.getMemoryInternal(MemoryModuleType.LOOK_TARGET).orElse(null) != walkTarget.getTarget()) {
+                this.brain.setMemory(MemoryModuleType.LOOK_TARGET, walkTarget.getTarget());
+            }
+            return;
+        }
+        BehaviorUtils.setWalkAndLookTargetMemories(this, new PersistentPathTarget(pos), speed, closeEnoughDist);
     }
 
     public void moveTowards(BlockPos pos, float speed) {

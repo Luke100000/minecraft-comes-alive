@@ -35,7 +35,6 @@ public final class ExternalBuilding extends Building {
     }
 
     public void validateBlocks(Level world) {
-        setLastScan(world.getGameTime());
         boolean changed = false;
         var iterator = blocks.entrySet().iterator();
         while (iterator.hasNext()) {

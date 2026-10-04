@@ -37,9 +37,14 @@ import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 public class VillageManager extends SavedData implements Iterable<Village> {
+    static final long ORIGIN_GEOMETRY_REFRESH_INITIAL_DELAY = 20L;
+    static final long ORIGIN_GEOMETRY_REFRESH_MAX_DELAY = 20L * 60L;
+    private static final int ORIGIN_GEOMETRY_REFRESH_MAX_FAILURES = 6;
+
     public final Set<BlockPos> cache = ConcurrentHashMap.newKeySet();
     private final Map<Integer, Village> villages = new HashMap<>();
     private final List<BlockPos> buildingQueue = new LinkedList<>();
+    private final Map<OriginGeometryRefreshKey, OriginGeometryRefreshRetry> originGeometryRefreshRetries = new HashMap<>();
     private final ServerLevel world;
     private final ReaperSpawner reapers;
     private int lastBuildingId;
@@ -71,6 +76,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
                 villages.put(village.getId(), village);
             }
         }
+        scheduleOriginGeometryRefreshes(world.getGameTime());
     }
 
     public static VillageManager get(ServerLevel world) {
@@ -83,6 +89,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     public boolean removeVillage(int id) {
         if (villages.remove(id) != null) {
+            originGeometryRefreshRetries.keySet().removeIf(key -> key.villageId() == id);
             cache.clear();
             return true;
         }
@@ -136,11 +143,84 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
         long time = world.getGameTime();
         for (Village village : this) village.tick(world, time);
+        tickOriginGeometryRefresh(time);
         if (time % buildingCooldown == 0 && !buildingQueue.isEmpty()) {
             processBuilding(buildingQueue.removeFirst());
         }
         reapers.tick(world);
         SpawnQueue.getInstance().tick();
+    }
+
+    static long originGeometryRefreshDelay(int failures) {
+        int boundedFailures = Math.max(0, Math.min(failures, ORIGIN_GEOMETRY_REFRESH_MAX_FAILURES));
+        long delay = ORIGIN_GEOMETRY_REFRESH_INITIAL_DELAY << boundedFailures;
+        return Math.min(delay, ORIGIN_GEOMETRY_REFRESH_MAX_DELAY);
+    }
+
+    private void scheduleOriginGeometryRefreshes(long time) {
+        for (Village village : villages.values()) {
+            for (Structure structure : village.getStructures().values()) {
+                if (!structure.hasOriginGeometryApproximation()) continue;
+                OriginGeometryRefreshKey key = new OriginGeometryRefreshKey(village.getId(), structure.getId());
+                originGeometryRefreshRetries.putIfAbsent(
+                        key, new OriginGeometryRefreshRetry(time + ORIGIN_GEOMETRY_REFRESH_INITIAL_DELAY, 0));
+            }
+        }
+    }
+
+    void tickOriginGeometryRefresh(long time) {
+        Map.Entry<OriginGeometryRefreshKey, OriginGeometryRefreshRetry> due = originGeometryRefreshRetries.entrySet()
+                .stream()
+                .filter(entry -> entry.getValue().retryAt() <= time)
+                .min(Comparator
+                        .comparingInt((Map.Entry<OriginGeometryRefreshKey, OriginGeometryRefreshRetry> entry) ->
+                                entry.getKey().villageId())
+                        .thenComparingInt(entry -> entry.getKey().structureId()))
+                .orElse(null);
+        if (due == null) return;
+
+        OriginGeometryRefreshKey key = due.getKey();
+        Village village = villages.get(key.villageId());
+        Structure structure = village == null ? null : village.getStructure(key.structureId()).orElse(null);
+        if (structure == null || !structure.hasOriginGeometryApproximation()) {
+            originGeometryRefreshRetries.remove(key);
+            return;
+        }
+
+        Building room = village.getRooms()
+                .filter(candidate -> candidate.getStructureId() == structure.getId())
+                .filter(candidate -> candidate.getFloorId() == 0)
+                .min(Comparator.comparingInt(Building::getId))
+                .orElse(null);
+        if (room == null) {
+            rescheduleOriginGeometryRefresh(key, due.getValue(), time);
+            return;
+        }
+        BlockPos source = room.getSourceBlock();
+        if (world.getChunkSource().getChunkNow(source.getX() >> 4, source.getZ() >> 4) == null) {
+            originGeometryRefreshRetries.put(
+                    key, new OriginGeometryRefreshRetry(time + ORIGIN_GEOMETRY_REFRESH_INITIAL_DELAY,
+                            due.getValue().failures()));
+            return;
+        }
+
+        RegisteredRoomUpdate update = new RoomWorkflow(this, world).analyzeRegisteredRoomUpdate(
+                village, room.getId(), source);
+        Building.validationResult result = applyRegisteredRoomUpdate(update, null, false);
+        if (result == Building.validationResult.SUCCESS) {
+            originGeometryRefreshRetries.remove(key);
+            finalizeVillageMutation(village);
+            return;
+        }
+        rescheduleOriginGeometryRefresh(key, due.getValue(), time);
+    }
+
+    private void rescheduleOriginGeometryRefresh(OriginGeometryRefreshKey key,
+                                                 OriginGeometryRefreshRetry previous,
+                                                 long time) {
+        int failures = Math.min(previous.failures() + 1, ORIGIN_GEOMETRY_REFRESH_MAX_FAILURES);
+        originGeometryRefreshRetries.put(
+                key, new OriginGeometryRefreshRetry(time + originGeometryRefreshDelay(failures), failures));
     }
 
     private void startBountyHunterWave(ServerPlayer player, Village sender) {
@@ -181,13 +261,16 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     public void reportBuilding(BlockPos pos) {
-        cache.add(pos);
-        buildingQueue.add(pos);
+        if (cache.add(pos)) buildingQueue.add(pos);
     }
 
     public Building.validationResult processBuilding(BlockPos pos) {
         BuildingType externalType = getGroupedBuildingType(pos);
-        if (externalType != null) return processExternalBuilding(pos, externalType);
+        if (externalType != null) {
+            Building.validationResult result = processExternalBuilding(pos, externalType);
+            if (result != Building.validationResult.SUCCESS) cache.remove(pos);
+            return result;
+        }
 
         Village village = findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
         if (village != null && village.getInteractionStructureAt(pos).isPresent()) {
@@ -195,8 +278,13 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             return Building.validationResult.SUCCESS;
         }
         BuildingScanResult scan = new RoomWorkflow(this, world).analyzeReportedBuildingAddition(pos);
-        if (scan.result() != Building.validationResult.SUCCESS || scan.isAmbiguous()) return scan.result();
-        return commitRoomAddition(scan, null);
+        if (scan.result() != Building.validationResult.SUCCESS || scan.isAmbiguous()) {
+            cache.remove(pos);
+            return scan.result();
+        }
+        Building.validationResult result = commitRoomAddition(scan, null);
+        if (result != Building.validationResult.SUCCESS) cache.remove(pos);
+        return result;
     }
 
     private BuildingType getGroupedBuildingType(BlockPos pos) {
@@ -280,8 +368,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (current == null || current.getLogicalBuildingId() != refreshed.getLogicalBuildingId()) {
             return Building.validationResult.NOT_IN_BUILDING;
         }
-        if (room.getId() >= 0 || room.getStructureId() != refreshed.getId()
-                || refreshed.getFloor(room.getFloorId()).isEmpty()) {
+        if (room.getId() >= 0) {
             return Building.validationResult.OVERLAP;
         }
 
@@ -357,24 +444,18 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
 
         Village village = update.village();
-        Structure structure = village == null
-                ? null : village.getStructure(update.structureId()).orElse(null);
-        if (structure == null || structure.getFloor(update.floorId()).isEmpty()) {
+        Building current = village == null ? null : village.getBuilding(update.expectedRoomId()).orElse(null);
+        if (current == null || !current.isFunctionalRoom()) {
+            return Building.validationResult.OVERLAP;
+        }
+        Structure structure = village.getStructureFor(current).orElse(null);
+        if (structure == null || structure.getFloor(current.getFloorId()).isEmpty()) {
             return Building.validationResult.NOT_IN_BUILDING;
         }
-        if (update.refreshedStructure() == null
-                || update.refreshedStructure().getId() != update.structureId()
-                || update.refreshedStructure().getFloor(update.floorId()).isEmpty()) {
-            return Building.validationResult.OVERLAP;
-        }
-
-        Building current = village.getBuilding(update.expectedRoomId()).orElse(null);
-        if (current == null || current.getStructureId() != update.structureId()
-                || current.getFloorId() != update.floorId()) {
-            return Building.validationResult.OVERLAP;
-        }
+        Structure refreshed = update.refreshedStructure();
         Building replacement = update.replacementRoom() == null ? null : update.replacementRoom().copy();
-        StructureFloor refreshedFloor = update.refreshedStructure().getFloor(update.floorId()).orElse(null);
+        StructureFloor refreshedFloor = refreshed == null || refreshed.getId() != current.getStructureId()
+                ? null : refreshed.getFloor(current.getFloorId()).orElse(null);
         if (replacement == null || refreshedFloor == null
                 || replacement.getId() != current.getId()
                 || replacement.getStructureId() != current.getStructureId()
@@ -385,8 +466,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
 
         List<Building> siblingRooms = village.getRooms()
-                .filter(room -> room.getStructureId() == update.structureId())
-                .filter(room -> room.getFloorId() == update.floorId())
+                .filter(room -> room.getStructureId() == current.getStructureId())
+                .filter(room -> room.getFloorId() == current.getFloorId())
                 .filter(room -> room.getId() != current.getId())
                 .toList();
         if (siblingRooms.stream().anyMatch(room -> refreshedFloor.geometry().roomIdentityOverlapCount(
@@ -414,7 +495,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
         List<Building> replacementRooms = new ArrayList<>(siblingRooms);
         replacementRooms.add(replacement);
-        return village.publishFloorRefresh(update.refreshedStructure(), update.floorId(), replacementRooms)
+        return village.publishFloorRefresh(refreshed, current.getFloorId(), replacementRooms)
                 ? Building.validationResult.SUCCESS
                 : Building.validationResult.OVERLAP;
     }
@@ -452,9 +533,14 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     public BuildingEditResult forceRoomType(BlockPos pos, String type) {
+        return forceRoomType(pos, type, -1);
+    }
+
+    public BuildingEditResult forceRoomType(BlockPos pos, String type, int expectedRoomId) {
         Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
         Building room = village == null ? null : village.findInteractionRoomAt(pos).orElse(null);
         if (room == null) return BuildingEditResult.NO_BUILDING;
+        if (expectedRoomId >= 0 && room.getId() != expectedRoomId) return BuildingEditResult.TARGET_CHANGED;
         boolean forced = !room.getType().equals(type);
         String resolvedType = forced ? type : RoomTypeResolver.create(village).resolve(room).updatedType(null);
         village.setRoomType(room, resolvedType, forced);
@@ -462,37 +548,92 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     public BuildingEditResult removeRoom(BlockPos pos) {
+        return removeRoom(pos, -1);
+    }
+
+    public BuildingEditResult removeRoom(BlockPos pos, int expectedRoomId) {
         Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
         if (village == null) return BuildingEditResult.NO_BUILDING;
         Building room = village.findInteractionRoomAt(pos).orElse(null);
         if (room == null) return village.getRoomScanPlan(world, pos).mode() == Village.RoomScanMode.ADD_ROOM
                 ? BuildingEditResult.NO_ROOM : BuildingEditResult.NO_BUILDING;
+        if (expectedRoomId >= 0 && room.getId() != expectedRoomId) return BuildingEditResult.TARGET_CHANGED;
         if (village.isMainRoom(room)) return BuildingEditResult.MAIN_ROOM;
         return village.removeRoom(room.getId())
                 ? BuildingEditResult.SUCCESS : BuildingEditResult.NO_ROOM;
     }
 
     public BuildingEditResult removeFloor(BlockPos pos, int floorNumber) {
+        return removeFloor(pos, floorNumber, -1);
+    }
+
+    public BuildingEditResult removeFloor(BlockPos pos, int floorNumber, int expectedBuildingId) {
+        return removeFloor(pos, floorNumber, expectedBuildingId, -1, -1);
+    }
+
+    public BuildingEditResult removeFloor(BlockPos pos,
+                                          int floorNumber,
+                                          int expectedBuildingId,
+                                          int expectedStructureId,
+                                          int expectedFloorId) {
         Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
         if (village == null) return BuildingEditResult.NO_BUILDING;
         if (floorNumber == Integer.MIN_VALUE) return BuildingEditResult.NO_FLOOR;
 
-        Building room = village.findInteractionRoomAt(pos).orElse(null);
-        if (room == null) return BuildingEditResult.NO_ROOM;
-        Structure structure = village.getStructureFor(room).orElse(null);
+        RoomScanPlan plan = village.getRoomScanPlan(world, pos);
+        Structure structure = village.getStructure(plan.targetStructureId()).orElse(null);
         if (structure == null) return BuildingEditResult.NO_BUILDING;
+        if (expectedBuildingId >= 0
+                && structure.getLogicalBuildingId() != expectedBuildingId) {
+            return BuildingEditResult.TARGET_CHANGED;
+        }
+        if (expectedStructureId >= 0 || expectedFloorId >= 0) {
+            Structure expectedStructure = village.getStructure(expectedStructureId).orElse(null);
+            StructureFloor expectedFloor = expectedStructure == null
+                    ? null : expectedStructure.getFloor(expectedFloorId).orElse(null);
+            if (expectedStructure == null
+                    || expectedFloor == null
+                    || expectedStructure.getLogicalBuildingId() != structure.getLogicalBuildingId()
+                    || expectedFloor.floorNumber() != floorNumber) {
+                return BuildingEditResult.TARGET_CHANGED;
+            }
+        }
 
         return village.removeFloor(structure.getLogicalBuildingId(), floorNumber)
                 ? BuildingEditResult.SUCCESS : BuildingEditResult.NO_FLOOR;
     }
 
+    public BuildingEditResult setMainRoom(BlockPos pos, int expectedRoomId) {
+        Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
+        if (village == null) return BuildingEditResult.NO_BUILDING;
+        Building room = village.findInteractionRoomAt(pos).orElse(null);
+        if (room == null) return BuildingEditResult.NO_ROOM;
+        if (expectedRoomId >= 0 && room.getId() != expectedRoomId) return BuildingEditResult.TARGET_CHANGED;
+        if (village.getStructureFor(room).isEmpty()) return BuildingEditResult.NO_STRUCTURE;
+        village.setMainRoom(room);
+        return BuildingEditResult.SUCCESS;
+    }
+
     public BuildingEditResult removeBuilding(BlockPos pos) {
+        return removeBuilding(pos, -1);
+    }
+
+    public BuildingEditResult removeBuilding(BlockPos pos, int expectedBuildingId) {
         Village village = findNearestVillage(pos, Village.PLAYER_BORDER_MARGIN).orElse(null);
         if (village == null) return BuildingEditResult.NO_BUILDING;
         Building target = village.getBuildingAt(pos).orElse(null);
         if (target instanceof ExternalBuilding) {
+            if (expectedBuildingId >= 0 && target.getId() != expectedBuildingId) {
+                return BuildingEditResult.TARGET_CHANGED;
+            }
             return village.removeExternalBuilding(target.getId())
                     ? BuildingEditResult.SUCCESS : BuildingEditResult.NO_BUILDING;
+        }
+        if (target != null && target.isFunctionalRoom()) {
+            int logicalBuildingId = village.getLogicalBuildingId(target.getStructureId());
+            if (expectedBuildingId >= 0 && logicalBuildingId != expectedBuildingId) {
+                return BuildingEditResult.TARGET_CHANGED;
+            }
         }
         if (target != null && target.isFunctionalRoom() && village.getStructure(target.getStructureId()).isEmpty()) {
             int orphanedStructureId = target.getStructureId();
@@ -505,10 +646,13 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
         Structure structure = target != null && target.isFunctionalRoom()
                 ? village.getStructure(target.getStructureId()).orElse(null)
-                : village.getExactStructureAt(pos)
-                .or(() -> village.getInteractionStructureAt(pos))
-                .orElse(null);
+                 : village.getExactStructureAt(pos)
+                 .or(() -> village.getInteractionStructureAt(pos))
+                 .orElse(null);
         if (structure == null) return BuildingEditResult.NO_BUILDING;
+        if (expectedBuildingId >= 0 && structure.getLogicalBuildingId() != expectedBuildingId) {
+            return BuildingEditResult.TARGET_CHANGED;
+        }
 
         village.publishBuildingMutation(() -> village.removeLogicalBuilding(structure.getLogicalBuildingId()));
 
@@ -552,9 +696,35 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         NO_BUILDING,
         NO_ROOM,
         NO_FLOOR,
-        MAIN_ROOM
+        MAIN_ROOM,
+        NO_STRUCTURE,
+        TARGET_CHANGED
     }
 
     public void setBuildingCooldown(int buildingCooldown) { this.buildingCooldown = buildingCooldown; }
-    public void merge(Village into, Village from) { into.merge(from); }
+    public void merge(Village into, Village from) {
+        into.merge(from);
+        if (into.getId() == from.getId()) return;
+
+        List<Map.Entry<OriginGeometryRefreshKey, OriginGeometryRefreshRetry>> movedRetries =
+                originGeometryRefreshRetries.entrySet().stream()
+                        .filter(entry -> entry.getKey().villageId() == from.getId())
+                        .toList();
+        for (Map.Entry<OriginGeometryRefreshKey, OriginGeometryRefreshRetry> entry : movedRetries) {
+            originGeometryRefreshRetries.remove(entry.getKey());
+            int structureId = entry.getKey().structureId();
+            Structure moved = into.getStructure(structureId).orElse(null);
+            if (moved == null || !moved.hasOriginGeometryApproximation()) continue;
+
+            OriginGeometryRefreshKey movedKey = new OriginGeometryRefreshKey(into.getId(), structureId);
+            originGeometryRefreshRetries.merge(movedKey, entry.getValue(),
+                    (first, second) -> first.retryAt() <= second.retryAt() ? first : second);
+        }
+    }
+
+    private record OriginGeometryRefreshKey(int villageId, int structureId) {
+    }
+
+    private record OriginGeometryRefreshRetry(long retryAt, int failures) {
+    }
 }

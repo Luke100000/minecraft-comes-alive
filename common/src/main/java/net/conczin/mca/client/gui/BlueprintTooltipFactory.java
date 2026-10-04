@@ -35,13 +35,6 @@ final class BlueprintTooltipFactory {
         return village == null ? empty() : new BlueprintTooltipFactory(village, roomTypeResolver);
     }
 
-    List<Component> tooltip(Building hovered, Integer floorOrdinal, boolean structureHover) {
-        int logicalBuildingId = hovered == null || village == null
-                ? -1
-                : village.getLogicalBuildingId(hovered.getStructureId());
-        return tooltip(hovered, floorOrdinal, structureHover, logicalBuildingId);
-    }
-
     List<Component> tooltip(Building hovered,
                             Integer floorOrdinal,
                             boolean structureHover,
@@ -261,7 +254,7 @@ final class BlueprintTooltipFactory {
                 .toList();
     }
 
-    private static Component blockName(ResourceLocation id) {
+    static Component blockName(ResourceLocation id) {
         return BuiltInRegistries.BLOCK.containsKey(id)
                 ? Component.translatable(BuiltInRegistries.BLOCK.get(id).getDescriptionId())
                 : Component.translatable("tag.block." + id.getNamespace() + "." + id.getPath());

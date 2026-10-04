@@ -214,7 +214,7 @@ public final class CommonNeoForge {
 
     @SubscribeEvent
     public static void registerNetwork(final RegisterPayloadHandlersEvent event) {
-        MessagesMCA.register(new NeoForgeRegistrar(event.registrar("2")));
+        MessagesMCA.register(new NeoForgeRegistrar(event.registrar("3")));
         Network.registerSender(PacketDistributor::sendToPlayer);
         Network.registerClientSender(PacketDistributor::sendToServer);
     }

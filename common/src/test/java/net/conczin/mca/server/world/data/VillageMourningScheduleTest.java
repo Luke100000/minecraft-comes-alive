@@ -1,6 +1,7 @@
 package net.conczin.mca.server.world.data;
 
 import net.minecraft.SharedConstants;
+import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.Bootstrap;
@@ -8,7 +9,9 @@ import net.minecraft.util.RandomSource;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -35,21 +38,29 @@ class VillageMourningScheduleTest {
     }
 
     @Test
-    void nextMourningRunsTwoMinutesLater() {
+    void nextMourningRunsBetweenThreeMinutesTwentySecondsAndSevenMinutesThirtySecondsLater() {
         long now = 200_000L;
-        long next = Village.calculateNextMourningTime(now);
+        long first = Long.MIN_VALUE;
+        boolean sawDifferentDelay = false;
 
-        assertEquals(now + 2_400L, next);
+        for (long seed = 0; seed < 20; seed++) {
+            long next = Village.calculateNextMourningTime(now, RandomSource.create(seed));
+            assertTrue(next >= now + 4_000L);
+            assertTrue(next <= now + 9_000L);
+            if (first == Long.MIN_VALUE) {
+                first = next;
+            } else if (next != first) {
+                sawDifferentDelay = true;
+            }
+        }
+
+        assertTrue(sawDifferentDelay);
     }
 
     @Test
-    void deferredMourningRetriesWithinThirtyToSixtySeconds() {
+    void deferredMourningRetriesFourMinutesLater() {
         long now = 200_000L;
-        for (long seed = 0; seed < 20; seed++) {
-            long retry = Village.calculateMourningRetryTime(now, RandomSource.create(seed));
-            assertTrue(retry >= now + 600L);
-            assertTrue(retry <= now + 1_200L);
-        }
+        assertEquals(now + 4_800L, Village.calculateMourningRetryTime(now));
     }
 
     @Test
@@ -61,18 +72,56 @@ class VillageMourningScheduleTest {
     }
 
     @Test
-    void ambientSafetyChecksAtMostFourGravesPerAttempt() {
+    void ambientSafetyStopsAfterFourChecksWhenAnInitialGraveIsSafe() {
         List<BlockPos> graves = IntStream.range(0, 10)
                 .mapToObj(index -> new BlockPos(index, 64, 0))
                 .toList();
+        AtomicInteger checked = new AtomicInteger();
 
-        List<BlockPos> candidates = Village.selectMourningSafetyCandidates(
-                graves,
-                RandomSource.create(1234L)
-        );
+        List<BlockPos> safe = Village.selectSafeMourningGraves(graves, RandomSource.create(1234L), grave -> {
+            checked.incrementAndGet();
+            return true;
+        });
 
-        assertEquals(4, candidates.size());
-        assertTrue(graves.containsAll(candidates));
+        assertEquals(4, checked.get());
+        assertEquals(4, safe.size());
+        assertEquals(4, safe.stream().distinct().count());
+        assertTrue(graves.containsAll(safe));
+    }
+
+    @Test
+    void ambientSafetyFallsBackPastFourUnsafeGravesAndStopsAtFirstSafeOne() {
+        List<BlockPos> graves = IntStream.range(0, 10)
+                .mapToObj(index -> new BlockPos(index, 64, 0))
+                .toList();
+        List<BlockPos> shuffled = new ArrayList<>(graves);
+        Util.shuffle(shuffled, RandomSource.create(1234L));
+        BlockPos safeGrave = shuffled.get(5);
+        AtomicInteger checked = new AtomicInteger();
+
+        List<BlockPos> safe = Village.selectSafeMourningGraves(graves, RandomSource.create(1234L), grave -> {
+            checked.incrementAndGet();
+            return grave.equals(safeGrave);
+        });
+
+        assertEquals(List.of(safeGrave), safe);
+        assertEquals(6, checked.get());
+    }
+
+    @Test
+    void ambientSafetyChecksAllGravesBeforeDeferringWhenAllAreUnsafe() {
+        List<BlockPos> graves = IntStream.range(0, 10)
+                .mapToObj(index -> new BlockPos(index, 64, 0))
+                .toList();
+        AtomicInteger checked = new AtomicInteger();
+
+        List<BlockPos> safe = Village.selectSafeMourningGraves(graves, RandomSource.create(1234L), grave -> {
+            checked.incrementAndGet();
+            return false;
+        });
+
+        assertTrue(safe.isEmpty());
+        assertEquals(graves.size(), checked.get());
     }
 
     @Test

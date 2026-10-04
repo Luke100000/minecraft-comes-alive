@@ -136,7 +136,7 @@ public class VillagerEntityBaseModelMCA<T extends LivingEntity & VillagerLike<T>
         }
 
         //and add our own
-        limbAngle /= (0.2f + villager.getRawVerticalScaleFactor());
+        limbAngle /= (0.2f + villager.getVisualVerticalScaleFactor());
 
         super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
 

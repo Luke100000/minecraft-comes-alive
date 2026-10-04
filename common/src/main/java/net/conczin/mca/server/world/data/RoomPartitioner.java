@@ -23,8 +23,10 @@ final class RoomPartitioner {
             .comparingInt((BlockPos pos) -> pos.getX())
             .thenComparingInt(pos -> pos.getZ())
             .thenComparingInt(pos -> pos.getY());
-    private static final Comparator<Component> COMPONENT_ORDER = (first, second) ->
-            compareFloorCellSets(first.floorCells(), second.floorCells());
+    // Partition components have disjoint cells, so their smallest exact cells order them uniquely.
+    private static final Comparator<Component> COMPONENT_ORDER = Comparator.comparing(
+            (Component component) -> component.cells().stream()
+                    .map(FloorGeometry.Cell::feet).min(CELL_ORDER).orElseThrow(), CELL_ORDER);
     private static final Comparator<Component> OWNER_ORDER =
             Comparator.comparingInt(Component::area).reversed()
                     .thenComparing(COMPONENT_ORDER);
@@ -277,17 +279,6 @@ final class RoomPartitioner {
 
     static Component owner(Collection<Component> adjacent) {
         return adjacent.stream().min(OWNER_ORDER).orElse(null);
-    }
-
-    static int compareFloorCellSets(Set<BlockPos> first, Set<BlockPos> second) {
-        List<BlockPos> orderedFirst = first.stream().sorted(CELL_ORDER).toList();
-        List<BlockPos> orderedSecond = second.stream().sorted(CELL_ORDER).toList();
-        int sharedSize = Math.min(orderedFirst.size(), orderedSecond.size());
-        for (int index = 0; index < sharedSize; index++) {
-            int comparison = CELL_ORDER.compare(orderedFirst.get(index), orderedSecond.get(index));
-            if (comparison != 0) return comparison;
-        }
-        return Integer.compare(orderedFirst.size(), orderedSecond.size());
     }
 
     static List<Component> adjacent(FloorGeometry.Cell floorCell, Collection<Component> components) {

@@ -54,7 +54,7 @@ public class FollowTask extends Behavior<VillagerEntityMCA> {
             int closeEnoughDistance = verticalDistance > 1 ? 0 : 2;
             boolean climbing = villager.onClimbable()
                     || villager.getNavigation() instanceof MCAGroundPathNavigation navigation
-                    && navigation.isControllingClimbable();
+                    && navigation.hasClimbablePathContext();
             if (climbing) {
                 closeEnoughDistance = 0;
             }

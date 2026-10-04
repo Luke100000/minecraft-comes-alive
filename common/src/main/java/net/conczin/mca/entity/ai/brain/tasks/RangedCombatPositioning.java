@@ -254,9 +254,10 @@ final class RangedCombatPositioning {
 
     private static boolean isSafeEscapePosition(PathfinderMob entity, BlockPos position) {
         Vec3 candidate = Vec3.atBottomCenterOf(position);
+        PathType pathType = pathTypeAt(entity, position);
         return entity.getNavigation().isStableDestination(position)
-                && isWalkableDestination(entity, candidate)
-                && hasStandingSpace(entity, candidate);
+                && isTraversablePathType(pathType)
+                && (pathType == PathType.WALKABLE_DOOR || hasStandingSpace(entity, candidate));
     }
 
     private static OnwardReachability measureOnwardReachability(
@@ -775,8 +776,16 @@ final class RangedCombatPositioning {
     }
 
     private static boolean isWalkableDestination(PathfinderMob entity, Vec3 candidate) {
+        return isTraversablePathType(pathTypeAt(entity, BlockPos.containing(candidate)));
+    }
+
+    private static PathType pathTypeAt(PathfinderMob entity, BlockPos position) {
         NodeEvaluator evaluator = entity.getNavigation().getNodeEvaluator();
-        return evaluator == null || evaluator.getPathType(entity, BlockPos.containing(candidate)) == PathType.WALKABLE;
+        return evaluator == null ? null : evaluator.getPathType(entity, position);
+    }
+
+    private static boolean isTraversablePathType(PathType pathType) {
+        return pathType == null || pathType == PathType.WALKABLE || pathType == PathType.WALKABLE_DOOR;
     }
 
     private static boolean hasStandingSpace(PathfinderMob entity, Vec3 candidate) {

@@ -15,6 +15,7 @@ import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.level.PathNavigationRegion;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.StairBlock;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.level.pathfinder.Node;
@@ -130,6 +131,118 @@ public final class FenceGateInteractionGameTests {
         } finally {
             villager.discard();
         }
+    }
+
+    @GameTest(batch = "mca_planter_corner", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 40)
+    public static void raisedPlanterCornerRejectsDiagonalBlockedBeforeJumpRange(GameTestHelper helper) {
+        BlockPos feet = helper.absolutePos(new BlockPos(5, 2, 5));
+        BlockPos candidate = preparePlanterFixture(helper, feet);
+        VillagerEntityMCA villager = spawnSizedVillager(helper, feet);
+        PathNavigationRegion region = new PathNavigationRegion(helper.getLevel(), feet.offset(-4, -2, -4), feet.offset(4, 5, 4));
+        try {
+            MCAWalkNodeEvaluator evaluator = new MCAWalkNodeEvaluator();
+            evaluator.prepare(region, villager);
+            try {
+                helper.assertTrue(hasNeighbor(evaluator, feet, candidate),
+                        "unobstructed planter rise lost its usable diagonal");
+            } finally {
+                evaluator.done();
+            }
+
+            helper.getLevel().setBlock(feet.west(), Blocks.OAK_TRAPDOOR.defaultBlockState()
+                    .setValue(BlockStateProperties.OPEN, true)
+                    .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.NORTH), 3);
+            helper.getLevel().setBlock(feet.south(), Blocks.OAK_TRAPDOOR.defaultBlockState()
+                    .setValue(BlockStateProperties.OPEN, true)
+                    .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST), 3);
+            // At this literal point the target is already within vanilla's one-block jump range,
+            // but the upright planter edging prevents the grounded body from getting here.
+            AABB jumpApproachBox = villager.getBoundingBox().move(-0.30D, 0.0D, 0.30D);
+            helper.assertTrue(!helper.getLevel().noCollision(villager, jumpApproachBox),
+                    "planter fixture did not obstruct the grounded jump approach");
+
+            evaluator.prepare(region, villager);
+            try {
+                helper.assertTrue(!hasNeighbor(evaluator, feet, candidate),
+                        "MCA kept diagonal planter rise blocked outside the jump trigger range");
+            } finally {
+                evaluator.done();
+            }
+            helper.succeed();
+        } finally {
+            villager.discard();
+        }
+    }
+
+    @GameTest(batch = "mca_planter_corner", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 40)
+    public static void planterEdgesPreserveUsableDiagonals(GameTestHelper helper) {
+        BlockPos feet = helper.absolutePos(new BlockPos(5, 2, 5));
+        BlockPos candidate = preparePlanterFixture(helper, feet);
+        VillagerEntityMCA villager = spawnSizedVillager(helper, feet);
+        BlockState air = Blocks.AIR.defaultBlockState();
+        BlockState open = Blocks.OAK_TRAPDOOR.defaultBlockState().setValue(BlockStateProperties.OPEN, true);
+        BlockState[][] usableEdges = {
+                {open.setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.NORTH), air},
+                {air, open.setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST)},
+                {open.setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.SOUTH),
+                        open.setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.WEST)},
+                {Blocks.OAK_TRAPDOOR.defaultBlockState(), Blocks.OAK_TRAPDOOR.defaultBlockState()}
+        };
+        PathNavigationRegion region = new PathNavigationRegion(helper.getLevel(), feet.offset(-4, -2, -4), feet.offset(4, 5, 4));
+        try {
+            MCAWalkNodeEvaluator evaluator = new MCAWalkNodeEvaluator();
+            for (BlockState[] edges : usableEdges) {
+                helper.getLevel().setBlock(feet.west(), edges[0], 3);
+                helper.getLevel().setBlock(feet.south(), edges[1], 3);
+                evaluator.prepare(region, villager);
+                try {
+                    helper.assertTrue(hasNeighbor(evaluator, feet, candidate),
+                            "usable planter diagonal was rejected: " + edges[0] + ", " + edges[1]);
+                } finally {
+                    evaluator.done();
+                }
+            }
+            helper.succeed();
+        } finally {
+            villager.discard();
+        }
+    }
+
+    @GameTest(batch = "mca_planter_corner", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void villagerWalksAroundBlockedPlanterCorner(GameTestHelper helper) {
+        BlockPos feet = helper.absolutePos(new BlockPos(5, 2, 5));
+        BlockPos candidate = preparePlanterFixture(helper, feet);
+        helper.getLevel().setBlock(feet.west(), Blocks.OAK_TRAPDOOR.defaultBlockState()
+                .setValue(BlockStateProperties.OPEN, true)
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.NORTH), 3);
+        helper.getLevel().setBlock(feet.south(), Blocks.OAK_TRAPDOOR.defaultBlockState()
+                .setValue(BlockStateProperties.OPEN, true)
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST), 3);
+        VillagerEntityMCA villager = spawnSizedVillager(helper, feet);
+        villager.refreshBrain(helper.getLevel());
+        villager.getBrain().removeAllBehaviors();
+        villager.setNoAi(false);
+        var path = villager.getNavigation().createPath(candidate, 0);
+        helper.assertTrue(path != null && path.canReach(), "planter corner has no usable alternate route");
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "planter alternate route did not start");
+        helper.succeedWhen(() -> {
+            helper.assertTrue(villager.blockPosition().equals(candidate),
+                    "villager stalled on planter approach at " + villager.position());
+            villager.discard();
+        });
+    }
+
+    private static BlockPos preparePlanterFixture(GameTestHelper helper, BlockPos feet) {
+        for (BlockPos pos : BlockPos.betweenClosed(feet.offset(-3, -1, -3), feet.offset(3, 3, 3))) {
+            helper.getLevel().setBlock(pos, pos.getY() == feet.getY() - 1
+                    ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 3);
+        }
+        BlockPos candidate = feet.west().south().above();
+        helper.getLevel().setBlock(candidate.below(), Blocks.GRASS_BLOCK.defaultBlockState(), 3);
+        return candidate;
     }
 
     private static boolean hasNeighbor(WalkNodeEvaluator evaluator, BlockPos origin, BlockPos candidate) {

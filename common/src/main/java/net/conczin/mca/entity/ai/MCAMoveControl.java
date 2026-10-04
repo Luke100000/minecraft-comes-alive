@@ -4,6 +4,8 @@ import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.control.MoveControl;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.level.block.Blocks;
 
 /**
  * Owns movement rules shared by every MCA villager movement mode.
@@ -35,7 +37,7 @@ public class MCAMoveControl extends MoveControl {
 
     @Override
     public void setWantedPosition(double x, double y, double z, double speedModifier) {
-        if (this.mob.onClimbable() && this.operation == Operation.JUMPING) {
+        if (isClimbNavigationActive() && this.operation == Operation.JUMPING) {
             this.operation = Operation.WAIT;
         }
         super.setWantedPosition(x, y, z, speedModifier);
@@ -45,7 +47,11 @@ public class MCAMoveControl extends MoveControl {
     public void tick() {
         if (!isClimbNavigationActive()) {
             boolean adjacentRaisedTargetNeedsJump = shouldJumpAtVanillaAdjacentBoundary();
-            super.tick();
+            if (this.operation == Operation.MOVE_TO && this.mob.getInBlockState().is(Blocks.SCAFFOLDING)) {
+                tickPassThroughScaffoldingMove();
+            } else {
+                super.tick();
+            }
             if (adjacentRaisedTargetNeedsJump && this.operation != Operation.JUMPING) {
                 this.mob.getJumpControl().jump();
                 this.operation = Operation.JUMPING;
@@ -66,6 +72,27 @@ public class MCAMoveControl extends MoveControl {
         this.mob.setSpeed(0.0F);
         this.mob.setXxa(0.0F);
         this.mob.setZza(0.0F);
+    }
+
+    private void tickPassThroughScaffoldingMove() {
+        // Mirror vanilla MOVE_TO, but omit its context-free block-collision jump:
+        // scaffolding reports a stable collision shape there even when the entity should pass through it.
+        this.operation = Operation.WAIT;
+        double dx = this.wantedX - this.mob.getX();
+        double dy = this.wantedY - this.mob.getY();
+        double dz = this.wantedZ - this.mob.getZ();
+        if (dx * dx + dy * dy + dz * dz < MIN_SPEED_SQR) {
+            this.mob.setZza(0.0F);
+            return;
+        }
+
+        float wantedYaw = (float)(Mth.atan2(dz, dx) * 180.0F / (float)Math.PI) - 90.0F;
+        this.mob.setYRot(this.rotlerp(this.mob.getYRot(), wantedYaw, MAX_TURN));
+        this.mob.setSpeed((float)(this.speedModifier * this.mob.getAttributeValue(Attributes.MOVEMENT_SPEED)));
+        if (dy > this.mob.maxUpStep() && dx * dx + dz * dz < Math.max(1.0F, this.mob.getBbWidth())) {
+            this.mob.getJumpControl().jump();
+            this.operation = Operation.JUMPING;
+        }
     }
 
     /**

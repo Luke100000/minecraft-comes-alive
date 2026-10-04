@@ -513,9 +513,15 @@ public class VillagerTasksMCA {
                     return memory == null || memory.isEmpty();
                 })),
                 Pair.of(3, new SleepInBed()),
-                Pair.of(5, new RunOne<>(ImmutableMap.of(MemoryModuleType.HOME, MemoryStatus.VALUE_ABSENT), ImmutableList.of(
+                // An already-active REST activity may linger for a tick after an
+                // archer acquires ATTACK_TARGET. Do not let its random stroll or
+                // village-seeking behavior fight the combat movement controller.
+                Pair.of(5, new RunOne<>(ImmutableMap.of(
+                        MemoryModuleType.HOME, MemoryStatus.VALUE_ABSENT,
+                        MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT
+                ), ImmutableList.of(
                         Pair.of(SetClosestHomeAsWalkTarget.create(speed), 1),
-                        Pair.of(InsideBrownianWalk.create(speed), 4),
+                        Pair.of(LocalInsideBrownianWalk.create(speed), 4),
                         Pair.of(GoToClosestVillage.create(speed, 4), 2),
                         // Outside a village these waypoints form a home-seeking journey. Do not insert a
                         // 1-2 second idle between legs; keep normal homeless idling once the villager arrives.

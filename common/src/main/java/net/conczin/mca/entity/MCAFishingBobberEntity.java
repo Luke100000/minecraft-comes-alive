@@ -82,9 +82,21 @@ public final class MCAFishingBobberEntity extends Projectile {
         return bobber;
     }
 
-    @Nullable
-    public VillagerEntityMCA getVillagerOwner() {
-        return getOwner() instanceof VillagerEntityMCA villager ? villager : null;
+    @Override
+    public void remove(RemovalReason reason) {
+        updateOwnerInfo(null);
+        super.remove(reason);
+    }
+
+    @Override
+    public void onClientRemoval() {
+        updateOwnerInfo(null);
+    }
+
+    @Override
+    public void setOwner(@Nullable Entity owner) {
+        super.setOwner(owner);
+        updateOwnerInfo(this);
     }
 
     public boolean isBobbing() {
@@ -116,10 +128,17 @@ public final class MCAFishingBobberEntity extends Projectile {
         shoot(direction.x, direction.y + horizontalDistance * 0.10, direction.z, 0.6F, 0.1F);
     }
 
+    private void updateOwnerInfo(@Nullable MCAFishingBobberEntity bobber) {
+        VillagerEntityMCA owner = getOwner() instanceof VillagerEntityMCA villager ? villager : null;
+        if (owner != null && (bobber != null || owner.getFishingBobber() == this)) {
+            owner.setFishingBobber(bobber);
+        }
+    }
+
     @Override
     public void tick() {
         synchronizedRandom.setSeed(getUUID().getLeastSignificantBits() ^ level().getGameTime());
-        VillagerEntityMCA owner = getVillagerOwner();
+        VillagerEntityMCA owner = getOwner() instanceof VillagerEntityMCA villager ? villager : null;
         if (!level().isClientSide && !canRemain(owner)) {
             MCA.LOGGER.info(
                     "[MCA Fishing Debug] discard-invalid-owner bobber={} owner={} job={} held={} distanceSqr={}",

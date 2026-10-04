@@ -19,7 +19,7 @@ class ConfigLayoutTest {
 
     @Test
     void exposesNativeCommonServerAndClientSpecs() {
-        assertTrue(Config.CLIENT_SPEC.getValues().contains(List.of("villager_behavior", "useSquidwardModels")));
+        assertTrue(Config.COMMON_SPEC.getValues().contains(List.of("villager_behavior", "useSquidwardModels")));
         assertTrue(Config.COMMON_SPEC.getValues().contains(List.of("ai", "villagerChatAIToken")));
         assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("village_behavior", "archerArrowsIgnoreVillagers")));
         assertTrue(Config.SERVER_SPEC.getValues().contains(List.of("destiny", "destinySpawnLocations")));
@@ -64,13 +64,13 @@ class ConfigLayoutTest {
 
     @Test
     void keepsClientOnlySettingsOutOfCommonConfig() {
-        assertEquals(false, Config.CLIENT.useSquidwardModels.getDefault());
+        assertEquals(false, Config.COMMON.useSquidwardModels.getDefault());
         assertEquals(true, Config.CLIENT.showNameTags.getDefault());
         assertEquals(5.0, Config.CLIENT.nameTagDistance.getDefault());
-        assertTrue(Config.CLIENT_SPEC.getValues().contains(List.of("villager_behavior", "useSquidwardModels")));
+        assertFalse(Config.CLIENT_SPEC.getValues().contains(List.of("villager_behavior", "useSquidwardModels")));
         assertTrue(Config.CLIENT_SPEC.getValues().contains(List.of("tts", "enableOnlineTTS")));
         assertTrue(Config.CLIENT_SPEC.getValues().contains(List.of("tts", "onlineTTSModel")));
-        assertFalse(Config.COMMON_SPEC.getValues().contains(List.of("useSquidwardModels")));
+        assertTrue(Config.COMMON_SPEC.getValues().contains(List.of("villager_behavior", "useSquidwardModels")));
         assertFalse(Config.COMMON_SPEC.getValues().contains(List.of("ai", "enableOnlineTTS")));
         assertFalse(Config.COMMON_SPEC.getValues().contains(List.of("ai", "onlineTTSModel")));
         assertFalse(Config.COMMON_SPEC.getValues().contains(List.of("villager_behavior", "showNameTags")));
@@ -146,7 +146,7 @@ class ConfigLayoutTest {
     @Test
     void restartMetadataMatchesActualLifecycleBoundaries() {
         for (ModConfigSpec.ConfigValue<?> value : List.of(
-                Config.CLIENT.useSquidwardModels,
+                Config.COMMON.useSquidwardModels,
                 Config.CLIENT.enableBoobs,
                 Config.CLIENT.onlineTTSServer,
                 Config.CLIENT.player2Url,

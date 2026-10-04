@@ -1,0 +1,60 @@
+package net.conczin.mca.entity.ai.brain.tasks;
+
+import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.behavior.BehaviorControl;
+import net.minecraft.world.entity.ai.behavior.InsideBrownianWalk;
+
+/**
+ * Throttles vanilla's indoor Brownian stroll producer so a blocked villager
+ * does not continuously publish new bounded local path requests.
+ */
+public final class LocalInsideBrownianWalk {
+    private LocalInsideBrownianWalk() {
+    }
+
+    public static BehaviorControl<PathfinderMob> create(float speedModifier) {
+        BehaviorControl<PathfinderMob> vanilla = InsideBrownianWalk.create(speedModifier);
+        WalkTargetRetryGate retryGate = new WalkTargetRetryGate(40L, 1.0D);
+        return new BehaviorControl<>() {
+            @Override
+            public Behavior.Status getStatus() {
+                return vanilla.getStatus();
+            }
+
+            @Override
+            public boolean tryStart(ServerLevel level, PathfinderMob mob, long gameTime) {
+                BlockPos origin = mob.blockPosition();
+                if (!retryGate.canReserve(origin, origin, gameTime)) {
+                    PathRequestDiagnostics.recordDeferredProducerRetry(mob);
+                    return false;
+                }
+                if (!vanilla.tryStart(level, mob, gameTime)) {
+                    return false;
+                }
+                // Vanilla may reject before scanning (an existing target or open sky).
+                // Only an accepted attempt consumes this producer's retry allowance.
+                retryGate.tryReserve(origin, origin, gameTime);
+                return true;
+            }
+
+            @Override
+            public void tickOrStop(ServerLevel level, PathfinderMob mob, long gameTime) {
+                vanilla.tickOrStop(level, mob, gameTime);
+            }
+
+            @Override
+            public void doStop(ServerLevel level, PathfinderMob mob, long gameTime) {
+                vanilla.doStop(level, mob, gameTime);
+            }
+
+            @Override
+            public String debugString() {
+                return vanilla.debugString();
+            }
+        };
+    }
+}

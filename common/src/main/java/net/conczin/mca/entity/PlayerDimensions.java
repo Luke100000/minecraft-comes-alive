@@ -45,7 +45,7 @@ public final class PlayerDimensions {
         if (villager.getPlayerModel() == VillagerLike.PlayerModel.VANILLA) {
             return VANILLA_SCALE;
         }
-        return new Scale(villager.getRawHorizontalScaleFactor(), villager.getRawVerticalScaleFactor());
+        return new Scale(villager.getPhysicalHorizontalScaleFactor(), villager.getPhysicalVerticalScaleFactor());
     }
 
     public static Scale fromPlayerData(PlayerSaveData playerData) {
@@ -77,7 +77,14 @@ public final class PlayerDimensions {
                 * age.height()
                 * gender.getScaleFactor();
 
-        return new Scale(width, height);
+        return physicalScale(width, height);
+    }
+
+    private static Scale physicalScale(float width, float height) {
+        return new Scale(
+                Math.min(VillagerLike.MAX_PHYSICAL_SCALE, width),
+                Math.min(VillagerLike.MAX_PHYSICAL_SCALE, height)
+        );
     }
 
     public static void debugAppliedScale(Player player, EntityDimensions vanilla, EntityDimensions scaled, Scale scale) {

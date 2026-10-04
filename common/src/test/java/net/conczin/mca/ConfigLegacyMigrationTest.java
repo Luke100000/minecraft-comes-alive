@@ -165,7 +165,7 @@ class ConfigLegacyMigrationTest {
             requireEquals(true, Config.SERVER.archerArrowsIgnoreVillagers.getDefault(), "SERVER default changed by legacy JSON");
             requireEquals(false, Config.CLIENT.enableOnlineTTS.getDefault(), "CLIENT TTS default changed by legacy JSON");
             requireEquals("default", Config.CLIENT.onlineTTSModel.getDefault(), "CLIENT TTS model default changed by legacy JSON");
-            requireEquals(false, Config.CLIENT.useSquidwardModels.getDefault(), "CLIENT model default changed by legacy JSON");
+            requireEquals(false, Config.COMMON.useSquidwardModels.getDefault(), "COMMON model default changed by legacy JSON");
             requireEquals(true, Config.CLIENT.showNameTags.getDefault(), "CLIENT default changed by legacy JSON");
 
             Path commonPath = Path.of("config", Config.COMMON_FILE_NAME).toAbsolutePath().normalize();
@@ -190,7 +190,7 @@ class ConfigLegacyMigrationTest {
             requireEquals(false, Config.SERVER.archerArrowsIgnoreVillagers.get(), "SERVER legacy value was not migrated");
             requireEquals(true, Config.CLIENT.enableOnlineTTS.get(), "CLIENT TTS legacy value was not migrated");
             requireEquals("player2", Config.CLIENT.onlineTTSModel.get(), "CLIENT TTS model legacy value was not migrated");
-            requireEquals(true, Config.CLIENT.useSquidwardModels.get(), "CLIENT model legacy value was not migrated");
+            requireEquals(true, Config.COMMON.useSquidwardModels.get(), "COMMON model legacy value was not migrated");
             requireEquals(false, Config.CLIENT.showNameTags.get(), "CLIENT legacy value was not migrated");
             requireEquals(List.of("minecraft:village_desert"), Config.SERVER.destinySpawnLocations.get(), "SERVER list was not migrated");
 
@@ -199,7 +199,7 @@ class ConfigLegacyMigrationTest {
             requireEquals(true, Config.SERVER.archerArrowsIgnoreVillagers.getDefault(), "SERVER default changed after migration");
             requireEquals(false, Config.CLIENT.enableOnlineTTS.getDefault(), "CLIENT TTS default changed after migration");
             requireEquals("default", Config.CLIENT.onlineTTSModel.getDefault(), "CLIENT TTS model default changed after migration");
-            requireEquals(false, Config.CLIENT.useSquidwardModels.getDefault(), "CLIENT model default changed after migration");
+            requireEquals(false, Config.COMMON.useSquidwardModels.getDefault(), "COMMON model default changed after migration");
             requireEquals(true, Config.CLIENT.showNameTags.getDefault(), "CLIENT default changed after migration");
             requireEquals(false, Config.migrateLegacy(Config.COMMON_SPEC, commonPath), "COMMON legacy migration was applied twice");
         }

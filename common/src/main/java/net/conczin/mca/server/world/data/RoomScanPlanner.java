@@ -5,6 +5,7 @@ import net.minecraft.world.level.Level;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 /** Captures fresh Floor evidence once and plans the requested Room operation from it. */
 final class RoomScanPlanner {
@@ -19,7 +20,7 @@ final class RoomScanPlanner {
         BlockPos source = pos == null ? BlockPos.ZERO : pos.immutable();
         if (village == null || pos == null) return new Analysis(RoomScanPlan.addBuilding(source));
 
-        Village.ResolvedInteraction resolved = village.resolveInteractionPosition(pos).orElse(null);
+        Village.ResolvedInteraction resolved = village.resolveInteractionPosition(level, pos).orElse(null);
         RoomScanPlan persistedFloorPlan = null;
         if (resolved != null) {
             Building room = resolved.position().room();
@@ -38,6 +39,11 @@ final class RoomScanPlanner {
         }
         List<RoomPartitioner.Component> components = BuildingRoomScanner.components(level, observation.scan());
         RoomScanPlan freshPlan = planFresh(village, source, observation, components);
+        Building verticalExitRoom = resolveVerticalExitRoom(village, level, source, observation, components, freshPlan);
+        if (verticalExitRoom != null) {
+            return new Analysis(RoomScanPlan.updateRoom(verticalExitRoom, source, observation.seed()),
+                    observation, components);
+        }
         if (persistedFloorPlan == null) {
             return new Analysis(freshPlan, observation, components);
         }
@@ -48,6 +54,31 @@ final class RoomScanPlanner {
         }
         // A rejected fresh plan cannot supply geometry for the persisted target.
         return new Analysis(persistedFloorPlan);
+    }
+
+    /** Older scans omitted vertical top exits; recover only the Room owning this exact component. */
+    private static Building resolveVerticalExitRoom(Village village,
+                                                    Level level,
+                                                    BlockPos source,
+                                                    StructureScanner.FloorObservation observation,
+                                                    List<RoomPartitioner.Component> components,
+                                                    RoomScanPlan plan) {
+        FloorGeometry floor = observation.scan().floor();
+        FloorGeometry.Cell exitCell = floor.interactionCellAt(source.getX(), source.getY(), source.getZ())
+                .orElse(null);
+        if (plan.mode() != Village.RoomScanMode.ADD_ROOM || exitCell == null
+                || !StructureConnector.isVerticalTopExit(level, source)) {
+            return null;
+        }
+        RoomPartitioner.Component selected = selectFreshComponent(floor, exitCell.feet(), components);
+        if (selected == null) return null;
+        List<Building> owners = village.getRooms()
+                .filter(room -> room.getStructureId() == plan.targetStructureId()
+                        && room.getFloorId() == plan.targetFloorId())
+                .filter(room -> floor.roomIdentityOverlapCount(room.getFloorCells(), selected.floorCells()) > 0)
+                .limit(2)
+                .toList();
+        return owners.size() == 1 ? owners.getFirst() : null;
     }
 
     record Analysis(RoomScanPlan plan,
@@ -85,8 +116,22 @@ final class RoomScanPlanner {
             RoomPartitioner.Component selected = selectFreshComponent(
                     observation.scan().floor(), observation.seed(), components);
             if (selected != null) {
+                SelectedFloorScanner.Result scan = observation.scan();
+                BlockPos supportedSource = scan.supportedSource();
+                // A nearby connector handoff discovers a Floor, not ownership of its Room.
+                boolean directSelection = source.equals(supportedSource) || source.above().equals(supportedSource);
+                List<Building> owners = village.getRooms()
+                        .filter(room -> room.getStructureId() == expansion.structureId()
+                                && room.getFloorId() == expansion.floorId())
+                        .filter(room -> room.ownsFloorCell(source)
+                                || directSelection && room.ownsFloorCell(scan.seed()))
+                        .limit(2)
+                        .toList();
+                if (owners.size() == 1) {
+                    return RoomScanPlan.updateRoom(owners.getFirst(), source, scan.seed());
+                }
                 return RoomScanPlan.addRoom(
-                        expansion.structureId(), expansion.floorId(), source, selected.nearestCell(observation.seed()));
+                        expansion.structureId(), expansion.floorId(), source, observation.seed());
             }
         }
 
@@ -102,20 +147,22 @@ final class RoomScanPlanner {
                 candidateFloor, observation.verticalConnections(), observation.scan().adjacentFloorSeeds()).orElse(null);
         if (target == null) return Optional.empty();
 
-        int floorNumber = adjacentFloorNumber(village, target, candidateFloor);
-        if (floorNumber == Integer.MIN_VALUE) return Optional.empty();
+        OptionalInt floorNumber = adjacentFloorNumber(village, target, candidateFloor);
+        if (floorNumber.isEmpty()) return Optional.empty();
         return Optional.of(RoomScanPlan.attachment(
-                target.buildingId(), floorNumber, source, observation.seed(), candidateFloor));
+                target.buildingId(), floorNumber.getAsInt(), source, observation.seed(), candidateFloor));
     }
 
-    private static int adjacentFloorNumber(
+    private static OptionalInt adjacentFloorNumber(
             Village village, Village.AttachmentTarget target, StructureFloor candidate) {
         Structure structure = village.getStructure(target.structureId()).orElse(null);
         StructureFloor reference = structure == null
                 ? null : structure.getFloor(target.floorId()).orElse(null);
-        if (reference == null) return Integer.MIN_VALUE;
+        if (reference == null) return OptionalInt.empty();
         int direction = Integer.compare(candidate.anchorY(), reference.anchorY());
-        return direction == 0 ? Integer.MIN_VALUE : reference.floorNumber() + direction;
+        return direction == 0
+                ? OptionalInt.empty()
+                : OptionalInt.of(reference.floorNumber() + direction);
     }
 
     private static boolean validExpansion(Village village,

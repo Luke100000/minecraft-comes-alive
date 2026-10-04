@@ -5,7 +5,6 @@ import java.util.Map;
 import net.neoforged.neoforge.common.ModConfigSpec;
 
 public final class ClientConfig {
-    public final ModConfigSpec.ConfigValue<Boolean> useSquidwardModels;
     public final ModConfigSpec.ConfigValue<Boolean> showNameTags;
     public final ModConfigSpec.ConfigValue<Double> nameTagDistance;
     public final ModConfigSpec.ConfigValue<Boolean> enableBoobs;
@@ -31,12 +30,6 @@ public final class ClientConfig {
 
     ClientConfig(ModConfigSpec.Builder builder) {
         builder.translation("mca.configuration.section.villager_behavior").push("villager_behavior");
-        useSquidwardModels = builder
-
-                .comment("If true, villagers use the vanilla \"Squidward\" (nose) model.")
-                .translation("mca.configuration.useSquidwardModels")
-                .gameRestart()
-                .define("useSquidwardModels", false);
         showNameTags = builder
 
                 .comment("If true, shows villager name tags above their heads.")
