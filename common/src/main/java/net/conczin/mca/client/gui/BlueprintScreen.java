@@ -623,9 +623,10 @@ public class BlueprintScreen extends ExtendedScreen {
         RemovalControlState removalState = removalControlState(village, scanContext, selectedFloorOrdinal);
         int y = layoutBaseY() - 56 + 22 * 3;
 
-        structureScanButton.setMessage(getStructureScanTranslationKey(primaryMode));
-        structureScanButton.setTooltip(Tooltip.create(Component.translatable(
-                getStructureScanTranslationKey(primaryMode) + ".tooltip")));
+        String scanKey = primaryMode == Village.RoomScanMode.ADD_ATTACHMENT
+                && scanContext.prospectiveFloorNumber() < 0
+                ? "gui.blueprint.addBasement" : getStructureScanTranslationKey(primaryMode);
+        structureScanButton.setMessage(scanKey);
         structureScanButton.active = true;
         structureScanButton.setY(y);
         y += 22;

@@ -101,6 +101,39 @@ final class SelectedFloorScanner {
         SurfaceCell stairOwner = stairFlights.owner(requestedSurface);
         SurfaceCell traversalSeed = stairOwner != null ? stairOwner
                 : resolveSelectedFloorAnchor(requestedSurface, provider);
+        Result selected = scanSelectedFloor(world, requestedSurface, traversalSeed, supportedSource,
+                ceilings, provider, stairFlights, maxSize, maxRadius);
+        if (selected.floor() == null
+                || stairOwner == null && !isExplicitStairTransitionCell(world, requestedSurface.feet())) {
+            return selected;
+        }
+
+        int anchorY = selected.floor().anchorY();
+        if (anchorY == traversalSeed.feet().getY() || !canStep(traversalSeed.surfaceY(), anchorY)) return selected;
+        // A flight can end a step below its room. Use the discovered main surface for the final
+        // band, otherwise selecting that flight can clip stairs along the higher landing's edge.
+        SurfaceCell mainSurface = selected.floor().cells().stream()
+                .map(FloorGeometry.Cell::feet)
+                .filter(pos -> pos.getY() == anchorY)
+                .sorted(CELL_ORDER)
+                .map(pos -> inspectSurfaceCell(world, pos, ceilings))
+                .flatMap(Optional::stream)
+                .findFirst().orElse(null);
+        if (mainSurface == null) return selected;
+        return scanSelectedFloor(world, requestedSurface, mainSurface, supportedSource,
+                ceilings, provider, stairFlights, maxSize, maxRadius);
+    }
+
+    private static Result scanSelectedFloor(
+            Level world,
+            SurfaceCell requestedSurface,
+            SurfaceCell traversalSeed,
+            BlockPos supportedSource,
+            FloorCeilingResolver ceilings,
+            StepProvider provider,
+            StairFlightOwnership stairFlights,
+            int maxSize,
+            int maxRadius) {
         FloorBandClassifier classifier = new FloorBandClassifier(
                 world, new FloorBand(traversalSeed.feet().getY()), provider, stairFlights);
         TraversalScan traversal = traverseSelectedFloor(
@@ -383,7 +416,7 @@ final class SelectedFloorScanner {
                 long candidateColumn = FloorGeometry.columnKey(candidatePos.getX(), candidatePos.getZ());
                 if (ownedColumns.contains(candidateColumn)) continue;
                 SurfaceCell candidate = resolveStructuralNeighbor(
-                        world, candidatePos, current, ceilings, classifier).orElse(null);
+                        world, candidatePos, current, ceilings, classifier, traversal.cells()).orElse(null);
                 if (candidate == null) continue;
 
                 floorCells.put(candidatePos, candidate);
@@ -406,7 +439,8 @@ final class SelectedFloorScanner {
             BlockPos feet,
             SurfaceCell adjacent,
             FloorCeilingResolver ceilings,
-            FloorBandClassifier classifier) {
+            FloorBandClassifier classifier,
+            Map<BlockPos, SurfaceCell> enclosedCells) {
         // A climbable opening belongs to the enclosed Floor beside it even though the ladder's
         // narrow collision shape is not a walking surface. It stays out of traversal discovery.
         if (StructureConnector.isVerticalTopExit(world, feet)) {
@@ -435,7 +469,7 @@ final class SelectedFloorScanner {
             BlockPos head = feet.above();
             if (world.getBlockState(head).isCollisionShapeFullBlock(world, head)
                     && !hasSurroundingFloorEvidence(
-                    world, feet, surfaceY.getAsDouble(), ceilings, classifier)) {
+                    world, feet, surfaceY.getAsDouble(), enclosedCells)) {
                 return Optional.empty();
             }
             return Optional.of(new SurfaceCell(
@@ -445,6 +479,10 @@ final class SelectedFloorScanner {
         for (int y = feet.getY() + 1; y < adjacent.ceilingY(); y++) {
             BlockPos interior = new BlockPos(feet.getX(), y, feet.getZ());
             if (!isOpen(world, interior)) continue;
+            if (!hasInteriorHeadroom(world, interior)
+                    && !hasSurroundingFloorEvidence(world, feet, surfaceY.getAsDouble(), enclosedCells)) {
+                continue;
+            }
             OptionalInt ceilingY = ceilings.ceilingY(interior);
             if (ceilingY.isPresent()) {
                 int localCeilingY = Math.min(ceilingY.getAsInt(), adjacent.ceilingY());
@@ -462,18 +500,14 @@ final class SelectedFloorScanner {
             Level world,
             BlockPos feet,
             double surfaceY,
-            FloorCeilingResolver ceilings,
-            FloorBandClassifier classifier) {
+            Map<BlockPos, SurfaceCell> enclosedCells) {
         int neighbors = 0;
         for (Direction direction : HORIZONTAL) {
             BlockPos horizontal = feet.relative(direction);
             boolean ownedNeighbor = false;
             for (SurfaceProbe landing : findLandings(world, surfaceY, horizontal)) {
-                OptionalInt ceilingY = ceilings.ceilingY(landing.feet());
-                if (ceilingY.isEmpty()) continue;
-                SurfaceCell cell = new SurfaceCell(landing.feet(), landing.surfaceY(), ceilingY.getAsInt());
-                FloorBandDecision decision = classifier.decision(cell);
-                if (decision.owned() && decision.continueTraversal()) {
+                // A geometrically compatible cell across a solid wall is not evidence for this Floor.
+                if (enclosedCells.containsKey(landing.feet())) {
                     ownedNeighbor = true;
                     break;
                 }
@@ -939,7 +973,8 @@ final class SelectedFloorScanner {
             return decisions.computeIfAbsent(cell.feet(), ignored -> {
                 SurfaceCell owner = stairFlights.owner(cell);
                 if (owner != null) {
-                    return owner.feet().getY() == band.anchorY()
+                    // A flight's landing can be one walking step below the room's main surface.
+                    return canStep(band.anchorY(), owner.surfaceY())
                             ? FloorBandDecision.OWNED : FloorBandDecision.ADJACENT;
                 }
                 return floorBandDecision(world, band, cell, provider);
