@@ -14,6 +14,7 @@ import net.conczin.mca.server.world.data.Village;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.block.Blocks;
@@ -154,6 +155,25 @@ class BlueprintScreenMapInteractionTest {
 
         assertEquals(ReportBuildingMessage.Action.SCAN_ROOM, message.action());
         assertEquals(42, message.expectedTargetId());
+    }
+
+    @Test
+    void attachmentButtonDistinguishesBasementsFromUpperFloors() throws Exception {
+        BlueprintScreen screen = new BlueprintScreen();
+        TooltipButtonWidget button = new TooltipButtonWidget(0, 0, 100, 20, "", ignored -> {});
+        setField(screen, "structureScanButton", button);
+        Method update = BlueprintScreen.class.getDeclaredMethod("updateStructureScanControl", RoomScanPlan.class);
+        update.setAccessible(true);
+
+        for (int floorNumber : List.of(-1, -2, 1, 2)) {
+            RoomScanPlan plan = RoomScanPlan.attachment(10, floorNumber, BlockPos.ZERO, BlockPos.ZERO,
+                    floor(0, 64, 68, floorNumber));
+            update.invoke(screen, plan);
+            assertEquals(Component.translatable(floorNumber < 0
+                    ? "gui.blueprint.addBasement" : "gui.blueprint.addFloor"), button.getMessage());
+            assertEquals(ReportBuildingMessage.Action.ADD_ATTACHMENT,
+                    BlueprintScreen.structureScanMessage(plan.mode(), plan).action());
+        }
     }
 
     @Test
