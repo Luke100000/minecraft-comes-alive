@@ -1620,6 +1620,9 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        if (event.button() != InputConstants.MOUSE_BUTTON_LEFT) {
+            return super.mouseClicked(event, doubleClick);
+        }
         if (nameField != null) {
             double mx = event.x();
             double my = event.y();

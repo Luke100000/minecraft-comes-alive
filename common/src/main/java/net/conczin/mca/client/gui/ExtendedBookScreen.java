@@ -102,11 +102,11 @@ public class ExtendedBookScreen extends Screen {
         }
 
         return switch (event.key()) {
-            case 266 -> {
+            case InputConstants.KEY_PAGEUP -> {
                 this.previousPageButton.onPress(event);
                 yield true;
             }
-            case 267 -> {
+            case InputConstants.KEY_PAGEDOWN -> {
                 this.nextPageButton.onPress(event);
                 yield true;
             }

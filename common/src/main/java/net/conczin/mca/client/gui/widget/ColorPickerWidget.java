@@ -42,15 +42,8 @@ public class ColorPickerWidget extends AbstractWidget {
     }
 
     @Override
-    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        if (isInArea(event.x(), event.y())) {
-            update(event.x(), event.y());
-        }
-        return super.mouseClicked(event, doubleClick);
-    }
-
-    private boolean isInArea(double mouseX, double mouseY) {
-        return mouseX >= getX() && mouseX <= getX() + width && mouseY >= getY() && mouseY <= getY() + height;
+    public void onClick(MouseButtonEvent event, boolean doubleClick) {
+        update(event.x(), event.y());
     }
 
     void update(double mouseX, double mouseY) {

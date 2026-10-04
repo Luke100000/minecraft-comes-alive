@@ -111,12 +111,15 @@ public class InteractScreen extends AbstractDynamicScreen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        super.mouseClicked(event, doubleClick);
+        if (super.mouseClicked(event, doubleClick)) {
+            return true;
+        }
 
         // Dialog
         if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && dialogAnswerHover != null && dialogQuestionText != null) {
             //todo double click (Likely fixable via using a different event -- 7.4.0)
             Network.sendToServer(new InteractionDialogueMessage(villager.asEntity().getUUID(), dialogQuestionId, dialogAnswerHover));
+            return true;
         }
 
         // Right mouse button
@@ -140,7 +143,7 @@ public class InteractScreen extends AbstractDynamicScreen {
             }
             return true;
         }
-        return false;
+        return super.keyPressed(event);
     }
 
     private void drawIcons(GuiGraphicsExtractor context) {

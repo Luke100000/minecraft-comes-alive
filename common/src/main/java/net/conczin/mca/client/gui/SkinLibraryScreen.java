@@ -622,19 +622,22 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 isPanning = true;
             }
         } else {
-            if (hoveredContent != null) {
+            if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && hoveredContent != null) {
                 if (previousScreen == null) {
                     focusedContent = hoveredContent;
                     setPage(Page.DETAIL);
+                    return true;
                 } else {
                     if (hoveredContent.hasTag("clothing")) {
                         var villager = previousScreen.getVillager();
                         villager.setClothes("immersive_library:" + hoveredContent.contentid());
                         previousScreen.markClothingSelected();
                         returnToPreviousScreen();
+                        return true;
                     } else if (hoveredContent.hasTag("hair")) {
                         previousScreen.applyLibraryHair("immersive_library:" + hoveredContent.contentid());
                         returnToPreviousScreen();
+                        return true;
                     }
                 }
             }

@@ -1,5 +1,6 @@
 package net.conczin.mca.client.gui;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.conczin.mca.MCA;
 import net.conczin.mca.network.FamilyTreeSearchEntry;
 import net.conczin.mca.network.Network;
@@ -154,7 +155,7 @@ public class FamilyTreeSearchScreen extends Screen {
 
     @Override
     public boolean mouseClicked(@NonNull MouseButtonEvent event, boolean doubleClick) {
-        if (event.button() == 0) {
+        if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
             FamilyTreeSearchEntry entry = searchResultAt(event.x(), event.y());
             if (entry != null) {
                 selectVillager(entry.name(), entry.uuid());
