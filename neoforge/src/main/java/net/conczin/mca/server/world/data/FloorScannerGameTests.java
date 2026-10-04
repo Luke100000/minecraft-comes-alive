@@ -34,6 +34,36 @@ public final class FloorScannerGameTests {
     private FloorScannerGameTests() {
     }
 
+    @GameTest(batch = "mca_floor_wall_air_pocket", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void singleAirPocketInDividingWallDoesNotCreateFloorOverlap(GameTestHelper helper) {
+        BlockPos firstMin = helper.absolutePos(new BlockPos(4, 2, 4));
+        BlockPos secondMin = firstMin.east(5);
+        buildClosedRoom(helper, firstMin, 4, 4);
+        buildClosedRoom(helper, secondMin, 4, 4);
+        raiseClosedRoomRoof(helper, firstMin, 4, 4, 7);
+        raiseClosedRoomRoof(helper, secondMin, 4, 4, 7);
+        BlockPos wallColumn = firstMin.offset(4, 0, 2);
+        for (int height : List.of(2, 0, 1)) {
+            BlockPos pocket = wallColumn.above(height);
+            helper.getLevel().setBlock(pocket, Blocks.AIR.defaultBlockState(), 3);
+            var first = SelectedFloorScanner.scan(helper.getLevel(), firstMin.offset(1, 0, 1), 256, 24);
+            var second = SelectedFloorScanner.scan(helper.getLevel(), secondMin.offset(1, 0, 1), 256, 24);
+            helper.assertTrue(first.result() == Building.validationResult.SUCCESS
+                            && second.result() == Building.validationResult.SUCCESS,
+                    "one-block wall pocket invalidated an enclosed room at height " + height);
+            helper.assertTrue(first.floor().cellsAtColumn(wallColumn.getX(), wallColumn.getZ()).isEmpty()
+                            && second.floor().cellsAtColumn(wallColumn.getX(), wallColumn.getZ()).isEmpty(),
+                    "one air block became shared Floor ownership at height " + height);
+            Structure firstStructure = new Structure(1, first.seed(), List.of(new StructureFloor(0, 0, first.floor())));
+            Structure secondStructure = new Structure(2, second.seed(), List.of(new StructureFloor(0, 0, second.floor())));
+            helper.assertTrue(!firstStructure.intersects(secondStructure),
+                    "separate rooms overlapped through an isolated wall pocket");
+            helper.getLevel().setBlock(pocket, Blocks.STONE.defaultBlockState(), 3);
+        }
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_room_wall_poi", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 100)
     public static void wallPoiCountsWithoutBecomingFloorGeometry(GameTestHelper helper) {
@@ -1078,6 +1108,91 @@ public final class FloorScannerGameTests {
             template = "bastion/blocks/air", timeoutTicks = 120)
     public static void oddStairFlightGivesExtraStepToUpperFloor(GameTestHelper helper) {
         assertStairFlightSplit(helper, 5, List.of(0, 1), List.of(2, 3, 4), true);
+    }
+
+    @GameTest(batch = "mca_floor_stair_uneven_landing", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 160)
+    public static void unevenUpperLandingKeepsItsStairHalfAndRoomIdentity(GameTestHelper helper) {
+        BlockPos origin = helper.absolutePos(new BlockPos(3, 2, 3));
+        buildStaircaseShell(helper, origin, 14, 6, 9);
+        for (int x = 0; x <= 3; x++) {
+            for (int z = 0; z <= 2; z++) {
+                helper.getLevel().setBlock(origin.offset(x, -1, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+            for (int z = 0; z < 6; z++) {
+                helper.getLevel().setBlock(origin.offset(10 + x, 4, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int z = 0; z <= 2; z++) {
+            helper.getLevel().setBlock(origin.offset(9, 3, z), Blocks.STONE.defaultBlockState(), 3);
+        }
+        for (int step = 0; step < 5; step++) {
+            helper.getLevel().setBlock(origin.offset(4 + step, step - 1, 1),
+                    Blocks.STONE_BRICK_STAIRS.defaultBlockState().setValue(StairBlock.FACING, Direction.EAST), 3);
+        }
+        for (int x = 7; x <= 9; x++) {
+            for (int z = 2; z < 6; z++) {
+                helper.getLevel().setBlock(origin.offset(x, 4, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        helper.getLevel().setBlock(origin.offset(8, 4, 2),
+                Blocks.STONE_BRICK_STAIRS.defaultBlockState().setValue(StairBlock.FACING, Direction.SOUTH), 3);
+        BlockPos upperSeed = origin.offset(12, 5, 1);
+        SelectedFloorScanner.Result upper = SelectedFloorScanner.scan(helper.getLevel(), upperSeed, 256, 24);
+        SelectedFloorScanner.Result lower = SelectedFloorScanner.scan(
+                helper.getLevel(), origin.offset(1, 0, 1), 256, 24);
+        helper.assertTrue(upper.result() == Building.validationResult.SUCCESS
+                        && lower.result() == Building.validationResult.SUCCESS,
+                "uneven landing did not discover both floors");
+        helper.assertTrue(upper.floor().anchorY() == origin.getY() + 5,
+                "upper room did not retain its dominant floor height");
+        for (int step = 0; step < 5; step++) {
+            BlockPos feet = origin.offset(4 + step, step, 1);
+            helper.assertTrue(upper.floor().cellAt(feet).isPresent() == (step >= 2),
+                    "uneven upper landing lost its exclusive stair half at step " + step);
+            helper.assertTrue(lower.floor().cellAt(feet).isPresent() == (step < 2),
+                    "lower landing claimed the wrong stair half at step " + step);
+            if (step >= 2) {
+                for (BlockPos source : List.of(feet, feet.below())) {
+                    var observed = StructureScanner.observeFloor(helper.getLevel(), source, List.of()).orElseThrow();
+                    helper.assertTrue(observed.scan().floor().sameCellPositions(upper.floor()),
+                            "stair half selected a different floor at " + source.subtract(origin));
+                }
+            }
+        }
+
+        VillageManager manager = new VillageManager(helper.getLevel());
+        RoomWorkflow workflow = new RoomWorkflow(manager, helper.getLevel());
+        BuildingScanResult initial = workflow.analyzeBuildingAddition(upperSeed);
+        helper.assertTrue(workflow.commitAddition(initial,
+                        initial.isAmbiguous() ? initial.matchingTypes().getFirst() : null).status()
+                        == RoomWorkflow.Status.COMMITTED,
+                "uneven upper room did not register");
+        Village village = manager.findNearestVillage(upperSeed, Village.MERGE_MARGIN).orElseThrow();
+        Building room = village.findInteractionRoomAt(upperSeed).orElseThrow();
+        Structure structure = village.getStructure(room.getStructureId()).orElseThrow();
+        Set<FloorGeometry.Cell> legacyCells = upper.floor().cells().stream()
+                .filter(cell -> cell.feet().getY() >= origin.getY() + 4)
+                .collect(Collectors.toSet());
+        helper.assertTrue(structure.replaceFloorGeometry(room.getFloorId(), new FloorGeometry(legacyCells, Map.of())),
+                "could not reproduce the saved footprint missing its middle stairs");
+        room.setGeometry(upper.min(), upper.max(), legacyCells.stream().map(FloorGeometry.Cell::feet).toList());
+        helper.assertTrue(workflow.scanRoom(upperSeed, room.getId(), null).status() == RoomWorkflow.Status.COMMITTED,
+                "updating the existing room did not repair its missing stairs");
+        Village reloaded = new Village(village.save(), helper.getLevel());
+        for (int step = 2; step < 5; step++) {
+            BlockPos feet = origin.offset(4 + step, step, 1);
+            for (BlockPos source : List.of(feet, feet.below())) {
+                RoomScanPlan plan = reloaded.getRoomScanPlan(helper.getLevel(), source);
+                helper.assertTrue(plan.mode() == Village.RoomScanMode.UPDATE_ROOM
+                                && plan.currentRoom().orElseThrow().getId() == room.getId(),
+                        "registered stair half selected " + plan.mode() + " at " + source.subtract(origin));
+                helper.assertTrue(workflow.scanRoom(source, room.getId(), null).status()
+                                == RoomWorkflow.Status.COMMITTED,
+                        "registered stair half could not update its room");
+            }
+        }
+        helper.succeed();
     }
 
     @GameTest(batch = "mca_floor_block_stair_split", templateNamespace = "minecraft",
@@ -3346,13 +3461,18 @@ public final class FloorScannerGameTests {
 
     private static void buildStaircaseShell(
             GameTestHelper helper, BlockPos origin, int maxX, int roofOffset) {
+        buildStaircaseShell(helper, origin, maxX, 3, roofOffset);
+    }
+
+    private static void buildStaircaseShell(
+            GameTestHelper helper, BlockPos origin, int maxX, int maxZ, int roofOffset) {
         var level = helper.getLevel();
         for (int x = -1; x <= maxX; x++) {
-            for (int z = -1; z <= 3; z++) {
+            for (int z = -1; z <= maxZ; z++) {
                 for (int dy = -2; dy <= roofOffset; dy++) {
                     level.setBlock(origin.offset(x, dy, z), Blocks.AIR.defaultBlockState(), 3);
                 }
-                if (x == -1 || x == maxX || z == -1 || z == 3) {
+                if (x == -1 || x == maxX || z == -1 || z == maxZ) {
                     for (int dy = 0; dy < roofOffset; dy++) {
                         level.setBlock(origin.offset(x, dy, z), Blocks.STONE.defaultBlockState(), 3);
                     }
