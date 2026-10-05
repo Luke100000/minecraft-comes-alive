@@ -40,8 +40,10 @@ forge*changelog.txt
 .*
 
 
-neoforge/run-gametest
+neoforge/run-gametest*/
 neoforge/run-abbenchmark
 neoforge/run-abopen
 neoforge/run-searchbudget-*
 common/logs/
+fabric/logs/
+fabric/config/

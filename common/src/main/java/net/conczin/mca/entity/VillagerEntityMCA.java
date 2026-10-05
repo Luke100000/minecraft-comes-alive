@@ -52,6 +52,7 @@ import net.minecraft.util.ProblemReporter;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.*;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.*;
@@ -716,6 +717,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public boolean hurtServer(ServerLevel level, DamageSource source, float damageAmount) {
+        if (isBaby() && source.is(DamageTypes.IN_WALL)) {
+            return false;
+        }
+
         // no baby squishes
         if (getVehicle() instanceof Player) {
             return super.hurtServer(level, source, 0.0f);
@@ -1107,6 +1112,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void refreshDimensions() {
+        float oldWidth = getBbWidth();
+        float oldHeight = getBbHeight();
+
         updateDimensionsForAge(getVisualAge());
 
         // todo calculateDimensions call move, move sets some flags, but since it's a "fake" move no collision happen
@@ -1115,6 +1123,63 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         boolean oldOnGround = this.onGround();
         super.refreshDimensions();
         this.setOnGround(oldOnGround);
+
+        if ((getBbWidth() > oldWidth || getBbHeight() > oldHeight)
+                && isBaby()
+                && level() instanceof ServerLevel serverLevel
+                && serverLevel.getEntity(getUUID()) == this
+                && isInWall()) {
+            // Vanilla already attempts resize repositioning; rescue any remaining collision,
+            // including growth before the first tick when vanilla skips that search.
+            moveToSafePositionIfSuffocating();
+        }
+    }
+
+    /**
+     * Performs one bounded rescue when a young villager is spawned while suffocating,
+     * or when vanilla's resize repositioning cannot resolve a growth collision.
+     */
+    public boolean moveToSafePositionIfSuffocating() {
+        if (!isInWall()) {
+            return true;
+        }
+
+        BlockPos origin = blockPosition();
+        Vec3 currentPosition = position();
+        int[] verticalOffsets = {0, 1, -1};
+
+        for (int radius = 0; radius <= 2; radius++) {
+            for (int dy : verticalOffsets) {
+                for (int dx = -radius; dx <= radius; dx++) {
+                    for (int dz = -radius; dz <= radius; dz++) {
+                        if (Math.max(Math.abs(dx), Math.abs(dz)) != radius) {
+                            continue;
+                        }
+
+                        BlockPos candidate = origin.offset(dx, dy, dz);
+                        double floorHeight = level().getBlockFloorHeight(candidate);
+                        if (!Double.isFinite(floorHeight) || floorHeight >= 1.0D) {
+                            continue;
+                        }
+                        if (getType().isBlockDangerous(level().getBlockState(candidate))
+                                || floorHeight <= 0.0D && getType().isBlockDangerous(level().getBlockState(candidate.below()))) {
+                            continue;
+                        }
+
+                        Vec3 candidatePosition = Vec3.upFromBottomCenterOf(candidate, floorHeight);
+                        AABB candidateBox = getBoundingBox().move(candidatePosition.subtract(currentPosition));
+                        if (!level().noCollision(this, candidateBox)) {
+                            continue;
+                        }
+
+                        setPos(candidatePosition.x, candidatePosition.y, candidatePosition.z);
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     @Override
@@ -1240,6 +1305,31 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    public void travel(Vec3 input) {
+        if (isSleeping()) {
+            // SleepInBed can start between navigation and MoveControl ticks. Ignore remaining
+            // approach input and gravity while vanilla's sleeping position owns the anchor.
+            setDeltaMovement(Vec3.ZERO);
+            calculateEntityAnimation(false);
+            return;
+        }
+        super.travel(input);
+    }
+
+    @Override
+    public boolean isPushable() {
+        return !isSleeping() && super.isPushable();
+    }
+
+    @Override
+    protected void doPush(Entity entity) {
+        if (isSleeping()) {
+            return;
+        }
+        super.doPush(entity);
+    }
+
+    @Override
     public EntityDimensions getDefaultDimensions(Pose pose) {
         Entity vehicle = getVehicle();
         if (vehicle instanceof Player) {
@@ -1250,30 +1340,42 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             return SLEEPING_DIMENSIONS;
         }
 
-        float height = getPhysicalVerticalScaleFactor() * 2.0F;
+        float height = getPhysicalStandingHeight();
         float width = getPhysicalHorizontalScaleFactor() * 0.6F;
 
-        return EntityDimensions.scalable(width, height).withAttachments(EntityAttachments.builder()
-                .attach(EntityAttachment.VEHICLE, 0.0F, getVisualVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F));
+        return EntityDimensions.scalable(width, height)
+                .withEyeHeight(getPhysicalStandingEyeHeight())
+                .withAttachments(EntityAttachments.builder()
+                        .attach(EntityAttachment.VEHICLE, 0.0F, getVisualVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F)
+                        .attach(EntityAttachment.NAME_TAG, 0.0F, getVisualNameTagHeight(), 0.0F));
+    }
+
+    @Override
+    protected void dropCustomDeathLoot(ServerLevel serverLevel, DamageSource cause, boolean recentlyHit) {
+        // MCA owns villager equipment separately, so do not let Mob drop equipped items here.
     }
 
     @Override
     public void die(DamageSource cause) {
-        // deselect equipment as this messes with MobEntities equipment dropping
-        for (EquipmentSlot slot : EquipmentSlot.values()) {
-            this.setItemSlot(slot, ItemStack.EMPTY);
-        }
-
-        //death message
-        if (!level().isClientSide()) {
-            getResidency().getHomeVillage().flatMap(Village::getCivilRegistry).ifPresent(r -> r.addText(getCombatTracker().getDeathMessage()));
+        if (dead) {
+            return;
         }
 
         super.die(cause);
 
+        // NeoForge can cancel LivingDeathEvent inside super.die(). Leave MCA's persistent
+        // death state untouched unless vanilla committed the death.
+        if (!dead) {
+            return;
+        }
+
         if (level().isClientSide()) {
             return;
         }
+
+        //death message
+        getResidency().getHomeVillage().flatMap(Village::getCivilRegistry)
+                .ifPresent(r -> r.addText(getCombatTracker().getDeathMessage()));
 
         //drop stuff
         InventoryUtils.dropAllItems(this, inventory);
@@ -1675,6 +1777,19 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         Optional<Integer> savedVanillaAge = input.getInt("Age");
         CompoundTag nbt = McaDataFixers.update(readMcaSaveData(input));
         super.readAdditionalSaveData(input);
+
+        if (!level().isClientSide() && isSleeping()) {
+            boolean sleepingAtHome = getBrain().getMemory(MemoryModuleType.HOME)
+                    .filter(home -> home.dimension().equals(level().dimension()))
+                    .map(home -> home.pos())
+                    .equals(getSleepingPos());
+            if (!sleepingAtHome) {
+                // Vanilla persists sleeping_pos independently from the Brain. Do not restore a stale
+                // sleeping pose when the saved villager no longer owns that position as HOME.
+                stopSleeping();
+            }
+        }
+
         boolean vanillaAgeLocked = super.isAgeLocked();
 
         getTypeDataManager().load(this, nbt);

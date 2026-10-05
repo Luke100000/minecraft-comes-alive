@@ -207,22 +207,25 @@ public final class TombstoneBlockGameTests {
         spouse.getRelationships().marry(deceased);
 
         deceased.getRelationships().onDeath(helper.getLevel().damageSources().generic());
+        // 26.1.2 deliberately defers relationship death finalization to the server queue.
+        // Assert after that target-native lifecycle step rather than requiring 1.21.1's same-stack timing.
+        helper.runAfterDelay(1, () -> {
+            GraveyardManager graves = GraveyardManager.getGlobal(helper.getLevel());
+            GlobalPos grave = graves.getOccupiedGrave(deceased.getUUID()).orElseThrow();
+            var view = FamilyTreeViewBuilder.build(
+                    FamilyTree.get(helper.getLevel()),
+                    spouse.getUUID(),
+                    0,
+                    0,
+                    graves::getOccupiedGrave
+            ).orElseThrow();
 
-        GraveyardManager graves = GraveyardManager.getGlobal(helper.getLevel());
-        GlobalPos grave = graves.getOccupiedGrave(deceased.getUUID()).orElseThrow();
-        var view = FamilyTreeViewBuilder.build(
-                FamilyTree.get(helper.getLevel()),
-                spouse.getUUID(),
-                0,
-                0,
-                graves::getOccupiedGrave
-        ).orElseThrow();
-
-        helper.assertTrue(view.nodes().containsKey(deceased.getUUID()),
-                "widowed spouse must retain the deceased partner in the family tree");
-        helper.assertTrue(view.graves().get(deceased.getUUID()).equals(grave),
-                "deceased spouse in the family tree must expose the exact grave created by death handling");
-        helper.succeed();
+            helper.assertTrue(view.nodes().containsKey(deceased.getUUID()),
+                    "widowed spouse must retain the deceased partner in the family tree");
+            helper.assertTrue(view.graves().get(deceased.getUUID()).equals(grave),
+                    "deceased spouse in the family tree must expose the exact grave created by death handling");
+            helper.succeed();
+        });
     }
 
     private static VillagerEntityMCA spawnVillager(GameTestHelper helper, BlockPos relativePos, String name) {

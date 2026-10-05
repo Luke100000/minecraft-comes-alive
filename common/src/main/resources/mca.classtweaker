@@ -1,5 +1,15 @@
 classTweaker v1 official
 
+# Reuse native chunk scheduling without the public API's server-thread managedBlock.
+accessible method net/minecraft/server/level/ServerChunkCache getChunkFutureMainThread (IILnet/minecraft/world/level/chunk/status/ChunkStatus;Z)Ljava/util/concurrent/CompletableFuture;
+# Hold generated chunks for the duration of an interruptible async structure search.
+accessible field net/minecraft/server/level/ServerChunkCache ticketStorage Lnet/minecraft/world/level/TicketStorage;
+# Await native ring-position generation interruptibly, without duplicating its generation logic.
+accessible field net/minecraft/world/level/chunk/ChunkGeneratorStructureState ringPositions Ljava/util/Map;
+
+# Read the exact schedule selected when MCA configured a villager brain.
+accessible field net/minecraft/world/entity/ai/Brain schedule Lnet/minecraft/world/attribute/EnvironmentAttribute;
+
 # Widen vanilla registry value constructors used by common registrations.
 accessible method net/minecraft/core/particles/SimpleParticleType <init> (Z)V
 accessible method net/minecraft/world/entity/ai/memory/MemoryModuleType <init> (Ljava/util/Optional;)V
@@ -13,12 +23,23 @@ extendable method net/minecraft/world/entity/AgeableMob setBaby (Z)V
 accessible method net/minecraft/world/entity/npc/villager/Villager startTrading (Lnet/minecraft/world/entity/player/Player;)V
 accessible method net/minecraft/world/entity/npc/villager/Villager setUnhappy ()V
 
+# Restore vanilla trading data when the Staff of Life cures a resurrected zombie.
+accessible field net/minecraft/world/entity/monster/zombie/ZombieVillager gossips Lnet/minecraft/world/entity/ai/gossip/GossipContainer;
+accessible field net/minecraft/world/entity/monster/zombie/ZombieVillager tradeOffers Lnet/minecraft/world/item/trading/MerchantOffers;
+
 # Widen AdvancementRewards.loot to allow temporary modification without an accessor mixin.
 accessible field net/minecraft/advancements/AdvancementRewards loot Ljava/util/List;
 mutable field net/minecraft/advancements/AdvancementRewards loot Ljava/util/List;
 
 # Widen MoveControl.rotlerp for task usage
 accessible method net/minecraft/world/entity/ai/control/MoveControl rotlerp (FFF)F
+
+# Reuse PathNavigation's effective ordinary-search horizon instead of mirroring
+# vanilla's required-path-length policy in MCA.
+accessible method net/minecraft/world/entity/ai/navigation/PathNavigation getMaxPathLength ()F
+
+# Widen GroundPathNavigation.getSurfaceY so MCA can make water-tag-aware navigation without replacing getTempMobPos.
+extendable method net/minecraft/world/entity/ai/navigation/GroundPathNavigation getSurfaceY ()I
 
 # Reuse vanilla's fishing-line curve primitive for MCA villager bobbers.
 accessible method net/minecraft/client/renderer/entity/FishingHookRenderer stringVertex (FFFLcom/mojang/blaze3d/vertex/VertexConsumer;Lcom/mojang/blaze3d/vertex/PoseStack$Pose;FFF)V
@@ -28,9 +49,6 @@ accessible method net/minecraft/world/entity/projectile/Projectile <init> (Lnet/
 
 # Reuse ItemEntity's vanilla infinite-delay sentinel when identifying protected MCA reel items.
 accessible field net/minecraft/world/entity/item/ItemEntity INFINITE_PICKUP_DELAY I
-
-# Widen GroundPathNavigation.getSurfaceY so MCA can make water-tag-aware navigation without replacing getTempMobPos.
-extendable method net/minecraft/world/entity/ai/navigation/GroundPathNavigation getSurfaceY ()I
 
 # Widen LivingEntity's air-movement calculation so MCA villagers can preserve
 # navigation-controlled vertical velocity while traversing climbables.

@@ -65,6 +65,7 @@ public record DestinyMessage(Optional<DestinyDestination> destination) implement
             return;
         }
 
+        MCA.getStructureLocator().cancel(serverPlayer.getUUID());
         DestinyDestination selectedDestination = destination.get();
         var server = serverPlayer.level().getServer();
         List<DestinyDestination> allowedDestinations =
@@ -86,20 +87,26 @@ public record DestinyMessage(Optional<DestinyDestination> destination) implement
         }
 
         BlockPos searchOrigin = getSearchOrigin(serverPlayer, targetLevel);
-        MCA.executorService.execute(() -> {
-            Optional<BlockPos> result = DestinyLocationResolver.findNearest(
-                    targetLevel,
-                    searchOrigin,
-                    selectedDestination,
-                    128
-            );
+        ServerLevel sourceLevel = serverPlayer.level();
+        DestinyLocationResolver.findNearestAsync(
+                serverPlayer.getUUID(),
+                targetLevel,
+                searchOrigin,
+                selectedDestination,
+                128
+        ).thenAccept(result -> {
+            if (serverPlayer.isRemoved() || serverPlayer.level() != sourceLevel
+                    || !Config.getInstance().allowDestinyTeleportation
+                    || !DestinyLocationResolver.getCachedDestinations(server).contains(selectedDestination)) {
+                return;
+            }
             result.ifPresentOrElse(
-                    pos -> server.execute(() -> handleBlockPos(
+                    pos -> handleBlockPos(
                             serverPlayer,
                             targetLevel,
                             selectedDestination.location(),
                             pos
-                    )),
+                    ),
                     () -> notifyDestinationNotFound(serverPlayer)
             );
         });
@@ -118,9 +125,9 @@ public record DestinyMessage(Optional<DestinyDestination> destination) implement
     }
 
     private static void notifyDestinationNotFound(ServerPlayer player) {
-        player.level().getServer().execute(() -> player.sendSystemMessage(
+        player.sendSystemMessage(
                 Component.translatable("destiny.teleport.failed").withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)
-        ));
+        );
     }
 
     static TicketType destinyTeleportTicket() {

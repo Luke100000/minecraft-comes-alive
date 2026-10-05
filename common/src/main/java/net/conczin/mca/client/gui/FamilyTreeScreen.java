@@ -134,9 +134,14 @@ public class FamilyTreeScreen extends Screen {
         searchField.setResponder(this::searchFamily);
 
         addRenderableWidget(new ButtonWidget(header.zoomOutX(), controlsY, ZOOM_BUTTON_WIDTH, 20, Component.literal("-"), button -> setZoom(viewport.zoom() - 0.1F)));
-        zoomLabel = addRenderableWidget(new ButtonWidget(header.zoomLabelX(), controlsY, ZOOM_LABEL_WIDTH, 20, zoomLabel(), button -> {
-        }));
-        zoomLabel.active = false;
+        zoomLabel = addRenderableWidget(new ButtonWidget(
+                header.zoomLabelX(),
+                controlsY,
+                ZOOM_LABEL_WIDTH,
+                20,
+                zoomLabel(),
+                button -> setZoom(1.0F)
+        ));
         addRenderableWidget(new ButtonWidget(header.zoomInX(), controlsY, ZOOM_BUTTON_WIDTH, 20, Component.literal("+"), button -> setZoom(viewport.zoom() + 0.1F)));
         addRenderableWidget(new ButtonWidget(header.fitX(), controlsY, FIT_WIDTH, 20, Component.translatable("gui.family_tree.fit"), button -> {
             viewport = fitView(layout, width, canvasHeight(), FIT_PADDING);
@@ -429,7 +434,16 @@ public class FamilyTreeScreen extends Screen {
     }
 
     private void renderEdges(GuiGraphicsExtractor context, Map<UUID, FamilyTreeNode> nodes) {
+        // Draw child stems underneath relationship icons, including their transparent padding.
+        renderEdges(context, nodes, FamilyTreeLayout.EdgeType.PARENT_CHILD);
+        renderEdges(context, nodes, FamilyTreeLayout.EdgeType.PARTNER);
+    }
+
+    private void renderEdges(GuiGraphicsExtractor context, Map<UUID, FamilyTreeNode> nodes, FamilyTreeLayout.EdgeType type) {
         for (FamilyTreeLayout.Edge edge : layout.edges()) {
+            if (edge.type() != type) {
+                continue;
+            }
             FamilyTreeLayout.Card from = card(edge.from());
             FamilyTreeLayout.Card to = card(edge.to());
             if (from == null || to == null) {
@@ -442,7 +456,13 @@ public class FamilyTreeScreen extends Screen {
             if (edge.type() == FamilyTreeLayout.EdgeType.PARTNER) {
                 FamilyTreeNode fromNode = nodes.get(edge.from());
                 FamilyTreeNode toNode = nodes.get(edge.to());
-                Optional<RelationshipState> relationshipState = fromNode == null || toNode == null
+                boolean inferredMarriage = fromNode != null
+                        && toNode != null
+                        && !fromNode.partner().equals(toNode.id())
+                        && !toNode.partner().equals(fromNode.id());
+                Optional<RelationshipState> relationshipState = inferredMarriage
+                        ? Optional.of(RelationshipState.MARRIED_TO_VILLAGER)
+                        : fromNode == null || toNode == null
                         ? Optional.empty()
                         : partnerRelationshipState(
                                 fromNode.getRelationshipState(),
@@ -472,7 +492,16 @@ public class FamilyTreeScreen extends Screen {
                     context.horizontalLine(Math.min(x1, x2), Math.max(x1, x2), y1, 0xFFE0E0E0);
                 }
             } else {
-                int midY = (y1 + y2) / 2;
+                if (edge.secondParent() != null) {
+                    FamilyTreeLayout.Card secondParent = card(edge.secondParent());
+                    if (secondParent != null) {
+                        x1 = (x1 + secondParent.bounds().centerX()) / 2;
+                    }
+                } else {
+                    y1 = from.bounds().bottom();
+                }
+                y2 = to.bounds().top();
+                int midY = (from.bounds().bottom() + y2) / 2;
                 context.verticalLine(x1, Math.min(y1, midY), Math.max(y1, midY), 0xFFB8B8B8);
                 context.horizontalLine(Math.min(x1, x2), Math.max(x1, x2), midY, 0xFFB8B8B8);
                 context.verticalLine(x2, Math.min(midY, y2), Math.max(midY, y2), 0xFFB8B8B8);

@@ -1,6 +1,7 @@
 package net.conczin.mca.mixin;
 
 import net.conczin.mca.ducks.IVillagerEntity;
+import net.conczin.mca.entity.ZombieVillagerEntityMCA;
 import net.minecraft.world.DifficultyInstance;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.SpawnGroupData;
@@ -36,6 +37,9 @@ abstract class MixinZombieVillager implements IVillagerEntity {
 
     @ModifyVariable(method = "setVillagerData", at = @At("HEAD"), ordinal = 0, argsOnly = true)
     private VillagerData setVillagerData(VillagerData villagerData) {
+        if ((Object) this instanceof ZombieVillagerEntityMCA) {
+            return villagerData;
+        }
         var professionKey = villagerData.profession().unwrapKey();
         if (professionKey.isPresent() && professionKey.get().identifier().getNamespace().equals("mca")) {
             villagerData = villagerData.withProfession(net.minecraft.core.registries.BuiltInRegistries.VILLAGER_PROFESSION.getOrThrow(VillagerProfession.NONE));

@@ -597,6 +597,8 @@ public final class MCAGroundPathNavigationGameTests {
         BlockPos start = helper.absolutePos(new BlockPos(4, 1, 4));
         BlockPos destination = start.east(100);
         prepareFlatPath(helper, start, destination);
+        BlockPos offRoute = start.east(4).south(4);
+        helper.getLevel().setBlock(offRoute, Blocks.AIR.defaultBlockState(), 3);
         VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
                 .withAge(0).withPosition(Vec3.atBottomCenterOf(start)).spawn(EntitySpawnReason.STRUCTURE);
         villager.refreshBrain(helper.getLevel());
@@ -613,7 +615,6 @@ public final class MCAGroundPathNavigationGameTests {
 
         helper.runAfterDelay(21, () -> {
             try {
-                BlockPos offRoute = start.east(4).south(4);
                 helper.assertTrue(villager.getNavigation().shouldRecomputePath(offRoute),
                         "partial route lost vanilla's broader block-update invalidation");
                 PathRequestDiagnostics.RecomputeSnapshot before =
