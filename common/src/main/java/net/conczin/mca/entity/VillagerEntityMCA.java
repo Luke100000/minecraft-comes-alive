@@ -1056,8 +1056,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 setInfectionProgress(infection);
 
                 if (infection > 1.0f) {
-                    convertTo(EntityTypes.ZOMBIE_VILLAGER, ConversionParams.single(this, false, false), mob -> {
-                    });
+                    convertTo(EntityTypes.ZOMBIE_VILLAGER, ConversionParams.single(this, false, false), this::finalizeInfectionConversion);
                 }
             }
 
@@ -1729,36 +1728,43 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         //nop
     }
 
+    private void finalizeInfectionConversion(ZombieVillager zombie) {
+        ServerLevel serverLevel = (ServerLevel) level();
+        zombie.finalizeSpawn(serverLevel, serverLevel.getCurrentDifficultyAt(zombie.blockPosition()), EntitySpawnReason.CONVERSION,
+                new Zombie.ZombieGroupData(false, true));
+        level().levelEvent(null, 1026, blockPosition(), 0);
+    }
+
     @SuppressWarnings({"unchecked", "rawtypes"})
     @Override
     @Nullable
     public <T extends Mob> T convertTo(EntityType<T> type, ConversionParams params, ConversionParams.AfterConversion<T> afterConversion) {
         boolean convertingToZombieVillager = !isRemoved() && type == EntityTypes.ZOMBIE_VILLAGER;
-        if (convertingToZombieVillager) {
-            residency.leaveHome();
-        }
         EntityType<? extends Mob> convertedType = convertingToZombieVillager ? getGenetics().getGender().getZombieType() : type;
 
         UUID oldUuid = getUUID();
 
         return (T) super.convertTo((EntityType) convertedType, params, mob -> {
-            ((ConversionParams.AfterConversion) afterConversion).finalizeConversion(mob);
-
-            if (mob instanceof VillagerLike<?> zombie) {
-                zombie.copyVillagerAttributesFrom(this);
+            if (mob instanceof ZombieVillager zombie) {
+                // 26.2+ tracks whether villager data has already been finalized. Preserve it
+                // before spawn finalization, matching vanilla's infection conversion order.
+                zombie.setVillagerDataFinalized(getVillagerDataFinalized());
             }
 
+            ((ConversionParams.AfterConversion) afterConversion).finalizeConversion(mob);
+
             if (mob instanceof ZombieVillager zombie) {
-                ServerLevel serverLevel = (ServerLevel) level();
-                zombie.finalizeSpawn(serverLevel, serverLevel.getCurrentDifficultyAt(zombie.blockPosition()), EntitySpawnReason.CONVERSION, new Zombie.ZombieGroupData(false, true));
                 zombie.setVillagerData(getVillagerData());
                 zombie.setGossips(getGossips().copy());
                 zombie.setTradeOffers(getOffers().copy());
                 zombie.setVillagerXp(getVillagerXp());
-                zombie.setUUID(oldUuid);
                 zombie.setPersistenceRequired();
+            }
 
-                level().levelEvent(null, 1026, this.blockPosition(), 0);
+            if (mob instanceof VillagerLike<?> zombie) {
+                // Spawn initialization may validate or initialize MCA state, so restore the
+                // source villager's state only after the converted entity has been finalized.
+                zombie.copyVillagerAttributesFrom(this);
             }
 
             if (mob instanceof ZombieVillagerEntityMCA zombie) {
@@ -1766,7 +1772,15 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 zombie.setAgeState(getAgeState());
             }
 
-            this.discard();
+            if (mob instanceof ZombieVillager && params.type().shouldDiscardAfterConversion()) {
+                if (convertingToZombieVillager) {
+                    residency.leaveHome();
+                }
+                mob.setUUID(oldUuid);
+                // Vanilla registers the converted mob before discarding the source. Free the
+                // preserved UUID now so addFreshEntity can register the replacement.
+                this.discard();
+            }
         });
     }
 

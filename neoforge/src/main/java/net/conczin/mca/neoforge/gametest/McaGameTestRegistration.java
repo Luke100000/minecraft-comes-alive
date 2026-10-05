@@ -6,6 +6,7 @@ import net.conczin.mca.block.TombstoneBlockGameTests;
 import net.conczin.mca.entity.VillagerBedAlignmentGameTests;
 import net.conczin.mca.entity.VillagerCarryPositionGameTests;
 import net.conczin.mca.entity.VillagerChildSuffocationGameTests;
+import net.conczin.mca.entity.VillagerConversionGameTests;
 import net.conczin.mca.entity.VillagerRecoveryFoodGameTests;
 import net.conczin.mca.entity.VillagerVoicePitchGameTests;
 import net.conczin.mca.entity.ai.ChoreToolMatchingGameTests;
@@ -89,6 +90,7 @@ public final class McaGameTestRegistration {
             VillagerBedAlignmentGameTests.class,
             VillagerCarryPositionGameTests.class,
             VillagerChildSuffocationGameTests.class,
+            VillagerConversionGameTests.class,
             VillagerRecoveryFoodGameTests.class,
             VillagerVoicePitchGameTests.class,
             ChoreToolMatchingGameTests.class,
