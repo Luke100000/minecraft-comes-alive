@@ -15,9 +15,10 @@ import net.conczin.mca.registry.ProfessionsMCA;
 import net.conczin.mca.server.world.data.FamilyTree;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
-import net.conczin.mca.util.WorldUtils;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderSet;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
 import net.minecraft.resources.Identifier;
@@ -267,19 +268,28 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                         arg = Config.getInstance().structuresInRumors.get(entity.getRandom().nextInt(Config.getInstance().structuresInRumors.size()));
                     }
 
-                    //slightly randomly the search center
+                    // Capture entity/registry state here; the locator returns on this server thread.
                     ServerLevel world = (ServerLevel) entity.level();
-                    String finalArg = arg;
-                    MCA.executorService.execute(() -> {
-                        Identifier identifier = Identifier.parse(finalArg);
-                        BlockPos pos = RandomPos.generateRandomDirection(entity.getRandom(), 1024, 0).offset(entity.blockPosition());
-                        Optional<BlockPos> position = WorldUtils.getClosestStructurePosition(world, pos, identifier, 64);
-                        if (position.isPresent()) {
-                            String posString = position.get().getX() + "," + position.get().getY() + "," + position.get().getZ();
-                            entity.sendChatMessage(player, "dialogue.location." + identifier.getPath(), posString);
-                        } else {
-                            entity.sendChatMessage(player, "dialogue.location.forgot");
+                    Identifier identifier = Identifier.tryParse(arg);
+                    BlockPos pos = RandomPos.generateRandomDirection(entity.getRandom(), 1024, 0).offset(entity.blockPosition());
+                    if (identifier == null) {
+                        entity.sendChatMessage(player, "dialogue.location.forgot");
+                        break;
+                    }
+                    var structure = world.registryAccess().lookupOrThrow(Registries.STRUCTURE).get(identifier);
+                    if (structure.isEmpty()) {
+                        entity.sendChatMessage(player, "dialogue.location.forgot");
+                        break;
+                    }
+                    MCA.getStructureLocator().locate(entity.getUUID(), world, pos,
+                            HolderSet.direct(structure.orElseThrow()), 64).thenAccept(position -> {
+                        if (!entity.isAlive() || player.isRemoved() || entity.level() != world || player.level() != world) {
+                            return;
                         }
+                        position.ifPresentOrElse(found -> {
+                            String posString = found.getX() + "," + found.getY() + "," + found.getZ();
+                            entity.sendChatMessage(player, "dialogue.location." + identifier.getPath(), posString);
+                        }, () -> entity.sendChatMessage(player, "dialogue.location.forgot"));
                     });
                 } else {
                     entity.sendChatMessage(player, "dialogue.location.forgot");

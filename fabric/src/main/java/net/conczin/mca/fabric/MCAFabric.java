@@ -135,9 +135,7 @@ public final class MCAFabric implements ModInitializer {
         Registry.register(BuiltInRegistries.CREATIVE_MODE_TAB, mcaTab, build);
 
         // Register events
-        ServerLifecycleEvents.SERVER_STARTING.register(server -> {
-            MCA.startExecutorService();
-        });
+        ServerLifecycleEvents.SERVER_STARTING.register(MCA::startServer);
         ServerLifecycleEvents.SERVER_STARTED.register(server ->
                 DestinyLocationResolver.refreshCachedDestinations(server, Config.getInstance())
         );
@@ -148,11 +146,11 @@ public final class MCAFabric implements ModInitializer {
         });
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             DestinyLocationResolver.clearCachedDestinations(server);
-            MCA.shutdownExecutorService();
+            MCA.stopServer(server);
         });
+        ServerLifecycleEvents.SERVER_STOPPED.register(MCA::finishServerStop);
         ServerTickEvents.END_LEVEL_TICK.register(w -> VillageManager.get(w).tick());
         ServerTickEvents.END_SERVER_TICK.register(s -> ServerInteractionManager.getInstance().tick());
-        ServerTickEvents.END_SERVER_TICK.register(MCA::setServer);
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
                 ServerInteractionManager.getInstance().onPlayerJoin(handler.player)

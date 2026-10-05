@@ -3,6 +3,7 @@ package net.conczin.mca.block;
 import com.mojang.serialization.MapCodec;
 import net.conczin.mca.entity.Infectable;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Mourning;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
@@ -33,6 +34,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.zombie.ZombieVillager;
+import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.TypedEntityData;
@@ -356,8 +358,9 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
 
                 if (resurrectionProgress > 500) {
                     resurrectionProgress = 0;
+                    sync();
 
-                    createEntity(level, true).ifPresent(entity -> {
+                    createEntity(level, false).ifPresent(entity -> {
                         generateLightning();
                         entity.clearFire();
                         entity.setPortalCooldown();
@@ -376,14 +379,13 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
 
                         boolean alreadySpawned = false;
                         if (cure && (entity instanceof ZombieVillager zombie)) {
-                            // spawnEntity is called here, so don't call it twice
-                            entity = zombie.convertTo(EntityType.VILLAGER, ConversionParams.single(zombie, false, false), villager -> {
-                            });
-                            alreadySpawned = true;
-                        }
+                            Villager villager = cureResurrectedZombie(zombie);
+                            if (villager == null) {
+                                return;
+                            }
 
-                        if (entity instanceof CompassionateEntity<?> compassionateEntity) {
-                            compassionateEntity.getRelationships().getFamilyEntry().setDeceased(false);
+                            entity = villager;
+                            alreadySpawned = true;
                         }
 
                         if (entity instanceof VillagerEntityMCA villager) {
@@ -400,12 +402,57 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
                             );
                         }
 
-                        if (!alreadySpawned) {
-                            level.addFreshEntity(entity);
+                        if (!alreadySpawned && !level.addFreshEntity(entity)) {
+                            return;
                         }
+
+                        if (entity instanceof CompassionateEntity<?> compassionateEntity) {
+                            compassionateEntity.getRelationships().getFamilyEntry().setDeceased(false);
+                        }
+
+                        setEntity(null);
                     });
                 }
             }
+        }
+
+        @Nullable
+        private Villager cureResurrectedZombie(ZombieVillager zombie) {
+            if (!(level instanceof ServerLevel serverLevel)) {
+                return null;
+            }
+
+            Villager villager = zombie.convertTo(
+                    EntityType.VILLAGER,
+                    ConversionParams.single(zombie, false, false),
+                    converted -> {
+                        // Restore cure data without vanilla's equipment drops, player credit or nausea.
+                        converted.setVillagerData(zombie.getVillagerData());
+                        if (zombie.gossips != null) {
+                            converted.setGossips(zombie.gossips.copy());
+                        }
+                        if (zombie.tradeOffers != null) {
+                            converted.setOffers(zombie.tradeOffers.copy());
+                        }
+                        converted.setVillagerXp(zombie.getVillagerXp());
+                        converted.finalizeSpawn(
+                                serverLevel,
+                                serverLevel.getCurrentDifficultyAt(converted.blockPosition()),
+                                EntitySpawnReason.CONVERSION,
+                                null
+                        );
+                        if (zombie instanceof VillagerLike<?> source && converted instanceof VillagerLike<?> target) {
+                            // Setting the profession can randomize MCA clothing; retain the stored appearance.
+                            target.copyVillagerAttributesFrom(source);
+                        }
+                        converted.refreshBrain(serverLevel);
+                    }
+            );
+
+            if (villager == null || serverLevel.getEntity(villager.getUUID()) != villager) {
+                return null;
+            }
+            return villager;
         }
 
         private void generateLightning() {

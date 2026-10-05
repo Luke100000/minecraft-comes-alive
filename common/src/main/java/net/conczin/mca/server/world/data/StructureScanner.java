@@ -102,25 +102,13 @@ final class StructureScanner {
         SelectedFloorScanner.Observation observation = new SelectedFloorScanner.Observation(
                 world, config.maxBuildingSize, config.maxBuildingRadius);
         SelectedFloorScanner.Result selected = observation.selected(seed);
-        int anchorY = floor.anchorY();
-        if (selected.result() == Building.validationResult.SUCCESS && selected.floor().anchorY() != anchorY) {
-            // A stored stair cell can change owners. An explicit rescan must retain its target Floor.
-            BlockPos anchorSeed = floor.geometry().cells().stream()
-                    .map(FloorGeometry.Cell::feet)
-                    .filter(candidate -> candidate.getY() == anchorY)
-                    .sorted(Comparator.comparingInt((BlockPos candidate) -> manhattanDistance(candidate, source))
-                            .thenComparingInt(BlockPos::getX).thenComparingInt(BlockPos::getZ))
-                    .filter(candidate -> isWalkableAnchor(world, candidate))
-                    .findFirst().orElse(null);
-            if (anchorSeed == null) return Result.failure(Building.validationResult.NOT_IN_BUILDING, source);
-            SelectedFloorScanner.Result anchored = observation.selected(anchorSeed);
-            if (anchored.result() != Building.validationResult.SUCCESS) {
-                return Result.failure(anchored.result(), source);
-            }
-            // Preserve the interaction's Room component when both seeds still resolve one Floor.
-            if (!selected.floor().sameCellPositions(anchored.floor())) selected = anchored;
-        }
-        return resultFromObservedFloor(source, selected, existing, structure.getId(), structure.getLogicalBuildingId());
+        Result validated = resultFromObservedFloor(source, selected, existing,
+                structure.getId(), structure.getLogicalBuildingId());
+        if (validated.result() != Building.validationResult.SUCCESS) return validated;
+        // The Floor's traversal anchor and the requested Room cell have different roles.
+        BlockPos interactionCell = selected.floor().interactionCellAt(
+                source.getX(), source.getY(), source.getZ()).map(FloorGeometry.Cell::feet).orElse(validated.source());
+        return new Result(Building.validationResult.SUCCESS, interactionCell, selected);
     }
 
     private static Optional<SelectedFloorScanner.Result> resolveAttachmentSeed(Level world, BlockPos source) {
@@ -231,13 +219,15 @@ final class StructureScanner {
     }
 
     /**
-     * Player block positions can lie inside partial-height collision blocks such as slabs or stairs.
-     * Fresh discovery still needs an open feet cell, so normalize that interaction to the supported
-     * cell immediately above without teaching the scanner about individual block classes.
+     * Player block positions can lie inside partial collision shapes or one block above the surface
+     * while standing across a step's edge. Normalize to a supported feet cell in the same column.
      */
     private static Optional<BlockPos> resolveStandingSurfaceSeed(Level world, BlockPos source) {
         if (isWalkableAnchor(world, source)) return Optional.of(source.immutable());
-        if (world.getBlockState(source).getCollisionShape(world, source).isEmpty()) return Optional.empty();
+        if (world.getBlockState(source).getCollisionShape(world, source).isEmpty()) {
+            BlockPos below = source.below();
+            return isWalkableAnchor(world, below) ? Optional.of(below.immutable()) : Optional.empty();
+        }
 
         BlockPos above = source.above();
         return isWalkableAnchor(world, above)
@@ -272,23 +262,20 @@ final class StructureScanner {
 
     private static boolean hasSameBandOverlap(StructureFloor candidate, Structure structure) {
         return structure.getFloors().stream()
-                .anyMatch(candidate::overlapsSameSemanticBand);
+                .anyMatch(candidate::overlapsNearbyFloorBand);
     }
 
     private static Optional<BlockPos> resolveExistingSeed(
             Level world, StructureFloor floor, BlockPos source) {
         if (floor == null || source == null) return Optional.empty();
         FloorGeometry geometry = floor.geometry();
-        FloorGeometry.Cell owned = geometry.interactionCellAt(
-                source.getX(), source.getY(), source.getZ()).orElse(null);
-        if (owned != null && isWalkableAnchor(world, owned.feet())) {
-            return Optional.of(owned.feet().immutable());
-        }
-
+        // An explicit refresh targets the persisted Floor, even if an old stair cell now
+        // belongs upstairs. Select its ordinary anchor before scanning, rather than rescan.
         return geometry.cells().stream()
                 .map(FloorGeometry.Cell::feet)
                 .sorted(Comparator
-                        .comparingInt((BlockPos candidate) -> manhattanDistance(candidate, source))
+                        .comparingInt((BlockPos candidate) -> Math.abs(candidate.getY() - floor.anchorY()))
+                        .thenComparingInt(candidate -> manhattanDistance(candidate, source))
                         .thenComparingInt(BlockPos::getY)
                         .thenComparingInt(BlockPos::getX)
                         .thenComparingInt(BlockPos::getZ))

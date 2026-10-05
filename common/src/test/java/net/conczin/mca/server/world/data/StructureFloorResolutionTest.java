@@ -75,6 +75,46 @@ class StructureFloorResolutionTest {
     }
 
     @Test
+    void newlyObservedLadderEntryKeepsItsPersistedConnectorRoom() {
+        BlockPos ladder = new BlockPos(0, 64, 0);
+        BlockPos landing = new BlockPos(1, 64, 0);
+        StructureFloor floor = TestStructureFloors.create(0, 64, 68, 0,
+                TestFloorFootprint.fromFootprint(64, Set.of(ladder, landing)),
+                List.of(new FloorConnector.Marker(ladder, FloorConnector.Type.LADDER, landing)));
+        Structure structure = structure(floor);
+        Building room = room(100, 10, 0, Set.of(landing));
+
+        Structure.InteractionPosition interaction = structure.resolveVerticalSide(
+                ladder, List.of(ladder, ladder.above()), List.of(room)).orElseThrow();
+
+        assertEquals(floor, interaction.floor());
+        assertEquals(room, interaction.room());
+        assertTrue(structure.resolveVerticalSide(ladder, List.of(), List.of(room))
+                .orElseThrow().room() == null);
+    }
+
+    @Test
+    void unregisteredLadderEntryDoesNotChooseBetweenConflictingConnectorRooms() {
+        BlockPos ladder = new BlockPos(0, 64, 0);
+        BlockPos firstCell = new BlockPos(1, 64, 0);
+        BlockPos secondCell = new BlockPos(-1, 64, 0);
+        StructureFloor floor = TestStructureFloors.create(0, 64, 68, 0,
+                TestFloorFootprint.fromFootprint(64, Set.of(ladder, firstCell, secondCell)),
+                List.of(new FloorConnector.Marker(ladder, FloorConnector.Type.LADDER, firstCell),
+                        new FloorConnector.Marker(ladder.above(), FloorConnector.Type.LADDER, secondCell)));
+        Structure structure = structure(floor);
+        Building first = room(100, 10, 0, Set.of(firstCell));
+        Building second = room(101, 10, 0, Set.of(secondCell));
+
+        assertTrue(structure.resolveVerticalSide(ladder, List.of(ladder, ladder.above()), List.of(first, second))
+                .orElseThrow().room() == null);
+
+        Building exactOwner = room(102, 10, 0, Set.of(ladder));
+        assertEquals(exactOwner, structure.resolveVerticalSide(
+                ladder, List.of(ladder, ladder.above()), List.of(first, second, exactOwner)).orElseThrow().room());
+    }
+
+    @Test
     void interactionOnSupportBlockImmediatelyBelowFloorUsesPersistedFloorGeometry() {
         StructureFloor floor = floor(0, 64, 68);
         Structure structure = structure(floor);

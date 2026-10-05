@@ -32,7 +32,7 @@ public final class BedPoiCompatibilityGameTests {
 
     @SubscribeEvent
     public static void register(RegisterEvent event) {
-        if (event.getRegistryKey() != Registries.BLOCK) {
+        if (event.getRegistryKey() != Registries.BLOCK || !Boolean.getBoolean("mca.gametest.enabled")) {
             return;
         }
 

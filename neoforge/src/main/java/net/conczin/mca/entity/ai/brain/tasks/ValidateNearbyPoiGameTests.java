@@ -10,7 +10,9 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.conczin.mca.neoforge.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.ai.behavior.SleepInBed;
@@ -22,6 +24,8 @@ import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.level.storage.TagValueInput;
+import net.minecraft.world.level.storage.TagValueOutput;
 import net.minecraft.world.phys.Vec3;
 import net.conczin.mca.neoforge.gametest.GameTestHolder;
 import net.conczin.mca.neoforge.gametest.PrefixGameTestTemplate;
@@ -121,6 +125,37 @@ public final class ValidateNearbyPoiGameTests {
                 "observer retained HOME already occupied by another villager");
         helper.assertTrue(GameTestPoi.getFreeTickets(poiManager, head) == 0,
                 "validating a duplicate HOME released the sleeping villager's POI ticket");
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void sleepingVillagerWithoutHomeWakesOnLoad(GameTestHelper helper) {
+        BlockPos foot = helper.absolutePos(new BlockPos(3, 1, 3));
+        Direction facing = Direction.EAST;
+        BlockPos head = foot.relative(facing);
+        placeBed(helper, foot, facing);
+
+        VillagerEntityMCA villager = spawnVillager(helper, head.relative(Direction.SOUTH), "Stale Sleeper");
+        villager.startSleeping(head);
+        villager.getBrain().eraseMemory(MemoryModuleType.HOME);
+        helper.assertTrue(villager.isSleeping(), "fixture villager did not start in the stale sleeping state");
+
+        TagValueOutput output = TagValueOutput.createWithContext(
+                ProblemReporter.DISCARDING, helper.getLevel().registryAccess());
+        villager.saveWithoutId(output);
+        CompoundTag saved = output.buildResult();
+        helper.assertTrue(saved.contains("sleeping_pos"), "fixture did not persist sleeping_pos");
+
+        villager.stopSleeping();
+        villager.discard();
+
+        VillagerEntityMCA reloaded = VillagerFactory.newVillager(helper.getLevel()).build();
+        reloaded.load(TagValueInput.create(
+                ProblemReporter.DISCARDING, helper.getLevel().registryAccess(), saved));
+
+        helper.assertTrue(!reloaded.isSleeping(), "villager restored stale sleeping_pos without HOME");
+        helper.assertTrue(!helper.getLevel().getBlockState(head).getValue(BedBlock.OCCUPIED),
+                "stale loaded sleeper left the bed marked occupied");
         helper.succeed();
     }
 

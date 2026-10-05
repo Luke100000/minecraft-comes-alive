@@ -45,6 +45,7 @@ import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -143,12 +144,11 @@ public final class CommonNeoForge {
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
         ServerInteractionManager.getInstance().tick();
-        MCA.setServer(event.getServer());
     }
 
     @SubscribeEvent
     public static void onServerStarting(ServerStartingEvent event) {
-        MCA.startExecutorService();
+        MCA.startServer(event.getServer());
     }
 
     @SubscribeEvent
@@ -166,7 +166,12 @@ public final class CommonNeoForge {
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
         DestinyLocationResolver.clearCachedDestinations(event.getServer());
-        MCA.shutdownExecutorService();
+        MCA.stopServer(event.getServer());
+    }
+
+    @SubscribeEvent
+    public static void onServerStopped(ServerStoppedEvent event) {
+        MCA.finishServerStop(event.getServer());
     }
 
     @SubscribeEvent

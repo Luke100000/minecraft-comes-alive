@@ -8,6 +8,7 @@ import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.MoodGroup;
 import net.conczin.mca.entity.ai.Mourning;
+import net.conczin.mca.entity.ai.SchedulesMCA;
 import net.conczin.mca.entity.ai.brain.tasks.EnterGraveyardTask;
 import net.conczin.mca.entity.ai.brain.tasks.GrieveTask;
 import net.conczin.mca.entity.ai.brain.tasks.MournAtGraveTask;
@@ -16,6 +17,7 @@ import net.conczin.mca.entity.ai.relationship.RelationshipType;
 import net.conczin.mca.registry.BlocksMCA;
 import net.minecraft.util.Util;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.conczin.mca.neoforge.gametest.GameTest;
 import net.conczin.mca.neoforge.gametest.GameTestHolder;
@@ -37,7 +39,9 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
 import net.minecraft.world.phys.AABB;
@@ -163,6 +167,94 @@ public final class VillageMourningGameTests {
     }
 
     @GameTest(batch = "mca_mourning_lifecycle", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void restInterruptsMourningAndPreservesDaytimeResumption(GameTestHelper helper) {
+        long previousDayTime = getDayTime(helper.getLevel());
+        try {
+            setDayTime(helper.getLevel(), 6_000L);
+            BlockPos grave = helper.absolutePos(new BlockPos(3, 1, 3));
+            prepareFlatArea(helper, grave, 3, 3);
+            occupyGrave(helper, grave);
+            VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(4, 1, 3), "Bedtime Mourner");
+            mourner.getBrain().setSchedule(SchedulesMCA.DEFAULT);
+            mourner.setItemInHand(InteractionHand.MAIN_HAND, Items.IRON_SWORD.getDefaultInstance());
+            Mourning.start(mourner, grave);
+            helper.assertTrue(new EnterGraveyardTask().tryStart(helper.getLevel(), mourner, helper.getLevel().getGameTime()),
+                    "fixture could not assign a graveside standing position");
+            MournAtGraveTask mourn = new MournAtGraveTask();
+            helper.assertTrue(mourn.tryStart(helper.getLevel(), mourner, helper.getLevel().getGameTime()),
+                    "fixture could not start graveside mourning");
+
+            // GRIEVE has no schedule updater: interruption must notice scheduled REST itself.
+            setDayTime(helper.getLevel(), 18_000L);
+            mourn.tickOrStop(helper.getLevel(), mourner, helper.getLevel().getGameTime() + 1L);
+            helper.assertTrue(mourn.getStatus() == Behavior.Status.STOPPED,
+                    "scheduled REST must interrupt running mourning even while GRIEVE is active");
+            helper.assertTrue(mourner.getBrain().isActive(Activity.REST), "mourner did not return to REST");
+            helper.assertTrue(mourner.getMainHandItem().is(Items.IRON_SWORD),
+                    "bedtime interruption did not restore the item displaced by the flower");
+            helper.assertTrue(mourner.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_FLOWER).isEmpty(),
+                    "bedtime interruption retained flower ownership");
+            helper.assertTrue(isMourningAt(mourner, helper.getLevel(), grave),
+                    "bedtime must preserve the assigned grave for later resumption");
+            helper.assertTrue(!new GrieveTask().tryStart(helper.getLevel(), mourner, helper.getLevel().getGameTime() + 2L),
+                    "retained mourning immediately overrode REST again");
+            Mourning.resume(mourner);
+            helper.assertTrue(mourner.getBrain().isActive(Activity.REST), "direct resumption overrode bedtime");
+
+            setDayTime(helper.getLevel(), 6_000L);
+            mourner.getBrain().setActiveActivityIfPossible(Activity.IDLE);
+            helper.assertTrue(new GrieveTask().tryStart(helper.getLevel(), mourner, helper.getLevel().getGameTime() + 3L),
+                    "paused mourning could not resume after scheduled REST ended");
+            helper.assertTrue(mourner.getBrain().isActive(ActivitiesMCA.GRIEVE), "daytime mourning did not resume");
+        } finally {
+            setDayTime(helper.getLevel(), previousDayTime);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_mourning_lifecycle", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void personalMourningCannotInterruptAnAlreadySleepingVillager(GameTestHelper helper) {
+        long previousDayTime = getDayTime(helper.getLevel());
+        try {
+            // Also protect an actual sleeping pose outside its scheduled rest period.
+            setDayTime(helper.getLevel(), 6_000L);
+            BlockPos grave = helper.absolutePos(new BlockPos(3, 1, 3));
+            occupyGrave(helper, grave);
+            VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(4, 1, 3), "Sleeping Mourner");
+            mourner.getBrain().setSchedule(SchedulesMCA.DEFAULT);
+            mourner.getBrain().setActiveActivityIfPossible(Activity.REST);
+            BlockPos bed = helper.absolutePos(new BlockPos(4, 1, 5));
+            var footState = Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.SOUTH);
+            helper.getLevel().setBlock(bed.north(), footState, 3);
+            helper.getLevel().setBlock(bed, footState.setValue(BedBlock.PART, BedPart.HEAD), 3);
+            mourner.startSleeping(bed);
+            helper.assertTrue(mourner.isSleeping(), "fixture did not enter the sleeping pose");
+
+            Mourning.start(mourner, grave);
+            helper.assertTrue(mourner.getBrain().isActive(Activity.REST),
+                    "new personal mourning displaced the sleeping villager's REST activity");
+            helper.assertTrue(mourner.isSleeping(), "mourning woke the sleeping villager");
+            helper.assertTrue(isMourningAt(mourner, helper.getLevel(), grave),
+                    "sleeping villager lost the pending personal grave assignment");
+            helper.assertTrue(!new GrieveTask().tryStart(helper.getLevel(), mourner, helper.getLevel().getGameTime()),
+                    "sleeping villager resumed mourning before waking");
+
+            mourner.stopSleeping();
+            mourner.getBrain().setSchedule(SchedulesMCA.NIGHT_OWL_DEFAULT);
+            Mourning.resume(mourner);
+            helper.assertTrue(mourner.getBrain().isActive(Activity.REST),
+                    "night owl's daytime rest was overridden by mourning");
+            setDayTime(helper.getLevel(), 18_000L);
+            Mourning.resume(mourner);
+            helper.assertTrue(mourner.getBrain().isActive(ActivitiesMCA.GRIEVE),
+                    "night owl could not resume mourning during its scheduled waking hours");
+        } finally {
+            setDayTime(helper.getLevel(), previousDayTime);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_mourning_lifecycle", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void combatInterruptsMourningApproach(GameTestHelper helper) {
         BlockPos grave = helper.absolutePos(new BlockPos(6, 1, 3));
         prepareFlatArea(helper, grave, 6, 3);
@@ -275,6 +367,135 @@ public final class VillageMourningGameTests {
                 "reloaded mourning cleanup retained stale previous-hand ownership");
         helper.assertTrue(reloaded.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_FLOWER).isEmpty(),
                 "reloaded mourning cleanup retained stale flower ownership");
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void cancelledMourningAfterReloadRestoresOnlyItsOwnedHand(GameTestHelper helper) {
+        long previousDayTime = getDayTime(helper.getLevel());
+        try {
+            setDayTime(helper.getLevel(), 6_000L);
+            BlockPos grave = helper.absolutePos(new BlockPos(3, 1, 3));
+            prepareFlatArea(helper, grave, 3, 3);
+            occupyGrave(helper, grave);
+            VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(4, 1, 3), "Reload Cleanup Mourner");
+            mourner.getBrain().setSchedule(SchedulesMCA.DEFAULT);
+            mourner.setItemInHand(InteractionHand.MAIN_HAND, Items.IRON_SWORD.getDefaultInstance());
+            Mourning.start(mourner, grave);
+            helper.assertTrue(new EnterGraveyardTask().tryStart(helper.getLevel(), mourner, helper.getLevel().getGameTime()),
+                    "fixture could not assign a graveside standing position");
+            helper.assertTrue(new MournAtGraveTask().tryStart(helper.getLevel(), mourner, helper.getLevel().getGameTime()),
+                    "fixture could not start flower ownership");
+            TagValueOutput output = TagValueOutput.createWithContext(
+                    ProblemReporter.DISCARDING, helper.getLevel().registryAccess());
+            mourner.saveWithoutId(output);
+            CompoundTag saved = output.buildResult();
+            mourner.discard();
+            helper.getLevel().setBlock(grave, Blocks.AIR.defaultBlockState(), 3);
+
+            for (boolean replacedHand : new boolean[]{false, true}) {
+                VillagerEntityMCA reloaded = VillagerFactory.newVillager(helper.getLevel()).build();
+                reloaded.load(TagValueInput.create(
+                        ProblemReporter.DISCARDING, helper.getLevel().registryAccess(), saved.copy()));
+                reloaded.refreshBrain(helper.getLevel());
+                reloaded.getBrain().setSchedule(SchedulesMCA.DEFAULT);
+                reloaded.getBrain().setActiveActivityIfPossible(Activity.IDLE);
+                if (replacedHand) {
+                    reloaded.setItemInHand(InteractionHand.MAIN_HAND, Items.BOW.getDefaultInstance());
+                }
+                helper.assertTrue(!new GrieveTask().tryStart(helper.getLevel(), reloaded, helper.getLevel().getGameTime()),
+                        "invalid grave restarted mourning after reload");
+                helper.assertTrue(reloaded.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE).isEmpty(),
+                        "invalid grave assignment was not cleared");
+                helper.assertTrue(reloaded.getMainHandItem().is(replacedHand ? Items.BOW : Items.IRON_SWORD),
+                        "reload cleanup failed to restore the displaced item or overwrote its replacement");
+                helper.assertTrue(reloaded.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_FLOWER).isEmpty()
+                                && reloaded.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND).isEmpty(),
+                        "reload cleanup retained temporary hand ownership");
+            }
+        } finally {
+            setDayTime(helper.getLevel(), previousDayTime);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void disablingMourningForgetsAssignmentAndRestoresHandIncludingAfterReload(GameTestHelper helper) {
+        long previousDayTime = getDayTime(helper.getLevel());
+        boolean previousEnabled = Config.getInstance().enableMourning;
+        try {
+            Config.getInstance().enableMourning = true;
+            setDayTime(helper.getLevel(), 6_000L);
+            BlockPos grave = helper.absolutePos(new BlockPos(3, 1, 3));
+            prepareFlatArea(helper, grave, 3, 3);
+            occupyGrave(helper, grave);
+            VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(4, 1, 3), "Disabled Cleanup Mourner");
+            mourner.getBrain().setSchedule(SchedulesMCA.DEFAULT);
+            mourner.setItemInHand(InteractionHand.MAIN_HAND, Items.IRON_SWORD.getDefaultInstance());
+            Mourning.start(mourner, grave);
+            helper.assertTrue(new EnterGraveyardTask().tryStart(helper.getLevel(), mourner, helper.getLevel().getGameTime()),
+                    "fixture could not assign a graveside standing position");
+            MournAtGraveTask task = new MournAtGraveTask();
+            helper.assertTrue(task.tryStart(helper.getLevel(), mourner, helper.getLevel().getGameTime()),
+                    "fixture could not start flower ownership");
+            TagValueOutput output = TagValueOutput.createWithContext(
+                    ProblemReporter.DISCARDING, helper.getLevel().registryAccess());
+            mourner.saveWithoutId(output);
+            CompoundTag saved = output.buildResult();
+
+            VillagerEntityMCA approaching = spawnVillager(helper, new BlockPos(5, 1, 3), "Disabled Approach Mourner");
+            approaching.getBrain().setSchedule(SchedulesMCA.DEFAULT);
+            Mourning.start(approaching, grave);
+            Zombie zombie = EntityType.ZOMBIE.create(helper.getLevel(), EntitySpawnReason.STRUCTURE);
+            helper.assertTrue(zombie != null, "fixture could not create a monster");
+            zombie.setNoAi(true);
+            Vec3 zombiePos = Vec3.atBottomCenterOf(grave.above());
+            zombie.snapTo(zombiePos.x, zombiePos.y, zombiePos.z);
+            helper.getLevel().addFreshEntity(zombie);
+            helper.assertTrue(Mourning.isAssignedGraveUnsafe(mourner), "fixture must make the assigned grave unsafe");
+
+            Config.getInstance().enableMourning = false;
+            task.tickOrStop(helper.getLevel(), mourner, helper.getLevel().getGameTime() + 1L);
+            helper.assertTrue(task.getStatus() == Behavior.Status.STOPPED,
+                    "running mourning ignored the disabled setting");
+            helper.assertTrue(!mourner.getBrain().isActive(ActivitiesMCA.GRIEVE), "disabled mourning remained active");
+            helper.assertTrue(mourner.getMainHandItem().is(Items.IRON_SWORD), "disabled mourning kept its flower");
+            helper.assertTrue(mourner.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE).isEmpty()
+                            && mourner.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_POSITION).isEmpty()
+                            && mourner.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_RETRY_AT).isEmpty(),
+                    "disabled mourning retained an assignment or retry for an unsafe grave");
+            new EnterGraveyardTask().tryStart(helper.getLevel(), approaching, helper.getLevel().getGameTime());
+            helper.assertTrue(approaching.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE).isEmpty(),
+                    "disabled mourning retained an approaching villager's assignment");
+
+            VillagerEntityMCA reloaded = VillagerFactory.newVillager(helper.getLevel()).build();
+            reloaded.load(TagValueInput.create(
+                    ProblemReporter.DISCARDING, helper.getLevel().registryAccess(), saved));
+            reloaded.refreshBrain(helper.getLevel());
+            reloaded.getBrain().setSchedule(SchedulesMCA.DEFAULT);
+            reloaded.getBrain().setActiveActivityIfPossible(Activity.IDLE);
+            helper.assertTrue(!new GrieveTask().tryStart(helper.getLevel(), reloaded, helper.getLevel().getGameTime()),
+                    "disabled mourning restarted after reload");
+            helper.assertTrue(reloaded.getMainHandItem().is(Items.IRON_SWORD),
+                    "disabled mourning retained saved flower ownership after reload");
+            helper.assertTrue(reloaded.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_FLOWER).isEmpty()
+                            && reloaded.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND).isEmpty(),
+                    "disabled mourning retained temporary hand ownership after reload");
+            helper.assertTrue(reloaded.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE).isEmpty()
+                            && reloaded.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_POSITION).isEmpty()
+                            && reloaded.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_RETRY_AT).isEmpty(),
+                    "disabled mourning retained a saved assignment or retry");
+            Mourning.start(reloaded, grave);
+            helper.assertTrue(reloaded.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE).isEmpty(),
+                    "disabled mourning accepted a new assignment");
+            zombie.discard();
+            Config.getInstance().enableMourning = true;
+            helper.assertTrue(!new GrieveTask().tryStart(helper.getLevel(), reloaded, helper.getLevel().getGameTime()),
+                    "forgotten mourning resumed after re-enabling the setting");
+        } finally {
+            Config.getInstance().enableMourning = previousEnabled;
+            setDayTime(helper.getLevel(), previousDayTime);
+        }
         helper.succeed();
     }
 
@@ -978,6 +1199,11 @@ public final class VillageMourningGameTests {
     private static void setDayTime(ServerLevel level, long ticks) {
         var clock = level.dimensionType().defaultClock().orElseThrow();
         level.clockManager().setTotalTicks(clock, ticks);
+    }
+
+    private static long getDayTime(ServerLevel level) {
+        var clock = level.dimensionType().defaultClock().orElseThrow();
+        return level.clockManager().getTotalTicks(clock);
     }
 
     private static boolean isMourningAt(VillagerEntityMCA villager, ServerLevel level, BlockPos grave) {

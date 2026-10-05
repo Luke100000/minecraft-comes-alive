@@ -66,23 +66,33 @@ public final class ExtendedWalkTowardsTask {
             return context.group(
                     context.registered(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
                     context.registered(MemoryModuleType.WALK_TARGET),
-                    context.present(destination)).apply(context,
+                    context.registered(destination)).apply(context,
                     (cantReachWalkTargetSince, walkTarget, destinationResult) -> {
                         return (world, entity, time) -> {
-                            GlobalPos globalPos = context.get(destinationResult);
+                            Optional<GlobalPos> rememberedDestination = context.tryGet(destinationResult);
+                            if (rememberedDestination.isEmpty()) {
+                                retractOwnedWalkTarget(entity, destination)
+                                        .ifPresent(ownedDestination -> retryGate.reset(ownedDestination.pos()));
+                                return true;
+                            }
+
+                            GlobalPos globalPos = rememberedDestination.orElseThrow();
                             BlockPos targetPos = globalPos.pos();
                             boolean sameDimension = globalPos.dimension() == world.dimension();
                             WalkTargetFailureMemory.clearIfTargetChanged(entity, globalPos);
 
                             WalkTarget currentWalkTarget = context.tryGet(walkTarget).orElse(null);
                             if (sameDimension) {
-                                noteJourneyProgress(entity, retryGate, targetPos, currentWalkTarget, time);
+                                noteJourneyProgress(entity, retryGate, destination, globalPos, currentWalkTarget, time);
                             }
 
                             if (currentWalkTarget != null) {
-                                if (!preserveCurrentWalkTarget(entity, retryGate, globalPos, currentWalkTarget, policy)) {
+                                if (!preserveCurrentWalkTarget(entity, retryGate, destination, globalPos, currentWalkTarget, policy)) {
                                     walkTarget.erase();
-                                    WalkTargetFailureMemory.clear(entity);
+                                    if (currentWalkTarget instanceof DestinationOwnedWalkTarget ownedTarget
+                                            && ownedTarget.ownedBy(destination)) {
+                                        WalkTargetFailureMemory.clearIfTargetMatches(entity, ownedTarget.destination());
+                                    }
                                 }
                                 return true;
                             }
@@ -106,12 +116,14 @@ public final class ExtendedWalkTowardsTask {
                             if (sameDimension && (failureSince.isEmpty() || unreachableTicks <= maxRunTime)) {
                                 if (failureSince.isPresent()
                                         && !routeInvalidated
-                                        && (unreachableTicks < UNREACHABLE_PATH_RETRY_TICKS
-                                        || unreachableTicks % UNREACHABLE_PATH_RETRY_TICKS != 0L)) {
+                                        && unreachableTicks < UNREACHABLE_PATH_RETRY_TICKS) {
                                     return true;
                                 }
 
-                                WalkTarget proposedTarget = proposeWalkTarget(world, entity, globalPos,
+                                // ConditionalTask can run this producer every other tick.
+                                // Exact failure-age multiples can then be missed forever;
+                                // the retry gate owns the interval between attempts.
+                                WalkTarget proposedTarget = proposeWalkTarget(world, entity, destination, globalPos,
                                         speed, completionRange, policy);
                                 if (proposedTarget == null) {
                                     // Short trips may finish below the physical-progress threshold.
@@ -149,44 +161,53 @@ public final class ExtendedWalkTowardsTask {
     }
 
     private static void noteJourneyProgress(VillagerEntityMCA entity, WalkTargetRetryGate retryGate,
-                                            BlockPos destination, @Nullable WalkTarget currentTarget, long time) {
+                                            MemoryModuleType<GlobalPos> destinationMemory, GlobalPos destination,
+                                            @Nullable WalkTarget currentTarget, long time) {
+        BlockPos targetPos = destination.pos();
         // A flank or its return leg has not established a route to the destination.
         // Navigation clears failure itself when the detour finds a reachable path.
         if (entity.getNavigation() instanceof MCAGroundPathNavigation navigation
-                && navigation.isTakingDetourTo(destination)) {
+                && navigation.isTakingDetourTo(targetPos)) {
             return;
         }
         // Only this destination's transit (or the gap between segments) can
         // refresh its failure age. Combat movement belongs to another producer.
         boolean ownsMovement = currentTarget == null
-                || (currentTarget.getTarget() instanceof BlockPosTracker transit
-                && transit.currentBlockPosition().equals(destination));
-        if (ownsMovement && retryGate.noteProgress(destination, entity.blockPosition(), time)) {
+                || currentTarget instanceof DestinationOwnedWalkTarget ownedTarget
+                && ownedTarget.matches(destinationMemory, destination);
+        if (ownsMovement && retryGate.noteProgress(targetPos, entity.blockPosition(), time)) {
             WalkTargetFailureMemory.clear(entity);
         }
     }
 
     private static boolean preserveCurrentWalkTarget(VillagerEntityMCA entity, WalkTargetRetryGate retryGate,
-                                                     GlobalPos destination, WalkTarget currentTarget, Policy policy) {
-        PositionTracker tracker = currentTarget.getTarget();
-        boolean matchesDestination = destination.dimension() == entity.level().dimension()
-                && tracker.currentBlockPosition().equals(destination.pos());
-        if (matchesDestination && isReached(entity, currentTarget)) {
-            completeJourney(entity, retryGate, destination.pos());
+                                                     MemoryModuleType<GlobalPos> destinationMemory, GlobalPos destination,
+                                                     WalkTarget currentTarget, Policy policy) {
+        if (currentTarget instanceof DestinationOwnedWalkTarget ownedFinalTarget) {
+            if (!ownedFinalTarget.ownedBy(destinationMemory)) {
+                return true;
+            }
+            if (!ownedFinalTarget.destination().equals(destination)) {
+                return false;
+            }
+            if (isReached(entity, currentTarget)) {
+                completeJourney(entity, retryGate, destination.pos());
+            }
+            return !(currentTarget.getTarget() instanceof PersistentPathTarget)
+                    || policy.finalTargetResolver() == NO_FINAL_TARGET_OVERRIDE
+                    || MCAGroundPathNavigation.requiresExtendedPath(entity, destination.pos());
         }
-        if (!(tracker instanceof PersistentPathTarget)) {
-            return true;
-        }
-        return matchesDestination && (policy.finalTargetResolver() == NO_FINAL_TARGET_OVERRIDE
-                || MCAGroundPathNavigation.requiresExtendedPath(entity, destination.pos()));
+        return true;
     }
 
     @Nullable
-    private static WalkTarget proposeWalkTarget(ServerLevel world, VillagerEntityMCA entity, GlobalPos destination,
+    private static WalkTarget proposeWalkTarget(ServerLevel world, VillagerEntityMCA entity,
+                                                MemoryModuleType<GlobalPos> destinationMemory, GlobalPos destination,
                                                 float speed, int completionRange, Policy policy) {
         BlockPos targetPos = destination.pos();
         if (MCAGroundPathNavigation.requiresExtendedPath(entity, targetPos)) {
-            return new WalkTarget(new PersistentPathTarget(targetPos), speed, completionRange);
+            return new DestinationOwnedWalkTarget(destinationMemory, destination,
+                    new PersistentPathTarget(targetPos), speed, completionRange);
         }
 
         Optional<? extends PositionTracker> finalTarget = policy.finalTargetResolver().resolve(world, entity, destination);
@@ -194,11 +215,12 @@ public final class ExtendedWalkTowardsTask {
             PositionTracker tracker = finalTarget.orElseThrow();
             return tracker instanceof MultiTargetPositionTracker multiTarget && multiTarget.isReached(entity, 0)
                     ? null
-                    : new WalkTarget(tracker, speed, 0);
+                    : new DestinationOwnedWalkTarget(destinationMemory, destination, tracker, speed, 0);
         }
         return targetPos.distManhattan(entity.blockPosition()) <= completionRange
                 ? null
-                : new WalkTarget(new PersistentPathTarget(targetPos), speed, completionRange);
+                : new DestinationOwnedWalkTarget(destinationMemory, destination,
+                new PersistentPathTarget(targetPos), speed, completionRange);
     }
 
     private static boolean isReached(VillagerEntityMCA entity, WalkTarget target) {
@@ -218,5 +240,52 @@ public final class ExtendedWalkTowardsTask {
             PositionTrackerResolver finalTargetResolver,
             boolean releasePoiOnGiveUp
     ) {
+    }
+
+    public static boolean clearOwnedWalkTarget(VillagerEntityMCA entity, MemoryModuleType<GlobalPos> destinationMemory) {
+        return retractOwnedWalkTarget(entity, destinationMemory).isPresent();
+    }
+
+    private static Optional<GlobalPos> retractOwnedWalkTarget(VillagerEntityMCA entity,
+                                                               MemoryModuleType<GlobalPos> destinationMemory) {
+        Optional<WalkTarget> currentTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET);
+        if (currentTarget.isEmpty()
+                || !(currentTarget.orElseThrow() instanceof DestinationOwnedWalkTarget ownedTarget)
+                || !ownedTarget.ownedBy(destinationMemory)) {
+            return Optional.empty();
+        }
+
+        entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        WalkTargetFailureMemory.clearIfTargetMatches(entity, ownedTarget.destination());
+        return Optional.of(ownedTarget.destination());
+    }
+
+    private static final class DestinationOwnedWalkTarget extends WalkTarget implements WalkTargetFailureMemory.TargetIdentityOwner {
+        private final MemoryModuleType<GlobalPos> destinationMemory;
+        private final GlobalPos destination;
+
+        private DestinationOwnedWalkTarget(MemoryModuleType<GlobalPos> destinationMemory, GlobalPos destination,
+                                           PositionTracker target, float speed, int closeEnoughDist) {
+            super(target, speed, closeEnoughDist);
+            this.destinationMemory = destinationMemory;
+            this.destination = destination;
+        }
+
+        private boolean ownedBy(MemoryModuleType<GlobalPos> destinationMemory) {
+            return this.destinationMemory == destinationMemory;
+        }
+
+        private boolean matches(MemoryModuleType<GlobalPos> destinationMemory, GlobalPos destination) {
+            return ownedBy(destinationMemory) && this.destination.equals(destination);
+        }
+
+        private GlobalPos destination() {
+            return destination;
+        }
+
+        @Override
+        public GlobalPos failureTarget() {
+            return destination;
+        }
     }
 }
