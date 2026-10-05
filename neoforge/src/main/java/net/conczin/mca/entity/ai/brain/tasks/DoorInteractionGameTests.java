@@ -18,13 +18,10 @@ import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.List;
 import java.util.Set;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class DoorInteractionGameTests {
     private DoorInteractionGameTests() {

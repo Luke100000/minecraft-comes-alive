@@ -89,6 +89,175 @@ public final class NavigationRecoveryGameTests {
 
     @GameTest(batch = "mca_navigation_owned_detour", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void completedPersistentPathSkipsDestinationProbeDuringExtendedBackoff(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(65, 1, 65));
+        BlockPos target = start.east(2);
+        prepareFlatArea(helper, start, 65, 3);
+        for (int z = -60; z <= 60; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        Config config = Config.getInstance();
+        int previousDistance = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 160;
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+            var navigation = villager.getNavigation();
+            Path blocked = navigation.createPath(target, 0);
+            helper.assertTrue(blocked != null && !blocked.canReach()
+                            && !MCAGroundPathNavigation.isUsefulPartialPath(blocked, target),
+                    "fixture did not exhaust the destination search: " + blocked);
+            PathRequestDiagnostics.SearchSnapshot before = PathRequestDiagnostics.snapshot(villager);
+            helper.assertTrue(before.extendedSearches() == 1,
+                    "fixture did not perform exactly one extended search: " + before);
+            WalkTargetFailureMemory.record(villager, target, helper.getLevel().getGameTime());
+            navigation.moveTo(blocked, 0.5D);
+            while (!blocked.isDone()) {
+                blocked.advance();
+            }
+            navigation.tick();
+            Path flank = navigation.getPath();
+            helper.assertTrue(flank != null && !flank.isDone() && flank.canReach()
+                            && !flank.getTarget().equals(target),
+                    "navigation did not start a reachable flank: " + flank);
+            PathRequestDiagnostics.SearchSnapshot after = PathRequestDiagnostics.snapshot(villager);
+            helper.assertTrue(after.extendedSearches() == before.extendedSearches(),
+                    "detour startup repeated the exhausted extended search: " + after);
+            helper.assertTrue(after.ordinarySearches() == before.ordinarySearches() + 1,
+                    "detour startup searched the destination again instead of only finding the flank: before="
+                            + before + ", after=" + after);
+            helper.assertTrue(villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElseThrow()
+                            .getTarget().currentBlockPosition().equals(target)
+                            && WalkTargetFailureMemory.hasFailureFor(villager, target),
+                    "flank selection changed the logical destination or erased its failure");
+        } finally {
+            config.villagerPathfindingDistance = previousDistance;
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_navigation_owned_detour", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void completedPersistentPathRetriesDestinationWhenExtendedHorizonIncreases(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(65, 1, 65));
+        BlockPos target = start.east(2);
+        prepareFlatArea(helper, start, 61, 3);
+        for (int z = -23; z <= 23; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        Config config = Config.getInstance();
+        int previousDistance = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 49;
+            villager.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+            var navigation = villager.getNavigation();
+            Path blocked = navigation.createPath(target, 0);
+            helper.assertTrue(blocked != null && !blocked.canReach()
+                            && !MCAGroundPathNavigation.isUsefulPartialPath(blocked, target)
+                            && PathRequestDiagnostics.snapshot(villager).extendedSearches() == 1,
+                    "fixture did not exhaust the smaller extended search: " + blocked);
+            WalkTargetFailureMemory.record(villager, target, helper.getLevel().getGameTime());
+            config.villagerPathfindingDistance = 160;
+            navigation.moveTo(blocked, 0.5D);
+            while (!blocked.isDone()) {
+                blocked.advance();
+            }
+            navigation.tick();
+            Path recovered = navigation.getPath();
+            helper.assertTrue(recovered != null && !recovered.isDone() && recovered.canReach()
+                            && recovered.getTarget().equals(target),
+                    "larger search horizon retained stale backoff and started a sideways detour: " + recovered);
+        } finally {
+            config.villagerPathfindingDistance = previousDistance;
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_navigation_owned_detour", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void completedPersistentPathRetriesDestinationWhenRouteOpens(GameTestHelper helper) {
+        assertCompletedPathRetriesOpenedRoute(helper, 2, 0);
+    }
+
+    @GameTest(batch = "mca_navigation_owned_detour", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void completedPersistentPathRetriesDestinationWhenRouteOpensNearOrigin(GameTestHelper helper) {
+        assertCompletedPathRetriesOpenedRoute(helper, 20, 0);
+    }
+
+    @GameTest(batch = "mca_navigation_owned_detour", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void completedPersistentPathRetriesDestinationWhenSideRouteOpens(GameTestHelper helper) {
+        assertCompletedPathRetriesOpenedRoute(helper, 2, 10);
+    }
+
+    private static void assertCompletedPathRetriesOpenedRoute(GameTestHelper helper, int destinationDistance,
+                                                              int gapOffset) {
+        BlockPos start = helper.absolutePos(new BlockPos(65, 1, 65));
+        BlockPos target = start.east(destinationDistance);
+        prepareFlatArea(helper, start, 65, 3);
+        for (int z = -60; z <= 60; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        Config config = Config.getInstance();
+        int previousDistance = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 160;
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+            MCAGroundPathNavigation navigation = (MCAGroundPathNavigation) villager.getNavigation();
+            Path blocked = navigation.createPath(target, 0);
+            helper.assertTrue(blocked != null && !blocked.canReach()
+                            && !MCAGroundPathNavigation.isUsefulPartialPath(blocked, target)
+                            && PathRequestDiagnostics.snapshot(villager).extendedSearches() == 1,
+                    "fixture did not exhaust the destination search: " + blocked);
+            WalkTargetFailureMemory.record(villager, target, helper.getLevel().getGameTime());
+            navigation.moveTo(blocked, 0.5D);
+            while (!blocked.isDone()) {
+                blocked.advance();
+            }
+            BlockPos gap = start.east().south(gapOffset);
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(gap.above(y), Blocks.AIR.defaultBlockState(), 3);
+            }
+            VillagerEntityMCA probe = spawnStationary(helper, start);
+            try {
+                probe.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.5F, 0));
+                Path opened = probe.getNavigation().createPath(target, 0);
+                helper.assertTrue(opened != null && opened.canReach(),
+                        "opened route was not reachable by an ordinary destination probe: " + opened);
+            } finally {
+                probe.discard();
+            }
+            navigation.shouldRecomputePath(gap);
+            navigation.tick();
+            Path recovered = navigation.getPath();
+            helper.assertTrue(recovered != null && !recovered.isDone() && recovered.canReach()
+                            && recovered.getTarget().equals(target)
+                            && !WalkTargetFailureMemory.hasFailureFor(villager, target),
+                    "opened route retained stale backoff or failed to clear destination failure: " + recovered);
+        } finally {
+            config.villagerPathfindingDistance = previousDistance;
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_navigation_owned_detour", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
     public static void completedPersistentPathStartsDetourWhenConfiguredSearchCannotReach(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(65, 1, 65));
         BlockPos target = start.east(2);

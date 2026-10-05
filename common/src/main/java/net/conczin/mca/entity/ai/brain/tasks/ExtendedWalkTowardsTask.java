@@ -116,11 +116,13 @@ public final class ExtendedWalkTowardsTask {
                             if (sameDimension && (failureSince.isEmpty() || unreachableTicks <= maxRunTime)) {
                                 if (failureSince.isPresent()
                                         && !routeInvalidated
-                                        && (unreachableTicks < UNREACHABLE_PATH_RETRY_TICKS
-                                        || unreachableTicks % UNREACHABLE_PATH_RETRY_TICKS != 0L)) {
+                                        && unreachableTicks < UNREACHABLE_PATH_RETRY_TICKS) {
                                     return true;
                                 }
 
+                                // ConditionalTask can run this producer every other tick.
+                                // Exact failure-age multiples can then be missed forever;
+                                // the retry gate owns the interval between attempts.
                                 WalkTarget proposedTarget = proposeWalkTarget(world, entity, destination, globalPos,
                                         speed, completionRange, policy);
                                 if (proposedTarget == null) {

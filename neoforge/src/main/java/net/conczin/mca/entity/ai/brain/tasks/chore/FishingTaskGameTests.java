@@ -28,7 +28,6 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.Comparator;
@@ -39,8 +38,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class FishingTaskGameTests {
     private FishingTaskGameTests() {

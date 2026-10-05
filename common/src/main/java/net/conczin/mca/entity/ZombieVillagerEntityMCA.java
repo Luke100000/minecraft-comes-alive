@@ -131,11 +131,12 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
             return SLEEPING_DIMENSIONS;
         }
 
-        float height = getPhysicalVerticalScaleFactor() * 2.0F;
+        float height = getPhysicalStandingHeight();
         float width = getPhysicalHorizontalScaleFactor() * 0.6F;
 
-        return EntityDimensions.scalable(width, height).withAttachments(EntityAttachments.builder()
-                .attach(EntityAttachment.VEHICLE, 0.0F, getVisualVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F));
+        return EntityDimensions.scalable(width, height).withEyeHeight(getPhysicalStandingEyeHeight()).withAttachments(EntityAttachments.builder()
+                .attach(EntityAttachment.VEHICLE, 0.0F, getVisualVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F)
+                .attach(EntityAttachment.NAME_TAG, 0.0F, getVisualNameTagHeight(), 0.0F));
     }
 
     @Override
@@ -205,9 +206,15 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
 
     @Override
     public void die(DamageSource cause) {
+        if (dead) {
+            return;
+        }
+
         super.die(cause);
 
-        if (level().isClientSide) {
+        // NeoForge can cancel LivingDeathEvent inside super.die(). Only commit MCA's
+        // inventory and relationship death handling after vanilla commits the death.
+        if (!dead || level().isClientSide) {
             return;
         }
 

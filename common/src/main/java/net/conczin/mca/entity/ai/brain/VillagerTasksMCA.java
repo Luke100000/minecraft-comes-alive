@@ -8,6 +8,7 @@ import net.conczin.mca.Config;
 import net.conczin.mca.entity.EquipmentSet;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.ActivitiesMCA;
+import net.conczin.mca.entity.ai.BedPoiCompatibility;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Mourning;
 import net.conczin.mca.entity.ai.RangedWeaponHelper;
@@ -45,6 +46,9 @@ import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 
 import java.util.Optional;
 
@@ -428,7 +432,8 @@ public class VillagerTasksMCA {
     }
 
     public static boolean isOnDuty(VillagerEntityMCA villager) {
-        return getActivity(villager) == Activity.WORK
+        return isFollowingPlayer(villager)
+               || getActivity(villager) == Activity.WORK
                || villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isPresent()
                || getPreferredTarget(villager).isPresent();
     }
@@ -492,8 +497,18 @@ public class VillagerTasksMCA {
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getRestPackage(float speed) {
         return ImmutableList.of(
+                Pair.of(1, BehaviorBuilder.create(context -> context.group(
+                        context.present(MemoryModuleType.HOME)
+                ).apply(context, homeMemory -> (world, villager, time) -> {
+                    if (!isForcedHomeOccupiedByOtherSleeper(world, villager, context.get(homeMemory))) {
+                        return false;
+                    }
+
+                    ExtendedWalkTowardsTask.clearOwnedWalkTarget(villager, MemoryModuleType.HOME);
+                    return true;
+                }))),
                 // try to reach the bed, and if not a set home, forget if out of range
-                Pair.of(2, ExtendedWalkTowardsTask.createWithFinalTarget(MemoryModuleType.HOME, speed, 1, 1200, (v) -> {
+                Pair.of(2, new ConditionalTask<>(ExtendedWalkTowardsTask.createWithFinalTarget(MemoryModuleType.HOME, speed, 1, 1200, (v) -> {
                     Optional<Boolean> memory = v.getBrain().getMemoryInternal(MemoryModuleTypeMCA.FORCED_HOME);
                     boolean forced = memory != null && memory.isPresent();
                     if (forced) {
@@ -504,7 +519,11 @@ public class VillagerTasksMCA {
                     v.getResidency().seekHome();
                 }, (world, villager, home) -> villager.isSleeping()
                         ? Optional.empty()
-                        : BedApproachTarget.create(world, home.pos()))),
+                        : BedApproachTarget.create(world, home.pos())),
+                        v -> !(v.level() instanceof ServerLevel world)
+                                || v.getBrain().getMemory(MemoryModuleType.HOME)
+                                .map(home -> !isForcedHomeOccupiedByOtherSleeper(world, v, home))
+                                .orElse(true))),
                 //verify the bed, occupancies state and similar
                 Pair.of(3, new ConditionalTask<>(ValidateNearbyPoi.create(
                         registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME), (v) -> {
@@ -520,7 +539,7 @@ public class VillagerTasksMCA {
                         MemoryModuleType.HOME, MemoryStatus.VALUE_ABSENT,
                         MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT
                 ), ImmutableList.of(
-                        Pair.of(SetClosestHomeAsWalkTarget.create(speed), 1),
+                        Pair.of(new SeekIndoorShelterTask(speed), 1),
                         Pair.of(LocalInsideBrownianWalk.create(speed), 4),
                         Pair.of(GoToClosestVillage.create(speed, 4), 2),
                         // Outside a village these waypoints form a home-seeking journey. Do not insert a
@@ -528,6 +547,21 @@ public class VillagerTasksMCA {
                         Pair.of(new ConditionalTask<>(new DoNothing(20, 40),
                                 v -> v.level() instanceof ServerLevel level && level.isVillage(v.blockPosition())), 2)))),
                 Pair.of(99, UpdateActivityFromSchedule.create()));
+    }
+
+    private static boolean isForcedHomeOccupiedByOtherSleeper(ServerLevel world, VillagerEntityMCA villager, net.minecraft.core.GlobalPos home) {
+        Optional<Boolean> forcedHome = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.FORCED_HOME);
+        if (forcedHome == null || forcedHome.isEmpty() || home.dimension() != world.dimension()) {
+            return false;
+        }
+
+        BlockState state = world.getBlockState(home.pos());
+        return BedPoiCompatibility.isHomePoiState(state)
+                && state.getValue(BedBlock.OCCUPIED)
+                && !world.getEntitiesOfClass(LivingEntity.class, new AABB(home.pos()),
+                sleeper -> sleeper != villager
+                        && sleeper.isSleeping()
+                        && sleeper.getSleepingPos().filter(home.pos()::equals).isPresent()).isEmpty();
     }
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getMeetPackage(float speedModifier) {

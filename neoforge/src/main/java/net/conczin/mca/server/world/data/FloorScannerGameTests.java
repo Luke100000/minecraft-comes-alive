@@ -15,7 +15,6 @@ import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.Set;
@@ -23,8 +22,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class FloorScannerGameTests {
     private static final Direction[] HORIZONTAL = {
@@ -32,6 +29,42 @@ public final class FloorScannerGameTests {
     };
 
     private FloorScannerGameTests() {
+    }
+
+    @GameTest(batch = "mca_floor_outside_registered_door", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 160)
+    public static void outsideRegisteredDoorDoesNotSuggestAddRoom(GameTestHelper helper) {
+        BlockPos min = helper.absolutePos(new BlockPos(5, 2, 5));
+        buildClosedRoom(helper, min, 3, 3);
+        BlockPos door = min.offset(1, 0, -1);
+        BlockPos outside = door.north();
+        helper.getLevel().setBlock(outside.below(), Blocks.STONE.defaultBlockState(), 3);
+        placeDoor(helper, door, Direction.SOUTH);
+        BlockPos inside = min.offset(1, 0, 1);
+        SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(helper.getLevel(), inside, 256, 24);
+        helper.assertTrue(scan.result() == Building.validationResult.SUCCESS,
+                "registered house fixture failed to scan: " + scan.result());
+        Structure structure = new Structure(51, inside, List.of(new StructureFloor(0, 0, scan.floor())));
+        Building room = materializedRoom(52, 51,
+                componentAt(BuildingRoomScanner.partition(helper.getLevel(), inside, 256, 0, scan), inside));
+        Village village = new Village(1, helper.getLevel());
+        village.registerStructure(structure, room);
+
+        for (boolean open : List.of(false, true)) {
+            setDoorOpen(helper, door, open);
+            helper.assertTrue(village.resolveInteractionPosition(helper.getLevel(), outside).isEmpty(),
+                    "outside position unexpectedly belongs to the registered house");
+            RoomScanPlan outsidePlan = village.getRoomScanPlan(helper.getLevel(), outside);
+            helper.assertTrue(outsidePlan.mode() == Village.RoomScanMode.ADD_BUILDING,
+                    "outside registered door suggested " + outsidePlan.mode() + " with open=" + open);
+            for (BlockPos source : List.of(door, inside)) {
+                RoomScanPlan registeredPlan = village.getRoomScanPlan(helper.getLevel(), source);
+                helper.assertTrue(registeredPlan.mode() == Village.RoomScanMode.UPDATE_ROOM
+                                && registeredPlan.currentRoom().orElseThrow().getId() == 52,
+                        "door/interior lost its registered Room with open=" + open);
+            }
+        }
+        helper.succeed();
     }
 
     @GameTest(batch = "mca_floor_turning_landing", templateNamespace = "minecraft",

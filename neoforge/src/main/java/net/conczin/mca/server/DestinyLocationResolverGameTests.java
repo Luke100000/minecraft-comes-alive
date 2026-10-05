@@ -13,13 +13,10 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.structure.Structure;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.List;
 import java.util.Optional;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class DestinyLocationResolverGameTests {
     private static final Gson GSON = new Gson();

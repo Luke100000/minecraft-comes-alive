@@ -58,13 +58,15 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     private static final class FailedExtendedSearch {
         private final BlockPos target;
         private final BlockPos origin;
+        private final float pathLength;
         private long attemptedAt;
         private long retryTicks = FAILED_EXTENDED_RETRY_TICKS;
         private boolean invalidated;
 
-        private FailedExtendedSearch(BlockPos target, BlockPos origin, long attemptedAt) {
+        private FailedExtendedSearch(BlockPos target, BlockPos origin, float pathLength, long attemptedAt) {
             this.target = target.immutable();
             this.origin = origin.immutable();
+            this.pathLength = pathLength;
             this.attemptedAt = attemptedAt;
         }
     }
@@ -167,7 +169,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 // A previous full search already exhausted the ordinary frontier.
                 // Retry that search directly instead of expanding it twice.
                 Path path = super.createPath(targets, radiusOffset, above, reachRange, extendedPathLength);
-                updateFailedExtendedSearch(target, path, null);
+                updateFailedExtendedSearch(target, path, null, extendedPathLength);
                 return path;
             }
             if (requiresExtendedPath(this.mob, target)) {
@@ -180,7 +182,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                         targets, radiusOffset, above, reachRange, pathLength
                 );
                 if (useExtended) {
-                    updateFailedExtendedSearch(target, path, null);
+                    updateFailedExtendedSearch(target, path, null, extendedPathLength);
                 } else if (suppressExtended) {
                     PathRequestDiagnostics.recordSuppressedExtendedSearch(this.mob);
                 }
@@ -207,20 +209,20 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             }
 
             Path extendedPath = super.createPath(targets, radiusOffset, above, reachRange, extendedPathLength);
-            updateFailedExtendedSearch(target, extendedPath, ordinaryPath);
+            updateFailedExtendedSearch(target, extendedPath, ordinaryPath, extendedPathLength);
             return preferEscalatedPath(ordinaryPath, extendedPath);
         }
         return super.createPath(targets, radiusOffset, above, reachRange, ordinaryPathLength);
     }
 
-    private void updateFailedExtendedSearch(BlockPos target, Path extendedPath, Path ordinaryPath) {
+    private void updateFailedExtendedSearch(BlockPos target, Path extendedPath, Path ordinaryPath, float pathLength) {
         if (extendedPath == null || (!extendedPath.canReach()
                 && !isUsefulPartialPath(extendedPath, target)
                 && (ordinaryPath == null
                 || extendedPath.getDistToTarget() >= ordinaryPath.getDistToTarget()))) {
             if (this.failedExtendedSearch == null || !this.failedExtendedSearch.target.equals(target)) {
                 this.failedExtendedSearch = new FailedExtendedSearch(target, this.mob.blockPosition(),
-                        this.level.getGameTime());
+                        pathLength, this.level.getGameTime());
             } else {
                 this.failedExtendedSearch.attemptedAt = this.level.getGameTime();
                 this.failedExtendedSearch.retryTicks = Math.min(MAX_FAILED_EXTENDED_RETRY_TICKS,
@@ -236,7 +238,10 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (failure == null) {
             return false;
         }
+        float extendedPathLength = Math.max((float)Config.getInstance().getVillagerPathfindingDistance(),
+                getOrdinaryPathLength(this.mob));
         if (!failure.target.equals(target) || !hasFailureEvidenceFor(target)
+                || failure.pathLength != extendedPathLength
                 || this.mob.blockPosition().distSqr(failure.origin) >= FAILED_EXTENDED_RETRY_MOVE_DISTANCE_SQR) {
             clearFailedExtendedSearch();
             return false;
@@ -410,7 +415,11 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (failure == null || !hasFailureEvidenceFor(failure.target)) {
             return;
         }
-        if (changed.distSqr(failure.target) <= FAILED_TARGET_INVALIDATION_RADIUS_SQR) {
+        // An opening anywhere in the ordinary frontier can make the destination
+        // probe useful again, even when it is far from both endpoints.
+        float ordinaryPathLength = getOrdinaryPathLength(this.mob);
+        if (changed.distSqr(failure.target) <= FAILED_TARGET_INVALIDATION_RADIUS_SQR
+                || changed.distSqr(failure.origin) <= ordinaryPathLength * ordinaryPathLength) {
             failure.invalidated = true;
         }
     }
@@ -476,6 +485,11 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     private boolean continueDetour(WalkTarget walkTarget) {
         BlockPos destination = walkTarget.getTarget().currentBlockPosition();
         if (this.detour == null) {
+            // A failed extended search already exhausted the ordinary frontier.
+            // Re-probe only when its backoff expires or its evidence changes.
+            if (!consumeRetryInvalidation(destination) && skipRepeatedFailedExtendedSearch(destination)) {
+                return beginDetour(walkTarget, destination);
+            }
             Path destinationPath = this.createPath(destination, 0);
             if (destinationPath != null
                     && (destinationPath.canReach() || isUsefulPartialPath(destinationPath, destination))) {

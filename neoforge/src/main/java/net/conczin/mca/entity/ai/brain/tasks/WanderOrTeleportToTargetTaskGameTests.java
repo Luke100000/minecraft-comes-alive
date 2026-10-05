@@ -32,13 +32,10 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class WanderOrTeleportToTargetTaskGameTests {
     private WanderOrTeleportToTargetTaskGameTests() {

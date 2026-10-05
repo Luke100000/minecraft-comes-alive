@@ -6,16 +6,14 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 /** Stable persisted identity for one semantic Floor around exact 3D geometry. */
 public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
-    static final int BAND_TOLERANCE = FloorGrouping.MAX_HEIGHT_SPAN;
+    // Physical overlap candidates use a local height window, not storey membership.
+    static final int ANCHOR_PROXIMITY = 2;
 
     public StructureFloor {
         geometry = Objects.requireNonNull(geometry, "geometry");
@@ -37,55 +35,26 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
         return !geometry.cellsAtColumn(x, z).isEmpty();
     }
 
-    boolean sameSemanticBand(StructureFloor other) {
-        return other != null && sameSemanticBand(anchorY(), other.anchorY());
+    boolean hasNearbyAnchor(StructureFloor other) {
+        return other != null && hasNearbyAnchor(anchorY(), other.anchorY());
     }
 
-    static boolean sameSemanticBand(int firstAnchorY, int secondAnchorY) {
-        return Math.abs(firstAnchorY - secondAnchorY) <= BAND_TOLERANCE;
-    }
-
-    static Map<StructureFloor, Integer> floorNumbers(Collection<StructureFloor> floors,
-                                                     StructureFloor groundFloor) {
-        if (floors == null || groundFloor == null) return Map.of();
-        List<StructureFloor> ordered = floors.stream()
-                .filter(Objects::nonNull)
-                .sorted(Comparator.comparingInt(StructureFloor::anchorY)
-                        .thenComparingInt(StructureFloor::id))
-                .toList();
-        if (ordered.isEmpty()) return Map.of();
-
-        List<List<StructureFloor>> bands = FloorGrouping.bands(
-                ordered.stream().map(StructureFloor::anchorY).toList()).stream()
-                .map(band -> ordered.stream().filter(floor -> band.contains(floor.anchorY())).toList())
-                .toList();
-
-        int groundBand = -1;
-        for (int index = 0; index < bands.size() && groundBand < 0; index++) {
-            if (bands.get(index).stream().anyMatch(groundFloor::equals)) groundBand = index;
-        }
-        if (groundBand < 0) return Map.of();
-
-        Map<StructureFloor, Integer> numbers = new HashMap<>();
-        for (int bandIndex = 0; bandIndex < bands.size(); bandIndex++) {
-            int floorNumber = bandIndex - groundBand;
-            for (StructureFloor floor : bands.get(bandIndex)) numbers.put(floor, floorNumber);
-        }
-        return Map.copyOf(numbers);
+    static boolean hasNearbyAnchor(int firstAnchorY, int secondAnchorY) {
+        return Math.abs((long) firstAnchorY - secondAnchorY) <= ANCHOR_PROXIMITY;
     }
 
     boolean overlapsFootprint(StructureFloor other) {
         return other != null && geometry.footprintIntersectionArea(other.geometry) > 0;
     }
 
-    boolean overlapsSameSemanticBand(StructureFloor other) {
-        return other != null && overlapsSameSemanticBand(other.geometry);
+    boolean overlapsNearbyFloorBand(StructureFloor other) {
+        return other != null && overlapsNearbyFloorBand(other.geometry);
     }
 
     /** Persisted-Floor candidate overlap for a freshly observed exact geometry. */
-    boolean overlapsSameSemanticBand(FloorGeometry other) {
+    boolean overlapsNearbyFloorBand(FloorGeometry other) {
         return other != null
-                && sameSemanticBand(anchorY(), other.anchorY())
+                && hasNearbyAnchor(anchorY(), other.anchorY())
                 && geometry.footprintIntersectionArea(other) > 0;
     }
 
@@ -100,7 +69,7 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
     }
 
     int attachmentGapTo(StructureFloor other) {
-        if (sameSemanticBand(other)) return -1;
+        if (hasNearbyAnchor(other)) return -1;
         return Math.max(0, verticalGapTo(other));
     }
 

@@ -16,12 +16,9 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.lang.reflect.Field;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class HarvestingTaskGameTests {
     private HarvestingTaskGameTests() {

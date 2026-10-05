@@ -5,6 +5,7 @@ import net.conczin.mca.server.world.data.Building;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
@@ -95,10 +96,14 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
     }
 
     protected boolean isGoodFloorWalkTarget(Level world, VillagerEntityMCA villager, BlockPos pos) {
-        return villager.getNavigation().isStableDestination(pos)
+        return hasStandingSpace(world, villager, pos);
+    }
+
+    static boolean hasStandingSpace(Level world, PathfinderMob mob, BlockPos pos) {
+        return mob.getNavigation().isStableDestination(pos)
                 && world.noCollision(
-                        villager,
-                        villager.getBoundingBox().move(Vec3.atBottomCenterOf(pos).subtract(villager.position()))
+                        mob,
+                        mob.getBoundingBox().move(Vec3.atBottomCenterOf(pos).subtract(mob.position()))
                 );
     }
 

@@ -73,6 +73,7 @@
   "item.mca.baby.no_drop/2": "I'm watching you, mister",
   "item.mca.baby.no_drop/3": "Please don't drop the baby!",
   "item.mca.baby.not_ready": "This baby is not ready yet.",
+  "item.mca.baby.cannot_place": "This baby can't be placed here.",
 
   "item.mca.male_villager_spawn_egg": "Male Villager Spawn Egg",
   "item.mca.female_villager_spawn_egg": "Female Villager Spawn Egg",

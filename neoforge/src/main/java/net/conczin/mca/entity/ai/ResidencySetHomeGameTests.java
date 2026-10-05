@@ -3,6 +3,8 @@ package net.conczin.mca.entity.ai;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.navigation.BedApproachTarget;
+import net.conczin.mca.server.world.data.Building;
+import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
@@ -10,6 +12,7 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.ai.behavior.ValidateNearbyPoi;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.level.block.BedBlock;
@@ -17,10 +20,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class ResidencySetHomeGameTests {
     private ResidencySetHomeGameTests() {
@@ -139,6 +139,42 @@ public final class ResidencySetHomeGameTests {
         assertHome(helper, villager, head);
         helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(head) == 0,
                 "reselecting the current HOME released its POI ticket");
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void duplicateHomeValidationKeepsCanonicalResidentTicket(GameTestHelper helper) {
+        placeFloor(helper, 1, 10, 2, 8);
+        BlockPos bell = helper.absolutePos(new BlockPos(4, 1, 5));
+        helper.getLevel().setBlock(bell, Blocks.BELL.defaultBlockState(), 3);
+        helper.assertTrue(VillageManager.get(helper.getLevel()).processBuilding(bell) == Building.validationResult.SUCCESS,
+                "fixture bell did not create an MCA village");
+
+        BlockPos foot = helper.absolutePos(new BlockPos(7, 1, 5));
+        BlockPos head = placeBed(helper, foot, Direction.EAST);
+        VillagerEntityMCA owner = spawnVillager(helper, helper.absolutePos(new BlockPos(2, 1, 5)));
+        helper.assertTrue(owner.getResidency().trySetHome(helper.getLevel(), foot),
+                "canonical owner could not claim the HOME ticket");
+        helper.assertTrue(owner.getResidency().getHomeVillage()
+                        .filter(village -> village.isResidentHomeCurrent(owner)).isPresent(),
+                "claimed HOME was not recorded as the canonical resident assignment");
+        helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(head) == 0,
+                "canonical owner's HOME ticket was not claimed");
+
+        owner.startSleeping(head);
+        helper.assertTrue(owner.isSleeping(), "canonical owner did not start sleeping in its HOME");
+
+        VillagerEntityMCA observer = spawnVillager(helper, head.relative(Direction.NORTH, 2));
+        observer.getBrain().setMemory(MemoryModuleType.HOME,
+                GlobalPos.of(helper.getLevel().dimension(), head));
+        var validator = ValidateNearbyPoi.create(poi -> poi.is(PoiTypes.HOME), MemoryModuleType.HOME);
+        helper.assertTrue(validator.tryStart(helper.getLevel(), observer, helper.getLevel().getGameTime()),
+                "duplicate HOME validator did not run");
+
+        helper.assertTrue(observer.getBrain().getMemoryInternal(MemoryModuleType.HOME).isEmpty(),
+                "duplicate observer retained the canonical resident's occupied HOME");
+        helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(head) == 0,
+                "duplicate observer released the canonical resident's HOME ticket");
         helper.succeed();
     }
 

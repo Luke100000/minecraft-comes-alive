@@ -6,7 +6,6 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.ArrayList;
@@ -14,8 +13,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
-
-@GameTestHolder("mca")
 @PrefixGameTestTemplate(false)
 public final class CopiedOpenHouseGameTests {
     private static final String TEMPLATE = "gametest/copied_open_house";
@@ -287,7 +284,7 @@ public final class CopiedOpenHouseGameTests {
 
     @GameTest(batch = "mca_copied_open_house_lower_chain", templateNamespace = "mca",
             template = TEMPLATE, timeoutTicks = 320, skyAccess = true)
-    public static void successiveLowerStairRoomsAttachOneLevelAtATime(GameTestHelper helper) {
+    public static void successiveLowerStairRoomsKeepBoundedStoreysAndDistinctGeometry(GameTestHelper helper) {
         BlockPos main = helper.absolutePos(MAIN_STOREY_SEED);
         VillageManager manager = new VillageManager(helper.getLevel());
         RoomWorkflow workflow = new RoomWorkflow(manager, helper.getLevel());
@@ -301,6 +298,8 @@ public final class CopiedOpenHouseGameTests {
                 new BlockPos(15, 7, 16),
                 new BlockPos(22, 5, 9));
         List<FloorGeometry> attached = new ArrayList<>();
+        List<Integer> expectedNumbers = List.of(-1, -1, -2);
+        List<Integer> roomIds = new ArrayList<>();
 
         for (int index = 0; index < lowerRooms.size(); index++) {
             BlockPos source = helper.absolutePos(lowerRooms.get(index));
@@ -309,8 +308,8 @@ public final class CopiedOpenHouseGameTests {
                     "lower room " + lowerRooms.get(index) + " offered " + plan.mode());
             helper.assertTrue(plan.targetBuildingId() == buildingId,
                     "lower room " + lowerRooms.get(index) + " targeted another house");
-            helper.assertTrue(plan.prospectiveFloorNumber() == -(index + 1),
-                    "lower room " + lowerRooms.get(index) + " skipped a stair-delimited level: floor="
+            helper.assertTrue(plan.prospectiveFloorNumber() == expectedNumbers.get(index),
+                    "lower room " + lowerRooms.get(index) + " has an unexpected bounded storey: floor="
                             + plan.prospectiveFloorNumber());
             helper.assertTrue(plan.selectedAttachmentFloor() != null,
                     "lower room " + lowerRooms.get(index) + " has no selected Floor");
@@ -328,7 +327,21 @@ public final class CopiedOpenHouseGameTests {
             }
 
             attached.add(plan.selectedAttachmentFloor().geometry());
-            commit(helper, workflow, workflow.analyzeAttachedRoom(source, buildingId));
+            BuildingScanResult addition = workflow.analyzeAttachedRoom(source, buildingId);
+            commit(helper, workflow, addition);
+            Building room = village.getRooms().filter(candidate -> candidate.getFloorCells()
+                    .equals(addition.building().getFloorCells())).findFirst().orElseThrow();
+            roomIds.add(room.getId());
+        }
+        Village reloaded = new Village(village.save(), helper.getLevel());
+        for (int index = 0; index < roomIds.size(); index++) {
+            Building room = reloaded.getBuilding(roomIds.get(index)).orElseThrow();
+            Structure structure = reloaded.getStructureFor(room).orElseThrow();
+            StructureFloor floor = structure.getFloor(room.getFloorId()).orElseThrow();
+            helper.assertTrue(floor.floorNumber() == expectedNumbers.get(index),
+                    "reload changed the lower room's storey");
+            helper.assertTrue(floor.geometry().sameExactGeometry(attached.get(index)),
+                    "reload changed the lower room's physical Floor");
         }
         helper.succeed();
     }

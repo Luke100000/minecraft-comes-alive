@@ -67,7 +67,7 @@ final class SelectedFloorScanner {
             Map<BlockPos, List<HorizontalStep>> steps = new HashMap<>();
             this.provider = cell -> steps.computeIfAbsent(
                     cell.feet(), ignored -> worldSteps(world, cell, ceilings));
-            this.regions = new RegionDiscovery(world, provider, maxSize, maxRadius);
+            this.regions = new RegionDiscovery(world, ceilings, provider, maxSize, maxRadius);
             // Proving a transition observes both floor halves. Only the selected half is
             // materialized and charged against maxSize by scanSelectedFloor.
             int maxTransitionSize = (int) Math.min(2L * maxSize, Integer.MAX_VALUE);
@@ -158,7 +158,15 @@ final class SelectedFloorScanner {
             Optional<SurfaceCell> underlying = inspectSurfaceCell(world, below, ceilings);
             if (underlying.isPresent()) return underlying;
         }
-        return inspectSurfaceCell(world, seed, ceilings);
+        Optional<SurfaceCell> exact = inspectSurfaceCell(world, seed, ceilings);
+        if (exact.isPresent()) return exact;
+        BlockState state = world.getBlockState(seed);
+        var shape = state.getCollisionShape(world, seed);
+        if (state.getFluidState().isEmpty() && !shape.isEmpty()
+                && shape.max(Direction.Axis.Y) <= 1.0D && !state.isCollisionShapeFullBlock(world, seed)) {
+            return inspectSurfaceCell(world, seed.above(), ceilings);
+        }
+        return Optional.empty();
     }
 
     private static Optional<SurfaceCell> adjacentTraversalSeed(
@@ -420,6 +428,29 @@ final class SelectedFloorScanner {
                     Math.min(ceilingY.getAsInt(), adjacent.ceilingY())));
         }
         BlockState state = world.getBlockState(feet);
+        if (FloorConnector.Type.fromBlockState(state) == FloorConnector.Type.LADDER
+                && state.getFluidState().isEmpty()) {
+            BlockPos head = feet.above();
+            BlockState headState = world.getBlockState(head);
+            OptionalDouble surfaceY = floorSurfaceLevel(world, feet);
+            if (surfaceY.isPresent() && canStep(adjacent.surfaceY(), surfaceY.getAsDouble())
+                    && feet.getY() + 1 < adjacent.ceilingY() && headState.getFluidState().isEmpty()
+                    && (isOpen(world, head) || FloorConnector.Type.fromBlockState(headState) == FloorConnector.Type.LADDER)) {
+                return Optional.of(new SurfaceCell(feet, surfaceY.getAsDouble(), adjacent.ceilingY()));
+            }
+            return Optional.empty();
+        }
+        // A stair placed inside a low-ceiling Room can occupy its structural cell even
+        // when there is no traversable cell above it. Surrounding enclosed floor evidence
+        // distinguishes this obstruction from a flight leading to another Floor.
+        if (state.getBlock() instanceof StairBlock && state.getFluidState().isEmpty()
+                && isOpen(world, feet.above()) && inspectSurfaceCell(world, feet.above(), ceilings).isEmpty()) {
+            OptionalDouble support = floorSurfaceLevel(world, feet);
+            if (support.isPresent() && canStep(adjacent.surfaceY(), support.getAsDouble())
+                    && hasSurroundingFloorEvidence(world, feet, support.getAsDouble(), enclosedCells)) {
+                return Optional.of(new SurfaceCell(feet, support.getAsDouble(), adjacent.ceilingY()));
+            }
+        }
         if (!state.getFluidState().isEmpty()
                 || StructureConnector.isConnector(state)
                 || isExplicitStairTransitionCell(world, feet)) {
@@ -940,7 +971,7 @@ final class SelectedFloorScanner {
 
         private FloorBandDecision decision(SurfaceCell cell) {
             return decisions.computeIfAbsent(cell.feet(), ignored -> {
-                SurfaceRegion owner = transitionsOwner.owner(cell);
+                SurfaceRegion owner = transitionsOwner == null ? null : transitionsOwner.owner(cell);
                 if (owner != null) {
                     return selectedRegion == owner
                             ? FloorBandDecision.OWNED : FloorBandDecision.ADJACENT;
@@ -960,13 +991,16 @@ final class SelectedFloorScanner {
     /** Local ordinary regions, without recursive discovery through another storey's flights. */
     private static final class RegionDiscovery {
         private final Level world;
+        private final FloorCeilingResolver ceilings;
         private final StepProvider provider;
         private final int maxSize;
         private final int maxRadius;
         private final Map<BlockPos, SurfaceRegion> resolved = new HashMap<>();
 
-        private RegionDiscovery(Level world, StepProvider provider, int maxSize, int maxRadius) {
+        private RegionDiscovery(Level world, FloorCeilingResolver ceilings,
+                                StepProvider provider, int maxSize, int maxRadius) {
             this.world = world;
+            this.ceilings = ceilings;
             this.provider = provider;
             this.maxSize = maxSize;
             this.maxRadius = maxRadius;
@@ -978,6 +1012,16 @@ final class SelectedFloorScanner {
             Map<BlockPos, SurfaceCell> cells = new LinkedHashMap<>();
             ArrayDeque<SurfaceCell> queue = new ArrayDeque<>();
             Set<BlockPos> visited = new HashSet<>();
+            Set<Transition> transitions = new HashSet<>();
+            // Doors divide Rooms, not physical Floors. Only enclosed continuations may vote
+            // for the Floor anchor; an exterior porch must not move an interior's anchor.
+            FloorBandClassifier enclosure = new FloorBandClassifier(
+                    world, new FloorBand(seed.feet().getY()), provider, null, null);
+            if (reachesExterior(world, seed, seed.feet(), ceilings, maxRadius, provider, enclosure)) {
+                SurfaceRegion exterior = new SurfaceRegion(seed);
+                resolved.put(seed.feet(), exterior);
+                return exterior;
+            }
             queue.add(seed);
             visited.add(seed.feet());
             while (!queue.isEmpty()) {
@@ -985,22 +1029,33 @@ final class SelectedFloorScanner {
                 cells.put(current.feet(), current);
                 for (HorizontalStep step : provider.steps(current)) {
                     SurfaceCell next = step.landing();
-                    if (step.connector() != null || StructureConnector.isHorizontalBoundary(world.getBlockState(next.feet()))
-                            || isExplicitStairTransitionCell(world, next.feet())
+                    if (isExplicitStairTransitionCell(world, next.feet())
                             || Math.abs(next.feet().getY() - seed.feet().getY()) > FLOOR_BAND_RADIUS
                             || horizontalDistance(next.feet(), seed.feet()) >= maxRadius
                             || cells.size() + queue.size() >= maxSize) continue;
+                    if (StructureConnector.isHorizontalBoundary(world.getBlockState(current.feet()))
+                            && reachesExterior(world, next, seed.feet(), ceilings, maxRadius, provider, enclosure)) continue;
+                    transitions.add(new Transition(current.feet(), next.feet()));
                     if (visited.add(next.feet())) queue.addLast(next);
                 }
             }
-            Map<Integer, Long> heights = cells.values().stream().filter(cell ->
-                    !isExplicitStairTransitionCell(world, cell.feet()))
-                    .collect(Collectors.groupingBy(cell -> cell.feet().getY(), Collectors.counting()));
-            int anchorY = heights.entrySet().stream().max(Comparator.<Map.Entry<Integer, Long>>comparingLong(Map.Entry::getValue)
-                    .thenComparing(Map.Entry::getKey, Comparator.reverseOrder()))
-                    .map(Map.Entry::getKey).orElse(seed.feet().getY());
+            Set<BlockPos> doors = cells.keySet().stream()
+                    .filter(pos -> StructureConnector.isHorizontalBoundary(world.getBlockState(pos)))
+                    .collect(Collectors.toSet());
+            // An upstairs Room must not outvote a smaller, uneven continuation across its door.
+            // Each enclosed Room contributes one representative; the lower representative
+            // supplies the common traversal band, independently of final geometry's modal height.
+            int anchorY = connectedRegions(cells.keySet(), doors, Transition.neighborIndex(transitions)).stream()
+                    .mapToInt(region -> {
+                        Map<Integer, Long> heights = region.stream().map(cells::get)
+                                .collect(Collectors.groupingBy(cell -> cell.feet().getY(), Collectors.counting()));
+                        return heights.entrySet().stream().max(Comparator.<Map.Entry<Integer, Long>>comparingLong(Map.Entry::getValue)
+                                .thenComparing(Map.Entry::getKey, Comparator.reverseOrder()))
+                                .map(Map.Entry::getKey).orElse(seed.feet().getY());
+                    }).min().orElse(seed.feet().getY());
             SurfaceCell anchor = cells.values().stream().filter(cell -> cell.feet().getY() == anchorY)
                     .filter(cell -> !isExplicitStairTransitionCell(world, cell.feet()))
+                    .filter(cell -> !StructureConnector.isHorizontalBoundary(world.getBlockState(cell.feet())))
                     .min(Comparator.comparing(SurfaceCell::feet, CELL_ORDER)).orElse(seed);
             for (SurfaceCell cell : cells.values()) {
                 SurfaceRegion existing = resolved.get(cell.feet());

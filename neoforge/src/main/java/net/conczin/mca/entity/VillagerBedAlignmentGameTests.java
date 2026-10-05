@@ -6,20 +6,21 @@ import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.world.entity.EntityDimensions;
+import net.minecraft.world.entity.EntityAttachment;
 import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
-import net.neoforged.neoforge.gametest.GameTestHolder;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.Objects;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class VillagerBedAlignmentGameTests {
     private static final double EPSILON = 1.0E-6D;
@@ -28,7 +29,40 @@ public final class VillagerBedAlignmentGameTests {
     }
 
     @GameTest(batch = "mca_villager_bed_alignment", templateNamespace = "minecraft", template = "bastion/blocks/air")
-    public static void sleepingTallAdultKeepsVanillaStandingEyeHeightForRenderAnchor(GameTestHelper helper) {
+    public static void sleepingVillagerKeepsBedAnchorThroughMovementTicks(GameTestHelper helper) {
+        helper.getLevel().setDayTime(18000L);
+        for (Direction facing : Direction.Plane.HORIZONTAL) {
+            BlockPos bedHead = placeBed(helper, new BlockPos(3, 1, 3), facing);
+            VillagerEntityMCA villager = createAdultMale(helper, bedHead);
+            villager.getBrain().setMemory(MemoryModuleType.HOME,
+                    GlobalPos.of(helper.getLevel().dimension(), bedHead));
+            villager.getBrain().setActiveActivityIfPossible(Activity.REST);
+            // Navigation ticks before Brain and MoveControl ticks after SleepInBed.
+            villager.getMoveControl().setWantedPosition(villager.getX(), villager.getY(), villager.getZ() - 1.0D, 0.5D);
+            villager.startSleeping(bedHead);
+            Vec3 anchor = villager.position();
+            // Movement input can remain from the approach on the tick SleepInBed starts.
+            villager.setZza(1.0F);
+            for (int tick = 0; tick < 20; tick++) {
+                helper.getLevel().tickNonPassenger(villager);
+                helper.assertTrue(villager.isSleeping(), "fixture woke during movement ticks");
+                helper.assertTrue(villager.position().distanceToSqr(anchor) < EPSILON * EPSILON,
+                        "sleeping villager moved off the " + facing + " bed anchor: "
+                                + anchor + " -> " + villager.position());
+            }
+            villager.stopSleeping();
+            Vec3 awakePosition = villager.position();
+            villager.setDeltaMovement(0.1D, 0.0D, 0.0D);
+            villager.travel(Vec3.ZERO);
+            helper.assertTrue(villager.position().distanceToSqr(awakePosition) > EPSILON,
+                    "villager could not resume movement after waking");
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_villager_bed_alignment", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void sleepingTallAdultUsesVisualStandingEyeHeightForRenderAnchor(GameTestHelper helper) {
         BlockPos bedHead = placeBed(helper, new BlockPos(3, 1, 3), Direction.NORTH);
         VillagerEntityMCA villager = createAdultMale(helper, bedHead);
         villager.getGenetics().setGene(Genetics.SIZE, 1.0F);
@@ -50,13 +84,16 @@ public final class VillagerBedAlignmentGameTests {
         float physicalStandingHeight = villager.getDefaultDimensions(Pose.STANDING).height();
         helper.assertTrue(Math.abs(physicalStandingHeight - villager.getPhysicalVerticalScaleFactor() * 2.0F) < EPSILON,
                 "tall adult villager did not use physical height for standing dimensions");
-        float visualModelEyeHeight = EntityDimensions
-                .scalable(villager.getVisualHorizontalScaleFactor() * 0.6F,
-                        villager.getVisualVerticalScaleFactor() * 2.0F)
-                .scale(villager.getScale())
-                .eyeHeight();
-        float standingEyeHeight = villager.getEyeHeight(Pose.STANDING);
-        helper.assertTrue(standingEyeHeight < visualModelEyeHeight,
+        float expectedNameTagY = villager.getVisualVerticalScaleFactor() * VillagerLike.PLAYER_MODEL_NAME_TAG_HEIGHT;
+        double nameTagY = villager.getDefaultDimensions(Pose.STANDING)
+                .attachments()
+                .get(EntityAttachment.NAME_TAG, 0, 0.0F)
+                .y;
+        helper.assertTrue(Math.abs(nameTagY - expectedNameTagY) < EPSILON,
+                "tall adult villager name tag did not use visual standing height");
+        float visualModelEyeHeight = villager.getVisualVerticalScaleFactor() * VillagerLike.PLAYER_MODEL_EYE_HEIGHT;
+        float physicalStandingEyeHeight = villager.getEyeHeight(Pose.STANDING);
+        helper.assertTrue(physicalStandingEyeHeight < visualModelEyeHeight,
                 "test fixture did not reproduce the visual-model bed-anchor mismatch");
         helper.succeed();
     }
@@ -73,6 +110,12 @@ public final class VillagerBedAlignmentGameTests {
         float expectedPhysicalHeight = zombie.getPhysicalVerticalScaleFactor() * 2.0F;
         helper.assertTrue(Math.abs(physicalHeight - expectedPhysicalHeight) < EPSILON,
                 "tall adult zombie villager used visual height for physical dimensions");
+        double nameTagY = zombie.getDefaultDimensions(Pose.STANDING)
+                .attachments()
+                .get(EntityAttachment.NAME_TAG, 0, 0.0F)
+                .y;
+        helper.assertTrue(Math.abs(nameTagY - zombie.getVisualVerticalScaleFactor() * VillagerLike.PLAYER_MODEL_NAME_TAG_HEIGHT) < EPSILON,
+                "tall adult zombie villager name tag did not use visual standing height");
         helper.succeed();
     }
 
