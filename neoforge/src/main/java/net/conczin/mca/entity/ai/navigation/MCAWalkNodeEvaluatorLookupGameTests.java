@@ -17,13 +17,11 @@ import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.PathfindingContext;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
 
 /** Guards the path-type classifier from repeating expensive terrain reads per candidate. */
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class MCAWalkNodeEvaluatorLookupGameTests {
     private MCAWalkNodeEvaluatorLookupGameTests() {

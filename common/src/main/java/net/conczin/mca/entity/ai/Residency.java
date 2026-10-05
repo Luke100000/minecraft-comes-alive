@@ -36,6 +36,7 @@ public class Residency {
     private static final CDataParameter<Integer> VILLAGE = CParameter.create("HomeVillage", -1);
     private static final int WORKPLACE_SEARCH_RADIUS = 8;
     private final VillagerEntityMCA entity;
+    private final BedDebugLog bedDebugLog = new BedDebugLog();
 
     public Residency(VillagerEntityMCA entity) {
         this.entity = entity;
@@ -192,6 +193,7 @@ public class Residency {
     }
 
     public void tick() {
+        bedDebugLog.tick(entity);
         //report buildings close by
         if (entity.tickCount % 600 == 0 && entity.requiresHome()) {
             Optional<Village> village = getHomeVillage();

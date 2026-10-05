@@ -32,7 +32,6 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.HashSet;
@@ -47,7 +46,6 @@ import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath;
  * Runs the real destination producer and movement sink in Brain ticks.
  * Existing navigation tests invoke createPath directly, bypassing this handoff.
  */
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class PathRetryLifecycleGameTests {
     // Each fixture extends beyond the tiny GameTest template. The two lanes

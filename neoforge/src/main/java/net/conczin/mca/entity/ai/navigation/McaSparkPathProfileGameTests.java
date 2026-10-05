@@ -22,7 +22,6 @@ import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.entity.schedule.ScheduleBuilder;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.ArrayList;
@@ -31,7 +30,6 @@ import java.util.List;
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
 
 /** Temporary, controlled MCA-only path stress fixture for an offline Spark capture. */
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class McaSparkPathProfileGameTests {
     private static final String BATCH = "zz_mca_spark_path_profile";

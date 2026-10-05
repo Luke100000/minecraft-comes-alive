@@ -24,10 +24,9 @@ import net.minecraft.world.level.pathfinder.PathfindingContext;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
-@GameTestHolder("minecraft")
+import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
 @PrefixGameTestTemplate(false)
 public final class FenceGateInteractionGameTests {
     private static final double FLOOR_EPSILON = 1.0E-3D;
@@ -46,6 +45,7 @@ public final class FenceGateInteractionGameTests {
                 Blocks.OAK_FENCE_GATE.defaultBlockState().setValue(BlockStateProperties.OPEN, true), 3);
 
         VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withGender(net.conczin.mca.entity.ai.relationship.Gender.MALE)
                 .withAge(0)
                 .withPosition(Vec3.atBottomCenterOf(villagerPos))
                 .spawn(MobSpawnType.STRUCTURE);
@@ -308,10 +308,7 @@ public final class FenceGateInteractionGameTests {
     }
 
     private static BlockPos preparePlanterFixture(GameTestHelper helper, BlockPos feet) {
-        for (BlockPos pos : BlockPos.betweenClosed(feet.offset(-3, -1, -3), feet.offset(3, 3, 3))) {
-            helper.getLevel().setBlock(pos, pos.getY() == feet.getY() - 1
-                    ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 3);
-        }
+        prepareFlatArea(helper, feet, 3, 4);
         BlockPos candidate = feet.west().south().above();
         helper.getLevel().setBlock(candidate.below(), Blocks.GRASS_BLOCK.defaultBlockState(), 3);
         return candidate;

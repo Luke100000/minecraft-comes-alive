@@ -19,15 +19,12 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.Optional;
 import java.util.Set;
 
 import static net.minecraft.world.entity.ai.behavior.AcquirePoi.findPathToPois;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class ExtendedFindPointOfInterestTaskGameTests {
     private ExtendedFindPointOfInterestTaskGameTests() {

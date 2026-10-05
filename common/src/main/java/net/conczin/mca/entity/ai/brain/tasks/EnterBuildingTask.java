@@ -94,7 +94,7 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
                 && isGoodFloorWalkTarget(world, villager, pos);
     }
 
-    private boolean isGoodFloorWalkTarget(Level world, VillagerEntityMCA villager, BlockPos pos) {
+    protected boolean isGoodFloorWalkTarget(Level world, VillagerEntityMCA villager, BlockPos pos) {
         return villager.getNavigation().isStableDestination(pos)
                 && world.noCollision(
                         villager,

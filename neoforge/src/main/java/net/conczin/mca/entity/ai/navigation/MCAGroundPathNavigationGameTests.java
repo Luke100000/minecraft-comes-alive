@@ -3,11 +3,14 @@ package net.conczin.mca.entity.ai.navigation;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
+import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.MCAMoveControl;
 import net.conczin.mca.entity.ai.PathingBlockInteraction;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
+import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.brain.tasks.LocalInsideBrownianWalk;
+import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.registry.BlocksMCA;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -32,7 +35,6 @@ import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.VoxelShape;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.HashSet;
@@ -41,8 +43,6 @@ import java.util.Set;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class MCAGroundPathNavigationGameTests {
     private static final Set<ChunkPos> PROGRESSIVE_FORCED_CHUNKS = new HashSet<>();
@@ -949,7 +949,6 @@ public final class MCAGroundPathNavigationGameTests {
             BlockPos lane = start.east(x);
             for (int y = 0; y < 2; y++) {
                 helper.getLevel().setBlock(lane.north().above(y), Blocks.STONE.defaultBlockState(), 3);
-                helper.getLevel().setBlock(lane.south().above(y), Blocks.STONE.defaultBlockState(), 3);
             }
         }
         BlockPos grave = start.east(3);
@@ -957,12 +956,24 @@ public final class MCAGroundPathNavigationGameTests {
 
         VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
                 .withAge(0)
+                .withGender(Gender.MALE)
                 .withPosition(Vec3.atBottomCenterOf(start))
                 .withName("Tombstone Collision Probe")
                 .spawn(MobSpawnType.STRUCTURE);
+        // A randomized narrow villager can fit beside the offset cross without colliding.
+        villager.getTraits().removeTrait(Traits.DWARFISM);
+        villager.getTraits().removeTrait(Traits.TOUGH);
+        villager.getTraits().removeTrait(Traits.WEAK);
+        villager.getGenetics().setGene(Genetics.SIZE, 0.5F);
+        villager.getGenetics().setGene(Genetics.WIDTH, 0.5F);
+        villager.refreshDimensions();
         villager.setNoAi(true);
         villager.setOnGround(true);
 
+        helper.assertTrue(!helper.getLevel().noBlockCollision(villager,
+                        villager.getBoundingBox().move(Vec3.atBottomCenterOf(grave)
+                                .subtract(villager.position()).add(0.0D, 0.001D, 0.0D))),
+                "fixture villager does not intersect the cross headstone; width=" + villager.getBbWidth());
         Path path = villager.getNavigation().createPath(target, 0);
 
         helper.assertTrue(path != null && path.canReach(),

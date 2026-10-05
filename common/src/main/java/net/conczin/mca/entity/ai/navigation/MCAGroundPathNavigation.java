@@ -476,6 +476,15 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     private boolean continueDetour(WalkTarget walkTarget) {
         BlockPos destination = walkTarget.getTarget().currentBlockPosition();
         if (this.detour == null) {
+            Path destinationPath = this.createPath(destination, 0);
+            if (destinationPath != null
+                    && (destinationPath.canReach() || isUsefulPartialPath(destinationPath, destination))) {
+                if (destinationPath.canReach()) {
+                    clearFailure(this.mob);
+                }
+                this.moveTo(destinationPath, walkTarget.getSpeedModifier());
+                return true;
+            }
             return beginDetour(walkTarget, destination);
         }
 
