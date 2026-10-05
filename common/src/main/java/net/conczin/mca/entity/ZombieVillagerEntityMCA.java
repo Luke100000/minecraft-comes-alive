@@ -261,7 +261,8 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     @Override
     @Nullable
     public <T extends Mob> T convertTo(EntityType<T> type, ConversionParams params, ConversionParams.AfterConversion<T> afterConversion) {
-        EntityType<? extends Mob> convertedType = !isRemoved() && type == EntityType.VILLAGER ? getGenetics().getGender().getVillagerType() : type;
+        boolean convertingToVillager = !isRemoved() && type == EntityType.VILLAGER;
+        EntityType<? extends Mob> convertedType = convertingToVillager ? getGenetics().getGender().getVillagerType() : type;
 
         UUID oldUuid = getUUID();
 
@@ -274,12 +275,16 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
             }
 
             if (mob instanceof VillagerEntityMCA villager) {
-                villager.setUUID(oldUuid);
                 villager.setInventory(inventory);
                 villager.setAge(getAgeState().toAge());
             }
 
-            this.discard();
+            if (mob instanceof VillagerEntityMCA && params.type().shouldDiscardAfterConversion()) {
+                mob.setUUID(oldUuid);
+                // Vanilla registers the converted mob before discarding the source. Free the
+                // preserved UUID now so addFreshEntity can register the replacement.
+                this.discard();
+            }
         });
     }
 
