@@ -165,11 +165,11 @@ class BlueprintScreenMapInteractionTest {
         Method update = BlueprintScreen.class.getDeclaredMethod("updateStructureScanControl", RoomScanPlan.class);
         update.setAccessible(true);
 
-        for (int floorNumber : List.of(-1, -2, 1, 2)) {
+        for (int floorNumber : List.of(-1, -2, 1, 2, Integer.MIN_VALUE)) {
             RoomScanPlan plan = RoomScanPlan.attachment(10, floorNumber, BlockPos.ZERO, BlockPos.ZERO,
                     floor(0, 64, 68, floorNumber));
             update.invoke(screen, plan);
-            assertEquals(Component.translatable(floorNumber < 0
+            assertEquals(Component.translatable(plan.hasProspectiveFloor() && floorNumber < 0
                     ? "gui.blueprint.addBasement" : "gui.blueprint.addFloor"), button.getMessage());
             assertEquals(ReportBuildingMessage.Action.ADD_ATTACHMENT,
                     BlueprintScreen.structureScanMessage(plan.mode(), plan).action());

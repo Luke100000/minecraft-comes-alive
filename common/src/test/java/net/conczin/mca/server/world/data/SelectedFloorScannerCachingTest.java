@@ -52,11 +52,16 @@ class SelectedFloorScannerCachingTest {
                 }
         );
 
-        Class<?> ownershipType = nestedType("StairFlightOwnership");
-        Constructor<?> ownershipConstructor = ownershipType.getDeclaredConstructor(
+        Class<?> regionType = nestedType("RegionDiscovery");
+        Constructor<?> regionConstructor = regionType.getDeclaredConstructor(
                 Level.class, providerType, int.class, int.class);
+        regionConstructor.setAccessible(true);
+        Object regions = regionConstructor.newInstance(null, provider, 64, 64);
+        Class<?> ownershipType = nestedType("TransitionOwnership");
+        Constructor<?> ownershipConstructor = ownershipType.getDeclaredConstructor(
+                Level.class, providerType, regionType, int.class, int.class);
         ownershipConstructor.setAccessible(true);
-        Object ownership = ownershipConstructor.newInstance(null, provider, 64, 64);
+        Object ownership = ownershipConstructor.newInstance(null, provider, regions, 64, 64);
         Method owner = ownershipType.getDeclaredMethod(
                 "owner", SelectedFloorScanner.SurfaceCell.class);
         owner.setAccessible(true);

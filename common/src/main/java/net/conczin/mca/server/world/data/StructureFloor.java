@@ -9,15 +9,13 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 /** Stable persisted identity for one semantic Floor around exact 3D geometry. */
 public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
-    static final int BAND_TOLERANCE = 2;
+    static final int BAND_TOLERANCE = FloorGrouping.MAX_HEIGHT_SPAN;
 
     public StructureFloor {
         geometry = Objects.requireNonNull(geometry, "geometry");
@@ -57,15 +55,10 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
                 .toList();
         if (ordered.isEmpty()) return Map.of();
 
-        List<List<StructureFloor>> bands = new ArrayList<>();
-        for (StructureFloor floor : ordered) {
-            List<StructureFloor> band = bands.isEmpty() ? null : bands.getLast();
-            if (band == null || floor.anchorY() - band.getFirst().anchorY() > BAND_TOLERANCE) {
-                band = new ArrayList<>();
-                bands.add(band);
-            }
-            band.add(floor);
-        }
+        List<List<StructureFloor>> bands = FloorGrouping.bands(
+                ordered.stream().map(StructureFloor::anchorY).toList()).stream()
+                .map(band -> ordered.stream().filter(floor -> band.contains(floor.anchorY())).toList())
+                .toList();
 
         int groundBand = -1;
         for (int index = 0; index < bands.size() && groundBand < 0; index++) {

@@ -38,8 +38,7 @@ public record RoomScanPlan(Optional<Building> currentRoom,
             case UPDATE_ROOM -> currentRoom.filter(room -> room.getStructureId() == targetStructureId
                     && room.getFloorId() == targetFloorId).isPresent() && existingFloor && noAttachment;
             case ADD_ATTACHMENT -> currentRoom.isEmpty() && noExistingFloor
-                    && targetBuildingId >= 0 && selectedAttachmentFloor != null
-                    && prospectiveFloorNumber != NO_PROSPECTIVE_FLOOR;
+                    && targetBuildingId >= 0 && selectedAttachmentFloor != null;
         };
         if (!valid) throw new IllegalArgumentException("Inconsistent Room scan target for " + mode);
     }

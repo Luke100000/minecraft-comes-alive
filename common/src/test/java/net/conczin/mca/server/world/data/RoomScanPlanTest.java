@@ -52,5 +52,10 @@ class RoomScanPlanTest {
 
         assertFalse(addBuilding.hasProspectiveFloor());
         assertTrue(attachment.hasProspectiveFloor());
+        RoomScanPlan unnumbered = RoomScanPlan.attachment(
+                1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, selectedFloor);
+        assertFalse(unnumbered.hasProspectiveFloor());
+        assertEquals(1, unnumbered.targetBuildingId());
+        assertEquals(selectedFloor, unnumbered.selectedAttachmentFloor());
     }
 }

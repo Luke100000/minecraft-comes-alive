@@ -1,6 +1,6 @@
 # Floor regions and transitions
 
-Status: proposed design, awaiting written-spec review.
+Status: approved by the user on 2026-10-05; source implementation verified; floor-only ports follow.
 
 ## Intent and scope
 
@@ -113,10 +113,12 @@ flight. Resolve each flight independently around that stable region.
 
 ### Transition ownership
 
-Resolve both endpoint groups before assigning a proven flight's rows. If the
-endpoints share a floor group, the flight is an internal level change. Otherwise,
-retain the tested allocation by distinct ascending step heights, independent of
-flight width or compass direction; the odd middle row belongs to the upper group.
+Resolve both endpoint surface regions before assigning a proven flight's rows.
+Retain the tested physical allocation by distinct ascending step heights,
+independent of flight width or compass direction; the odd middle row belongs to
+the upper region. Sharing a semantic floor number does not merge those regions
+or change this ownership. Ordinary uneven surfaces retain their local traversal
+rules.
 Descending interaction uses that same allocation, not a second rule.
 
 Do not replace proven odd-row semantics with distance-to-player or raw block-count
@@ -128,11 +130,11 @@ requirements. Do not assume every ascending surface is an inter-storey staircase
 ### Selection and materialisation
 
 Resolve the requested supported surface or existing connector handoff to its
-group. Traverse and materialise the selected floor using that group's canonical
-classification. Preserve the original interaction position and supported-source
+physical region. Traverse and materialise the selected floor using that region's
+canonical classification. Semantic groups determine labels separately. Preserve the original interaction position and supported-source
 provenance for subsequent Room lookup and server target validation.
 
-All equivalent seeds in that resolved ownership component must produce the same
+All equivalent seeds in the same physical ownership component must produce the same
 feet positions. Ceiling and connector metadata must also be deterministic for an
 unchanged world. Selection of a lower stair half and its upper walking cell must
 use the same physical transition ownership when both refer to that half.
@@ -256,3 +258,14 @@ saved identities, and loader boundaries. Its main implementation risks are stabl
 region recognition and accidental expansion through deep transition chains.
 The targeted tests above are required before removing the old special rescan.
 Implementation planning starts after the user reviews this written specification.
+
+## Implementation ruling: geometry and label ownership
+
+The existing `twoBlockStaircaseSeparatesBroadStoreys` regression exposed an
+incorrect draft interpretation: grouping nearby heights must not combine the
+endpoint footprints of a proven flight. The scanner therefore needs only
+`SurfaceRegion` and transition ownership, while the pure `FloorGrouping` helper
+owns semantic label bands. No separate scanner FloorGroup carrier is needed.
+Turning-landing regressions compare equivalent seeds within each physical
+region and separately assert shared numbering and disjoint geometry. This
+preserves genuine short storeys and avoids a rule specific to upward stairs.
