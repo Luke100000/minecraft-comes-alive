@@ -481,6 +481,32 @@ class RoomDFUTest {
         return TestStructureFloors.create(id, anchorY, ceilingY, number, region);
     }
 
+    @Test
+    void inconsistentSavedStoreyLabelsRoundTripWithoutNewRepair() {
+        Village village = canonicalVillage();
+        int[] heights = {72, 76, 78, 78};
+        int[] numbers = {1, 2, 3, 2};
+        for (int index = 0; index < heights.length; index++) {
+            int id = 21 + index;
+            BlockPos position = new BlockPos(10 + index * 3, heights[index], 0);
+            StructureFloor floor = new StructureFloor(0, numbers[index], new FloorGeometry(
+                    List.of(new FloorGeometry.Cell(position, heights[index] + 4)), java.util.Map.of()));
+            Structure structure = new Structure(id, position, List.of(floor));
+            structure.setLogicalBuildingId(20);
+            Building room = new Building(position);
+            room.setId(11 + index);
+            room.setStructureId(id);
+            room.setFloorId(0);
+            room.setGeometry(position, position.above(3), List.of(position));
+            village.registerStructure(structure, room);
+        }
+        Village reloaded = new Village(village.save(), null);
+        for (int index = 0; index < heights.length; index++) {
+            assertEquals(numbers[index], reloaded.getStructure(21 + index).orElseThrow()
+                    .getFloor(0).orElseThrow().floorNumber());
+        }
+    }
+
     private static Village canonicalVillage() {
         Village village = new Village(1, null);
         StructureFloor floor = floor(0, 64, 68, 0);

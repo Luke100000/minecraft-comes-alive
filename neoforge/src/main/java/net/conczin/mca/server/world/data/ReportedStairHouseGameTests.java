@@ -9,20 +9,135 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.TagParser;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.LadderBlock;
+import net.minecraft.world.level.block.state.properties.DoorHingeSide;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.List;
 
 @GameTestHolder("mca")
 @PrefixGameTestTemplate(false)
 public final class ReportedStairHouseGameTests {
     private ReportedStairHouseGameTests() {
+    }
+
+    @GameTest(batch = "mca_uneven_basement", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void descendingBasementContinuationAddsRoomOnExistingFloor(GameTestHelper helper) {
+        // Minimal stone/door geometry from (-200, 98, 134) in the reported New World.
+        BlockPos origin = helper.absolutePos(new BlockPos(5, 2, 5));
+        var level = helper.getLevel();
+        for (BlockPos relative : BlockPos.betweenClosed(-2, -1, -1, 6, 8, 4)) {
+            level.setBlock(origin.offset(relative), Blocks.STONE.defaultBlockState(), 2);
+        }
+        int[][] air = {
+                {0, 0, 1}, {-1, 1, 1}, {0, 1, 1}, {1, 1, 0}, {1, 1, 1}, {0, 1, 2},
+                {-1, 2, 1}, {0, 2, 1}, {1, 2, 0}, {1, 2, 1}, {2, 2, 0}, {2, 2, 1}, {1, 2, 2},
+                {0, 3, 0}, {1, 3, 0}, {1, 3, 1}, {2, 3, 0}, {2, 3, 1},
+                {2, 4, 0}, {1, 4, 1}, {2, 4, 1},
+                {4, 3, 0}, {4, 3, 1}, {4, 3, 2}, {5, 3, 0}, {5, 3, 1}, {5, 3, 2}, {5, 3, 3},
+                {4, 4, 0}, {4, 4, 1}, {4, 4, 2}, {5, 4, 0}, {5, 4, 1}, {5, 4, 2}, {5, 4, 3},
+                {4, 6, 0}, {4, 6, 1}, {5, 6, 0}, {5, 6, 1},
+                {4, 7, 0}, {4, 7, 1}, {5, 7, 0}, {5, 7, 1}
+        };
+        for (int[] pos : air) {
+            level.setBlock(origin.offset(pos[0], pos[1], pos[2]), Blocks.AIR.defaultBlockState(), 2);
+        }
+        BlockPos doorPos = origin.offset(3, 3, 0);
+        var door = Blocks.OAK_DOOR.defaultBlockState()
+                .setValue(DoorBlock.FACING, Direction.WEST)
+                .setValue(DoorBlock.OPEN, true)
+                .setValue(DoorBlock.HINGE,
+                        DoorHingeSide.RIGHT);
+        level.setBlock(doorPos, door, 2);
+        level.setBlock(doorPos.above(), door.setValue(DoorBlock.HALF,
+                DoubleBlockHalf.UPPER), 2);
+
+        Village village = new Village(0, level);
+        List<FloorGeometry.Cell> groundCells = List.of(new BlockPos(4, 6, 0), new BlockPos(4, 6, 1),
+                        new BlockPos(5, 6, 0), new BlockPos(5, 6, 1)).stream()
+                .map(pos -> new FloorGeometry.Cell(origin.offset(pos), origin.getY() + 8)).toList();
+        registerBasementFixtureFloor(village, 67, 68, 0, new FloorGeometry(groundCells, List.of()), groundCells);
+        int[][] saved = {
+                {1, 1, 0, 4}, {1, 1, 1, 5}, {2, 2, 0, 5}, {2, 2, 1, 5}, {3, 3, 0, 4},
+                {4, 3, 0, 5}, {4, 3, 1, 5}, {4, 3, 2, 5}, {5, 3, 0, 5}, {5, 3, 1, 5}, {5, 3, 2, 5}, {5, 3, 3, 5}
+        };
+        List<FloorGeometry.Cell> cells = Arrays.stream(saved)
+                .map(pos -> new FloorGeometry.Cell(origin.offset(pos[0], pos[1], pos[2]), origin.getY()+pos[3]))
+                .toList();
+        FloorGeometry basement = new FloorGeometry(cells, List.of(
+                new FloorConnector.Marker(doorPos, FloorConnector.Type.DOOR, doorPos, Direction.EAST)));
+        List<FloorGeometry.Cell> existingRoom = cells.stream().filter(cell ->
+                cell.feet().getX() >= origin.getX() + 4 && cell.feet().getY() == origin.getY() + 3).toList();
+        registerBasementFixtureFloor(village, 69, 70, -1, basement, existingRoom);
+        var villages = new ListTag();
+        villages.add(village.save());
+        var managerTag = new CompoundTag();
+        managerTag.put("villages", villages);
+        managerTag.putInt("lastBuildingId", 100);
+        VillageManager manager = new VillageManager(level, managerTag);
+        village = manager.findNearestVillage(origin, Village.MERGE_MARGIN).orElseThrow();
+        RoomWorkflow workflow = new RoomWorkflow(manager, level);
+        BlockPos bottom = origin.offset(0, 0, 1);
+        BlockPos nextStep = origin.offset(1, 1, 1);
+        for (BlockPos source : List.of(nextStep, bottom)) {
+            var analysis = RoomScanPlanner.analyze(village, level, source);
+            helper.assertTrue(analysis.plan().mode() == Village.RoomScanMode.ADD_ROOM
+                            && analysis.plan().targetStructureId() == 69 && analysis.plan().targetFloorId() == 0,
+                    "descending basement selected " + analysis.plan().mode() + " at " + source.subtract(origin));
+            helper.assertTrue(analysis.observation() != null
+                            && analysis.observation().scan().floor().anchorY() == origin.getY() + 3,
+                    "descending basement changed its canonical anchor");
+            BuildingScanResult addition = workflow.analyzeRoom(source);
+            helper.assertTrue(addition.result() == Building.validationResult.SUCCESS,
+                    "descending basement room addition failed: " + addition.result());
+        }
+        var addition = workflow.analyzeRoom(bottom);
+        var committed = workflow.commitAddition(addition,
+                addition.isAmbiguous() ? addition.matchingTypes().getFirst() : null);
+        helper.assertTrue(committed.status() == RoomWorkflow.Status.COMMITTED,
+                "descending basement room did not commit: " + committed.result());
+        Building newRoom = village.findInteractionRoomAt(bottom).orElseThrow();
+        helper.assertTrue(newRoom.getStructureId() == 69 && newRoom.getFloorId() == 0
+                        && newRoom.getId() != 70 && village.getStructures().size() == 2,
+                "descending basement created a new floor instead of a room");
+        Village reloaded = new Village(village.save(), level);
+        helper.assertTrue(reloaded.getStructure(69).orElseThrow().getFloor(0).orElseThrow().floorNumber() == -1,
+                "room addition changed the existing basement number");
+        for (BlockPos source : List.of(nextStep, bottom)) {
+            RoomScanPlan plan = reloaded.getRoomScanPlan(null, source);
+            helper.assertTrue(plan.mode() == Village.RoomScanMode.UPDATE_ROOM
+                            && plan.currentRoom().orElseThrow().getId() == newRoom.getId(),
+                    "descending basement lost its room identity after save/load");
+        }
+        helper.assertTrue(reloaded.findInteractionRoomAt(origin.offset(5, 3, 1)).orElseThrow().getId() == 70,
+                "basement continuation replaced the registered room across the door");
+        helper.succeed();
+    }
+
+    private static void registerBasementFixtureFloor(Village village, int structureId, int roomId, int number,
+                                                     FloorGeometry geometry, List<FloorGeometry.Cell> roomCells) {
+        BlockPos source = roomCells.getFirst().feet();
+        Structure structure = new Structure(structureId, source, List.of(new StructureFloor(0, number, geometry)));
+        structure.setLogicalBuildingId(67);
+        Building room = new Building(source);
+        room.setId(roomId);
+        room.setStructureId(structureId);
+        room.setFloorId(0);
+        room.setType("house");
+        room.setGeometry(structure.getRawPos0(), structure.getRawPos1(),
+                roomCells.stream().map(FloorGeometry.Cell::feet).toList());
+        village.registerStructure(structure, room);
     }
 
     @GameTest(batch = "mca_reported_stair_initial_registration", templateNamespace = "minecraft",
