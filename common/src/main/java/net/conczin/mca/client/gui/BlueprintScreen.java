@@ -622,7 +622,7 @@ public class BlueprintScreen extends ExtendedScreen {
         int y = layoutBaseY() - 56 + 22 * 3;
 
         String scanKey = primaryMode == Village.RoomScanMode.ADD_ATTACHMENT
-                && scanContext.prospectiveFloorNumber() < 0
+                && scanContext.hasProspectiveFloor() && scanContext.prospectiveFloorNumber() < 0
                 ? "gui.blueprint.addBasement" : getStructureScanTranslationKey(primaryMode);
         structureScanButton.setMessage(scanKey);
         structureScanButton.active = true;

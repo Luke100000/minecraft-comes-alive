@@ -42,6 +42,39 @@ class RoomScanPlannerTest {
     }
 
     @Test
+    void attachmentAboveLandingReusesExistingStorey() {
+        Structure ground = structure(20, 20, floor(0, 67, 71, 0, 3));
+        Village village = village(ground, room(100, 20, 0, Set.of(new BlockPos(0, 67, 0))));
+        Structure landing = structure(21, 20, new StructureFloor(0, 2, scannedFloor(76, 80, 5, 8)));
+        village.registerStructure(landing, room(101, 21, 0, Set.of(new BlockPos(5, 76, 0))));
+        BlockPos source = new BlockPos(9, 78, 0);
+        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
+                observation(source, scannedFloor(78, 82, 9, 12), Set.of(new BlockPos(8, 76, 0))));
+        assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, plan.mode());
+        assertEquals(2, plan.prospectiveFloorNumber());
+    }
+
+    @Test
+    void conflictingStoreyNumbersPreserveAttachmentFailure() {
+        Structure ground = structure(20, 20, floor(0, 67, 71, 0, 3));
+        Village village = village(ground, room(100, 20, 0, Set.of(new BlockPos(0, 67, 0))));
+        village.registerStructure(structure(21, 20, new StructureFloor(0, 2, scannedFloor(76, 80, 5, 8))),
+                room(101, 21, 0, Set.of(new BlockPos(5, 76, 0))));
+        village.registerStructure(structure(22, 20, new StructureFloor(0, 3, scannedFloor(78, 82, 15, 18))),
+                room(102, 22, 0, Set.of(new BlockPos(15, 78, 0))));
+        BlockPos source = new BlockPos(9, 78, 0);
+        var analysis = RoomScanPlanner.analyzeFresh(village, source,
+                observation(source, scannedFloor(78, 82, 9, 12), Set.of(new BlockPos(8, 76, 0))));
+        assertEquals(Building.validationResult.AMBIGUOUS_STRUCTURE, analysis.result());
+        assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, analysis.plan().mode());
+        assertEquals(20, analysis.plan().targetBuildingId());
+        assertTrue(!analysis.plan().hasProspectiveFloor());
+        assertEquals(3, village.getStructure(22).orElseThrow().getFloor(0).orElseThrow().floorNumber());
+        assertEquals(Village.RoomScanMode.UPDATE_ROOM,
+                village.getRoomScanPlan(null, new BlockPos(15, 78, 0)).mode());
+    }
+
+    @Test
     void supportedBandDescentUsesTheExactSelectedRoomCell() {
         Structure persisted = structure(20, 20, floor(0, 64, 68, 0, 3));
         BlockPos selectedCell = new BlockPos(2, 64, 0);

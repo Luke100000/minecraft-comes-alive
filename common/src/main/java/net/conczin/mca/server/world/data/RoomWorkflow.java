@@ -26,6 +26,9 @@ public final class RoomWorkflow {
         if (village != null) {
             RoomScanPlanner.Analysis analysis = RoomScanPlanner.analyze(village, world, source);
             RoomScanPlan plan = analysis.plan();
+            if (analysis.result() != Building.validationResult.SUCCESS) {
+                return Outcome.failed(analysis.result(), source, expectedTargetBuildingId);
+            }
             if (plan.mode() == Village.RoomScanMode.ADD_ATTACHMENT) {
                 if (expectedTargetBuildingId >= 0
                         && plan.targetBuildingId() != expectedTargetBuildingId) {
@@ -51,6 +54,9 @@ public final class RoomWorkflow {
         }
         RoomScanPlanner.Analysis analysis = RoomScanPlanner.analyze(village, world, source);
         RoomScanPlan plan = analysis.plan();
+        if (analysis.result() != Building.validationResult.SUCCESS) {
+            return Outcome.failed(analysis.result(), source, expectedRoomId);
+        }
         if (expectedRoomId >= 0 && plan.mode() != Village.RoomScanMode.UPDATE_ROOM) {
             return Outcome.failed(Building.validationResult.NOT_IN_BUILDING, source, expectedRoomId);
         }
@@ -111,6 +117,9 @@ public final class RoomWorkflow {
     private BuildingScanResult analyzeRoom(Village village, RoomScanPlanner.Analysis analysis) {
         RoomScanPlan plan = analysis.plan();
         BlockPos source = plan.interactionSource();
+        if (analysis.result() != Building.validationResult.SUCCESS) {
+            return failedRoom(analysis.result(), source, village);
+        }
         if (plan.mode() != Village.RoomScanMode.ADD_ROOM
                 || plan.targetStructureId() < 0 || plan.targetFloorId() < 0) {
             return failedRoom(plan.mode() == Village.RoomScanMode.UPDATE_ROOM
@@ -194,6 +203,9 @@ public final class RoomWorkflow {
                                                    int expectedTargetBuildingId) {
         RoomScanPlan plan = analysis.plan();
         BlockPos source = plan.interactionSource();
+        if (analysis.result() != Building.validationResult.SUCCESS) {
+            return failedRoom(analysis.result(), source, village);
+        }
         if (plan.mode() != Village.RoomScanMode.ADD_ATTACHMENT || plan.targetBuildingId() < 0
                 || (expectedTargetBuildingId >= 0
                 && plan.targetBuildingId() != expectedTargetBuildingId)) {
