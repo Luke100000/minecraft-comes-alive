@@ -91,10 +91,38 @@ class VillageFloorSystemTest {
     }
 
     @Test
+    void loadingAndOrdinaryEditsPreserveSavedFloorLabels() {
+        Village village = new Village(1, null);
+        Structure structure = structure(10, 77,
+                TestStructureFloors.create(0, 64, 68, 4, region(64)),
+                TestStructureFloors.create(1, 72, 76, 4, region(72)),
+                TestStructureFloors.create(2, 80, 84, 7, region(80)));
+        registerStructure(village, structure, room(100, 10, 0, true));
+
+        Village loaded = new Village(village.save(), null);
+        assertEquals(List.of(4, 4, 7), loaded.getStructure(10).orElseThrow().getFloors().stream()
+                .map(StructureFloor::floorNumber).toList());
+        loaded.setBuildingInheritanceEnabled(loaded.getBuilding(100).orElseThrow(), false);
+        loaded.refreshLogicalBuildings();
+        assertEquals(List.of(4, 4, 7), loaded.getStructure(10).orElseThrow().getFloors().stream()
+                .map(StructureFloor::floorNumber).toList());
+    }
+
+    @Test
+    void unnumberedSavedFloorsAreNotReclassifiedOnLoad() {
+        Village village = new Village(1, null);
+        Structure structure = structure(10, 77, floor(0, 64), floor(1, 72));
+        registerStructure(village, structure, room(100, 10, 0, true));
+        Village loaded = new Village(village.save(), null);
+        assertEquals(0, loaded.getStructure(10).orElseThrow().getFloor(0).orElseThrow().floorNumber());
+        assertEquals(0, loaded.getStructure(10).orElseThrow().getFloor(1).orElseThrow().floorNumber());
+    }
+
+    @Test
     void floorNumbersAreRelativeToExplicitGroundFloor() {
         Village village = new Village(1, null);
-        Structure low = structure(10, 77, floor(0, 40), floor(1, 44));
-        Structure high = structure(11, 77, floor(0, 48));
+        Structure low = structure(10, 77, floor(0, 40).withFloorNumber(-1), floor(1, 44));
+        Structure high = structure(11, 77, floor(0, 48).withFloorNumber(1));
         registerStructure(village, low, room(100, 10, 1, true));
         registerStructure(village, high, room(101, 11, 0, true));
 
@@ -106,7 +134,7 @@ class VillageFloorSystemTest {
     }
 
     @Test
-    void insertingPhysicalFloorBetweenExistingFloorsRenumbersUpperFloor() {
+    void insertingConflictingLabelsDoesNotRenumberExistingFloors() {
         Village village = new Village(1, null);
         Structure original = structure(10, 77,
                 TestStructureFloors.create(0, 64, 68, 0, region(64)),
@@ -121,14 +149,18 @@ class VillageFloorSystemTest {
 
         assertEquals(0, original.getFloor(0).orElseThrow().floorNumber());
         assertEquals(1, inserted.getFloor(0).orElseThrow().floorNumber());
-        assertEquals(2, original.getFloor(1).orElseThrow().floorNumber());
+        assertEquals(1, original.getFloor(1).orElseThrow().floorNumber());
+        assertEquals(Building.validationResult.AMBIGUOUS_STRUCTURE,
+                FloorGrouping.prospectiveNumber(List.of(original.getFloor(0).orElseThrow(),
+                        original.getFloor(1).orElseThrow()), original.getFloor(0).orElseThrow(),
+                        inserted.getFloor(0).orElseThrow()).result());
     }
 
     @Test
-    void floorNumbersAreRebuiltFromLogicalGroundAfterSaveLoad() {
+    void savedFloorNumbersRemainRelativeToExplicitGroundAfterSaveLoad() {
         Village village = new Village(1, null);
-        Structure low = structure(10, 77, floor(0, 40), floor(1, 44));
-        Structure high = structure(11, 77, floor(0, 48));
+        Structure low = structure(10, 77, floor(0, 40).withFloorNumber(-1), floor(1, 44));
+        Structure high = structure(11, 77, floor(0, 48).withFloorNumber(1));
         registerStructure(village, low, room(100, 10, 1, true));
         registerStructure(village, high, room(101, 11, 0, true));
         village.refreshLogicalBuildings();
@@ -566,7 +598,7 @@ class VillageFloorSystemTest {
         Structure lower = structure(10, 10,
                 TestStructureFloors.create(0, 88, 93, 0, region(88)));
         Structure upper = structure(11, 10,
-                TestStructureFloors.create(0, 91, 94, 0, region(91)));
+                TestStructureFloors.create(0, 91, 94, 1, region(91)));
         registerStructure(village, lower, room(100, 10, 0, true));
         registerStructure(village, upper, room(101, 11, 0, true));
 

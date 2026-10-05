@@ -162,6 +162,12 @@ final class RangedCombatPositioning {
             }
 
             Vec3 candidatePosition = Vec3.atBottomCenterOf(position);
+            // WALKABLE_DOOR nodes belong in the reachability graph so escape routing can pass
+            // through a closed hand-operable door/gate, but a collision-blocked transit node
+            // must never become the final escape target.
+            if (!hasStandingSpace(entity, candidatePosition)) {
+                continue;
+            }
             double candidateMinimumDistanceSquared = minimumDistanceSquared(candidatePosition, escapeThreats);
             if (candidateMinimumDistanceSquared <= currentMinimumDistanceSquared + MIN_USEFUL_DISTANCE_GAIN) {
                 continue;

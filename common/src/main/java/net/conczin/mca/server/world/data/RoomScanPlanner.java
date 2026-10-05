@@ -152,6 +152,11 @@ final class RoomScanPlanner {
                 if (owners.size() == 1) {
                     return RoomScanPlan.updateRoom(owners.getFirst(), source, scan.seed());
                 }
+                // Discovering a nearby Floor does not make an outside interaction a new Room.
+                if (!directSelection && scan.floor().interactionCellAt(
+                        source.getX(), source.getY(), source.getZ()).isEmpty()) {
+                    return RoomScanPlan.addBuilding(source);
+                }
                 return RoomScanPlan.addRoom(
                         expansion.structureId(), expansion.floorId(), source, observation.seed());
             }
@@ -198,7 +203,7 @@ final class RoomScanPlanner {
         if (village == null || freshFloor == null) return Optional.empty();
         List<FloorTarget> matches = village.getStructures().values().stream()
                 .flatMap(structure -> structure.getFloors().stream()
-                        .filter(floor -> floor.overlapsSameSemanticBand(freshFloor))
+                        .filter(floor -> floor.overlapsNearbyFloorBand(freshFloor))
                         .map(floor -> new FloorTarget(structure.getId(), floor.id())))
                 .limit(2)
                 .toList();

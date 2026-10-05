@@ -22,6 +22,6 @@ class ConfigPathfindingTest {
         Config config = GSON.fromJson("{\"version\":2}", Config.class);
 
         assertEquals(160, config.getVillagerPathfindingDistance());
-        assertEquals(48, config.getVillagerFollowRange());
+        assertEquals(16, config.getVillagerFollowRange());
     }
 }

@@ -54,9 +54,9 @@ class SelectedFloorScannerCachingTest {
 
         Class<?> regionType = nestedType("RegionDiscovery");
         Constructor<?> regionConstructor = regionType.getDeclaredConstructor(
-                Level.class, providerType, int.class, int.class);
+                Level.class, FloorCeilingResolver.class, providerType, int.class, int.class);
         regionConstructor.setAccessible(true);
-        Object regions = regionConstructor.newInstance(null, provider, 64, 64);
+        Object regions = regionConstructor.newInstance(null, null, provider, 64, 64);
         Class<?> ownershipType = nestedType("TransitionOwnership");
         Constructor<?> ownershipConstructor = ownershipType.getDeclaredConstructor(
                 Level.class, providerType, regionType, int.class, int.class);

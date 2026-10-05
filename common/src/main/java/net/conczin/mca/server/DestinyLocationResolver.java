@@ -1,10 +1,12 @@
 package net.conczin.mca.server;
 
 import net.conczin.mca.CommonConfig;
+import net.conczin.mca.MCA;
 import net.conczin.mca.destiny.DestinyDestination;
 import net.conczin.mca.util.WorldUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
+import net.minecraft.core.HolderSet;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.Identifier;
@@ -23,6 +25,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.TreeSet;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -35,6 +39,9 @@ public final class DestinyLocationResolver {
     }
 
     public static synchronized void refreshCachedDestinations(MinecraftServer server, CommonConfig config) {
+        if (MCA.getServer().orElse(null) == server) {
+            MCA.getStructureLocator().cancelAll();
+        }
         cachedDestinations = resolve(server, config);
         cachedServer = server;
     }
@@ -123,6 +130,23 @@ public final class DestinyLocationResolver {
                     radius
             );
         };
+    }
+
+    public static CompletableFuture<Optional<BlockPos>> findNearestAsync(UUID playerId, ServerLevel level,
+            BlockPos origin, DestinyDestination destination, int radius) {
+        if (destination.dimension().isEmpty() || !level.dimension().equals(destination.dimension().orElseThrow())) {
+            return CompletableFuture.completedFuture(Optional.empty());
+        }
+        Registry<Structure> registry = level.registryAccess().lookupOrThrow(Registries.STRUCTURE);
+        return parseSelector(destination.location()).map(selector -> {
+            Optional<? extends HolderSet<Structure>> structures = switch (selector.type()) {
+                case STRUCTURE -> registry.get(selector.id()).map(HolderSet::direct);
+                case TAG -> registry.get(TagKey.create(Registries.STRUCTURE, selector.id()));
+            };
+            return structures.map(holders -> MCA.getStructureLocator().locate(
+                    playerId, level, origin, holders, radius, true))
+                    .orElseGet(() -> CompletableFuture.completedFuture(Optional.empty()));
+        }).orElseGet(() -> CompletableFuture.completedFuture(Optional.empty()));
     }
 
     private static Collection<String> discoverVillageLocations(Registry<Structure> structures, boolean autoDiscover) {

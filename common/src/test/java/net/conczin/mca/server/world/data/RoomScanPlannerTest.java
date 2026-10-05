@@ -102,9 +102,9 @@ class RoomScanPlannerTest {
         RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
                 observation(selectedCell, null, scannedFloor(64, 68, 0, 3), Set.of()));
 
-        assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
+        assertEquals(Village.RoomScanMode.ADD_BUILDING, plan.mode());
         assertTrue(plan.currentRoom().isEmpty());
-        assertEquals(selectedCell, plan.scanSeed());
+        assertEquals(source, plan.scanSeed());
     }
 
     @Test

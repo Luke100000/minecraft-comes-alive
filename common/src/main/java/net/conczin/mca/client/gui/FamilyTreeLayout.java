@@ -1,7 +1,9 @@
 package net.conczin.mca.client.gui;
 
+import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.network.FamilyTreeView;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -40,34 +42,45 @@ final class FamilyTreeLayout {
             return Result.empty();
         }
 
-        Map<UUID, Placement> placements = collectPlacements(layoutRoot, nodes);
+        Map<UUID, UUID> displayPartners = collectDisplayPartners(nodes);
+        Map<UUID, Placement> placements = collectPlacements(layoutRoot, nodes, displayPartners);
         Map<Integer, List<UUID>> generations = new LinkedHashMap<>();
         placements.forEach((uuid, placement) ->
                 generations.computeIfAbsent(placement.generation(), ignored -> new ArrayList<>()).add(uuid));
 
         Map<UUID, Bounds> boundsById = new LinkedHashMap<>();
         List<Integer> orderedGenerations = generations.keySet().stream().sorted().toList();
+        Map<UUID, Integer> branchWidths = ancestorBranchWidths(nodes, placements, orderedGenerations, generations);
+        List<UUID> anchorIds = generations.get(0);
+        anchorIds.sort(UUID_ORDER);
+        placeAnchorGeneration(layoutRoot, anchorIds, placements, displayPartners, branchWidths, boundsById);
         for (int generation : orderedGenerations) {
-            List<UUID> ids = generations.get(generation);
-            ids.sort(UUID_ORDER);
-            if (generation == 0) {
-                placeAnchorGeneration(layoutRoot, ids, placements, nodes, boundsById);
-            } else {
-                placeGeneration(generation, ids, nodes, boundsById);
+            if (generation > 0) {
+                placeGeneration(generation, generations.get(generation), nodes, displayPartners, branchWidths, boundsById);
+            }
+        }
+        for (int index = orderedGenerations.size() - 1; index >= 0; index--) {
+            int generation = orderedGenerations.get(index);
+            if (generation < 0) {
+                placeGeneration(generation, generations.get(generation), nodes, displayPartners, branchWidths, boundsById);
             }
         }
 
         List<Card> cards = boundsById.entrySet().stream()
                 .map(entry -> new Card(entry.getKey(), entry.getValue()))
                 .toList();
-        List<Edge> edges = buildEdges(nodes, boundsById);
+        List<Edge> edges = buildEdges(nodes, boundsById, displayPartners);
         List<ContinuationControl> continuations = buildContinuations(snapshot.continuations(), boundsById);
         Bounds contentBounds = computeContentBounds(cards, continuations);
 
         return new Result(cards, edges, continuations, contentBounds);
     }
 
-    private static Map<UUID, Placement> collectPlacements(UUID layoutRoot, Map<UUID, FamilyTreeNode> nodes) {
+    private static Map<UUID, Placement> collectPlacements(
+            UUID layoutRoot,
+            Map<UUID, FamilyTreeNode> nodes,
+            Map<UUID, UUID> displayPartners
+    ) {
         Map<UUID, Placement> placements = new LinkedHashMap<>();
         placements.put(layoutRoot, new Placement(0, Role.ANCHOR));
 
@@ -75,7 +88,7 @@ final class FamilyTreeLayout {
         walkAncestors(rootNode, 0, nodes, placements);
         walkDescendants(rootNode, 0, nodes, placements);
         addSiblings(rootNode, nodes, placements);
-        addPartnerBranches(nodes, placements);
+        addPartnerBranches(nodes, placements, displayPartners);
         return placements;
     }
 
@@ -155,14 +168,18 @@ final class FamilyTreeLayout {
                 .forEach(node -> placements.putIfAbsent(node.id(), new Placement(0, Role.SIBLING)));
     }
 
-    private static void addPartnerBranches(Map<UUID, FamilyTreeNode> nodes, Map<UUID, Placement> placements) {
+    private static void addPartnerBranches(
+            Map<UUID, FamilyTreeNode> nodes,
+            Map<UUID, Placement> placements,
+            Map<UUID, UUID> displayPartners
+    ) {
         for (Map.Entry<UUID, Placement> entry : List.copyOf(placements.entrySet())) {
-            FamilyTreeNode node = nodes.get(entry.getKey());
-            if (node == null || !FamilyTreeNode.isValid(node.partner()) || !nodes.containsKey(node.partner())) {
+            UUID partnerId = displayPartners.get(entry.getKey());
+            if (partnerId == null) {
                 continue;
             }
 
-            FamilyTreeNode partner = nodes.get(node.partner());
+            FamilyTreeNode partner = nodes.get(partnerId);
             int generation = entry.getValue().generation();
             placements.putIfAbsent(partner.id(), new Placement(generation, Role.PARTNER));
             walkAncestors(partner, generation, nodes, placements);
@@ -174,18 +191,81 @@ final class FamilyTreeLayout {
         return node.streamParents().toList();
     }
 
+    private static Map<UUID, UUID> collectDisplayPartners(Map<UUID, FamilyTreeNode> nodes) {
+        Map<UUID, UUID> partners = new LinkedHashMap<>();
+        for (FamilyTreeNode node : nodes.values()) {
+            if (FamilyTreeNode.isValid(node.partner()) && nodes.containsKey(node.partner())) {
+                partners.put(node.id(), node.partner());
+            }
+        }
+
+        // Villager spawning creates two deceased parent records without a stored marriage.
+        // Use the existing generated-parent heuristic and their shared child to pair those
+        // records only for display. Recorded relationships, including widows, take precedence.
+        for (FamilyTreeNode child : nodes.values()) {
+            FamilyTreeNode father = nodes.get(child.father());
+            FamilyTreeNode mother = nodes.get(child.mother());
+            if (father == null || mother == null || father.id().equals(mother.id())
+                    || !isUnpairedGeneratedParent(father, child.id())
+                    || !isUnpairedGeneratedParent(mother, child.id())) {
+                continue;
+            }
+            partners.put(father.id(), mother.id());
+            partners.put(mother.id(), father.id());
+        }
+        return partners;
+    }
+
+    private static boolean isUnpairedGeneratedParent(FamilyTreeNode node, UUID childId) {
+        return node.probablyGenerated()
+                && node.children().contains(childId)
+                && !FamilyTreeNode.isValid(node.partner())
+                && node.getRelationshipState() == RelationshipState.SINGLE;
+    }
+
+    private static Map<UUID, Integer> ancestorBranchWidths(
+            Map<UUID, FamilyTreeNode> nodes,
+            Map<UUID, Placement> placements,
+            List<Integer> orderedGenerations,
+            Map<Integer, List<UUID>> generations
+    ) {
+        Map<UUID, Integer> widths = new LinkedHashMap<>();
+        // Reserve each person's ancestry before positioning couples, so both spouses'
+        // parents have separate lanes instead of sharing a horizontal connector rail.
+        for (int generation : orderedGenerations) {
+            for (UUID id : generations.get(generation)) {
+                int parentCount = 0;
+                int parentWidth = CARD_WIDTH;
+                for (UUID parentId : parentIds(nodes.get(id))) {
+                    Placement parent = placements.get(parentId);
+                    if (parent != null && parent.generation() == generation - 1) {
+                        parentCount++;
+                        parentWidth = Math.max(parentWidth, widths.getOrDefault(parentId, CARD_WIDTH));
+                    }
+                }
+                widths.put(id, parentCount > 1 ? parentWidth * 2 + PARTNER_GAP : parentWidth);
+            }
+        }
+        return widths;
+    }
+
     private static void placeAnchorGeneration(
             UUID layoutRoot,
             List<UUID> ids,
             Map<UUID, Placement> placements,
-            Map<UUID, FamilyTreeNode> nodes,
+            Map<UUID, UUID> displayPartners,
+            Map<UUID, Integer> branchWidths,
             Map<UUID, Bounds> boundsById
     ) {
         boundsById.put(layoutRoot, cardBounds(0, 0));
 
-        UUID partnerId = nodes.get(layoutRoot).partner();
+        UUID partnerId = displayPartners.get(layoutRoot);
         boolean hasPartner = FamilyTreeNode.isValid(partnerId) && ids.contains(partnerId);
-        int partnerX = CARD_WIDTH + PARTNER_GAP;
+        int laneWidth = branchWidths.get(layoutRoot);
+        if (hasPartner) {
+            laneWidth = Math.max(laneWidth, branchWidths.get(partnerId));
+        }
+        int partnerX = laneWidth + PARTNER_GAP;
         if (hasPartner) {
             boundsById.put(partnerId, cardBounds(partnerX, 0));
         }
@@ -201,23 +281,27 @@ final class FamilyTreeLayout {
                 .filter(id -> placements.get(id).role() != Role.SIBLING)
                 .toList();
 
-        int step = CARD_WIDTH + HORIZONTAL_GAP;
-        int leftX = -step;
-        int rightX = hasPartner ? partnerX + step : step;
+        int leftEdge = -laneWidth / 2;
+        int rightEdge = (hasPartner ? partnerX : 0) + laneWidth / 2;
         for (int index = 0; index < siblings.size(); index++) {
             UUID id = siblings.get(index);
+            int width = branchWidths.get(id);
             if ((index & 1) == 0) {
-                boundsById.put(id, cardBounds(leftX, 0));
-                leftX -= step;
+                int x = leftEdge - HORIZONTAL_GAP - width / 2;
+                boundsById.put(id, cardBounds(x, 0));
+                leftEdge = x - width / 2;
             } else {
-                boundsById.put(id, cardBounds(rightX, 0));
-                rightX += step;
+                int x = rightEdge + HORIZONTAL_GAP + width / 2;
+                boundsById.put(id, cardBounds(x, 0));
+                rightEdge = x + width / 2;
             }
         }
 
         for (UUID id : others) {
-            boundsById.put(id, cardBounds(rightX, 0));
-            rightX += step;
+            int width = branchWidths.get(id);
+            int x = rightEdge + HORIZONTAL_GAP + width / 2;
+            boundsById.put(id, cardBounds(x, 0));
+            rightEdge = x + width / 2;
         }
     }
 
@@ -225,41 +309,87 @@ final class FamilyTreeLayout {
             int generation,
             List<UUID> ids,
             Map<UUID, FamilyTreeNode> nodes,
+            Map<UUID, UUID> displayPartners,
+            Map<UUID, Integer> branchWidths,
             Map<UUID, Bounds> boundsById
     ) {
-        List<List<UUID>> units = new ArrayList<>();
+        List<GenerationUnit> units = new ArrayList<>();
         Set<UUID> assigned = new HashSet<>();
         Set<UUID> generationIds = new HashSet<>(ids);
-        for (UUID id : ids) {
+        for (UUID id : ids.stream().sorted(UUID_ORDER).toList()) {
             if (!assigned.add(id)) {
                 continue;
             }
-            FamilyTreeNode node = nodes.get(id);
-            UUID partnerId = node == null ? null : node.partner();
+            UUID partnerId = displayPartners.get(id);
+            List<UUID> members;
             if (FamilyTreeNode.isValid(partnerId) && generationIds.contains(partnerId) && assigned.add(partnerId)) {
-                units.add(List.of(id, partnerId));
+                members = List.of(id, partnerId);
             } else {
-                units.add(List.of(id));
+                members = List.of(id);
             }
+            int laneWidth = members.stream().mapToInt(branchWidths::get).max().orElse(CARD_WIDTH);
+            units.add(new GenerationUnit(members, laneWidth, generationTarget(generation, members, nodes, boundsById)));
         }
 
-        int totalWidth = units.stream()
-                .mapToInt(unit -> unit.size() == 2 ? CARD_WIDTH * 2 + PARTNER_GAP : CARD_WIDTH)
-                .sum()
-                + Math.max(0, units.size() - 1) * HORIZONTAL_GAP;
-        int cursorX = -(totalWidth / 2);
-        int y = generation * (CARD_HEIGHT + GENERATION_GAP);
-        for (List<UUID> unit : units) {
-            int firstCenter = cursorX + CARD_WIDTH / 2;
-            boundsById.put(unit.get(0), cardBounds(firstCenter, y));
-            if (unit.size() == 2) {
-                boundsById.put(unit.get(1), cardBounds(firstCenter + CARD_WIDTH + PARTNER_GAP, y));
-                cursorX += CARD_WIDTH * 2 + PARTNER_GAP;
-            } else {
-                cursorX += CARD_WIDTH;
+        units.sort(Comparator.comparingInt(GenerationUnit::targetX)
+                .thenComparing(unit -> unit.ids().get(0), UUID_ORDER));
+        List<Integer> centers = new ArrayList<>();
+        int rightEdge = Integer.MIN_VALUE;
+        long totalOffset = 0;
+        for (GenerationUnit unit : units) {
+            int left = unit.targetX() - unit.width() / 2;
+            if (!centers.isEmpty()) {
+                left = Math.max(left, rightEdge + HORIZONTAL_GAP);
             }
-            cursorX += HORIZONTAL_GAP;
+            int center = left + unit.width() / 2;
+            centers.add(center);
+            totalOffset += unit.targetX() - center;
+            rightEdge = left + unit.width();
         }
+        int offset = units.isEmpty() ? 0 : (int) (totalOffset / units.size());
+        int y = generation * (CARD_HEIGHT + GENERATION_GAP);
+        for (int index = 0; index < units.size(); index++) {
+            GenerationUnit unit = units.get(index);
+            int center = centers.get(index) + offset;
+            if (unit.ids().size() == 2) {
+                int separation = unit.laneWidth() + PARTNER_GAP;
+                int firstCenter = center - separation / 2;
+                boundsById.put(unit.ids().get(0), cardBounds(firstCenter, y));
+                boundsById.put(unit.ids().get(1), cardBounds(firstCenter + separation, y));
+            } else {
+                boundsById.put(unit.ids().get(0), cardBounds(center, y));
+            }
+        }
+    }
+
+    private static int generationTarget(
+            int generation,
+            List<UUID> ids,
+            Map<UUID, FamilyTreeNode> nodes,
+            Map<UUID, Bounds> boundsById
+    ) {
+        int left = Integer.MAX_VALUE;
+        int right = Integer.MIN_VALUE;
+        int adjacentY = (generation + (generation < 0 ? 1 : -1)) * (CARD_HEIGHT + GENERATION_GAP);
+        for (FamilyTreeNode node : nodes.values()) {
+            if (generation < 0) {
+                Bounds child = boundsById.get(node.id());
+                if (child != null && child.centerY() == adjacentY
+                        && parentIds(node).stream().anyMatch(ids::contains)) {
+                    left = Math.min(left, child.centerX());
+                    right = Math.max(right, child.centerX());
+                }
+            } else if (ids.contains(node.id())) {
+                for (UUID parentId : parentIds(node)) {
+                    Bounds parent = boundsById.get(parentId);
+                    if (parent != null && parent.centerY() == adjacentY) {
+                        left = Math.min(left, parent.centerX());
+                        right = Math.max(right, parent.centerX());
+                    }
+                }
+            }
+        }
+        return left == Integer.MAX_VALUE ? 0 : (left + right) / 2;
     }
 
     private static Bounds cardBounds(int centerX, int centerY) {
@@ -268,7 +398,11 @@ final class FamilyTreeLayout {
         return new Bounds(left, left + CARD_WIDTH, top, top + CARD_HEIGHT);
     }
 
-    private static List<Edge> buildEdges(Map<UUID, FamilyTreeNode> nodes, Map<UUID, Bounds> boundsById) {
+    private static List<Edge> buildEdges(
+            Map<UUID, FamilyTreeNode> nodes,
+            Map<UUID, Bounds> boundsById,
+            Map<UUID, UUID> displayPartners
+    ) {
         Set<EdgeKey> seen = new LinkedHashSet<>();
         List<Edge> edges = new ArrayList<>();
 
@@ -278,21 +412,26 @@ final class FamilyTreeLayout {
                 continue;
             }
 
-            for (UUID parentId : parentIds(node)) {
-                if (!boundsById.containsKey(parentId)) {
-                    continue;
-                }
-                EdgeKey key = EdgeKey.ordered(parentId, id, EdgeType.PARENT_CHILD);
-                if (seen.add(key)) {
-                    edges.add(new Edge(parentId, id, EdgeType.PARENT_CHILD));
+            List<UUID> parents = parentIds(node).stream().distinct().filter(boundsById::containsKey).toList();
+            if (parents.size() == 2
+                    && (parents.get(1).equals(displayPartners.get(parents.get(0)))
+                    || parents.get(0).equals(displayPartners.get(parents.get(1))))
+                    && boundsById.get(parents.get(0)).centerY() == boundsById.get(parents.get(1)).centerY()) {
+                edges.add(new Edge(parents.get(0), id, EdgeType.PARENT_CHILD, parents.get(1)));
+            } else {
+                for (UUID parentId : parents) {
+                    EdgeKey key = EdgeKey.ordered(parentId, id, EdgeType.PARENT_CHILD);
+                    if (seen.add(key)) {
+                        edges.add(new Edge(parentId, id, EdgeType.PARENT_CHILD, null));
+                    }
                 }
             }
 
-            UUID partnerId = node.partner();
+            UUID partnerId = displayPartners.get(id);
             if (FamilyTreeNode.isValid(partnerId) && boundsById.containsKey(partnerId)) {
                 EdgeKey key = EdgeKey.ordered(id, partnerId, EdgeType.PARTNER);
                 if (seen.add(key)) {
-                    edges.add(new Edge(id, partnerId, EdgeType.PARTNER));
+                    edges.add(new Edge(id, partnerId, EdgeType.PARTNER, null));
                 }
             }
         }
@@ -387,7 +526,7 @@ final class FamilyTreeLayout {
     public record Card(UUID uuid, Bounds bounds) {
     }
 
-    public record Edge(UUID from, UUID to, EdgeType type) {
+    public record Edge(UUID from, UUID to, EdgeType type, @Nullable UUID secondParent) {
     }
 
     public record ContinuationControl(UUID anchor, FamilyTreeView.Direction direction, Bounds bounds) {
@@ -414,6 +553,12 @@ final class FamilyTreeLayout {
     }
 
     private record GenerationNode(FamilyTreeNode node, int generation) {
+    }
+
+    private record GenerationUnit(List<UUID> ids, int laneWidth, int targetX) {
+        int width() {
+            return ids.size() == 2 ? laneWidth * 2 + PARTNER_GAP : laneWidth;
+        }
     }
 
     private record EdgeKey(UUID one, UUID two, EdgeType type) {

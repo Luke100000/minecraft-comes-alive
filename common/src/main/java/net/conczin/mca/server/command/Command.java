@@ -26,6 +26,7 @@ import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.permissions.Permissions;
 
@@ -251,29 +252,35 @@ public class Command {
 
     private static int verify(CommandContext<CommandSourceStack> ctx) {
         ServerPlayer player = ctx.getSource().getPlayer();
+        if (player == null) {
+            return 0;
+        }
 
-        CompletableFuture.runAsync(() -> {
-            // build http request
-            Map<String, String> params = new HashMap<>();
-            params.put("email", StringArgumentType.getString(ctx, "email"));
-            assert player != null;
-            params.put("player", player.getName().getString());
+        MinecraftServer server = player.level().getServer();
 
-            // encode and create url
-            String encodedURL = params.keySet().stream()
-                    .map(key -> key + "=" + URLEncoder.encode(params.get(key), StandardCharsets.UTF_8))
-                    .collect(Collectors.joining("&", Config.getInstance().villagerChatAIEndpoint.replace("v1/mca/chat", "v1/mca/verify") + "?", ""));
+        // Capture all Minecraft-owned state before leaving the server thread. The worker does
+        // only blocking HTTP I/O; applying the result returns to the server executor.
+        Map<String, String> params = new HashMap<>();
+        params.put("email", StringArgumentType.getString(ctx, "email"));
+        params.put("player", player.getName().getString());
+        String encodedURL = params.keySet().stream()
+                .map(key -> key + "=" + URLEncoder.encode(params.get(key), StandardCharsets.UTF_8))
+                .collect(Collectors.joining("&", Config.getInstance().villagerChatAIEndpoint.replace("v1/mca/chat", "v1/mca/verify") + "?", ""));
 
-            String request = OpenAIChatAI.verify(encodedURL);
-
-            if (request.equals("success")) {
-                sendMessage(ctx, Component.translatable("command.verify.success").withStyle(ChatFormatting.GREEN));
-            } else if (request.equals("failed")) {
-                sendMessage(ctx, Component.translatable("command.verify.failed").withStyle(ChatFormatting.RED));
-            } else {
-                sendMessage(ctx, Component.translatable("command.verify.crashed").withStyle(ChatFormatting.RED));
-            }
-        });
+        CompletableFuture
+                .supplyAsync(() -> OpenAIChatAI.verify(encodedURL), Util.ioPool())
+                .thenAcceptAsync(request -> {
+                    if (player.isRemoved() || MCA.getServer().orElse(null) != server) {
+                        return;
+                    }
+                    if (request.equals("success")) {
+                        player.sendSystemMessage(Component.translatable("command.verify.success").withStyle(ChatFormatting.GREEN));
+                    } else if (request.equals("failed")) {
+                        player.sendSystemMessage(Component.translatable("command.verify.failed").withStyle(ChatFormatting.RED));
+                    } else {
+                        player.sendSystemMessage(Component.translatable("command.verify.crashed").withStyle(ChatFormatting.RED));
+                    }
+                }, server);
         return 0;
     }
 

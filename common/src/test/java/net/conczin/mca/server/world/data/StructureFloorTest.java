@@ -150,25 +150,24 @@ class StructureFloorTest {
         FloorGeometry disjoint = new FloorGeometry(Set.of(
                 new FloorGeometry.Cell(new BlockPos(4, 65, 0), 69)), java.util.Map.of());
 
-        assertTrue(persisted.overlapsSameSemanticBand(overlappingUneven));
-        assertFalse(persisted.overlapsSameSemanticBand(differentFloor));
-        assertFalse(persisted.overlapsSameSemanticBand(disjoint));
+        assertTrue(persisted.overlapsNearbyFloorBand(overlappingUneven));
+        assertFalse(persisted.overlapsNearbyFloorBand(differentFloor));
+        assertFalse(persisted.overlapsNearbyFloorBand(disjoint));
     }
 
     @Test
-    void floorNumberBandsDoNotChainPairwiseTolerance() {
+    void anchorProximityDoesNotImplyOneStorey() {
         StructureFloor y64 = floorAt(0, 64);
-        StructureFloor y66 = floorAt(1, 66);
-        StructureFloor y68 = floorAt(2, 68);
+        StructureFloor y66 = floorAt(1, 66).withFloorNumber(1);
+        StructureFloor y68 = floorAt(2, 68).withFloorNumber(2);
 
-        assertTrue(StructureFloor.sameSemanticBand(y64.anchorY(), y66.anchorY()));
-        assertTrue(StructureFloor.sameSemanticBand(y66.anchorY(), y68.anchorY()));
-        assertFalse(StructureFloor.sameSemanticBand(y64.anchorY(), y68.anchorY()));
+        assertTrue(StructureFloor.hasNearbyAnchor(y64.anchorY(), y66.anchorY()));
+        assertTrue(StructureFloor.hasNearbyAnchor(y66.anchorY(), y68.anchorY()));
+        assertFalse(StructureFloor.hasNearbyAnchor(y64.anchorY(), y68.anchorY()));
 
-        var numbers = StructureFloor.floorNumbers(List.of(y64, y66, y68), y64);
-        assertEquals(0, numbers.get(y64));
-        assertEquals(0, numbers.get(y66));
-        assertEquals(1, numbers.get(y68));
+        assertEquals(0, y64.floorNumber());
+        assertEquals(1, y66.floorNumber());
+        assertEquals(2, y68.floorNumber());
     }
 
     private static StructureFloor floorAt(int id, int y) {

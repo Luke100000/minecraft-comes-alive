@@ -1,8 +1,9 @@
 package net.conczin.mca.server.world.data;
 
-import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.OptionalInt;
 
 /** Pure bounded storey grouping; stored labels are inputs, never rewritten here. */
@@ -16,19 +17,6 @@ final class FloorGrouping {
         boolean contains(int height) {
             return height >= minY && height <= maxY;
         }
-    }
-
-    static List<Band> bands(Collection<Integer> heights) {
-        List<Band> bands = new ArrayList<>();
-        for (int height : heights.stream().distinct().sorted().toList()) {
-            if (bands.isEmpty() || (long) height - bands.getLast().minY() > MAX_HEIGHT_SPAN) {
-                bands.add(new Band(height, height));
-            } else {
-                Band last = bands.getLast();
-                bands.set(bands.size() - 1, new Band(last.minY(), height));
-            }
-        }
-        return List.copyOf(bands);
     }
 
     record NumberDecision(Building.validationResult result, OptionalInt number) {
@@ -55,27 +43,34 @@ final class FloorGrouping {
         if (ground == null || !registered.contains(ground)) {
             return new NumberDecision(Building.validationResult.NOT_IN_BUILDING, OptionalInt.empty());
         }
-        List<Integer> heights = new ArrayList<>(registered.stream().map(StructureFloor::anchorY).toList());
-        heights.add(candidateY);
-        List<Band> bands = bands(heights);
-        Band candidate = bands.stream().filter(band -> band.contains(candidateY)).findFirst().orElseThrow();
-        List<Integer> labels = registered.stream().filter(floor -> candidate.contains(floor.anchorY()))
+        if (ground.floorNumber() != 0) return ambiguous();
+        // Saved labels define existing groups. A new candidate must not repartition those
+        // groups by changing where a sorted height-band sweep starts.
+        Map<Integer, Band> groups = new HashMap<>();
+        for (StructureFloor floor : registered) {
+            groups.merge(floor.floorNumber(), new Band(floor.anchorY(), floor.anchorY()),
+                    (first, second) -> new Band(Math.min(first.minY(), second.minY()),
+                            Math.max(first.maxY(), second.maxY())));
+        }
+        List<Integer> nearbyLabels = registered.stream()
+                .filter(floor -> Math.abs((long) floor.anchorY() - candidateY) <= MAX_HEIGHT_SPAN)
                 .filter(floor -> candidateFloor == null || floor.anchorY() == candidateY
                         || !floor.overlapsFootprint(candidateFloor))
                 .map(StructureFloor::floorNumber).distinct().toList();
+        List<Integer> labels = nearbyLabels.stream().filter(number -> {
+            Band group = groups.get(number);
+            return (long) Math.max(group.maxY(), candidateY) - Math.min(group.minY(), candidateY)
+                    <= MAX_HEIGHT_SPAN;
+        }).toList();
+        for (int number : nearbyLabels) {
+            if (number == Integer.MIN_VALUE || groups.get(number).contains(candidateY) && !labels.contains(number)) {
+                return ambiguous();
+            }
+        }
         if (labels.size() > 1) return ambiguous();
         if (labels.size() == 1) {
             int number = labels.getFirst();
-            if (number == Integer.MIN_VALUE) return ambiguous();
-            int minY = candidateY;
-            int maxY = candidateY;
-            for (StructureFloor floor : registered) {
-                if (floor.floorNumber() != number) continue;
-                minY = Math.min(minY, floor.anchorY());
-                maxY = Math.max(maxY, floor.anchorY());
-            }
-            // Reusing a label must not extend its saved group through pairwise chaining.
-            return (long) maxY - minY <= MAX_HEIGHT_SPAN ? success(number) : ambiguous();
+            return success(number);
         }
 
         OptionalInt lowerY = registered.stream().mapToInt(StructureFloor::anchorY)

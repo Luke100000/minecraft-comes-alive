@@ -206,10 +206,10 @@ public final class Config extends CommonConfig {
     public int villagerPathfindingDistance = 160;
 
     /**
-     * Vanilla follow-range attribute for villagers. Affects how far they pursue entities and the baseline pathfinder search budget.
-     * Smaller values improve performance at the cost of reduced detection range.
+     * Vanilla follow-range attribute for villagers. Controls sensing/pursuit range; vanilla keeps
+     * ordinary villager path searches at least 48 blocks independently of this default.
      */
-    public int villagerFollowRange = 48;
+    public int villagerFollowRange = 16;
 
 
     /**

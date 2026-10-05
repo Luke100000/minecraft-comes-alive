@@ -39,6 +39,7 @@ import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
+import net.minecraft.world.phys.AABB;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -46,6 +47,8 @@ import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 public class BabyItem extends Item {
+    private static final double MIN_PLACEMENT_CLEARANCE = 2.0D;
+
     private final Gender gender;
 
     public BabyItem(Gender gender, Item.Properties properties) {
@@ -188,15 +191,17 @@ public class BabyItem extends Item {
         }
 
         // Name is good and we're ready to grow
-        if (player instanceof ServerPlayer serverPlayer) {
-            birthChild(stack, (ServerLevel) world, serverPlayer);
+        Optional<VillagerEntityMCA> child = birthChild(stack, (ServerLevel) world, player);
+        if (child.isEmpty()) {
+            player.sendOverlayMessage(Component.translatable("item.mca.baby.cannot_place"));
+            return InteractionResult.FAIL;
         }
         stack.shrink(1);
 
         return InteractionResult.SUCCESS_SERVER.heldItemTransformedTo(stack);
     }
 
-    protected VillagerEntityMCA birthChild(ItemStack stack, ServerLevel world, ServerPlayer player) {
+    protected final Optional<VillagerEntityMCA> birthChild(ItemStack stack, ServerLevel world, Player player) {
         VillagerEntityMCA child = VillagerFactory.newVillager(world)
                 .withPosition(player.position())
                 .withGender(gender)
@@ -209,6 +214,17 @@ public class BabyItem extends Item {
         }
 
         child.setCustomName(stack.getOrDefault(DataComponents.CUSTOM_NAME, Component.literal("Unnamed")));
+        configureChild(child);
+        child.refreshDimensions();
+
+        AABB bounds = child.getBoundingBox();
+        AABB placementClearance = new AABB(
+                bounds.minX, bounds.minY, bounds.minZ,
+                bounds.maxX, bounds.minY + MIN_PLACEMENT_CLEARANCE, bounds.maxZ
+        );
+        if (!world.noBlockCollision(child, placementClearance) || child.isInWall()) {
+            return Optional.empty();
+        }
 
         WorldUtils.spawnEntity(world, child, EntitySpawnReason.BREEDING);
 
@@ -244,7 +260,10 @@ public class BabyItem extends Item {
                     });
         }
 
-        return child;
+        return Optional.of(child);
+    }
+
+    protected void configureChild(VillagerEntityMCA child) {
     }
 
     @Override

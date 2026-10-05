@@ -90,6 +90,11 @@ breaking ties toward the lower height, consistent with the current geometry
 anchor convention. Transition rows must not outvote the region's main surface.
 Use existing deterministic cell ordering to select its representative position.
 
+For enclosed continuations across doors, each Room contributes its own modal
+surface height. Use the lowest of these representatives for the common traversal
+band, so a larger Room does not exclude an uneven continuation. The materialised
+geometry still derives its own modal anchor. Exterior continuations do not vote.
+
 A small room or landing is eligible regardless of its area. Do not introduce a
 minimum-area heuristic that would discard the user's small turning room.
 
@@ -98,8 +103,9 @@ minimum-area heuristic that would discard the user's small turning room.
 Group eligible regions within the same proven building context using the existing
 two-block height tolerance. A group's full representative-height range must fit
 that tolerance: 76 and 78 may group, but 76, 78, and 80 must not become one group
-through pairwise chaining. Sort by height and deterministic position, then compare
-each candidate with the lowest representative height of the group.
+through pairwise chaining. Existing saved labels define the registered groups;
+compare a candidate with each group's full saved height range. Adding a lower
+candidate must not repartition a previously registered group.
 
 Height tolerance is a semantic convention, not physical membership. Preserve
 the existing exact-column separation and overlap validation so grouping labels
@@ -134,6 +140,11 @@ physical region. Traverse and materialise the selected floor using that region's
 canonical classification. Semantic groups determine labels separately. Preserve the original interaction position and supported-source
 provenance for subsequent Room lookup and server target validation.
 
+An explicit refresh selects a supported anchor of its persisted Floor before a
+single scan. Resolve the original interaction against that fresh geometry for
+Room selection; a legacy stair cell reassigned upstairs must not retarget the
+Floor refresh, and a traversal anchor must not select a Room across a door.
+
 All equivalent seeds in the same physical ownership component must produce the same
 feet positions. Ceiling and connector metadata must also be deterministic for an
 unchanged world. Selection of a lower stair half and its upper walking cell must
@@ -160,6 +171,10 @@ Stored Structure, Floor, and Room identities remain authoritative for existing
 registrations. Loading or viewing a save must not invoke a new repair pass. An
 explicit room rescan can update its geometry under normal validation but must not
 use that operation to silently reclassify all saved floor numbers.
+
+Only an explicit change of main Room rebases saved numbers relative to the new
+ground reference, in the existing building mutation transaction. Physical anchor
+proximity remains a separate overlap predicate and does not define storey identity.
 
 For a candidate group whose saved members disagree about their number, or a new
 intermediate group requiring renumbering occupied ordinals, use the existing

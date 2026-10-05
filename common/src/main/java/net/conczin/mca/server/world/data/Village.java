@@ -115,7 +115,6 @@ public class Village implements Iterable<Building> {
         structures.putAll(data.structures());
         logicalBuildings.putAll(data.logicalBuildings());
         validateBuildingData();
-        logicalBuildings.values().forEach(this::applyFloorNumbers);
         if (!buildings.isEmpty() || !externalBuildings.isEmpty() || !structures.isEmpty()) calculateDimensions();
     }
 
@@ -458,7 +457,7 @@ public class Village implements Iterable<Building> {
                     if (!exactCellOverlap) continue;
                     boolean permittedAttachmentTransition = candidate.getLogicalBuildingId()
                             == registered.getLogicalBuildingId()
-                            && !candidateFloor.sameSemanticBand(registeredFloor);
+                            && !candidateFloor.hasNearbyAnchor(registeredFloor);
                     if (!permittedAttachmentTransition) return true;
                 }
             }
@@ -908,7 +907,7 @@ public class Village implements Iterable<Building> {
                         new StructureConnector.VerticalConnection(structure, floor));
                 boolean belongsToProvenBuilding = provenBuildingIds.size() == 1
                         && provenBuildingIds.contains(structure.getLogicalBuildingId())
-                        && !candidate.sameSemanticBand(floor);
+                        && !candidate.hasNearbyAnchor(floor);
                 if (!directlyProven && !belongsToProvenBuilding) {
                     return true;
                 }
@@ -1056,7 +1055,15 @@ public class Village implements Iterable<Building> {
         LogicalBuilding logical = logicalBuildings.get(structure.getLogicalBuildingId());
         if (logical == null || logical.mainRoomId() == room.getId()
                 || !belongsToLogicalBuilding(room, logical.id())) return false;
-        publishBuildingMutation(() -> logical.setMainRoomId(room.getId()));
+        int groundNumber = structure.getFloor(room.getFloorId()).orElseThrow().floorNumber();
+        publishBuildingMutation(() -> {
+            logical.setMainRoomId(room.getId());
+            for (Structure member : getBuildingStructures(logical.id())) {
+                for (StructureFloor floor : member.getFloors()) {
+                    member.setFloorNumber(floor.id(), Math.subtractExact(floor.floorNumber(), groundNumber));
+                }
+            }
+        });
         return true;
     }
 
@@ -1149,7 +1156,6 @@ public class Village implements Iterable<Building> {
             removeLogicalBuilding(buildingId);
             return;
         }
-        applyFloorNumbers(logical);
     }
 
     private boolean validMainRoom(LogicalBuilding logical) {
@@ -1168,79 +1174,6 @@ public class Village implements Iterable<Building> {
                 .filter(Building::isFunctionalRoom)
                 .filter(room -> belongsToLogicalBuilding(room, buildingId))
                 .mapToInt(Building::getId).min().orElse(-1);
-    }
-
-    private void applyFloorNumbers(LogicalBuilding logical) {
-        StructureFloor ground = groundFloor(logical).orElse(null);
-        if (ground == null) return;
-        List<Structure> members = getBuildingStructures(logical.id());
-        List<StructureFloor> floors = members.stream()
-                .flatMap(structure -> structure.getFloors().stream())
-                .toList();
-        if (floors.stream().anyMatch(floor -> floor.floorNumber() != 0)) {
-            int groundNumber = ground.floorNumber();
-            for (Structure structure : members) {
-                for (StructureFloor floor : structure.getFloors()) {
-                    structure.setFloorNumber(floor.id(), floor.floorNumber() - groundNumber);
-                }
-            }
-            repairFloorNumberCollisions(members, ground.anchorY());
-            return;
-        }
-        Map<StructureFloor, Integer> numbers = StructureFloor.floorNumbers(
-                floors, ground);
-        for (Structure structure : members) {
-            for (StructureFloor floor : structure.getFloors()) {
-                Integer number = numbers.get(floor);
-                if (number != null) structure.setFloorNumber(floor.id(), number);
-            }
-        }
-    }
-
-    private static void repairFloorNumberCollisions(List<Structure> structures, int groundAnchorY) {
-        List<OwnedFloor> floors = structures.stream()
-                .flatMap(structure -> structure.getFloors().stream().map(floor -> new OwnedFloor(structure, floor)))
-                .toList();
-
-        StructureFloor reference = floors.stream()
-                .map(OwnedFloor::floor)
-                .filter(floor -> floor.floorNumber() == 0)
-                .min(Comparator.comparingInt(floor -> Math.abs(floor.anchorY() - groundAnchorY)))
-                .orElse(null);
-        if (reference == null) return;
-
-        List<OwnedFloor> above = floors.stream()
-                .filter(owned -> owned.floor().anchorY() > groundAnchorY)
-                .sorted(Comparator.comparingInt(owned -> owned.floor().anchorY()))
-                .toList();
-        StructureFloor previous = reference;
-        for (OwnedFloor owned : above) {
-            StructureFloor floor = owned.floor();
-            if (floor.floorNumber() == previous.floorNumber() && !floor.sameSemanticBand(previous)) {
-                int floorNumber = previous.floorNumber() + 1;
-                owned.structure().setFloorNumber(floor.id(), floorNumber);
-                floor = floor.withFloorNumber(floorNumber);
-            }
-            previous = floor;
-        }
-
-        List<OwnedFloor> below = floors.stream()
-                .filter(owned -> owned.floor().anchorY() < groundAnchorY)
-                .sorted(Comparator.comparingInt((OwnedFloor owned) -> owned.floor().anchorY()).reversed())
-                .toList();
-        previous = reference;
-        for (OwnedFloor owned : below) {
-            StructureFloor floor = owned.floor();
-            if (floor.floorNumber() == previous.floorNumber() && !floor.sameSemanticBand(previous)) {
-                int floorNumber = previous.floorNumber() - 1;
-                owned.structure().setFloorNumber(floor.id(), floorNumber);
-                floor = floor.withFloorNumber(floorNumber);
-            }
-            previous = floor;
-        }
-    }
-
-    private record OwnedFloor(Structure structure, StructureFloor floor) {
     }
 
     private void validateBuildingData() {
