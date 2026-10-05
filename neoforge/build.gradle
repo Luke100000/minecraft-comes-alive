@@ -91,6 +91,7 @@ neoForge {
             gameDirectory = file('run-gametest/')
             ideName = "NeoForge GameTest Server (${project.path})"
             systemProperty('neoforge.enabledGameTestNamespaces', "${mod_id},minecraft")
+            systemProperty('mca.gametest.enabled', 'true')
             focusedGameTest.orNull?.with { selectedGameTest ->
                 validateFocusedGameTest(selectedGameTest)
                 systemProperty('mca.gametest.select', selectedGameTest)
