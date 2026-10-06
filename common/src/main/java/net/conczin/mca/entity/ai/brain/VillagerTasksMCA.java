@@ -102,7 +102,8 @@ public class VillagerTasksMCA {
             MemoryModuleTypeMCA.MOURNING_FLOWER,
             MemoryModuleTypeMCA.FORCED_HOME,
             MemoryModuleTypeMCA.RANGED_COMBAT_STATE,
-            MemoryModuleTypeMCA.CANT_REACH_WALK_TARGET
+            MemoryModuleTypeMCA.CANT_REACH_WALK_TARGET,
+            MemoryModuleTypeMCA.SHELTER_BED
     );
 
     public static final ImmutableList<SensorType<? extends Sensor<? super Villager>>> SENSOR_TYPES = ImmutableList.of(
@@ -151,7 +152,8 @@ public class VillagerTasksMCA {
             brain.addActivity(Activity.IDLE, VillagerTasksMCA.getMercenaryPackage(0.5f));
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getGuardCorePackage(villager));
             brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F));
-            brain.addActivityWithConditions(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F), ImmutableSet.of(Pair.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT)));
+            brain.addActivityAndRemoveMemoriesWhenStopped(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F),
+                    ImmutableSet.of(Pair.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT)), ImmutableSet.of(MemoryModuleTypeMCA.SHELTER_BED));
             brain.addActivity(ActivitiesMCA.CHORE, VillagerTasksMCA.getChorePackage());
             noDefault = true;
         } else if (!villager.requiresHome()) {
@@ -160,7 +162,8 @@ public class VillagerTasksMCA {
             brain.addActivity(Activity.IDLE, VillagerTasksMCA.getAdventurerPackage(0.5f));
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage());
             brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F));
-            brain.addActivityWithConditions(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F), ImmutableSet.of(Pair.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT)));
+            brain.addActivityAndRemoveMemoriesWhenStopped(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F),
+                    ImmutableSet.of(Pair.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT)), ImmutableSet.of(MemoryModuleTypeMCA.SHELTER_BED));
             noDefault = true;
         } else if (age == AgeState.BABY) {
             brain.setSchedule(Schedule.VILLAGER_BABY);
@@ -190,7 +193,8 @@ public class VillagerTasksMCA {
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getImportantCorePackage(0.5F));
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getCorePackage(0.5F));
             brain.addActivityWithConditions(Activity.MEET, VillagerTasksMCA.getMeetPackage(0.5F), ImmutableSet.of(Pair.of(MemoryModuleType.MEETING_POINT, MemoryStatus.VALUE_PRESENT)));
-            brain.addActivityWithConditions(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F), ImmutableSet.of(Pair.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT)));
+            brain.addActivityAndRemoveMemoriesWhenStopped(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F),
+                    ImmutableSet.of(Pair.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT)), ImmutableSet.of(MemoryModuleTypeMCA.SHELTER_BED));
             brain.addActivity(Activity.IDLE, VillagerTasksMCA.getIdlePackage(0.5F));
             brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F));
             brain.addActivity(Activity.PRE_RAID, VillagerTasksMCA.getPreRaidPackage(0.5F));
@@ -222,6 +226,9 @@ public class VillagerTasksMCA {
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getImportantCorePackage(float speedModifier) {
         return ImmutableList.of(
+                Pair.of(0, EraseMemoryIf.<VillagerEntityMCA>create(v -> !v.getBrain().isActive(Activity.REST)
+                        || v.getBrain().hasMemoryValue(MemoryModuleType.HOME),
+                        MemoryModuleTypeMCA.SHELTER_BED)),
                 Pair.of(0, new Swim(0.8F)),
                 Pair.of(0, new SmarterOpenDoorsTask()),
                 Pair.of(0, new LookAtTargetSink(45, 90)),

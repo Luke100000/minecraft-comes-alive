@@ -23,7 +23,8 @@ import java.util.Set;
 
 /** Temporary bed diagnostics. No gameplay state is changed or persisted. */
 public final class BedDebugLog {
-    public static final boolean ENABLED = Boolean.parseBoolean(System.getProperty("mca.bedDebug", "true"));
+    public static final boolean ENABLED = Boolean.parseBoolean(System.getProperty("mca.bedDebug", "false"));
+    public static final boolean SHELTER_ENABLED = Boolean.parseBoolean(System.getProperty("mca.shelterDebug", "false"));
     private GlobalPos previousHome;
     private BlockPos previousSleepingPos;
     private String previousWalk;

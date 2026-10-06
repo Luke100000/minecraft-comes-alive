@@ -3,6 +3,7 @@ package net.conczin.mca.entity;
 import net.conczin.mca.Config;
 import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.ai.Genetics;
+import net.conczin.mca.entity.ai.LongTermMemory;
 import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
@@ -50,6 +51,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
 
     private String chatAIPrompt = "";
     private CompoundTag nicknameData = new CompoundTag();
+    private CompoundTag longTermMemoryData = new CompoundTag();
     private int burned;
 
     public ZombieVillagerEntityMCA(EntityType<? extends ZombieVillager> type, Level world, Gender gender) {
@@ -260,12 +262,14 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     public void writeAdditionalConversionData(CompoundTag output) {
         output.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
         output.put(VillagerEntityMCA.NICKNAMES_KEY, nicknameData.copy());
+        output.put(LongTermMemory.NBT_KEY, longTermMemoryData.copy());
     }
 
     @Override
     public void readAdditionalConversionData(CompoundTag input) {
         chatAIPrompt = input.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
         nicknameData = input.getCompound(VillagerEntityMCA.NICKNAMES_KEY).copy();
+        longTermMemoryData = input.getCompound(LongTermMemory.NBT_KEY).copy();
     }
 
     @Override
@@ -276,6 +280,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         relations.readFromNbt(data);
         chatAIPrompt = data.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
         nicknameData = data.getCompound(VillagerEntityMCA.NICKNAMES_KEY).copy();
+        longTermMemoryData = data.getCompound(LongTermMemory.NBT_KEY).copy();
 
         updateAttributes();
 
@@ -298,6 +303,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         InventoryUtils.saveToNBT(this.registryAccess(), inventory, nbt);
         nbt.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
         nbt.put(VillagerEntityMCA.NICKNAMES_KEY, nicknameData.copy());
+        nbt.put(LongTermMemory.NBT_KEY, longTermMemoryData.copy());
     }
 
     @Override

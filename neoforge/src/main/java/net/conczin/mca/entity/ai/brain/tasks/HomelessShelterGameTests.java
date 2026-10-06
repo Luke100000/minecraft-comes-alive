@@ -6,9 +6,15 @@ import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.BedPoiCompatibility;
+import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
+import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.conczin.mca.entity.ai.SchedulesMCA;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
 import net.conczin.mca.entity.ai.navigation.BedApproachTarget;
+import net.conczin.mca.server.world.data.Building;
+import net.conczin.mca.server.world.data.IndoorRoomCache;
+import net.conczin.mca.server.world.data.Village;
+import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
@@ -47,6 +53,7 @@ public final class HomelessShelterGameTests {
     private static final List<VillagerEntityMCA> STROLL_VILLAGERS = new ArrayList<>();
     private static final Map<BlockPos, BlockState> STROLL_BLOCKS = new LinkedHashMap<>();
     private static final Set<ChunkPos> STROLL_CHUNKS = new HashSet<>();
+    private static final Set<Integer> STROLL_VILLAGES = new HashSet<>();
     private static Boolean previousTeleport;
     private static Long previousDayTime;
     private static Boolean previousDaylightCycle;
@@ -54,9 +61,226 @@ public final class HomelessShelterGameTests {
     private HomelessShelterGameTests() {
     }
 
+    @GameTest(batch = "mca_unregistered_shelter_arrival", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void unregisteredRoomFloorCompletesShelterAwayFromBed(GameTestHelper helper) {
+        BlockPos center = helper.absolutePos(new BlockPos(1104, 2, 80));
+        BlockPos head = prepareBedsideHouse(helper, center);
+        VillagerEntityMCA villager = spawn(helper, center.north(2));
+        STROLL_VILLAGERS.add(villager);
+        helper.runAfterDelay(10, () -> {
+            helper.assertTrue(villager.getResidency().getHomeVillage().isEmpty(), "fixture house was registered");
+            helper.assertTrue(!BedApproachTarget.create(helper.getLevel(), head).orElseThrow()
+                    .getPathTargets(villager).contains(villager.blockPosition()), "fixture origin is beside bed");
+            helper.assertTrue(!new SeekIndoorShelterTask(0.5F).tryStart(helper.getLevel(), villager,
+                    helper.getLevel().getGameTime()), "unregistered room arrival still required standing beside the bed");
+            helper.assertTrue(!villager.getBrain().hasMemoryValue(MemoryModuleType.HOME), "room arrival claimed HOME");
+            helper.succeed();
+        });
+    }
+
+    // Separate extended arenas avoid reusing chunks whose tickets the previous batch just released.
+    @GameTest(batch = "mca_registered_shelter_arrival", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void registeredRoomFloorCompletesShelterAwayFromBed(GameTestHelper helper) {
+        BlockPos center = helper.absolutePos(new BlockPos(80, 2, 80));
+        BlockPos head = prepareBedsideHouse(helper, center);
+        helper.runAfterDelay(10, () -> {
+            Village village = registerStrollHouse(helper, center);
+            VillagerEntityMCA villager = spawn(helper, center.north(2));
+            STROLL_VILLAGERS.add(villager);
+            villager.getResidency().seekHome();
+            Building room = village.findPhysicalRoomAt(head).orElseThrow();
+            helper.assertTrue(room.containsFloorPosition(villager.blockPosition()), "fixture origin is outside registered room");
+            helper.assertTrue(!BedApproachTarget.create(helper.getLevel(), head).orElseThrow()
+                    .getPathTargets(villager).contains(villager.blockPosition()), "fixture origin is beside bed");
+            helper.assertTrue(!new SeekIndoorShelterTask(0.5F).tryStart(helper.getLevel(), villager,
+                    helper.getLevel().getGameTime()), "sheltered villager was pulled back toward bed");
+            helper.assertTrue(!villager.getBrain().hasMemoryValue(MemoryModuleType.HOME), "room arrival claimed HOME");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "mca_registered_stroll_selection", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void registeredRoomWanderingUsesRoomFloorAndLongerSteps(GameTestHelper helper) {
+        BlockPos center = helper.absolutePos(new BlockPos(208, 2, 80));
+        prepareBedsideHouse(helper, center);
+        helper.runAfterDelay(10, () -> {
+            Village village = registerStrollHouse(helper, center);
+            VillagerEntityMCA villager = spawn(helper, center.east().south(3));
+            STROLL_VILLAGERS.add(villager);
+            villager.getResidency().seekHome();
+            Building room = village.findPhysicalRoomAt(villager.blockPosition()).orElseThrow();
+            helper.assertTrue(!room.containsFloorPosition(center.east().south(5))
+                    && !helper.getLevel().canSeeSky(center.east().south(5)), "fixture lacks covered exterior floor");
+            // A floor-to-ceiling obstruction must still be checked live.
+            // A single solid block instead creates a valid raised floor surface.
+            BlockPos obstructed = center.south();
+            helper.assertTrue(room.containsFloorPosition(obstructed), "fixture obstruction is outside stored floor");
+            helper.getLevel().setBlock(obstructed, Blocks.STONE.defaultBlockState(), 3);
+            helper.getLevel().setBlock(obstructed.above(), Blocks.STONE.defaultBlockState(), 3);
+            helper.getLevel().setBlock(obstructed.above(2), Blocks.STONE.defaultBlockState(), 3);
+            helper.assertTrue(!EnterBuildingTask.hasStandingSpace(helper.getLevel(), villager, obstructed),
+                    "fixture obstruction did not block standing clearance");
+            var wander = LocalInsideBrownianWalk.create(0.5F);
+            long now = helper.getLevel().getGameTime();
+            boolean longerStep = false;
+            for (int attempt = 0; attempt < 128; attempt++) {
+                long time = now + attempt * 100L;
+                wander.tryStart(helper.getLevel(), villager, time);
+                var walk = villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET);
+                if (walk.isPresent()) {
+                    BlockPos target = walk.orElseThrow().getTarget().currentBlockPosition();
+                    assertRegisteredDestination(helper, villager, room, target);
+                    longerStep |= target.distSqr(villager.blockPosition()) >= 4.0D;
+                }
+                villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+                wander.doStop(helper.getLevel(), villager, time);
+            }
+            helper.assertTrue(longerStep, "registered room wandering still only selected one-block steps");
+            helper.succeed();
+        });
+    }
+
+    private static Village registerStrollHouse(GameTestHelper helper, BlockPos center) {
+        VillageManager manager = VillageManager.get(helper.getLevel());
+        helper.assertTrue(manager.findNearestVillage(center, Village.BORDER_MARGIN).isEmpty(),
+                "fixture would modify an existing village");
+        var result = manager.processBuilding(center);
+        helper.assertTrue(result == Building.validationResult.SUCCESS, "fixture room registration failed: " + result);
+        Village village = manager.findNearestVillage(center, Village.BORDER_MARGIN).orElseThrow();
+        STROLL_VILLAGES.add(village.getId());
+        village.setAutoScan(false);
+        return village;
+    }
+
+    private static void assertRegisteredDestination(GameTestHelper helper, VillagerEntityMCA villager,
+                                                     Building room, BlockPos target) {
+        helper.assertTrue(room.containsFloorPosition(target), "stroll escaped registered room: " + target);
+        helper.assertTrue(!BedPoiCompatibility.isCompatibleBedState(helper.getLevel().getBlockState(target))
+                        && !BedPoiCompatibility.isCompatibleBedState(helper.getLevel().getBlockState(target.below())),
+                "stroll selected a bed surface: " + target);
+        helper.assertTrue(EnterBuildingTask.hasStandingSpace(helper.getLevel(), villager, target),
+                "stroll used stale room support or clearance: " + target);
+    }
+
+    private static void prepareRestNight(ServerLevel level) {
+        previousTeleport = Config.getInstance().allowVillagerTeleporting;
+        Config.getInstance().allowVillagerTeleporting = false;
+        previousDayTime = level.getDayTime();
+        previousDaylightCycle = level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT);
+        level.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(false, level.getServer());
+        level.setDayTime(16000);
+    }
+
+    private static void startHomelessRest(VillagerEntityMCA villager) {
+        var brain = villager.getMCABrain();
+        brain.removeAllBehaviors();
+        brain.addActivity(Activity.CORE, ImmutableList.of(
+                Pair.of(0, new SmarterOpenDoorsTask()), Pair.of(1, new WanderOrTeleportToTargetTask())));
+        brain.addActivity(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F));
+        brain.setCoreActivities(Set.of(Activity.CORE));
+        brain.setDefaultActivity(Activity.REST);
+        brain.setSchedule(SchedulesMCA.DEFAULT);
+        brain.setActiveActivityIfPossible(Activity.REST);
+        villager.setNoAi(false);
+    }
+
+    @GameTest(batch = "mca_registered_rest_movement", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 600)
+    public static void homelessRestWandersWithinRegisteredRoomIncludingFromBed(GameTestHelper helper) {
+        verifyRestRoomMovement(helper, true);
+    }
+
+    @GameTest(batch = "mca_unregistered_rest_movement", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 600)
+    public static void homelessRestWandersWithinUnregisteredStairRoofRoom(GameTestHelper helper) {
+        verifyRestRoomMovement(helper, false);
+    }
+
+    private static void verifyRestRoomMovement(GameTestHelper helper, boolean registered) {
+        BlockPos center = helper.absolutePos(new BlockPos(registered ? 976 : 1232, 2, 80));
+        BlockPos head = prepareBedsideHouse(helper, center);
+        ServerLevel level = helper.getLevel();
+        prepareRestNight(level);
+        List<VillagerEntityMCA> walkers = new ArrayList<>();
+        Map<VillagerEntityMCA, Set<BlockPos>> visited = new LinkedHashMap<>();
+        Set<VillagerEntityMCA> longerWalks = new HashSet<>();
+        VillagerEntityMCA[] owner = {null};
+        Village[] village = {null};
+        IndoorRoomCache.Room[] room = {null};
+        long[] started = {0L};
+        helper.runAfterDelay(10, () -> {
+            if (registered) {
+                village[0] = registerStrollHouse(helper, center);
+            } else {
+                for (int x = -4; x <= 4; x++) {
+                    for (int z = -4; z <= 4; z++) {
+                        level.setBlock(center.offset(x, 3, z), Blocks.OAK_STAIRS.defaultBlockState(), 3);
+                    }
+                }
+                for (int x = 0; x <= 2; x++) {
+                    level.setBlock(center.offset(x, 3, 5), Blocks.OAK_STAIRS.defaultBlockState(), 3);
+                }
+            }
+            room[0] = VillageManager.get(level).getIndoorRooms().resolve(head).orElseThrow();
+            helper.assertTrue(!room[0].floorCells().contains(center.east().south(5)), "room included roofed doorstep");
+            level.getPoiManager().take(poi -> poi.is(PoiTypes.HOME), (poi, pos) -> pos.equals(head), head, 1).orElseThrow();
+            owner[0] = spawn(helper, head);
+            STROLL_VILLAGERS.add(owner[0]);
+            owner[0].getBrain().setMemory(MemoryModuleType.HOME, GlobalPos.of(level.dimension(), head));
+            if (registered) owner[0].getResidency().seekHomeAfterClaim();
+            owner[0].startSleeping(head);
+            for (BlockPos position : List.of(head.west(), center.north(2), center.west(2))) {
+                VillagerEntityMCA villager = spawn(helper, position);
+                STROLL_VILLAGERS.add(villager);
+                villager.getResidency().seekHome();
+                if (position.equals(head.west())) {
+                    villager.setPos(Vec3.atBottomCenterOf(position).add(0.0D, 0.5625D, 0.0D));
+                }
+                startHomelessRest(villager);
+                walkers.add(villager);
+                visited.put(villager, new HashSet<>());
+            }
+            started[0] = level.getGameTime();
+        });
+        helper.onEachTick(() -> {
+            if (walkers.isEmpty()) return;
+            long elapsed = level.getGameTime() - started[0];
+            for (VillagerEntityMCA villager : walkers) {
+                helper.assertTrue(!villager.getBrain().hasMemoryValue(MemoryModuleType.HOME) && !villager.isSleeping(),
+                        "homeless REST took the resident's bed");
+                villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).ifPresent(walk -> {
+                    BlockPos target = walk.getTarget().currentBlockPosition();
+                    helper.assertTrue(room[0].floorCells().contains(target), "REST destination left resolved room: " + target);
+                    assertStandingDestination(helper, villager, target);
+                    if (target.distSqr(villager.blockPosition()) >= 4.0D) longerWalks.add(villager);
+                });
+                if (villager.getY() <= center.getY() + 0.1D) {
+                    helper.assertTrue(room[0].floorCells().contains(villager.blockPosition()),
+                            "villager left its resolved room: " + villager.position());
+                    visited.get(villager).add(villager.blockPosition());
+                }
+                if (elapsed >= 400) {
+                    helper.assertTrue(visited.get(villager).size() >= 3 && longerWalks.contains(villager),
+                            "villager did not wander across room floor: " + visited.get(villager));
+                    helper.assertTrue(!BedPoiCompatibility.isCompatibleBedState(level.getBlockState(villager.blockPosition())),
+                            "villager remained on occupied bed");
+                }
+            }
+            if (elapsed >= 400) {
+                helper.assertTrue(owner[0].isSleeping() && (!registered || village[0].isResidentHomeCurrent(owner[0]))
+                                && owner[0].getBrain().getMemory(MemoryModuleType.HOME)
+                                .filter(home -> home.pos().equals(head)).isPresent()
+                                && level.getPoiManager().getCountInRange(poi -> poi.is(PoiTypes.HOME), head, 0,
+                                net.minecraft.world.entity.ai.village.poi.PoiManager.Occupancy.HAS_SPACE) == 0,
+                        "room wandering disturbed the resident's HOME, sleep or POI ticket");
+                helper.succeed();
+            }
+        });
+    }
+
     @GameTest(batch = "mca_shelter_bedside", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void roofedDoorstepStillSelectsFloorBesideBed(GameTestHelper helper) {
-        BlockPos center = helper.absolutePos(new BlockPos(80, 2, 80));
+        BlockPos center = helper.absolutePos(new BlockPos(336, 2, 80));
         BlockPos head = prepareBedsideHouse(helper, center);
         BlockPos doorstep = center.east().south(5);
         VillagerEntityMCA villager = spawn(helper, doorstep);
@@ -69,12 +293,13 @@ public final class HomelessShelterGameTests {
             helper.assertTrue(path != null && path.canReach(), "fixture bedside floor was unreachable");
             SeekIndoorShelterTask shelter = new SeekIndoorShelterTask(0.5F);
             BlockPos selected = shelter.getNextPosition(villager).orElseThrow();
-            helper.assertTrue(bedside.contains(selected) && selected.getZ() < center.getZ() + 4,
-                    "shelter selected roofed ground outside instead of bedside floor: " + selected);
+            var room = VillageManager.get(helper.getLevel()).getIndoorRooms().resolve(head).orElseThrow();
+            helper.assertTrue(room.floorCells().contains(selected) && !selected.equals(doorstep),
+                    "shelter selected roofed ground outside instead of room floor: " + selected);
             helper.assertTrue(shelter.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime()),
                     "roofed doorstep incorrectly counted as completed shelter arrival");
             var walk = villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElseThrow();
-            helper.assertTrue(bedside.contains(walk.getTarget().currentBlockPosition()), "shelter did not publish a bedside target");
+            helper.assertTrue(room.floorCells().contains(walk.getTarget().currentBlockPosition()), "shelter did not publish a room target");
             helper.assertTrue(!villager.getBrain().hasMemoryValue(MemoryModuleType.HOME), "shelter claimed HOME");
             shelter.doStop(helper.getLevel(), villager, helper.getLevel().getGameTime());
             villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
@@ -88,16 +313,11 @@ public final class HomelessShelterGameTests {
     @GameTest(batch = "mca_shelter_bedside_movement", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 500)
     public static void homelessRestEntersFromRoofedDoorstepWithoutClaimingBed(GameTestHelper helper) {
-        BlockPos center = helper.absolutePos(new BlockPos(80, 2, 80));
+        BlockPos center = helper.absolutePos(new BlockPos(464, 2, 80));
         BlockPos head = prepareBedsideHouse(helper, center);
         BlockPos door = center.east().south(4);
         ServerLevel level = helper.getLevel();
-        previousTeleport = Config.getInstance().allowVillagerTeleporting;
-        Config.getInstance().allowVillagerTeleporting = false;
-        previousDayTime = level.getDayTime();
-        previousDaylightCycle = level.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT);
-        level.getGameRules().getRule(GameRules.RULE_DAYLIGHT).set(false, level.getServer());
-        level.setDayTime(16000);
+        prepareRestNight(level);
         VillagerEntityMCA[] walker = {null};
         VillagerEntityMCA[] owner = {null};
         boolean[] bedsideIntent = {false};
@@ -110,21 +330,12 @@ public final class HomelessShelterGameTests {
             // The claimed bed is visually empty, as in the reported house.
             walker[0] = spawn(helper, door.south());
             STROLL_VILLAGERS.add(walker[0]);
-            var brain = walker[0].getMCABrain();
-            brain.removeAllBehaviors();
-            brain.addActivity(Activity.CORE, ImmutableList.of(
-                    Pair.of(0, new SmarterOpenDoorsTask()), Pair.of(1, new WanderOrTeleportToTargetTask())));
-            brain.addActivity(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F));
-            brain.setCoreActivities(Set.of(Activity.CORE));
-            brain.setDefaultActivity(Activity.REST);
-            brain.setSchedule(SchedulesMCA.DEFAULT);
-            brain.setActiveActivityIfPossible(Activity.REST);
-            walker[0].setNoAi(false);
+            startHomelessRest(walker[0]);
         });
         helper.onEachTick(() -> {
             if (walker[0] == null) return;
             VillagerEntityMCA villager = walker[0];
-            Set<BlockPos> bedside = BedApproachTarget.create(level, head).orElseThrow().getPathTargets(villager);
+            Set<BlockPos> bedside = VillageManager.get(level).getIndoorRooms().resolve(head).orElseThrow().floorCells();
             villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).ifPresent(walk -> {
                 if (bedside.contains(walk.getTarget().currentBlockPosition())) bedsideIntent[0] = true;
             });
@@ -179,6 +390,7 @@ public final class HomelessShelterGameTests {
                 helper.getLevel().setBlock(pos.above(3), Blocks.STONE.defaultBlockState(), 3);
             }
         }
+        encloseFloor(helper, floor);
         BlockPos foot = floor.offset(2, 0, 3);
         BlockPos head = foot.east();
         var bed = Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.EAST);
@@ -197,11 +409,11 @@ public final class HomelessShelterGameTests {
             var blockedPath = villager.getNavigation().createPath(unreachable, 0);
             helper.assertTrue(blockedPath == null || !blockedPath.canReach(),
                     "fixture enclosed floor was reachable");
-            var reachablePath = villager.getNavigation().createPath(floor, 0);
+            var reachablePath = villager.getNavigation().createPath(floor.east().south(), 0);
             helper.assertTrue(reachablePath != null && reachablePath.canReach(),
                     "fixture did not contain reachable shelter");
             SeekIndoorShelterTask task = new SeekIndoorShelterTask(0.5F);
-            helper.assertTrue(task.isGoodFloorWalkTarget(helper.getLevel(), villager, unreachable),
+            helper.assertTrue(EnterBuildingTask.isUsableFloor(helper.getLevel(), villager, unreachable),
                     "fixture enclosed floor did not qualify as a shelter candidate");
             helper.assertTrue(villager.getResidency().getHomeVillage().isEmpty(),
                     "fixture unexpectedly used a registered room instead of nearby-floor discovery");
@@ -211,7 +423,9 @@ public final class HomelessShelterGameTests {
                 helper.assertTrue(selected.isPresent(),
                         "reachable shelter was rejected by the sampled floor; attempt=" + attempt);
                 var path = villager.getNavigation().createPath(selected.orElseThrow(), 0);
-                helper.assertTrue(path != null && path.canReach(), "selected shelter was unreachable");
+                helper.assertTrue(path != null && path.canReach(), "selected shelter was unreachable: target="
+                        + selected.orElseThrow() + ", state=" + helper.getLevel().getBlockState(selected.orElseThrow())
+                        + ", pathTarget=" + (path == null ? "null" : path.getTarget()));
             }
             helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.HOME).isEmpty(),
                     "shelter selection claimed HOME");
@@ -220,7 +434,7 @@ public final class HomelessShelterGameTests {
         });
     }
 
-    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
+    @GameTest(batch = "mca_occupied_shelter_floor", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void homelessRestChoosesIndoorFloorInsteadOfOccupiedBed(GameTestHelper helper) {
         BlockPos floor = helper.absolutePos(new BlockPos(2, 1, 2));
         helper.getLevel().setDayTime(13000);
@@ -237,6 +451,7 @@ public final class HomelessShelterGameTests {
             helper.getLevel().setBlock(pos.above(), Blocks.AIR.defaultBlockState(), 3);
         }
         BlockPos foot = floor.offset(3, 0, 3);
+        encloseFloor(helper, floor);
         BlockPos head = foot.east();
         var bed = Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.EAST);
         helper.getLevel().setBlock(foot, bed.setValue(BedBlock.PART, BedPart.FOOT), 3);
@@ -287,7 +502,7 @@ public final class HomelessShelterGameTests {
 
     @GameTest(batch = "mca_indoor_stroll_selection", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void indoorWanderingDoesNotTargetBedSurface(GameTestHelper helper) {
-        BlockPos foot = helper.absolutePos(new BlockPos(80, 2, 80));
+        BlockPos foot = helper.absolutePos(new BlockPos(592, 2, 80));
         prepareStrollRoom(helper, foot);
         VillagerEntityMCA villager = spawn(helper, foot.west());
         STROLL_VILLAGERS.add(villager);
@@ -299,7 +514,7 @@ public final class HomelessShelterGameTests {
 
     @GameTest(batch = "mca_indoor_stroll_leaves", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void indoorWanderingDoesNotChooseLeafSupport(GameTestHelper helper) {
-        BlockPos center = helper.absolutePos(new BlockPos(80, 2, 80));
+        BlockPos center = helper.absolutePos(new BlockPos(720, 2, 80));
         prepareStrollRoom(helper, center);
         BlockPos origin = center.west(2);
         BlockState leaves = Blocks.OAK_LEAVES.defaultBlockState().setValue(BlockStateProperties.PERSISTENT, true);
@@ -326,14 +541,18 @@ public final class HomelessShelterGameTests {
             wander.tryStart(helper.getLevel(), villager, time);
             var walk = villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET);
             if (walk.isPresent()) {
-                BlockPos target = walk.orElseThrow().getTarget().currentBlockPosition();
-                assertStandingDestination(helper, villager, target);
-                helper.assertTrue(helper.getLevel().noCollision(villager,
-                                villager.getBoundingBox().move(Vec3.atBottomCenterOf(target).subtract(villager.position()))),
-                        "stroll selected a destination without body clearance: " + target);
-                var path = villager.getNavigation().createPath(target, 0);
-                helper.assertTrue(path != null && path.canReach() && path.getTarget().equals(target),
-                        "stroll destination required surface relocation or was unreachable: " + target);
+                var tracker = walk.orElseThrow().getTarget();
+                Set<BlockPos> targets = tracker instanceof MultiTargetPositionTracker multiTarget
+                        ? multiTarget.getPathTargets(villager) : Set.of(tracker.currentBlockPosition());
+                for (BlockPos target : targets) {
+                    assertStandingDestination(helper, villager, target);
+                    helper.assertTrue(helper.getLevel().noCollision(villager,
+                                    villager.getBoundingBox().move(Vec3.atBottomCenterOf(target).subtract(villager.position()))),
+                            "stroll selected a destination without body clearance: " + target);
+                }
+                var path = villager.getNavigation().createPath(targets, 0);
+                helper.assertTrue(path != null && path.canReach() && targets.contains(path.getTarget()),
+                        "stroll endpoints required surface relocation or were unreachable: " + targets);
                 publications++;
             }
             villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
@@ -345,7 +564,7 @@ public final class HomelessShelterGameTests {
     @GameTest(batch = "mca_indoor_stroll_movement", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 500)
     public static void villagersStrollOnFloorAndLeaveBedWithoutTakingHome(GameTestHelper helper) {
-        BlockPos foot = helper.absolutePos(new BlockPos(80, 2, 80));
+        BlockPos foot = helper.absolutePos(new BlockPos(848, 2, 80));
         BlockPos head = foot.east();
         prepareStrollRoom(helper, foot);
         previousTeleport = Config.getInstance().allowVillagerTeleporting;
@@ -422,6 +641,7 @@ public final class HomelessShelterGameTests {
     private static void assertStandingDestination(GameTestHelper helper, VillagerEntityMCA villager, BlockPos target) {
         var state = helper.getLevel().getBlockState(target);
         var support = helper.getLevel().getBlockState(target.below());
+        helper.assertTrue(!state.is(BlockTags.DOORS), "stroll selected a doorway as idle shelter: " + target);
         helper.assertTrue(!state.is(BlockTags.LEAVES) && !support.is(BlockTags.LEAVES),
                 "stroll selected leaf support: " + target);
         helper.assertTrue(!BedPoiCompatibility.isCompatibleBedState(state)
@@ -438,14 +658,16 @@ public final class HomelessShelterGameTests {
         for (BlockPos pos : BlockPos.betweenClosed(center.offset(-4, -1, -4), center.offset(4, 4, 4))) {
             STROLL_BLOCKS.putIfAbsent(pos.immutable(), level.getBlockState(pos));
         }
-        ChunkPos min = new ChunkPos(center.offset(-4, 0, -4));
-        ChunkPos max = new ChunkPos(center.offset(4, 0, 4));
+        ChunkPos min = new ChunkPos(center.offset(-20, 0, -20));
+        ChunkPos max = new ChunkPos(center.offset(20, 0, 20));
         for (int x = min.x; x <= max.x; x++) {
             for (int z = min.z; z <= max.z; z++) {
                 ChunkPos chunk = new ChunkPos(x, z);
                 if (!level.getForcedChunks().contains(chunk.toLong())) {
                     STROLL_CHUNKS.add(chunk);
                 }
+                level.setChunkForced(x, z, true);
+                level.getChunk(x, z);
             }
         }
         prepareFlatArea(helper, center, 4, 5);
@@ -471,8 +693,206 @@ public final class HomelessShelterGameTests {
         cleanupStroll(level);
     }
 
+    @AfterBatch(batch = "mca_registered_shelter_arrival")
+    public static void cleanupRegisteredArrival(ServerLevel level) {
+        cleanupStroll(level);
+    }
+
+    @AfterBatch(batch = "mca_unregistered_shelter_arrival")
+    public static void cleanupUnregisteredArrival(ServerLevel level) {
+        cleanupStroll(level);
+    }
+
+    @AfterBatch(batch = "mca_registered_stroll_selection")
+    public static void cleanupRegisteredSelection(ServerLevel level) {
+        cleanupStroll(level);
+    }
+
+    @AfterBatch(batch = "mca_registered_rest_movement")
+    public static void cleanupRegisteredRest(ServerLevel level) {
+        cleanupStroll(level);
+    }
+
+    @AfterBatch(batch = "mca_unregistered_rest_movement")
+    public static void cleanupUnregisteredRest(ServerLevel level) {
+        cleanupStroll(level);
+    }
+
+    private static void encloseFloor(GameTestHelper helper, BlockPos floor) {
+        for (int x = 0; x <= 6; x++) {
+            for (int z = 0; z <= 6; z++) {
+                if (x == 0 || x == 6 || z == 0 || z == 6) {
+                    for (int y = 0; y < 3; y++) {
+                        helper.getLevel().setBlock(floor.offset(x, y, z), Blocks.STONE.defaultBlockState(), 3);
+                    }
+                }
+            }
+        }
+        BlockPos door = floor.south(3);
+        var state = Blocks.OAK_DOOR.defaultBlockState().setValue(DoorBlock.FACING, Direction.EAST);
+        helper.getLevel().setBlock(door, state.setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER), 3);
+        helper.getLevel().setBlock(door.above(), state.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER), 3);
+    }
+
     @AfterBatch(batch = "mca_shelter_bedside")
     public static void cleanupBedside(ServerLevel level) {
+        cleanupStroll(level);
+    }
+
+    @GameTest(batch = "mca_shelter_room_cache", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 560)
+    public static void sharedRoomCacheReusesBedsAndInvalidatesRoofChanges(GameTestHelper helper) {
+        verifyRoomCache(helper, false);
+    }
+
+    @GameTest(batch = "mca_registered_room_cache", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 560)
+    public static void registeredRoomCacheDoesNotRestoreInvalidatedGeometry(GameTestHelper helper) {
+        verifyRoomCache(helper, true);
+    }
+
+    @GameTest(batch = "mca_registered_room_partition_cache", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void registeredRoomCacheDiscoversRemovedPartitionOnFirstUse(GameTestHelper helper) {
+        verifyRemovedPartition(helper, false);
+    }
+
+    @GameTest(batch = "mca_registered_room_partition_cache", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 1500)
+    public static void registeredRoomCacheDiscoversRemovedPartitionAfterExpiry(GameTestHelper helper) {
+        verifyRemovedPartition(helper, true);
+    }
+
+    private static void verifyRemovedPartition(GameTestHelper helper, boolean expire) {
+        BlockPos center = helper.absolutePos(new BlockPos(expire ? 2128 : 1872, 2, 80));
+        BlockPos head = prepareBedsideHouse(helper, center);
+        ServerLevel level = helper.getLevel();
+        BlockPos adjacentRoom = center.west(3).north(2);
+        for (int z = -3; z <= 3; z++) {
+            for (int y = 0; y < 3; y++) {
+                level.setBlock(center.offset(-1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        BlockPos door = center.west();
+        var state = Blocks.OAK_DOOR.defaultBlockState().setValue(DoorBlock.FACING, Direction.EAST);
+        level.setBlock(door, state.setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER), 3);
+        level.setBlock(door.above(), state.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER), 3);
+        var cache = VillageManager.get(level).getIndoorRooms();
+        Building[] registered = {null};
+        helper.runAfterDelay(10, () -> {
+            Village village = registerStrollHouse(helper, center);
+            registered[0] = village.findPhysicalRoomAt(head).orElseThrow();
+            helper.assertTrue(!registered[0].containsFloorPosition(adjacentRoom),
+                    "fixture partition did not separate the bed from the adjacent room");
+            if (expire) {
+                helper.assertTrue(!cache.resolve(head).orElseThrow().floorCells().contains(adjacentRoom),
+                        "initial room discovery ignored the partition");
+            }
+        });
+        // Wait beyond both the idle lifetime and the cache's periodic eviction pass.
+        int removeAt = expire ? 1420 : 20;
+        helper.runAfterDelay(removeAt, () -> {
+            for (int z = -3; z <= 3; z++) {
+                // Keep the door column: removing its upper half also changes
+                // a recorded ceiling and would mask stale wall membership.
+                if (z == 0) continue;
+                for (int y = 0; y < 3; y++) {
+                    level.setBlock(center.offset(-1, y, z), Blocks.AIR.defaultBlockState(), 3);
+                }
+            }
+        });
+        helper.runAfterDelay(removeAt + 10, () -> {
+            helper.assertTrue(!registered[0].containsFloorPosition(adjacentRoom),
+                    "fixture registration refreshed before testing cache discovery");
+            var resolved = cache.resolve(head).orElseThrow();
+            helper.assertTrue(resolved.floorCells().contains(adjacentRoom)
+                            && resolved.floorCells().contains(door),
+                    "room discovery restored a stale registered partition after its wall was removed");
+            helper.assertTrue(!resolved.floorCells().contains(center.east().south(5)),
+                    "merged interior room included the covered exterior doorstep");
+            helper.succeed();
+        });
+    }
+
+    private static void verifyRoomCache(GameTestHelper helper, boolean registered) {
+        BlockPos center = helper.absolutePos(new BlockPos(registered ? 1616 : 1360, 2, 80));
+        BlockPos head = prepareBedsideHouse(helper, center);
+        ServerLevel level = helper.getLevel();
+        BlockPos secondFoot = center.west(3).south();
+        BlockPos secondHead = secondFoot.east();
+        var bed = Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.EAST);
+        level.setBlock(secondFoot, bed.setValue(BedBlock.PART, BedPart.FOOT), 3);
+        level.setBlock(secondHead, bed.setValue(BedBlock.PART, BedPart.HEAD), 3);
+        BlockPos gate = center.west(4);
+        level.setBlock(gate, Blocks.OAK_FENCE_GATE.defaultBlockState(), 3);
+        var cache = VillageManager.get(level).getIndoorRooms();
+        IndoorRoomCache.Room[] original = {null};
+        BlockPos roof = center.north().above(3);
+        helper.runAfterDelay(10, () -> {
+            if (registered) registerStrollHouse(helper, center);
+            original[0] = cache.resolve(head).orElseThrow();
+            helper.assertTrue(cache.resolve(secondHead).orElseThrow() == original[0],
+                    "beds in the same room did not reuse one geometry result");
+            helper.assertTrue(!original[0].floorCells().contains(center.east().south(5)), "cache included covered exterior");
+            level.setBlock(head, level.getBlockState(head).setValue(BedBlock.OCCUPIED, true), 3);
+            BlockPos door = center.east().south(4);
+            level.setBlock(door, level.getBlockState(door).setValue(DoorBlock.OPEN, true), 3);
+            level.setBlock(door.above(), level.getBlockState(door.above()).setValue(DoorBlock.OPEN, true), 3);
+            level.setBlock(gate, level.getBlockState(gate).setValue(BlockStateProperties.OPEN, true), 3);
+        });
+        helper.runAfterDelay(60, () -> {
+            helper.assertTrue(cache.resolve(head).orElseThrow() == original[0],
+                    "bed occupancy or door/gate movement unnecessarily rescanned the room");
+            level.setBlock(roof, Blocks.AIR.defaultBlockState(), 3);
+        });
+        helper.runAfterDelay(110, () -> {
+            helper.assertTrue(cache.resolve(head).isEmpty(), "roof opening retained stale indoor room geometry");
+        });
+        helper.runAfterDelay(320, () -> {
+            helper.assertTrue(cache.resolve(head).isEmpty(), "retry resurrected stale registered geometry with an open roof");
+            level.setBlock(roof, Blocks.STONE.defaultBlockState(), 3);
+        });
+        helper.runAfterDelay(525, () -> {
+            helper.assertTrue(cache.resolve(head).orElseThrow() != original[0], "repaired roof did not produce fresh geometry");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "mca_shelter_memory", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void selectedShelterIsForgottenWhenRestEnds(GameTestHelper helper) {
+        BlockPos center = helper.absolutePos(new BlockPos(1488, 2, 80));
+        prepareBedsideHouse(helper, center);
+        VillagerEntityMCA villager = spawn(helper, center.north(2));
+        STROLL_VILLAGERS.add(villager);
+        helper.runAfterDelay(10, () -> {
+            villager.getBrain().setActiveActivityIfPossible(Activity.REST);
+            new SeekIndoorShelterTask(0.5F).tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime());
+            helper.assertTrue(villager.getBrain().hasMemoryValue(MemoryModuleTypeMCA.SHELTER_BED),
+                    "REST did not remember the selected shelter");
+            villager.getBrain().setActiveActivityIfPossible(Activity.IDLE);
+            helper.assertTrue(!villager.getBrain().hasMemoryValue(MemoryModuleTypeMCA.SHELTER_BED),
+                    "selected shelter survived leaving REST");
+            helper.succeed();
+        });
+    }
+
+    @AfterBatch(batch = "mca_shelter_room_cache")
+    public static void cleanupRoomCache(ServerLevel level) {
+        cleanupStroll(level);
+    }
+
+    @AfterBatch(batch = "mca_registered_room_cache")
+    public static void cleanupRegisteredRoomCache(ServerLevel level) {
+        cleanupStroll(level);
+    }
+
+    @AfterBatch(batch = "mca_registered_room_partition_cache")
+    public static void cleanupRegisteredPartitionCache(ServerLevel level) {
+        cleanupStroll(level);
+    }
+
+    @AfterBatch(batch = "mca_shelter_memory")
+    public static void cleanupShelterMemory(ServerLevel level) {
         cleanupStroll(level);
     }
 
@@ -500,6 +920,8 @@ public final class HomelessShelterGameTests {
             villager.discard();
         });
         STROLL_VILLAGERS.clear();
+        STROLL_VILLAGES.forEach(id -> VillageManager.get(level).removeVillage(id));
+        STROLL_VILLAGES.clear();
         STROLL_BLOCKS.forEach((pos, state) -> level.setBlock(pos, state, 3));
         STROLL_BLOCKS.clear();
         STROLL_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x, chunk.z, false));

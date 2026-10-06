@@ -10,20 +10,24 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 
-/** Stable persisted identity for one semantic Floor around exact 3D geometry. */
-public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
+/**
+ * Registered Floor identity and storey reference around exact physical geometry.
+ * The scanner chooses anchorY from ordinary surface evidence; stairs and later
+ * room expansion must not move it. Cell membership is owned exclusively by geometry.
+ */
+public record StructureFloor(int id, int floorNumber, int anchorY, FloorGeometry geometry) {
     // Physical overlap candidates use a local height window, not storey membership.
     static final int ANCHOR_PROXIMITY = 2;
+
+    public StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
+        this(id, floorNumber, geometry.anchorY(), geometry);
+    }
 
     public StructureFloor {
         geometry = Objects.requireNonNull(geometry, "geometry");
         if (geometry.cells().isEmpty()) {
             throw new IllegalArgumentException("StructureFloor requires non-empty geometry");
         }
-    }
-
-    public int anchorY() {
-        return geometry.anchorY();
     }
 
     /** Derived projection only; never authoritative physical topology. */
@@ -48,14 +52,9 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
     }
 
     boolean overlapsNearbyFloorBand(StructureFloor other) {
-        return other != null && overlapsNearbyFloorBand(other.geometry);
-    }
-
-    /** Persisted-Floor candidate overlap for a freshly observed exact geometry. */
-    boolean overlapsNearbyFloorBand(FloorGeometry other) {
         return other != null
-                && hasNearbyAnchor(anchorY(), other.anchorY())
-                && geometry.footprintIntersectionArea(other) > 0;
+                && hasNearbyAnchor(other)
+                && geometry.footprintIntersectionArea(other.geometry) > 0;
     }
 
     int verticalGapTo(StructureFloor other) {
@@ -85,6 +84,7 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
         tag.putInt("floorNumber", floorNumber);
+        tag.putInt("anchorY", anchorY);
         tag.put("cells", NbtHelper.fromList(geometry.cells().stream()
                 .sorted(Comparator
                         .comparingInt((FloorGeometry.Cell cell) -> cell.feet().getX())
@@ -104,15 +104,17 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
         List<FloorGeometry.Cell> cells = NbtHelper.toList(
                 tag.getList("cells", Tag.TAG_COMPOUND), value -> loadCell((CompoundTag) value));
         int floorNumber = tag.contains("floorNumber", Tag.TAG_INT) ? tag.getInt("floorNumber") : 0;
-        return new StructureFloor(tag.getInt("id"), floorNumber,
-                new FloorGeometry(cells, loadMarkers(tag).stream()
-                        .filter(marker -> cells.stream()
-                                .anyMatch(cell -> cell.feet().equals(marker.floorCell())))
-                        .toList()));
+        FloorGeometry geometry = new FloorGeometry(cells, loadMarkers(tag).stream()
+                .filter(marker -> cells.stream()
+                        .anyMatch(cell -> cell.feet().equals(marker.floorCell())))
+                .toList());
+        // Older saves derived this height from geometry; preserve that interpretation.
+        int anchorY = tag.contains("anchorY", Tag.TAG_INT) ? tag.getInt("anchorY") : geometry.anchorY();
+        return new StructureFloor(tag.getInt("id"), floorNumber, anchorY, geometry);
     }
 
     public StructureFloor withFloorNumber(int newFloorNumber) {
-        return new StructureFloor(id, newFloorNumber, geometry);
+        return new StructureFloor(id, newFloorNumber, anchorY, geometry);
     }
 
     private static CompoundTag saveCell(FloorGeometry.Cell cell) {

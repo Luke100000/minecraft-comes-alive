@@ -142,13 +142,13 @@ class StructureFloorTest {
         StructureFloor persisted = TestStructureFloors.create(0, 0, new FloorGeometry(Set.of(
                 new FloorGeometry.Cell(new BlockPos(0, 64, 0), 68),
                 new FloorGeometry.Cell(new BlockPos(1, 64, 0), 68)), java.util.Map.of()));
-        FloorGeometry overlappingUneven = new FloorGeometry(Set.of(
+        StructureFloor overlappingUneven = TestStructureFloors.create(1, 0, new FloorGeometry(Set.of(
                 new FloorGeometry.Cell(new BlockPos(1, 66, 0), 70),
-                new FloorGeometry.Cell(new BlockPos(2, 66, 0), 70)), java.util.Map.of());
-        FloorGeometry differentFloor = new FloorGeometry(Set.of(
-                new FloorGeometry.Cell(new BlockPos(1, 68, 0), 72)), java.util.Map.of());
-        FloorGeometry disjoint = new FloorGeometry(Set.of(
-                new FloorGeometry.Cell(new BlockPos(4, 65, 0), 69)), java.util.Map.of());
+                new FloorGeometry.Cell(new BlockPos(2, 66, 0), 70)), java.util.Map.of()));
+        StructureFloor differentFloor = TestStructureFloors.create(2, 1, new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(new BlockPos(1, 68, 0), 72)), java.util.Map.of()));
+        StructureFloor disjoint = TestStructureFloors.create(3, 0, new FloorGeometry(Set.of(
+                new FloorGeometry.Cell(new BlockPos(4, 65, 0), 69)), java.util.Map.of()));
 
         assertTrue(persisted.overlapsNearbyFloorBand(overlappingUneven));
         assertFalse(persisted.overlapsNearbyFloorBand(differentFloor));

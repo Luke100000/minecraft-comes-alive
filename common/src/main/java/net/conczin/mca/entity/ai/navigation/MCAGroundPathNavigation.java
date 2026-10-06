@@ -118,6 +118,20 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         return super.createPath(target, reachRange);
     }
 
+    /**
+     * One bounded search for a producer that is about to publish persistent
+     * movement. This keeps the extended-distance policy in navigation instead
+     * of making callers approximate reachability with the ordinary range.
+     */
+    public Path createPathForPersistentIntent(Set<BlockPos> targets, int reachRange) {
+        PathRequestDiagnostics.recordNavigationRequest(this.mob);
+        float pathLength = Math.max(
+                (float)Config.getInstance().getVillagerPathfindingDistance(),
+                getOrdinaryPathLength(this.mob)
+        );
+        return super.createPath(targets, 8, false, reachRange, pathLength);
+    }
+
     @Override
     protected PathFinder createPathFinder(int maxVisitedNodes) {
         MCAWalkNodeEvaluator evaluator = new MCAWalkNodeEvaluator();

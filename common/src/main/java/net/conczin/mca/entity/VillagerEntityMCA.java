@@ -1615,12 +1615,14 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public void writeAdditionalConversionData(CompoundTag output) {
         output.putString(CHAT_AI_PROMPT_KEY, getChatAIPrompt());
         writeNicknames(output);
+        longTermMemory.writeToNbt(output);
     }
 
     @Override
     public void readAdditionalConversionData(CompoundTag input) {
         chatAIPrompt = input.getString(CHAT_AI_PROMPT_KEY);
         readNicknames(input);
+        longTermMemory.readFromNbt(input);
     }
 
     @Override

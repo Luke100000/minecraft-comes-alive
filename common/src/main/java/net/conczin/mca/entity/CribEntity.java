@@ -176,6 +176,11 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity> {
     }
 
     @Override
+    public float getPickRadius() {
+        return 0.35F;
+    }
+
+    @Override
     public void tick() {
         super.tick();
 

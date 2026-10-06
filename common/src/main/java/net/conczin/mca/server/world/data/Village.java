@@ -33,6 +33,7 @@ import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.*;
+import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -919,6 +920,11 @@ public class Village implements Iterable<Building> {
 
     Optional<Structure> getInteractionStructureAt(BlockPos pos) {
         return resolveInteractionPosition(pos).map(ResolvedInteraction::structure);
+    }
+
+    /** Server-thread view of authoritative assignments; callers validate live bed state. */
+    public void forEachResidentHome(BiConsumer<? super UUID, ? super BlockPos> consumer) {
+        residentHomes.forEach((owner, position) -> consumer.accept(owner, BlockPos.of(position)));
     }
 
     Optional<ResolvedInteraction> resolveInteractionPosition(BlockPos pos) {

@@ -27,17 +27,21 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.npc.VillagerTrades;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.event.AddReloadListenerEvent;
 import net.neoforged.neoforge.event.OnDatapackSyncEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
+import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
@@ -150,6 +154,21 @@ public final class CommonNeoForge {
     @SubscribeEvent
     public static void onServerStarting(ServerStartingEvent event) {
         MCA.startServer(event.getServer());
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void onEntityJoin(EntityJoinLevelEvent event) {
+        if (event.getLevel() instanceof ServerLevel level && event.getEntity() instanceof Villager villager) {
+            // Only index the reference here; joining chunks need not be FULL yet.
+            VillageManager.get(level).trackVillager(villager);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onEntityLeave(EntityLeaveLevelEvent event) {
+        if (event.getLevel() instanceof ServerLevel level && event.getEntity() instanceof Villager villager) {
+            VillageManager.get(level).untrackVillager(villager);
+        }
     }
 
     @SubscribeEvent

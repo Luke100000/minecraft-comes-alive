@@ -1,7 +1,11 @@
 package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.Level;
+import net.minecraft.SharedConstants;
+import net.minecraft.server.Bootstrap;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.EmptyBlockGetter;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Constructor;
@@ -15,6 +19,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 class SelectedFloorScannerCachingTest {
+    @BeforeAll
+    static void bootstrapMinecraft() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+    }
+
     @Test
     void rejectedFlightCachesEveryVisitedCell() throws ReflectiveOperationException {
         SelectedFloorScanner.SurfaceCell lower = cell(0, 64, 0);
@@ -54,14 +64,15 @@ class SelectedFloorScannerCachingTest {
 
         Class<?> regionType = nestedType("RegionDiscovery");
         Constructor<?> regionConstructor = regionType.getDeclaredConstructor(
-                Level.class, FloorCeilingResolver.class, providerType, int.class, int.class);
+                BlockGetter.class, FloorCeilingResolver.class, providerType, int.class, int.class);
         regionConstructor.setAccessible(true);
-        Object regions = regionConstructor.newInstance(null, null, provider, 64, 64);
+        BlockGetter world = EmptyBlockGetter.INSTANCE;
+        Object regions = regionConstructor.newInstance(world, new FloorCeilingResolver(world), provider, 64, 64);
         Class<?> ownershipType = nestedType("TransitionOwnership");
         Constructor<?> ownershipConstructor = ownershipType.getDeclaredConstructor(
-                Level.class, providerType, regionType, int.class, int.class);
+                BlockGetter.class, providerType, regionType, int.class, int.class);
         ownershipConstructor.setAccessible(true);
-        Object ownership = ownershipConstructor.newInstance(null, provider, regions, 64, 64);
+        Object ownership = ownershipConstructor.newInstance(world, provider, regions, 64, 64);
         Method owner = ownershipType.getDeclaredMethod(
                 "owner", SelectedFloorScanner.SurfaceCell.class);
         owner.setAccessible(true);

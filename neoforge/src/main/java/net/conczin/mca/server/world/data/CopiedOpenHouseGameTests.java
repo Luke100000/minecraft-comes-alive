@@ -1,17 +1,23 @@
 package net.conczin.mca.server.world.data;
 
+import com.mojang.authlib.GameProfile;
 import net.conczin.mca.Config;
+import net.conczin.mca.network.c2s.ConfirmBuildingPolymorphMessage;
+import net.conczin.mca.network.c2s.ReportBuildingMessage;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.neoforge.common.util.FakePlayer;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 @PrefixGameTestTemplate(false)
 public final class CopiedOpenHouseGameTests {
@@ -82,7 +88,7 @@ public final class CopiedOpenHouseGameTests {
                     "copied house scan from " + relativeSeed + " produced no Room components");
 
             List<BuildingRoomScanner.Result> rooms = BuildingRoomScanner.partition(
-                    helper.getLevel(), seed, config.maxBuildingSize, 0, scan);
+                    helper.getLevel(), seed, config.maxBuildingSize, scan);
             helper.assertTrue(rooms.size() == components.size(),
                     "copied house materialization changed component count at " + relativeSeed
                             + ": components=" + components.size() + " rooms=" + rooms.size());
@@ -303,7 +309,8 @@ public final class CopiedOpenHouseGameTests {
 
         for (int index = 0; index < lowerRooms.size(); index++) {
             BlockPos source = helper.absolutePos(lowerRooms.get(index));
-            RoomScanPlan plan = village.getRoomScanPlan(helper.getLevel(), source);
+            RoomScanPlanner.Analysis analysis = RoomScanPlanner.analyze(village, helper.getLevel(), source);
+            RoomScanPlan plan = analysis.plan();
             helper.assertTrue(plan.mode() == Village.RoomScanMode.ADD_ATTACHMENT,
                     "lower room " + lowerRooms.get(index) + " offered " + plan.mode());
             helper.assertTrue(plan.targetBuildingId() == buildingId,
@@ -311,22 +318,23 @@ public final class CopiedOpenHouseGameTests {
             helper.assertTrue(plan.prospectiveFloorNumber() == expectedNumbers.get(index),
                     "lower room " + lowerRooms.get(index) + " has an unexpected bounded storey: floor="
                             + plan.prospectiveFloorNumber());
-            helper.assertTrue(plan.selectedAttachmentFloor() != null,
+            helper.assertTrue(analysis.observation() != null,
                     "lower room " + lowerRooms.get(index) + " has no selected Floor");
+            FloorGeometry selectedFloor = analysis.observation().scan().floor();
             helper.assertTrue(attached.stream().noneMatch(previous ->
-                            previous.sameCellPositions(plan.selectedAttachmentFloor().geometry())),
+                            previous.sameCellPositions(selectedFloor)),
                     "lower room " + lowerRooms.get(index) + " reused an earlier stair-delimited Floor");
             for (int later = index + 1; later < lowerRooms.size(); later++) {
                 BlockPos laterSource = helper.absolutePos(lowerRooms.get(later));
-                helper.assertTrue(plan.selectedAttachmentFloor().geometry().interactionCellAt(
+                helper.assertTrue(selectedFloor.interactionCellAt(
                                 laterSource.getX(), laterSource.getY(), laterSource.getZ()).isEmpty(),
                         "lower room " + lowerRooms.get(index) + " Floor already owns later room "
-                                + lowerRooms.get(later) + "; anchor=" + plan.selectedAttachmentFloor().anchorY()
-                                + " cellYs=" + plan.selectedAttachmentFloor().geometry().cells().stream()
+                                + lowerRooms.get(later) + "; anchor=" + analysis.observation().scan().anchorY()
+                                + " cellYs=" + selectedFloor.cells().stream()
                                 .collect(Collectors.groupingBy(cell -> cell.feet().getY(), Collectors.counting())));
             }
 
-            attached.add(plan.selectedAttachmentFloor().geometry());
+            attached.add(selectedFloor);
             BuildingScanResult addition = workflow.analyzeAttachedRoom(source, buildingId);
             commit(helper, workflow, addition);
             Building room = village.getRooms().filter(candidate -> candidate.getFloorCells()
@@ -365,7 +373,8 @@ public final class CopiedOpenHouseGameTests {
             commit(helper, workflow, workflow.analyzeBuildingAddition(main));
             Village village = manager.findNearestVillage(main, Village.MERGE_MARGIN).orElseThrow();
             BlockPos source = helper.absolutePos(relative);
-            RoomScanPlan plan = village.getRoomScanPlan(helper.getLevel(), source);
+            RoomScanPlanner.Analysis analysis = RoomScanPlanner.analyze(village, helper.getLevel(), source);
+            RoomScanPlan plan = analysis.plan();
             helper.assertTrue(plan.mode() == Village.RoomScanMode.ADD_ATTACHMENT,
                     "staircase did not select the lower Floor at " + relative);
             BuildingScanResult scan = workflow.analyzeAttachedRoom(source, plan.targetBuildingId());
@@ -379,7 +388,7 @@ public final class CopiedOpenHouseGameTests {
             helper.assertTrue(structure.getLogicalBuildingId() == plan.targetBuildingId(),
                     "staircase registered a separate house at " + relative);
             helper.assertTrue(structure.getFloor(registered.getFloorId()).orElseThrow().geometry()
-                            .sameCellPositions(plan.selectedAttachmentFloor().geometry()),
+                            .sameCellPositions(analysis.observation().scan().floor()),
                     "staircase commit changed the selected Floor at " + relative);
             Village.RoomScanMode next = village.getRoomScanPlan(helper.getLevel(), source).mode();
             helper.assertTrue(next == Village.RoomScanMode.UPDATE_ROOM || next == Village.RoomScanMode.ADD_ROOM,
@@ -390,35 +399,88 @@ public final class CopiedOpenHouseGameTests {
 
     @GameTest(batch = "mca_copied_open_house_confirmation", templateNamespace = "mca",
             template = TEMPLATE, timeoutTicks = 280, skyAccess = true)
-    public static void attachmentConfirmationRejectsChangedGeometryAndDuplicateRegistration(GameTestHelper helper) {
+    public static void attachmentConfirmationHandlerRejectsBlockedSource(GameTestHelper helper) {
         BlockPos main = helper.absolutePos(MAIN_STOREY_SEED);
         BlockPos lower = helper.absolutePos(LOWER_STOREY_SEED);
-        VillageManager manager = new VillageManager(helper.getLevel());
+        VillageManager manager = VillageManager.get(helper.getLevel());
         RoomWorkflow workflow = new RoomWorkflow(manager, helper.getLevel());
         commit(helper, workflow, workflow.analyzeBuildingAddition(main));
         Village village = manager.findNearestVillage(main, Village.MERGE_MARGIN).orElseThrow();
-        RoomScanPlan expected = village.getRoomScanPlan(helper.getLevel(), lower);
-        helper.assertTrue(expected.mode() == Village.RoomScanMode.ADD_ATTACHMENT,
-                "lower Room did not offer an attachment");
-        int before = village.getStructures().size();
         BlockState original = helper.getLevel().getBlockState(lower);
-        helper.getLevel().setBlockAndUpdate(lower, Blocks.STONE.defaultBlockState());
-        BuildingScanResult changed = workflow.analyzeAttachedRoom(
-                village, expected, expected.targetBuildingId());
-        helper.assertTrue(changed.result() != Building.validationResult.SUCCESS,
-                "confirmation accepted changed Floor geometry");
-        helper.assertTrue(village.getStructures().size() == before,
-                "rejected confirmation mutated the house");
-        helper.getLevel().setBlockAndUpdate(lower, original);
-        commit(helper, workflow, workflow.analyzeAttachedRoom(
-                village, expected, expected.targetBuildingId()));
-        BuildingScanResult duplicate = workflow.analyzeAttachedRoom(
-                village, expected, expected.targetBuildingId());
-        helper.assertTrue(duplicate.result() != Building.validationResult.SUCCESS,
-                "stale confirmation accepted an already registered attachment");
-        helper.assertTrue(village.getStructures().size() == before + 1,
-                "confirmation created a duplicate Structure");
+        try {
+            ConfirmBuildingPolymorphMessage confirmation = attachmentConfirmation(helper, workflow, village, lower);
+            // Use the loader's disconnected player fixture, not a replacement handler or manager.
+            ServerPlayer player = new FakePlayer(helper.getLevel(),
+                    new GameProfile(UUID.randomUUID(), "blueprint-confirmation"));
+            player.setPos(lower.getX() + 0.5, lower.getY(), lower.getZ() + 0.5);
+            int structuresBefore = village.getStructures().size();
+            long roomsBefore = village.getRooms().count();
+
+            helper.getLevel().setBlockAndUpdate(lower, Blocks.STONE.defaultBlockState());
+            confirmation.handleServer(player);
+            helper.assertTrue(village.getStructures().size() == structuresBefore
+                            && village.getRooms().count() == roomsBefore,
+                    "confirmation handler registered an attachment from a blocked source");
+
+            helper.getLevel().setBlockAndUpdate(lower, original);
+            confirmation.handleServer(player);
+            helper.assertTrue(village.getStructures().size() == structuresBefore + 1
+                            && village.getRooms().count() == roomsBefore + 1,
+                    "confirmation handler did not register the valid attachment");
+            Building registered = village.findInteractionRoomAt(lower).orElseThrow();
+            helper.assertTrue(village.getStructureFor(registered).orElseThrow().getLogicalBuildingId()
+                            == confirmation.expectedTargetId(),
+                    "confirmation handler attached the Room to a different house");
+        } finally {
+            helper.getLevel().setBlockAndUpdate(lower, original);
+            manager.removeVillage(village.getId());
+        }
         helper.succeed();
+    }
+
+    @GameTest(batch = "mca_copied_open_house_duplicate_confirmation", templateNamespace = "mca",
+            template = TEMPLATE, timeoutTicks = 280, skyAccess = true)
+    public static void attachmentConfirmationHandlerRejectsDuplicateRegistration(GameTestHelper helper) {
+        BlockPos main = helper.absolutePos(MAIN_STOREY_SEED);
+        BlockPos lower = helper.absolutePos(LOWER_STOREY_SEED);
+        VillageManager manager = VillageManager.get(helper.getLevel());
+        RoomWorkflow workflow = new RoomWorkflow(manager, helper.getLevel());
+        commit(helper, workflow, workflow.analyzeBuildingAddition(main));
+        Village village = manager.findNearestVillage(main, Village.MERGE_MARGIN).orElseThrow();
+        try {
+            ConfirmBuildingPolymorphMessage confirmation = attachmentConfirmation(helper, workflow, village, lower);
+            ServerPlayer player = new FakePlayer(helper.getLevel(),
+                    new GameProfile(UUID.randomUUID(), "blueprint-confirmation"));
+            player.setPos(lower.getX() + 0.5, lower.getY(), lower.getZ() + 0.5);
+            int structuresBefore = village.getStructures().size();
+            long roomsBefore = village.getRooms().count();
+
+            confirmation.handleServer(player);
+            helper.assertTrue(village.getStructures().size() == structuresBefore + 1
+                            && village.getRooms().count() == roomsBefore + 1,
+                    "confirmation handler did not register the initial attachment");
+
+            confirmation.handleServer(player);
+            helper.assertTrue(village.getStructures().size() == structuresBefore + 1
+                            && village.getRooms().count() == roomsBefore + 1,
+                    "confirmation handler registered a duplicate attachment");
+        } finally {
+            manager.removeVillage(village.getId());
+        }
+        helper.succeed();
+    }
+
+    private static ConfirmBuildingPolymorphMessage attachmentConfirmation(
+            GameTestHelper helper, RoomWorkflow workflow, Village village, BlockPos source) {
+        RoomScanPlan plan = village.getRoomScanPlan(helper.getLevel(), source);
+        helper.assertTrue(plan.mode() == Village.RoomScanMode.ADD_ATTACHMENT,
+                "lower Room did not offer an attachment");
+        BuildingScanResult scan = workflow.analyzeAttachedRoom(source, plan.targetBuildingId());
+        helper.assertTrue(scan.result() == Building.validationResult.SUCCESS
+                        && !scan.matchingTypes().isEmpty(),
+                "lower Room must offer a valid type for confirmation");
+        return new ConfirmBuildingPolymorphMessage(source, ReportBuildingMessage.Action.ADD_ATTACHMENT,
+                plan.targetBuildingId(), scan.matchingTypes().getFirst());
     }
 
     @GameTest(batch = "mca_copied_open_house_storeys", templateNamespace = "mca",
