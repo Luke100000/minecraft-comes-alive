@@ -298,6 +298,29 @@ class DialogueEventParsingTest {
     }
 
     @Test
+    void defersRecentEventConditionUntilGameplayFactOwnerExists() {
+        assertDecodeFails(baseEvent(
+                "[{ \"type\": \"mca:recent_event\", \"event\": \"mca:attacked\" }]",
+                "{ \"type\": \"always\" }"
+        ));
+    }
+
+    @Test
+    void rejectsInvalidBuiltInConditionShapes() {
+        for (String requirement : List.of(
+                "{ \"type\": \"mca:time\", \"value\": \"night\", \"min\": 13000 }",
+                "{ \"type\": \"mca:time\" }",
+                "{ \"type\": \"mca:pregnancy\", \"value\": false, \"min_progress\": 1 }",
+                "{ \"type\": \"mca:inventory\", \"item\": \"minecraft:oak_log\", \"tag\": \"minecraft:logs\" }",
+                "{ \"type\": \"mca:inventory\" }",
+                "{ \"type\": \"mca:item\", \"value\": \"minecraft:oak_log\", \"min\": 3, \"max\": 2 }",
+                "{ \"type\": \"mca:health\", \"min\": 1, \"typo\": true }"
+        )) {
+            assertDecodeFails(baseEvent("[" + requirement + "]", "{ \"type\": \"always\" }"));
+        }
+    }
+
+    @Test
     void preservesKnownConditionAndActionParametersForLaterEvaluation() {
         DialogueEvent event = decode("""
                 {

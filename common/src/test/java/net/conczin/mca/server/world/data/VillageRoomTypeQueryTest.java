@@ -140,6 +140,21 @@ class VillageRoomTypeQueryTest {
         assertEquals(List.of(main), village.getBuildingsOfType("house").toList());
     }
 
+    @Test
+    void currentPhysicalRoomUsesItsResolvedEffectiveType() {
+        PoiCountingRoom main = room(1, "house");
+        PoiCountingRoom child = room(2, "building");
+        Village village = village(main, child);
+
+        assertTrue(village.isInBuildingOfType(new BlockPos(0, 64, 0), "armory"));
+        assertFalse(village.isInBuildingOfType(new BlockPos(0, 64, 0), "house"));
+        assertFalse(village.isInBuildingOfType(new BlockPos(40, 64, 0), "armory"));
+
+        village.setBuildingInheritanceEnabled(main, false);
+        assertFalse(village.isInBuildingOfType(new BlockPos(0, 64, 0), "armory"));
+        assertTrue(village.isInBuildingOfType(new BlockPos(0, 64, 0), "house"));
+    }
+
     private static BuildingType type(String name, int priority, int bells) {
         JsonObject definition = new JsonObject();
         definition.addProperty("priority", priority);

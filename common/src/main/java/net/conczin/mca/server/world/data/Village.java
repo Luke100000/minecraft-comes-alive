@@ -561,6 +561,14 @@ public class Village implements Iterable<Building> {
         return getBuildingsOfType(type).findAny().isPresent();
     }
 
+    public boolean isInBuildingOfType(Vec3i position, String type) {
+        if (position == null || type == null) return false;
+        Building room = findPhysicalRoomAt(position).orElse(null);
+        if (room == null) return false;
+        BuildingType effective = RoomTypeResolver.create(this).effectiveType(room);
+        return effective != null && effective.name().equals(type);
+    }
+
     List<BuildingType> getMatchingRoomTypes(Building candidate) {
         return candidate == null ? List.of() : List.copyOf(candidate.getVisibleMatchingTypes());
     }
