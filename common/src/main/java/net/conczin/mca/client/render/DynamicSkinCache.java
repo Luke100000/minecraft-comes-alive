@@ -25,7 +25,6 @@ import java.util.UUID;
 
 public final class DynamicSkinCache {
     private static final ResourceLocation STEVE = ResourceLocation.parse("textures/entity/steve.png");
-    private static final String IMMERSIVE_LIBRARY_PREFIX = "immersive_library:";
     private static final ResourceLocation EMPTY_LIBRARY_TEXTURE = MCA.locate("skins/empty.png");
 
     private static final Set<SkinKey> INCOMPLETE_CACHE = new HashSet<>();
@@ -295,22 +294,11 @@ public final class DynamicSkinCache {
     }
 
     private static boolean isMissingImmersiveLibraryAsset(String identifier) {
-        Integer contentId = contentId(identifier);
+        Integer contentId = SkinCache.getContentId(identifier);
         if (contentId == null) {
             return false;
         }
         return EMPTY_LIBRARY_TEXTURE.equals(SkinCache.getTextureIdentifier(contentId));
-    }
-
-    private static Integer contentId(String identifier) {
-        if (MCA.isBlankString(identifier) || !identifier.startsWith(IMMERSIVE_LIBRARY_PREFIX)) {
-            return null;
-        }
-        try {
-            return Integer.parseInt(identifier.substring(IMMERSIVE_LIBRARY_PREFIX.length()));
-        } catch (NumberFormatException exception) {
-            return null;
-        }
     }
 
     private record SkinKey(

@@ -93,7 +93,7 @@ public class VillagerPlayerModel<T extends LivingEntity & VillagerLike<T>> exten
 
         super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
         applyPanicAnimation(villager, animationProgress);
-        applyHeadScale(villager);
+        MCAModelMorphology.applyHeadScale(head, hat, villager.getVillagerDimensions().getHead());
         hidePlayerWears();
     }
 
@@ -112,19 +112,6 @@ public class VillagerPlayerModel<T extends LivingEntity & VillagerLike<T>> exten
         leftArm.zRot = -waveSideways;
         rightArm.xRot = -armRaise;
         rightArm.zRot = waveSideways;
-    }
-
-    private void applyHeadScale(T villager) {
-        composeHeadScale(head, hat, villager.getVillagerDimensions().getHead());
-    }
-
-    static void composeHeadScale(ModelPart head, ModelPart hat, float scale) {
-        head.xScale *= scale;
-        head.yScale *= scale;
-        head.zScale *= scale;
-        hat.xScale *= scale;
-        hat.yScale *= scale;
-        hat.zScale *= scale;
     }
 
     private void hidePlayerWears() {

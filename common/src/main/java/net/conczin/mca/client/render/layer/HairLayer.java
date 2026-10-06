@@ -4,7 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.gui.immersive_library.SkinCache;
-import net.conczin.mca.client.model.HairOverlayModel;
+import net.conczin.mca.client.model.VillagerOverlayModel;
 import net.conczin.mca.client.resources.ColorPalette;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
@@ -19,14 +19,15 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.animal.Sheep;
 import net.minecraft.world.item.DyeColor;
 
-public class HairLayer<T extends LivingEntity> extends VillagerLayer<T, HairOverlayModel<T>> {
-    public HairLayer(RenderLayerParent<T, PlayerModel<T>> renderer, HairOverlayModel<T> model) {
+public class HairLayer<T extends LivingEntity> extends VillagerLayer<T> {
+    public HairLayer(RenderLayerParent<T, PlayerModel<T>> renderer, VillagerOverlayModel<T> model) {
         super(renderer, model);
     }
 
     @Override
     protected void configureModel(T villager) {
         var villagerData = MCAClient.resolveVillager(villager);
+        model.showHairOnly();
         model.applyMorphology(villagerData);
     }
 
@@ -70,10 +71,10 @@ public class HairLayer<T extends LivingEntity> extends VillagerLayer<T, HairOver
         if (MCA.isBlankString(identifier)) {
             return null;
         }
-        if (identifier.startsWith("immersive_library:")) {
-            return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring("immersive_library:".length())));
+        if (SkinCache.isLibraryIdentifier(identifier)) {
+            return SkinCache.resolveTextureIdentifier(identifier);
         }
-        return cached(identifier, ResourceLocation::parse);
+        return cached(identifier, ResourceLocation::tryParse);
     }
 
     @Override
@@ -82,10 +83,10 @@ public class HairLayer<T extends LivingEntity> extends VillagerLayer<T, HairOver
     }
 
     private ResourceLocation getOverlayTexture(String identifier) {
-        if (identifier.startsWith("immersive_library:") || !identifier.endsWith(".png")) {
+        if (SkinCache.isLibraryIdentifier(identifier) || !identifier.endsWith(".png")) {
             return null;
         }
-        return cached(identifier.replace(".png", "_overlay.png"), ResourceLocation::parse);
+        return cached(identifier.replace(".png", "_overlay.png"), ResourceLocation::tryParse);
     }
 
     private int getRainbow(LivingEntity entity, float tickDelta) {

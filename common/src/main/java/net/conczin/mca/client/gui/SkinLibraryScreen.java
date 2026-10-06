@@ -652,11 +652,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 } else {
                     if (hoveredContent.hasTag("clothing")) {
                         var villager = previousScreen.getVillager();
-                        villager.setClothes("immersive_library:" + hoveredContent.contentid());
+                        villager.setClothes(SkinCache.libraryIdentifier(hoveredContent.contentid()));
                         previousScreen.markClothingSelected();
                         returnToPreviousScreen();
                     } else if (hoveredContent.hasTag("hair")) {
-                        previousScreen.applyLibraryHair("immersive_library:" + hoveredContent.contentid());
+                        previousScreen.applyLibraryHair(SkinCache.libraryIdentifier(hoveredContent.contentid()));
                         returnToPreviousScreen();
                     }
                 }
@@ -1364,9 +1364,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private Optional<SkinListEntry> toListEntry(LiteContent content) {
         return SkinCache.getMeta(content).map(meta -> {
             if (content.hasTag("clothing")) {
-                return new Clothing("immersive_library:" + content.contentid(), meta.getProfession(), meta.getTemperature(), false, meta.getGender());
+                return new Clothing(SkinCache.libraryIdentifier(content.contentid()), meta.getProfession(), meta.getTemperature(), false, meta.getGender());
             } else {
-                return new Hair("immersive_library:" + content.contentid());
+                return new Hair(SkinCache.libraryIdentifier(content.contentid()));
             }
         });
     }
@@ -1821,14 +1821,12 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     private <T> void addServerContent(Map<String, T> map, String type) {
         for (Map.Entry<String, T> entry : map.entrySet()) {
-            if (entry.getKey().startsWith("immersive_library:")) {
-                try {
-                    int contentid = Integer.parseInt(entry.getKey().substring(18));
+            if (SkinCache.isLibraryIdentifier(entry.getKey())) {
+                Integer contentid = SkinCache.getContentId(entry.getKey());
+                if (contentid != null) {
                     serverContent.add(getContentById(contentid).orElse(new LiteContent(
                             contentid, -1, "unknown", -1, Set.of(type), "unknown", -1
                     )));
-                } catch (NumberFormatException ignored) {
-                    //nop
                 }
             }
         }

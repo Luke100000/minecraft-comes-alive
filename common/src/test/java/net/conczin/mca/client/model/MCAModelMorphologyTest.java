@@ -40,6 +40,27 @@ class MCAModelMorphologyTest {
         assertEquals(transform.yScale, transform.zScale, EPSILON);
     }
 
+    @Test
+    void headMorphologyComposesWithExistingModelScale() {
+        ModelPart head = emptyPart();
+        ModelPart hat = emptyPart();
+        head.xScale = 1.2F;
+        head.yScale = 0.8F;
+        head.zScale = 1.1F;
+        hat.xScale = 0.9F;
+        hat.yScale = 1.3F;
+        hat.zScale = 1.05F;
+
+        MCAModelMorphology.applyHeadScale(head, hat, 1.5F);
+
+        assertEquals(1.8F, head.xScale, EPSILON);
+        assertEquals(1.2F, head.yScale, EPSILON);
+        assertEquals(1.65F, head.zScale, EPSILON);
+        assertEquals(1.35F, hat.xScale, EPSILON);
+        assertEquals(1.95F, hat.yScale, EPSILON);
+        assertEquals(1.575F, hat.zScale, EPSILON);
+    }
+
     private static ModelPart emptyPart() {
         return new ModelPart(List.of(), Map.of());
     }

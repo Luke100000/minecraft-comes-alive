@@ -2,8 +2,6 @@ package net.conczin.mca.client.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
-import net.conczin.mca.client.model.HairOverlayModel;
-import net.conczin.mca.client.model.MCALayerDefinitions;
 import net.conczin.mca.client.model.MCAModelLayers;
 import net.conczin.mca.client.model.VillagerOverlayModel;
 import net.conczin.mca.client.model.VillagerPlayerModel;
@@ -42,14 +40,11 @@ public class VillagerEntityMCARenderer extends VillagerLikeEntityMCARenderer<Vil
                 new VillagerPlayerModel<>(ctx.bakeLayer(ModelLayers.PLAYER_SLIM), true));
 
         layers.add(0, new MorphologyLayer<>(this, ctx.bakeLayer(MCAModelLayers.PLAYER_ATTACHMENTS)));
-        addLayer(new FaceLayer<>(this, createOverlay(ctx, MCAModelLayers.VILLAGER_FACE).hideWears(), "normal"));
+        addLayer(new FaceLayer<>(this, createOverlay(ctx, MCAModelLayers.VILLAGER_FACE).hideWears()));
         addLayer(new ClothingLayer<>(this, createOverlay(ctx, MCAModelLayers.VILLAGER_CLOTHING), "normal"));
         addLayer(new ClothingLayer<>(this, new VillagerOverlayModel<>(
                 ctx.bakeLayer(MCAModelLayers.VILLAGER_CLOTHING_SLIM), true), "normal", true));
-        addLayer(new HairLayer<>(this, new HairOverlayModel<>(
-                ctx.bakeLayer(MCAModelLayers.VILLAGER_HAIR),
-                MCALayerDefinitions.VILLAGER_CLOTHING_DILATION
-        )));
+        addLayer(new HairLayer<>(this, createOverlay(ctx, MCAModelLayers.VILLAGER_HAIR)));
         addLayer(new VillagerFishingLineLayer(this));
         addLayer(new RenderLayer<VillagerEntityMCA, PlayerModel<VillagerEntityMCA>>(this) {
             @Override

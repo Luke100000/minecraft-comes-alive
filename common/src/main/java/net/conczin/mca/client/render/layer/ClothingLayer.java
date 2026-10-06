@@ -13,7 +13,7 @@ import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.LivingEntity;
 
-public class ClothingLayer<T extends LivingEntity> extends VillagerLayer<T, VillagerOverlayModel<T>> {
+public class ClothingLayer<T extends LivingEntity> extends VillagerLayer<T> {
     private final String variant;
     private final boolean slimTexture;
 
@@ -48,11 +48,14 @@ public class ClothingLayer<T extends LivingEntity> extends VillagerLayer<T, Vill
         if (MCA.isBlankString(identifier)) {
             return null;
         }
-        if (identifier.startsWith("immersive_library:")) {
-            return remapForSlim(SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(18))));
+        if (SkinCache.isLibraryIdentifier(identifier)) {
+            return remapForSlim(SkinCache.resolveTextureIdentifier(identifier));
         }
         ResourceLocation texture = cached(identifier + v, clothes -> {
-            ResourceLocation id = ResourceLocation.parse(identifier);
+            ResourceLocation id = SkinCache.resolveTextureIdentifier(identifier);
+            if (id == null) {
+                return null;
+            }
 
             ResourceLocation idNew = ResourceLocation.fromNamespaceAndPath(id.getNamespace(), id.getPath().replace("normal", v));
             if (canUse(idNew)) {

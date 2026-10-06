@@ -24,7 +24,7 @@ public final class MCALayerDefinitions {
         register.accept(MCAModelLayers.VILLAGER_CLOTHING_SLIM,
                 () -> LayerDefinition.create(MCAModelGeometry.overlayData(new CubeDeformation(VILLAGER_CLOTHING_DILATION), true), 64, 64));
         register.accept(MCAModelLayers.VILLAGER_HAIR,
-                () -> LayerDefinition.create(MCAModelGeometry.hairData(VILLAGER_HAIR_DILATION), 64, 64));
+                () -> LayerDefinition.create(MCAModelGeometry.overlayData(new CubeDeformation(VILLAGER_HAIR_DILATION), false), 64, 64));
 
         register.accept(MCAModelLayers.ZOMBIE_VILLAGER_FACE,
                 () -> LayerDefinition.create(MCAModelGeometry.overlayData(new CubeDeformation(0.01F), false), 64, 64));
@@ -33,7 +33,7 @@ public final class MCALayerDefinitions {
         register.accept(MCAModelLayers.ZOMBIE_VILLAGER_CLOTHING_SLIM,
                 () -> LayerDefinition.create(MCAModelGeometry.overlayData(new CubeDeformation(ZOMBIE_VILLAGER_CLOTHING_DILATION), true), 64, 64));
         register.accept(MCAModelLayers.ZOMBIE_VILLAGER_HAIR,
-                () -> LayerDefinition.create(MCAModelGeometry.hairData(ZOMBIE_VILLAGER_HAIR_DILATION), 64, 64));
+                () -> LayerDefinition.create(MCAModelGeometry.overlayData(new CubeDeformation(ZOMBIE_VILLAGER_HAIR_DILATION), false), 64, 64));
 
         register.accept(MCAModelLayers.VILLAGER_INNER_ARMOR,
                 () -> LayerDefinition.create(MCAModelGeometry.armorData(new CubeDeformation(0.3F)), 64, 32));

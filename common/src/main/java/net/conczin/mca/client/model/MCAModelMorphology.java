@@ -42,6 +42,15 @@ public final class MCAModelMorphology {
         setScale(transform, scaleX, scaleYZ, scaleYZ);
     }
 
+    public static void applyHeadScale(ModelPart head, ModelPart hat, float scale) {
+        head.xScale *= scale;
+        head.yScale *= scale;
+        head.zScale *= scale;
+        hat.xScale *= scale;
+        hat.yScale *= scale;
+        hat.zScale *= scale;
+    }
+
     private static void setScale(ModelPart part, float x, float y, float z) {
         part.xScale = x;
         part.yScale = y;

@@ -5,10 +5,9 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
-import net.conczin.mca.client.model.VillagerLayerModel;
+import net.conczin.mca.client.model.VillagerOverlayModel;
 import net.minecraft.ResourceLocationException;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
@@ -25,10 +24,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
 
-public abstract class VillagerLayer<
-        T extends LivingEntity,
-        M extends EntityModel<T> & VillagerLayerModel<T>
-        > extends RenderLayer<T, PlayerModel<T>> {
+public abstract class VillagerLayer<T extends LivingEntity> extends RenderLayer<T, PlayerModel<T>> {
     private static final Map<String, ResourceLocation> TEXTURE_CACHE = Maps.newHashMap();
     private static final Map<ResourceLocation, Boolean> TEXTURE_EXIST_CACHE = Maps.newHashMap();
 
@@ -37,17 +33,15 @@ public abstract class VillagerLayer<
         TEXTURE_EXIST_CACHE.put(MCA.locate("temp"), true);
     }
 
-    public final M model;
+    public final VillagerOverlayModel<T> model;
 
-    public VillagerLayer(RenderLayerParent<T, PlayerModel<T>> renderer, M model) {
+    public VillagerLayer(RenderLayerParent<T, PlayerModel<T>> renderer, VillagerOverlayModel<T> model) {
         super(renderer);
         this.model = model;
     }
 
     @Nullable
-    public ResourceLocation getSkin(T villager) {
-        return null;
-    }
+    public abstract ResourceLocation getSkin(T villager);
 
     @Nullable
     protected ResourceLocation getOverlay(T villager) {
@@ -81,8 +75,7 @@ public abstract class VillagerLayer<
     protected record Visibility(boolean visible, boolean translucent, boolean glowing) {
     }
 
-    protected void configureModel(T villager) {
-    }
+    protected abstract void configureModel(T villager);
 
     public void renderFinal(PoseStack transform, MultiBufferSource provider, int light, T villager, float tickDelta, Visibility visibility) {
         int tint = LivingEntityRenderer.getOverlayCoords(villager, 0);

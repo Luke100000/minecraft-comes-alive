@@ -26,18 +26,14 @@ import net.minecraft.world.item.DyeColor;
 import java.io.InputStream;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class FaceLayer<T extends LivingEntity> extends VillagerLayer<T, VillagerOverlayModel<T>> {
+public class FaceLayer<T extends LivingEntity> extends VillagerLayer<T> {
     private static final int OPAQUE_WHITE = 0xFFFFFFFF;
     private static final Map<EyeLayerKey, ResourceLocation> EYE_TEXTURE_CACHE = new ConcurrentHashMap<>();
 
-    private final String variant;
-
-    public FaceLayer(RenderLayerParent<T, PlayerModel<T>> renderer, VillagerOverlayModel<T> model, String variant) {
+    public FaceLayer(RenderLayerParent<T, PlayerModel<T>> renderer, VillagerOverlayModel<T> model) {
         super(renderer, model);
-        this.variant = variant;
     }
 
     @Override
@@ -77,10 +73,6 @@ public class FaceLayer<T extends LivingEntity> extends VillagerLayer<T, Villager
             }
         }
 
-        ResourceLocation extraOverlay = getOverlay(villager);
-        if (!Objects.equals(skin, extraOverlay) && canUse(extraOverlay)) {
-            renderModel(transform, provider, light, OPAQUE_WHITE, extraOverlay, overlay, visibility);
-        }
     }
 
     @Override
@@ -89,16 +81,11 @@ public class FaceLayer<T extends LivingEntity> extends VillagerLayer<T, Villager
         if (list == null) {
             return getBlinkSkin();
         }
-        return list.pick(variant, getVillager(villager).getGenetics().getGene(Genetics.FACE));
+        return list.pick("normal", getVillager(villager).getGenetics().getGene(Genetics.FACE));
     }
 
     private ResourceLocation getBlinkSkin() {
         return cached("skins/face/normal/blink.png", MCA::locate);
-    }
-
-    @Override
-    protected ResourceLocation getOverlay(T villager) {
-        return null;
     }
 
     public static void clearGeneratedEyeTextureCache() {

@@ -5,6 +5,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.MCAClient;
+import net.conczin.mca.client.model.MCAModelMorphology;
 import net.conczin.mca.client.resources.SkinExporter;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.AgeState;
@@ -60,13 +61,7 @@ public abstract class MixinLivingEntityRenderer {
 
         original.call(model, entity, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
 
-        float headScale = villager.getVillagerDimensions().getHead();
-        playerModel.head.xScale *= headScale;
-        playerModel.head.yScale *= headScale;
-        playerModel.head.zScale *= headScale;
-        playerModel.hat.xScale *= headScale;
-        playerModel.hat.yScale *= headScale;
-        playerModel.hat.zScale *= headScale;
+        MCAModelMorphology.applyHeadScale(playerModel.head, playerModel.hat, villager.getVillagerDimensions().getHead());
 
         if (villager.getPlayerModel() == VillagerLike.PlayerModel.VILLAGER) {
             playerModel.jacket.visible = false;

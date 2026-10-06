@@ -6,7 +6,7 @@ import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.world.entity.LivingEntity;
 
-public final class VillagerOverlayModel<T extends LivingEntity> extends PlayerModel<T> implements VillagerLayerModel<T> {
+public final class VillagerOverlayModel<T extends LivingEntity> extends PlayerModel<T> {
     private final ModelPart breastTransform;
     private final ModelPart breasts;
     private final ModelPart breastsWear;
@@ -19,7 +19,6 @@ public final class VillagerOverlayModel<T extends LivingEntity> extends PlayerMo
         breastsWear = breastTransform.getChild(MCAModelGeometry.BREASTPLATE);
     }
 
-    @Override
     public void copyFrom(PlayerModel<T> parent) {
         parent.copyPropertiesTo(this);
         syncWearParts();
@@ -35,6 +34,17 @@ public final class VillagerOverlayModel<T extends LivingEntity> extends PlayerMo
         rightPants.visible = false;
         breastsWear.visible = false;
         return this;
+    }
+
+    public void showHairOnly() {
+        leftArm.visible = false;
+        rightArm.visible = false;
+        leftLeg.visible = false;
+        rightLeg.visible = false;
+        leftSleeve.visible = false;
+        rightSleeve.visible = false;
+        leftPants.visible = false;
+        rightPants.visible = false;
     }
 
     @Override
