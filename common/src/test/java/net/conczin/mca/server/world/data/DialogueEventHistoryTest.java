@@ -7,8 +7,16 @@ import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.RandomSource;
+import net.minecraft.util.datafix.DataFixTypes;
+import net.minecraft.util.datafix.DataFixers;
+import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.storage.DimensionDataStorage;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.SharedConstants;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -20,6 +28,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DialogueEventHistoryTest {
+    @TempDir
+    Path tempDir;
+
     private static final UUID PLAYER_A = UUID.fromString("00000000-0000-0000-0000-000000000001");
     private static final UUID PLAYER_B = UUID.fromString("00000000-0000-0000-0000-000000000002");
     private static final UUID VILLAGER = UUID.fromString("00000000-0000-0000-0000-000000000010");
@@ -44,6 +55,36 @@ class DialogueEventHistoryTest {
         assertEquals(1L, savedRecord(saved, PLAYER_A, VILLAGER, STORY_ID).getLong("completion_count"));
         assertEquals(1_000L, savedRecord(saved, PLAYER_A, VILLAGER, STORY_ID).getLong("last_completed_at"));
         assertEquals("mca:story/example", savedRecord(saved, PLAYER_A, VILLAGER, STORY_ID).getString("event"));
+    }
+
+    @Test
+    void typedSavedDataFactoryReloadsHistoryFromDisk() {
+        SharedConstants.tryDetectVersion();
+        SavedData.Factory<DialogueEventHistory> factory = new SavedData.Factory<>(
+                DialogueEventHistory::new,
+                DialogueEventHistory::new,
+                DataFixTypes.SAVED_DATA_COMMAND_STORAGE);
+        String dataId = "dialogue_event_history_test";
+
+        DimensionDataStorage firstStorage = new DimensionDataStorage(
+                tempDir.toFile(), DataFixers.getDataFixer(), RegistryAccess.EMPTY);
+        DialogueEventHistory first = firstStorage.computeIfAbsent(factory, dataId);
+        first.complete(
+                PLAYER_A,
+                VILLAGER,
+                story(STORY_ID, DialogueEvent.RepeatType.COOLDOWN, 100L, 100L),
+                Set.of("remembered"),
+                1_000L,
+                RandomSource.create(42L));
+        firstStorage.save();
+
+        DimensionDataStorage secondStorage = new DimensionDataStorage(
+                tempDir.toFile(), DataFixers.getDataFixer(), RegistryAccess.EMPTY);
+        DialogueEventHistory loaded = secondStorage.get(factory, dataId);
+
+        assertTrue(loaded.completed(PLAYER_A, VILLAGER, STORY_ID));
+        assertTrue(loaded.chose(PLAYER_A, VILLAGER, STORY_ID, "remembered"));
+        assertEquals(1_100L, loaded.nextEligibleAt(PLAYER_A, VILLAGER, STORY_ID));
     }
 
     @Test
