@@ -9,6 +9,7 @@ import net.minecraft.server.level.FullChunkStatus;
 import net.minecraft.server.level.ServerChunkCache;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
+import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
@@ -22,6 +23,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -47,6 +49,22 @@ public interface WorldUtils {
                         () -> factory.apply(world),
                         loader,
                         null
+                ),
+                dataId);
+    }
+
+    static <T extends SavedData> T loadData(
+            ServerLevel world,
+            BiFunction<CompoundTag, HolderLookup.Provider, T> loader,
+            Function<ServerLevel, T> factory,
+            String dataId,
+            DataFixTypes dataFixType
+    ) {
+        return world.getDataStorage().computeIfAbsent(
+                new SavedData.Factory<>(
+                        () -> factory.apply(world),
+                        loader,
+                        Objects.requireNonNull(dataFixType, "dataFixType")
                 ),
                 dataId);
     }
