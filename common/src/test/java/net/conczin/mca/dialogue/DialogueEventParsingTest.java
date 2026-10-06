@@ -1,0 +1,412 @@
+package net.conczin.mca.dialogue;
+
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
+import net.minecraft.resources.ResourceLocation;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+class DialogueEventParsingTest {
+    private static final ResourceLocation EVENT_ID = ResourceLocation.fromNamespaceAndPath("mca", "personal/test");
+
+    @Test
+    void decodesNamespacedEventAndNormalizesOrderedLinesAndCooldownSeconds() {
+        DialogueEvent event = decode("""
+                {
+                  "trigger": "talk",
+                  "presentation": {
+                    "mode": "ask",
+                    "prompt": "dialogue_event.test.prompt",
+                    "resume_prompt": "dialogue_event.test.resume",
+                    "topic": "personal"
+                  },
+                  "priority": 7,
+                  "weight": 2.5,
+                  "requirements": [],
+                  "repeat": { "type": "cooldown", "seconds": 5 },
+                  "start": "intro",
+                  "nodes": {
+                    "intro": {
+                      "lines": ["dialogue_event.test.first", "dialogue_event.test.second"],
+                      "choices": [
+                        { "id": "continue_topic", "text": "dialogue_event.test.choice", "next": "done" }
+                      ]
+                    },
+                    "done": { "line": "dialogue_event.test.done", "complete": true }
+                  }
+                }
+                """);
+
+        assertEquals(EVENT_ID, event.id());
+        assertEquals(DialogueEvent.Trigger.TALK, event.trigger());
+        assertEquals(DialogueEvent.PresentationMode.ASK, event.presentation().mode());
+        assertEquals("dialogue_event.test.prompt", event.presentation().prompt().orElseThrow());
+        assertEquals("dialogue_event.test.resume", event.presentation().resumePrompt());
+        assertEquals("personal", event.presentation().topic().orElseThrow());
+        assertEquals(7, event.priority());
+        assertEquals(2.5, event.weight());
+        assertEquals(DialogueEvent.HistoryPolicy.STORY, event.history());
+        assertEquals(DialogueEvent.RepeatType.COOLDOWN, event.repeat().type());
+        assertEquals(100L, event.repeat().minTicks());
+        assertEquals(100L, event.repeat().maxTicks());
+        assertEquals(List.of("dialogue_event.test.first", "dialogue_event.test.second"), event.nodes().get("intro").lines());
+        assertEquals(List.of("dialogue_event.test.done"), event.nodes().get("done").lines());
+    }
+
+    @Test
+    void decodesCrossEventRequirementsAndExplicitNegation() {
+        DialogueEvent event = decode(baseEvent("""
+                [
+                  { "type": "mca:event_completed", "event": "mca:story/first" },
+                  { "type": "mca:event_choice", "event": "mca:story/first", "choice": "ask_why" },
+                  { "type": "mca:not", "condition": { "type": "mca:event_completed", "event": "addon:optional" } }
+                ]
+                """, "{ \"type\": \"always\" }"));
+
+        assertInstanceOf(DialogueCondition.EventCompleted.class, event.requirements().get(0));
+        assertInstanceOf(DialogueCondition.EventChoice.class, event.requirements().get(1));
+        DialogueCondition.Not not = assertInstanceOf(DialogueCondition.Not.class, event.requirements().get(2));
+        assertInstanceOf(DialogueCondition.EventCompleted.class, not.condition());
+    }
+
+    @Test
+    void rejectsDuplicateChoiceIdsAcrossNodes() {
+        assertDecodeFails("""
+                {
+                  "trigger": "talk",
+                  "presentation": { "mode": "ask", "prompt": "p", "resume_prompt": "r" },
+                  "repeat": { "type": "always" },
+                  "start": "a",
+                  "nodes": {
+                    "a": { "line": "a", "choices": [{ "id": "same", "text": "x", "next": "b" }] },
+                    "b": { "line": "b", "choices": [{ "id": "same", "text": "y", "next": "done" }] },
+                    "done": { "line": "done", "complete": true }
+                  }
+                }
+                """);
+    }
+
+    @Test
+    void rejectsMissingStartNodeAndMissingChoiceNext() {
+        assertDecodeFails(simpleEvent("missing", "{ \"line\": \"done\", \"complete\": true }"));
+        assertDecodeFails(simpleEvent("intro", "{ \"line\": \"intro\", \"choices\": [{ \"id\": \"x\", \"text\": \"x\" }] }"));
+    }
+
+    @Test
+    void rejectsInvalidEventAndOutcomeWeights() {
+        for (double weight : List.of(0.0, -1.0, Double.NaN, Double.POSITIVE_INFINITY)) {
+            JsonObject json = parse(baseEvent("[]", "{ \"type\": \"always\" }"));
+            json.add("weight", new JsonPrimitive(weight));
+            assertDecodeFails(json);
+
+            JsonObject outcome = parse("""
+                    {
+                      "trigger": "talk",
+                      "presentation": { "mode": "ask", "prompt": "p", "resume_prompt": "r" },
+                      "repeat": { "type": "always" },
+                      "start": "intro",
+                      "nodes": {
+                        "intro": {
+                          "line": "intro",
+                          "choices": [{
+                            "id": "x",
+                            "text": "x",
+                            "outcomes": [{ "weight": 1, "next": "done" }]
+                          }]
+                        },
+                        "done": { "line": "done", "complete": true }
+                      }
+                    }
+                    """);
+            outcome.getAsJsonObject("nodes")
+                    .getAsJsonObject("intro")
+                    .getAsJsonArray("choices")
+                    .get(0).getAsJsonObject()
+                    .getAsJsonArray("outcomes")
+                    .get(0).getAsJsonObject()
+                    .add("weight", new JsonPrimitive(weight));
+            assertDecodeFails(outcome);
+        }
+    }
+
+    @Test
+    void rejectsChoiceThatMixesDirectPathAndOutcomes() {
+        assertDecodeFails("""
+                {
+                  "trigger": "talk",
+                  "presentation": { "mode": "ask", "prompt": "p", "resume_prompt": "r" },
+                  "repeat": { "type": "always" },
+                  "start": "intro",
+                  "nodes": {
+                    "intro": {
+                      "line": "intro",
+                      "choices": [{
+                        "id": "x",
+                        "text": "x",
+                        "next": "done",
+                        "outcomes": [{ "next": "done" }]
+                      }]
+                    },
+                    "done": { "line": "done", "complete": true }
+                  }
+                }
+                """);
+    }
+
+    @Test
+    void requiresExplicitRetryableForNonCompletingOnceOrCooldownTerminals() {
+        assertDecodeFails(simpleEvent("intro", "{ \"line\": \"bye\", \"end\": true }", "{ \"type\": \"once\" }"));
+        assertDecodeFails(simpleEvent("intro", "{ \"line\": \"bye\", \"end\": true }", "{ \"type\": \"cooldown\", \"seconds\": 5 }"));
+
+        DialogueEvent retryable = decode(simpleEvent(
+                "intro",
+                "{ \"line\": \"bye\", \"end\": true, \"retryable\": true }",
+                "{ \"type\": \"cooldown\", \"seconds\": 5 }"
+        ));
+        assertTrue(retryable.nodes().get("intro").retryable());
+    }
+
+    @Test
+    void validatesNodeLineAndContinuationShapesAndCycles() {
+        assertDecodeFails(simpleEvent("intro", "{ \"line\": \"a\", \"lines\": [\"b\"], \"complete\": true }"));
+        assertDecodeFails(simpleEvent("intro", "{ \"lines\": [], \"complete\": true }"));
+        assertDecodeFails(simpleEvent("intro", "{ \"line\": \"   \", \"complete\": true }"));
+        assertDecodeFails(simpleEvent("intro", "{ \"line\": \"a\", \"next\": \"done\", \"complete\": true }"));
+
+        DialogueEvent nextOnly = decode("""
+                {
+                  "trigger": "talk",
+                  "presentation": { "mode": "ask", "prompt": "p", "resume_prompt": "r" },
+                  "repeat": { "type": "always" },
+                  "start": "intro",
+                  "nodes": {
+                    "intro": { "line": "intro", "next": "done" },
+                    "done": { "line": "done", "complete": true }
+                  }
+                }
+                """);
+        assertEquals("done", nextOnly.nodes().get("intro").next().orElseThrow());
+
+        assertDecodeFails("""
+                {
+                  "trigger": "talk",
+                  "presentation": { "mode": "ask", "prompt": "p", "resume_prompt": "r" },
+                  "repeat": { "type": "always" },
+                  "start": "a",
+                  "nodes": {
+                    "a": { "line": "a", "next": "b" },
+                    "b": { "line": "b", "next": "a" }
+                  }
+                }
+                """);
+    }
+
+    @Test
+    void defaultsHistoryToStoryAndRestrictsSchedulingHistoryToCooldown() {
+        DialogueEvent event = decode(baseEvent("[]", "{ \"type\": \"always\" }"));
+        assertEquals(DialogueEvent.HistoryPolicy.STORY, event.history());
+
+        assertDecodeFails(baseEventWithHistory("[]", "{ \"type\": \"always\" }", "scheduling"));
+        DialogueEvent scheduling = decode(baseEventWithHistory("[]", "{ \"type\": \"cooldown\", \"seconds\": 5 }", "scheduling"));
+        assertEquals(DialogueEvent.HistoryPolicy.SCHEDULING, scheduling.history());
+    }
+
+    @Test
+    void requiresRepeatAndValidSecondsAuthoring() {
+        assertDecodeFails(baseEventWithoutRepeat());
+
+        assertEquals(DialogueEvent.RepeatType.ONCE, decode(baseEvent("[]", "{ \"type\": \"once\" }")).repeat().type());
+        assertEquals(DialogueEvent.RepeatType.ALWAYS, decode(baseEvent("[]", "{ \"type\": \"always\" }")).repeat().type());
+
+        DialogueEvent fractional = decode(baseEvent("[]", "{ \"type\": \"cooldown\", \"seconds\": 0.01 }"));
+        assertEquals(1L, fractional.repeat().minTicks());
+        assertEquals(1L, fractional.repeat().maxTicks());
+
+        DialogueEvent random = decode(baseEvent("[]", "{ \"type\": \"cooldown\", \"min_seconds\": 1.25, \"max_seconds\": 2.5 }"));
+        assertEquals(25L, random.repeat().minTicks());
+        assertEquals(50L, random.repeat().maxTicks());
+
+        for (String repeat : List.of(
+                "{ \"type\": \"cooldown\" }",
+                "{ \"type\": \"cooldown\", \"seconds\": 5, \"min_seconds\": 1, \"max_seconds\": 2 }",
+                "{ \"type\": \"cooldown\", \"min_seconds\": 2, \"max_seconds\": 1 }",
+                "{ \"type\": \"cooldown\", \"min_seconds\": 1 }",
+                "{ \"type\": \"cooldown\", \"seconds\": -1 }",
+                "{ \"type\": \"cooldown\", \"min_ticks\": 100, \"max_ticks\": 100 }",
+                "{ \"type\": \"once\", \"seconds\": 5 }"
+        )) {
+            assertDecodeFails(baseEvent("[]", repeat));
+        }
+
+        JsonObject nonFinite = parse(baseEvent("[]", "{ \"type\": \"cooldown\", \"seconds\": 5 }"));
+        nonFinite.getAsJsonObject("repeat").add("seconds", new JsonPrimitive(Double.NaN));
+        assertDecodeFails(nonFinite);
+
+        JsonObject overflow = parse(baseEvent("[]", "{ \"type\": \"cooldown\", \"seconds\": 5 }"));
+        overflow.getAsJsonObject("repeat").add("seconds", new JsonPrimitive(Double.MAX_VALUE));
+        assertDecodeFails(overflow);
+    }
+
+    @Test
+    void requiresNonblankResumePromptAndPromptForSelectableModes() {
+        assertDecodeFails(baseEventWithPresentation("{ \"mode\": \"ask\", \"prompt\": \"p\", \"resume_prompt\": \"   \" }"));
+        assertDecodeFails(baseEventWithPresentation("{ \"mode\": \"highlighted\", \"resume_prompt\": \"r\" }"));
+
+        DialogueEvent ambient = decode(baseEventWithPresentation("{ \"mode\": \"ambient\", \"resume_prompt\": \"r\" }"));
+        assertTrue(ambient.presentation().prompt().isEmpty());
+    }
+
+    @Test
+    void rejectsUnknownConditionAndActionTypes() {
+        assertDecodeFails(baseEvent("[{ \"type\": \"addon:unknown_condition\" }]", "{ \"type\": \"always\" }"));
+        assertDecodeFails("""
+                {
+                  "trigger": "talk",
+                  "presentation": { "mode": "ask", "prompt": "p", "resume_prompt": "r" },
+                  "repeat": { "type": "always" },
+                  "start": "intro",
+                  "nodes": {
+                    "intro": {
+                      "line": "intro",
+                      "choices": [{
+                        "id": "x",
+                        "text": "x",
+                        "actions": [{ "type": "addon:unknown_action" }],
+                        "next": "done"
+                      }]
+                    },
+                    "done": { "line": "done", "complete": true }
+                  }
+                }
+                """);
+    }
+
+    @Test
+    void preservesKnownConditionAndActionParametersForLaterEvaluation() {
+        DialogueEvent event = decode("""
+                {
+                  "trigger": "talk",
+                  "presentation": { "mode": "ask", "prompt": "p", "resume_prompt": "r" },
+                  "requirements": [{ "type": "mca:personality", "value": "gloomy" }],
+                  "repeat": { "type": "always" },
+                  "start": "intro",
+                  "nodes": {
+                    "intro": {
+                      "line": "intro",
+                      "choices": [{
+                        "id": "x",
+                        "text": "x",
+                        "actions": [{ "type": "mca:hearts", "amount": 5 }],
+                        "next": "done"
+                      }]
+                    },
+                    "done": { "line": "done", "complete": true }
+                  }
+                }
+                """);
+
+        DialogueCondition.Defined condition = assertInstanceOf(DialogueCondition.Defined.class, event.requirements().get(0));
+        assertEquals("gloomy", condition.definition().get("value").getAsString());
+
+        DialogueAction.Defined action = assertInstanceOf(
+                DialogueAction.Defined.class,
+                event.nodes().get("intro").choices().orElseThrow().get(0).actions().get(0)
+        );
+        assertEquals(5, action.definition().get("amount").getAsInt());
+    }
+
+    @Test
+    void rejectsUnknownStructuralFieldsInsteadOfSilentlyIgnoringThem() {
+        assertDecodeFails(baseEvent("[]", "{ \"type\": \"always\", \"typo\": 1 }"));
+        assertDecodeFails("""
+                {
+                  "trigger": "talk",
+                  "presentation": { "mode": "ask", "prompt": "p", "resume_prompt": "r" },
+                  "repeat": { "type": "always" },
+                  "start": "intro",
+                  "nodes": {
+                    "intro": { "line": "intro", "complete": true, "typo": true }
+                  }
+                }
+                """);
+    }
+
+    private static DialogueEvent decode(String json) {
+        return DialogueEvent.decode(EVENT_ID, parse(json));
+    }
+
+    private static JsonObject parse(String json) {
+        return JsonParser.parseString(json).getAsJsonObject();
+    }
+
+    private static void assertDecodeFails(String json) {
+        assertDecodeFails(parse(json));
+    }
+
+    private static void assertDecodeFails(JsonObject json) {
+        assertThrows(IllegalArgumentException.class, () -> DialogueEvent.decode(EVENT_ID, json));
+    }
+
+    private static String baseEvent(String requirements, String repeat) {
+        return """
+                {
+                  "trigger": "talk",
+                  "presentation": { "mode": "ask", "prompt": "p", "resume_prompt": "r" },
+                  "requirements": %s,
+                  "repeat": %s,
+                  "start": "intro",
+                  "nodes": { "intro": { "line": "intro", "complete": true } }
+                }
+                """.formatted(requirements, repeat);
+    }
+
+    private static String baseEventWithHistory(String requirements, String repeat, String history) {
+        return baseEvent(requirements, repeat).replace("\"start\":", "\"history\": \"" + history + "\",\n  \"start\":");
+    }
+
+    private static String baseEventWithoutRepeat() {
+        return """
+                {
+                  "trigger": "talk",
+                  "presentation": { "mode": "ask", "prompt": "p", "resume_prompt": "r" },
+                  "start": "intro",
+                  "nodes": { "intro": { "line": "intro", "complete": true } }
+                }
+                """;
+    }
+
+    private static String baseEventWithPresentation(String presentation) {
+        return """
+                {
+                  "trigger": "talk",
+                  "presentation": %s,
+                  "repeat": { "type": "always" },
+                  "start": "intro",
+                  "nodes": { "intro": { "line": "intro", "complete": true } }
+                }
+                """.formatted(presentation);
+    }
+
+    private static String simpleEvent(String start, String node) {
+        return simpleEvent(start, node, "{ \"type\": \"always\" }");
+    }
+
+    private static String simpleEvent(String start, String node, String repeat) {
+        return """
+                {
+                  "trigger": "talk",
+                  "presentation": { "mode": "ask", "prompt": "p", "resume_prompt": "r" },
+                  "repeat": %s,
+                  "start": "%s",
+                  "nodes": { "intro": %s }
+                }
+                """.formatted(repeat, start, node);
+    }
+}
