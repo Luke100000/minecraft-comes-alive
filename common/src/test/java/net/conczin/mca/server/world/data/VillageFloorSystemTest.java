@@ -43,6 +43,16 @@ class VillageFloorSystemTest {
     }
 
     @Test
+    void emptyFunctionalRoomDoesNotSynthesizeRectangularOwnership() {
+        Building room = new Building(new BlockPos(1, 64, 1));
+        room.setGeometry(new BlockPos(0, 64, 0), new BlockPos(2, 67, 2), Set.of());
+
+        assertFalse(room.containsPos(new BlockPos(1, 64, 1)));
+        assertFalse(room.containsFloorColumn(1, 1));
+        assertEquals(0L, room.getFloorFootprintArea());
+    }
+
+    @Test
     void registerStructureRejectsInvalidRoomReferenceWithoutMutation() {
         Village village = new Village(1, null);
         Structure existing = structure(10, 10, floor(0, 64));
@@ -81,10 +91,38 @@ class VillageFloorSystemTest {
     }
 
     @Test
+    void loadingAndOrdinaryEditsPreserveSavedFloorLabels() {
+        Village village = new Village(1, null);
+        Structure structure = structure(10, 77,
+                TestStructureFloors.create(0, 64, 68, 4, region(64)),
+                TestStructureFloors.create(1, 72, 76, 4, region(72)),
+                TestStructureFloors.create(2, 80, 84, 7, region(80)));
+        registerStructure(village, structure, room(100, 10, 0, true));
+
+        Village loaded = new Village(village.save(), null);
+        assertEquals(List.of(4, 4, 7), loaded.getStructure(10).orElseThrow().getFloors().stream()
+                .map(StructureFloor::floorNumber).toList());
+        loaded.setBuildingInheritanceEnabled(loaded.getBuilding(100).orElseThrow(), false);
+        loaded.refreshLogicalBuildings();
+        assertEquals(List.of(4, 4, 7), loaded.getStructure(10).orElseThrow().getFloors().stream()
+                .map(StructureFloor::floorNumber).toList());
+    }
+
+    @Test
+    void unnumberedSavedFloorsAreNotReclassifiedOnLoad() {
+        Village village = new Village(1, null);
+        Structure structure = structure(10, 77, floor(0, 64), floor(1, 72));
+        registerStructure(village, structure, room(100, 10, 0, true));
+        Village loaded = new Village(village.save(), null);
+        assertEquals(0, loaded.getStructure(10).orElseThrow().getFloor(0).orElseThrow().floorNumber());
+        assertEquals(0, loaded.getStructure(10).orElseThrow().getFloor(1).orElseThrow().floorNumber());
+    }
+
+    @Test
     void floorNumbersAreRelativeToExplicitGroundFloor() {
         Village village = new Village(1, null);
-        Structure low = structure(10, 77, floor(0, 40), floor(1, 44));
-        Structure high = structure(11, 77, floor(0, 48));
+        Structure low = structure(10, 77, floor(0, 40).withFloorNumber(-1), floor(1, 44));
+        Structure high = structure(11, 77, floor(0, 48).withFloorNumber(1));
         registerStructure(village, low, room(100, 10, 1, true));
         registerStructure(village, high, room(101, 11, 0, true));
 
@@ -96,10 +134,33 @@ class VillageFloorSystemTest {
     }
 
     @Test
-    void floorNumbersAreRebuiltFromLogicalGroundAfterSaveLoad() {
+    void insertingConflictingLabelsDoesNotRenumberExistingFloors() {
         Village village = new Village(1, null);
-        Structure low = structure(10, 77, floor(0, 40), floor(1, 44));
-        Structure high = structure(11, 77, floor(0, 48));
+        Structure original = structure(10, 77,
+                TestStructureFloors.create(0, 64, 68, 0, region(64)),
+                TestStructureFloors.create(1, 72, 76, 1, region(72)));
+        registerStructure(village, original, room(100, 10, 0, true));
+        village.refreshLogicalBuildings();
+
+        Structure inserted = structure(20, 77,
+                TestStructureFloors.create(0, 68, 72, 1, region(68)));
+        registerStructure(village, inserted, room(101, 20, 0, true));
+        village.refreshLogicalBuildings();
+
+        assertEquals(0, original.getFloor(0).orElseThrow().floorNumber());
+        assertEquals(1, inserted.getFloor(0).orElseThrow().floorNumber());
+        assertEquals(1, original.getFloor(1).orElseThrow().floorNumber());
+        assertEquals(Building.validationResult.AMBIGUOUS_STRUCTURE,
+                FloorGrouping.prospectiveNumber(List.of(original.getFloor(0).orElseThrow(),
+                        original.getFloor(1).orElseThrow()), original.getFloor(0).orElseThrow(),
+                        inserted.getFloor(0).orElseThrow()).result());
+    }
+
+    @Test
+    void savedFloorNumbersRemainRelativeToExplicitGroundAfterSaveLoad() {
+        Village village = new Village(1, null);
+        Structure low = structure(10, 77, floor(0, 40).withFloorNumber(-1), floor(1, 44));
+        Structure high = structure(11, 77, floor(0, 48).withFloorNumber(1));
         registerStructure(village, low, room(100, 10, 1, true));
         registerStructure(village, high, room(101, 11, 0, true));
         village.refreshLogicalBuildings();
@@ -537,7 +598,7 @@ class VillageFloorSystemTest {
         Structure lower = structure(10, 10,
                 TestStructureFloors.create(0, 88, 93, 0, region(88)));
         Structure upper = structure(11, 10,
-                TestStructureFloors.create(0, 91, 94, 0, region(91)));
+                TestStructureFloors.create(0, 91, 94, 1, region(91)));
         registerStructure(village, lower, room(100, 10, 0, true));
         registerStructure(village, upper, room(101, 11, 0, true));
 
@@ -632,7 +693,7 @@ class VillageFloorSystemTest {
     @Test
     void interactionRoomLookupFallsBackToPhysicalRoomGeometryWithoutRecursing() {
         Village village = new Village(1, null);
-        BuildingFloorRegion legacyRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+        TestFloorFootprint legacyRegion = TestFloorFootprint.fromFootprint(64, Set.of(
                 new BlockPos(10, 64, 10)));
         Structure structure = structure(10, 10,
                 TestStructureFloors.create(0, 64, 68, 0, legacyRegion));
@@ -707,7 +768,7 @@ class VillageFloorSystemTest {
     }
 
     @Test
-    void replacingOneFloorGeometryDoesNotRenumberNeighboringFloors() {
+    void replacingOneFloorGeometryPreservesStoreyIdentityAndNeighborNumbers() {
         Village village = new Village(1, null);
         Structure structure = structure(10, 77,
                 TestStructureFloors.create(3, 64, 70, -1, region(64)),
@@ -721,7 +782,7 @@ class VillageFloorSystemTest {
         assertEquals(-1, structure.getFloor(3).orElseThrow().floorNumber());
         assertEquals(0, structure.getFloor(7).orElseThrow().floorNumber());
         assertEquals(1, structure.getFloor(9).orElseThrow().floorNumber());
-        assertEquals(75, structure.getFloor(7).orElseThrow().anchorY());
+        assertEquals(74, structure.getFloor(7).orElseThrow().anchorY());
     }
 
     @Test
@@ -852,7 +913,7 @@ class VillageFloorSystemTest {
     @Test
     void expandedStructureAndNewRoomCommitAgainstOneRefreshedFloorGeometry() {
         Village village = new Village(1, null);
-        BuildingFloorRegion oldRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+        TestFloorFootprint oldRegion = TestFloorFootprint.fromFootprint(64, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));
         StructureFloor oldFloor = TestStructureFloors.create(0, 64, 68, 0, oldRegion);
         Structure current = structure(10, 10, oldFloor);
@@ -860,7 +921,7 @@ class VillageFloorSystemTest {
         main.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 0), oldRegion.cells());
         registerStructure(village, current, main);
 
-        BuildingFloorRegion freshRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+        TestFloorFootprint freshRegion = TestFloorFootprint.fromFootprint(64, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
         Structure refreshed = current.copy();
@@ -868,7 +929,7 @@ class VillageFloorSystemTest {
                 TestStructureFloors.create(0, 64, 68, 0, freshRegion)));
 
         Building added = room(101, 10, 0, true);
-        BuildingFloorRegion addedRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+        TestFloorFootprint addedRegion = TestFloorFootprint.fromFootprint(64, Set.of(
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
         added.setGeometry(new BlockPos(2, 64, 0), new BlockPos(3, 67, 0), addedRegion.cells());
 
@@ -881,21 +942,21 @@ class VillageFloorSystemTest {
     @Test
     void failedPostPublicationStepRestoresPreviousAggregateState() {
         ThrowOnceCalculateVillage village = new ThrowOnceCalculateVillage();
-        BuildingFloorRegion oldRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+        TestFloorFootprint oldRegion = TestFloorFootprint.fromFootprint(64, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0)));
         Structure current = structure(10, 10, TestStructureFloors.create(0, 64, 68, 0, oldRegion));
         Building main = room(100, 10, 0, true);
         main.setGeometry(new BlockPos(0, 64, 0), new BlockPos(1, 67, 0), oldRegion.cells());
         registerStructure(village, current, main);
 
-        BuildingFloorRegion freshRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+        TestFloorFootprint freshRegion = TestFloorFootprint.fromFootprint(64, Set.of(
                 new BlockPos(0, 64, 0), new BlockPos(1, 64, 0),
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
         Structure refreshed = current.copy();
         assertTrue(refreshed.replaceFloorGeometry(0,
                 TestStructureFloors.create(0, 64, 68, 0, freshRegion)));
         Building added = room(101, 10, 0, true);
-        BuildingFloorRegion addedRegion = BuildingFloorRegion.fromFootprint(64, Set.of(
+        TestFloorFootprint addedRegion = TestFloorFootprint.fromFootprint(64, Set.of(
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
         added.setGeometry(new BlockPos(2, 64, 0), new BlockPos(3, 67, 0), addedRegion.cells());
 
@@ -997,17 +1058,17 @@ class VillageFloorSystemTest {
         return TestStructureFloors.create(id, y, y + 4, region(y));
     }
 
-    private static BuildingFloorRegion region(int y) {
+    private static TestFloorFootprint region(int y) {
         return region(y, 0, 0);
     }
 
-    private static BuildingFloorRegion region(int y, int x, int z) {
-        return BuildingFloorRegion.fromFootprint(y, Set.of(
+    private static TestFloorFootprint region(int y, int x, int z) {
+        return TestFloorFootprint.fromFootprint(y, Set.of(
                 new BlockPos(x, y, z), new BlockPos(x + 1, y, z),
                 new BlockPos(x, y, z + 1), new BlockPos(x + 1, y, z + 1)));
     }
 
-    private static FloorGeometry scannedFloor(BuildingFloorRegion region) {
+    private static FloorGeometry scannedFloor(TestFloorFootprint region) {
         Set<FloorGeometry.Cell> cells = region.cells().stream()
                 .map(pos -> new FloorGeometry.Cell(pos, pos.getY() + 4))
                 .collect(java.util.stream.Collectors.toSet());

@@ -12,20 +12,17 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class EnterBuildingGameTests {
     private EnterBuildingGameTests() {
@@ -65,10 +62,42 @@ public final class EnterBuildingGameTests {
                 "building beyond FOLLOW_RANGE did not publish a walk target");
         helper.assertTrue(walkTarget.getTarget().currentBlockPosition().equals(buildingTarget),
                 "building travel replaced the real destination with an intermediate point");
-        helper.assertTrue(walkTarget.getTarget().getClass() == BlockPosTracker.class,
-                "enter-building caller still opted into a special long-distance target");
 
         villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_building_wall_recovery", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void buildingVisitFindsRouteAroundLongWall(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(35, 1, 35));
+        BlockPos target = start.east(2);
+        prepareFlatArea(helper, start, 30, 3);
+        for (int z = -23; z <= 23; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start)).spawn(MobSpawnType.STRUCTURE);
+        villager.refreshBrain(helper.getLevel());
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+        villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
+        Config config = Config.getInstance();
+        int previousDistance = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 160;
+            EnterBuildingTask task = new FixedTargetEnterBuildingTask(0.5F, target);
+            helper.assertTrue(task.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime()),
+                    "building visit did not publish its destination");
+            var path = villager.getNavigation().createPath(target, 0);
+            helper.assertTrue(path != null && path.canReach() && path.getTarget().equals(target),
+                    "building visit lost long-wall recovery: " + path);
+        } finally {
+            config.villagerPathfindingDistance = previousDistance;
+            villager.discard();
+        }
         helper.succeed();
     }
 
@@ -131,6 +160,8 @@ public final class EnterBuildingGameTests {
         villager.setNoAi(true);
 
         Building building = buildingWithFloorCells(min, max, floorCells);
+        helper.assertTrue(building.getFloorCells().equals(floorCells),
+                "fixture did not preserve the registered room floor cells");
         Optional<BlockPos> selected = new TargetSelectionProbe().select(building, helper.getLevel(), villager);
 
         String diagnostics = floorCells.stream()
@@ -148,6 +179,45 @@ public final class EnterBuildingGameTests {
                 "enter-building selected an elevated/non-floor position instead of registered room floor geometry");
 
         villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_enter_building_nearest_selection", templateNamespace = "minecraft",
+            template = "bastion/blocks/air")
+    public static void nearestBuildingResolvesDynamicTypeOncePerScan(GameTestHelper helper) {
+        BlockPos origin = helper.absolutePos(new BlockPos(4, 2, 4));
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(origin))
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.setNoAi(true);
+        try {
+            Building farHouse = new Building(origin.east(8));
+            Building library = new Building(origin.east());
+            library.setType("library");
+            Building nearestHouse = new Building(origin.east(3));
+            Building tiedHouse = new Building(origin.south(3));
+            List<Building> candidates = List.of(farHouse, library, nearestHouse, tiedHouse);
+            NearestBuildingProbe task = new NearestBuildingProbe();
+
+            helper.assertTrue(task.select(villager, candidates).orElse(null) == nearestHouse,
+                    "nearest matching room or stable equal-distance ordering changed");
+            helper.assertTrue(task.typeResolutions == 1,
+                    "favored building type was resolved more than once in the same scan: "
+                            + task.typeResolutions);
+
+            task.wantedType = "library";
+            helper.assertTrue(task.select(villager, candidates).orElse(null) == library,
+                    "a later selection reused the old favored building type");
+            helper.assertTrue(task.typeResolutions == 2,
+                    "each independent nearest-room scan must resolve its dynamic type once");
+
+            task.wantedType = "missing";
+            helper.assertTrue(task.select(villager, candidates).isEmpty()
+                            && task.typeResolutions == 3,
+                    "a missing favored room must return empty after one type resolution");
+        } finally {
+            villager.discard();
+        }
         helper.succeed();
     }
 
@@ -198,6 +268,25 @@ public final class EnterBuildingGameTests {
 
         private Optional<BlockPos> select(Building building, Level level, VillagerEntityMCA villager) {
             return getRandomPositionIn(building, level, villager);
+        }
+    }
+
+    private static final class NearestBuildingProbe extends EnterBuildingTask {
+        private String wantedType = "house";
+        private int typeResolutions;
+
+        private NearestBuildingProbe() {
+            super("", 0.5F);
+        }
+
+        @Override
+        public String getBuilding(VillagerEntityMCA villager) {
+            typeResolutions++;
+            return wantedType;
+        }
+
+        private Optional<Building> select(VillagerEntityMCA villager, List<Building> candidates) {
+            return getNearestBuilding(villager, candidates);
         }
     }
 }

@@ -1,28 +1,37 @@
 package net.conczin.mca.client.gui;
 
 import com.google.gson.JsonObject;
+import net.conczin.mca.client.gui.widget.TooltipButtonWidget;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.network.c2s.ReportBuildingMessage;
 import net.conczin.mca.server.world.data.Building;
-import net.conczin.mca.server.world.data.BuildingFloorRegion;
+import net.conczin.mca.server.world.data.TestFloorFootprint;
 import net.conczin.mca.server.world.data.RoomScanPlan;
 import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.StructureFloor;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.SharedConstants;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.Bootstrap;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import sun.misc.Unsafe;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -31,6 +40,9 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BlueprintScreenMapInteractionTest {
@@ -68,6 +80,8 @@ class BlueprintScreenMapInteractionTest {
         setField(first, "mapCenterAutomatic", false);
         setField(first, "mapCenterX", 123.25D);
         setField(first, "mapCenterZ", -45.75D);
+        setField(first, "lastRoomScanPosition", BlockPos.ZERO);
+        setField(first, "cachedRoomScanPlan", RoomScanPlan.addBuilding(BlockPos.ZERO));
         first.removed();
 
         BlueprintScreen reopened = new BlueprintScreen();
@@ -83,6 +97,8 @@ class BlueprintScreenMapInteractionTest {
         assertEquals(false, getField(reopened, "mapCenterAutomatic"));
         assertEquals(123.25D, getDoubleField(reopened, "mapCenterX"), 0.0000001D);
         assertEquals(-45.75D, getDoubleField(reopened, "mapCenterZ"), 0.0000001D);
+        assertEquals(null, getField(reopened, "lastRoomScanPosition"));
+        assertEquals(null, getField(reopened, "cachedRoomScanPlan"));
     }
 
     @Test
@@ -118,6 +134,186 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
+    void loadedBlueprintDoesNotNeedAnotherInitialVillageRequestWhenResumed() throws Exception {
+        BlueprintScreen screen = new BlueprintScreen();
+        assertTrue(screen.needsVillageRequestOnInit());
+
+        setField(screen, "village", new Village(1, null));
+
+        assertFalse(screen.needsVillageRequestOnInit());
+    }
+
+    @Test
+    void soleAvailableFloorCannotRemainAllFloors() throws Exception {
+        BlueprintScreen screen = new BlueprintScreen();
+        setField(screen, "selectedFloorOrdinal", null);
+        setField(screen, "floorOrdinals", List.of(0));
+
+        Method updateFloorControls = BlueprintScreen.class.getDeclaredMethod("updateFloorControls");
+        updateFloorControls.setAccessible(true);
+        updateFloorControls.invoke(screen);
+
+        assertEquals(0, getField(screen, "selectedFloorOrdinal"));
+    }
+
+    @Test
+    void registeredRoomScanCarriesExpectedRoomId() {
+        Building room = room(42);
+        RoomScanPlan plan = RoomScanPlan.updateRoom(room, BlockPos.ZERO);
+
+        ReportBuildingMessage message = BlueprintScreen.structureScanMessage(
+                Village.RoomScanMode.UPDATE_ROOM, plan);
+
+        assertEquals(ReportBuildingMessage.Action.SCAN_ROOM, message.action());
+        assertEquals(42, message.expectedTargetId());
+    }
+
+    @Test
+    void roomScanPreviewIsReusedWhileStationaryAndRefreshesAfterMovement() throws Exception {
+        BlueprintScreen screen = new BlueprintScreen();
+        Minecraft client = allocate(Minecraft.class);
+        client.player = allocate(LocalPlayer.class);
+        Field minecraftField = Screen.class.getDeclaredField("minecraft");
+        minecraftField.setAccessible(true);
+        minecraftField.set(screen, client);
+        setField(screen, "village", new Village(1, null));
+        BlockPos position = new BlockPos(4, 64, 8);
+        Field playerPosition = Entity.class.getDeclaredField("blockPosition");
+        playerPosition.setAccessible(true);
+        playerPosition.set(client.player, position);
+        Method preview = BlueprintScreen.class.getDeclaredMethod("getPlayerRoomScanPlan");
+        preview.setAccessible(true);
+        RoomScanPlan initial = (RoomScanPlan) preview.invoke(screen);
+
+        client.player.tickCount = 20;
+        assertSame(initial, preview.invoke(screen));
+        client.player.tickCount = 200;
+        assertSame(initial, preview.invoke(screen));
+
+        BlockPos movedPosition = position.offset(1, 0, 0);
+        playerPosition.set(client.player, movedPosition);
+        RoomScanPlan moved = (RoomScanPlan) preview.invoke(screen);
+        assertNotSame(initial, moved);
+        assertEquals(Village.RoomScanMode.ADD_BUILDING, moved.mode());
+        assertEquals(new BlockPos(5, 64, 8), moved.interactionSource());
+    }
+
+    @Test
+    void villageResponseInvalidatesRoomScanPreview() throws Exception {
+        BlueprintScreen screen = new BlueprintScreen();
+        setField(screen, "page", "map");
+        setField(screen, "lastRoomScanPosition", BlockPos.ZERO);
+        setField(screen, "cachedRoomScanPlan", RoomScanPlan.addBuilding(BlockPos.ZERO));
+
+        screen.setVillage(new Village(1, null));
+
+        assertEquals(null, getField(screen, "lastRoomScanPosition"));
+        assertEquals(null, getField(screen, "cachedRoomScanPlan"));
+    }
+
+    @Test
+    void attachmentButtonDistinguishesBasementsFromUpperFloors() throws Exception {
+        BlueprintScreen screen = new BlueprintScreen();
+        TooltipButtonWidget button = new TooltipButtonWidget(0, 0, 100, 20, "", ignored -> {});
+        setField(screen, "structureScanButton", button);
+        Method update = BlueprintScreen.class.getDeclaredMethod("updateStructureScanControl", RoomScanPlan.class);
+        update.setAccessible(true);
+
+        for (int floorNumber : List.of(-1, -2, 1, 2, Integer.MIN_VALUE)) {
+            RoomScanPlan plan = RoomScanPlan.attachment(10, floorNumber, BlockPos.ZERO, BlockPos.ZERO);
+            update.invoke(screen, plan);
+            assertEquals(Component.translatable(plan.hasProspectiveFloor() && floorNumber < 0
+                    ? "gui.blueprint.addBasement" : "gui.blueprint.addFloor"), button.getMessage());
+            assertEquals(ReportBuildingMessage.Action.ADD_ATTACHMENT,
+                    BlueprintScreen.structureScanMessage(plan.mode(), plan).action());
+        }
+    }
+
+    @Test
+    void inheritanceMessageCarriesExpectedRoomId() {
+        Building room = room(43);
+
+        ReportBuildingMessage message = BlueprintScreen.inheritanceMessage(null, room);
+
+        assertEquals(ReportBuildingMessage.Action.SET_ROOM_INHERITANCE, message.action());
+        assertEquals(43, message.expectedTargetId());
+    }
+
+    @Test
+    void destructiveEditMessagesCarryTheDisplayedTargetIdentity() throws Exception {
+        Village village = new Village(1, null);
+        Structure structure = new Structure(10, BlockPos.ZERO, List.of(
+                floor(0, 64, 68, 0),
+                floor(1, 72, 76, 1)));
+        Building currentRoom = room(43);
+        registerStructure(village, structure, currentRoom);
+        RoomScanPlan roomPlan = RoomScanPlan.updateRoom(currentRoom, BlockPos.ZERO);
+
+        ReportBuildingMessage forceType = BlueprintScreen.targetedEditMessage(
+                ReportBuildingMessage.Action.FORCE_TYPE, village, roomPlan, 0).orElseThrow();
+        ReportBuildingMessage mainRoom = BlueprintScreen.targetedEditMessage(
+                ReportBuildingMessage.Action.SET_MAIN_ROOM, village, roomPlan, 0).orElseThrow();
+        ReportBuildingMessage removeRoom = BlueprintScreen.targetedEditMessage(
+                ReportBuildingMessage.Action.REMOVE_ROOM, village, roomPlan, 0).orElseThrow();
+        ReportBuildingMessage removeFloor = BlueprintScreen.targetedEditMessage(
+                ReportBuildingMessage.Action.REMOVE_FLOOR, village, roomPlan, 1).orElseThrow();
+        ReportBuildingMessage removeBuilding = BlueprintScreen.targetedEditMessage(
+                ReportBuildingMessage.Action.REMOVE, village, roomPlan, 0).orElseThrow();
+
+        assertEquals(43, forceType.expectedTargetId());
+        assertEquals("blocked", forceType.data());
+        assertEquals(43, mainRoom.expectedTargetId());
+        assertEquals(43, removeRoom.expectedTargetId());
+        assertEquals(10, removeFloor.expectedTargetId());
+        assertEquals("1:10:1", removeFloor.data());
+        assertEquals(10, removeBuilding.expectedTargetId());
+    }
+
+    @Test
+    void buildingRemovalFromAnUnregisteredRoomUsesPersistedLogicalBuildingIdentity() throws Exception {
+        Village village = new Village(1, null);
+        Structure structure = new Structure(10, BlockPos.ZERO, List.of(floor(0, 64, 68, 0)));
+        Building main = room(43);
+        registerStructure(village, structure, main);
+        RoomScanPlan plan = RoomScanPlan.addRoom(10, 0, BlockPos.ZERO);
+
+        ReportBuildingMessage message = BlueprintScreen.targetedEditMessage(
+                ReportBuildingMessage.Action.REMOVE, village, plan, 0).orElseThrow();
+
+        assertEquals(10, message.expectedTargetId());
+    }
+
+    @Test
+    void inheritanceControlCanAppearAfterEnteringRoomWithoutRebuildingPage() throws Exception {
+        BlueprintScreen screen = new BlueprintScreen();
+        Class<?> columnType = Arrays.stream(BlueprintScreen.class.getDeclaredClasses())
+                .filter(type -> type.getSimpleName().equals("SideControlColumn"))
+                .findFirst().orElseThrow();
+        Constructor<?> constructor = columnType.getDeclaredConstructor(
+                BlueprintScreen.class, int.class, int.class);
+        constructor.setAccessible(true);
+        Object column = constructor.newInstance(screen, 0, 0);
+        Method addInheritanceControl = BlueprintScreen.class.getDeclaredMethod(
+                "addInheritanceControl", columnType);
+        addInheritanceControl.setAccessible(true);
+
+        addInheritanceControl.invoke(screen, column);
+
+        TooltipButtonWidget button = (TooltipButtonWidget) getField(screen, "inheritanceButton");
+        assertNotNull(button);
+        assertFalse(button.visible);
+        assertFalse(button.active);
+
+        Method updateInheritanceControl = BlueprintScreen.class.getDeclaredMethod(
+                "updateInheritanceControl", RoomScanPlan.class);
+        updateInheritanceControl.setAccessible(true);
+        updateInheritanceControl.invoke(screen, RoomScanPlan.updateRoom(room(44), BlockPos.ZERO));
+
+        assertTrue(button.visible);
+        assertTrue(button.active);
+    }
+
+    @Test
     void rememberedMapCenterIsNotReusedForAnotherVillage() throws Exception {
         BlueprintScreen first = new BlueprintScreen();
         setField(first, "mapCenterVillageId", 7);
@@ -133,6 +329,159 @@ class BlueprintScreenMapInteractionTest {
         assertEquals(40.5D, getDoubleField(reopened, "mapCenterX"), 0.0000001D);
         assertEquals(10.5D, getDoubleField(reopened, "mapCenterZ"), 0.0000001D);
         assertEquals(true, getField(reopened, "mapCenterAutomatic"));
+    }
+
+    @Test
+    void switchingBlueprintSectionsKeepsNavigationInPlaceAtDifferentGuiScales() throws Exception {
+        for (int[] viewport : List.of(new int[]{854, 496}, new int[]{427, 248})) {
+            BlueprintScreen screen = new BlueprintScreen();
+            screen.width = viewport[0];
+            screen.height = viewport[1];
+            setField(screen, "village", new Village(1, null));
+            setField(screen, "page", "map");
+            screen.init();
+
+            List<AbstractWidget> initialNavigation = screen.children().stream().skip(1).limit(5)
+                    .map(AbstractWidget.class::cast).toList();
+            assertEquals(screen.width / 2 - 180, initialNavigation.getFirst().getX(),
+                    "Keep navigation at its original horizontal position");
+            assertEquals(screen.height / 2 - 56, initialNavigation.getFirst().getY(),
+                    "Keep navigation at its original vertical position");
+            for (String section : List.of("rank", "catalog", "villagers", "rules", "map")) {
+                var sectionButton = screen.children().stream()
+                        .filter(child -> child instanceof net.minecraft.client.gui.components.Button button
+                                && button.getMessage().equals(net.minecraft.network.chat.Component.translatable(
+                                "gui.blueprint." + section)))
+                        .map(net.minecraft.client.gui.components.Button.class::cast).findFirst().orElseThrow();
+                sectionButton.onPress();
+                List<AbstractWidget> navigation = screen.children().stream().skip(1).limit(5)
+                        .map(AbstractWidget.class::cast).toList();
+                for (int i = 0; i < navigation.size(); i++) {
+                    assertEquals(initialNavigation.get(i).getX(), navigation.get(i).getX(), section + " navigation X");
+                    assertEquals(initialNavigation.get(i).getY(), navigation.get(i).getY(), section + " navigation Y");
+                    assertEquals(80, navigation.get(i).getWidth(), "Preserve vanilla GUI-unit width");
+                    assertEquals(20, navigation.get(i).getHeight(), "Preserve vanilla GUI-unit height");
+                }
+            }
+        }
+    }
+
+    @Test
+    void mapStaysCenteredWithNarrowerSideControls() throws Exception {
+        for (String page : List.of("map", "advanced")) {
+            for (int width : new int[]{427, 480, 854}) {
+                BlueprintScreen screen = new BlueprintScreen();
+                screen.width = width;
+                screen.height = 250;
+                setField(screen, "village", new Village(1, null));
+                setField(screen, "page", page);
+                screen.init();
+
+                // The back button is fixed in the corner; the remaining widgets form the map columns.
+                List<AbstractWidget> columns = screen.children().stream().skip(1)
+                        .map(AbstractWidget.class::cast).toList();
+                int left = columns.stream().mapToInt(AbstractWidget::getX).min().orElseThrow();
+                int right = columns.stream().mapToInt(widget -> widget.getX() + widget.getWidth())
+                        .max().orElseThrow();
+                assertTrue(left >= 0, page + " left edge at width " + width);
+                assertTrue(right <= width, page + " right edge " + right + " at width " + width);
+                Method currentViewport = BlueprintScreen.class.getDeclaredMethod("currentViewport");
+                currentViewport.setAccessible(true);
+                BlueprintMapViewport viewport = (BlueprintMapViewport) currentViewport.invoke(screen);
+                assertEquals(width / 2, viewport.centerX(), page + " map center at width " + width);
+                AbstractWidget floorPrevious = (AbstractWidget) getField(screen, "floorPreviousButton");
+                AbstractWidget floorNext = (AbstractWidget) getField(screen, "floorNextButton");
+                AbstractWidget playerCentered = (AbstractWidget) getField(screen, "playerCenteredButton");
+                AbstractWidget playerHead = (AbstractWidget) getField(screen, "playerHeadButton");
+                assertTrue(playerHead.getX() + playerHead.getWidth() - playerCentered.getX() <= 110);
+                assertEquals(viewport.centerX(),
+                        (floorPrevious.getX() + floorNext.getX() + floorNext.getWidth()) / 2);
+                assertEquals(150, floorNext.getX() + floorNext.getWidth() - floorPrevious.getX());
+            }
+        }
+    }
+
+    @Test
+    void mapGrowthStaysModestWithoutScalingButtonsAndRefitsAfterResize() throws Exception {
+        BlueprintScreen screen = new BlueprintScreen();
+        setField(screen, "village", new Village(1, null));
+        setField(screen, "page", "map");
+        Method currentViewport = BlueprintScreen.class.getDeclaredMethod("currentViewport");
+        currentViewport.setAccessible(true);
+
+        screen.width = 427;
+        screen.height = 248;
+        screen.init();
+        BlueprintMapViewport compact = (BlueprintMapViewport) currentViewport.invoke(screen);
+        screen.width = 854;
+        screen.height = 496;
+        screen.init();
+        BlueprintMapViewport expanded = (BlueprintMapViewport) currentViewport.invoke(screen);
+        assertTrue(expanded.halfSize() > compact.halfSize(), "Allow modest growth with extra GUI space");
+        assertTrue(expanded.halfSize() <= 90, "Limit map diameter to 20 percent above its original size");
+        assertEquals(427, expanded.centerX());
+        assertTrue(expanded.top() >= 29, "Reserve title space");
+        for (var child : screen.children()) {
+            AbstractWidget widget = (AbstractWidget) child;
+            assertTrue(widget.getX() >= 0 && widget.getX() + widget.getWidth() <= screen.width);
+            assertTrue(widget.getY() >= 0 && widget.getY() + widget.getHeight() <= screen.height);
+        }
+        AbstractWidget floorPrevious = (AbstractWidget) getField(screen, "floorPreviousButton");
+        assertEquals(24, floorPrevious.getWidth());
+        assertEquals(20, floorPrevious.getHeight());
+        assertTrue(floorPrevious.getY() >= expanded.bottom(), "Keep controls below expanded map");
+        AbstractWidget playerCentered = (AbstractWidget) getField(screen, "playerCenteredButton");
+        assertTrue(playerCentered.getX() >= expanded.right(), "Keep side controls outside expanded map");
+        AbstractWidget navigation = (AbstractWidget) screen.children().get(1);
+        assertTrue(navigation.getX() + navigation.getWidth() < expanded.left(),
+                "Leave a gap between original navigation and expanded map");
+
+        screen.width = 427;
+        screen.height = 248;
+        screen.init();
+        assertEquals(compact, currentViewport.invoke(screen));
+    }
+
+    @Test
+    void mapControlsFitShortScreenBeforeAndAfterRoomControlUpdates() throws Exception {
+        for (String page : List.of("map", "advanced")) {
+            BlueprintScreen screen = new BlueprintScreen();
+            screen.width = 427;
+            screen.height = 248;
+            setField(screen, "village", new Village(1, null));
+            setField(screen, "isVillage", true);
+            setField(screen, "page", page);
+            screen.init();
+
+            Method updateControls = BlueprintScreen.class.getDeclaredMethod("updateMapControls", RoomScanPlan.class);
+            updateControls.setAccessible(true);
+            for (RoomScanPlan scanPlan : List.of(RoomScanPlan.addBuilding(BlockPos.ZERO),
+                    RoomScanPlan.updateRoom(room(44), BlockPos.ZERO))) {
+                for (var child : screen.children()) {
+                    AbstractWidget widget = (AbstractWidget) child;
+                    assertTrue(widget.getY() >= 0, page + " control above screen");
+                    assertTrue(widget.getY() + widget.getHeight() <= screen.height,
+                            page + " control below screen: " + widget.getMessage().getString());
+                }
+                updateControls.invoke(screen, scanPlan);
+                AbstractWidget scanButton = (AbstractWidget) getField(screen, "structureScanButton");
+                if (scanButton != null) {
+                    AbstractWidget previousFloor = (AbstractWidget) getField(screen, "floorPreviousButton");
+                    assertTrue(scanButton.getY() + 3 * 22 <= previousFloor.getY(),
+                            "Room controls must stay above the map navigation rows after refresh");
+                }
+            }
+
+            Method currentViewport = BlueprintScreen.class.getDeclaredMethod("currentViewport");
+            currentViewport.setAccessible(true);
+            BlueprintMapViewport viewport = (BlueprintMapViewport) currentViewport.invoke(screen);
+            assertTrue(viewport.top() >= 30, "Leave room for the title above the map");
+            AbstractWidget scaleButton = (AbstractWidget) getField(screen, "mapScaleButton");
+            int titleTop = viewport.top() - 29;
+            int controlsBottom = scaleButton.getY() + scaleButton.getHeight();
+            assertTrue(Math.abs(titleTop - (screen.height - controlsBottom)) <= 1,
+                    "Title and bottom controls must have balanced vertical margins");
+        }
     }
 
     @Test
@@ -299,77 +648,6 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
-    void terrainTilePriorityUsesCameraPosition() {
-        double cameraX = 220.0D;
-        double cameraZ = 64.0D;
-
-        assertTrue(BlueprintTerrainRenderer.tileDistanceSq(128, 0, cameraX, cameraZ)
-                < BlueprintTerrainRenderer.tileDistanceSq(0, 0, cameraX, cameraZ));
-    }
-
-    @Test
-    void wholeTileSchedulingOrdersVisibleBeforePrefetchAndHonorsLifecycleDeadlines() {
-        long never = Long.MIN_VALUE;
-        long now = 200L;
-
-        assertEquals(0, BlueprintTerrainRenderer.terrainWorkPriority(
-                0, false, false, never, never, now));
-        assertEquals(1, BlueprintTerrainRenderer.terrainWorkPriority(
-                0, true, false, 150L, 200L, now));
-        assertEquals(2, BlueprintTerrainRenderer.terrainWorkPriority(
-                0, true, true, -400L, never, now));
-        assertEquals(3, BlueprintTerrainRenderer.terrainWorkPriority(
-                1, false, false, never, never, now));
-        assertEquals(4, BlueprintTerrainRenderer.terrainWorkPriority(
-                1, true, false, 150L, 200L, now));
-        assertEquals(4, BlueprintTerrainRenderer.terrainWorkPriority(
-                1, true, true, -400L, never, now));
-
-        assertEquals(Integer.MAX_VALUE, BlueprintTerrainRenderer.terrainWorkPriority(
-                        0, true, false, 150L, 201L, now),
-                "incomplete tiles must wait for their retry deadline");
-        assertEquals(Integer.MAX_VALUE, BlueprintTerrainRenderer.terrainWorkPriority(
-                        0, true, true, -399L, never, now),
-                "a complete tile younger than 600 ticks must stay fresh");
-    }
-
-    @Test
-    void wholeTileCompletenessCountsCoreCellsButNotHillshadeHalo() {
-        assertFalse(BlueprintTerrainRenderer.isCoreSampleCell(0, 64));
-        assertFalse(BlueprintTerrainRenderer.isCoreSampleCell(129, 64));
-        assertFalse(BlueprintTerrainRenderer.isCoreSampleCell(64, 0));
-        assertFalse(BlueprintTerrainRenderer.isCoreSampleCell(64, 129));
-        assertTrue(BlueprintTerrainRenderer.isCoreSampleCell(1, 1));
-        assertTrue(BlueprintTerrainRenderer.isCoreSampleCell(128, 128));
-    }
-
-    @Test
-    void terrainPrefetchCoversExactlyOneTileRingOutsideViewport() {
-        assertEquals(0, BlueprintTerrainRenderer.terrainSamplingBand(0, 0, 0, 127, 0, 127));
-        assertEquals(1, BlueprintTerrainRenderer.terrainSamplingBand(-128, 0, 0, 127, 0, 127));
-        assertEquals(1, BlueprintTerrainRenderer.terrainSamplingBand(128, 128, 0, 127, 0, 127));
-        assertEquals(2, BlueprintTerrainRenderer.terrainSamplingBand(-256, 0, 0, 127, 0, 127));
-        assertEquals(2, BlueprintTerrainRenderer.terrainSamplingBand(0, 256, 0, 127, 0, 127));
-    }
-
-    @Test
-    void terrainDoesNotScheduleTileWhenNoneOfItsClientChunksAreLoaded() {
-        int[] lookups = {0};
-
-        assertFalse(BlueprintTerrainRenderer.tileTouchesLoadedChunk(0, 0, (chunkX, chunkZ) -> {
-            lookups[0]++;
-            return false;
-        }));
-        assertEquals(64, lookups[0]);
-    }
-
-    @Test
-    void terrainTileBecomesEligibleWhenAnyClientChunkIsLoaded() {
-        assertTrue(BlueprintTerrainRenderer.tileTouchesLoadedChunk(
-                128, -128, (chunkX, chunkZ) -> chunkX == 10 && chunkZ == -6));
-    }
-
-    @Test
     void dryTerrainUsesVanillaNoLeavesHeightWhenAvailable() throws Exception {
         Method method;
         try {
@@ -499,8 +777,7 @@ class BlueprintScreenMapInteractionTest {
         otherRoom.setStructureId(20);
         registerStructure(village, other, otherRoom);
 
-        RoomScanPlan plan = new RoomScanPlan(Optional.of(currentRoom), Village.RoomScanMode.UPDATE_ROOM,
-                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 0);
+        RoomScanPlan plan = RoomScanPlan.updateRoom(currentRoom, BlockPos.ZERO);
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, 1);
 
         assertTrue(state.visible());
@@ -509,7 +786,7 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
-    void floorRemovalIsUnavailableWhenPlayerIsNotStandingInARoom() throws Exception {
+    void unregisteredAttachmentDoesNotOfferFloorRemoval() throws Exception {
         Village village = new Village(1, null);
         Structure structure = new Structure(10, BlockPos.ZERO,
                 List.of(
@@ -519,11 +796,52 @@ class BlueprintScreenMapInteractionTest {
         main.setFloorId(1);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = new RoomScanPlan(Optional.empty(), Village.RoomScanMode.ADD_ATTACHMENT,
-                10, -1, BlockPos.ZERO, BlockPos.ZERO, -1, -1, structure.getFloor(0).orElseThrow());
+        RoomScanPlan plan = RoomScanPlan.attachment(
+                10, -1, BlockPos.ZERO, BlockPos.ZERO);
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, -1);
 
         assertFalse(state.visible());
+        assertTrue(BlueprintScreen.targetedEditMessage(
+                ReportBuildingMessage.Action.REMOVE_FLOOR, village, plan, -1).isEmpty());
+    }
+
+    @Test
+    void emptyPersistedFloorOffersRemovalWithoutARegisteredRoom() throws Exception {
+        for (int floorNumber : List.of(-1, 1)) {
+            Village village = new Village(1, null);
+            Structure structure = new Structure(10, BlockPos.ZERO,
+                    List.of(floor(0, 64, 68, 0),
+                            floor(1, 64 + 8 * floorNumber, 68 + 8 * floorNumber, floorNumber)));
+            registerStructure(village, structure, room(1));
+            RoomScanPlan plan = RoomScanPlan.addRoom(10, 1, new BlockPos(0, 64 + 8 * floorNumber, 0));
+
+            BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(
+                    village, plan, floorNumber);
+
+            assertTrue(state.visible(), "empty floor " + floorNumber + " hid its removal control");
+            assertTrue(state.active());
+            assertEquals(ReportBuildingMessage.Action.REMOVE_FLOOR, state.action());
+            ReportBuildingMessage message = BlueprintScreen.targetedEditMessage(
+                    state.action(), village, plan, floorNumber).orElseThrow();
+            assertEquals(10, message.expectedTargetId());
+            assertEquals(floorNumber + ":10:1", message.data());
+        }
+    }
+
+    @Test
+    void unregisteredComponentCannotRemoveAnOccupiedFloor() throws Exception {
+        Village village = new Village(1, null);
+        Structure structure = new Structure(10, BlockPos.ZERO,
+                List.of(floor(0, 64, 68, 0), floor(1, 72, 76, 1)));
+        registerStructure(village, structure, room(1));
+        Building upperRoom = room(2);
+        upperRoom.setFloorId(1);
+        registerRoom(village, upperRoom);
+        RoomScanPlan plan = RoomScanPlan.addRoom(10, 1, new BlockPos(1, 72, 0));
+
+        assertFalse(BlueprintScreen.removalControlState(village, plan, 1).visible());
+        assertTrue(BlueprintScreen.targetedEditMessage(
+                ReportBuildingMessage.Action.REMOVE_FLOOR, village, plan, 1).isEmpty());
     }
 
     @Test
@@ -536,8 +854,7 @@ class BlueprintScreenMapInteractionTest {
         Building main = room(1);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.UPDATE_ROOM,
-                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 0);
+        RoomScanPlan plan = RoomScanPlan.updateRoom(main, BlockPos.ZERO);
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, 1);
 
         assertTrue(state.visible());
@@ -553,8 +870,7 @@ class BlueprintScreenMapInteractionTest {
         Building main = room(1);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.UPDATE_ROOM,
-                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 0);
+        RoomScanPlan plan = RoomScanPlan.updateRoom(main, BlockPos.ZERO);
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, 0);
 
         assertTrue(state.visible());
@@ -573,8 +889,7 @@ class BlueprintScreenMapInteractionTest {
         Building main = room(1);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.UPDATE_ROOM,
-                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 0);
+        RoomScanPlan plan = RoomScanPlan.updateRoom(main, BlockPos.ZERO);
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, 1);
 
         assertTrue(state.visible());
@@ -594,8 +909,7 @@ class BlueprintScreenMapInteractionTest {
         main.setFloorId(2);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.UPDATE_ROOM,
-                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 2);
+        RoomScanPlan plan = RoomScanPlan.updateRoom(main, BlockPos.ZERO);
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, -1);
 
         assertTrue(state.visible());
@@ -615,8 +929,7 @@ class BlueprintScreenMapInteractionTest {
         main.setFloorId(2);
         registerStructure(village, structure, main);
 
-        RoomScanPlan plan = new RoomScanPlan(Optional.of(main), Village.RoomScanMode.UPDATE_ROOM,
-                -1, Integer.MIN_VALUE, BlockPos.ZERO, BlockPos.ZERO, 10, 2);
+        RoomScanPlan plan = RoomScanPlan.updateRoom(main, BlockPos.ZERO);
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, -2);
 
         assertTrue(state.visible());
@@ -675,19 +988,13 @@ class BlueprintScreenMapInteractionTest {
                 region(anchorY));
     }
 
-    private static BuildingFloorRegion region(int anchorY) throws Exception {
-        Method fromFootprint = BuildingFloorRegion.class.getDeclaredMethod(
-                "fromFootprint", int.class, java.util.Collection.class);
-        fromFootprint.setAccessible(true);
-        return (BuildingFloorRegion) fromFootprint.invoke(null, anchorY,
-                Set.of(new BlockPos(0, anchorY, 0)));
+    private static TestFloorFootprint region(int anchorY) throws Exception {
+        return TestFloorFootprint.fromFootprint(
+                anchorY, Set.of(new BlockPos(0, anchorY, 0)));
     }
 
-    private static BuildingFloorRegion region(BlockPos cell) throws Exception {
-        Method fromFootprint = BuildingFloorRegion.class.getDeclaredMethod(
-                "fromFootprint", int.class, java.util.Collection.class);
-        fromFootprint.setAccessible(true);
-        return (BuildingFloorRegion) fromFootprint.invoke(null, cell.getY(), Set.of(cell));
+    private static TestFloorFootprint region(BlockPos cell) throws Exception {
+        return TestFloorFootprint.fromFootprint(cell.getY(), Set.of(cell));
     }
 
     private static void setRoomGeometry(Building room, BlockPos cell) throws Exception {
@@ -695,6 +1002,12 @@ class BlueprintScreenMapInteractionTest {
                 "setGeometry", BlockPos.class, BlockPos.class, java.util.Collection.class);
         setGeometry.setAccessible(true);
         setGeometry.invoke(room, cell, cell, Set.of(cell));
+    }
+
+    private static <T> T allocate(Class<T> type) throws ReflectiveOperationException {
+        Field field = Unsafe.class.getDeclaredField("theUnsafe");
+        field.setAccessible(true);
+        return type.cast(((Unsafe) field.get(null)).allocateInstance(type));
     }
 
     private static void setField(Object target, String name, Object value) throws Exception {

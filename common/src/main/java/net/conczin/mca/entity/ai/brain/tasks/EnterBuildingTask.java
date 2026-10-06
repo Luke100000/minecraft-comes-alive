@@ -1,17 +1,19 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.BedPoiCompatibility;
 import net.conczin.mca.server.world.data.Building;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -28,20 +30,36 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
 
     protected void start(ServerLevel serverWorld, VillagerEntityMCA villager, long l) {
         getNextPosition(villager)
-                .ifPresent(pos -> villager.moveTowards(pos, this.speed, getCompletionRange()));
+                .ifPresent(pos -> villager.moveTowardsPersistent(pos, this.speed, getCompletionRange()));
     }
 
     protected Optional<Building> getNearestBuilding(VillagerEntityMCA villager) {
         return villager.getResidency().getHomeVillage()
-                .flatMap(buildings -> buildings.getBuildings().values().stream()
-                        .filter(a -> a.getType().equals(getBuilding(villager)))
-                        .min(Comparator.comparingInt(a -> a.getCenter().distManhattan(villager.blockPosition()))));
+                .flatMap(village -> getNearestBuilding(villager, village.getBuildings().values()));
+    }
+
+    protected Optional<Building> getNearestBuilding(VillagerEntityMCA villager, Iterable<Building> candidates) {
+        String buildingType = getBuilding(villager);
+        BlockPos origin = villager.blockPosition();
+        Building nearest = null;
+        int nearestDistance = Integer.MAX_VALUE;
+        for (Building candidate : candidates) {
+            if (!candidate.getType().equals(buildingType)) {
+                continue;
+            }
+            int distance = candidate.getCenter().distManhattan(origin);
+            if (nearest == null || distance < nearestDistance) {
+                nearest = candidate;
+                nearestDistance = distance;
+            }
+        }
+        return Optional.ofNullable(nearest);
     }
 
     protected Optional<BlockPos> getRandomPositionIn(Building b, Level world, VillagerEntityMCA villager) {
         if (!b.getFloorCells().isEmpty()) {
             List<BlockPos> floorTargets = b.getFloorCells().stream()
-                    .filter(pos -> isGoodIndoorWalkTarget(world, villager, pos))
+                    .filter(pos -> isGoodFloorWalkTarget(world, villager, pos))
                     .toList();
             if (floorTargets.isEmpty()) {
                 return Optional.empty();
@@ -76,10 +94,26 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
 
     private boolean isGoodIndoorWalkTarget(Level world, VillagerEntityMCA villager, BlockPos pos) {
         return !world.canSeeSky(pos)
-                && villager.getNavigation().isStableDestination(pos)
+                && isGoodFloorWalkTarget(world, villager, pos);
+    }
+
+    protected boolean isGoodFloorWalkTarget(Level world, VillagerEntityMCA villager, BlockPos pos) {
+        return hasStandingSpace(world, villager, pos);
+    }
+
+    /** Idle standing space within a room, excluding sleep surfaces and doorways. */
+    static boolean isUsableFloor(Level world, PathfinderMob mob, BlockPos pos) {
+        return !world.getBlockState(pos).is(BlockTags.DOORS)
+                && !BedPoiCompatibility.isCompatibleBedState(world.getBlockState(pos))
+                && !BedPoiCompatibility.isCompatibleBedState(world.getBlockState(pos.below()))
+                && hasStandingSpace(world, mob, pos);
+    }
+
+    static boolean hasStandingSpace(Level world, PathfinderMob mob, BlockPos pos) {
+        return mob.getNavigation().isStableDestination(pos)
                 && world.noCollision(
-                        villager,
-                        villager.getBoundingBox().move(Vec3.atBottomCenterOf(pos).subtract(villager.position()))
+                        mob,
+                        mob.getBoundingBox().move(Vec3.atBottomCenterOf(pos).subtract(mob.position()))
                 );
     }
 

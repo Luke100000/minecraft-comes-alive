@@ -16,10 +16,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class ArcherArrowFriendlyFireGameTests {
     private ArcherArrowFriendlyFireGameTests() {

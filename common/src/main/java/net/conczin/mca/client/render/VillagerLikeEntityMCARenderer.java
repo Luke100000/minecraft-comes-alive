@@ -27,7 +27,6 @@ import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 
 public abstract class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> extends HumanoidMobRenderer<T, PlayerModel<T>> {
-    private static final double CARRIED_NAME_TAG_Y = 0.63;
     private final PlayerModel<T> wideModel;
     private final PlayerModel<T> slimModel;
 
@@ -63,8 +62,8 @@ public abstract class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike
 
     @Override
     protected void scale(T villager, PoseStack matrices, float tickDelta) {
-        float height = villager.getRawVerticalScaleFactor();
-        float width = villager.getRawHorizontalScaleFactor();
+        float height = villager.getVisualVerticalScaleFactor();
+        float width = villager.getVisualHorizontalScaleFactor();
         matrices.scale(width, height, width);
         if (villager.getAgeState() == AgeState.BABY && !villager.isPassenger()) {
             matrices.translate(0, 0.6F, 0);
@@ -101,7 +100,7 @@ public abstract class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike
         boolean visibleThroughWalls = !villager.isDiscrete();
         int yOffset = "deadmau5".equals(displayName.getString()) ? -10 : 0;
         poseStack.pushPose();
-        poseStack.translate(attachment.x, CARRIED_NAME_TAG_Y + 0.5, attachment.z);
+        poseStack.translate(attachment.x, villager.getVisualNameTagHeight() + 0.5, attachment.z);
         poseStack.mulPose(this.entityRenderDispatcher.cameraOrientation());
         poseStack.scale(0.025F, -0.025F, 0.025F);
         Matrix4f matrix = poseStack.last().pose();

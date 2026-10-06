@@ -4,7 +4,7 @@ import com.google.gson.JsonObject;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.server.world.data.Building;
-import net.conczin.mca.server.world.data.BuildingFloorRegion;
+import net.conczin.mca.server.world.data.TestFloorFootprint;
 import net.conczin.mca.server.world.data.RoomTypeResolver;
 import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.StructureFloor;
@@ -77,7 +77,7 @@ class BlueprintTooltipHierarchyTest {
         BlueprintTooltipFactory factory = BlueprintTooltipFactory.create(
                 fixture.village(), RoomTypeResolver.create(fixture.village()));
 
-        List<String> lines = factory.tooltip(fixture.groundRoom(), null, true).stream()
+        List<String> lines = tooltip(factory, fixture, fixture.groundRoom(), null, true).stream()
                 .map(component -> component.getString())
                 .toList();
 
@@ -92,7 +92,7 @@ class BlueprintTooltipHierarchyTest {
         BlueprintTooltipFactory factory = BlueprintTooltipFactory.create(
                 fixture.village(), RoomTypeResolver.create(fixture.village()));
 
-        List<String> lines = factory.tooltip(fixture.upperRoom(), 1, false).stream()
+        List<String> lines = tooltip(factory, fixture, fixture.upperRoom(), 1, false).stream()
                 .map(component -> component.getString())
                 .toList();
 
@@ -134,7 +134,7 @@ class BlueprintTooltipHierarchyTest {
         BlueprintTooltipFactory factory = BlueprintTooltipFactory.create(
                 fixture.village(), RoomTypeResolver.create(fixture.village()));
 
-        List<String> lines = factory.tooltip(fixture.groundRoom(), 0, true).stream()
+        List<String> lines = tooltip(factory, fixture, fixture.groundRoom(), 0, true).stream()
                 .map(component -> component.getString())
                 .toList();
 
@@ -180,7 +180,7 @@ class BlueprintTooltipHierarchyTest {
         BlueprintTooltipFactory factory = BlueprintTooltipFactory.create(
                 fixture.village(), RoomTypeResolver.create(fixture.village()));
 
-        List<String> lines = factory.tooltip(fixture.groundRoom(), null, true).stream()
+        List<String> lines = tooltip(factory, fixture, fixture.groundRoom(), null, true).stream()
                 .map(Component::getString)
                 .toList();
 
@@ -215,17 +215,26 @@ class BlueprintTooltipHierarchyTest {
         return new Fixture(village, ground, upper);
     }
 
+    private static List<Component> tooltip(BlueprintTooltipFactory factory,
+                                           Fixture fixture,
+                                           Building building,
+                                           Integer floorOrdinal,
+                                           boolean structureHover) {
+        return factory.tooltip(
+                building,
+                floorOrdinal,
+                structureHover,
+                fixture.village().getLogicalBuildingId(building.getStructureId()));
+    }
+
     private static StructureFloor floor(int id, int anchorY, int ceilingY, int floorNumber) throws Exception {
         return net.conczin.mca.server.world.data.TestStructureFloors.create(id, anchorY, ceilingY, floorNumber,
                 region(anchorY));
     }
 
-    private static BuildingFloorRegion region(int anchorY) throws Exception {
-        Method fromFootprint = BuildingFloorRegion.class.getDeclaredMethod(
-                "fromFootprint", int.class, java.util.Collection.class);
-        fromFootprint.setAccessible(true);
-        return (BuildingFloorRegion) fromFootprint.invoke(null, anchorY,
-                Set.of(new BlockPos(0, anchorY, 0)));
+    private static TestFloorFootprint region(int anchorY) throws Exception {
+        return TestFloorFootprint.fromFootprint(
+                anchorY, Set.of(new BlockPos(0, anchorY, 0)));
     }
 
     private static Building room(int id, int structureId, int floorId, String type) {

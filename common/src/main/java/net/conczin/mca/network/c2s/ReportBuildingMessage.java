@@ -14,17 +14,23 @@ import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Locale;
+import java.util.Optional;
 
-public record ReportBuildingMessage(Action action, String data) implements HandleablePayload {
+public record ReportBuildingMessage(Action action, String data, int expectedTargetId) implements HandleablePayload {
     public static final CustomPacketPayload.Type<ReportBuildingMessage> TYPE =
             new CustomPacketPayload.Type<>(MCA.locate("report_building"));
     public static final StreamCodec<FriendlyByteBuf, ReportBuildingMessage> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.idMapper(i -> Action.VALUES[i], Action::ordinal), ReportBuildingMessage::action,
             ByteBufCodecs.optional(ByteBufCodecs.STRING_UTF8).map(opt -> opt.orElse(null), java.util.Optional::ofNullable), ReportBuildingMessage::data,
+            ByteBufCodecs.VAR_INT, ReportBuildingMessage::expectedTargetId,
             ReportBuildingMessage::new);
 
     public ReportBuildingMessage(Action action) {
-        this(action, null);
+        this(action, null, -1);
+    }
+
+    public ReportBuildingMessage(Action action, String data) {
+        this(action, data, -1);
     }
 
     @Override
@@ -35,19 +41,27 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             switch (action) {
                 case SCAN_ROOM, ADD_BUILDING, ADD_ATTACHMENT ->
                         executeScanAction(workflow, player, player.blockPosition(), null,
-                                action, parseTargetBuildingId(data));
-                case SET_MAIN_ROOM -> updateMainRoom(manager, player);
+                                action, expectedTargetId >= 0 ? expectedTargetId : parseTargetBuildingId(data));
+                case SET_MAIN_ROOM -> displayEditResult(player,
+                        manager.setMainRoom(player.blockPosition(), expectedTargetId), "blueprint.mainRoomSet");
                 case AUTO_SCAN -> manager.findNearestVillage(player).ifPresent(Village::toggleAutoScan);
                 case FULL_SCAN -> fullScan(manager, player);
                 case FORCE_TYPE -> displayEditResult(player,
-                        manager.forceRoomType(player.blockPosition(), data), null);
+                        manager.forceRoomType(player.blockPosition(), data, expectedTargetId), null);
                 case REMOVE_ROOM -> displayEditResult(player,
-                        manager.removeRoom(player.blockPosition()), "blueprint.roomRemoved");
-                case REMOVE_FLOOR -> displayEditResult(player,
-                        manager.removeFloor(player.blockPosition(), parseFloorNumber(data)), "blueprint.floorRemoved");
+                        manager.removeRoom(player.blockPosition(), expectedTargetId), "blueprint.roomRemoved");
+                case REMOVE_FLOOR -> {
+                    FloorRemovalTarget target = parseFloorRemovalTarget(data).orElse(null);
+                    if (target != null) {
+                        displayEditResult(player,
+                                manager.removeFloor(player.blockPosition(), target.floorNumber(), expectedTargetId,
+                                        target.structureId(), target.floorId()),
+                                "blueprint.floorRemoved");
+                    }
+                }
                 case REMOVE -> displayEditResult(player,
-                        manager.removeBuilding(player.blockPosition()), "blueprint.buildingRemoved");
-                case SET_ROOM_INHERITANCE -> setRoomInheritance(workflow, player, data);
+                        manager.removeBuilding(player.blockPosition(), expectedTargetId), "blueprint.buildingRemoved");
+                case SET_ROOM_INHERITANCE -> setRoomInheritance(workflow, player, data, expectedTargetId);
             }
         } finally {
             GetVillageRequest.sendResponse(player);
@@ -62,7 +76,7 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
                                   int expectedTargetId) {
         RoomWorkflow.Outcome outcome = switch (action) {
             case SCAN_ROOM -> workflow.scanRoom(source, expectedTargetId, forcedType);
-            case ADD_BUILDING -> workflow.addBuilding(source, forcedType);
+            case ADD_BUILDING -> workflow.addBuilding(source, expectedTargetId, forcedType);
             case ADD_ATTACHMENT -> workflow.addAttachment(source, expectedTargetId, forcedType);
             case SET_ROOM_INHERITANCE -> workflow.updateInheritance(
                     source, expectedTargetId, false, forcedType);
@@ -79,8 +93,20 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         return parseInt(value, -1);
     }
 
-    private static int parseFloorNumber(String value) {
-        return parseInt(value, Integer.MIN_VALUE);
+    static Optional<FloorRemovalTarget> parseFloorRemovalTarget(String value) {
+        if (value == null) return Optional.empty();
+        String[] parts = value.split(":", -1);
+        if (parts.length != 3) return Optional.empty();
+
+        Integer floorNumber = parseInt(parts[0]);
+        Integer structureId = parseInt(parts[1]);
+        Integer floorId = parseInt(parts[2]);
+        if (floorNumber == null || floorNumber == Integer.MIN_VALUE
+                || structureId == null || structureId < 0
+                || floorId == null || floorId < 0) {
+            return Optional.empty();
+        }
+        return Optional.of(new FloorRemovalTarget(floorNumber, structureId, floorId));
     }
 
     private static int parseInt(String value, int fallback) {
@@ -92,6 +118,18 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         }
     }
 
+    private static Integer parseInt(String value) {
+        if (value == null) return null;
+        try {
+            return Integer.valueOf(value);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    record FloorRemovalTarget(int floorNumber, int structureId, int floorId) {
+    }
+
     private static void fullScan(VillageManager manager, ServerPlayer player) {
         Village village = manager.findNearestVillage(player).orElse(null);
         if (village == null) {
@@ -101,32 +139,14 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         displayScanResult(player, manager.fullScan(village), "blueprint.refreshed");
     }
 
-    private static void updateMainRoom(VillageManager manager, ServerPlayer player) {
-        Village village = manager.findNearestVillage(player).orElse(null);
-        if (village == null) {
-            player.displayClientMessage(Component.translatable("blueprint.noBuilding"), true);
-            return;
-        }
-            Building room = village.findInteractionRoomAt(player.blockPosition()).orElse(null);
-        if (room == null) {
-            player.displayClientMessage(Component.translatable("blueprint.noRoomOnFloor"), true);
-            return;
-        }
-        if (village.getStructureFor(room).isEmpty()) {
-            player.displayClientMessage(Component.translatable("blueprint.mainRoomNoStructure"), true);
-            return;
-        }
-        boolean changed = village.setMainRoom(room);
-        if (changed) {
-            player.displayClientMessage(Component.translatable("blueprint.mainRoomSet"), true);
-        }
-    }
-
-    private static void setRoomInheritance(RoomWorkflow workflow, ServerPlayer player, String data) {
+    private static void setRoomInheritance(RoomWorkflow workflow,
+                                           ServerPlayer player,
+                                           String data,
+                                           int expectedRoomId) {
         if (!"true".equals(data) && !"false".equals(data)) return;
         boolean enabled = Boolean.parseBoolean(data);
         RoomWorkflow.Outcome outcome = workflow.updateInheritance(
-                player.blockPosition(), -1, enabled, null);
+                player.blockPosition(), expectedRoomId, enabled, null);
         if (outcome.status() == RoomWorkflow.Status.FAILED
                 && outcome.result() == Building.validationResult.NOT_IN_BUILDING) {
             return;
@@ -160,7 +180,9 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
         }
 
         String successKey = switch (action) {
-            case ADD_BUILDING -> "blueprint.buildingAdded";
+            case ADD_BUILDING -> outcome.prospectiveFloorNumber() == Integer.MIN_VALUE
+                    ? "blueprint.buildingAdded"
+                    : outcome.prospectiveFloorNumber() < 0 ? "blueprint.basementAdded" : "blueprint.floorAdded";
             case ADD_ATTACHMENT -> outcome.prospectiveFloorNumber() < 0
                     ? "blueprint.basementAdded" : "blueprint.floorAdded";
             case SCAN_ROOM -> outcome.expectedTargetId() >= 0
@@ -202,6 +224,8 @@ public record ReportBuildingMessage(Action action, String data) implements Handl
             case NO_ROOM -> "blueprint.noRoomOnFloor";
             case NO_FLOOR -> "blueprint.noFloor";
             case MAIN_ROOM -> "blueprint.cannotRemoveMainRoom";
+            case NO_STRUCTURE -> "blueprint.mainRoomNoStructure";
+            case TARGET_CHANGED -> "blueprint.targetChanged";
         };
         if (key != null) player.displayClientMessage(Component.translatable(key), true);
     }

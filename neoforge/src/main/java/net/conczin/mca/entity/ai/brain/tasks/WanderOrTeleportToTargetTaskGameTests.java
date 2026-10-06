@@ -8,7 +8,7 @@ import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.SchedulesMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
-import net.conczin.mca.entity.ai.navigation.LongDistancePathTarget;
+import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -32,13 +32,10 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class WanderOrTeleportToTargetTaskGameTests {
     private WanderOrTeleportToTargetTaskGameTests() {
@@ -64,7 +61,7 @@ public final class WanderOrTeleportToTargetTaskGameTests {
 
         var brain = villager.getBrain();
         brain.setMemory(MemoryModuleType.WALK_TARGET,
-                new WalkTarget(new LongDistancePathTarget(oldTarget), 0.5F, 0));
+                new WalkTarget(new PersistentPathTarget(oldTarget), 0.5F, 0));
         Path oldPath = villager.getNavigation().createPath(oldTarget, 0);
         helper.assertTrue(oldPath != null && !oldPath.canReach(),
                 "fixture old target did not produce a bounded partial path");
@@ -72,7 +69,7 @@ public final class WanderOrTeleportToTargetTaskGameTests {
 
         brain.eraseMemory(MemoryModuleType.PATH);
         brain.setMemory(MemoryModuleType.WALK_TARGET,
-                new WalkTarget(new LongDistancePathTarget(newTarget), 0.5F, 0));
+                new WalkTarget(new PersistentPathTarget(newTarget), 0.5F, 0));
         WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
         long retryTime = helper.getLevel().getGameTime();
         helper.assertTrue(sink.tryStart(helper.getLevel(), villager, retryTime),
@@ -107,7 +104,7 @@ public final class WanderOrTeleportToTargetTaskGameTests {
 
     @GameTest(batch = "mca_walk_target_timeout_scope", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 80)
-    public static void farStaticTargetsSuppressVanillaMovementTimeout(GameTestHelper helper) {
+    public static void onlyPersistentStaticTargetsSuppressVanillaMovementTimeout(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
         BlockPos target = start.east(6);
         BlockPos farStaticTarget = start.east(60);
@@ -140,21 +137,36 @@ public final class WanderOrTeleportToTargetTaskGameTests {
 
         WanderOrTeleportToTargetTask farStaticSink = new WanderOrTeleportToTargetTask();
         helper.assertTrue(farStaticSink.tryStart(helper.getLevel(), villager, startedAt),
-                "far static movement sink did not start");
-        helper.assertTrue(!farStaticSink.timedOut(startedAt + 251L),
-                "far static WALK_TARGET was still limited by vanilla's movement timeout");
+                "far disposable movement sink did not start");
+        helper.assertTrue(farStaticSink.timedOut(startedAt + 251L),
+                "far disposable WALK_TARGET incorrectly disabled vanilla movement timeout");
         farStaticSink.doStop(helper.getLevel(), villager, startedAt + 251L);
 
         brain.eraseMemory(MemoryModuleType.PATH);
         brain.setMemory(MemoryModuleType.WALK_TARGET,
-                new WalkTarget(new LongDistancePathTarget(farStaticTarget), 0.5F, 0));
+                new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+        WanderOrTeleportToTargetTask nearbyPersistentSink = new WanderOrTeleportToTargetTask();
+        helper.assertTrue(nearbyPersistentSink.tryStart(helper.getLevel(), villager, startedAt),
+                "nearby persistent movement sink did not start");
+        Path nearbyPath = villager.getNavigation().getPath();
+        helper.assertTrue(nearbyPath != null && nearbyPath.canReach() && !nearbyPath.isDone(),
+                "nearby persistent fixture did not have unfinished reachable navigation");
+        nearbyPersistentSink.tickOrStop(helper.getLevel(), villager, startedAt + 251L);
+        helper.assertTrue(villager.getNavigation().getPath() == nearbyPath
+                        && brain.hasMemoryValue(MemoryModuleType.WALK_TARGET),
+                "nearby persistent travel discarded unfinished navigation at vanilla's behavior deadline");
+        nearbyPersistentSink.doStop(helper.getLevel(), villager, startedAt + 251L);
 
-        WanderOrTeleportToTargetTask longDistanceSink = new WanderOrTeleportToTargetTask();
-        helper.assertTrue(longDistanceSink.tryStart(helper.getLevel(), villager, startedAt),
-                "long-distance movement sink did not start");
-        helper.assertTrue(!longDistanceSink.timedOut(startedAt + 251L),
-                "long-distance WALK_TARGET lost its extended movement lifetime");
-        longDistanceSink.doStop(helper.getLevel(), villager, startedAt + 251L);
+        brain.eraseMemory(MemoryModuleType.PATH);
+        brain.setMemory(MemoryModuleType.WALK_TARGET,
+                new WalkTarget(new PersistentPathTarget(farStaticTarget), 0.5F, 0));
+
+        WanderOrTeleportToTargetTask persistentSink = new WanderOrTeleportToTargetTask();
+        helper.assertTrue(persistentSink.tryStart(helper.getLevel(), villager, startedAt),
+                "persistent movement sink did not start");
+        helper.assertTrue(!persistentSink.timedOut(startedAt + 251L),
+                "persistent WALK_TARGET lost its extended movement lifetime");
+        persistentSink.doStop(helper.getLevel(), villager, startedAt + 251L);
 
         BlockPos movingTargetPos = start.east(60).north(4);
         VillagerEntityMCA movingTarget = VillagerFactory.newVillager(helper.getLevel())
@@ -179,9 +191,112 @@ public final class WanderOrTeleportToTargetTaskGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_walk_target_intent_change", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void changedTargetIntentUsesCurrentMovementLifetime(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
+        BlockPos target = start.east(6);
+        prepareFlatArea(helper, start, 10, 2);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start)).spawn(MobSpawnType.STRUCTURE);
+        villager.refreshBrain(helper.getLevel());
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+        var brain = villager.getBrain();
+        long startedAt = helper.getLevel().getGameTime();
+        try {
+            for (int offset : new int[]{0, 2}) {
+                brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.5F, 0));
+                WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
+                helper.assertTrue(sink.tryStart(helper.getLevel(), villager, startedAt),
+                        "ordinary movement did not start before intent change");
+                Path activePath = villager.getNavigation().getPath();
+                brain.setMemory(MemoryModuleType.WALK_TARGET,
+                        new WalkTarget(new PersistentPathTarget(target.east(offset)), 0.5F, 0));
+                sink.tickOrStop(helper.getLevel(), villager, startedAt + 251L);
+                helper.assertTrue(brain.hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                                && villager.getNavigation().getPath() == activePath
+                                && !villager.getNavigation().isDone(),
+                        "persistent intent inherited the ordinary timeout after a target shift of " + offset);
+                sink.doStop(helper.getLevel(), villager, startedAt + 251L);
+
+                brain.setMemory(MemoryModuleType.WALK_TARGET,
+                        new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+                sink = new WanderOrTeleportToTargetTask();
+                helper.assertTrue(sink.tryStart(helper.getLevel(), villager, startedAt),
+                        "persistent movement did not start before intent change");
+                brain.setMemory(MemoryModuleType.WALK_TARGET,
+                        new WalkTarget(target.east(offset), 0.5F, 0));
+                sink.tickOrStop(helper.getLevel(), villager, startedAt + 251L);
+                helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                                && villager.getNavigation().isDone(),
+                        "ordinary intent retained persistent lifetime after a target shift of " + offset);
+            }
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_walk_target_timeout_scope", templateNamespace = "minecraft",
-            template = "bastion/blocks/air", timeoutTicks = 400)
-    public static void nearbyExtendedDetourKeepsVanillaMovementTimeout(GameTestHelper helper) {
+            template = "bastion/blocks/air", timeoutTicks = 1_000)
+    public static void ordinaryStaticTargetDoesNotStartExtendedDetour(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(40, 1, 40));
+        BlockPos target = start.east(2);
+        prepareFlatArea(helper, start, 30, 3);
+
+        for (int z = -23; z <= 23; z++) {
+            BlockPos wall = start.offset(1, 0, z);
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(wall.above(y), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(start))
+                .withName("Disposable Walk Target Probe")
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.refreshBrain(helper.getLevel());
+        villager.getBrain().removeAllBehaviors();
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+        villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
+
+        var brain = villager.getBrain();
+        brain.eraseMemory(MemoryModuleType.PATH);
+        brain.eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+        brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.5F, 0));
+
+        WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
+        Config config = Config.getInstance();
+        int originalPathfindingDistance = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 160;
+            helper.assertTrue(sink.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime()),
+                    "ordinary movement sink did not start its bounded path");
+        } finally {
+            config.villagerPathfindingDistance = originalPathfindingDistance;
+        }
+
+        Path path = villager.getNavigation().getPath();
+        helper.assertTrue(path != null && !path.canReach(),
+                "ordinary disposable target escalated into an extended detour");
+        helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE).isPresent(),
+                "ordinary disposable partial path did not retain vanilla unreachable evidence");
+        while (!path.isDone()) {
+            path.advance();
+        }
+        villager.getNavigation().tick();
+        helper.assertTrue(!sink.canStillUse(helper.getLevel(), villager, helper.getLevel().getGameTime() + 1L),
+                "ordinary disposable target started MCA detour recovery after its bounded path ended");
+        villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_walk_target_timeout_scope", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 1_000)
+    public static void nearbyReachableLongDetourCanFinishWithoutMovementTimeout(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(40, 1, 40));
         BlockPos target = start.east(2);
         prepareFlatArea(helper, start, 30, 3);
@@ -210,7 +325,9 @@ public final class WanderOrTeleportToTargetTaskGameTests {
         Path ordinary = villager.getNavigation().createPath(target, 0);
         helper.assertTrue(ordinary != null && !ordinary.canReach(),
                 "fixture ordinary path unexpectedly solved the long nearby detour");
-        brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.35F, 0));
+        villager.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(0.5D);
+        brain.setMemory(MemoryModuleType.WALK_TARGET,
+                new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
 
         WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
         long startedAt = helper.getLevel().getGameTime();
@@ -228,24 +345,49 @@ public final class WanderOrTeleportToTargetTaskGameTests {
                 "fixture did not select the reachable extended detour");
         helper.assertTrue(!MCAGroundPathNavigation.requiresExtendedPath(villager, target),
                 "fixture target must remain inside the ordinary geometric range");
+        helper.assertTrue(!sink.timedOut(startedAt + 251L),
+                "long reachable route did not qualify for extended lifetime; nodes=" + path.getNodeCount()
+                        + ", walkedDistance=" + path.getEndNode().walkedDistance
+                        + ", pathTarget=" + path.getTarget() + ", walkTarget=" + target);
 
-        // This test owns the sink lifecycle, not physical travel. Freeze entity AI so
-        // a completed route cannot turn the timeout assertion into a path-end test.
-        villager.setNoAi(true);
-
+        boolean[] continuedAfterVanillaTimeout = {false};
+        boolean[] madePhysicalProgress = {false};
         helper.onEachTick(() -> {
             long gameTime = helper.getLevel().getGameTime();
             sink.tickOrStop(helper.getLevel(), villager, gameTime);
+            madePhysicalProgress[0] |= villager.blockPosition().distSqr(start) >= 16.0D;
             if (gameTime - startedAt < 260L) {
                 return;
             }
 
-            helper.assertTrue(!villager.blockPosition().equals(target),
-                    "fixture reached the target before exercising the vanilla timeout window");
-            helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty(),
-                    "nearby extended-horizon fallback incorrectly suppressed the vanilla movement timeout");
-            villager.discard();
-            helper.succeed();
+            if (villager.blockPosition().equals(target)) {
+                helper.assertTrue(continuedAfterVanillaTimeout[0],
+                        "fixture did not exercise natural movement beyond the vanilla timeout");
+                villager.discard();
+                helper.succeed();
+            } else {
+                helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).isPresent(),
+                        "reachable long detour lost its WALK_TARGET; position=" + villager.position()
+                                + ", path=" + villager.getNavigation().getPath()
+                                + ", stuck=" + villager.getNavigation().isStuck()
+                                + ", timedOut=" + sink.timedOut(gameTime));
+                helper.assertTrue(madePhysicalProgress[0],
+                        "long detour kept a movement behavior without physical progress");
+                continuedAfterVanillaTimeout[0] = true;
+            }
+            if (gameTime - startedAt >= 950L) {
+                Path active = villager.getNavigation().getPath();
+                helper.fail("long detour did not finish; position=" + villager.position()
+                        + ", entityTicks=" + villager.tickCount
+                        + ", entityTicking=" + helper.getLevel().isPositionEntityTicking(villager.blockPosition())
+                        + ", noAi=" + villager.isNoAi() + ", width=" + villager.getBbWidth()
+                        + ", speed=" + villager.getSpeed() + ", grounded=" + villager.onGround()
+                        + ", movement=" + villager.getDeltaMovement()
+                        + ", path=" + active
+                        + ", next=" + (active == null ? null : active.getNextNodeIndex())
+                        + ", node=" + (active == null || active.isDone() ? null : active.getNextNodePos())
+                        + ", wanted=" + (active == null || active.isDone() ? null : active.getNextEntityPos(villager)));
+            }
         });
     }
 
@@ -328,7 +470,7 @@ public final class WanderOrTeleportToTargetTaskGameTests {
         brain.eraseMemory(MemoryModuleType.PATH);
         brain.eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
         brain.setMemory(MemoryModuleType.WALK_TARGET,
-                new WalkTarget(new LongDistancePathTarget(destination), 1.0F, 0));
+                new WalkTarget(new PersistentPathTarget(destination), 1.0F, 0));
 
         long startedAt = helper.getLevel().getGameTime();
         Path[] lastPath = {null};
@@ -703,7 +845,8 @@ public final class WanderOrTeleportToTargetTaskGameTests {
         var brain = villager.getBrain();
         brain.eraseMemory(MemoryModuleType.PATH);
         brain.eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
-        brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(destination, 0.5F, 0));
+        brain.setMemory(MemoryModuleType.WALK_TARGET,
+                new WalkTarget(new PersistentPathTarget(destination), 0.5F, 0));
 
         Path partial = villager.getNavigation().createPath(destination, 0);
         helper.assertTrue(partial != null && !partial.canReach(),

@@ -3,6 +3,7 @@ package net.conczin.mca.block;
 import com.mojang.serialization.MapCodec;
 import net.conczin.mca.entity.Infectable;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Mourning;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
@@ -16,6 +17,7 @@ import net.conczin.mca.util.localization.FlowingText;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Direction.Axis;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.particles.ParticleTypes;
@@ -31,6 +33,7 @@ import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.*;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.ZombieVillager;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -62,6 +65,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -176,10 +180,15 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
     @Deprecated
     @Override
     public void onRemove(BlockState state, Level world, BlockPos pos, BlockState newState, boolean moved) {
+        Optional<UUID> deceasedId = Data.of(world.getBlockEntity(pos)).flatMap(Data::getEntityUuid);
         super.onRemove(state, world, pos, newState, moved);
         if (!world.isClientSide && !state.is(newState.getBlock())) {
             updateNeighbors(state, world, pos);
-            GraveyardManager.get((ServerLevel) world).removeTombstoneState(pos);
+            GraveyardManager graveyardManager = GraveyardManager.get((ServerLevel) world);
+            graveyardManager.removeTombstoneState(pos);
+            GlobalPos grave = GlobalPos.of(world.dimension(), pos);
+            GraveyardManager globalGraveyardManager = GraveyardManager.getGlobal((ServerLevel) world);
+            deceasedId.ifPresent(uuid -> globalGraveyardManager.clearOccupiedGrave(uuid, grave));
         }
     }
 
@@ -355,8 +364,9 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
 
                 if (resurrectionProgress > 500) {
                     resurrectionProgress = 0;
+                    sync();
 
-                    createEntity(level, true).ifPresent(entity -> {
+                    createEntity(level, false).ifPresent(entity -> {
                         generateLightning();
                         entity.clearFire();
                         entity.setPortalCooldown();
@@ -375,13 +385,13 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
 
                         boolean alreadySpawned = false;
                         if (cure && (entity instanceof ZombieVillager zombie)) {
-                            // spawnEntity is called here, so don't call it twice
-                            entity = zombie.convertTo(EntityType.VILLAGER, true);
-                            alreadySpawned = true;
-                        }
+                            Villager villager = cureResurrectedZombie(zombie);
+                            if (villager == null) {
+                                return;
+                            }
 
-                        if (entity instanceof CompassionateEntity<?> compassionateEntity) {
-                            compassionateEntity.getRelationships().getFamilyEntry().setDeceased(false);
+                            entity = villager;
+                            alreadySpawned = true;
                         }
 
                         if (entity instanceof VillagerEntityMCA villager) {
@@ -398,12 +408,44 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
                             );
                         }
 
-                        if (!alreadySpawned) {
-                            level.addFreshEntity(entity);
+                        if (!alreadySpawned && !level.addFreshEntity(entity)) {
+                            return;
                         }
+
+                        if (entity instanceof CompassionateEntity<?> compassionateEntity) {
+                            compassionateEntity.getRelationships().getFamilyEntry().setDeceased(false);
+                        }
+                        setEntity(null);
                     });
                 }
             }
+        }
+
+        @Nullable
+        private Villager cureResurrectedZombie(ZombieVillager zombie) {
+            Villager villager = zombie.convertTo(EntityType.VILLAGER, true);
+            if (villager == null || !(level instanceof ServerLevel serverLevel)
+                    || serverLevel.getEntity(villager.getUUID()) != villager) {
+                return null;
+            }
+
+            // Restore cure data without vanilla's equipment drops, player credit or nausea.
+            villager.setVillagerData(zombie.getVillagerData());
+            if (zombie.gossips != null) {
+                villager.setGossips(zombie.gossips.copy());
+            }
+            if (zombie.tradeOffers != null) {
+                villager.setOffers(zombie.tradeOffers.copy());
+            }
+            villager.setVillagerXp(zombie.getVillagerXp());
+            villager.finalizeSpawn(serverLevel, serverLevel.getCurrentDifficultyAt(villager.blockPosition()),
+                    MobSpawnType.CONVERSION, null);
+            if (zombie instanceof VillagerLike<?> source && villager instanceof VillagerLike<?> converted) {
+                // Setting the profession can randomize MCA clothing; retain the stored appearance.
+                converted.copyVillagerAttributesFrom(source);
+            }
+            villager.refreshBrain(serverLevel);
+            return villager;
         }
 
         private void generateLightning() {
@@ -415,6 +457,7 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
         }
 
         public void setEntity(@Nullable Entity entity) {
+            Optional<UUID> previousUuid = getEntityUuid();
             entityData = Optional.ofNullable(entity).map(e -> new EntityData(
                     writeEntityToNbt(e),
                     e.getName().getString(),
@@ -430,7 +473,12 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
                 ((TombstoneBlock) getBlockState().getBlock()).updateNeighbors(getBlockState(), level, worldPosition);
 
                 if (!level.isClientSide) {
-                    GraveyardManager.get((ServerLevel) level).setTombstoneState(worldPosition,
+                    GraveyardManager graveyardManager = GraveyardManager.get((ServerLevel) level);
+                    GraveyardManager globalGraveyardManager = GraveyardManager.getGlobal((ServerLevel) level);
+                    GlobalPos grave = GlobalPos.of(level.dimension(), worldPosition);
+                    previousUuid.ifPresent(uuid -> globalGraveyardManager.clearOccupiedGrave(uuid, grave));
+                    getEntityUuid().ifPresent(uuid -> globalGraveyardManager.setOccupiedGrave(uuid, grave));
+                    graveyardManager.setTombstoneState(worldPosition,
                             hasEntity() ? GraveyardManager.TombstoneState.FILLED : GraveyardManager.TombstoneState.EMPTY
                     );
                     sync();
@@ -448,6 +496,13 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
 
         public Optional<String> getEntityName() {
             return entityData.map(e -> e.name);
+        }
+
+        public Optional<UUID> getEntityUuid() {
+            return entityData
+                    .map(e -> e.nbt)
+                    .filter(nbt -> nbt.hasUUID("UUID"))
+                    .map(nbt -> nbt.getUUID("UUID"));
         }
 
         public FlowingText getOrCreateEntityName(Function<Component, FlowingText> factory) {
@@ -516,6 +571,10 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
                     .filter(s -> s.has(DataComponents.BLOCK_ENTITY_DATA))
                     .map(s -> s.getOrDefault(DataComponents.BLOCK_ENTITY_DATA, CustomData.EMPTY).copyTag())
                     .map(EntityData::new);
+            if (hasLevel() && !level.isClientSide) {
+                GlobalPos grave = GlobalPos.of(level.dimension(), worldPosition);
+                getEntityUuid().ifPresent(uuid -> GraveyardManager.getGlobal((ServerLevel) level).setOccupiedGrave(uuid, grave));
+            }
         }
 
         public void writeToStack(ItemStack stack) {

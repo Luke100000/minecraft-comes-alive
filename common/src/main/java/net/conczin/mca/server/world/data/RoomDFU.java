@@ -8,8 +8,10 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -67,13 +69,30 @@ final class RoomDFU {
             LogicalBuilding logical = new LogicalBuilding((CompoundTag) value);
             putUnique(logicalBuildings, logical.id(), logical, "Logical building");
         }
+        validateDisjointRoomOwnership(rooms.values());
         return new Result(rooms, external, structures, logicalBuildings);
+    }
+
+    private static void validateDisjointRoomOwnership(Collection<Building> rooms) {
+        Map<FloorRef, Set<BlockPos>> ownedCells = new HashMap<>();
+        for (Building room : rooms) {
+            Set<BlockPos> floorCells = ownedCells.computeIfAbsent(
+                    new FloorRef(room.getStructureId(), room.getFloorId()), ignored -> new HashSet<>());
+            for (BlockPos cell : room.getFloorCells()) {
+                if (!floorCells.add(cell)) {
+                    throw new IllegalArgumentException("Canonical Rooms overlap at floor cell " + cell);
+                }
+            }
+        }
     }
 
     private static <T> void putUnique(Map<Integer, T> target, int id, T value, String kind) {
         if (target.putIfAbsent(id, value) != null) {
             throw new IllegalArgumentException("Duplicate canonical " + kind + " id " + id);
         }
+    }
+
+    private record FloorRef(int structureId, int floorId) {
     }
 
     private static Result migrateUpstreamFloorCleanSquash(CompoundTag villageTag) {
@@ -152,7 +171,7 @@ final class RoomDFU {
                         pos, Math.max(pos.getY() + 1, ceilingY)))
                 .toList();
         return new StructureFloor(
-                oldFloor.getInt("id"), oldFloor.getInt("floorNumber"),
+                oldFloor.getInt("id"), oldFloor.getInt("floorNumber"), region.anchorY(),
                 new FloorGeometry(cells, Map.of()));
     }
 
@@ -180,7 +199,7 @@ final class RoomDFU {
                 for (int x = minX; x <= maxX; x++) cells.add(new BlockPos(x, anchorY, z));
             }
         }
-        return new LegacyFloorRegion(Set.copyOf(cells));
+        return new LegacyFloorRegion(anchorY, Set.copyOf(cells));
     }
 
     private static void validateCurrentShape(CompoundTag villageTag) {
@@ -192,18 +211,28 @@ final class RoomDFU {
         }
         for (Tag value : villageTag.getList("structures", Tag.TAG_COMPOUND)) {
             CompoundTag structure = (CompoundTag) value;
+            require(structure, "id", Tag.TAG_INT, "Structure");
             require(structure, "buildingId", Tag.TAG_INT, "Structure");
             require(structure, "source", "Structure");
             require(structure, "floors", Tag.TAG_LIST, "Structure");
+            ListTag floors = structure.getList("floors", Tag.TAG_COMPOUND);
+            if (floors.isEmpty()) {
+                throw new IllegalArgumentException("Structure requires at least one canonical floor");
+            }
+            for (Tag floorValue : floors) {
+                require((CompoundTag) floorValue, "id", Tag.TAG_INT, "StructureFloor");
+            }
         }
         for (Tag value : villageTag.getList("logicalBuildings", Tag.TAG_COMPOUND)) {
             CompoundTag logical = (CompoundTag) value;
+            require(logical, "id", Tag.TAG_INT, "Logical building");
             require(logical, "mainRoomId", Tag.TAG_INT, "Logical building");
             require(logical, "inheritanceEnabled", Tag.TAG_BYTE, "Logical building");
         }
     }
 
     private static void requireCurrentBuildingShape(CompoundTag building, String kind) {
+        require(building, "id", Tag.TAG_INT, kind);
         require(building, "floorCells", Tag.TAG_LIST, kind);
         require(building, "contributesToMain", Tag.TAG_BYTE, kind);
         require(building, "structureId", Tag.TAG_INT, kind);
@@ -253,6 +282,7 @@ final class RoomDFU {
                     .toList(), Map.of());
             Structure structure = new Structure(id, room.getSourceBlock(), List.of(
                     new StructureFloor(0, 0, geometry)));
+            structure.setOriginGeometryApproximate(true);
             rooms.put(id, room);
             structures.put(id, structure);
             logicalBuildings.put(id, new LogicalBuilding(id, id, true));
@@ -316,7 +346,7 @@ final class RoomDFU {
             Map<Integer, LogicalBuilding> logicalBuildings) {
     }
 
-    private record LegacyFloorRegion(Set<BlockPos> cells) {
+    private record LegacyFloorRegion(int anchorY, Set<BlockPos> cells) {
         boolean containsHorizontally(int x, int z) {
             return cells.stream().anyMatch(pos -> pos.getX() == x && pos.getZ() == z);
         }

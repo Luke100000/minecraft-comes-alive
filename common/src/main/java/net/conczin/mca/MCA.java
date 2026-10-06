@@ -1,5 +1,6 @@
 package net.conczin.mca;
 
+import net.conczin.mca.server.AsyncStructureLocator;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.EntityType;
@@ -11,18 +12,16 @@ import org.apache.logging.log4j.Logger;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 public final class MCA {
     public static final String MOD_ID = "mca";
     public static final Logger LOGGER = LogManager.getLogger();
 
-    public static volatile ExecutorService executorService = createExecutorService();
     public static Map<String, String> storage = new HashMap<>();
     public static String language;
     public static PlatformHelper platformHelper = new PlatformHelper();
     private static MinecraftServer server;
+    private static AsyncStructureLocator structureLocator;
 
     public static ResourceLocation locate(String id) {
         return ResourceLocation.fromNamespaceAndPath(MOD_ID, id);
@@ -36,26 +35,38 @@ public final class MCA {
         return Optional.ofNullable(server);
     }
 
-    public static void setServer(MinecraftServer server) {
+    public static void startServer(MinecraftServer server) {
+        if (structureLocator != null && !structureLocator.isTerminated()) {
+            LOGGER.warn("Previous structure locator has not terminated; starting the server with "
+                    + "structure lookups unavailable until the old worker exits");
+        } else {
+            structureLocator = new AsyncStructureLocator(server);
+        }
         MCA.server = server;
     }
 
-    private static ExecutorService createExecutorService() {
-        return Executors.newSingleThreadExecutor(runnable -> {
-            Thread thread = new Thread(runnable, "MCA-Structure-Locator");
-            thread.setDaemon(true);
-            return thread;
-        });
-    }
-
-    public static synchronized void startExecutorService() {
-        if (executorService.isShutdown()) {
-            executorService = createExecutorService();
+    public static void stopServer(MinecraftServer server) {
+        if (MCA.server == server) {
+            structureLocator.close();
+            MCA.server = null;
         }
     }
 
-    public static synchronized void shutdownExecutorService() {
-        executorService.shutdownNow();
+    public static void finishServerStop(MinecraftServer server) {
+        // A failed startup/crashed run can reach STOPPED without the normal STOPPING hook.
+        stopServer(server);
+        if (MCA.server == null && structureLocator != null && structureLocator.finishStopping(server)) {
+            structureLocator = null;
+        }
+    }
+
+    public static AsyncStructureLocator getStructureLocator() {
+        // Recover on the next lookup once the previous server's worker has actually exited.
+        // Until then its closed locator rejects requests without starting an overlapping worker.
+        if (server != null && structureLocator != null && structureLocator.isTerminated()) {
+            structureLocator = new AsyncStructureLocator(server);
+        }
+        return structureLocator;
     }
 
     public interface RegisterHelper<T> {

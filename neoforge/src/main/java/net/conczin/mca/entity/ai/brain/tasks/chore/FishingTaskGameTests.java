@@ -28,7 +28,6 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.Comparator;
@@ -39,8 +38,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class FishingTaskGameTests {
     private FishingTaskGameTests() {
@@ -67,6 +64,27 @@ public final class FishingTaskGameTests {
                         + ", job=" + villager.getVillagerBrain().getCurrentJob()
                         + ", fluid=" + helper.getLevel().getFluidState(bobber.blockPosition())
         );
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_fishing_bobber", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void bobberOwnerReferenceFollowsCurrentBobberLifecycle(GameTestHelper helper) {
+        BlockPos villagerPos = helper.absolutePos(new BlockPos(3, 2, 3));
+        BlockPos water = villagerPos.east(2);
+        prepareWater(helper, water);
+
+        VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
+        MCAFishingBobberEntity first = MCAFishingBobberEntity.cast(helper.getLevel(), villager, water);
+        helper.assertTrue(villager.getFishingBobber() == first, "cast bobber was not tracked by its villager owner");
+
+        MCAFishingBobberEntity second = MCAFishingBobberEntity.cast(helper.getLevel(), villager, water);
+        helper.assertTrue(villager.getFishingBobber() == second, "new cast did not replace the tracked bobber");
+
+        first.discard();
+        helper.assertTrue(villager.getFishingBobber() == second, "removing an old bobber cleared the current one");
+
+        second.discard();
+        helper.assertTrue(villager.getFishingBobber() == null, "removing the current bobber did not clear the owner reference");
         helper.succeed();
     }
 
@@ -129,7 +147,7 @@ public final class FishingTaskGameTests {
                 return;
             }
 
-            MCAFishingBobberEntity bobberBeforeTick = activeBobber(helper, villager);
+            MCAFishingBobberEntity bobberBeforeTick = villager.getFishingBobber();
             int rollsBeforeTick = task.getBiteRollCount();
             List<Integer> nearbyItemIds = bobberBeforeTick == null
                     ? List.of()
@@ -213,7 +231,7 @@ public final class FishingTaskGameTests {
                 return;
             }
 
-            MCAFishingBobberEntity bobberBeforeTick = activeBobber(helper, villager);
+            MCAFishingBobberEntity bobberBeforeTick = villager.getFishingBobber();
             int rollsBeforeTick = task.getBiteRollCount();
             List<Integer> nearbyItemIds = bobberBeforeTick == null
                     ? List.of()
@@ -398,7 +416,7 @@ public final class FishingTaskGameTests {
         task.start(helper.getLevel(), villager, gameTime);
         task.tick(helper.getLevel(), villager, gameTime);
         task.tick(helper.getLevel(), villager, gameTime + 1);
-        helper.assertTrue(activeBobber(helper, villager) != null, "fishing loot test did not create a bobber context");
+        helper.assertTrue(villager.getFishingBobber() != null, "fishing loot test did not create a bobber context");
 
         ItemStack plainRod = new ItemStack(Items.FISHING_ROD);
         villager.setItemInHand(villager.getDominantHand(), plainRod);
@@ -473,7 +491,7 @@ public final class FishingTaskGameTests {
         task.tick(helper.getLevel(), villager, time + 1);
         task.tick(helper.getLevel(), villager, time + 2);
 
-        helper.assertTrue(activeBobber(helper, villager) != null, "empty-loot fixture did not create a bobber");
+        helper.assertTrue(villager.getFishingBobber() != null, "empty-loot fixture did not create a bobber");
         int itemEntitiesBefore = helper.getLevel()
                 .getEntitiesOfClass(ItemEntity.class, villager.getBoundingBox().inflate(32.0D))
                 .size();
@@ -512,7 +530,7 @@ public final class FishingTaskGameTests {
 
         task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
         helper.onEachTick(() -> {
-            MCAFishingBobberEntity bobberBeforeTick = activeBobber(helper, villager);
+            MCAFishingBobberEntity bobberBeforeTick = villager.getFishingBobber();
             boolean biteWasActive = bobberBeforeTick != null && bobberBeforeTick.isBiting();
 
             task.tick(helper.getLevel(), villager, helper.getLevel().getGameTime());
@@ -559,7 +577,7 @@ public final class FishingTaskGameTests {
                 return;
             }
 
-            MCAFishingBobberEntity bobberBeforeTick = activeBobber(helper, villager);
+            MCAFishingBobberEntity bobberBeforeTick = villager.getFishingBobber();
             int nearbyItemsBefore = bobberBeforeTick == null
                     ? 0
                     : helper.getLevel().getEntitiesOfClass(ItemEntity.class, bobberBeforeTick.getBoundingBox().inflate(1.5D)).size();
@@ -575,7 +593,7 @@ public final class FishingTaskGameTests {
                 }
             }
 
-            MCAFishingBobberEntity active = activeBobber(helper, villager);
+            MCAFishingBobberEntity active = villager.getFishingBobber();
             if (active != null && active.isBiting()) {
                 sawBite.set(true);
             } else if (sawBite.get() && task.getBiteRollCount() > 0) {
@@ -619,7 +637,7 @@ public final class FishingTaskGameTests {
                 return;
             }
 
-            MCAFishingBobberEntity bobberBeforeTick = activeBobber(helper, villager);
+            MCAFishingBobberEntity bobberBeforeTick = villager.getFishingBobber();
             int rollsBeforeTick = task.getBiteRollCount();
             List<Integer> nearbyItemIds = bobberBeforeTick == null
                     ? List.of()
@@ -933,17 +951,8 @@ public final class FishingTaskGameTests {
         return helper.getLevel()
                 .getEntitiesOfClass(MCAFishingBobberEntity.class, villager.getBoundingBox().inflate(32.0D))
                 .stream()
-                .filter(entity -> !entity.isRemoved() && entity.getVillagerOwner() == villager)
+                .filter(entity -> !entity.isRemoved() && entity.getOwner() == villager)
                 .count();
-    }
-
-    private static MCAFishingBobberEntity activeBobber(GameTestHelper helper, VillagerEntityMCA villager) {
-        return helper.getLevel()
-                .getEntitiesOfClass(MCAFishingBobberEntity.class, villager.getBoundingBox().inflate(32.0D))
-                .stream()
-                .filter(entity -> !entity.isRemoved() && entity.getVillagerOwner() == villager)
-                .findFirst()
-                .orElse(null);
     }
 
     private static int countCaughtItems(VillagerEntityMCA villager) {

@@ -28,6 +28,9 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
     private boolean lastArmorWearState;
     private int lastEquipmentRefreshTick = -EQUIPMENT_REFRESH_INTERVAL;
     private EquipmentSet cachedEquipmentSet;
+    private boolean conditionEvaluatedDuringCheck;
+    private boolean checkedWear;
+    private boolean equipmentResolvedDuringCheck;
 
     public EquipmentTask(Predicate<VillagerEntityMCA> condition, Function<VillagerEntityMCA, EquipmentSet> set) {
         super(ImmutableMap.of(MemoryModuleTypeMCA.WEARS_ARMOR, MemoryStatus.REGISTERED));
@@ -37,6 +40,8 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA villager) {
+        conditionEvaluatedDuringCheck = false;
+        equipmentResolvedDuringCheck = false;
         if (villager.isUsingRecoveryFood()) {
             return false;
         }
@@ -47,10 +52,13 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
         }
 
         boolean wear = condition.test(villager);
+        checkedWear = wear;
+        conditionEvaluatedDuringCheck = true;
         if (wear && (cachedEquipmentSet == null
                 || villager.tickCount - lastEquipmentRefreshTick >= EQUIPMENT_REFRESH_INTERVAL)) {
             lastEquipmentRefreshTick = villager.tickCount;
             cachedEquipmentSet = equipmentSet.apply(villager);
+            equipmentResolvedDuringCheck = true;
         }
 
         boolean present = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.WEARS_ARMOR).isPresent();
@@ -89,18 +97,26 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
     protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.start(world, villager, time);
 
+        boolean reuseCheckedCondition = conditionEvaluatedDuringCheck;
+        conditionEvaluatedDuringCheck = false;
+        boolean reuseCheckedEquipment = equipmentResolvedDuringCheck;
+        equipmentResolvedDuringCheck = false;
         if (villager.isUsingRecoveryFood()) {
             return;
         }
 
         lastArmorWearState = villager.getVillagerBrain().getArmorWear();
-        boolean wear = condition.test(villager);
+        boolean wear = reuseCheckedCondition ? checkedWear : condition.test(villager);
         EquipmentSet set = cachedEquipmentSet;
 
         if (wear || villager.getVillagerBrain().getArmorWear()) {
-            set = equipmentSet.apply(villager);
-            cachedEquipmentSet = set;
-            lastEquipmentRefreshTick = villager.tickCount;
+            // Only reuse a selection resolved by this start check. An older cached
+            // set, or an armor-visibility bypass, still needs a fresh lookup.
+            if (!reuseCheckedEquipment || !wear || set == null) {
+                set = equipmentSet.apply(villager);
+                cachedEquipmentSet = set;
+                lastEquipmentRefreshTick = villager.tickCount;
+            }
         }
 
         if (wear && set != null && isNakedCombatSet(set, villager)) {

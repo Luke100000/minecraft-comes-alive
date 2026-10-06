@@ -6,6 +6,7 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.BedPoiCompatibility;
+import net.conczin.mca.entity.ai.BedDebugLog;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.Holder;
@@ -20,6 +21,8 @@ import net.minecraft.world.entity.ai.village.poi.PoiType;
 import net.minecraft.world.level.pathfinder.Path;
 
 import java.util.Optional;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.function.BiPredicate;
 import java.util.function.Consumer;
@@ -81,20 +84,32 @@ public class ExtendedFindPointOfInterestTask extends Behavior<VillagerEntityMCA>
         this.positionExpireTimeLimit = l + POSITION_EXPIRE_INTERVAL + (long) serverWorld.getRandom().nextInt(POSITION_EXPIRE_INTERVAL);
         PoiManager pointOfInterestStorage = serverWorld.getPoiManager();
         this.foundPositionsToExpiry.long2ObjectEntrySet().removeIf(entry -> !entry.getValue().isAttempting(l));
+        List<String> exclusions = new ArrayList<>();
         Predicate<BlockPos> predicate = blockPos -> {
             RetryMarker retryMarker = this.foundPositionsToExpiry.get(blockPos.asLong());
             if (retryMarker != null) {
                 if (!retryMarker.shouldRetry(l)) {
+                    noteHomeExclusion(exclusions, blockPos, "RETRY_COOLDOWN");
                     return false;
                 }
                 retryMarker.setAttemptTime(l);
             }
-            return this.predicate.test(villager, blockPos);
+            boolean allowed = this.predicate.test(villager, blockPos);
+            if (!allowed) {
+                noteHomeExclusion(exclusions, blockPos, "RESIDENCY_BUILDING_RULE");
+            }
+            return allowed;
         };
         Set<Pair<Holder<PoiType>, BlockPos>> set = pointOfInterestStorage
                 .findAllClosestFirstWithType(this.poiType, predicate, villager.blockPosition(), POI_SORTING_RADIUS, PoiManager.Occupancy.HAS_SPACE)
                 .limit(MAX_POSITIONS_PER_RUN)
-                .filter(poi -> isValidPoi(serverWorld, poi.getSecond()))
+                .filter(poi -> {
+                    boolean valid = isValidPoi(serverWorld, poi.getSecond());
+                    if (!valid) {
+                        noteHomeExclusion(exclusions, poi.getSecond(), "OCCUPIED_OR_INVALID_BED");
+                    }
+                    return valid;
+                })
                 .collect(Collectors.toSet());
         Path path = findPathToPois(villager, set);
         if (path != null && path.canReach()) {
@@ -111,11 +126,28 @@ public class ExtendedFindPointOfInterestTask extends Behavior<VillagerEntityMCA>
                     DebugPackets.sendPoiTicketCountPacket(serverWorld, claimedPos);
                     onFinish.accept(villager);
                 });
+                logHomeSelection(villager, set, path, claimedPosition.isPresent() ? "CLAIMED" : "CLAIM_LOST", exclusions);
             });
+            if (pointOfInterestStorage.getType(blockPos2).isEmpty()) {
+                logHomeSelection(villager, set, path, "TARGET_POI_MISSING", exclusions);
+            }
         } else {
             for (Pair<Holder<PoiType>, BlockPos> blockPos2 : set) {
                 this.foundPositionsToExpiry.computeIfAbsent(blockPos2.getSecond().asLong(), m -> new RetryMarker(villager.level().random, l));
             }
+            logHomeSelection(villager, set, path, set.isEmpty() ? "NO_ELIGIBLE_CANDIDATES" : "NO_REACHABLE_PATH", exclusions);
+        }
+    }
+
+    private void noteHomeExclusion(List<String> exclusions, BlockPos pos, String reason) {
+        if (this.targetMemoryModuleType == MemoryModuleType.HOME && BedDebugLog.ENABLED && exclusions.size() < 8) {
+            exclusions.add(pos.toShortString() + ":" + reason);
+        }
+    }
+
+    private void logHomeSelection(VillagerEntityMCA villager, Set<Pair<Holder<PoiType>, BlockPos>> candidates, Path path, String result, List<String> exclusions) {
+        if (this.targetMemoryModuleType == MemoryModuleType.HOME && BedDebugLog.ENABLED) {
+            BedDebugLog.selection(villager, candidates.stream().map(Pair::getSecond).collect(Collectors.toSet()), path, result, exclusions);
         }
     }
 

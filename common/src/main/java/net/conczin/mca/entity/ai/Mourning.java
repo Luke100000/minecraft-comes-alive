@@ -1,5 +1,6 @@
 package net.conczin.mca.entity.ai;
 
+import net.conczin.mca.Config;
 import net.conczin.mca.block.TombstoneBlock;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
@@ -11,10 +12,12 @@ import net.conczin.mca.server.world.data.Village;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.schedule.Activity;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.AABB;
@@ -40,6 +43,11 @@ public final class Mourning {
     }
 
     public static void resume(VillagerEntityMCA villager) {
+        if (!Config.getInstance().enableMourning) {
+            pause(villager);
+            return;
+        }
+
         villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION);
         villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_RETRY_AT);
 
@@ -63,18 +71,21 @@ public final class Mourning {
     }
 
     public static void clear(VillagerEntityMCA villager) {
+        restorePreviousHand(villager);
         villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_SITE);
         villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION);
         villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_RETRY_AT);
     }
 
     public static void pause(VillagerEntityMCA villager) {
+        restorePreviousHand(villager);
         clearOwnedMovement(villager);
         villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_RETRY_AT);
         leaveGrievingActivity(villager);
     }
 
     public static void retry(VillagerEntityMCA villager) {
+        restorePreviousHand(villager);
         clearMovement(villager);
         villager.getBrain().setMemory(
                 MemoryModuleTypeMCA.MOURNING_RETRY_AT,
@@ -84,6 +95,7 @@ public final class Mourning {
     }
 
     public static void deferUnsafe(VillagerEntityMCA villager) {
+        restorePreviousHand(villager);
         clearOwnedMovement(villager);
         villager.getBrain().setMemory(
                 MemoryModuleTypeMCA.MOURNING_RETRY_AT,
@@ -96,6 +108,20 @@ public final class Mourning {
         clear(villager);
         clearMovement(villager);
         leaveGrievingActivity(villager);
+    }
+
+    private static void restorePreviousHand(VillagerEntityMCA villager) {
+        ItemStack currentMainHand = villager.getMainHandItem();
+        villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_FLOWER)
+                .filter(mourningFlower -> ItemStack.matches(currentMainHand, mourningFlower))
+                .flatMap(mourningFlower -> villager.getBrain()
+                        .getMemoryInternal(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND))
+                .ifPresent(previousMainHand -> villager.setItemInHand(
+                        InteractionHand.MAIN_HAND,
+                        previousMainHand.copy()
+                ));
+        villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND);
+        villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_FLOWER);
     }
 
     private static void clearMovement(VillagerEntityMCA villager) {
@@ -133,6 +159,11 @@ public final class Mourning {
     }
 
     private static void leaveGrievingActivity(VillagerEntityMCA villager) {
+        // Disabling the feature cancels the assignment, including safety and movement retries.
+        if (!Config.getInstance().enableMourning) {
+            clear(villager);
+        }
+
         if (!villager.getBrain().isActive(ActivitiesMCA.GRIEVE)) {
             return;
         }
@@ -147,7 +178,12 @@ public final class Mourning {
     }
 
     public static boolean isTemporarilyBlocked(VillagerEntityMCA villager) {
-        return isInterrupted(villager)
+        return !Config.getInstance().enableMourning
+                || isInterrupted(villager)
+                || villager.isSleeping()
+                // GRIEVE has no schedule updater, so check the scheduled activity itself.
+                || villager.getBrain().getSchedule()
+                        .getActivityAt((int) (villager.level().getDayTime() % 24_000L)) == Activity.REST
                 || villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isPresent()
                 || villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.STAYING).isPresent();
     }

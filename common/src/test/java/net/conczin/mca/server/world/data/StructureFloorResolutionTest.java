@@ -2,6 +2,7 @@ package net.conczin.mca.server.world.data;
 
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.Bootstrap;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -24,7 +25,7 @@ class StructureFloorResolutionTest {
     @Test
     void structureBoundsAreDerivedFromFloorGeometryAndNotPersistedSeparately() {
         StructureFloor floor = TestStructureFloors.create(0, 64, 70, 0,
-                BuildingFloorRegion.fromFootprint(64, Set.of(
+                TestFloorFootprint.fromFootprint(64, Set.of(
                         new BlockPos(2, 64, 3), new BlockPos(5, 64, 7))));
         Structure structure = new Structure(10, new BlockPos(2, 64, 3), List.of(floor));
 
@@ -74,6 +75,46 @@ class StructureFloorResolutionTest {
     }
 
     @Test
+    void newlyObservedLadderEntryKeepsItsPersistedConnectorRoom() {
+        BlockPos ladder = new BlockPos(0, 64, 0);
+        BlockPos landing = new BlockPos(1, 64, 0);
+        StructureFloor floor = TestStructureFloors.create(0, 64, 68, 0,
+                TestFloorFootprint.fromFootprint(64, Set.of(ladder, landing)),
+                List.of(new FloorConnector.Marker(ladder, FloorConnector.Type.LADDER, landing)));
+        Structure structure = structure(floor);
+        Building room = room(100, 10, 0, Set.of(landing));
+
+        Structure.InteractionPosition interaction = structure.resolveVerticalSide(
+                ladder, List.of(ladder, ladder.above()), List.of(room)).orElseThrow();
+
+        assertEquals(floor, interaction.floor());
+        assertEquals(room, interaction.room());
+        assertTrue(structure.resolveVerticalSide(ladder, List.of(), List.of(room))
+                .orElseThrow().room() == null);
+    }
+
+    @Test
+    void unregisteredLadderEntryDoesNotChooseBetweenConflictingConnectorRooms() {
+        BlockPos ladder = new BlockPos(0, 64, 0);
+        BlockPos firstCell = new BlockPos(1, 64, 0);
+        BlockPos secondCell = new BlockPos(-1, 64, 0);
+        StructureFloor floor = TestStructureFloors.create(0, 64, 68, 0,
+                TestFloorFootprint.fromFootprint(64, Set.of(ladder, firstCell, secondCell)),
+                List.of(new FloorConnector.Marker(ladder, FloorConnector.Type.LADDER, firstCell),
+                        new FloorConnector.Marker(ladder.above(), FloorConnector.Type.LADDER, secondCell)));
+        Structure structure = structure(floor);
+        Building first = room(100, 10, 0, Set.of(firstCell));
+        Building second = room(101, 10, 0, Set.of(secondCell));
+
+        assertTrue(structure.resolveVerticalSide(ladder, List.of(ladder, ladder.above()), List.of(first, second))
+                .orElseThrow().room() == null);
+
+        Building exactOwner = room(102, 10, 0, Set.of(ladder));
+        assertEquals(exactOwner, structure.resolveVerticalSide(
+                ladder, List.of(ladder, ladder.above()), List.of(first, second, exactOwner)).orElseThrow().room());
+    }
+
+    @Test
     void interactionOnSupportBlockImmediatelyBelowFloorUsesPersistedFloorGeometry() {
         StructureFloor floor = floor(0, 64, 68);
         Structure structure = structure(floor);
@@ -90,11 +131,11 @@ class StructureFloorResolutionTest {
     void verticalConnectorBlockImmediatelyBelowGroundFloorResolvesToGroundFloor() {
         BlockPos connectorColumn = new BlockPos(0, 88, 0);
         StructureFloor basementFloor = TestStructureFloors.create(0, 84, 87, -1,
-                BuildingFloorRegion.fromFootprint(84, Set.of(new BlockPos(0, 84, 0))),
+                TestFloorFootprint.fromFootprint(84, Set.of(new BlockPos(0, 84, 0))),
                 List.of(new FloorConnector.Marker(
                         new BlockPos(0, 84, 0), FloorConnector.Type.TRAPDOOR)));
         StructureFloor groundFloor = TestStructureFloors.create(0, 88, 92, 0,
-                BuildingFloorRegion.fromFootprint(88, Set.of(connectorColumn)),
+                TestFloorFootprint.fromFootprint(88, Set.of(connectorColumn)),
                 List.of(new FloorConnector.Marker(
                         connectorColumn, FloorConnector.Type.TRAPDOOR)));
         Structure basement = new Structure(10, new BlockPos(0, 84, 0), List.of(basementFloor));
@@ -120,7 +161,7 @@ class StructureFloorResolutionTest {
         BlockPos floorCell = new BlockPos(0, 64, 0);
         BlockPos trapdoor = new BlockPos(1, 63, 0);
         StructureFloor floor = TestStructureFloors.create(0, 64, 68, 0,
-                BuildingFloorRegion.fromFootprint(64, Set.of(floorCell)),
+                TestFloorFootprint.fromFootprint(64, Set.of(floorCell)),
                 List.of(new FloorConnector.Marker(
                         trapdoor, FloorConnector.Type.TRAPDOOR, floorCell)));
         Structure structure = new Structure(10, floorCell, List.of(floor));
@@ -136,6 +177,57 @@ class StructureFloorResolutionTest {
         assertEquals(room, interaction.room());
         assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
         assertEquals(room, plan.currentRoom().orElseThrow());
+    }
+
+    @Test
+    void snapshotTrapdoorOwnerSideSelectsTheSameVerticalRoomSide() {
+        BlockPos lowerCell = new BlockPos(0, 63, 0);
+        BlockPos trapdoor = new BlockPos(0, 64, 0);
+        BlockPos upperCell = new BlockPos(0, 65, 0);
+        StructureFloor lowerFloor = TestStructureFloors.create(0, 63, 64, -1,
+                TestFloorFootprint.fromFootprint(63, Set.of(lowerCell)),
+                List.of(new FloorConnector.Marker(
+                        trapdoor, FloorConnector.Type.TRAPDOOR, lowerCell, Direction.UP)));
+        StructureFloor upperFloor = TestStructureFloors.create(0, 65, 69, 0,
+                TestFloorFootprint.fromFootprint(65, Set.of(upperCell)),
+                List.of(new FloorConnector.Marker(
+                        trapdoor, FloorConnector.Type.TRAPDOOR, upperCell, Direction.UP)));
+        Structure lower = new Structure(10, lowerCell, List.of(lowerFloor));
+        Structure upper = new Structure(11, upperCell, List.of(upperFloor));
+        lower.setLogicalBuildingId(10);
+        upper.setLogicalBuildingId(10);
+        Building lowerRoom = room(100, 10, 0, Set.of(lowerCell));
+        Building upperRoom = room(101, 11, 0, Set.of(upperCell));
+        Village village = new Village(1, null);
+        village.registerStructure(lower, lowerRoom);
+        village.registerStructure(upper, upperRoom);
+
+        RoomScanPlan plan = village.getRoomScanPlan(null, trapdoor);
+
+        assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode());
+        assertEquals(upperRoom, plan.currentRoom().orElseThrow());
+    }
+
+    @Test
+    void oldSnapshotSharedTrapdoorDoesNotGuessBetweenVerticalRooms() {
+        BlockPos lowerCell = new BlockPos(0, 63, 0);
+        BlockPos trapdoor = new BlockPos(0, 64, 0);
+        BlockPos upperCell = new BlockPos(0, 65, 0);
+        StructureFloor lowerFloor = TestStructureFloors.create(0, 63, 64, -1,
+                TestFloorFootprint.fromFootprint(63, Set.of(lowerCell)),
+                List.of(new FloorConnector.Marker(trapdoor, FloorConnector.Type.TRAPDOOR, lowerCell)));
+        StructureFloor upperFloor = TestStructureFloors.create(0, 65, 69, 0,
+                TestFloorFootprint.fromFootprint(65, Set.of(upperCell)),
+                List.of(new FloorConnector.Marker(trapdoor, FloorConnector.Type.TRAPDOOR, upperCell)));
+        Structure lower = new Structure(10, lowerCell, List.of(lowerFloor));
+        Structure upper = new Structure(11, upperCell, List.of(upperFloor));
+        lower.setLogicalBuildingId(10);
+        upper.setLogicalBuildingId(10);
+        Village village = new Village(1, null);
+        village.registerStructure(lower, room(100, 10, 0, Set.of(lowerCell)));
+        village.registerStructure(upper, room(101, 11, 0, Set.of(upperCell)));
+
+        assertTrue(village.resolveInteractionPosition(null, trapdoor).isEmpty());
     }
 
     @Test
@@ -192,7 +284,7 @@ class StructureFloorResolutionTest {
     void reloadingUnownedConnectorDoesNotInventRoomOwnership() {
         BlockPos connector = new BlockPos(1, 64, 0);
         StructureFloor floor = TestStructureFloors.create(0, 64, 68, 0,
-                BuildingFloorRegion.fromFootprint(64, Set.of(
+                TestFloorFootprint.fromFootprint(64, Set.of(
                         new BlockPos(0, 64, 0), connector, new BlockPos(2, 64, 0),
                         new BlockPos(3, 64, 0), new BlockPos(4, 64, 0))),
                 List.of(new FloorConnector.Marker(
@@ -218,7 +310,7 @@ class StructureFloorResolutionTest {
     void reloadingCurrentSharedConnectorDoesNotInventRoomOwnership() {
         BlockPos connector = new BlockPos(2, 64, 0);
         StructureFloor floor = TestStructureFloors.create(0, 64, 68, 0,
-                BuildingFloorRegion.fromFootprint(64, Set.of(
+                TestFloorFootprint.fromFootprint(64, Set.of(
                         new BlockPos(0, 64, 0), new BlockPos(1, 64, 0), connector,
                         new BlockPos(3, 64, 0), new BlockPos(4, 64, 0), new BlockPos(5, 64, 0))),
                 List.of(new FloorConnector.Marker(
@@ -258,7 +350,7 @@ class StructureFloorResolutionTest {
     }
 
     private static StructureFloor floor(int id, int anchorY, int ceilingY) {
-        BuildingFloorRegion region = BuildingFloorRegion.fromFootprint(
+        TestFloorFootprint region = TestFloorFootprint.fromFootprint(
                 anchorY, Set.of(new BlockPos(0, anchorY, 0)));
         return TestStructureFloors.create(id, anchorY, ceilingY, id, region);
     }

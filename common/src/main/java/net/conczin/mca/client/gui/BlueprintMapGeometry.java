@@ -63,11 +63,11 @@ final class BlueprintMapGeometry {
     }
 
     private List<MapFootprintLayer> allRoomLayers() {
-        if (allRoomLayers == null) allRoomLayers = buildRoomLayers(null);
+        if (allRoomLayers == null) allRoomLayers = buildRoomLayers();
         return allRoomLayers;
     }
 
-    private List<MapFootprintLayer> buildRoomLayers(Integer selectedFloor) {
+    private List<MapFootprintLayer> buildRoomLayers() {
         List<Building> rooms = village.getRooms()
                 .sorted(Comparator.comparingInt((Building room) ->
                                 village.getLogicalBuildingId(room.getStructureId()))
@@ -76,7 +76,6 @@ final class BlueprintMapGeometry {
         List<MapFootprintLayer> layers = new ArrayList<>();
         for (Building room : rooms) {
             int floorNum = room.getFloorNumber(village);
-            if (selectedFloor != null && floorNum != selectedFloor) continue;
             Set<BlueprintMapFootprint.Cell> footprintCells = roomFootprint(room);
             if (footprintCells.isEmpty()) continue;
             BlueprintMapFootprint.Shape shape = BlueprintMapFootprint.shape(footprintCells);
@@ -226,13 +225,7 @@ final class BlueprintMapGeometry {
     }
 
     private static Set<BlueprintMapFootprint.Cell> roomFootprint(Building building) {
-        Set<BlueprintMapFootprint.Cell> cells = building.getFloorRegion()
-                .map(BlueprintMapFootprint::fromFloorRegion)
-                .orElseGet(Set::of);
-        if (!cells.isEmpty()) return cells;
-        BlockPos min = building.getRawPos0();
-        BlockPos max = building.getRawPos1();
-        return BlueprintMapFootprint.rectangle(min.getX(), min.getZ(), max.getX(), max.getZ());
+        return BlueprintMapFootprint.fromBlockPositions(building.getFloorCells());
     }
 
     /** Always returns a point inside the actual visible footprint closest to its centroid. */

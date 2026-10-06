@@ -141,7 +141,7 @@ class RoomTypeResolverTest {
 
     private static StructureFloor floor(int anchorY, int ceilingY) {
         return TestStructureFloors.create(0, anchorY, ceilingY,
-                BuildingFloorRegion.fromFootprint(anchorY, Set.of(new BlockPos(0, anchorY, 0))));
+                TestFloorFootprint.fromFootprint(anchorY, Set.of(new BlockPos(0, anchorY, 0))));
     }
 
     private static void registerStructure(Village village, Structure structure, Building room) {

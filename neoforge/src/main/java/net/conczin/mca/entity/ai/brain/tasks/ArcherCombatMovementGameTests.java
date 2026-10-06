@@ -33,7 +33,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.ArrayDeque;
@@ -41,10 +40,10 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class ArcherCombatMovementGameTests {
     private static final List<Entity> TEST_ENTITIES = new ArrayList<>();
@@ -212,6 +211,37 @@ public final class ArcherCombatMovementGameTests {
                 "ordinary idle movement did not resume after combat ended"
         );
         idleMovement.doStop(helper.getLevel(), archer, time + 1);
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_rest_combat_ownership", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 60)
+    public static void restWanderingCannotPreemptCombatMovement(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        prepareFlatArea(helper, start, 6);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        archer.setNoAi(true);
+        Zombie target = spawnTarget(helper, start.east(10));
+        archer.getBrain().eraseMemory(MemoryModuleType.HOME);
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+
+        var restMovement = VillagerTasksMCA.getRestPackage(0.5F).stream()
+                .map(com.mojang.datafixers.util.Pair::getSecond)
+                .filter(task -> task instanceof net.minecraft.world.entity.ai.behavior.RunOne<?>)
+                .findFirst()
+                .orElseThrow();
+        long time = helper.getLevel().getGameTime();
+        helper.assertTrue(!restMovement.tryStart(helper.getLevel(), archer, time),
+                "rest movement issued an unrelated WALK_TARGET while the archer had an attack target");
+        helper.assertTrue(archer.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty(),
+                "rest movement replaced combat navigation");
+
+        archer.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
+        helper.assertTrue(restMovement.tryStart(helper.getLevel(), archer, time + 1),
+                "normal rest movement did not resume after the attack target was removed");
+        restMovement.doStop(helper.getLevel(), archer, time + 1);
+        cleanupTestEntities();
         helper.succeed();
     }
 
@@ -457,6 +487,43 @@ public final class ArcherCombatMovementGameTests {
                 "emergency escape candidate moved closer to the east threat");
         helper.assertTrue(destination.distanceToSqr(westThreat.position()) > westInitial,
                 "emergency escape candidate moved closer to the west threat");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_escape_gate", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void emergencyEscapeCanRouteThroughClosedHandOperableGate(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        prepareFlatArea(helper, start, 8);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        Zombie threat = spawnTarget(helper, start.east(3));
+        archer.setOnGround(true);
+
+        setWallColumn(helper, start.north());
+        setWallColumn(helper, start.south());
+        setWallColumn(helper, start.east());
+        helper.getLevel().setBlock(start.west(), Blocks.OAK_FENCE_GATE.defaultBlockState(), 3);
+        for (int offset = 1; offset <= 6; offset++) {
+            setWallColumn(helper, start.west(offset).north());
+            setWallColumn(helper, start.west(offset).south());
+        }
+
+        var escapeTarget = RangedCombatPositioning.findEmergencyEscapeTarget(
+                archer, List.of(threat), List.of(threat), 6.0D
+        ).orElseThrow(() -> new AssertionError("closed hand-operable gate hid the only escape lane"));
+        var path = archer.getNavigation().createPath(escapeTarget.getPathTargets(archer), 0);
+
+        helper.assertTrue(path != null && path.canReach(),
+                "MCA navigation could not reach the escape lane through the closed gate");
+        boolean routesPastGate = false;
+        for (int index = 0; index < path.getNodeCount(); index++) {
+            if (path.getNodePos(index).getX() < start.getX() - 1) {
+                routesPastGate = true;
+                break;
+            }
+        }
+        helper.assertTrue(routesPastGate,
+                "escape path stopped at the closed gate instead of routing through it: target=" + path.getTarget());
         helper.succeed();
     }
 
@@ -1640,6 +1707,87 @@ public final class ArcherCombatMovementGameTests {
 
         helper.assertTrue(archer.getMainHandItem().is(Items.BOW),
                 "EquipmentTask cleared the archer bow from a stale off-duty cache after combat resumed");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_equipment_supplier", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void successfulEquipmentStartResolvesSupplierOnce(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
+        prepareFlatArea(helper, start, 8);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        archer.setNoAi(true);
+        archer.getVillagerBrain().setArmorWear(false);
+        archer.getBrain().eraseMemory(MemoryModuleTypeMCA.WEARS_ARMOR);
+        archer.setItemSlot(archer.getDominantSlot(), ItemStack.EMPTY);
+
+        AtomicInteger conditionCalls = new AtomicInteger();
+        AtomicInteger supplierCalls = new AtomicInteger();
+        EquipmentTask equipment = new EquipmentTask(ignored -> {
+            conditionCalls.incrementAndGet();
+            return true;
+        }, ignored -> {
+            supplierCalls.incrementAndGet();
+            return EquipmentSet.ARCHER_0;
+        });
+        long gameTime = helper.getLevel().getGameTime();
+
+        archer.tickCount = 0;
+        helper.assertTrue(equipment.tryStart(helper.getLevel(), archer, gameTime),
+                "equipment fixture did not start while missing its bow");
+        helper.assertTrue(conditionCalls.get() == 1,
+                "successful start evaluated the live duty predicate more than once: " + conditionCalls.get());
+        helper.assertTrue(supplierCalls.get() == 1,
+                "successful start looked up equipment more than once after a fresh start-condition lookup: "
+                        + supplierCalls.get());
+        helper.assertTrue(archer.getItemBySlot(archer.getDominantSlot()).is(Items.BOW),
+                "equipment fixture did not equip the requested bow");
+
+        equipment.tickOrStop(helper.getLevel(), archer, gameTime + 1);
+        archer.tickCount = 1;
+        archer.setItemSlot(archer.getDominantSlot(), ItemStack.EMPTY);
+        helper.assertTrue(equipment.tryStart(helper.getLevel(), archer, gameTime + 2),
+                "equipment fixture did not restart when the bow was removed");
+        helper.assertTrue(conditionCalls.get() == 2,
+                "later successful start evaluated the live duty predicate more than once: " + conditionCalls.get());
+        helper.assertTrue(supplierCalls.get() == 2,
+                "a later successful start reused an older cached selection instead of refreshing it");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_equipment_visibility", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void armorVisibilityBypassResolvesCurrentEquipment(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
+        prepareFlatArea(helper, start, 8);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        archer.setNoAi(true);
+        archer.getVillagerBrain().setArmorWear(false);
+        archer.setItemSlot(archer.getDominantSlot(), Items.BOW.getDefaultInstance());
+        archer.getBrain().setMemory(MemoryModuleTypeMCA.WEARS_ARMOR, true);
+
+        AtomicBoolean onDuty = new AtomicBoolean(true);
+        AtomicInteger supplierCalls = new AtomicInteger();
+        EquipmentTask equipment = new EquipmentTask(ignored -> onDuty.get(), ignored ->
+                supplierCalls.incrementAndGet() == 1 ? EquipmentSet.ARCHER_0 : EquipmentSet.ARCHER_2);
+        long gameTime = helper.getLevel().getGameTime();
+
+        archer.tickCount = 0;
+        helper.assertTrue(!equipment.tryStart(helper.getLevel(), archer, gameTime),
+                "equipment fixture unexpectedly started while its bow was already equipped");
+        helper.assertTrue(supplierCalls.get() == 1, "equipment fixture did not populate its cached set");
+
+        onDuty.set(false);
+        archer.getVillagerBrain().setArmorWear(true);
+        archer.tickCount = 1;
+        helper.assertTrue(equipment.tryStart(helper.getLevel(), archer, gameTime + 1),
+                "armor visibility change did not start equipment handling");
+        helper.assertTrue(supplierCalls.get() == 2,
+                "armor visibility bypass reused stale equipment or evaluated the supplier more than once");
+        helper.assertTrue(archer.getItemBySlot(EquipmentSlot.CHEST).is(Items.DIAMOND_CHESTPLATE),
+                "armor visibility change did not apply the newly selected armor");
         helper.succeed();
     }
 

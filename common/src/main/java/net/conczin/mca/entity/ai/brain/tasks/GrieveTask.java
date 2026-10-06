@@ -19,6 +19,8 @@ public class GrieveTask extends Behavior<VillagerEntityMCA> {
     @Override
     protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA entity) {
         if (!Config.getInstance().enableMourning) {
+            // Reloaded flower ownership can outlive the original graveside behavior.
+            Mourning.pause(entity);
             return false;
         }
 

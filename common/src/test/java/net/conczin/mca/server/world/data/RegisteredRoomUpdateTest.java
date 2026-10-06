@@ -50,8 +50,6 @@ class RegisteredRoomUpdateTest {
                 BlockPos.ZERO,
                 null,
                 null,
-                10,
-                0,
                 20,
                 replacement,
                 matchingTypes);

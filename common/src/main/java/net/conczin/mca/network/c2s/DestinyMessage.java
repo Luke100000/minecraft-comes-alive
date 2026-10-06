@@ -55,11 +55,13 @@ public record DestinyMessage(Optional<DestinyDestination> destination) implement
         }
 
         if (destination.isEmpty()) {
+            // Also sent when the story finishes: effect cleanup must not cancel its teleport.
             serverPlayer.removeEffect(MobEffects.INVISIBILITY);
             serverPlayer.removeEffect(MobEffects.HEALTH_BOOST);
             return;
         }
 
+        MCA.getStructureLocator().cancel(serverPlayer.getUUID());
         DestinyDestination selectedDestination = destination.get();
         List<DestinyDestination> allowedDestinations =
                 DestinyLocationResolver.getCachedDestinations(serverPlayer.server);
@@ -80,20 +82,26 @@ public record DestinyMessage(Optional<DestinyDestination> destination) implement
         }
 
         BlockPos searchOrigin = getSearchOrigin(serverPlayer, targetLevel);
-        MCA.executorService.execute(() -> {
-            Optional<BlockPos> result = DestinyLocationResolver.findNearest(
-                    targetLevel,
-                    searchOrigin,
-                    selectedDestination,
-                    128
-            );
+        ServerLevel sourceLevel = serverPlayer.serverLevel();
+        DestinyLocationResolver.findNearestAsync(
+                serverPlayer.getUUID(),
+                targetLevel,
+                searchOrigin,
+                selectedDestination,
+                128
+        ).thenAccept(result -> {
+            if (serverPlayer.isRemoved() || serverPlayer.serverLevel() != sourceLevel
+                    || !Config.getInstance().allowDestinyTeleportation
+                    || !DestinyLocationResolver.getCachedDestinations(serverPlayer.server).contains(selectedDestination)) {
+                return;
+            }
             result.ifPresentOrElse(
-                    pos -> serverPlayer.server.execute(() -> handleBlockPos(
+                    pos -> handleBlockPos(
                             serverPlayer,
                             targetLevel,
                             selectedDestination.location(),
                             pos
-                    )),
+                    ),
                     () -> notifyDestinationNotFound(serverPlayer)
             );
         });
@@ -112,9 +120,9 @@ public record DestinyMessage(Optional<DestinyDestination> destination) implement
     }
 
     private static void notifyDestinationNotFound(ServerPlayer player) {
-        player.server.execute(() -> player.sendSystemMessage(
+        player.sendSystemMessage(
                 Component.translatable("destiny.teleport.failed").withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC)
-        ));
+        );
     }
 
     private static void handleBlockPos(
@@ -123,7 +131,11 @@ public record DestinyMessage(Optional<DestinyDestination> destination) implement
             String location,
             BlockPos pos
     ) {
-        targetLevel.getChunkAt(pos);
+        // The async locator has already requested the destination at FULL status.
+        if (targetLevel.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4) == null) {
+            notifyDestinationNotFound(player);
+            return;
+        }
         if (location.equals("minecraft:ancient_city")) {
             pos = new BlockPos(pos.getX(), -50, pos.getZ());
         } else {

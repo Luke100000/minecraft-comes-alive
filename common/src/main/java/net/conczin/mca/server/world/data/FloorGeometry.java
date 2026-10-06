@@ -90,6 +90,7 @@ final class FloorGeometry {
         return Optional.ofNullable(cellsByPosition.get(feet));
     }
 
+    /** Legacy representative height; fresh scans use their ordinary surface evidence. */
     int anchorY() {
         Map<Integer, Long> counts = cells.stream().collect(Collectors.groupingBy(
                 cell -> cell.feet().getY(), Collectors.counting()));
@@ -140,14 +141,6 @@ final class FloorGeometry {
         return cellsAtColumn(x, z).stream()
                 .filter(cell -> y == cell.feet().getY() - 1)
                 .max(Comparator.comparingInt(cell -> cell.feet().getY()));
-    }
-
-    BuildingFloorRegion projection() {
-        int y = anchorY();
-        Set<BlockPos> projected = cells.stream()
-                .map(cell -> new BlockPos(cell.feet().getX(), y, cell.feet().getZ()))
-                .collect(Collectors.toUnmodifiableSet());
-        return BuildingFloorRegion.fromFootprint(y, projected);
     }
 
     boolean sameProjectedFootprint(FloorGeometry other) {

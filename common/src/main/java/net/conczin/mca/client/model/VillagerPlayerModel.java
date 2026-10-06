@@ -97,7 +97,7 @@ public class VillagerPlayerModel<T extends LivingEntity & VillagerLike<T>> exten
         if (villager.isBaby()) {
             limbAngle /= 3.0F;
         }
-        limbAngle /= 0.2F + villager.getRawVerticalScaleFactor();
+        limbAngle /= 0.2F + villager.getVisualVerticalScaleFactor();
 
         super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
         applyPanicAnimation(villager, animationProgress);

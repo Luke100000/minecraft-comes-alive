@@ -6,28 +6,28 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Comparator;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
-/** Stable persisted identity for one semantic Floor around exact 3D geometry. */
-public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
-    static final int BAND_TOLERANCE = 2;
+/**
+ * Registered Floor identity and storey reference around exact physical geometry.
+ * The scanner chooses anchorY from ordinary surface evidence; stairs and later
+ * room expansion must not move it. Cell membership is owned exclusively by geometry.
+ */
+public record StructureFloor(int id, int floorNumber, int anchorY, FloorGeometry geometry) {
+    // Physical overlap candidates use a local height window, not storey membership.
+    static final int ANCHOR_PROXIMITY = 2;
+
+    public StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
+        this(id, floorNumber, geometry.anchorY(), geometry);
+    }
 
     public StructureFloor {
         geometry = Objects.requireNonNull(geometry, "geometry");
         if (geometry.cells().isEmpty()) {
             throw new IllegalArgumentException("StructureFloor requires non-empty geometry");
         }
-    }
-
-    public int anchorY() {
-        return geometry.anchorY();
     }
 
     /** Derived projection only; never authoritative physical topology. */
@@ -39,61 +39,22 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
         return !geometry.cellsAtColumn(x, z).isEmpty();
     }
 
-    boolean sameSemanticBand(StructureFloor other) {
-        return other != null && sameSemanticBand(anchorY(), other.anchorY());
+    boolean hasNearbyAnchor(StructureFloor other) {
+        return other != null && hasNearbyAnchor(anchorY(), other.anchorY());
     }
 
-    static boolean sameSemanticBand(int firstAnchorY, int secondAnchorY) {
-        return Math.abs(firstAnchorY - secondAnchorY) <= BAND_TOLERANCE;
-    }
-
-    static Map<StructureFloor, Integer> floorNumbers(Collection<StructureFloor> floors,
-                                                     StructureFloor groundFloor) {
-        if (floors == null || groundFloor == null) return Map.of();
-        List<StructureFloor> ordered = floors.stream()
-                .filter(Objects::nonNull)
-                .sorted(Comparator.comparingInt(StructureFloor::anchorY)
-                        .thenComparingInt(StructureFloor::id))
-                .toList();
-        if (ordered.isEmpty()) return Map.of();
-
-        List<List<StructureFloor>> bands = new ArrayList<>();
-        for (StructureFloor floor : ordered) {
-            List<StructureFloor> band = bands.isEmpty() ? null : bands.getLast();
-            if (band == null || floor.anchorY() - band.getFirst().anchorY() > BAND_TOLERANCE) {
-                band = new ArrayList<>();
-                bands.add(band);
-            }
-            band.add(floor);
-        }
-
-        int groundBand = -1;
-        for (int index = 0; index < bands.size() && groundBand < 0; index++) {
-            if (bands.get(index).stream().anyMatch(groundFloor::equals)) groundBand = index;
-        }
-        if (groundBand < 0) return Map.of();
-
-        Map<StructureFloor, Integer> numbers = new HashMap<>();
-        for (int bandIndex = 0; bandIndex < bands.size(); bandIndex++) {
-            int floorNumber = bandIndex - groundBand;
-            for (StructureFloor floor : bands.get(bandIndex)) numbers.put(floor, floorNumber);
-        }
-        return Map.copyOf(numbers);
+    static boolean hasNearbyAnchor(int firstAnchorY, int secondAnchorY) {
+        return Math.abs((long) firstAnchorY - secondAnchorY) <= ANCHOR_PROXIMITY;
     }
 
     boolean overlapsFootprint(StructureFloor other) {
         return other != null && geometry.footprintIntersectionArea(other.geometry) > 0;
     }
 
-    boolean overlapsSameSemanticBand(StructureFloor other) {
-        return other != null && overlapsSameSemanticBand(other.geometry);
-    }
-
-    /** Persisted-Floor candidate overlap for a freshly observed exact geometry. */
-    boolean overlapsSameSemanticBand(FloorGeometry other) {
+    boolean overlapsNearbyFloorBand(StructureFloor other) {
         return other != null
-                && sameSemanticBand(anchorY(), other.anchorY())
-                && geometry.footprintIntersectionArea(other) > 0;
+                && hasNearbyAnchor(other)
+                && geometry.footprintIntersectionArea(other.geometry) > 0;
     }
 
     int verticalGapTo(StructureFloor other) {
@@ -107,7 +68,7 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
     }
 
     int attachmentGapTo(StructureFloor other) {
-        if (sameSemanticBand(other)) return -1;
+        if (hasNearbyAnchor(other)) return -1;
         return Math.max(0, verticalGapTo(other));
     }
 
@@ -123,6 +84,7 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
         tag.putInt("floorNumber", floorNumber);
+        tag.putInt("anchorY", anchorY);
         tag.put("cells", NbtHelper.fromList(geometry.cells().stream()
                 .sorted(Comparator
                         .comparingInt((FloorGeometry.Cell cell) -> cell.feet().getX())
@@ -142,15 +104,17 @@ public record StructureFloor(int id, int floorNumber, FloorGeometry geometry) {
         List<FloorGeometry.Cell> cells = NbtHelper.toList(
                 tag.getList("cells", Tag.TAG_COMPOUND), value -> loadCell((CompoundTag) value));
         int floorNumber = tag.contains("floorNumber", Tag.TAG_INT) ? tag.getInt("floorNumber") : 0;
-        return new StructureFloor(tag.getInt("id"), floorNumber,
-                new FloorGeometry(cells, loadMarkers(tag).stream()
-                        .filter(marker -> cells.stream()
-                                .anyMatch(cell -> cell.feet().equals(marker.floorCell())))
-                        .toList()));
+        FloorGeometry geometry = new FloorGeometry(cells, loadMarkers(tag).stream()
+                .filter(marker -> cells.stream()
+                        .anyMatch(cell -> cell.feet().equals(marker.floorCell())))
+                .toList());
+        // Older saves derived this height from geometry; preserve that interpretation.
+        int anchorY = tag.contains("anchorY", Tag.TAG_INT) ? tag.getInt("anchorY") : geometry.anchorY();
+        return new StructureFloor(tag.getInt("id"), floorNumber, anchorY, geometry);
     }
 
     public StructureFloor withFloorNumber(int newFloorNumber) {
-        return new StructureFloor(id, newFloorNumber, geometry);
+        return new StructureFloor(id, newFloorNumber, anchorY, geometry);
     }
 
     private static CompoundTag saveCell(FloorGeometry.Cell cell) {

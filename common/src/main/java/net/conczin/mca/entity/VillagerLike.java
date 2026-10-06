@@ -49,6 +49,13 @@ import java.util.function.ToDoubleFunction;
 import static net.minecraft.world.entity.LivingEntity.getSlotForHand;
 
 public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrackedEntity<E>, VillagerDataHolder, Infectable, Messenger {
+    float MAX_PHYSICAL_SCALE = 0.999F;
+    /** PlayerRenderer's model scale; vanilla player dimensions are measured against the model at this scale. */
+    float PLAYER_RENDER_SCALE = 0.9375F;
+    /** PlayerModel height (32 px) before renderer scaling. MCA renders the model without PLAYER_RENDER_SCALE. */
+    float PLAYER_MODEL_HEIGHT = 2.0F;
+    float PLAYER_MODEL_EYE_HEIGHT = Player.DEFAULT_EYE_HEIGHT / PLAYER_RENDER_SCALE;
+    float PLAYER_MODEL_NAME_TAG_HEIGHT = Player.STANDING_DIMENSIONS.height() / PLAYER_RENDER_SCALE;
     CDataParameter<String> CLOTHES = CParameter.create("Clothes", "");
     CDataParameter<Boolean> CLOTHING_LOCKED = CParameter.create("ClothingLocked", false);
     CDataParameter<String> SKIN = CParameter.create("Skin", "");
@@ -438,26 +445,29 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         return old != AgeState.UNASSIGNED;
     }
 
-    default float getHorizontalScaleFactor() {
-        if (getGenetics() == null || Config.getInstance().useSquidwardModels) {
-            return asEntity().isBaby() ? 0.5f : 1.0f;
-        } else {
-            return Math.min(0.999f, getRawHorizontalScaleFactor());
-        }
+    /** Scale used by collision/physical dimensions. */
+    default float getPhysicalHorizontalScaleFactor() {
+        return Math.min(MAX_PHYSICAL_SCALE, getVisualHorizontalScaleFactor());
     }
 
-    default float getRawHorizontalScaleFactor() {
+    /** Uncapped scale used by the rendered model. */
+    default float getVisualHorizontalScaleFactor() {
+        if (getGenetics() == null || Config.getInstance().useSquidwardModels) {
+            return asEntity().isBaby() ? 0.5f : 1.0f;
+        }
         return getGenetics().getHorizontalScaleFactor()
                * getTraits().getHorizontalScaleFactor()
                * getVillagerDimensions().getWidth()
                * getGenetics().getGender().getHorizontalScaleFactor();
     }
 
-    default float getVerticalScaleFactor() {
-        return Math.min(0.999f, getRawVerticalScaleFactor());
+    /** Scale used by collision/physical dimensions. */
+    default float getPhysicalVerticalScaleFactor() {
+        return Math.min(MAX_PHYSICAL_SCALE, getVisualVerticalScaleFactor());
     }
 
-    default float getRawVerticalScaleFactor() {
+    /** Uncapped scale used by the rendered model. */
+    default float getVisualVerticalScaleFactor() {
         if (getGenetics() == null || Config.getInstance().useSquidwardModels) {
             return asEntity().isBaby() ? 0.5f : 1.0f;
         } else {
@@ -466,6 +476,21 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
                    * getVillagerDimensions().getHeight()
                    * getGenetics().getGender().getScaleFactor();
         }
+    }
+
+    /** Name tag anchor: vanilla's player name tag height, converted to the rendered PlayerModel scale. */
+    default float getVisualNameTagHeight() {
+        return PLAYER_MODEL_NAME_TAG_HEIGHT * getVisualVerticalScaleFactor();
+    }
+
+    /** Collision height; capped so villagers fit through two-block gaps. */
+    default float getPhysicalStandingHeight() {
+        return PLAYER_MODEL_HEIGHT * getPhysicalVerticalScaleFactor();
+    }
+
+    /** Eye height at the PlayerModel's eye line for the capped physical size. */
+    default float getPhysicalStandingEyeHeight() {
+        return PLAYER_MODEL_EYE_HEIGHT * getPhysicalVerticalScaleFactor();
     }
 
     @Override

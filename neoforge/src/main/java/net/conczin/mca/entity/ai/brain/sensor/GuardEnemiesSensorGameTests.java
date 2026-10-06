@@ -16,14 +16,11 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class GuardEnemiesSensorGameTests {
     private static final List<Entity> TEST_ENTITIES = new ArrayList<>();

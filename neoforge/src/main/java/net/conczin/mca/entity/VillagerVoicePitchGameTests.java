@@ -5,12 +5,9 @@ import net.conczin.mca.registry.EntitiesMCA;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.Objects;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class VillagerVoicePitchGameTests {
     private VillagerVoicePitchGameTests() {

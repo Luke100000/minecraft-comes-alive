@@ -162,6 +162,12 @@ final class RangedCombatPositioning {
             }
 
             Vec3 candidatePosition = Vec3.atBottomCenterOf(position);
+            // WALKABLE_DOOR nodes belong in the reachability graph so escape routing can pass
+            // through a closed hand-operable door/gate, but a collision-blocked transit node
+            // must never become the final escape target.
+            if (!hasStandingSpace(entity, candidatePosition)) {
+                continue;
+            }
             double candidateMinimumDistanceSquared = minimumDistanceSquared(candidatePosition, escapeThreats);
             if (candidateMinimumDistanceSquared <= currentMinimumDistanceSquared + MIN_USEFUL_DISTANCE_GAIN) {
                 continue;
@@ -254,9 +260,10 @@ final class RangedCombatPositioning {
 
     private static boolean isSafeEscapePosition(PathfinderMob entity, BlockPos position) {
         Vec3 candidate = Vec3.atBottomCenterOf(position);
+        PathType pathType = pathTypeAt(entity, position);
         return entity.getNavigation().isStableDestination(position)
-                && isWalkableDestination(entity, candidate)
-                && hasStandingSpace(entity, candidate);
+                && isTraversablePathType(pathType)
+                && (pathType == PathType.WALKABLE_DOOR || hasStandingSpace(entity, candidate));
     }
 
     private static OnwardReachability measureOnwardReachability(
@@ -775,8 +782,16 @@ final class RangedCombatPositioning {
     }
 
     private static boolean isWalkableDestination(PathfinderMob entity, Vec3 candidate) {
+        return isTraversablePathType(pathTypeAt(entity, BlockPos.containing(candidate)));
+    }
+
+    private static PathType pathTypeAt(PathfinderMob entity, BlockPos position) {
         NodeEvaluator evaluator = entity.getNavigation().getNodeEvaluator();
-        return evaluator == null || evaluator.getPathType(entity, BlockPos.containing(candidate)) == PathType.WALKABLE;
+        return evaluator == null ? null : evaluator.getPathType(entity, position);
+    }
+
+    private static boolean isTraversablePathType(PathType pathType) {
+        return pathType == null || pathType == PathType.WALKABLE || pathType == PathType.WALKABLE_DOOR;
     }
 
     private static boolean hasStandingSpace(PathfinderMob entity, Vec3 candidate) {

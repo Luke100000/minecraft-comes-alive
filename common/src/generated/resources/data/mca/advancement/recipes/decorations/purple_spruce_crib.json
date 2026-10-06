@@ -28,6 +28,5 @@
     "recipes": [
       "mca:purple_spruce_crib"
     ]
-  },
-  "sends_telemetry_event": false
+  }
 }

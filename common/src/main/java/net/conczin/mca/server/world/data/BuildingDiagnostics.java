@@ -26,9 +26,7 @@ public final class BuildingDiagnostics {
         VillageManager manager = VillageManager.get(world);
         RoomWorkflow roomWorkflow = new RoomWorkflow(manager, world);
         Village village = manager.findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
-        PlanAttempt planAttempt = planAttempt(() -> village == null
-                ? RoomScanPlan.addBuilding(pos)
-                : village.getRoomScanPlan(world, pos));
+        PlanAttempt planAttempt = planAttempt(() -> RoomScanPlanner.analyze(village, world, pos));
         if (planAttempt.failure() != null) {
             RuntimeException failure = planAttempt.failure();
             log(traceId, "roomPlanFailure position={} dimension={} village={} type={} message={}",
@@ -40,7 +38,7 @@ public final class BuildingDiagnostics {
             log(traceId, "verdict={}", verdict);
             return new Result(traceId, StructuralPosition.OUTSIDE, "SCAN_FAILED", verdict);
         }
-        RoomScanPlan plan = planAttempt.plan();
+        RoomScanPlan plan = planAttempt.analysis().plan();
         StructuralPosition position = structuralPosition(plan);
         String uiAction = uiAction(plan.mode());
 
@@ -74,7 +72,7 @@ public final class BuildingDiagnostics {
                 id(structureAt), id(interactionStructure), id(nearestStructure),
                 room == null ? "none" : room.getId(), room == null ? "none" : room.getFloorId());
 
-        StructureFloor freshPlayerFloor = null;
+        FloorGeometry freshPlayerFloor = null;
         if (inspected != null) {
             boolean contains = inspected.containsPos(pos);
             Structure.InteractionPosition interaction = inspected
@@ -105,7 +103,7 @@ public final class BuildingDiagnostics {
                 StructureFloor roomFloor = inspected.getFloor(room.getFloorId()).orElse(null);
                 boolean sameColumn = room.containsFloorColumn(pos.getX(), pos.getZ());
                 boolean elevatedWithinBand = roomFloor != null
-                        && pos.getY() > roomFloor.anchorY() + StructureFloor.BAND_TOLERANCE
+                        && pos.getY() > roomFloor.anchorY() + StructureFloor.ANCHOR_PROXIMITY
                         && pos.getY() < roomFloor.maxPhysicalCeilingY();
                 RoomTypeResolver.Context resolved = roomTypeResolver.resolve(room);
                 log(traceId, "room id={} directType={} effectiveType={} structureId={} floorId={} floor={} footprintArea={} ownPoi={} effectivePoi={} containsColumn={} elevatedWithinSameFloorBand={}",
@@ -122,21 +120,19 @@ public final class BuildingDiagnostics {
                     : StructureScanner.scanExistingFloor(
                     world, inspected, selectedFloor, pos, village.getStructures().values());
             freshPlayerFloor = scan.result() == Building.validationResult.SUCCESS
-                    ? scan.floor()
+                    ? scan.scannedFloor()
                     : null;
             log(traceId, "freshFloorScan persistedFloor={} result={} scanSeed={} bounds={}..{} freshFloor={}",
                     floor(selectedFloor), scan.result(), scan.source(), scan.min(), scan.max(),
                     floor(freshPlayerFloor));
-            logFloorDifference(traceId,
-                    selectedFloor == null ? List.of() : List.of(selectedFloor),
-                    scan.floor() == null ? List.of() : List.of(scan.floor()), verbose);
+            logFloorDifference(traceId, selectedFloor, scan.scannedFloor(), verbose);
         }
 
         Building.validationResult analysis = switch (plan.mode()) {
             case ADD_BUILDING -> roomWorkflow.analyzeBuildingAddition(pos).result();
             case ADD_ROOM -> roomWorkflow.analyzeRoom(pos).result();
             case ADD_ATTACHMENT -> roomWorkflow.analyzeAttachedRoom(
-                    village, plan, plan.targetBuildingId()).result();
+                    village, planAttempt.analysis(), plan.targetBuildingId()).result();
             case UPDATE_ROOM -> room == null
                     ? Building.validationResult.NOT_IN_BUILDING
                     : roomWorkflow.analyzeRegisteredRoomUpdate(village, room.getId(), pos).result();
@@ -183,7 +179,7 @@ public final class BuildingDiagnostics {
                 .orElse(null);
     }
 
-    static PlanAttempt planAttempt(Supplier<RoomScanPlan> supplier) {
+    static PlanAttempt planAttempt(Supplier<RoomScanPlanner.Analysis> supplier) {
         try {
             return new PlanAttempt(supplier.get(), null);
         } catch (RuntimeException failure) {
@@ -224,7 +220,7 @@ public final class BuildingDiagnostics {
                                   Structure structure,
                                   Collection<Building> rooms,
                                   Building room,
-                                  StructureFloor freshPlayerFloor,
+                                  FloorGeometry freshPlayerFloor,
                                   BlockPos pos,
                                   ServerLevel world) {
         if (structure == null) {
@@ -248,7 +244,7 @@ public final class BuildingDiagnostics {
                         + freshPlayerFloor.anchorY();
             }
             if (persistentRoomFloor != null
-                    && pos.getY() > persistentRoomFloor.anchorY() + StructureFloor.BAND_TOLERANCE
+                    && pos.getY() > persistentRoomFloor.anchorY() + StructureFloor.ANCHOR_PROXIMITY
                     && pos.getY() < persistentRoomFloor.maxPhysicalCeilingY()) {
                 return "ELEVATED_POSITION_IN_SAME_FLOOR_BAND: no separate StructureFloor anchor currently owns this Y, "
                         + "so Room lookup remains on Floor " + room.getFloorId() + " @" + persistentRoomFloor.anchorY();
@@ -262,50 +258,43 @@ public final class BuildingDiagnostics {
     }
 
     private static void logFloorDifference(long traceId,
-                                           List<StructureFloor> persistent,
-                                           List<StructureFloor> fresh,
+                                           StructureFloor persistent,
+                                           FloorGeometry fresh,
                                            boolean verbose) {
-        List<Integer> persistentAnchors = persistent.stream().map(StructureFloor::anchorY).toList();
-        List<Integer> freshAnchors = fresh.stream().map(StructureFloor::anchorY).toList();
-        if (!persistentAnchors.equals(freshAnchors)) {
-            log(traceId, "floorMismatch persistentAnchors={} freshAnchors={}", persistentAnchors, freshAnchors);
+        Integer persistentAnchor = persistent == null ? null : persistent.anchorY();
+        Integer freshAnchor = fresh == null ? null : fresh.anchorY();
+        if (!Objects.equals(persistentAnchor, freshAnchor)) {
+            log(traceId, "floorMismatch persistentAnchor={} freshAnchor={}", persistentAnchor, freshAnchor);
         }
 
-        boolean geometryMismatch = false;
-        for (StructureFloor persistentFloor : persistent) {
-            StructureFloor freshFloor = fresh.stream()
-                    .filter(candidate -> candidate.anchorY() == persistentFloor.anchorY())
-                    .findFirst().orElse(null);
-            if (freshFloor == null) continue;
-            if (persistentFloor.geometry().sameExactGeometry(freshFloor.geometry())) continue;
-
-            Set<FloorGeometry.Cell> persistentCells = persistentFloor.geometry().cells();
-            Set<FloorGeometry.Cell> freshCells = freshFloor.geometry().cells();
-
-            geometryMismatch = true;
+        boolean geometryMismatch = persistent != null && fresh != null
+                && !persistent.geometry().sameExactGeometry(fresh);
+        if (geometryMismatch) {
+            Set<FloorGeometry.Cell> persistentCells = persistent.geometry().cells();
+            Set<FloorGeometry.Cell> freshCells = fresh.cells();
             LinkedHashSet<FloorGeometry.Cell> added = new LinkedHashSet<>(freshCells);
             added.removeAll(persistentCells);
             LinkedHashSet<FloorGeometry.Cell> removed = new LinkedHashSet<>(persistentCells);
             removed.removeAll(freshCells);
-            boolean sameProjectedFootprint = persistentFloor.geometry().sameProjectedFootprint(freshFloor.geometry());
-            boolean connectorsChanged = !persistentFloor.geometry().connectorTypesByCell()
-                    .equals(freshFloor.geometry().connectorTypesByCell());
+            boolean sameProjectedFootprint = persistent.geometry().sameProjectedFootprint(fresh);
+            boolean connectorsChanged = !persistent.geometry().connectorTypesByCell()
+                    .equals(fresh.connectorTypesByCell());
             if (verbose) {
                 log(traceId, "floorGeometryMismatch anchorY={} persistentCells={} freshCells={} "
                                 + "sameProjectedFootprint={} connectorsChanged={} addedCells={} removedCells={} "
                                 + "addedSample={} removedSample={}",
-                        persistentFloor.anchorY(), persistentCells.size(), freshCells.size(),
+                        persistent.anchorY(), persistentCells.size(), freshCells.size(),
                         sameProjectedFootprint, connectorsChanged, added.size(), removed.size(),
                         sampleCells(added), sampleCells(removed));
             } else {
                 log(traceId, "floorGeometryMismatch anchorY={} persistentCells={} freshCells={} "
                                 + "sameProjectedFootprint={} connectorsChanged={} addedCells={} removedCells={}",
-                        persistentFloor.anchorY(), persistentCells.size(), freshCells.size(),
+                        persistent.anchorY(), persistentCells.size(), freshCells.size(),
                         sameProjectedFootprint, connectorsChanged, added.size(), removed.size());
             }
         }
-        if (persistentAnchors.equals(freshAnchors) && !geometryMismatch) {
-            log(traceId, "floorMismatch none anchors={}", persistentAnchors);
+        if (Objects.equals(persistentAnchor, freshAnchor) && !geometryMismatch) {
+            log(traceId, "floorMismatch none anchor={}", persistentAnchor);
         }
     }
 
@@ -351,6 +340,12 @@ public final class BuildingDiagnostics {
                 + floor.anchorY() + ".." + floor.maxPhysicalCeilingY() + " area=" + floor.area();
     }
 
+    private static String floor(FloorGeometry floor) {
+        return floor == null ? "none"
+                : "@" + floor.anchorY() + ".." + floor.maxPhysicalCeilingY()
+                + " area=" + floor.footprintArea();
+    }
+
     private static String id(Structure structure) {
         return structure == null ? "none" : Integer.toString(structure.getId());
     }
@@ -372,7 +367,7 @@ public final class BuildingDiagnostics {
                          String verdict) {
     }
 
-    record PlanAttempt(RoomScanPlan plan, RuntimeException failure) {
+    record PlanAttempt(RoomScanPlanner.Analysis analysis, RuntimeException failure) {
     }
 
     public enum StructuralPosition {

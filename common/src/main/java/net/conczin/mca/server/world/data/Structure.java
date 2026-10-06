@@ -17,7 +17,7 @@ public final class Structure implements VillageBuilding {
 
     private int id;
     private int logicalBuildingId;
-    private int nextFloorId;
+    private boolean originGeometryApproximate;
     private BlockPos source;
     private BlockPos min;
     private BlockPos max;
@@ -27,24 +27,30 @@ public final class Structure implements VillageBuilding {
         this.id = id;
         logicalBuildingId = id;
         this.source = source.immutable();
-        for (StructureFloor floor : floors) {
+        for (StructureFloor floor : Objects.requireNonNull(floors, "floors")) {
             putFloorUnique(floor);
-            nextFloorId = Math.max(nextFloorId, floor.id() + 1);
         }
+        requireFloor();
         recomputeBoundsFromFloors();
     }
 
     public Structure(CompoundTag tag) {
         id = tag.getInt("id");
         logicalBuildingId = tag.getInt("buildingId");
-        nextFloorId = tag.getInt("nextFloorId");
+        originGeometryApproximate = tag.getBoolean("originGeometryApproximate");
         source = NbtHelper.decodeBlockPos(tag.get("source"));
         for (StructureFloor floor : NbtHelper.toList(tag.getList("floors", Tag.TAG_COMPOUND),
                 value -> StructureFloor.load((CompoundTag) value))) {
             putFloorUnique(floor);
-            nextFloorId = Math.max(nextFloorId, floor.id() + 1);
         }
+        requireFloor();
         recomputeBoundsFromFloors();
+    }
+
+    private void requireFloor() {
+        if (floors.isEmpty()) {
+            throw new IllegalArgumentException("Structure " + id + " requires at least one StructureFloor");
+        }
     }
 
     private void putFloorUnique(StructureFloor floor) {
@@ -59,7 +65,9 @@ public final class Structure implements VillageBuilding {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
         tag.putInt("buildingId", getLogicalBuildingId());
-        tag.putInt("nextFloorId", nextFloorId);
+        if (originGeometryApproximate) {
+            tag.putBoolean("originGeometryApproximate", true);
+        }
         tag.put("source", NbtHelper.encodeBlockPos(source));
         tag.put("floors", NbtHelper.fromList(getFloors(), StructureFloor::save));
         return tag;
@@ -71,6 +79,14 @@ public final class Structure implements VillageBuilding {
 
     void setLogicalBuildingId(int logicalBuildingId) {
         this.logicalBuildingId = logicalBuildingId;
+    }
+
+    void setOriginGeometryApproximate(boolean originGeometryApproximate) {
+        this.originGeometryApproximate = originGeometryApproximate;
+    }
+
+    boolean hasOriginGeometryApproximation() {
+        return originGeometryApproximate;
     }
 
     public Optional<StructureFloor> getFloor(int floorId) {
@@ -157,6 +173,36 @@ public final class Structure implements VillageBuilding {
                 resolved.floor(), roomAtCell(localRooms, resolved.floor(), resolved.cell().feet())));
     }
 
+    /** Use exact geometry first, then the scan's connector evidence when a ladder occupies the column. */
+    Optional<InteractionPosition> resolveVerticalSide(BlockPos pos, List<BlockPos> connectorColumn,
+                                                      Collection<Building> structureRooms) {
+        Collection<Building> localRooms = structureRooms == null ? List.of() : structureRooms;
+        FloorCell physical = resolvePhysicalFloorCell(pos).orElse(null);
+        InteractionPosition physicalPosition = null;
+        if (physical != null) {
+            physicalPosition = new InteractionPosition(physical.floor(),
+                    roomAtCell(localRooms, physical.floor(), physical.cell().feet()));
+            if (physicalPosition.room() != null) return Optional.of(physicalPosition);
+        }
+        if (connectorColumn.isEmpty()) return Optional.ofNullable(physicalPosition);
+        // A fresh Floor can acquire the supported ladder entry before its Room is updated.
+        // Its persisted connector still identifies that Room on this exact ladder column.
+        StructureFloor floor = physical == null ? floorAtHeight(pos.getY()).orElse(null) : physical.floor();
+        if (floor == null) return Optional.empty();
+        Building owner = null;
+        boolean matched = false;
+        for (FloorConnector.Marker marker : floor.connectors()) {
+            if (!marker.type().vertical() || !connectorColumn.contains(marker.pos())) continue;
+            matched = true;
+            Building candidate = roomAtCell(localRooms, floor, marker.floorCell());
+            if (candidate == null || owner != null && owner != candidate) {
+                return Optional.of(new InteractionPosition(floor, null));
+            }
+            owner = candidate;
+        }
+        return matched ? Optional.of(new InteractionPosition(floor, owner)) : Optional.ofNullable(physicalPosition);
+    }
+
     private static Building roomAtCell(Collection<Building> rooms, StructureFloor floor, BlockPos feet) {
         return rooms.stream()
                 .filter(room -> room.getFloorId() == floor.id())
@@ -182,27 +228,36 @@ public final class Structure implements VillageBuilding {
     Structure copy() {
         Structure copy = new Structure(id, source, getFloors());
         copy.logicalBuildingId = logicalBuildingId;
-        copy.nextFloorId = nextFloorId;
+        copy.originGeometryApproximate = originGeometryApproximate;
         return copy;
     }
 
     boolean replaceFloorGeometry(int floorId, StructureFloor scannedFloor) {
+        return replaceFloorGeometry(floorId, scannedFloor == null ? null : scannedFloor.geometry());
+    }
+
+    boolean replaceFloorGeometry(int floorId, FloorGeometry scannedFloor) {
         StructureFloor existing = floors.get(floorId);
         if (existing == null || scannedFloor == null) return false;
-        floors.put(floorId, new StructureFloor(floorId, existing.floorNumber(), scannedFloor.geometry()));
+        floors.put(floorId, new StructureFloor(
+                floorId, existing.floorNumber(), existing.anchorY(), scannedFloor));
+        if (floorId == 0) originGeometryApproximate = false;
         recomputeBoundsFromFloors();
         return true;
     }
 
     boolean removeFloor(int floorId) {
-        if (floors.remove(floorId) == null) return false;
-        if (!floors.isEmpty()) recomputeBoundsFromFloors();
+        if (!floors.containsKey(floorId) || floors.size() == 1) return false;
+        floors.remove(floorId);
+        recomputeBoundsFromFloors();
         return true;
     }
 
     private void recomputeBoundsFromFloors() {
         List<StructureFloor> current = getFloors();
-        if (current.isEmpty()) return;
+        if (current.isEmpty()) {
+            throw new IllegalStateException("Structure " + id + " has no floors");
+        }
 
         List<FloorGeometry.Cell> cells = current.stream()
                 .flatMap(floor -> floor.geometry().cells().stream())
