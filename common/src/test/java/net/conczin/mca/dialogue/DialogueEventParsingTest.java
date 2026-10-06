@@ -17,6 +17,15 @@ class DialogueEventParsingTest {
     private static final ResourceLocation EVENT_ID = ResourceLocation.fromNamespaceAndPath("mca", "personal/test");
 
     @Test
+    void nestedEnumsAndRepeatCanInitializeBeforeOuterEventCodec() {
+        DialogueEvent.Repeat repeat = new DialogueEvent.Repeat(DialogueEvent.RepeatType.COOLDOWN, 100L, 100L);
+
+        assertEquals(DialogueEvent.RepeatType.COOLDOWN, repeat.type());
+        assertEquals(100L, repeat.minTicks());
+        assertEquals(DialogueEvent.Trigger.TALK, DialogueEvent.Trigger.valueOf("TALK"));
+    }
+
+    @Test
     void decodesNamespacedEventAndNormalizesOrderedLinesAndCooldownSeconds() {
         DialogueEvent event = decode("""
                 {
@@ -319,6 +328,8 @@ class DialogueEventParsingTest {
                 DialogueAction.Defined.class,
                 event.nodes().get("intro").choices().orElseThrow().get(0).actions().get(0)
         );
+        assertEquals(5, action.definition().get("amount").getAsInt());
+        action.definition().addProperty("amount", 99);
         assertEquals(5, action.definition().get("amount").getAsInt());
     }
 

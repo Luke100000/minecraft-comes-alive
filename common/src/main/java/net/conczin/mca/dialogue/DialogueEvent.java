@@ -39,7 +39,7 @@ public record DialogueEvent(
             DialogueCondition.CODEC.listOf().optionalFieldOf("requirements", List.of()).forGetter(DialogueEvent::requirements),
             Repeat.CODEC.fieldOf("repeat").forGetter(DialogueEvent::repeat),
             HistoryPolicy.CODEC.optionalFieldOf("history", HistoryPolicy.STORY).forGetter(DialogueEvent::history),
-            nonblankStringCodec("start").fieldOf("start").forGetter(DialogueEvent::start),
+            DialogueCodecs.nonblankStringCodec("start").fieldOf("start").forGetter(DialogueEvent::start),
             Codec.unboundedMap(Codec.STRING, Node.CODEC).fieldOf("nodes").forGetter(DialogueEvent::nodes)
     ).apply(instance, (trigger, presentation, priority, weight, requirements, repeat, history, start, nodes) ->
             new DialogueEvent(null, trigger, presentation, priority, weight, requirements, repeat, history, start, nodes)));
@@ -233,27 +233,10 @@ public record DialogueEvent(
         }
     }
 
-    private static Codec<String> nonblankStringCodec(String name) {
-        return Codec.STRING.comapFlatMap(value -> value.isBlank()
-                ? DataResult.error(() -> name + " must not be blank")
-                : DataResult.success(value), value -> value);
-    }
-
-    private static <E extends Enum<E>> Codec<E> enumCodec(Class<E> type) {
-        return Codec.STRING.comapFlatMap(value -> {
-            for (E constant : type.getEnumConstants()) {
-                if (constant.name().equalsIgnoreCase(value)) {
-                    return DataResult.success(constant);
-                }
-            }
-            return DataResult.error(() -> "Unknown " + type.getSimpleName() + ": " + value);
-        }, constant -> constant.name().toLowerCase(java.util.Locale.ROOT));
-    }
-
     public enum Trigger {
         TALK;
 
-        public static final Codec<Trigger> CODEC = enumCodec(Trigger.class);
+        public static final Codec<Trigger> CODEC = DialogueCodecs.enumCodec(Trigger.class);
     }
 
     public enum PresentationMode {
@@ -261,7 +244,7 @@ public record DialogueEvent(
         ASK,
         AMBIENT;
 
-        public static final Codec<PresentationMode> CODEC = enumCodec(PresentationMode.class);
+        public static final Codec<PresentationMode> CODEC = DialogueCodecs.enumCodec(PresentationMode.class);
     }
 
     public enum RepeatType {
@@ -269,22 +252,22 @@ public record DialogueEvent(
         ONCE,
         COOLDOWN;
 
-        public static final Codec<RepeatType> CODEC = enumCodec(RepeatType.class);
+        public static final Codec<RepeatType> CODEC = DialogueCodecs.enumCodec(RepeatType.class);
     }
 
     public enum HistoryPolicy {
         STORY,
         SCHEDULING;
 
-        public static final Codec<HistoryPolicy> CODEC = enumCodec(HistoryPolicy.class);
+        public static final Codec<HistoryPolicy> CODEC = DialogueCodecs.enumCodec(HistoryPolicy.class);
     }
 
     public record Presentation(PresentationMode mode, Optional<String> prompt, String resumePrompt, Optional<String> topic) {
         private static final Codec<Presentation> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 PresentationMode.CODEC.fieldOf("mode").forGetter(Presentation::mode),
-                nonblankStringCodec("prompt").optionalFieldOf("prompt").forGetter(Presentation::prompt),
-                nonblankStringCodec("resume_prompt").fieldOf("resume_prompt").forGetter(Presentation::resumePrompt),
-                nonblankStringCodec("topic").optionalFieldOf("topic").forGetter(Presentation::topic)
+                DialogueCodecs.nonblankStringCodec("prompt").optionalFieldOf("prompt").forGetter(Presentation::prompt),
+                DialogueCodecs.nonblankStringCodec("resume_prompt").fieldOf("resume_prompt").forGetter(Presentation::resumePrompt),
+                DialogueCodecs.nonblankStringCodec("topic").optionalFieldOf("topic").forGetter(Presentation::topic)
         ).apply(instance, Presentation::new));
 
         private void validate() {
@@ -363,10 +346,10 @@ public record DialogueEvent(
             boolean silent
     ) {
         private static final Codec<Node> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-                nonblankStringCodec("line").optionalFieldOf("line").forGetter(node -> node.lines.size() == 1 ? Optional.of(node.lines.get(0)) : Optional.empty()),
-                nonblankStringCodec("line").listOf().optionalFieldOf("lines").forGetter(node -> node.lines.size() > 1 ? Optional.of(node.lines) : Optional.empty()),
+                DialogueCodecs.nonblankStringCodec("line").optionalFieldOf("line").forGetter(node -> node.lines.size() == 1 ? Optional.of(node.lines.get(0)) : Optional.empty()),
+                DialogueCodecs.nonblankStringCodec("line").listOf().optionalFieldOf("lines").forGetter(node -> node.lines.size() > 1 ? Optional.of(node.lines) : Optional.empty()),
                 Choice.CODEC.listOf().optionalFieldOf("choices").forGetter(Node::choices),
-                nonblankStringCodec("next").optionalFieldOf("next").forGetter(Node::next),
+                DialogueCodecs.nonblankStringCodec("next").optionalFieldOf("next").forGetter(Node::next),
                 Codec.BOOL.optionalFieldOf("complete", false).forGetter(Node::complete),
                 Codec.BOOL.optionalFieldOf("end", false).forGetter(Node::end),
                 Codec.BOOL.optionalFieldOf("retryable", false).forGetter(Node::retryable),
@@ -418,11 +401,11 @@ public record DialogueEvent(
             Optional<List<Outcome>> outcomes
     ) {
         private static final Codec<Choice> CODEC = RecordCodecBuilder.create(instance -> instance.group(
-                nonblankStringCodec("choice id").fieldOf("id").forGetter(Choice::id),
-                nonblankStringCodec("choice text").fieldOf("text").forGetter(Choice::text),
+                DialogueCodecs.nonblankStringCodec("choice id").fieldOf("id").forGetter(Choice::id),
+                DialogueCodecs.nonblankStringCodec("choice text").fieldOf("text").forGetter(Choice::text),
                 DialogueCondition.CODEC.listOf().optionalFieldOf("requirements", List.of()).forGetter(Choice::requirements),
                 DialogueAction.CODEC.listOf().optionalFieldOf("actions", List.of()).forGetter(Choice::actions),
-                nonblankStringCodec("next").optionalFieldOf("next").forGetter(Choice::next),
+                DialogueCodecs.nonblankStringCodec("next").optionalFieldOf("next").forGetter(Choice::next),
                 Outcome.CODEC.listOf().optionalFieldOf("outcomes").forGetter(Choice::outcomes)
         ).apply(instance, Choice::new));
 
@@ -456,7 +439,7 @@ public record DialogueEvent(
                 DialogueCondition.CODEC.listOf().optionalFieldOf("requirements", List.of()).forGetter(Outcome::requirements),
                 Codec.DOUBLE.optionalFieldOf("weight", 1.0).forGetter(Outcome::weight),
                 DialogueAction.CODEC.listOf().optionalFieldOf("actions", List.of()).forGetter(Outcome::actions),
-                nonblankStringCodec("next").fieldOf("next").forGetter(Outcome::next)
+                DialogueCodecs.nonblankStringCodec("next").fieldOf("next").forGetter(Outcome::next)
         ).apply(instance, Outcome::new));
 
         public Outcome {
@@ -469,5 +452,27 @@ public record DialogueEvent(
                 throw new IllegalArgumentException("outcome weight for choice '" + choiceId + "' must be finite and positive");
             }
         }
+    }
+}
+
+final class DialogueCodecs {
+    private DialogueCodecs() {
+    }
+
+    static Codec<String> nonblankStringCodec(String name) {
+        return Codec.STRING.comapFlatMap(value -> value.isBlank()
+                ? DataResult.error(() -> name + " must not be blank")
+                : DataResult.success(value), value -> value);
+    }
+
+    static <E extends Enum<E>> Codec<E> enumCodec(Class<E> type) {
+        return Codec.STRING.comapFlatMap(value -> {
+            for (E constant : type.getEnumConstants()) {
+                if (constant.name().equalsIgnoreCase(value)) {
+                    return DataResult.success(constant);
+                }
+            }
+            return DataResult.error(() -> "Unknown " + type.getSimpleName() + ": " + value);
+        }, constant -> constant.name().toLowerCase(java.util.Locale.ROOT));
     }
 }

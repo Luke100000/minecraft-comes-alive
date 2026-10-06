@@ -55,5 +55,10 @@ public sealed interface DialogueAction permits DialogueAction.Defined {
         public Defined {
             definition = definition.deepCopy();
         }
+
+        @Override
+        public JsonObject definition() {
+            return definition.deepCopy();
+        }
     }
 }
