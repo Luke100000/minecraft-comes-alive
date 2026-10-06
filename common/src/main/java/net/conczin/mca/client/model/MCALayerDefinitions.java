@@ -19,8 +19,6 @@ public final class MCALayerDefinitions {
     public static void register(BiConsumer<ModelLayerLocation, Supplier<LayerDefinition>> register) {
         register.accept(MCAModelLayers.VILLAGER_FACE,
                 () -> LayerDefinition.create(MCAModelGeometry.overlayData(new CubeDeformation(0.01F), false), 64, 64));
-        register.accept(MCAModelLayers.VILLAGER_FACE_SLIM,
-                () -> LayerDefinition.create(MCAModelGeometry.overlayData(new CubeDeformation(0.01F), true), 64, 64));
         register.accept(MCAModelLayers.VILLAGER_CLOTHING,
                 () -> LayerDefinition.create(MCAModelGeometry.overlayData(new CubeDeformation(VILLAGER_CLOTHING_DILATION), false), 64, 64));
         register.accept(MCAModelLayers.VILLAGER_CLOTHING_SLIM,

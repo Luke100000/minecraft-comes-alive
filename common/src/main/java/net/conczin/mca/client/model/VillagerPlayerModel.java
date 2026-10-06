@@ -1,14 +1,10 @@
 package net.conczin.mca.client.model;
 
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
-import net.conczin.mca.client.resources.SkinExporter;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
-import net.minecraft.util.FastColor;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.LivingEntity;
@@ -16,12 +12,8 @@ import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.UseAnim;
-import org.jetbrains.annotations.Nullable;
 
 public class VillagerPlayerModel<T extends LivingEntity & VillagerLike<T>> extends PlayerModel<T> {
-    @Nullable
-    private T currentVillager;
-
     public VillagerPlayerModel(ModelPart root, boolean slim) {
         super(root, slim);
         hidePlayerWears();
@@ -103,7 +95,6 @@ public class VillagerPlayerModel<T extends LivingEntity & VillagerLike<T>> exten
         applyPanicAnimation(villager, animationProgress);
         applyHeadScale(villager);
         hidePlayerWears();
-        currentVillager = villager;
     }
 
     private void applyPanicAnimation(T villager, float animationProgress) {
@@ -124,13 +115,16 @@ public class VillagerPlayerModel<T extends LivingEntity & VillagerLike<T>> exten
     }
 
     private void applyHeadScale(T villager) {
-        float headScale = villager.getVillagerDimensions().getHead();
-        head.xScale = headScale;
-        head.yScale = headScale;
-        head.zScale = headScale;
-        hat.xScale = headScale;
-        hat.yScale = headScale;
-        hat.zScale = headScale;
+        composeHeadScale(head, hat, villager.getVillagerDimensions().getHead());
+    }
+
+    static void composeHeadScale(ModelPart head, ModelPart hat, float scale) {
+        head.xScale *= scale;
+        head.yScale *= scale;
+        head.zScale *= scale;
+        hat.xScale *= scale;
+        hat.yScale *= scale;
+        hat.zScale *= scale;
     }
 
     private void hidePlayerWears() {
@@ -149,16 +143,4 @@ public class VillagerPlayerModel<T extends LivingEntity & VillagerLike<T>> exten
         }
     }
 
-    @Override
-    public void renderToBuffer(PoseStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
-        T villager = currentVillager;
-        try {
-            if (villager != null) {
-                color = FastColor.ARGB32.multiply(color, SkinExporter.getSkinColor(villager));
-            }
-            super.renderToBuffer(matrices, vertices, light, overlay, color);
-        } finally {
-            currentVillager = null;
-        }
-    }
 }

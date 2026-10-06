@@ -67,7 +67,7 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
                 this,
                 mca$createVisibleModel(
                         ctx,
-                        slim ? MCAModelLayers.VILLAGER_FACE_SLIM : MCAModelLayers.VILLAGER_FACE,
+                        MCAModelLayers.VILLAGER_FACE,
                         slim
                 ).hideWears(),
                 "normal"

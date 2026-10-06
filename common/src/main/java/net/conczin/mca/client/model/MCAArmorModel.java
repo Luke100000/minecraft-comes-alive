@@ -7,32 +7,31 @@ import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.world.entity.LivingEntity;
 
-import java.util.List;
-
-import static net.conczin.mca.client.model.MCAModelGeometry.BREASTS;
 import static net.conczin.mca.client.model.MCAModelGeometry.BREAST_TRANSFORM;
 
 /** Shared MCA humanoid armour model for villagers and genetics-enabled players. */
 public class MCAArmorModel<T extends LivingEntity> extends HumanoidModel<T> {
     private final ModelPart breastTransform;
-    private final ModelPart breasts;
-    private final List<ModelPart> breastParts;
+    private boolean renderBreastMorphology;
 
     public MCAArmorModel(ModelPart root) {
         super(root);
         breastTransform = body.getChild(BREAST_TRANSFORM);
-        breasts = breastTransform.getChild(BREASTS);
-        breastParts = List.of(breasts);
     }
 
     public void applyMorphology(VillagerLike<?> villager) {
-        MCAModelMorphology.applyBreastDimensions(villager, breastTransform, breasts, breastParts);
+        MCAModelMorphology.applyBreastDimensions(villager, breastTransform);
+        renderBreastMorphology = true;
+    }
+
+    public void hideMorphology() {
+        renderBreastMorphology = false;
     }
 
     @Override
     public void renderToBuffer(PoseStack matrices, VertexConsumer vertices, int light, int overlay, int color) {
         boolean wasBreastTransformVisible = breastTransform.visible;
-        breastTransform.visible &= leftArm.visible || rightArm.visible;
+        breastTransform.visible &= renderBreastMorphology;
         try {
             super.renderToBuffer(matrices, vertices, light, overlay, color);
         } finally {

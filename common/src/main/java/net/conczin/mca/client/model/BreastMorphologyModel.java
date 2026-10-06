@@ -8,28 +8,21 @@ import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartNames;
 import net.minecraft.world.entity.LivingEntity;
 
-import java.util.List;
-
 import static net.conczin.mca.client.model.MCAModelGeometry.BREASTPLATE;
-import static net.conczin.mca.client.model.MCAModelGeometry.BREASTS;
 import static net.conczin.mca.client.model.MCAModelGeometry.BREAST_TRANSFORM;
 
 public final class BreastMorphologyModel {
     private final ModelPart breastTransform;
-    private final ModelPart breasts;
     private final ModelPart breastsWear;
-    private final List<ModelPart> breastParts;
 
     public BreastMorphologyModel(ModelPart root) {
         ModelPart body = root.getChild(PartNames.BODY);
         breastTransform = body.getChild(BREAST_TRANSFORM);
-        breasts = breastTransform.getChild(BREASTS);
         breastsWear = breastTransform.getChild(BREASTPLATE);
-        breastParts = List.of(breasts, breastsWear);
     }
 
     public void apply(VillagerLike<?> villager, boolean showWear) {
-        MCAModelMorphology.applyBreastDimensions(villager, breastTransform, breasts, breastParts);
+        MCAModelMorphology.applyBreastDimensions(villager, breastTransform);
         breastsWear.visible = showWear && breastTransform.visible;
     }
 

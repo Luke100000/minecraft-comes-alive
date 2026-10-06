@@ -39,12 +39,11 @@ class HairOverlayModelTest {
 
     @Test
     void projectedHairUsesTorsoUvsAndCoversTheUpperBreastSurface() throws Exception {
-        ModelPart pivot = bakedHair(MCALayerDefinitions.VILLAGER_HAIR_DILATION)
-                .getChild("body").getChild(MCAModelGeometry.BREAST_TRANSFORM)
-                .getChild(MCAModelGeometry.BREASTS);
-        ModelPart breast = pivot.getChild(MCAModelGeometry.BREAST_HAIR_SURFACE);
+        ModelPart transform = bakedHair(MCALayerDefinitions.VILLAGER_HAIR_DILATION)
+                .getChild("body").getChild(MCAModelGeometry.BREAST_TRANSFORM);
+        ModelPart breast = transform.getChild(MCAModelGeometry.BREASTS);
 
-        assertEquals(2, polygons(breast).size(), "Inner hair needs front and upper faces");
+        assertEquals(4, polygons(breast).size(), "Inner hair needs front, upper, and both side faces");
         int topFaces = 0;
         for (Object polygon : polygons(breast)) {
             Vector3f normal = (Vector3f) field(polygon, "normal");
@@ -63,15 +62,49 @@ class HairOverlayModelTest {
         }
         assertEquals(1, topFaces, "Hair needs an actual baked upper breast face");
 
-        ModelPart outerHair = pivot.getChild(MCAModelGeometry.BREASTPLATE);
-        assertEquals(2, polygons(outerHair).size(), "Outer hair needs front and upper faces");
+        ModelPart outerHair = transform.getChild(MCAModelGeometry.BREASTPLATE);
+        assertEquals(4, polygons(outerHair).size(), "Outer hair needs front, upper, and both side faces");
         for (Object polygon : polygons(outerHair)) {
+            Vector3f normal = (Vector3f) field(polygon, "normal");
+            if (normal.x() != 0.0F) {
+                continue;
+            }
             for (Object vertex : (Object[]) field(polygon, "vertices")) {
                 float u = (float) field(vertex, "u") * 64.0F;
                 float v = (float) field(vertex, "v") * 64.0F;
                 assertTrue(u >= 21.0F && u <= 27.0F, "Outer hair must sample torso columns");
                 assertTrue(v >= 37.0F && v <= 43.0F, "Outer hair must sample outer torso rows");
             }
+        }
+    }
+
+    @Test
+    void projectedHairCoversBreastSidesUsingTorsoSideUvs() throws Exception {
+        ModelPart transform = bakedHair(MCALayerDefinitions.VILLAGER_HAIR_DILATION)
+                .getChild("body").getChild(MCAModelGeometry.BREAST_TRANSFORM);
+
+        assertSideUvs(transform.getChild(MCAModelGeometry.BREASTS), 24.0F, 27.0F);
+        assertSideUvs(transform.getChild(MCAModelGeometry.BREASTPLATE), 40.0F, 43.0F);
+    }
+
+    @Test
+    void breastGeometryIsBakedIndependentlyOfRuntimeVisibilitySetting() throws Exception {
+        boolean previous = Config.getInstance().enableBoobs;
+        try {
+            Config.getInstance().enableBoobs = false;
+
+            ModelPart hairTransform = bakedHair(MCALayerDefinitions.VILLAGER_HAIR_DILATION)
+                    .getChild("body").getChild(MCAModelGeometry.BREAST_TRANSFORM);
+            assertEquals(4, polygons(hairTransform.getChild(MCAModelGeometry.BREASTS)).size());
+            assertEquals(4, polygons(hairTransform.getChild(MCAModelGeometry.BREASTPLATE)).size());
+
+            ModelPart overlayTransform = LayerDefinition.create(
+                            MCAModelGeometry.overlayData(CubeDeformation.NONE, false), 64, 64)
+                    .bakeRoot().getChild("body").getChild(MCAModelGeometry.BREAST_TRANSFORM);
+            assertEquals(6, polygons(overlayTransform.getChild(MCAModelGeometry.BREASTS)).size());
+            assertEquals(6, polygons(overlayTransform.getChild(MCAModelGeometry.BREASTPLATE)).size());
+        } finally {
+            Config.getInstance().enableBoobs = previous;
         }
     }
 
@@ -130,10 +163,9 @@ class HairOverlayModelTest {
         for (float[] pair : dilations) {
             ModelPart root = bakedHair(pair[0]);
             new HairOverlayModel<>(root, pair[1]);
-            ModelPart pivot = root.getChild("body")
-                    .getChild(MCAModelGeometry.BREAST_TRANSFORM).getChild(MCAModelGeometry.BREASTS);
-            ModelPart breast = pivot.getChild(MCAModelGeometry.BREAST_HAIR_SURFACE);
-            ModelPart outerHair = pivot.getChild(MCAModelGeometry.BREASTPLATE);
+            ModelPart transform = root.getChild("body").getChild(MCAModelGeometry.BREAST_TRANSFORM);
+            ModelPart breast = transform.getChild(MCAModelGeometry.BREASTS);
+            ModelPart outerHair = transform.getChild(MCAModelGeometry.BREASTPLATE);
             float clothingWidth = MCAModelGeometry.BREAST_WIDTH
                     + 2.0F * (pair[1] + MCAModelGeometry.BREAST_WEAR_DILATION);
             float baseGap = (MCAModelGeometry.BREAST_WIDTH * breast.xScale - clothingWidth) / 2.0F;
@@ -142,8 +174,8 @@ class HairOverlayModelTest {
             assertTrue(baseGap > 0.0F, "Hair must clear clothing");
             assertTrue(outerGap > baseGap, "Outer hair must clear inner hair");
             assertTrue(outerGap <= 0.02F, "Outer hair must not float above clothing");
-            assertEquals(1.0F, pivot.xScale, "Morphology pivot must not inherit shell dilation");
-            assertEquals(1.0F, pivot.yScale);
+            assertEquals(1.0F, transform.xScale, "Morphology transform must not inherit shell dilation");
+            assertEquals(1.0F, transform.yScale);
             for (ModelPart shell : List.of(breast, outerHair)) {
                 assertEquals(MCAModelGeometry.BREAST_CENTER_X,
                         MCAModelGeometry.BREAST_CENTER_X * shell.xScale + shell.x, 0.00001F);
@@ -184,6 +216,26 @@ class HairOverlayModelTest {
             }
         }
         return new Bounds(minX, minY, minZ, maxX, maxY, maxZ);
+    }
+
+    private static void assertSideUvs(ModelPart part, float minV, float maxV) throws ReflectiveOperationException {
+        int sideFaces = 0;
+        for (Object polygon : polygons(part)) {
+            Vector3f normal = (Vector3f) field(polygon, "normal");
+            if (Math.abs(normal.x()) != 1.0F) {
+                continue;
+            }
+            sideFaces++;
+            float minU = normal.x() < 0.0F ? 18.0F : 27.0F;
+            float maxU = normal.x() < 0.0F ? 21.0F : 30.0F;
+            for (Object vertex : (Object[]) field(polygon, "vertices")) {
+                float u = (float) field(vertex, "u") * 64.0F;
+                float v = (float) field(vertex, "v") * 64.0F;
+                assertTrue(u >= minU && u <= maxU, "Side hair must sample the matching torso side columns");
+                assertTrue(v >= minV && v <= maxV, "Side hair must sample the matching torso rows");
+            }
+        }
+        assertEquals(2, sideFaces, "Hair needs both east and west breast side faces");
     }
 
     private static Object field(Object target, String name) throws ReflectiveOperationException {

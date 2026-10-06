@@ -3,8 +3,8 @@ package net.conczin.mca.client.render;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.Config;
 import net.conczin.mca.client.gui.VillagerEditorScreen;
-import net.conczin.mca.client.model.MCAModelLayers;
 import net.conczin.mca.client.model.MCAArmorModel;
+import net.conczin.mca.client.model.MCAModelLayers;
 import net.conczin.mca.client.model.VillagerOverlayModel;
 import net.conczin.mca.client.resources.SkinExporter;
 import net.conczin.mca.entity.Infectable;
@@ -14,6 +14,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelLayerLocation;
+import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.entity.HumanoidMobRenderer;
@@ -45,11 +46,28 @@ public abstract class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike
     @Override
     public void render(T villager, float yaw, float tickDelta, PoseStack matrices, MultiBufferSource buffers, int light) {
         PlayerModel<T> previousModel = model;
-        model = villager.isSlim() ? slimModel : wideModel;
+        PlayerModel<T> selectedModel = villager.isSlim() ? slimModel : wideModel;
+        model = selectedModel;
+        ModelPartScale headScale = ModelPartScale.capture(selectedModel.head);
+        ModelPartScale hatScale = ModelPartScale.capture(selectedModel.hat);
         try {
             super.render(villager, yaw, tickDelta, matrices, buffers, light);
         } finally {
+            headScale.restore(selectedModel.head);
+            hatScale.restore(selectedModel.hat);
             model = previousModel;
+        }
+    }
+
+    private record ModelPartScale(float x, float y, float z) {
+        static ModelPartScale capture(ModelPart part) {
+            return new ModelPartScale(part.xScale, part.yScale, part.zScale);
+        }
+
+        void restore(ModelPart part) {
+            part.xScale = x;
+            part.yScale = y;
+            part.zScale = z;
         }
     }
 

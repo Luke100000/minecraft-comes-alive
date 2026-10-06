@@ -1,5 +1,6 @@
 package net.conczin.mca.client.model;
 
+import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.minecraft.client.model.geom.ModelPart;
@@ -12,28 +13,33 @@ public final class MCAModelMorphology {
 
     public static void applyBreastDimensions(
             VillagerLike<?> villager,
-            ModelPart transform,
-            ModelPart breastPart,
-            Iterable<ModelPart> breastParts
+            ModelPart transform
     ) {
         var dimensions = villager.getVillagerDimensions();
         float rawBreastSize = villager.getGenetics().getBreastSize();
-        float scaledBreastSize = rawBreastSize * dimensions.getBreasts();
-        transform.visible = villager.getGenetics().getGender() == Gender.FEMALE && scaledBreastSize > 0.0F;
-        setScale(
+        applyBreastDimensions(
                 transform,
-                scaledBreastSize * 0.2F + 1.05F,
-                scaledBreastSize * 0.75F + 0.75F,
-                scaledBreastSize * 0.75F + 0.75F
+                rawBreastSize,
+                dimensions.getBreasts(),
+                Config.getInstance().enableBoobs && villager.getGenetics().getGender() == Gender.FEMALE
         );
+    }
 
-        breastPart.visible = villager.getGenetics().getGender() == Gender.FEMALE;
+    static void applyBreastDimensions(ModelPart transform, float rawBreastSize, float dimensionScale, boolean visible) {
+        float scaledBreastSize = rawBreastSize * dimensionScale;
+        float scaleX = scaledBreastSize * 0.2F + 1.05F;
+        float scaleYZ = scaledBreastSize * 0.75F + 0.75F;
         float breastY = (float) (5.0F - Math.pow(rawBreastSize, 0.5) * 2.5F);
         float breastZ = -1.5F + rawBreastSize * 0.25F;
-        for (ModelPart part : breastParts) {
-            part.setRotation(BREAST_ROTATION_X, 0.0F, 0.0F);
-            part.setPos(0.25F, breastY, breastZ);
-        }
+
+        transform.visible = visible && scaledBreastSize > 0.0F;
+        transform.setRotation(BREAST_ROTATION_X, 0.0F, 0.0F);
+        // Previously the transform supplied scale while each child supplied its
+        // pivot. Pre-scaling the pivot preserves that S*T*R result when the
+        // complete pose moves onto this single T*R*S node. Y/Z share one scale,
+        // so the X rotation commutes with that scale.
+        transform.setPos(0.25F * scaleX, breastY * scaleYZ, breastZ * scaleYZ);
+        setScale(transform, scaleX, scaleYZ, scaleYZ);
     }
 
     private static void setScale(ModelPart part, float x, float y, float z) {

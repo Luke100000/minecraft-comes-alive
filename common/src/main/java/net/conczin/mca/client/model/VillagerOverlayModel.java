@@ -6,13 +6,10 @@ import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.world.entity.LivingEntity;
 
-import java.util.List;
-
 public final class VillagerOverlayModel<T extends LivingEntity> extends PlayerModel<T> implements VillagerLayerModel<T> {
     private final ModelPart breastTransform;
     private final ModelPart breasts;
     private final ModelPart breastsWear;
-    private final List<ModelPart> breastParts;
     private boolean wearsHidden;
 
     public VillagerOverlayModel(ModelPart root, boolean slim) {
@@ -20,7 +17,6 @@ public final class VillagerOverlayModel<T extends LivingEntity> extends PlayerMo
         breastTransform = body.getChild(MCAModelGeometry.BREAST_TRANSFORM);
         breasts = breastTransform.getChild(MCAModelGeometry.BREASTS);
         breastsWear = breastTransform.getChild(MCAModelGeometry.BREASTPLATE);
-        breastParts = List.of(breasts, breastsWear);
     }
 
     @Override
@@ -65,9 +61,8 @@ public final class VillagerOverlayModel<T extends LivingEntity> extends PlayerMo
     }
 
     public void applyMorphology(VillagerLike<?> villager) {
-        MCAModelMorphology.applyBreastDimensions(villager, breastTransform, breasts, breastParts);
+        MCAModelMorphology.applyBreastDimensions(villager, breastTransform);
         breastTransform.visible &= body.visible;
-        breasts.visible &= body.visible;
         breastsWear.visible = !wearsHidden && breastTransform.visible;
     }
 

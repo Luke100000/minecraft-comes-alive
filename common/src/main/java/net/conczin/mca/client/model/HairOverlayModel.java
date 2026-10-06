@@ -9,32 +9,30 @@ import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.client.model.geom.PartNames;
 import net.minecraft.world.entity.LivingEntity;
 
-import java.util.List;
-
 public final class HairOverlayModel<T extends LivingEntity> extends EntityModel<T> implements VillagerLayerModel<T> {
     private static final float SURFACE_SEPARATION = 0.005F;
     private final ModelPart head;
     private final ModelPart hat;
     private final ModelPart body;
-    private final ModelPart jacket;
+    private final ModelPart outerTorso;
     private final ModelPart breastTransform;
     private final ModelPart breasts;
-    private final List<ModelPart> breastParts;
+    private final ModelPart breastsWear;
 
     public HairOverlayModel(ModelPart root, float clothingDilation) {
         head = root.getChild(PartNames.HEAD);
         hat = root.getChild(PartNames.HAT);
         body = root.getChild(PartNames.BODY);
-        jacket = root.getChild(PartNames.JACKET);
+        outerTorso = root.getChild(PartNames.JACKET);
         breastTransform = body.getChild(MCAModelGeometry.BREAST_TRANSFORM);
         breasts = breastTransform.getChild(MCAModelGeometry.BREASTS);
-        breastParts = List.of(breasts);
+        breastsWear = breastTransform.getChild(MCAModelGeometry.BREASTPLATE);
 
         // Inflate the two UV shells once around the same centre. The shared
         // breast pivot supplies the full morphology pose on every render.
         float innerDilation = clothingDilation + MCAModelGeometry.BREAST_WEAR_DILATION + SURFACE_SEPARATION;
-        sizeProjection(breasts.getChild(MCAModelGeometry.BREAST_HAIR_SURFACE), innerDilation);
-        sizeProjection(breasts.getChild(MCAModelGeometry.BREASTPLATE), innerDilation + SURFACE_SEPARATION);
+        sizeProjection(breasts, innerDilation);
+        sizeProjection(breastsWear, innerDilation + SURFACE_SEPARATION);
     }
 
     private static void sizeProjection(ModelPart shell, float dilation) {
@@ -53,20 +51,20 @@ public final class HairOverlayModel<T extends LivingEntity> extends EntityModel<
         head.copyFrom(parent.head);
         hat.copyFrom(parent.hat);
         body.copyFrom(parent.body);
-        jacket.copyFrom(parent.body);
+        outerTorso.copyFrom(parent.body);
 
         head.visible = parent.head.visible;
         hat.visible = parent.head.visible && parent.hat.visible;
         body.visible = parent.body.visible;
-        jacket.visible = parent.body.visible;
+        outerTorso.visible = parent.body.visible;
         breastTransform.visible = parent.body.visible;
         breasts.visible = parent.body.visible;
+        breastsWear.visible = parent.body.visible;
     }
 
     public void applyMorphology(VillagerLike<?> villager) {
-        MCAModelMorphology.applyBreastDimensions(villager, breastTransform, breasts, breastParts);
+        MCAModelMorphology.applyBreastDimensions(villager, breastTransform);
         breastTransform.visible &= body.visible;
-        breasts.visible &= body.visible;
     }
 
     @Override
@@ -78,6 +76,6 @@ public final class HairOverlayModel<T extends LivingEntity> extends EntityModel<
         head.render(matrices, vertices, light, overlay, color);
         hat.render(matrices, vertices, light, overlay, color);
         body.render(matrices, vertices, light, overlay, color);
-        jacket.render(matrices, vertices, light, overlay, color);
+        outerTorso.render(matrices, vertices, light, overlay, color);
     }
 }

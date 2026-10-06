@@ -80,10 +80,12 @@ public abstract class MixinHumanoidArmorLayer<T extends LivingEntity, A extends 
                 ? mca$getModel(usesInnerModel(slot))
                 : original.call(layer, slot);
 
-        if (slot == EquipmentSlot.CHEST
-                && (entity instanceof VillagerLike<?> || geneticsPlayer)
-                && model instanceof MCAArmorModel<?> morphology) {
-            morphology.applyMorphology(MCAClient.resolveVillager(entity));
+        if (model instanceof MCAArmorModel<?> morphology) {
+            if (slot == EquipmentSlot.CHEST && (entity instanceof VillagerLike<?> || geneticsPlayer)) {
+                morphology.applyMorphology(MCAClient.resolveVillager(entity));
+            } else {
+                morphology.hideMorphology();
+            }
         }
         return model;
     }

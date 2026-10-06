@@ -84,7 +84,7 @@ public abstract class MixinLivingEntityRenderer {
                     target = "Lnet/minecraft/client/model/EntityModel;renderToBuffer(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;III)V"
             )
     )
-    private void mca$tintVillagerPlayerSkin(
+    private void mca$tintVillagerSkin(
             EntityModel<?> model,
             PoseStack matrices,
             VertexConsumer vertices,
@@ -94,10 +94,15 @@ public abstract class MixinLivingEntityRenderer {
             Operation<Void> original,
             LivingEntity entity
     ) {
-        if (entity instanceof AbstractClientPlayer player && MCAClient.useVillagerRenderer(player.getUUID())) {
+        VillagerLike<?> villager = entity instanceof VillagerLike<?> villagerEntity
+                ? villagerEntity
+                : entity instanceof AbstractClientPlayer player && MCAClient.useVillagerRenderer(player.getUUID())
+                        ? MCAClient.resolveVillager(player)
+                        : null;
+        if (villager != null) {
             color = FastColor.ARGB32.multiply(
                     color,
-                    SkinExporter.getSkinColor(MCAClient.resolveVillager(player))
+                    SkinExporter.getSkinColor(villager)
             );
         }
         original.call(model, matrices, vertices, light, overlay, color);

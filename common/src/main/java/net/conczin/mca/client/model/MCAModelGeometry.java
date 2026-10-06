@@ -1,6 +1,5 @@
 package net.conczin.mca.client.model;
 
-import net.conczin.mca.Config;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.model.geom.PartNames;
@@ -17,7 +16,6 @@ public final class MCAModelGeometry {
     public static final String BREAST_TRANSFORM = "breast_transform";
     public static final String BREASTS = "breasts";
     public static final String BREASTPLATE = "breastplate";
-    static final String BREAST_HAIR_SURFACE = "hair_surface";
     static final float BREAST_WEAR_DILATION = 0.1F;
     static final float BREAST_X = -3.25F;
     static final float BREAST_Y = -1.25F;
@@ -27,12 +25,17 @@ public final class MCAModelGeometry {
     static final float BREAST_DEPTH = 3.0F;
     static final float BREAST_CENTER_X = BREAST_X + BREAST_WIDTH / 2.0F;
     static final float BREAST_CENTER_Y = BREAST_Y + BREAST_HEIGHT / 2.0F;
+    private static final int BREAST_TEXTURE_X = 18;
     private static final int BREAST_TEXTURE_Y = 21;
 
     private MCAModelGeometry() {
     }
 
     public static MeshDefinition overlayData(CubeDeformation dilation, boolean slim) {
+        // Keep the vanilla PlayerModel tree even for layers that render only a subset.
+        // External model mods can replace or animate that structure, and MCA copies the
+        // final parent pose into these overlays. Baking the full tree happens once and
+        // avoids introducing a second, compatibility-sensitive overlay model hierarchy.
         MeshDefinition mesh = PlayerModel.createMesh(dilation, slim);
         addBreastParts(mesh.getRoot().getChild(PartNames.BODY), dilation, true);
         return mesh;
@@ -50,25 +53,20 @@ public final class MCAModelGeometry {
                 CubeListBuilder.create(),
                 PartPose.ZERO
         );
-        // Both projected textures follow one breast pose. Their independent
-        // shells can be inflated without inheriting each other's scale.
-        PartDefinition breasts = transform.addOrReplaceChild(BREASTS, CubeListBuilder.create(), PartPose.ZERO);
-        breasts.addOrReplaceChild(BREAST_HAIR_SURFACE, newHairBreastProjection(0), PartPose.ZERO);
-        breasts.addOrReplaceChild(BREASTPLATE, newHairBreastProjection(16), PartPose.ZERO);
+        // Keep the same subtree shape as clothing/attachments: morphology lives
+        // on the transform and each independently sized shell is a direct child.
+        transform.addOrReplaceChild(BREASTS, newHairBreastProjection(0), PartPose.ZERO);
+        transform.addOrReplaceChild(BREASTPLATE, newHairBreastProjection(16), PartPose.ZERO);
     }
 
     private static CubeListBuilder newHairBreastProjection(int textureYOffset) {
-        CubeListBuilder builder = CubeListBuilder.create();
-        if (!Config.getInstance().enableBoobs) {
-            return builder;
-        }
-
-        // Model Y points down: DOWN is the visible top, and its native UVs
-        // already sample the same torso columns as NORTH.
-        builder.texOffs(18, BREAST_TEXTURE_Y + textureYOffset)
+        // Model Y points down: DOWN is the visible top. The native cube UVs
+        // also map WEST/EAST onto the matching torso-side columns, so keep
+        // those faces for profile views without adding the hidden back/bottom.
+        return CubeListBuilder.create()
+                .texOffs(BREAST_TEXTURE_X, BREAST_TEXTURE_Y + textureYOffset)
                 .addBox(BREAST_X, BREAST_Y, BREAST_Z, BREAST_WIDTH, BREAST_HEIGHT, BREAST_DEPTH,
-                        Set.of(Direction.NORTH, Direction.DOWN));
-        return builder;
+                        Set.of(Direction.NORTH, Direction.DOWN, Direction.WEST, Direction.EAST));
     }
 
     public static MeshDefinition attachmentData(CubeDeformation dilation) {
@@ -109,11 +107,8 @@ public final class MCAModelGeometry {
     }
 
     private static CubeListBuilder newBreasts(CubeDeformation dilation, int textureYOffset) {
-        CubeListBuilder builder = CubeListBuilder.create();
-        if (Config.getInstance().enableBoobs) {
-            builder.texOffs(18, BREAST_TEXTURE_Y + textureYOffset)
-                    .addBox(BREAST_X, BREAST_Y, BREAST_Z, BREAST_WIDTH, BREAST_HEIGHT, BREAST_DEPTH, dilation);
-        }
-        return builder;
+        return CubeListBuilder.create()
+                .texOffs(BREAST_TEXTURE_X, BREAST_TEXTURE_Y + textureYOffset)
+                .addBox(BREAST_X, BREAST_Y, BREAST_Z, BREAST_WIDTH, BREAST_HEIGHT, BREAST_DEPTH, dilation);
     }
 }

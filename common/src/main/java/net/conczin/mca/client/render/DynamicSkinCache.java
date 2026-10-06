@@ -77,6 +77,40 @@ public final class DynamicSkinCache {
         INCOMPLETE_FACE_CACHE.clear();
     }
 
+    /**
+     * Evicts derived textures whose source was replaced in-place (for example an
+     * Immersive Library asset receiving a new version under the same identifier).
+     */
+    public static void invalidateSourceTexture(ResourceLocation source) {
+        if (source == null) {
+            return;
+        }
+
+        ResourceLocation slim = SLIM_TEXTURE_CACHE.remove(source);
+        if (slim != null) {
+            releaseDynamicTexture(slim);
+        }
+
+        String sourceId = source.toString();
+        invalidateDerivedSkins(CACHE, INCOMPLETE_CACHE, sourceId);
+        invalidateDerivedSkins(FACE_CACHE, INCOMPLETE_FACE_CACHE, sourceId);
+    }
+
+    private static void invalidateDerivedSkins(
+            Map<SkinKey, ResourceLocation> cache,
+            Set<SkinKey> incomplete,
+            String sourceId
+    ) {
+        cache.entrySet().removeIf(entry -> {
+            if (!entry.getKey().references(sourceId)) {
+                return false;
+            }
+            releaseDynamicTexture(entry.getValue());
+            incomplete.remove(entry.getKey());
+            return true;
+        });
+    }
+
     public static ResourceLocation getOrCreateSlimTexture(ResourceLocation source) {
         if (source == null) {
             return null;
@@ -340,6 +374,17 @@ public final class DynamicSkinCache {
 
         String id() {
             return UUID.nameUUIDFromBytes(toString().getBytes(StandardCharsets.UTF_8)).toString();
+        }
+
+        boolean references(String identifier) {
+            return identifier.equals(skin)
+                   || identifier.equals(hair)
+                   || identifier.equals(hairBase)
+                   || identifier.equals(hairBangs)
+                   || identifier.equals(hairBack)
+                   || identifier.equals(hairFront)
+                   || identifier.equals(hairExtra)
+                   || identifier.equals(clothes);
         }
     }
 }
