@@ -13,6 +13,7 @@ import net.conczin.mca.network.MessagesMCA;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.registry.*;
 import net.conczin.mca.resources.BodySkinList;
+import net.conczin.mca.resources.DialogueEvents;
 import net.conczin.mca.resources.HairStyleList;
 import net.conczin.mca.resources.LayeredHairList;
 import net.conczin.mca.server.ServerInteractionManager;
@@ -126,6 +127,7 @@ public final class MCAFabric implements ModInitializer {
         registerReloadListener(managerHelper, HairStyleList.ID, new HairStyleList());
         registerReloadListener(managerHelper, LayeredHairList.ID, new LayeredHairList());
         managerHelper.registerReloadListener(new FabricGiftLoader());
+        registerReloadListener(managerHelper, DialogueEvents.ID, new DialogueEvents());
         managerHelper.registerReloadListener(new FabricDialogues());
         managerHelper.registerReloadListener(new FabricTasks());
         managerHelper.registerReloadListener(new FabricNames());

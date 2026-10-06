@@ -115,6 +115,7 @@ public final class CommonNeoForge {
         event.addListener(new HairStyleList());
         event.addListener(new LayeredHairList());
         event.addListener(new GiftLoader());
+        event.addListener(new DialogueEvents());
         event.addListener(new Dialogues());
         event.addListener(new Tasks());
         event.addListener(new Names());
