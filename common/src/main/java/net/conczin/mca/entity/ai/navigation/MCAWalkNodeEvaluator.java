@@ -370,6 +370,11 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             return PathType.WALKABLE_DOOR;
         }
 
+        if (PathingBlockInteraction.isDramaticDoorOpenable(state) && !state.getValue(BlockStateProperties.OPEN)) {
+            // Modded doors vanilla's path types do not recognise need the same treatment.
+            return PathType.WALKABLE_DOOR;
+        }
+
         return super.getPathType(context, x, y, z);
     }
 
