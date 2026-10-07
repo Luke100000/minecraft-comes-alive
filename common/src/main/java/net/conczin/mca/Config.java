@@ -630,6 +630,15 @@ public final class Config extends CommonConfig {
     public List<String> villagerDimensionBlacklist = List.of();
 
     /**
+     * Villagers carrying any of these scoreboard tags are never converted into MCA villagers.
+     * Used to leave tagged villagers of other mods untouched, e.g. From the Fog's door ghosts.
+     */
+    public List<String> villagerTagBlacklist = List.of(
+            "doorGhost",
+            "herobrineEntity"
+    );
+
+    /**
      * List of allowed spawn reasons for villager conversion.
      */
     public List<String> allowedSpawnReasons = List.of(

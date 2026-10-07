@@ -122,6 +122,7 @@ public class SpawnQueue {
         if (Config.getInstance().overwriteOriginalVillagers
             && (entity.getClass().equals(Villager.class) ||
                 Config.getInstance().moddedVillagerWhitelist.contains(BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString()) && entity instanceof Villager)
+            && Config.getInstance().villagerTagBlacklist.stream().noneMatch(entity.getTags()::contains)
             && shouldGetConverted(entity)
             && !villagerSpawnQueue.contains(entity)) {
             return villagerSpawnQueue.add((Villager) entity);
