@@ -9,6 +9,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
@@ -57,6 +58,53 @@ public final class ArcherArrowFriendlyFireGameTests {
                     "archer arrow damaged the villager in front of its target");
             helper.assertTrue(target.getHealth() < targetHealth,
                     "archer arrow did not continue through the villager to hit the hostile target");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "mca_archer_arrow_golem_friendly_fire", templateNamespace = "minecraft", template = "bastion/hoglin_stable/air_base", timeoutTicks = 80)
+    public static void arrowPassesThroughIronGolemAndHitsHostile(GameTestHelper helper) {
+        clearArrowLane(helper);
+
+        BlockPos archerPos = helper.absolutePos(new BlockPos(2, 2, 4));
+        BlockPos golemPos = helper.absolutePos(new BlockPos(5, 2, 4));
+        BlockPos targetPos = helper.absolutePos(new BlockPos(8, 2, 4));
+
+        VillagerEntityMCA archer = spawnVillager(helper, archerPos, true);
+        IronGolem golem = EntityType.IRON_GOLEM.create(helper.getLevel());
+        if (golem == null) {
+            throw new IllegalStateException("failed to create iron golem bystander");
+        }
+        golem.absMoveTo(golemPos.getX() + 0.5D, golemPos.getY(), golemPos.getZ() + 0.5D);
+        golem.setNoAi(true);
+        golem.setNoGravity(true);
+        helper.getLevel().addFreshEntity(golem);
+
+        Zombie target = EntityType.ZOMBIE.create(helper.getLevel());
+        if (target == null) {
+            throw new IllegalStateException("failed to create zombie target");
+        }
+        target.absMoveTo(targetPos.getX() + 0.5D, targetPos.getY(), targetPos.getZ() + 0.5D);
+        target.setNoAi(true);
+        target.setNoGravity(true);
+        helper.getLevel().addFreshEntity(target);
+
+        float golemHealth = golem.getHealth();
+        float targetHealth = target.getHealth();
+
+        ItemStack bow = Items.BOW.getDefaultInstance();
+        archer.setItemSlot(EquipmentSlot.MAINHAND, bow);
+        AbstractArrow arrow = ProjectileUtil.getMobArrow(archer, Items.ARROW.getDefaultInstance(), 1.0F, bow);
+        arrow.setNoGravity(true);
+        arrow.setPos(archer.getX(), golem.getY() + golem.getBbHeight() * 0.5D, archer.getZ());
+        arrow.shoot(1.0D, 0.0D, 0.0D, 1.5F, 0.0F);
+        helper.getLevel().addFreshEntity(arrow);
+
+        helper.runAfterDelay(20, () -> {
+            helper.assertTrue(golem.getHealth() == golemHealth,
+                    "archer arrow damaged the iron golem in front of its target");
+            helper.assertTrue(target.getHealth() < targetHealth,
+                    "archer arrow did not continue through the iron golem to hit the hostile target");
             helper.succeed();
         });
     }
