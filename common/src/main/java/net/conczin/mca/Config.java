@@ -861,7 +861,13 @@ public final class Config extends CommonConfig {
      * Maps modded professions to MCA professions for clothing conversion.
      * Only adult clothing is used; toddlers and children remain unchanged.
      */
-    public Map<String, String> professionConversionsMap = Map.of();
+    public Map<String, String> professionConversionsMap = Map.of(
+            "villagersplus:alchemist", "minecraft:cleric",
+            "villagersplus:horticulturist", "minecraft:farmer",
+            "villagersplus:miner", "mca:miner",
+            "villagersplus:oceanographer", "minecraft:fisherman",
+            "villagersplus:occultist", "mca:cultist"
+    );
 
     /**
      * Maps traits to shader locations, applied to players when camera entity has the trait.
