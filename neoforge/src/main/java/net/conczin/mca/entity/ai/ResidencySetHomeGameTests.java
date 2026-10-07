@@ -178,6 +178,37 @@ public final class ResidencySetHomeGameTests {
         helper.succeed();
     }
 
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void duplicateResidentHomeReconciliationWakesSleepingVillager(GameTestHelper helper) {
+        placeFloor(helper, 1, 10, 2, 8);
+        BlockPos bell = helper.absolutePos(new BlockPos(4, 1, 5));
+        helper.getLevel().setBlock(bell, Blocks.BELL.defaultBlockState(), 3);
+        helper.assertTrue(VillageManager.get(helper.getLevel()).processBuilding(bell) == Building.validationResult.SUCCESS,
+                "fixture bell did not create an MCA village");
+
+        BlockPos foot = helper.absolutePos(new BlockPos(7, 1, 5));
+        BlockPos head = placeBed(helper, foot, Direction.EAST);
+        VillagerEntityMCA owner = spawnVillager(helper, helper.absolutePos(new BlockPos(2, 1, 5)));
+        helper.assertTrue(owner.getResidency().trySetHome(helper.getLevel(), foot),
+                "canonical owner could not claim the HOME ticket");
+
+        VillagerEntityMCA duplicate = spawnVillager(helper, head.relative(Direction.NORTH, 2));
+        duplicate.getBrain().setMemory(MemoryModuleType.HOME,
+                GlobalPos.of(helper.getLevel().dimension(), head));
+        duplicate.startSleeping(head);
+        helper.assertTrue(duplicate.isSleeping(), "duplicate villager did not start sleeping");
+
+        duplicate.getResidency().seekHome();
+
+        helper.assertTrue(duplicate.getBrain().getMemoryInternal(MemoryModuleType.HOME).isEmpty(),
+                "duplicate resident retained the canonical owner's HOME");
+        helper.assertTrue(!duplicate.isSleeping(),
+                "duplicate resident stayed asleep after its HOME was invalidated");
+        helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(head) == 0,
+                "duplicate reconciliation released the canonical resident's HOME ticket");
+        helper.succeed();
+    }
+
     private static void assertHome(GameTestHelper helper, VillagerEntityMCA villager, BlockPos expectedHome) {
         GlobalPos home = villager.getBrain().getMemoryInternal(MemoryModuleType.HOME)
                 .orElseThrow(() -> new AssertionError("villager has no HOME"));

@@ -173,6 +173,9 @@ public class Residency {
                     // A duplicate memory does not own this position's POI ticket. Forget it without
                     // releasing the ticket retained for the canonical resident.
                     clearHomeMemories(entity.getBrain());
+                    if (entity.isSleeping()) {
+                        entity.stopSleeping();
+                    }
                 }
                 entity.setTrackedValue(VILLAGE, v.getId());
             });
