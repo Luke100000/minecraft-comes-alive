@@ -493,7 +493,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (getVehicle() != null && getVehicle().equals(player)) return InteractionResult.PASS;
 
         ItemStack stack = player.getItemInHand(hand);
-        if (!stack.is(TagsMCA.Items.VILLAGER_EGGS) && isAlive() && !isTrading() && !isSleeping() && canInteractWithItemStackInHand(stack) && !getVillagerBrain().isPanicking()) {
+        boolean isOnBlacklist = Config.getInstance().villagerInteractionItemBlacklist.contains(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+        if (!isOnBlacklist && !stack.is(TagsMCA.Items.VILLAGER_EGGS) && isAlive() && !isTrading() && !isSleeping() && canInteractWithItemStackInHand(stack) && !getVillagerBrain().isPanicking()) {
             if (isBaby()) {
                 setUnhappy();
             } else if (!level().isClientSide) {
