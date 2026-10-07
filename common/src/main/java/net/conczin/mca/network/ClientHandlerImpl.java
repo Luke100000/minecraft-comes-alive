@@ -199,6 +199,9 @@ public class ClientHandlerImpl implements ClientHandler {
         Locale locale = Locale.forLanguageTag(client.options.languageCode.replace('_', '-'));
         InteractScreen gui = client.screen instanceof InteractScreen interactScreen ? interactScreen : null;
         boolean visibleInteraction = gui != null && gui.isDialogueMode();
+        if (!visibleInteraction && message.state() == InteractionDialogueNodeResponse.State.ACTIVE) {
+            return;
+        }
         UnaryOperator<Component> resolver = UnaryOperator.identity();
         if (visibleInteraction && message.state() == InteractionDialogueNodeResponse.State.ACTIVE) {
             boolean silent = message.node().orElseThrow().silent();
@@ -209,14 +212,14 @@ public class ClientHandlerImpl implements ClientHandler {
         if (!accepted) {
             return;
         }
-        if (!visibleInteraction) {
-            dialoguePresentation.pause();
-            return;
-        }
         if (message.state() == InteractionDialogueNodeResponse.State.ENDED) {
-            gui.requestDialogueMenu();
+            if (visibleInteraction) {
+                gui.requestDialogueMenu();
+            }
         } else if (message.state() == InteractionDialogueNodeResponse.State.PAUSED) {
-            gui.leaveDialogueMode();
+            if (visibleInteraction) {
+                gui.leaveDialogueMode(false);
+            }
         }
     }
 
@@ -342,11 +345,12 @@ public class ClientHandlerImpl implements ClientHandler {
         private int revealedWords;
         private long nextRevealAt;
         private boolean nodeVisible;
+        private boolean menuMode;
         private DialogueEngine.DialogueSelection pendingSelection;
 
         public boolean acceptOptions(InteractionDialogueOptionsResponse response) {
             Objects.requireNonNull(response, "response");
-            if (nodeVisible || !acceptsNewToken(response.offerToken())) {
+            if (!menuMode || nodeVisible || !acceptsNewToken(response.offerToken())) {
                 return false;
             }
             options = response;
@@ -369,6 +373,9 @@ public class ClientHandlerImpl implements ClientHandler {
             Objects.requireNonNull(locale, "locale");
             Objects.requireNonNull(lineResolver, "lineResolver");
 
+            if (menuMode && pendingSelection == null) {
+                return false;
+            }
             if (response.state() != InteractionDialogueNodeResponse.State.ACTIVE) {
                 return acceptTerminal(response);
             }
@@ -398,6 +405,7 @@ public class ClientHandlerImpl implements ClientHandler {
             node = incoming;
             options = null;
             nodeVisible = true;
+            menuMode = false;
             rememberToken(response.offerToken());
 
             if (preserveResume) {
@@ -444,21 +452,26 @@ public class ClientHandlerImpl implements ClientHandler {
         public void pause() {
             options = null;
             nodeVisible = false;
+            menuMode = false;
             pendingSelection = null;
         }
 
         public void beginRequest() {
             options = null;
+            nodeVisible = false;
+            menuMode = true;
             pendingSelection = null;
         }
 
         public void dismissOptions() {
             options = null;
+            menuMode = false;
             pendingSelection = null;
         }
 
         public void markSelectionRequested(DialogueEngine.DialogueSelection selection) {
             pendingSelection = Objects.requireNonNull(selection, "selection");
+            menuMode = false;
         }
 
         public Optional<InteractionDialogueOptionsResponse> options() {
@@ -479,9 +492,9 @@ public class ClientHandlerImpl implements ClientHandler {
             return nodeVisible ? Optional.ofNullable(node) : Optional.empty();
         }
 
-    public boolean nodeVisible() {
-        return nodeVisible;
-    }
+        public boolean nodeVisible() {
+            return nodeVisible;
+        }
 
         public Component fullLine() {
             return resolvedLine;
@@ -519,6 +532,7 @@ public class ClientHandlerImpl implements ClientHandler {
             terminatedSessionId = null;
             hasLatestToken = false;
             latestToken = 0L;
+            menuMode = false;
             pendingSelection = null;
             dropSnapshot();
         }
@@ -585,7 +599,7 @@ public class ClientHandlerImpl implements ClientHandler {
                 }
             }
             if (wordStarts.isEmpty()) {
-                return List.of();
+                return List.of(text.length());
             }
             List<Integer> cuts = new ArrayList<>(wordStarts.size());
             for (int i = 0; i < wordStarts.size(); i++) {

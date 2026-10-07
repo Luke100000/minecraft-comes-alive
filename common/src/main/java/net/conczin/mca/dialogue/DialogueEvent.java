@@ -31,6 +31,9 @@ public record DialogueEvent(
         String start,
         Map<String, Node> nodes
 ) {
+    public static final int MAX_CHOICES = 32;
+    public static final int MAX_CHOICE_ID_LENGTH = 96;
+
     private static final Codec<DialogueEvent> CODEC = RecordCodecBuilder.create(instance -> instance.group(
             Trigger.CODEC.fieldOf("trigger").forGetter(DialogueEvent::trigger),
             Presentation.CODEC.fieldOf("presentation").forGetter(DialogueEvent::presentation),
@@ -389,6 +392,9 @@ public record DialogueEvent(
             if (choices.isPresent() && choices.orElseThrow().isEmpty()) {
                 throw new IllegalArgumentException("node '" + nodeId + "' choices must not be empty");
             }
+            if (choices.isPresent() && choices.orElseThrow().size() > MAX_CHOICES) {
+                throw new IllegalArgumentException("node '" + nodeId + "' has too many choices");
+            }
         }
     }
 
@@ -416,6 +422,9 @@ public record DialogueEvent(
         }
 
         private void validate(String nodeId) {
+            if (id.length() > MAX_CHOICE_ID_LENGTH) {
+                throw new IllegalArgumentException("choice ID in node '" + nodeId + "' exceeds " + MAX_CHOICE_ID_LENGTH + " characters");
+            }
             if (outcomes.isPresent()) {
                 if (outcomes.orElseThrow().isEmpty()) {
                     throw new IllegalArgumentException("choice '" + id + "' in node '" + nodeId + "' has empty outcomes");

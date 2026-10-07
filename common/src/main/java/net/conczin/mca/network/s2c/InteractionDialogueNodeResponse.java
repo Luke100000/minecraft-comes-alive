@@ -27,7 +27,7 @@ public record InteractionDialogueNodeResponse(
         State state,
         Optional<Node> node
 ) implements HandleablePayload {
-    public static final int MAX_CHOICES = 32;
+    public static final int MAX_CHOICES = net.conczin.mca.dialogue.DialogueEvent.MAX_CHOICES;
 
     private static final StreamCodec<ByteBuf, Component> COMPONENT_CODEC =
             ComponentSerialization.TRUSTED_CONTEXT_FREE_STREAM_CODEC;

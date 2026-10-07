@@ -1,6 +1,7 @@
 package net.conczin.mca.network.c2s;
 
 import net.conczin.mca.MCA;
+import net.conczin.mca.dialogue.DialogueEvent;
 import net.conczin.mca.dialogue.DialogueEngine;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.Network;
@@ -14,7 +15,7 @@ import net.minecraft.server.level.ServerPlayer;
 import java.util.Objects;
 
 public record InteractionDialogueChoiceMessage(long offerToken, String choiceId) implements HandleablePayload {
-    public static final int MAX_CHOICE_ID_LENGTH = 96;
+    public static final int MAX_CHOICE_ID_LENGTH = DialogueEvent.MAX_CHOICE_ID_LENGTH;
     private static final StreamCodec<io.netty.buffer.ByteBuf, String> CHOICE_ID_CODEC =
             ByteBufCodecs.stringUtf8(MAX_CHOICE_ID_LENGTH);
 

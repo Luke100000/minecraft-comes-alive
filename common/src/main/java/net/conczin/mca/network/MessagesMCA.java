@@ -24,6 +24,7 @@ public interface MessagesMCA {
         c.register(InteractionDialogueAdvanceMessage.TYPE, InteractionDialogueAdvanceMessage.STREAM_CODEC, true);
         c.register(InteractionDialogueBeginMessage.TYPE, InteractionDialogueBeginMessage.STREAM_CODEC, true);
         c.register(InteractionDialogueChoiceMessage.TYPE, InteractionDialogueChoiceMessage.STREAM_CODEC, true);
+        c.register(InteractionDialogueLeaveMessage.TYPE, InteractionDialogueLeaveMessage.STREAM_CODEC, true);
         c.register(InteractionDialogueInitMessage.TYPE, InteractionDialogueInitMessage.STREAM_CODEC, true);
         c.register(InteractionDialogueMessage.TYPE, InteractionDialogueMessage.STREAM_CODEC, true);
         c.register(InteractionDialogueSelectMessage.TYPE, InteractionDialogueSelectMessage.STREAM_CODEC, true);

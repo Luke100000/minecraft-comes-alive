@@ -6,6 +6,7 @@ import net.conczin.mca.dialogue.DialogueEngine;
 import net.conczin.mca.network.c2s.InteractionDialogueAdvanceMessage;
 import net.conczin.mca.network.c2s.InteractionDialogueBeginMessage;
 import net.conczin.mca.network.c2s.InteractionDialogueChoiceMessage;
+import net.conczin.mca.network.c2s.InteractionDialogueLeaveMessage;
 import net.conczin.mca.network.c2s.InteractionDialogueSelectMessage;
 import net.conczin.mca.network.s2c.InteractionDialogueNodeResponse;
 import net.conczin.mca.network.s2c.InteractionDialogueOptionsResponse;
@@ -74,6 +75,10 @@ class DialogueEventCodecTest {
         assertEquals(
                 new InteractionDialogueAdvanceMessage(44L),
                 roundTrip(InteractionDialogueAdvanceMessage.STREAM_CODEC, new InteractionDialogueAdvanceMessage(44L))
+        );
+        assertEquals(
+                new InteractionDialogueLeaveMessage(),
+                roundTrip(InteractionDialogueLeaveMessage.STREAM_CODEC, new InteractionDialogueLeaveMessage())
         );
     }
 

@@ -26,7 +26,7 @@ public record InteractionDialogueOptionsResponse(
         boolean ambientAvailable,
         boolean legacyAvailable
 ) implements HandleablePayload {
-    public static final int MAX_EVENT_OPTIONS = 64;
+    public static final int MAX_EVENT_OPTIONS = DialogueEngine.MAX_EVENT_OPTIONS;
 
     private static final StreamCodec<ByteBuf, Mode> MODE_CODEC =
             ByteBufCodecs.VAR_INT.map(InteractionDialogueOptionsResponse::modeById, Enum::ordinal);

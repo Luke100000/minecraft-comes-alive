@@ -33,6 +33,7 @@ import java.util.function.ToDoubleFunction;
  * {@link DialogueEvents}; generation mismatches invalidate the transient state here.</p>
  */
 public final class DialogueEngine {
+    public static final int MAX_EVENT_OPTIONS = 64;
     public static final long PAUSE_TICKS = 2400L;
 
     private static final Comparator<DialogueEvent> PRIORITY_ORDER =
@@ -457,6 +458,10 @@ public final class DialogueEngine {
                 .filter(event -> event.presentation().mode() == DialogueEvent.PresentationMode.ASK)
                 .forEach(ask::add);
         ask.sort(PRIORITY_ORDER);
+        int askLimit = Math.max(0, MAX_EVENT_OPTIONS - (direct.isPresent() ? 1 : 0));
+        if (ask.size() > askLimit) {
+            ask = new ArrayList<>(ask.subList(0, askLimit));
+        }
 
         List<DialogueEvent> ambient = candidates.stream()
                 .filter(event -> event.presentation().mode() == DialogueEvent.PresentationMode.AMBIENT)

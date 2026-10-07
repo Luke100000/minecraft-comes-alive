@@ -355,6 +355,41 @@ class DialogueEventParsingTest {
     }
 
     @Test
+    void rejectsChoiceIdsAndChoiceListsThatExceedWireBounds() {
+        assertDecodeFails("""
+                {
+                  "trigger": "talk",
+                  "presentation": { "mode": "ask", "prompt": "p", "resume_prompt": "r" },
+                  "repeat": { "type": "always" },
+                  "start": "intro",
+                  "nodes": {
+                    "intro": {
+                      "line": "intro",
+                      "choices": [{ "id": "%s", "text": "x", "next": "done" }]
+                    },
+                    "done": { "line": "done", "complete": true }
+                  }
+                }
+                """.formatted("x".repeat(DialogueEvent.MAX_CHOICE_ID_LENGTH + 1)));
+
+        String choices = java.util.stream.IntStream.rangeClosed(0, DialogueEvent.MAX_CHOICES)
+                .mapToObj(i -> "{ \"id\": \"c" + i + "\", \"text\": \"x\", \"next\": \"done\" }")
+                .collect(java.util.stream.Collectors.joining(","));
+        assertDecodeFails("""
+                {
+                  "trigger": "talk",
+                  "presentation": { "mode": "ask", "prompt": "p", "resume_prompt": "r" },
+                  "repeat": { "type": "always" },
+                  "start": "intro",
+                  "nodes": {
+                    "intro": { "line": "intro", "choices": [%s] },
+                    "done": { "line": "done", "complete": true }
+                  }
+                }
+                """.formatted(choices));
+    }
+
+    @Test
     void rejectsInvalidBuiltInActionShapes() {
         for (String action : List.of(
                 "{ \"type\": \"mca:hearts\" }",

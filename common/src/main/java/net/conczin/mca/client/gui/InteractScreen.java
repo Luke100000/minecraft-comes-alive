@@ -368,9 +368,16 @@ public class InteractScreen extends AbstractDynamicScreen {
     }
 
     public void leaveDialogueMode() {
+        leaveDialogueMode(true);
+    }
+
+    public void leaveDialogueMode(boolean notifyServer) {
         dialogueMode = false;
         dialogueClickHover = null;
         dialoguePresentation().ifPresent(ClientHandlerImpl.DialoguePresentation::dismissOptions);
+        if (notifyServer) {
+            Network.sendToServer(new InteractionDialogueLeaveMessage());
+        }
         setLayout("main");
     }
 

@@ -79,6 +79,28 @@ class DialoguePresentationTest {
     }
 
     @Test
+    void punctuationOnlyLineStillRevealsBeforeControlsBecomeAvailable() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        presentation.acceptNode(active(
+                UUID.randomUUID(),
+                13L,
+                Component.literal("... 👋 ?!"),
+                true,
+                List.of(new InteractionDialogueNodeResponse.Choice("wave", Component.literal("👋")))
+        ), 0L, Locale.ENGLISH);
+
+        assertEquals("", presentation.visibleLine().getString());
+        assertFalse(presentation.canAdvance());
+        assertTrue(presentation.visibleChoices().isEmpty());
+        presentation.tick(250L);
+        assertEquals("... 👋 ?!", presentation.visibleLine().getString());
+        assertTrue(presentation.canAdvance());
+        assertEquals(List.of("wave"), presentation.visibleChoices().stream()
+                .map(InteractionDialogueNodeResponse.Choice::id)
+                .toList());
+    }
+
+    @Test
     void preservesUnicodePunctuationAndComponentStylesAtWordBoundaries() {
         ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
         MutableComponent line = Component.literal("Café, 👋 ").withStyle(ChatFormatting.RED)
@@ -110,6 +132,7 @@ class DialoguePresentationTest {
         assertEquals("First ", presentation.visibleLine().getString());
 
         presentation.pause();
+        presentation.beginRequest();
         presentation.acceptOptions(new InteractionDialogueOptionsResponse(
                 40L,
                 Optional.of(Component.literal("Want to finish what you were saying?")),
@@ -151,6 +174,44 @@ class DialoguePresentationTest {
         presentation.tick(250L);
         presentation.tick(500L);
         assertEquals("Current line", presentation.visibleLine().getString());
+    }
+
+    @Test
+    void freshTalkRequestRejectsLateActiveResponseUntilASelectionIsMade() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        UUID sessionId = UUID.randomUUID();
+        assertTrue(presentation.acceptNode(
+                active(sessionId, 51L, Component.literal("Old line"), true, List.of()),
+                0L,
+                Locale.ENGLISH
+        ));
+
+        presentation.beginRequest();
+        assertFalse(presentation.acceptNode(new InteractionDialogueNodeResponse(
+                sessionId,
+                51L,
+                InteractionDialogueNodeResponse.State.PAUSED,
+                Optional.empty()
+        ), 5L, Locale.ENGLISH));
+        assertFalse(presentation.acceptNode(
+                active(sessionId, 52L, Component.literal("Late line"), true, List.of()),
+                10L,
+                Locale.ENGLISH
+        ));
+        InteractionDialogueOptionsResponse menu = new InteractionDialogueOptionsResponse(
+                53L,
+                Optional.of(Component.literal("Resume?")),
+                List.of(),
+                false,
+                false
+        );
+        assertTrue(presentation.acceptOptions(menu));
+        presentation.markSelectionRequested(DialogueEngine.DialogueSelection.RESUME);
+        assertTrue(presentation.acceptNode(
+                active(sessionId, 54L, Component.literal("Old line"), true, List.of()),
+                20L,
+                Locale.ENGLISH
+        ));
     }
 
     @Test
@@ -226,6 +287,7 @@ class DialoguePresentationTest {
                 false
         );
 
+        presentation.beginRequest();
         presentation.acceptOptions(options);
         assertEquals(options, presentation.options().orElseThrow());
         presentation.markSelectionRequested(DialogueEngine.DialogueSelection.AMBIENT);

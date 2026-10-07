@@ -7,6 +7,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.contents.TranslatableContents;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -97,6 +98,24 @@ class DialogueSelectionTest {
         assertTrue(plan.highlighted().isEmpty());
         assertEquals(List.of(eligible.id()), plan.ask().stream().map(DialogueEvent::id).toList());
         assertTrue(plan.ambient().isEmpty());
+    }
+
+    @Test
+    void menuSelectionPlanNeverExceedsWireOptionBudget() {
+        List<DialogueEvent> events = new ArrayList<>();
+        events.add(event("test:highlighted", "highlighted", 100, 1.0, "always"));
+        for (int i = 0; i < DialogueEngine.MAX_EVENT_OPTIONS + 10; i++) {
+            events.add(event("test:ask_" + i, "ask", i, 1.0, "always"));
+        }
+
+        DialogueEngine.SelectionPlan plan = DialogueEngine.planSelection(events, event -> true, null);
+
+        assertTrue(plan.highlighted().isPresent());
+        assertEquals(
+                DialogueEngine.MAX_EVENT_OPTIONS,
+                1 + plan.ask().size(),
+                "highlighted plus Ask entries must fit the bounded options packet"
+        );
     }
 
     @Test
