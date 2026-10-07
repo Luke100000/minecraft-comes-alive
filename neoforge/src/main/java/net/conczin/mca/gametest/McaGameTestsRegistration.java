@@ -3,6 +3,7 @@ package net.conczin.mca.gametest;
 import net.conczin.mca.MCA;
 import net.conczin.mca.block.TombstoneBlockGameTests;
 import net.conczin.mca.dialogue.DialogueConditionGameTests;
+import net.conczin.mca.dialogue.DialogueActionGameTests;
 import net.conczin.mca.dialogue.DialogueEngineGameTests;
 import net.conczin.mca.entity.VillagerBedAlignmentGameTests;
 import net.conczin.mca.entity.VillagerCarryPositionGameTests;
@@ -65,6 +66,7 @@ public final class McaGameTestsRegistration {
     private static final List<Class<?>> GAME_TEST_CLASSES = List.of(
             TombstoneBlockGameTests.class,
             DialogueConditionGameTests.class,
+            DialogueActionGameTests.class,
             DialogueEngineGameTests.class,
             VillagerBedAlignmentGameTests.class,
             VillagerCarryPositionGameTests.class,

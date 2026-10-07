@@ -321,7 +321,7 @@ class DialogueEventParsingTest {
     }
 
     @Test
-    void preservesKnownConditionAndActionParametersForLaterEvaluation() {
+    void decodesKnownConditionAndTypedActionParameters() {
         DialogueEvent event = decode("""
                 {
                   "trigger": "talk",
@@ -347,13 +347,27 @@ class DialogueEventParsingTest {
         DialogueCondition.Defined condition = assertInstanceOf(DialogueCondition.Defined.class, event.requirements().get(0));
         assertEquals("gloomy", condition.definition().get("value").getAsString());
 
-        DialogueAction.Defined action = assertInstanceOf(
-                DialogueAction.Defined.class,
+        DialogueAction.Hearts action = assertInstanceOf(
+                DialogueAction.Hearts.class,
                 event.nodes().get("intro").choices().orElseThrow().get(0).actions().get(0)
         );
-        assertEquals(5, action.definition().get("amount").getAsInt());
-        action.definition().addProperty("amount", 99);
-        assertEquals(5, action.definition().get("amount").getAsInt());
+        assertEquals(5, action.amount());
+    }
+
+    @Test
+    void rejectsInvalidBuiltInActionShapes() {
+        for (String action : List.of(
+                "{ \"type\": \"mca:hearts\" }",
+                "{ \"type\": \"mca:hearts\", \"amount\": 1, \"typo\": true }",
+                "{ \"type\": \"mca:hearts\", \"amount\": 1.5 }",
+                "{ \"type\": \"mca:mood\", \"amount\": \"sad\" }",
+                "{ \"type\": \"mca:remember\", \"id\": \"x\", \"var\": \"villager\" }",
+                "{ \"type\": \"mca:remember\", \"id\": \"x\", \"time\": 0 }",
+                "{ \"type\": \"mca:remember\", \"id\": \"x\", \"time\": 1.25 }",
+                "{ \"type\": \"mca:command\", \"command\": \" \" }"
+        )) {
+            assertDecodeFails(eventWithAction(action));
+        }
     }
 
     @Test
@@ -426,6 +440,29 @@ class DialogueEventParsingTest {
                   "nodes": { "intro": { "line": "intro", "complete": true } }
                 }
                 """.formatted(presentation);
+    }
+
+    private static String eventWithAction(String action) {
+        return """
+                {
+                  "trigger": "talk",
+                  "presentation": { "mode": "ask", "prompt": "p", "resume_prompt": "r" },
+                  "repeat": { "type": "always" },
+                  "start": "intro",
+                  "nodes": {
+                    "intro": {
+                      "line": "intro",
+                      "choices": [{
+                        "id": "x",
+                        "text": "x",
+                        "actions": [%s],
+                        "next": "done"
+                      }]
+                    },
+                    "done": { "line": "done", "complete": true }
+                  }
+                }
+                """.formatted(action);
     }
 
     private static String simpleEvent(String start, String node) {

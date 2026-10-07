@@ -38,6 +38,16 @@ public final class DialogueEngine {
     private static final Comparator<DialogueEvent> PRIORITY_ORDER =
             Comparator.comparingInt(DialogueEvent::priority).reversed().thenComparing(DialogueEvent::id);
     private static final Comparator<DialogueEvent> CANONICAL_ORDER = Comparator.comparing(DialogueEvent::id);
+    /**
+     * Commands whose current handler result reliably means the owner executed the operation.
+     * Commands with ambiguous success semantics are added only when their migration reviews the
+     * concrete owner contract instead of treating the handler's close-screen flag as success.
+     */
+    private static final Set<String> RELIABLE_DIALOGUE_COMMANDS = Set.of(
+            "divorcePapers",
+            "divorceConfirm",
+            "stay_in_village"
+    );
 
     private final DialogueEvents events;
     private final Map<UUID, DialogueSession> sessions = new HashMap<>();
@@ -145,7 +155,7 @@ public final class DialogueEngine {
             offers.remove(playerId);
             DialogueSession resumed = refreshOfferedChoices(retained.resume(nextToken()), context);
             sessions.put(playerId, resumed);
-            return Optional.of(view(resumed));
+            return Optional.of(view(resumed, context));
         }
 
         DialogueEvent selected;
@@ -188,7 +198,7 @@ public final class DialogueEngine {
         );
         session = refreshOfferedChoices(session, context);
         sessions.put(playerId, session);
-        return Optional.of(view(session));
+        return Optional.of(view(session, context));
     }
 
     public TransitionResult choose(ServerPlayer player, long offerToken, String choiceId) {
@@ -229,7 +239,7 @@ public final class DialogueEngine {
                 return TransitionResult.ending();
             }
             sessions.put(playerId, refreshed);
-            return TransitionResult.rejected(view(refreshed));
+            return TransitionResult.rejected(view(refreshed, context));
         }
 
         DialogueSession progressed = session.withAcceptedChoice(choice.id());
@@ -248,19 +258,21 @@ public final class DialogueEngine {
                     return TransitionResult.ending();
                 }
                 sessions.put(playerId, refreshed);
-                return TransitionResult.rejected(view(refreshed));
+                return TransitionResult.rejected(view(refreshed, context));
             }
             int outcomeIndex = choice.outcomes().orElseThrow().indexOf(outcome);
             progressed = progressed.withSelectedOutcome(choice.id(), outcomeIndex);
+            progressed = progressed.appendPendingEffects(outcome.actions());
             next = outcome.next();
         } else {
+            progressed = progressed.appendPendingEffects(choice.actions());
             next = choice.next().orElseThrow();
         }
 
         progressed = progressed.withProgress(next, 0, List.of(), nextToken());
         progressed = refreshOfferedChoices(progressed, context);
         sessions.put(playerId, progressed);
-        return TransitionResult.advanced(view(progressed));
+        return TransitionResult.advanced(view(progressed, context));
     }
 
     public TransitionResult advance(ServerPlayer player, long offerToken) {
@@ -288,7 +300,7 @@ public final class DialogueEngine {
             );
             progressed = refreshOfferedChoices(progressed, context);
             sessions.put(playerId, progressed);
-            return TransitionResult.advanced(view(progressed));
+            return TransitionResult.advanced(view(progressed, context));
         }
 
         if (node.choices().isPresent()) {
@@ -306,12 +318,18 @@ public final class DialogueEngine {
             DialogueSession progressed = session.withProgress(node.next().orElseThrow(), 0, List.of(), nextToken());
             progressed = refreshOfferedChoices(progressed, context);
             sessions.put(playerId, progressed);
-            return TransitionResult.advanced(view(progressed));
+            return TransitionResult.advanced(view(progressed, context));
         }
 
         sessions.remove(playerId);
         offers.remove(playerId);
-        return node.complete() ? TransitionResult.completion() : TransitionResult.ending();
+        if (!node.complete()) {
+            return TransitionResult.ending();
+        }
+        if (!commit(player, villager, session, context)) {
+            return TransitionResult.ending();
+        }
+        return TransitionResult.completion();
     }
 
     public void pause(ServerPlayer player) {
@@ -566,9 +584,77 @@ public final class DialogueEngine {
         return session.withOfferedChoices(choices);
     }
 
-    private DialogueNodeView view(DialogueSession session) {
+    private boolean commit(
+            ServerPlayer player,
+            VillagerEntityMCA villager,
+            DialogueSession session,
+            DialogueContext context
+    ) {
+        List<DialogueAction.Command> commands = session.pendingEffects().stream()
+                .filter(DialogueAction.Command.class::isInstance)
+                .map(DialogueAction.Command.class::cast)
+                .toList();
+        if (commands.size() > 1 || commands.stream().anyMatch(command -> !canCommit(command))) {
+            return false;
+        }
+        if (!commands.isEmpty() && !executeCommand(villager, player, commands.getFirst())) {
+            return false;
+        }
+
+        for (DialogueAction action : session.pendingEffects()) {
+            if (action instanceof DialogueAction.Command) {
+                continue;
+            }
+            if (action instanceof DialogueAction.Hearts hearts) {
+                villager.getVillagerBrain().rewardHearts(player, hearts.amount());
+            } else if (action instanceof DialogueAction.Mood mood) {
+                villager.getVillagerBrain().modifyMoodValue(mood.amount());
+            } else if (action instanceof DialogueAction.Remember remember) {
+                String id = remember.playerScoped()
+                        ? remember.id() + "." + player.getUUID()
+                        : remember.id();
+                if (remember.time().isPresent()) {
+                    villager.getLongTermMemory().remember(id, remember.time().getAsLong());
+                } else {
+                    villager.getLongTermMemory().remember(id);
+                }
+            }
+        }
+
+        context.history().complete(
+                player.getUUID(),
+                villager.getUUID(),
+                session.event(),
+                session.acceptedChoices(),
+                overworldTime(player),
+                random
+        );
+        return true;
+    }
+
+    private static boolean canCommit(DialogueAction.Command command) {
+        return RELIABLE_DIALOGUE_COMMANDS.contains(command.command());
+    }
+
+    private static boolean executeCommand(
+            VillagerEntityMCA villager,
+            ServerPlayer player,
+            DialogueAction.Command command
+    ) {
+        // For this conservative subset the current handler's true result means the command executed.
+        boolean close = villager.getInteractions().handle(player, command.command());
+        if (close) {
+            villager.getInteractions().stopInteracting();
+        }
+        return close;
+    }
+
+    private DialogueNodeView view(DialogueSession session, DialogueContext context) {
         DialogueEvent.Node node = session.event().nodes().get(session.nodeId());
-        Component line = Component.translatable(node.lines().get(session.lineIndex()));
+        Component line = context.villager().getTranslatable(
+                context.player(),
+                node.lines().get(session.lineIndex())
+        );
         List<ChoiceView> choices = session.lineIndex() == node.lines().size() - 1
                 ? node.choices().orElse(List.of()).stream()
                         .filter(choice -> session.offeredChoices().contains(choice.id()))

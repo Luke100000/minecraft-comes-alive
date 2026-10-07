@@ -437,10 +437,7 @@ public final class DialogueEngineGameTests {
         UUID playerId = fixture.player().getUUID();
         UUID villagerId = fixture.villager().getUUID();
         DialogueSession paused = Objects.requireNonNull(sessions(engine).get(playerId));
-        DialogueAction queued = new DialogueAction.Defined(
-                ResourceLocation.parse("mca:hearts"),
-                JsonParser.parseString("{\"type\":\"mca:hearts\",\"amount\":1}").getAsJsonObject()
-        );
+        DialogueAction queued = new DialogueAction.Hearts(1);
         sessions(engine).put(playerId, paused.withPendingEffects(List.of(queued)));
         UUID pausedId = paused.id();
         helper.assertTrue(paused.acceptedChoices().contains("remember_me"), "fixture must carry an accepted temporary choice");
