@@ -81,6 +81,7 @@ public final class MCAFabricClient extends ClientProxyAbstractImpl implements Cl
         ClientPlayConnectionEvents.JOIN.register((handler, sender, server) ->
                 MCAClient.onLogin()
         );
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> MCAClient.onDisconnect());
 
         BlockRenderLayerMap.INSTANCE.putBlock(BlocksMCA.INFERNAL_FLAME, RenderType.cutout());
 

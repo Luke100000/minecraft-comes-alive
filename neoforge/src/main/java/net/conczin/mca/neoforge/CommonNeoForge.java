@@ -208,6 +208,13 @@ public final class CommonNeoForge {
     }
 
     @SubscribeEvent
+    public static void onPlayerLoggedOutEvent(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            MCA.getDialogueEngine().ifPresent(engine -> engine.end(player));
+        }
+    }
+
+    @SubscribeEvent
     public static void onPlayerRespawnEvent(PlayerEvent.PlayerRespawnEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             ServerInteractionManager.getInstance().onPlayerRespawn(player);

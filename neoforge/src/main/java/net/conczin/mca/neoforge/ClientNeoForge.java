@@ -93,6 +93,11 @@ public final class ClientNeoForge extends ClientProxyAbstractImpl {
     }
 
     @SubscribeEvent
+    public static void onClientDisconnected(ClientPlayerNetworkEvent.LoggingOut event) {
+        MCAClient.onDisconnect();
+    }
+
+    @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Pre event) {
         MCAClient.tickClient(Minecraft.getInstance());
     }

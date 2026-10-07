@@ -1,7 +1,9 @@
 package net.conczin.mca.client.gui;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.conczin.mca.ClientProxy;
 import net.conczin.mca.MCA;
+import net.conczin.mca.dialogue.DialogueEngine;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Memories;
@@ -10,7 +12,10 @@ import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.conczin.mca.entity.ai.relationship.CompassionateEntity;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.network.Network;
+import net.conczin.mca.network.ClientHandlerImpl;
 import net.conczin.mca.network.c2s.*;
+import net.conczin.mca.network.s2c.InteractionDialogueNodeResponse;
+import net.conczin.mca.network.s2c.InteractionDialogueOptionsResponse;
 import net.conczin.mca.resources.data.Analysis;
 import net.conczin.mca.resources.data.dialogue.Question;
 import net.minecraft.ChatFormatting;
@@ -41,6 +46,8 @@ public class InteractScreen extends AbstractDynamicScreen {
     private String dialogAnswerHover;
     private List<FormattedCharSequence> dialogQuestionText;
     private String dialogQuestionId;
+    private boolean dialogueMode;
+    private DialogueClick dialogueClickHover;
 
     public InteractScreen(VillagerLike<?> villager) {
         super(Component.literal("Interact"));
@@ -68,6 +75,7 @@ public class InteractScreen extends AbstractDynamicScreen {
 
     @Override
     public void onClose() {
+        dialoguePresentation().ifPresent(ClientHandlerImpl.DialoguePresentation::pause);
         Objects.requireNonNull(this.minecraft).setScreen(null);
         Network.sendToServer(new InteractionCloseRequest(villager.asEntity().getUUID()));
     }
@@ -93,6 +101,7 @@ public class InteractScreen extends AbstractDynamicScreen {
 
         drawIcons(context);
         drawTextPopups(context);
+        drawDialogueEventState(context);
     }
 
     @Override
@@ -110,8 +119,12 @@ public class InteractScreen extends AbstractDynamicScreen {
     public boolean mouseClicked(double posX, double posY, int button) {
         super.mouseClicked(posX, posY, button);
 
+        if (button == 0 && dialogueMode && dialogueClickHover != null && handleDialogueClick(dialogueClickHover)) {
+            return true;
+        }
+
         // Dialog
-        if (button == 0 && dialogAnswerHover != null && dialogQuestionText != null) {
+        if (!dialogueMode && button == 0 && dialogAnswerHover != null && dialogQuestionText != null) {
             //todo double click (Likely fixable via using a different event -- 7.4.0)
             Network.sendToServer(new InteractionDialogueMessage(villager.asEntity().getUUID(), dialogQuestionId, dialogAnswerHover));
         }
@@ -276,7 +289,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         }
 
         //dialogue
-        if (dialogQuestionText != null) {
+        if (!dialogueMode && dialogQuestionText != null) {
             //background
             context.fill(width / 2 - 85, height / 2 - 50 - 10 * dialogQuestionText.size(), width / 2 + 85,
                     height / 2 - 30 + 10 * dialogAnswers.size(), 0x77000000);
@@ -334,6 +347,33 @@ public class InteractScreen extends AbstractDynamicScreen {
         dialogQuestionText = font.split(text, 160);
     }
 
+    public boolean isDialogueMode() {
+        return dialogueMode;
+    }
+
+    public Component resolveDialogueLine(Component line, boolean silent) {
+        return silent ? villager.transformMessage(line) : villager.sendChatMessage(line, player);
+    }
+
+    public void requestDialogueMenu() {
+        dialogueMode = true;
+        dialogueClickHover = null;
+        dialogQuestionText = null;
+        dialogAnswers = null;
+        dialogAnswerHover = null;
+        dialogQuestionId = null;
+        clearWidgets();
+        dialoguePresentation().ifPresent(ClientHandlerImpl.DialoguePresentation::beginRequest);
+        Network.sendToServer(new InteractionDialogueBeginMessage(villager.asEntity().getUUID()));
+    }
+
+    public void leaveDialogueMode() {
+        dialogueMode = false;
+        dialogueClickHover = null;
+        dialoguePresentation().ifPresent(ClientHandlerImpl.DialoguePresentation::dismissOptions);
+        setLayout("main");
+    }
+
     @Override
     protected void buttonPressed(MCAButton button) {
         String id = button.identifier();
@@ -354,8 +394,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         } else if (id.equals("gui.button.familyTree")) {
             Minecraft.getInstance().setScreen(new FamilyTreeScreen(villager.asEntity().getUUID()));
         } else if (id.equals("gui.button.talk")) {
-            clearWidgets();
-            Network.sendToServer(new InteractionDialogueInitMessage(villager.asEntity().getUUID()));
+            requestDialogueMenu();
         } else if (id.equals("gui.button.work")) {
             setLayout("work");
             disableButton("gui.button." + villager.getVillagerBrain().getCurrentJob().name().toLowerCase(Locale.ENGLISH));
@@ -382,5 +421,195 @@ public class InteractScreen extends AbstractDynamicScreen {
             this.inGiftMode = true;
             disableAllButtons();
         }
+    }
+
+    private Optional<ClientHandlerImpl.DialoguePresentation> dialoguePresentation() {
+        return ClientProxy.getNetworkHandler() instanceof ClientHandlerImpl handler
+                ? Optional.of(handler.dialoguePresentation())
+                : Optional.empty();
+    }
+
+    private void drawDialogueEventState(GuiGraphics context) {
+        if (!dialogueMode) {
+            return;
+        }
+        ClientHandlerImpl.DialoguePresentation presentation = dialoguePresentation().orElse(null);
+        if (presentation == null) {
+            return;
+        }
+
+        dialogueClickHover = null;
+        if (presentation.nodeVisible()) {
+            drawDialogueNode(context, presentation);
+        } else {
+            presentation.options().ifPresent(options -> drawDialogueOptions(context, options));
+        }
+    }
+
+    private void drawDialogueOptions(GuiGraphics context, InteractionDialogueOptionsResponse options) {
+        List<DialogueRow> rows = new ArrayList<>();
+        options.continuation().ifPresent(prompt -> rows.add(new DialogueRow(
+                prompt,
+                new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.RESUME, null, null)
+        )));
+        options.eventOptions().stream()
+                .filter(option -> option.mode() == InteractionDialogueOptionsResponse.Mode.HIGHLIGHTED)
+                .forEach(option -> rows.add(new DialogueRow(
+                        option.prompt(),
+                        new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.EVENT, option.id(), null)
+                )));
+
+        List<InteractionDialogueOptionsResponse.EventOption> ask = options.eventOptions().stream()
+                .filter(option -> option.mode() == InteractionDialogueOptionsResponse.Mode.ASK)
+                .toList();
+        if (!ask.isEmpty()) {
+            rows.add(new DialogueRow(Component.translatable("gui.dialogue.ask"), null));
+            ask.forEach(option -> rows.add(new DialogueRow(
+                    option.prompt(),
+                    new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.EVENT, option.id(), null)
+            )));
+        }
+        if (options.ambientAvailable()) {
+            rows.add(new DialogueRow(
+                    Component.translatable("gui.dialogue.ambient"),
+                    new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.AMBIENT, null, null)
+            ));
+        }
+        if (options.legacyAvailable()) {
+            rows.add(new DialogueRow(
+                    Component.translatable("gui.dialogue.legacy"),
+                    new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.LEGACY, null, null)
+            ));
+        }
+        rows.add(new DialogueRow(Component.translatable("gui.button.back"), DialogueClick.back()));
+        drawDialogueRows(context, rows, height / 2 - Math.min(70, rows.size() * 6));
+    }
+
+    private void drawDialogueNode(GuiGraphics context, ClientHandlerImpl.DialoguePresentation presentation) {
+        Component visible = presentation.visibleLine();
+        List<FormattedCharSequence> lines = font.split(visible, 210);
+        int lineHeight = 10;
+        int top = height / 2 - 55;
+        int textHeight = Math.max(1, lines.size()) * lineHeight;
+        int actionCount = presentation.visibleChoices().size() + (presentation.canAdvance() ? 1 : 0);
+        context.fill(width / 2 - 115, top - 8, width / 2 + 115,
+                top + textHeight + 14 + actionCount * 12, 0x77000000);
+        int y = top;
+        for (FormattedCharSequence line : lines) {
+            context.drawString(font, line, width / 2 - font.width(line) / 2, y, 0xFFFFFFFF);
+            y += lineHeight;
+        }
+        y += 6;
+        context.hLine(width / 2 - 100, width / 2 + 100, y, 0xAAFFFFFF);
+        y += 7;
+
+        for (InteractionDialogueNodeResponse.Choice choice : presentation.visibleChoices()) {
+            y = drawDialogueRow(context, new DialogueRow(
+                    choice.text(),
+                    new DialogueClick(DialogueClickKind.CHOICE, null, null, choice.id())
+            ), y);
+        }
+        if (presentation.canAdvance()) {
+            drawDialogueRow(context, new DialogueRow(
+                    Component.translatable("gui.dialogue.continue"),
+                    new DialogueClick(DialogueClickKind.ADVANCE, null, null, null)
+            ), y);
+        }
+    }
+
+    private void drawDialogueRows(GuiGraphics context, List<DialogueRow> rows, int top) {
+        int totalHeight = rows.stream()
+                .mapToInt(row -> Math.max(1, font.split(row.text(), 210).size()) * 10 + 2)
+                .sum();
+        context.fill(width / 2 - 115, top - 8, width / 2 + 115, top + totalHeight + 6, 0x77000000);
+        int y = top;
+        for (DialogueRow row : rows) {
+            y = drawDialogueRow(context, row, y);
+        }
+    }
+
+    private int drawDialogueRow(GuiGraphics context, DialogueRow row, int y) {
+        List<FormattedCharSequence> lines = font.split(row.text(), 210);
+        int rowHeight = Math.max(1, lines.size()) * 10 + 2;
+        boolean hover = row.click() != null && hoveringOver(width / 2 - 110, y - 2, 220, rowHeight);
+        int color = row.click() == null ? 0xFFB0B0B0 : hover ? 0xFFD7D784 : 0xFFFFFFFF;
+        int lineY = y;
+        for (FormattedCharSequence line : lines) {
+            context.drawString(font, line, width / 2 - font.width(line) / 2, lineY, color);
+            lineY += 10;
+        }
+        if (hover) {
+            dialogueClickHover = row.click();
+        }
+        return y + rowHeight;
+    }
+
+    private boolean handleDialogueClick(DialogueClick click) {
+        ClientHandlerImpl.DialoguePresentation presentation = dialoguePresentation().orElse(null);
+        if (presentation == null) {
+            return false;
+        }
+        if (click.kind() == DialogueClickKind.BACK) {
+            leaveDialogueMode();
+            return true;
+        }
+        if (click.kind() == DialogueClickKind.ADVANCE) {
+            if (!presentation.canAdvance() || presentation.offerToken().isEmpty()) {
+                return false;
+            }
+            long token = presentation.offerToken().orElseThrow();
+            Network.sendToServer(new InteractionDialogueAdvanceMessage(token));
+            return true;
+        }
+        if (click.kind() == DialogueClickKind.CHOICE) {
+            if (presentation.offerToken().isEmpty()
+                    || presentation.visibleChoices().stream().noneMatch(choice -> choice.id().equals(click.choiceId()))) {
+                return false;
+            }
+            long token = presentation.offerToken().orElseThrow();
+            Network.sendToServer(new InteractionDialogueChoiceMessage(token, click.choiceId()));
+            return true;
+        }
+
+        InteractionDialogueOptionsResponse options = presentation.options().orElse(null);
+        if (options == null
+                || presentation.offerToken().isEmpty()
+                || !selectionStillOffered(options, click)) {
+            return false;
+        }
+        long token = presentation.offerToken().orElseThrow();
+        presentation.markSelectionRequested(click.selection());
+        Network.sendToServer(new InteractionDialogueSelectMessage(token, click.selection(), Optional.ofNullable(click.eventId())));
+        return true;
+    }
+
+    private static boolean selectionStillOffered(InteractionDialogueOptionsResponse options, DialogueClick click) {
+        return switch (click.selection()) {
+            case RESUME -> options.continuation().isPresent() && click.eventId() == null;
+            case EVENT -> click.eventId() != null && options.eventOptions().stream().anyMatch(option -> option.id().equals(click.eventId()));
+            case AMBIENT -> click.eventId() == null && options.ambientAvailable();
+            case LEGACY -> click.eventId() == null && options.legacyAvailable();
+        };
+    }
+
+    private enum DialogueClickKind {
+        SELECT,
+        CHOICE,
+        ADVANCE,
+        BACK
+    }
+
+    private record DialogueClick(
+            DialogueClickKind kind,
+            DialogueEngine.DialogueSelection selection,
+            ResourceLocation eventId,
+            String choiceId
+    ) {
+        static DialogueClick back() {
+            return new DialogueClick(DialogueClickKind.BACK, null, null, null);
+        }
+    }
+
+    private record DialogueRow(Component text, DialogueClick click) {
     }
 }

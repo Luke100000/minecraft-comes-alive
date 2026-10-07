@@ -8,6 +8,7 @@ import net.conczin.mca.entity.PlayerDimensions;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.network.Network;
+import net.conczin.mca.network.ClientHandlerImpl;
 import net.conczin.mca.network.c2s.ConfigRequest;
 import net.conczin.mca.network.c2s.PlayerDataRequest;
 import net.minecraft.client.Minecraft;
@@ -26,6 +27,7 @@ public class MCAClient {
     }
 
     public static void onLogin() {
+        dialoguePresentation().ifPresent(ClientHandlerImpl.DialoguePresentation::clear);
         playerData.clear();
         playerDataRequests.clear();
         ClientSkinCatalog.clear();
@@ -75,6 +77,13 @@ public class MCAClient {
     }
 
     public static void tickClient(Minecraft client) {
+        dialoguePresentation().ifPresent(presentation -> {
+            if (client.getConnection() == null) {
+                presentation.clear();
+            } else {
+                presentation.tick(System.nanoTime() / 1_000_000L);
+            }
+        });
         BlueprintScreen.maintainSessionState(client);
         destinyManager.tick(client);
 
@@ -83,6 +92,16 @@ public class MCAClient {
         }
 
         SpeechManager.INSTANCE.tick(client);
+    }
+
+    public static void onDisconnect() {
+        dialoguePresentation().ifPresent(ClientHandlerImpl.DialoguePresentation::clear);
+    }
+
+    private static Optional<ClientHandlerImpl.DialoguePresentation> dialoguePresentation() {
+        return ClientProxy.getNetworkHandler() instanceof ClientHandlerImpl handler
+                ? Optional.of(handler.dialoguePresentation())
+                : Optional.empty();
     }
 
     public static void addPlayerData(UUID uuid, VillagerEntityMCA villager) {

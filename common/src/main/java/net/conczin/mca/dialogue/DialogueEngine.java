@@ -134,6 +134,13 @@ public final class DialogueEngine {
             return Optional.empty();
         }
 
+        DialogueSession current = sessions.get(playerId);
+        if (selection != DialogueSelection.RESUME
+                && current != null
+                && current.status() == DialogueSession.Status.ACTIVE) {
+            return Optional.empty();
+        }
+
         long gameTime = overworldTime(player);
         DialogueEventHistory history = DialogueEventHistory.get(player.serverLevel());
         DialogueContext context = new DialogueContext(villager, player, history, id -> events.get(id).isPresent());
@@ -213,20 +220,20 @@ public final class DialogueEngine {
         VillagerEntityMCA villager = resolveBoundVillager(player, session.villagerId()).orElse(null);
         if (villager == null) {
             pauseUnavailable(player, session);
-            return TransitionResult.rejected();
+            return TransitionResult.paused(session.id());
         }
         if (!canInteract(player, villager)) {
             pauseUnavailable(player, session);
-            return TransitionResult.rejected();
-        }
-
-        DialogueEvent.Node node = session.event().nodes().get(session.nodeId());
-        if (session.lineIndex() != node.lines().size() - 1 || node.choices().isEmpty()
-                || !session.offeredChoices().contains(choiceId)) {
-            return TransitionResult.rejected();
+            return TransitionResult.paused(session.id());
         }
 
         DialogueContext context = context(player, villager);
+        DialogueEvent.Node node = session.event().nodes().get(session.nodeId());
+        if (session.lineIndex() != node.lines().size() - 1 || node.choices().isEmpty()
+                || !session.offeredChoices().contains(choiceId)) {
+            return TransitionResult.rejected(view(session, context));
+        }
+
         DialogueEvent.Choice choice = node.choices().orElseThrow().stream()
                 .filter(candidate -> candidate.id().equals(choiceId))
                 .findFirst()
@@ -236,7 +243,7 @@ public final class DialogueEngine {
             if (refreshed.offeredChoices().isEmpty()) {
                 sessions.remove(playerId);
                 offers.remove(playerId);
-                return TransitionResult.ending();
+                return TransitionResult.ending(session.id());
             }
             sessions.put(playerId, refreshed);
             return TransitionResult.rejected(view(refreshed, context));
@@ -255,7 +262,7 @@ public final class DialogueEngine {
                 if (refreshed.offeredChoices().isEmpty()) {
                     sessions.remove(playerId);
                     offers.remove(playerId);
-                    return TransitionResult.ending();
+                    return TransitionResult.ending(session.id());
                 }
                 sessions.put(playerId, refreshed);
                 return TransitionResult.rejected(view(refreshed, context));
@@ -286,7 +293,7 @@ public final class DialogueEngine {
         VillagerEntityMCA villager = resolveBoundVillager(player, session.villagerId()).orElse(null);
         if (villager == null || !canInteract(player, villager)) {
             pauseUnavailable(player, session);
-            return TransitionResult.rejected();
+            return TransitionResult.paused(session.id());
         }
         DialogueContext context = context(player, villager);
         DialogueEvent.Node node = session.event().nodes().get(session.nodeId());
@@ -308,10 +315,10 @@ public final class DialogueEngine {
             if (refreshed.offeredChoices().isEmpty()) {
                 sessions.remove(playerId);
                 offers.remove(playerId);
-                return TransitionResult.ending();
+                return TransitionResult.ending(session.id());
             }
             sessions.put(playerId, refreshed);
-            return TransitionResult.rejected();
+            return TransitionResult.rejected(view(refreshed, context));
         }
 
         if (node.next().isPresent()) {
@@ -324,12 +331,12 @@ public final class DialogueEngine {
         sessions.remove(playerId);
         offers.remove(playerId);
         if (!node.complete()) {
-            return TransitionResult.ending();
+            return TransitionResult.ending(session.id());
         }
         if (!commit(player, villager, session, context)) {
-            return TransitionResult.ending();
+            return TransitionResult.ending(session.id());
         }
-        return TransitionResult.completion();
+        return TransitionResult.completion(session.id());
     }
 
     public void pause(ServerPlayer player) {
@@ -663,6 +670,7 @@ public final class DialogueEngine {
                 : List.of();
         return new DialogueNodeView(
                 session.id(),
+                session.eventId(),
                 session.offerToken(),
                 line,
                 node.silent(),
@@ -879,6 +887,7 @@ public final class DialogueEngine {
 
     public record DialogueNodeView(
             UUID sessionId,
+            ResourceLocation eventId,
             long offerToken,
             Component line,
             boolean silent,
@@ -886,6 +895,9 @@ public final class DialogueEngine {
             boolean canContinue
     ) {
         public DialogueNodeView {
+            Objects.requireNonNull(sessionId, "sessionId");
+            Objects.requireNonNull(eventId, "eventId");
+            Objects.requireNonNull(line, "line");
             choices = List.copyOf(choices);
         }
     }
@@ -899,23 +911,37 @@ public final class DialogueEngine {
 
     public enum TransitionStatus {
         REJECTED,
+        PAUSED,
         ADVANCED,
         COMPLETED,
         ENDED
     }
 
-    public record TransitionResult(TransitionStatus status, Optional<DialogueNodeView> view) {
+    public record TransitionResult(
+            TransitionStatus status,
+            Optional<UUID> sessionId,
+            Optional<DialogueNodeView> view
+    ) {
         public TransitionResult {
             Objects.requireNonNull(status, "status");
+            sessionId = Objects.requireNonNull(sessionId, "sessionId");
             view = Objects.requireNonNull(view, "view");
+            if (view.isPresent()
+                    && (sessionId.isEmpty() || !sessionId.orElseThrow().equals(view.orElseThrow().sessionId()))) {
+                throw new IllegalArgumentException("Node view must match transition session identity");
+            }
         }
 
         public boolean accepted() {
-            return status != TransitionStatus.REJECTED;
+            return status != TransitionStatus.REJECTED && status != TransitionStatus.PAUSED;
         }
 
         public boolean completed() {
             return status == TransitionStatus.COMPLETED;
+        }
+
+        public boolean paused() {
+            return status == TransitionStatus.PAUSED;
         }
 
         public boolean ended() {
@@ -923,23 +949,27 @@ public final class DialogueEngine {
         }
 
         static TransitionResult rejected() {
-            return new TransitionResult(TransitionStatus.REJECTED, Optional.empty());
+            return new TransitionResult(TransitionStatus.REJECTED, Optional.empty(), Optional.empty());
         }
 
         static TransitionResult rejected(DialogueNodeView view) {
-            return new TransitionResult(TransitionStatus.REJECTED, Optional.of(view));
+            return new TransitionResult(TransitionStatus.REJECTED, Optional.of(view.sessionId()), Optional.of(view));
+        }
+
+        static TransitionResult paused(UUID sessionId) {
+            return new TransitionResult(TransitionStatus.PAUSED, Optional.of(sessionId), Optional.empty());
         }
 
         static TransitionResult advanced(DialogueNodeView view) {
-            return new TransitionResult(TransitionStatus.ADVANCED, Optional.of(view));
+            return new TransitionResult(TransitionStatus.ADVANCED, Optional.of(view.sessionId()), Optional.of(view));
         }
 
-        static TransitionResult completion() {
-            return new TransitionResult(TransitionStatus.COMPLETED, Optional.empty());
+        static TransitionResult completion(UUID sessionId) {
+            return new TransitionResult(TransitionStatus.COMPLETED, Optional.of(sessionId), Optional.empty());
         }
 
-        static TransitionResult ending() {
-            return new TransitionResult(TransitionStatus.ENDED, Optional.empty());
+        static TransitionResult ending(UUID sessionId) {
+            return new TransitionResult(TransitionStatus.ENDED, Optional.of(sessionId), Optional.empty());
         }
     }
 }

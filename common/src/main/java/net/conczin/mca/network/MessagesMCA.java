@@ -21,8 +21,12 @@ public interface MessagesMCA {
         c.register(GetVillageRequest.TYPE, GetVillageRequest.STREAM_CODEC, true);
         c.register(GetVillagerRequest.TYPE, GetVillagerRequest.STREAM_CODEC, true);
         c.register(InteractionCloseRequest.TYPE, InteractionCloseRequest.STREAM_CODEC, true);
+        c.register(InteractionDialogueAdvanceMessage.TYPE, InteractionDialogueAdvanceMessage.STREAM_CODEC, true);
+        c.register(InteractionDialogueBeginMessage.TYPE, InteractionDialogueBeginMessage.STREAM_CODEC, true);
+        c.register(InteractionDialogueChoiceMessage.TYPE, InteractionDialogueChoiceMessage.STREAM_CODEC, true);
         c.register(InteractionDialogueInitMessage.TYPE, InteractionDialogueInitMessage.STREAM_CODEC, true);
         c.register(InteractionDialogueMessage.TYPE, InteractionDialogueMessage.STREAM_CODEC, true);
+        c.register(InteractionDialogueSelectMessage.TYPE, InteractionDialogueSelectMessage.STREAM_CODEC, true);
         c.register(InteractionVillagerMessage.TYPE, InteractionVillagerMessage.STREAM_CODEC, true);
         c.register(PlayerDataRequest.TYPE, PlayerDataRequest.STREAM_CODEC, true);
         c.register(RemoveCustomClothingMessage.TYPE, RemoveCustomClothingMessage.STREAM_CODEC, true);
@@ -50,6 +54,8 @@ public interface MessagesMCA {
         c.register(GetVillagerResponse.TYPE, GetVillagerResponse.STREAM_CODEC, false);
         c.register(InteractionDialogueQuestionResponse.TYPE, InteractionDialogueQuestionResponse.STREAM_CODEC, false);
         c.register(InteractionDialogueResponse.TYPE, InteractionDialogueResponse.STREAM_CODEC, false);
+        c.register(InteractionDialogueOptionsResponse.TYPE, InteractionDialogueOptionsResponse.STREAM_CODEC, false);
+        c.register(InteractionDialogueNodeResponse.TYPE, InteractionDialogueNodeResponse.STREAM_CODEC, false);
         c.register(OpenDestinyGuiRequest.TYPE, OpenDestinyGuiRequest.STREAM_CODEC, false);
         c.register(OpenGuiRequest.TYPE, OpenGuiRequest.STREAM_CODEC, false);
         c.register(PlayerDataMessage.TYPE, PlayerDataMessage.STREAM_CODEC, false);

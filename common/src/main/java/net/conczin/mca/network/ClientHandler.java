@@ -21,6 +21,10 @@ public interface ClientHandler {
 
     void handleDialogueResponse(InteractionDialogueResponse message);
 
+    void handleDialogueOptionsResponse(InteractionDialogueOptionsResponse message);
+
+    void handleDialogueNodeResponse(InteractionDialogueNodeResponse message);
+
     void handleSkinListResponse(AnalysisResults message);
 
     void handleBabyNameResponse(BabyNameResponse message);

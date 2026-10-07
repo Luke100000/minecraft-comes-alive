@@ -7,6 +7,7 @@ import net.conczin.mca.client.book.CivilRegistryBook;
 import net.conczin.mca.client.gui.*;
 import net.conczin.mca.client.resources.ClientSkinCatalog;
 import net.conczin.mca.client.tts.SpeechManager;
+import net.conczin.mca.dialogue.DialogueEngine;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.item.BabyItem;
@@ -19,13 +20,30 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 
+import java.text.BreakIterator;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.OptionalLong;
+import java.util.UUID;
+import java.util.function.UnaryOperator;
+
 public class ClientHandlerImpl implements ClientHandler {
     private final Minecraft client = Minecraft.getInstance();
+    private final DialoguePresentation dialoguePresentation = new DialoguePresentation();
+
+    public DialoguePresentation dialoguePresentation() {
+        return dialoguePresentation;
+    }
 
     @Override
     public void handleGuiRequest(OpenGuiRequest message) {
@@ -170,6 +188,39 @@ public class ClientHandlerImpl implements ClientHandler {
     }
 
     @Override
+    public void handleDialogueOptionsResponse(InteractionDialogueOptionsResponse message) {
+        if (client.screen instanceof InteractScreen gui && gui.isDialogueMode()) {
+            dialoguePresentation.acceptOptions(message);
+        }
+    }
+
+    @Override
+    public void handleDialogueNodeResponse(InteractionDialogueNodeResponse message) {
+        Locale locale = Locale.forLanguageTag(client.options.languageCode.replace('_', '-'));
+        InteractScreen gui = client.screen instanceof InteractScreen interactScreen ? interactScreen : null;
+        boolean visibleInteraction = gui != null && gui.isDialogueMode();
+        UnaryOperator<Component> resolver = UnaryOperator.identity();
+        if (visibleInteraction && message.state() == InteractionDialogueNodeResponse.State.ACTIVE) {
+            boolean silent = message.node().orElseThrow().silent();
+            resolver = line -> gui.resolveDialogueLine(line, silent);
+        }
+
+        boolean accepted = dialoguePresentation.acceptNode(message, System.nanoTime() / 1_000_000L, locale, resolver);
+        if (!accepted) {
+            return;
+        }
+        if (!visibleInteraction) {
+            dialoguePresentation.pause();
+            return;
+        }
+        if (message.state() == InteractionDialogueNodeResponse.State.ENDED) {
+            gui.requestDialogueMenu();
+        } else if (message.state() == InteractionDialogueNodeResponse.State.PAUSED) {
+            gui.leaveDialogueMode();
+        }
+    }
+
+    @Override
     public void handleDialogueQuestionResponse(InteractionDialogueQuestionResponse message) {
         Screen screen = client.screen;
         if (screen instanceof InteractScreen gui) {
@@ -270,5 +321,308 @@ public class ClientHandlerImpl implements ClientHandler {
         client.setScreen(new BuildingPolymorphScreen(
                 message.matchingTypes(), message.scanPos(), message.action(),
                 message.expectedTargetId(), client.screen));
+    }
+
+    /**
+     * Bounded client-only presentation state for the server-authoritative dialogue run.
+     * It deliberately retains only one menu, one session snapshot and one resolved line.
+     */
+    public static final class DialoguePresentation {
+        public static final long WORD_REVEAL_MILLIS = 250L;
+
+        private InteractionDialogueOptionsResponse options;
+        private UUID sessionId;
+        private UUID terminatedSessionId;
+        private long offerToken;
+        private long latestToken;
+        private boolean hasLatestToken;
+        private InteractionDialogueNodeResponse.Node node;
+        private Component resolvedLine = Component.empty();
+        private List<Integer> revealCuts = List.of();
+        private int revealedWords;
+        private long nextRevealAt;
+        private boolean nodeVisible;
+        private DialogueEngine.DialogueSelection pendingSelection;
+
+        public boolean acceptOptions(InteractionDialogueOptionsResponse response) {
+            Objects.requireNonNull(response, "response");
+            if (nodeVisible || !acceptsNewToken(response.offerToken())) {
+                return false;
+            }
+            options = response;
+            pendingSelection = null;
+            rememberToken(response.offerToken());
+            return true;
+        }
+
+        public boolean acceptNode(InteractionDialogueNodeResponse response, long nowMillis, Locale locale) {
+            return acceptNode(response, nowMillis, locale, UnaryOperator.identity());
+        }
+
+        public boolean acceptNode(
+                InteractionDialogueNodeResponse response,
+                long nowMillis,
+                Locale locale,
+                UnaryOperator<Component> lineResolver
+        ) {
+            Objects.requireNonNull(response, "response");
+            Objects.requireNonNull(locale, "locale");
+            Objects.requireNonNull(lineResolver, "lineResolver");
+
+            if (response.state() != InteractionDialogueNodeResponse.State.ACTIVE) {
+                return acceptTerminal(response);
+            }
+            if (terminatedSessionId != null && terminatedSessionId.equals(response.sessionId())) {
+                return false;
+            }
+
+            boolean sameSession = sessionId != null && sessionId.equals(response.sessionId());
+            boolean sameOffer = sameSession && offerToken == response.offerToken();
+            boolean replacingSession = sessionId != null && !sameSession;
+            if (replacingSession
+                    && (pendingSelection == null || pendingSelection == DialogueEngine.DialogueSelection.RESUME)) {
+                return false;
+            }
+            if (!sameOffer && !acceptsNewToken(response.offerToken())) {
+                return false;
+            }
+
+            InteractionDialogueNodeResponse.Node incoming = response.node().orElseThrow();
+            boolean preserveResume = sameSession
+                    && pendingSelection == DialogueEngine.DialogueSelection.RESUME
+                    && node != null;
+            boolean preserveCurrentLine = sameOffer && node != null;
+
+            sessionId = response.sessionId();
+            offerToken = response.offerToken();
+            node = incoming;
+            options = null;
+            nodeVisible = true;
+            rememberToken(response.offerToken());
+
+            if (preserveResume) {
+                nextRevealAt = saturatingAdd(nowMillis, WORD_REVEAL_MILLIS);
+            } else if (!preserveCurrentLine) {
+                ResolvedLine resolved = resolveOnce(lineResolver.apply(incoming.line()));
+                resolvedLine = resolved.component();
+                revealCuts = revealCuts(resolved.text(), locale);
+                revealedWords = 0;
+                nextRevealAt = saturatingAdd(nowMillis, WORD_REVEAL_MILLIS);
+            }
+
+            pendingSelection = null;
+            return true;
+        }
+
+        private boolean acceptTerminal(InteractionDialogueNodeResponse response) {
+            if (sessionId == null
+                    || !sessionId.equals(response.sessionId())
+                    || offerToken != response.offerToken()) {
+                return false;
+            }
+
+            options = null;
+            nodeVisible = false;
+            pendingSelection = null;
+            if (response.state() == InteractionDialogueNodeResponse.State.ENDED) {
+                terminatedSessionId = sessionId;
+                dropSnapshot();
+            }
+            return true;
+        }
+
+        public void tick(long nowMillis) {
+            if (!nodeVisible || isFullyRevealed()) {
+                return;
+            }
+            if (nowMillis >= nextRevealAt) {
+                revealedWords++;
+                nextRevealAt = saturatingAdd(nowMillis, WORD_REVEAL_MILLIS);
+            }
+        }
+
+        public void pause() {
+            options = null;
+            nodeVisible = false;
+            pendingSelection = null;
+        }
+
+        public void beginRequest() {
+            options = null;
+            pendingSelection = null;
+        }
+
+        public void dismissOptions() {
+            options = null;
+            pendingSelection = null;
+        }
+
+        public void markSelectionRequested(DialogueEngine.DialogueSelection selection) {
+            pendingSelection = Objects.requireNonNull(selection, "selection");
+        }
+
+        public Optional<InteractionDialogueOptionsResponse> options() {
+            return Optional.ofNullable(options);
+        }
+
+        public Optional<UUID> sessionId() {
+            return Optional.ofNullable(sessionId);
+        }
+
+        public OptionalLong offerToken() {
+            return sessionId != null || options != null
+                    ? OptionalLong.of(options != null ? options.offerToken() : offerToken)
+                    : OptionalLong.empty();
+        }
+
+        public Optional<InteractionDialogueNodeResponse.Node> node() {
+            return nodeVisible ? Optional.ofNullable(node) : Optional.empty();
+        }
+
+    public boolean nodeVisible() {
+        return nodeVisible;
+    }
+
+        public Component fullLine() {
+            return resolvedLine;
+        }
+
+        public Component visibleLine() {
+            if (!nodeVisible || resolvedLine.getString().isEmpty()) {
+                return Component.empty();
+            }
+            if (revealedWords <= 0) {
+                return Component.empty();
+            }
+            if (isFullyRevealed()) {
+                return resolvedLine;
+            }
+            return head(resolvedLine, revealCuts.get(revealedWords - 1));
+        }
+
+        public boolean canAdvance() {
+            return nodeVisible
+                    && isFullyRevealed()
+                    && node != null
+                    && node.canContinue();
+        }
+
+        public List<InteractionDialogueNodeResponse.Choice> visibleChoices() {
+            if (!nodeVisible || !isFullyRevealed() || node == null) {
+                return List.of();
+            }
+            return node.choices();
+        }
+
+        public void clear() {
+            options = null;
+            terminatedSessionId = null;
+            hasLatestToken = false;
+            latestToken = 0L;
+            pendingSelection = null;
+            dropSnapshot();
+        }
+
+        private void dropSnapshot() {
+            sessionId = null;
+            offerToken = 0L;
+            node = null;
+            resolvedLine = Component.empty();
+            revealCuts = List.of();
+            revealedWords = 0;
+            nextRevealAt = 0L;
+            nodeVisible = false;
+        }
+
+        private boolean isFullyRevealed() {
+            return revealedWords >= revealCuts.size();
+        }
+
+        private boolean acceptsNewToken(long candidate) {
+            return !hasLatestToken || isNewerToken(candidate, latestToken);
+        }
+
+        private void rememberToken(long token) {
+            latestToken = token;
+            hasLatestToken = true;
+        }
+
+        private static boolean isNewerToken(long candidate, long current) {
+            return candidate != current && candidate - current > 0L;
+        }
+
+        private static long saturatingAdd(long value, long delta) {
+            if (delta > 0L && value > Long.MAX_VALUE - delta) {
+                return Long.MAX_VALUE;
+            }
+            return value + delta;
+        }
+
+        private static ResolvedLine resolveOnce(Component source) {
+            MutableComponent resolved = Component.empty();
+            StringBuilder plain = new StringBuilder();
+            source.visit((style, text) -> {
+                if (!text.isEmpty()) {
+                    resolved.append(Component.literal(text).setStyle(style));
+                    plain.append(text);
+                }
+                return Optional.empty();
+            }, Style.EMPTY);
+            return new ResolvedLine(resolved, plain.toString());
+        }
+
+        private static List<Integer> revealCuts(String text, Locale locale) {
+            if (text.isEmpty()) {
+                return List.of();
+            }
+            BreakIterator iterator = BreakIterator.getWordInstance(locale);
+            iterator.setText(text);
+            List<Integer> wordStarts = new ArrayList<>();
+            int start = iterator.first();
+            for (int end = iterator.next(); end != BreakIterator.DONE; start = end, end = iterator.next()) {
+                if (containsWordCharacter(text, start, end)) {
+                    wordStarts.add(start);
+                }
+            }
+            if (wordStarts.isEmpty()) {
+                return List.of();
+            }
+            List<Integer> cuts = new ArrayList<>(wordStarts.size());
+            for (int i = 0; i < wordStarts.size(); i++) {
+                cuts.add(i + 1 < wordStarts.size() ? wordStarts.get(i + 1) : text.length());
+            }
+            return List.copyOf(cuts);
+        }
+
+        private static boolean containsWordCharacter(String text, int start, int end) {
+            for (int offset = start; offset < end;) {
+                int codePoint = text.codePointAt(offset);
+                if (Character.isLetterOrDigit(codePoint)) {
+                    return true;
+                }
+                offset += Character.charCount(codePoint);
+            }
+            return false;
+        }
+
+        private static Component head(Component source, int utf16Length) {
+            MutableComponent result = Component.empty();
+            int[] remaining = {utf16Length};
+            source.visit((style, text) -> {
+                if (remaining[0] <= 0) {
+                    return Optional.of(Boolean.TRUE);
+                }
+                int take = Math.min(remaining[0], text.length());
+                if (take > 0) {
+                    result.append(Component.literal(text.substring(0, take)).setStyle(style));
+                    remaining[0] -= take;
+                }
+                return remaining[0] <= 0 ? Optional.of(Boolean.TRUE) : Optional.empty();
+            }, Style.EMPTY);
+            return result;
+        }
+
+        private record ResolvedLine(Component component, String text) {
+        }
     }
 }

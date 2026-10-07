@@ -149,6 +149,8 @@ public final class DialogueEngineGameTests {
                 fixture.player(), menu.token(), DialogueEngine.DialogueSelection.AMBIENT, null).orElseThrow();
         DialogueSession session = sessions(engine).get(fixture.player().getUUID());
         helper.assertTrue(session.id().equals(selected.sessionId()), "ambient selection should create the retained run");
+        helper.assertTrue(session.eventId().equals(selected.eventId()),
+                "active node view must expose the selected event identity");
         helper.assertTrue(
                 session.eventId().equals(highA.id()) || session.eventId().equals(highB.id()),
                 "ambient selection must not choose a lower-priority candidate"
@@ -253,6 +255,8 @@ public final class DialogueEngineGameTests {
         DialogueEngine.TransitionResult completed = engine.advance(fixture.player(), terminal.offerToken());
         helper.assertTrue(completed.status() == DialogueEngine.TransitionStatus.COMPLETED,
                 "final Continue should complete the run");
+        helper.assertTrue(completed.sessionId().orElseThrow().equals(terminal.sessionId()),
+                "completion must retain the terminated session identity for stale-response filtering");
         helper.assertTrue(sessions(engine).isEmpty(), "completed run must be discarded");
         helper.assertTrue(offers(engine).isEmpty(), "completion must not auto-open or auto-start another event");
         helper.assertTrue(
@@ -307,10 +311,85 @@ public final class DialogueEngineGameTests {
         DialogueEngine.TransitionResult ended = engine.advance(fixture.player(), node.offerToken());
         helper.assertTrue(ended.status() == DialogueEngine.TransitionStatus.ENDED,
                 "zero-choice Continue should end without completing");
+        helper.assertTrue(ended.sessionId().orElseThrow().equals(node.sessionId()),
+                "ended transition must retain the terminated session identity for stale-response filtering");
         helper.assertTrue(sessions(engine).isEmpty(), "ended run must be discarded");
         helper.assertTrue(offers(engine).isEmpty(), "ending must not automatically open or chain another event");
         DialogueEngine.DialogueOptions refreshed = engine.begin(fixture.player(), fixture.villager());
         helper.assertTrue(refreshed.containsEvent(event.id()), "Talk should refresh options only after an explicit new begin");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void newlyEligibleChoiceRefreshesInsteadOfLeavingContinuePending(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        fixture.villager().setAgeState(AgeState.CHILD);
+        DialogueEvent event = adultOnlyChoiceEvent();
+        DialogueEngine engine = engine(event);
+
+        DialogueEngine.DialogueOptions menu = engine.begin(fixture.player(), fixture.villager());
+        DialogueEngine.DialogueNodeView node = engine.select(
+                fixture.player(), menu.token(), DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow();
+        helper.assertTrue(node.choices().isEmpty(), "fixture must initially expose the safe Continue exit");
+
+        fixture.villager().setAgeState(AgeState.ADULT);
+        DialogueEngine.TransitionResult refreshedResult = engine.advance(fixture.player(), node.offerToken());
+        helper.assertTrue(refreshedResult.status() == DialogueEngine.TransitionStatus.REJECTED,
+                "Continue must not bypass a choice that became eligible");
+        DialogueEngine.DialogueNodeView refreshed = refreshedResult.view().orElseThrow();
+        helper.assertTrue(refreshed.offerToken() == node.offerToken(),
+                "choice refresh must retain the current single-use offer token");
+        helper.assertTrue(
+                refreshed.choices().stream().map(DialogueEngine.ChoiceView::id).toList().equals(List.of("adult")),
+                "client must receive the newly authoritative choice instead of waiting forever"
+        );
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void activeRunCannotBeReplacedByForgedBeginSelection(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        DialogueEvent activeEvent = passageEvent(ResourceLocation.parse("mca:test/active_begin"), false);
+        DialogueEvent replacementEvent = simpleEvent(ResourceLocation.parse("mca:test/active_begin_replacement"));
+        DialogueEngine engine = engine(activeEvent, replacementEvent);
+
+        DialogueEngine.DialogueOptions initial = engine.begin(fixture.player(), fixture.villager());
+        DialogueEngine.DialogueNodeView active = engine.select(
+                fixture.player(), initial.token(), DialogueEngine.DialogueSelection.EVENT, activeEvent.id()).orElseThrow();
+
+        DialogueEngine.DialogueOptions forgedMenu = engine.begin(fixture.player(), fixture.villager());
+        helper.assertTrue(forgedMenu.containsEvent(replacementEvent.id()),
+                "fixture must prove the forged Begin produced a selectable-looking menu");
+        helper.assertTrue(engine.select(
+                fixture.player(), forgedMenu.token(), DialogueEngine.DialogueSelection.EVENT, replacementEvent.id()).isEmpty(),
+                "a second Begin must not replace an ACTIVE run"
+        );
+        DialogueSession retained = sessions(engine).get(fixture.player().getUUID());
+        helper.assertTrue(retained != null && retained.id().equals(active.sessionId()),
+                "the original active session must remain authoritative");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void interactionLossReturnsPausedTransition(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        DialogueEvent event = passageEvent(ResourceLocation.parse("mca:test/pause_response"), false);
+        DialogueEngine engine = engine(event);
+
+        DialogueEngine.DialogueOptions menu = engine.begin(fixture.player(), fixture.villager());
+        DialogueEngine.DialogueNodeView node = engine.select(
+                fixture.player(), menu.token(), DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow();
+        fixture.player().setPos(fixture.player().getX() + 100.0D, fixture.player().getY(), fixture.player().getZ());
+
+        DialogueEngine.TransitionResult pausedResult = engine.advance(fixture.player(), node.offerToken());
+        helper.assertTrue(pausedResult.status() == DialogueEngine.TransitionStatus.PAUSED,
+                "losing interaction range must report the server-side pause to the client");
+        helper.assertTrue(!pausedResult.accepted(), "pausing on interaction loss must not count as accepted progression");
+        helper.assertTrue(pausedResult.sessionId().orElseThrow().equals(node.sessionId()),
+                "paused transition must retain the resumable session identity");
+        DialogueSession paused = sessions(engine).get(fixture.player().getUUID());
+        helper.assertTrue(paused != null && paused.status() == DialogueSession.Status.PAUSED,
+                "interaction loss must retain a paused run rather than discard it");
         helper.succeed();
     }
 
