@@ -3,6 +3,7 @@ package net.conczin.mca.fabric;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.block.BlockEntityTypesMCA;
+import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.SchedulesMCA;
@@ -93,6 +94,9 @@ public final class MCAFabric implements ModInitializer {
         });
         ServerEntityEvents.ENTITY_UNLOAD.register((entity, level) -> {
             if (entity instanceof Villager villager) VillageManager.get(level).untrackVillager(villager);
+            if (entity instanceof VillagerEntityMCA villager) {
+                MCA.getDialogueEngine().ifPresent(engine -> engine.onVillagerLeave(villager));
+            }
         });
         BedPoiCompatibilityFabric.init();
         registerHelper(BuiltInRegistries.ITEM, ItemsMCA::registerItems);
@@ -127,7 +131,7 @@ public final class MCAFabric implements ModInitializer {
         registerReloadListener(managerHelper, HairStyleList.ID, new HairStyleList());
         registerReloadListener(managerHelper, LayeredHairList.ID, new LayeredHairList());
         managerHelper.registerReloadListener(new FabricGiftLoader());
-        registerReloadListener(managerHelper, DialogueEvents.ID, new DialogueEvents());
+        registerReloadListener(managerHelper, DialogueEvents.ID, DialogueEvents.INSTANCE);
         managerHelper.registerReloadListener(new FabricDialogues());
         managerHelper.registerReloadListener(new FabricTasks());
         managerHelper.registerReloadListener(new FabricNames());
@@ -162,7 +166,10 @@ public final class MCAFabric implements ModInitializer {
         });
         ServerLifecycleEvents.SERVER_STOPPED.register(MCA::finishServerStop);
         ServerTickEvents.END_WORLD_TICK.register(w -> VillageManager.get(w).tick());
-        ServerTickEvents.END_SERVER_TICK.register(s -> ServerInteractionManager.getInstance().tick());
+        ServerTickEvents.END_SERVER_TICK.register(s -> {
+            ServerInteractionManager.getInstance().tick();
+            MCA.getDialogueEngine().ifPresent(engine -> engine.tick(s));
+        });
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
                 ServerInteractionManager.getInstance().onPlayerJoin(handler.player)

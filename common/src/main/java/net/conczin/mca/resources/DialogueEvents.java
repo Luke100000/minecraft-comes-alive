@@ -22,6 +22,7 @@ import java.util.function.Consumer;
 
 public final class DialogueEvents extends SimpleJsonResourceReloadListener {
     public static final ResourceLocation ID = MCA.locate("dialogue_events");
+    public static final DialogueEvents INSTANCE = new DialogueEvents();
 
     private volatile Snapshot snapshot = new Snapshot(Map.of(), 0L);
 

@@ -1,6 +1,8 @@
 package net.conczin.mca;
 
 import net.conczin.mca.server.AsyncStructureLocator;
+import net.conczin.mca.dialogue.DialogueEngine;
+import net.conczin.mca.resources.DialogueEvents;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.EntityType;
@@ -22,6 +24,7 @@ public final class MCA {
     public static PlatformHelper platformHelper = new PlatformHelper();
     private static MinecraftServer server;
     private static AsyncStructureLocator structureLocator;
+    private static DialogueEngine dialogueEngine;
 
     public static ResourceLocation locate(String id) {
         return ResourceLocation.fromNamespaceAndPath(MOD_ID, id);
@@ -43,13 +46,22 @@ public final class MCA {
             structureLocator = new AsyncStructureLocator(server);
         }
         MCA.server = server;
+        dialogueEngine = new DialogueEngine(DialogueEvents.INSTANCE);
     }
 
     public static void stopServer(MinecraftServer server) {
         if (MCA.server == server) {
+            if (dialogueEngine != null) {
+                dialogueEngine.clear(server);
+                dialogueEngine = null;
+            }
             structureLocator.close();
             MCA.server = null;
         }
+    }
+
+    public static Optional<DialogueEngine> getDialogueEngine() {
+        return Optional.ofNullable(dialogueEngine);
     }
 
     public static void finishServerStop(MinecraftServer server) {

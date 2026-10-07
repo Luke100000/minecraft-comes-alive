@@ -4,6 +4,7 @@ import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.block.BlockEntityTypesMCA;
+import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.SensorsMCA;
@@ -115,7 +116,7 @@ public final class CommonNeoForge {
         event.addListener(new HairStyleList());
         event.addListener(new LayeredHairList());
         event.addListener(new GiftLoader());
-        event.addListener(new DialogueEvents());
+        event.addListener(DialogueEvents.INSTANCE);
         event.addListener(new Dialogues());
         event.addListener(new Tasks());
         event.addListener(new Names());
@@ -150,6 +151,7 @@ public final class CommonNeoForge {
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
         ServerInteractionManager.getInstance().tick();
+        MCA.getDialogueEngine().ifPresent(engine -> engine.tick(event.getServer()));
     }
 
     @SubscribeEvent
@@ -169,6 +171,9 @@ public final class CommonNeoForge {
     public static void onEntityLeave(EntityLeaveLevelEvent event) {
         if (event.getLevel() instanceof ServerLevel level && event.getEntity() instanceof Villager villager) {
             VillageManager.get(level).untrackVillager(villager);
+        }
+        if (event.getEntity() instanceof VillagerEntityMCA villager) {
+            MCA.getDialogueEngine().ifPresent(engine -> engine.onVillagerLeave(villager));
         }
     }
 
