@@ -17,6 +17,11 @@ public class CommonConfig {
     public boolean villagersInteractWithFenceGates = true;
 
     /**
+     * If true, a villager called with the whistle also starts following the player.
+     */
+    public boolean whistleCallMakesVillagersFollow = false;
+
+    /**
      * Time (in ticks) until a baby grows up when held as an item.
      */
     public int babyItemGrowUpTime = 24000;
