@@ -78,7 +78,7 @@ final class StructureScanner {
             return Result.failure(selected == null
                     ? Building.validationResult.NOT_IN_BUILDING : selected.result(), source);
         }
-        StructureFloor floor = new StructureFloor(0, 0, selected.floor());
+        StructureFloor floor = new StructureFloor(0, 0, selected.anchorY(), selected.floor());
         Structure candidate = new Structure(-1, selected.seed(), List.of(floor));
         Building.validationResult validation = validateCandidate(
                 candidate, floor, selected, existing, ignoredStructureId, attachmentBuildingId);
@@ -198,7 +198,7 @@ final class StructureScanner {
                                                    Collection<Structure> existing) {
         SelectedFloorScanner.Result scan = resolveAttachmentSeed(world, source).orElse(null);
         if (scan == null) return Optional.empty();
-        StructureFloor candidate = new StructureFloor(0, 0, scan.floor());
+        StructureFloor candidate = new StructureFloor(0, 0, scan.anchorY(), scan.floor());
         return Optional.of(new FloorObservation(
                 scan,
                 StructureConnector.verticalConnections(world, candidate, existing)));
@@ -336,7 +336,7 @@ final class StructureScanner {
         Structure toStructure(int id, int floorNumber) {
             FloorGeometry floor = scannedFloor();
             if (floor == null) throw new IllegalStateException("Cannot materialize a failed Structure scan");
-            return new Structure(id, source, List.of(new StructureFloor(0, floorNumber, floor)));
+            return new Structure(id, source, List.of(new StructureFloor(0, floorNumber, scan.anchorY(), floor)));
         }
     }
 }

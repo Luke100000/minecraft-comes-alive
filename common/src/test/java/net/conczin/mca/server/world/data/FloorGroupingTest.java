@@ -102,6 +102,19 @@ class FloorGroupingTest {
                 FloorGrouping.prospectiveNumber(List.of(ground, invalid), ground, 78).result());
     }
 
+    @Test
+    void semanticAnchorDoesNotMoveWhenRaisedGeometryBecomesTheModalHeight() {
+        StructureFloor ground = new StructureFloor(0, 0, 67, new FloorGeometry(List.of(
+                new FloorGeometry.Cell(new BlockPos(0, 67, 0), 71),
+                new FloorGeometry.Cell(new BlockPos(1, 69, 0), 73),
+                new FloorGeometry.Cell(new BlockPos(2, 69, 0), 73)), Map.of()));
+
+        assertEquals(69, ground.geometry().anchorY());
+        assertEquals(67, ground.anchorY());
+        assertEquals(OptionalInt.of(1), FloorGrouping.prospectiveNumber(
+                List.of(ground), ground, 73).number());
+    }
+
     private static StructureFloor floor(int id, int height, int number) {
         return new StructureFloor(id, number, new FloorGeometry(List.of(
                 new FloorGeometry.Cell(new BlockPos(id, height, 0), height + 4)), Map.of()));

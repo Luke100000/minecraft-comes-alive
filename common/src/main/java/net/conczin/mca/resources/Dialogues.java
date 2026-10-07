@@ -3,6 +3,7 @@ package net.conczin.mca.resources;
 import com.google.gson.JsonElement;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.interaction.Constraint;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.AnalysisResults;
 import net.conczin.mca.resources.data.Analysis;
@@ -93,6 +94,12 @@ public class Dialogues extends SimpleJsonResourceReloadListener<JsonElement> {
         Answer answer = question.getAnswer(answerId);
         if (answer == null) {
             MCA.LOGGER.warn("Player {} tried to select unknown answer '{}' for dialogue question '{}'", player.getGameProfile().name(), answerId, questionId);
+            return;
+        }
+
+        Set<Constraint> constraints = Constraint.allMatching(villager, player);
+        if (!answer.isValidForConstraint(constraints)) {
+            MCA.LOGGER.warn("Player {} tried to select unavailable answer '{}' for dialogue question '{}'", player.getGameProfile().name(), answerId, questionId);
             return;
         }
 

@@ -203,6 +203,11 @@ tasks.named('jar') {
     exclude '**/*GameTests*.class'
     exclude 'net/conczin/mca/neoforge/gametest/**'
     exclude 'data/mca/structure/ported_1_21_1/**'
+    exclude 'net/conczin/mca/gametest/**'
+    exclude 'net/conczin/mca/benchmark/**'
+    exclude 'data/mca/gametest/**'
+    exclude 'data/mca/structure/gametest/**'
+    exclude 'data/mca_ab/**'
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }

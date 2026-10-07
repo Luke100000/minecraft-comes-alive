@@ -15,6 +15,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.Locale;
+import java.util.Optional;
 
 public record ReportBuildingMessage(Action action, String data, int expectedTargetId) implements HandleablePayload {
     public static final CustomPacketPayload.Type<ReportBuildingMessage> TYPE =
@@ -52,11 +53,13 @@ public record ReportBuildingMessage(Action action, String data, int expectedTarg
                 case REMOVE_ROOM -> displayEditResult(player,
                         manager.removeRoom(player.blockPosition(), expectedTargetId), "blueprint.roomRemoved");
                 case REMOVE_FLOOR -> {
-                    FloorRemovalTarget target = parseFloorRemovalTarget(data);
-                    displayEditResult(player,
-                            manager.removeFloor(player.blockPosition(), target.floorNumber(), expectedTargetId,
-                                    target.structureId(), target.floorId()),
-                            "blueprint.floorRemoved");
+                    FloorRemovalTarget target = parseFloorRemovalTarget(data).orElse(null);
+                    if (target != null) {
+                        displayEditResult(player,
+                                manager.removeFloor(player.blockPosition(), target.floorNumber(), expectedTargetId,
+                                        target.structureId(), target.floorId()),
+                                "blueprint.floorRemoved");
+                    }
                 }
                 case REMOVE -> displayEditResult(player,
                         manager.removeBuilding(player.blockPosition(), expectedTargetId), "blueprint.buildingRemoved");
@@ -92,15 +95,20 @@ public record ReportBuildingMessage(Action action, String data, int expectedTarg
         return parseInt(value, -1);
     }
 
-    private static FloorRemovalTarget parseFloorRemovalTarget(String value) {
-        if (value == null) return FloorRemovalTarget.invalid();
+    static Optional<FloorRemovalTarget> parseFloorRemovalTarget(String value) {
+        if (value == null) return Optional.empty();
         String[] parts = value.split(":", -1);
-        int floorNumber = parseInt(parts[0], Integer.MIN_VALUE);
-        if (parts.length != 3) return new FloorRemovalTarget(floorNumber, -1, -1);
-        return new FloorRemovalTarget(
-                floorNumber,
-                parseInt(parts[1], -1),
-                parseInt(parts[2], -1));
+        if (parts.length != 3) return Optional.empty();
+
+        Integer floorNumber = parseInt(parts[0]);
+        Integer structureId = parseInt(parts[1]);
+        Integer floorId = parseInt(parts[2]);
+        if (floorNumber == null || floorNumber == Integer.MIN_VALUE
+                || structureId == null || structureId < 0
+                || floorId == null || floorId < 0) {
+            return Optional.empty();
+        }
+        return Optional.of(new FloorRemovalTarget(floorNumber, structureId, floorId));
     }
 
     private static int parseInt(String value, int fallback) {
@@ -112,10 +120,16 @@ public record ReportBuildingMessage(Action action, String data, int expectedTarg
         }
     }
 
-    private record FloorRemovalTarget(int floorNumber, int structureId, int floorId) {
-        private static FloorRemovalTarget invalid() {
-            return new FloorRemovalTarget(Integer.MIN_VALUE, -1, -1);
+    private static Integer parseInt(String value) {
+        if (value == null) return null;
+        try {
+            return Integer.valueOf(value);
+        } catch (NumberFormatException ignored) {
+            return null;
         }
+    }
+
+    record FloorRemovalTarget(int floorNumber, int structureId, int floorId) {
     }
 
     private static void fullScan(VillageManager manager, ServerPlayer player) {

@@ -1,7 +1,7 @@
 package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.Level;
+import net.minecraft.world.level.BlockGetter;
 
 import java.util.List;
 import java.util.Set;
@@ -12,10 +12,9 @@ final class BuildingRoomScanner {
     }
 
     /** Materializes every fresh topology component without assigning persistence identity. */
-    static List<Result> partition(Level world,
+    static List<Result> partition(BlockGetter world,
                                   BlockPos source,
                                   int maxSize,
-                                  int floorId,
                                   SelectedFloorScanner.Result scan) {
         if (scan == null) return List.of();
         FloorGeometry floor = scan.floor();
@@ -23,12 +22,12 @@ final class BuildingRoomScanner {
         List<RoomPartitioner.Component> components = components(world, scan);
         return components.stream()
                 .map(component -> materialize(
-                        source, maxSize, floorId, floor, components, component))
+                        source, maxSize, components, component))
                 .toList();
     }
 
     /** One world-aware Room partition entry point so door ownership cannot drift between callers. */
-    static List<RoomPartitioner.Component> components(Level world, SelectedFloorScanner.Result scan) {
+    static List<RoomPartitioner.Component> components(BlockGetter world, SelectedFloorScanner.Result scan) {
         if (scan == null) return List.of();
         FloorGeometry floor = scan.floor();
         if (floor == null || floor.cells().isEmpty()) return List.of();
@@ -39,8 +38,6 @@ final class BuildingRoomScanner {
     static Result materialize(
             BlockPos source,
             int maxSize,
-            int floorId,
-            FloorGeometry floor,
             List<RoomPartitioner.Component> components,
             RoomPartitioner.Component component) {
         Set<BlockPos> floorCells = component.floorCells();
@@ -52,26 +49,23 @@ final class BuildingRoomScanner {
         BlockPos seed = component.nearestCell(source);
         Set<BlockPos> poi = RoomPoiEvidence.candidates(components, component);
         FloorGeometry.Bounds bounds = FloorGeometry.bounds(component.cells(), 0);
-        return new Result(Building.validationResult.SUCCESS, seed, floorId, floor.anchorY(), floorCells, poi,
+        return new Result(Building.validationResult.SUCCESS, seed, floorCells, poi,
                 bounds.min(), bounds.max());
     }
 
     static Result materializeSelected(
             BlockPos source,
             int maxSize,
-            int floorId,
             FloorGeometry floor,
             List<RoomPartitioner.Component> components) {
         RoomPartitioner.Component component = RoomPartitioner.select(source, floor, components);
         return component == null
                 ? Result.failure(Building.validationResult.TOO_SMALL, source)
-                : materialize(source, maxSize, floorId, floor, components, component);
+                : materialize(source, maxSize, components, component);
     }
 
     record Result(Building.validationResult status,
                   BlockPos seed,
-                  int floorId,
-                  int floorY,
                   Set<BlockPos> floorCells,
                   Set<BlockPos> poiCells,
                   BlockPos min,
@@ -82,7 +76,7 @@ final class BuildingRoomScanner {
         }
 
         static Result failure(Building.validationResult status, BlockPos seed) {
-            return new Result(status, seed, -1, seed.getY(), Set.of(), Set.of(), seed, seed);
+            return new Result(status, seed, Set.of(), Set.of(), seed, seed);
         }
     }
 }

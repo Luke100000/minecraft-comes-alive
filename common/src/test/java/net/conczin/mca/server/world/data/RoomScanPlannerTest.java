@@ -42,6 +42,42 @@ class RoomScanPlannerTest {
     }
 
     @Test
+    void exactFloorCellsKeepIdentityWhenFreshReferenceHeightChanges() {
+        FloorGeometry geometry = scannedFloor(68, 70, 0, 3);
+        Structure persisted = structure(20, 20, new StructureFloor(7, 2, 64, geometry));
+        Village village = village(persisted, room(100, 20, 7, Set.of(new BlockPos(0, 68, 0))));
+        BlockPos source = new BlockPos(4, 68, 0);
+
+        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
+                observation(source, scannedFloor(68, 70, 0, 4)));
+
+        assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
+        assertEquals(20, plan.targetStructureId());
+        assertEquals(7, plan.targetFloorId());
+        assertTrue(plan.currentRoom().isEmpty());
+        assertEquals(2, persisted.getFloor(7).orElseThrow().floorNumber());
+    }
+
+    @Test
+    void exactFloorCellsTakePriorityOverNearbyStackedFootprint() {
+        Structure persisted = structure(20, 20,
+                new StructureFloor(7, 2, 64, scannedFloor(68, 70, 0, 3)));
+        Village village = village(persisted, room(100, 20, 7, Set.of(new BlockPos(0, 68, 0))));
+        Structure upper = structure(21, 20,
+                new StructureFloor(8, 3, 70, scannedFloor(70, 74, 0, 4)));
+        village.registerStructure(upper, room(101, 21, 8, Set.of(new BlockPos(0, 70, 0))));
+        BlockPos source = new BlockPos(4, 68, 0);
+
+        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
+                observation(source, scannedFloor(68, 70, 0, 4)));
+
+        assertEquals(Village.RoomScanMode.ADD_ROOM, plan.mode());
+        assertEquals(20, plan.targetStructureId());
+        assertEquals(7, plan.targetFloorId());
+        assertTrue(plan.currentRoom().isEmpty());
+    }
+
+    @Test
     void attachmentAboveLandingReusesExistingStorey() {
         Structure ground = structure(20, 20, floor(0, 67, 71, 0, 3));
         Village village = village(ground, room(100, 20, 0, Set.of(new BlockPos(0, 67, 0))));
@@ -325,14 +361,14 @@ class RoomScanPlannerTest {
         BlockPos source = new BlockPos(4, 63, 0);
         FloorGeometry primary = scannedFloor(63, 68, 0, 4);
 
-        RoomScanPlan plan = RoomScanPlanner.planFresh(
+        RoomScanPlanner.Analysis analysis = RoomScanPlanner.analyzeFresh(
                 village, source, observation(source, primary, Set.of(new BlockPos(0, 64, 0))));
+        RoomScanPlan plan = analysis.plan();
 
         assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, plan.mode());
         assertEquals(20, plan.targetBuildingId());
         assertEquals(-1, plan.prospectiveFloorNumber());
-        assertTrue(plan.selectedAttachmentFloor() != null
-                && plan.selectedAttachmentFloor().geometry().sameCellPositions(primary));
+        assertTrue(analysis.observation().scan().floor().sameCellPositions(primary));
     }
 
     @Test
@@ -387,12 +423,11 @@ class RoomScanPlannerTest {
         BlockPos source = new BlockPos(4, 63, 0);
         FloorGeometry primary = scannedFloor(63, 68, 0, 4);
 
-        RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
+        RoomScanPlanner.Analysis analysis = RoomScanPlanner.analyzeFresh(village, source,
                 observation(source, primary, Set.of(new BlockPos(0, 64, 0))));
 
-        assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, plan.mode());
-        assertTrue(plan.selectedAttachmentFloor() != null
-                && plan.selectedAttachmentFloor().geometry().sameCellPositions(primary),
+        assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, analysis.plan().mode());
+        assertTrue(analysis.observation().scan().floor().sameCellPositions(primary),
                 "attachment planning must keep the selected Floor instead of substituting another scanned Floor");
     }
 
@@ -472,7 +507,7 @@ class RoomScanPlannerTest {
             Set<BlockPos> transitionSeeds) {
         return new StructureScanner.FloorObservation(
                 new SelectedFloorScanner.Result(Building.validationResult.SUCCESS,
-                floor, selectedCell, supportedSource, selectedCell, selectedCell,
+                floor, selectedCell, supportedSource, floor.anchorY(), selectedCell, selectedCell,
                 transitions(floor), Set.of(), transitionSeeds), List.of());
     }
 

@@ -2,6 +2,7 @@ package net.conczin.mca.entity;
 
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.ai.Genetics;
+import net.conczin.mca.entity.ai.LongTermMemory;
 import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
@@ -56,6 +57,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     private final UpdatableInventory inventory = new UpdatableInventory(27);
     private String chatAIPrompt = "";
     private CompoundTag nicknameData = new CompoundTag();
+    private CompoundTag longTermMemoryData = new CompoundTag();
     private int burned;
 
     public ZombieVillagerEntityMCA(EntityType<? extends ZombieVillager> type, Level world, Gender gender) {
@@ -296,6 +298,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         relations.readFromNbt(nbt);
         chatAIPrompt = nbt.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY).orElse("");
         nicknameData = nbt.getCompound(VillagerEntityMCA.NICKNAMES_KEY).orElseGet(CompoundTag::new).copy();
+        longTermMemoryData = nbt.getCompound(LongTermMemory.NBT_KEY).orElseGet(CompoundTag::new).copy();
 
         updateAttributes();
 
@@ -309,12 +312,14 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     public void writeAdditionalConversionData(CompoundTag output) {
         output.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
         output.put(VillagerEntityMCA.NICKNAMES_KEY, nicknameData.copy());
+        output.put(LongTermMemory.NBT_KEY, longTermMemoryData.copy());
     }
 
     @Override
     public void readAdditionalConversionData(CompoundTag input) {
         chatAIPrompt = input.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY).orElse("");
         nicknameData = input.getCompound(VillagerEntityMCA.NICKNAMES_KEY).orElseGet(CompoundTag::new).copy();
+        longTermMemoryData = input.getCompound(LongTermMemory.NBT_KEY).orElseGet(CompoundTag::new).copy();
     }
 
     @Override
@@ -331,6 +336,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         InventoryUtils.saveToNBT(this.registryAccess(), inventory, nbt);
         nbt.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
         nbt.put(VillagerEntityMCA.NICKNAMES_KEY, nicknameData.copy());
+        nbt.put(LongTermMemory.NBT_KEY, longTermMemoryData.copy());
         VillagerEntityMCA.storeMcaSaveData(output, nbt);
     }
 

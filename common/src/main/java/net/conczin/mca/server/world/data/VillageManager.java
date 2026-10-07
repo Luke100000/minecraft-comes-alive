@@ -26,6 +26,7 @@ import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.SpawnPlacements;
 import net.minecraft.world.entity.monster.illager.AbstractIllager;
+import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.saveddata.SavedData;
@@ -45,6 +46,9 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     private final List<BlockPos> buildingQueue = new LinkedList<>();
     private final Map<OriginGeometryRefreshKey, OriginGeometryRefreshRetry> originGeometryRefreshRetries = new HashMap<>();
     private final ServerLevel world;
+    private final IndoorRoomCache indoorRooms;
+    // Transient type index only. Position, HOME and WALK_TARGET remain entity-owned.
+    private final Map<UUID, Villager> loadedVillagers = new HashMap<>();
     private final ReaperSpawner reapers;
     private int lastBuildingId;
     private int lastVillageId;
@@ -52,11 +56,13 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     VillageManager(ServerLevel world) {
         this.world = world;
+        this.indoorRooms = new IndoorRoomCache(world);
         reapers = new ReaperSpawner(this);
     }
 
     VillageManager(ServerLevel world, CompoundTag nbt) {
         this.world = world;
+        this.indoorRooms = new IndoorRoomCache(world);
         lastBuildingId = nbt.getInt("lastBuildingId").orElse(0);
         lastVillageId = nbt.getInt("lastVillageId").orElse(0);
         reapers = nbt.getCompound("reapers")
@@ -84,6 +90,25 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     public ReaperSpawner getReaperSpawner() { return reapers; }
+    public IndoorRoomCache getIndoorRooms() { return indoorRooms; }
+    public void trackVillager(Villager villager) {
+        loadedVillagers.put(villager.getUUID(), villager);
+    }
+
+    public void untrackVillager(Villager villager) {
+        // Tracking can end while a chunk is hidden, before the entity is actually removed.
+        // Keep it indexed until removal so becoming visible again needs no new join event.
+        if (villager.isRemoved()) loadedVillagers.remove(villager.getUUID(), villager);
+    }
+
+    public List<Villager> getLoadedVillagers() {
+        List<Villager> result = new ArrayList<>();
+        for (Villager villager : loadedVillagers.values()) {
+            if (villager.isAlive() && !villager.isRemoved() && villager.level() == world
+                    && world.getEntity(villager.getUUID()) == villager) result.add(villager);
+        }
+        return result;
+    }
     public Optional<Village> getOrEmpty(int id) { return Optional.ofNullable(villages.get(id)); }
 
     public boolean removeVillage(int id) {
@@ -140,6 +165,10 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
 
         long time = world.getGameTime();
+        if (time % 200L == 0) {
+            loadedVillagers.values().removeIf(villager -> villager.isRemoved() || villager.level() != world);
+        }
+        indoorRooms.tick(time);
         for (Village village : this) village.tick(world, time);
         tickOriginGeometryRefresh(time);
         if (time % buildingCooldown == 0 && !buildingQueue.isEmpty()) {
