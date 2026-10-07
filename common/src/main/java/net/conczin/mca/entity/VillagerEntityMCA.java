@@ -101,6 +101,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.WeakHashMap;
 import java.util.function.Predicate;
 
 
@@ -113,6 +114,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     static final String NICKNAMES_KEY = "nicknames";
     private static final CDataManager<VillagerEntityMCA> DATA = createTrackedData(VillagerEntityMCA.class).build();
     private static final int RECALCULATE_DIMENSIONS_EVERY_N_TICKS = 100;
+    private static final int PANIC_SCREAM_INTERVAL = 40;
+    private static final Map<Level, Long> LAST_PANIC_SCREAM = new WeakHashMap<>();
     public final ConversationManager conversationManager = new ConversationManager(this);
     private String chatAIPrompt = "";
     final ResourceLocation EXTRA_HEALTH_EFFECT_ID = MCA.locate("trait_health");
@@ -134,6 +137,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private long lastHit = 0;
     private int prevGrowthAmount;
     private boolean interactedWith;
+    private boolean wasPanicking;
     private double lastAppliedHealthBonus = Double.NaN;
     private boolean recoveryFoodUseActive;
     private boolean completingRecoveryFoodUse;
@@ -915,10 +919,15 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 }
             }
 
-            // panic screams
-            if (this.tickCount % 90 == 0 && mcaBrain.isPanicking()) {
+            // one scream per villager per panic wave, at most one per level per PANIC_SCREAM_INTERVAL
+            boolean panicking = mcaBrain.isPanicking();
+            long now = level().getGameTime();
+            Long lastScream = LAST_PANIC_SCREAM.get(level());
+            if (panicking && !wasPanicking && (lastScream == null || now - lastScream > PANIC_SCREAM_INTERVAL)) {
+                LAST_PANIC_SCREAM.put(level(), now);
                 sendChatToAllAround("villager.scream");
             }
+            wasPanicking = panicking;
 
             // sirben noises
             if (this.tickCount % 60 == 0 && random.nextInt(50) == 0 && traits.hasTrait(Traits.SIRBEN)) {
