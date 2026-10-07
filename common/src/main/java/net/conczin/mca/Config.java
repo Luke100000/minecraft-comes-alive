@@ -896,7 +896,8 @@ public final class Config extends CommonConfig {
             "firstpersonmod", "arms",
             "firstperson", "arms",
             "epicfight", "all",
-            "mowziesmobs", "all"
+            "mowziesmobs", "all",
+            "cpm", "all"
     );
 
     /**
