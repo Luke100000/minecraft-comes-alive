@@ -899,7 +899,8 @@ public final class Config extends CommonConfig {
             "mowziesmobs", "all",
             "cpm", "all",
             "walkers", "arms",
-            "remorphed", "arms"
+            "remorphed", "arms",
+            "parcool", "all"
     );
 
     /**
