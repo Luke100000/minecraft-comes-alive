@@ -31,7 +31,6 @@ import net.conczin.mca.util.compat.ButtonWidget;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
@@ -129,6 +128,8 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     private boolean hasVisualChange = false;
     private ButtonWidget genderButtonFemale;
     private ButtonWidget genderButtonMale;
+    private ButtonWidget slimButtonWide;
+    private ButtonWidget slimButtonSlim;
 
     public VillagerEditorScreen(UUID villagerUUID, UUID playerUUID, boolean allowPlayerModel, boolean allowVillagerModel) {
         super(Component.translatable("gui.VillagerEditorScreen.title"));
@@ -1630,11 +1631,24 @@ public class VillagerEditorScreen extends Screen implements SkinListUpdateListen
     }
 
     protected void addSlimToggle(int x, int y) {
-        addRenderableWidget(CycleButton.onOffBuilder(villager.isSlim())
-                .create(x, y, DATA_WIDTH / 2, 20, Component.translatable("gui.villager_editor.slim"), (button, slim) -> {
-                    villager.setSlim(slim);
-                    sendCommandLocked("sync");
-                }));
+        slimButtonWide = new ButtonWidget(x, y, DATA_WIDTH / 2, 20, Component.translatable("gui.villager_editor.wide"), sender -> {
+            villager.setSlim(false);
+            sendCommandLocked("sync");
+            slimButtonWide.active = false;
+            slimButtonSlim.active = true;
+        });
+        addRenderableWidget(slimButtonWide);
+
+        slimButtonSlim = new ButtonWidget(x + DATA_WIDTH / 2, y, DATA_WIDTH / 2, 20, Component.translatable("gui.villager_editor.slim"), sender -> {
+            villager.setSlim(true);
+            sendCommandLocked("sync");
+            slimButtonWide.active = true;
+            slimButtonSlim.active = false;
+        });
+        addRenderableWidget(slimButtonSlim);
+
+        slimButtonWide.active = villager.isSlim();
+        slimButtonSlim.active = !villager.isSlim();
     }
 
     private boolean beginEditorCommand() {
