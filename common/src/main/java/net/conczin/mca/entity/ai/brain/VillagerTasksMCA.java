@@ -5,13 +5,10 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.mojang.datafixers.util.Pair;
 import net.conczin.mca.Config;
+import net.conczin.mca.MCA;
 import net.conczin.mca.entity.EquipmentSet;
 import net.conczin.mca.entity.VillagerEntityMCA;
-import net.conczin.mca.entity.ai.ActivitiesMCA;
-import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
-import net.conczin.mca.entity.ai.SchedulesMCA;
-import net.conczin.mca.entity.ai.SensorsMCA;
-import net.conczin.mca.entity.ai.RangedWeaponHelper;
+import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.conczin.mca.entity.ai.brain.tasks.*;
 import net.conczin.mca.entity.ai.brain.tasks.chore.ChoppingTask;
@@ -442,7 +439,8 @@ public class VillagerTasksMCA {
                         Config.getInstance().getVillagerPathfindingDistance(),
                         GRIEVING_PATH_TIMEOUT,
                         villager -> true,
-                        villager -> { },
+                        villager -> {
+                        },
                         villager -> !mournAtGrave.hasArrived()
                 )),
                 Pair.of(0, new SequenceTask<>(
@@ -531,12 +529,16 @@ public class VillagerTasksMCA {
     }
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getMeetPackage(float speedModifier) {
+        var socializingTasks = ImmutableList.<Pair<? extends BehaviorControl<? super VillagerEntityMCA>, Integer>>builder()
+                .add(Pair.of(StrollAroundPoi.create(MemoryModuleType.MEETING_POINT, 0.4F, 40), 2))
+                .add(Pair.of(SocializeAtBell.create(), 2));
+
+        if (MCA.platformHelper.isModLoaded("immersive_melodies")) {
+            socializingTasks.add(Pair.of(new PlayImmersiveMelodyTask(), 1));
+        }
+
         return ImmutableList.of(
-                Pair.of(2, new RunOne<>(ImmutableList.of(
-                        Pair.of(StrollAroundPoi.create(MemoryModuleType.MEETING_POINT, 0.4F, 40), 2),
-                        Pair.of(SocializeAtBell.create(), 2),
-                        Pair.of(new PlayImmersiveMelodyTask(), 1))
-                )),
+                Pair.of(2, new RunOne<>(socializingTasks.build())),
                 Pair.of(10, new ShowTradesToPlayer(400, 1600)),
                 Pair.of(10, SetLookAndInteract.create(EntityType.PLAYER, 4)),
                 Pair.of(2, SetWalkTargetFromBlockMemory.create(MemoryModuleType.MEETING_POINT, speedModifier, 6, 100, 200)),

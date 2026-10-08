@@ -1,9 +1,11 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
 import com.google.common.collect.ImmutableMap;
+import immersive_melodies.Items;
+import immersive_melodies.item.InstrumentItem;
+import immersive_melodies.resources.ServerMelodyManager;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
-import net.conczin.mca.integration.ImmersiveMelodies;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
@@ -44,8 +46,10 @@ public class PlayImmersiveMelodyTask extends Behavior<VillagerEntityMCA> {
         if (villager.getRandom().nextFloat() >= Config.getInstance().immersiveMelodiesChance) {
             return false;
         }
-        melody = closestMelody(level, villager).map(ImmersiveMelodies.PlayingMelody::melody)
-                .or(() -> ImmersiveMelodies.randomMelody(villager, Config.getInstance().immersiveMelodiesNamespace))
+        String namespace = Config.getInstance().immersiveMelodiesNamespace;
+        melody = closestMelody(level, villager).map(InstrumentItem.Playback::melody)
+                .or(() -> ServerMelodyManager.getRandomMelody(villager.getRandom(),
+                        id -> "*".equals(namespace) || id.getNamespace().equals(namespace)))
                 .orElse(null);
         return melody != null;
     }
@@ -60,8 +64,8 @@ public class PlayImmersiveMelodyTask extends Behavior<VillagerEntityMCA> {
     @Override
     protected void start(ServerLevel level, VillagerEntityMCA villager, long time) {
         if (melody != null) {
-            ImmersiveMelodies.PlayingMelody selectedMelody = closestMelody(level, villager)
-                    .orElse(new ImmersiveMelodies.PlayingMelody(melody, level.getGameTime()));
+            InstrumentItem.Playback selectedMelody = closestMelody(level, villager)
+                    .orElse(new InstrumentItem.Playback(melody, level.getGameTime()));
             startPerforming(level, villager, selectedMelody);
             level.getEntitiesOfClass(VillagerEntityMCA.class, villager.getBoundingBox().inflate(8.0), other -> other != villager && canPerform(other)
                                                                                                                && level.getGameTime() >= nextPerformanceTimes.getOrDefault(other, 0L))
@@ -90,7 +94,7 @@ public class PlayImmersiveMelodyTask extends Behavior<VillagerEntityMCA> {
     }
 
     private static void stopPerforming(ServerLevel level, Performer performer) {
-        ImmersiveMelodies.stop(performer.instrument(), level);
+        ((InstrumentItem) performer.instrument().getItem()).pause(performer.instrument(), level);
         if (performer.villager().getItemInHand(performer.hand()) == performer.instrument()) {
             performer.villager().setItemInHand(performer.hand(), performer.previousStack());
         }
@@ -104,23 +108,20 @@ public class PlayImmersiveMelodyTask extends Behavior<VillagerEntityMCA> {
                && !villager.getVillagerBrain().isPanicking();
     }
 
-    private void startPerforming(ServerLevel level, VillagerEntityMCA villager, ImmersiveMelodies.PlayingMelody melody) {
-        ImmersiveMelodies.randomInstrument(villager).ifPresent(instrument -> {
+    private void startPerforming(ServerLevel level, VillagerEntityMCA villager, InstrumentItem.Playback melody) {
+        Items.getRandomInstrument(villager.getRandom()).ifPresent(stack -> {
             ItemStack previous = villager.getMainHandItem().copy();
-            villager.setItemInHand(InteractionHand.MAIN_HAND, instrument);
-            if (ImmersiveMelodies.play(instrument, melody, level, villager)) {
-                performers.add(new Performer(villager, InteractionHand.MAIN_HAND, instrument, previous));
-                nextPerformanceTimes.put(villager, level.getGameTime() + RETRY_COOLDOWN);
-            } else {
-                villager.setItemInHand(InteractionHand.MAIN_HAND, previous);
-            }
+            ((InstrumentItem) stack.getItem()).play(stack, melody.melody(), melody.startTime(), villager);
+            villager.setItemInHand(InteractionHand.MAIN_HAND, stack);
+            performers.add(new Performer(villager, InteractionHand.MAIN_HAND, stack, previous));
+            nextPerformanceTimes.put(villager, level.getGameTime() + RETRY_COOLDOWN);
         });
     }
 
-    private static Optional<ImmersiveMelodies.PlayingMelody> closestMelody(ServerLevel level, VillagerEntityMCA villager) {
+    private static Optional<InstrumentItem.Playback> closestMelody(ServerLevel level, VillagerEntityMCA villager) {
         return level.getEntitiesOfClass(VillagerEntityMCA.class, villager.getBoundingBox().inflate(8.0), other -> other != villager).stream()
                 .sorted(Comparator.comparingDouble(villager::distanceToSqr))
-                .map(other -> ImmersiveMelodies.playingMelody(other.getMainHandItem()))
+                .map(other -> InstrumentItem.getPlayback(other.getMainHandItem()))
                 .flatMap(Optional::stream)
                 .findFirst();
     }
