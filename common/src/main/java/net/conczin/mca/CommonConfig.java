@@ -17,6 +17,7 @@ public class CommonConfig implements Serializable {
         this.babyItemGrowUpTime = config.babyItemGrowUpTime;
         this.villagerMaxAgeTime = config.villagerMaxAgeTime;
         this.allowEveryoneToAddContentGlobally = config.allowEveryoneToAddContentGlobally;
+        this.addContentGloballyPermissionLevel = config.addContentGloballyPermissionLevel;
         this.allowPlayerSizeAdjustment = config.allowPlayerSizeAdjustment;
         this.scalePlayerHitboxWithSizeAndWidth = config.scalePlayerHitboxWithSizeAndWidth;
         this.allowBodyCustomizationInDestiny = config.allowBodyCustomizationInDestiny;
@@ -40,6 +41,12 @@ public class CommonConfig implements Serializable {
      * If true, allows non-ops to add skins from the library to the server wide pool.
      */
     public boolean allowEveryoneToAddContentGlobally = false;
+
+    /**
+     * Permission level required to add or remove skins from the server-wide library.
+     * Singleplayer owners can always edit it. The existing allow-everyone option takes precedence.
+     */
+    public int addContentGloballyPermissionLevel = 3;
 
     /**
      * Allow players to modify their size.

@@ -7,7 +7,9 @@ import net.conczin.mca.entity.ai.relationship.Gender;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.GsonHelper;
 
-public abstract class SkinListEntry {
+import java.io.Serializable;
+
+public abstract class SkinListEntry implements Serializable {
     public static final Codec<Gender> GENDER_CODEC = Codec.STRING.comapFlatMap(name -> {
         Gender gender = Gender.byName(name);
         if (gender == Gender.UNASSIGNED) {

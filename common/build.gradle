@@ -15,6 +15,14 @@ legacyForge {
 dependencies {
     compileOnly 'org.spongepowered:mixin:0.8.5'
     compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:${mixin_extras_version}"))
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+configurations.testRuntimeClasspath.extendsFrom(configurations.compileClasspath)
+
+tasks.named('test', Test) {
+    useJUnitPlatform()
 }
 
 configurations {

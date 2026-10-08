@@ -1261,7 +1261,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         List<TooltipButtonWidget> widgets = new LinkedList<>();
 
         // subscribe
-        if (isOp() || Config.getServerConfig().allowEveryoneToAddContentGlobally) {
+        if (canEditServerWideContent()) {
             widgets.add(new ToggleableTooltipIconButtonWidget(0, 0, 0, 3 * 16,
                     getServerContentById(content.contentid()).isPresent(),
                     Component.translatable("gui.skin_library.subscribe"),
@@ -1595,8 +1595,12 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         return Minecraft.getInstance().player == null ? "Unknown" : Minecraft.getInstance().player.getGameProfile().getName();
     }
 
-    private boolean isOp() {
-        return Minecraft.getInstance().player != null && Minecraft.getInstance().player.hasPermissions(4);
+    private boolean canEditServerWideContent() {
+        Minecraft minecraft = Minecraft.getInstance();
+        return minecraft.hasSingleplayerServer()
+                || Config.getServerConfig().allowEveryoneToAddContentGlobally
+                || minecraft.player != null
+                && minecraft.player.hasPermissions(Config.getServerConfig().addContentGloballyPermissionLevel);
     }
 
     private void setSelectionPage(int p) {

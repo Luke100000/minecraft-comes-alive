@@ -23,7 +23,9 @@ public class CustomClothingManager {
     static final Storage<Hair> HAIR_DUMMY = new Storage<>();
 
     public static boolean canModifyGlobalContent(ServerPlayer player) {
-        return Config.getServerConfig().allowEveryoneToAddContentGlobally || player.hasPermissions(4);
+        return Config.getServerConfig().allowEveryoneToAddContentGlobally
+                || player.hasPermissions(Config.getServerConfig().addContentGloballyPermissionLevel)
+                || player.getServer() != null && player.getServer().isSingleplayerOwner(player.getGameProfile());
     }
 
     public static Storage<Clothing> getClothing() {

@@ -4,6 +4,12 @@
 * Backup your world before using.
 * Some addons may not work/crash, if so either use 7.6.28-beta or 7.7.0-beta.2
 
+# 7.7.1-beta.4
+
+* Fixed custom outfits and hairstyles missing from the World's skin library after updating, including newly added skins.
+* Fixed adding and removing skins from the server-wide library in singleplayer without cheats enabled.
+* Server owners can now set `addContentGloballyPermissionLevel` to choose who can manage the library. The existing `allowEveryoneToAddContentGlobally` setting still works.
+
 # 7.7.1-beta.3
 
 * Fixed custom player size and hitbox resetting after changing dimensions.
