@@ -64,6 +64,27 @@ public final class DynamicSkinCache {
         INCOMPLETE_FACE_CACHE.clear();
     }
 
+    /** Evict stitched skins and face icons when a library texture changes under the same ID. */
+    public static void invalidateSourceTexture(ResourceLocation source) {
+        if (source == null) {
+            return;
+        }
+        invalidateDerivedSkins(CACHE, INCOMPLETE_CACHE, source.toString());
+        invalidateDerivedSkins(FACE_CACHE, INCOMPLETE_FACE_CACHE, source.toString());
+    }
+
+    private static void invalidateDerivedSkins(Map<SkinKey, ResourceLocation> cache,
+                                                Set<SkinKey> incomplete, String sourceId) {
+        cache.entrySet().removeIf(entry -> {
+            if (!entry.getKey().references(sourceId)) {
+                return false;
+            }
+            releaseDynamicTexture(entry.getValue());
+            incomplete.remove(entry.getKey());
+            return true;
+        });
+    }
+
     public static ResourceLocation getOrCreateStitchedSkin(Entity entity) {
         if (!(entity instanceof VillagerLike<?> villager)) {
             return STEVE;
@@ -290,6 +311,17 @@ public final class DynamicSkinCache {
 
         String id() {
             return UUID.nameUUIDFromBytes(toString().getBytes(StandardCharsets.UTF_8)).toString();
+        }
+
+        boolean references(String identifier) {
+            return identifier.equals(skin)
+                   || identifier.equals(hair)
+                   || identifier.equals(hairBase)
+                   || identifier.equals(hairBangs)
+                   || identifier.equals(hairBack)
+                   || identifier.equals(hairFront)
+                   || identifier.equals(hairExtra)
+                   || identifier.equals(clothes);
         }
     }
 }
