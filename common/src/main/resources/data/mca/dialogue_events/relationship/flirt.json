@@ -1,0 +1,110 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue.main.flirt",
+    "resume_prompt": "dialogue_event.mca.relationship.flirt.resume",
+    "topic": "relationship"
+  },
+  "priority": 0,
+  "weight": 1,
+  "requirements": [
+    { "type": "mca:age_group", "value": "adult" },
+    {
+      "type": "mca:not",
+      "condition": { "type": "mca:family", "value": "child" }
+    },
+    {
+      "type": "mca:not",
+      "condition": { "type": "mca:family", "value": "relative" }
+    }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "reaction",
+  "nodes": {
+    "reaction": {
+      "outcomes": [
+        {
+          "weight": 5,
+          "actions": [
+            { "type": "mca:hearts", "amount": 5 }
+          ],
+          "next": "success"
+        },
+        {
+          "requirements": [
+            { "type": "mca:personality", "value": "flirty" }
+          ],
+          "weight": 12,
+          "actions": [
+            { "type": "mca:hearts", "amount": 5 }
+          ],
+          "next": "success"
+        },
+        {
+          "weight": 3,
+          "actions": [
+            { "type": "mca:hearts", "amount": -3 }
+          ],
+          "next": "fail"
+        },
+        {
+          "requirements": [
+            { "type": "mca:personality", "value": "odd" }
+          ],
+          "weight": 5,
+          "actions": [
+            { "type": "mca:hearts", "amount": -3 }
+          ],
+          "next": "fail"
+        },
+        {
+          "weight": 1,
+          "actions": [
+            { "type": "mca:hearts", "amount": -5 },
+            { "type": "mca:command", "command": "slap" }
+          ],
+          "next": "slap"
+        },
+        {
+          "requirements": [
+            { "type": "mca:personality", "value": "odd" }
+          ],
+          "weight": 5,
+          "actions": [
+            { "type": "mca:hearts", "amount": -5 },
+            { "type": "mca:command", "command": "slap" }
+          ],
+          "next": "slap"
+        },
+        {
+          "requirements": [
+            { "type": "mca:hearts", "max": 0 }
+          ],
+          "weight": 20,
+          "actions": [
+            { "type": "mca:hearts", "amount": -5 },
+            { "type": "mca:command", "command": "slap" }
+          ],
+          "next": "slap"
+        }
+      ]
+    },
+    "success": {
+      "line": "dialogue.flirt.success",
+      "complete": true
+    },
+    "fail": {
+      "line": "dialogue.flirt.fail",
+      "complete": true
+    },
+    "slap": {
+      "line": "dialogue.flirt.slap",
+      "complete": true
+    }
+  }
+}

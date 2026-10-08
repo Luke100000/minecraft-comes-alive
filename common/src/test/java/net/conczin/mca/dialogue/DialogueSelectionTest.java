@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -101,6 +102,21 @@ class DialogueSelectionTest {
     }
 
     @Test
+    void pausedHighlightedTopicIsExcludedWithoutHidingOtherTiersOrTopics() {
+        DialogueEvent paused = event("test:paused", "highlighted", 100, 1.0, "always");
+        DialogueEvent otherHighlighted = event("test:highlighted", "highlighted", 50, 1.0, "always");
+        DialogueEvent ask = event("test:ask", "ask", 10, 1.0, "always");
+        DialogueEvent ambient = event("test:ambient", "ambient", 20, 1.0, "always");
+
+        DialogueEngine.SelectionPlan plan = DialogueEngine.planSelection(
+                List.of(ambient, paused, ask, otherHighlighted), candidate -> true, paused.id());
+
+        assertEquals(otherHighlighted.id(), plan.highlighted().orElseThrow().id());
+        assertEquals(List.of(ask.id()), plan.ask().stream().map(DialogueEvent::id).toList());
+        assertEquals(List.of(ambient.id()), plan.ambient().stream().map(DialogueEvent::id).toList());
+    }
+
+    @Test
     void menuSelectionPlanNeverExceedsWireOptionBudget() {
         List<DialogueEvent> events = new ArrayList<>();
         events.add(event("test:highlighted", "highlighted", 100, 1.0, "always"));
@@ -176,6 +192,118 @@ class DialogueSelectionTest {
                 RandomSource.create(seed)
         ).orElseThrow();
         assertEquals(expectedWeight, picked.weight());
+    }
+
+    @Test
+    void changingChoiceConditionsRevalidatesEachOutcomeInsteadOfCachingOldEligibility() {
+        DialogueEvent.Node node = outcomeEvent().nodes().get("start");
+        DialogueEvent.Choice childOnly = node.choices().orElseThrow().get(0);
+        DialogueEvent.Choice weighted = node.choices().orElseThrow().get(1);
+        Predicate<DialogueCondition> adultNow = condition ->
+                "adult".equals(((DialogueCondition.Defined) condition).definition().get("value").getAsString());
+        Predicate<DialogueCondition> childNow = condition ->
+                "child".equals(((DialogueCondition.Defined) condition).definition().get("value").getAsString());
+
+        assertFalse(DialogueEngine.choiceEligible(childOnly, adultNow));
+        assertTrue(DialogueEngine.choiceEligible(weighted, adultNow));
+        assertEquals(List.of(1.0, 4.0), DialogueEngine.eligibleOutcomes(weighted, adultNow)
+                .stream().map(DialogueEvent.Outcome::weight).toList());
+
+        assertTrue(DialogueEngine.choiceEligible(childOnly, childNow));
+        assertTrue(DialogueEngine.choiceEligible(weighted, childNow));
+        assertEquals(List.of(100.0), DialogueEngine.eligibleOutcomes(weighted, childNow)
+                .stream().map(DialogueEvent.Outcome::weight).toList());
+        assertTrue(DialogueEngine.weightedPick(List.<DialogueEvent.Outcome>of(),
+                DialogueEvent.Outcome::weight, RandomSource.create(17L)).isEmpty(),
+                "no eligible outcome must never fall back to an ineligible reward");
+    }
+
+    @Test
+    void consecutiveAutomaticRoutesQueueOnlyChosenEffectsAndRotateOnceWhenVisible() {
+        DialogueEvent event = DialogueEvent.decode(ResourceLocation.parse("test:two_routes"), JsonParser.parseString("""
+                {
+                  "trigger":"talk",
+                  "presentation":{"mode":"ask","prompt":"dialogue.routes","resume_prompt":"dialogue.resume"},
+                  "repeat":{"type":"always"},
+                  "start":"first",
+                  "nodes":{
+                    "first":{"outcomes":[{"weight":1,"actions":[{"type":"mca:hearts","amount":2}],"next":"second"}]},
+                    "second":{"outcomes":[{"weight":1,"actions":[{"type":"mca:hearts","amount":3}],"next":"final"}]},
+                    "final":{"line":"dialogue.final","complete":true}
+                  }
+                }
+                """).getAsJsonObject());
+        DialogueSession start = DialogueSession.start(
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), 4L, 10L, event);
+        AtomicLong tokens = new AtomicLong(10L);
+
+        DialogueSession routed = DialogueEngine.resolveAutomaticTransitions(
+                start, condition -> true, RandomSource.create(8L), tokens::incrementAndGet);
+
+        assertEquals("final", routed.nodeId());
+        assertEquals(11L, routed.offerToken());
+        assertEquals(10L, routed.previousOfferToken());
+        assertFalse(routed.acceptsOffer(10L, 4L));
+        assertTrue(routed.acceptsOffer(11L, 4L));
+        assertEquals(List.of(new DialogueAction.Hearts(2), new DialogueAction.Hearts(3)), routed.pendingEffects());
+        assertTrue(routed.acceptedChoices().isEmpty());
+        assertTrue(routed.selectedOutcomes().isEmpty());
+        assertEquals(DialogueEngine.AdvanceKind.BACK_TO_TOPICS, DialogueEngine.advanceKind(routed),
+                "routing into a final node must not implicitly commit or chain into another event");
+    }
+
+    @Test
+    void automaticRoutingSkipsInternalNodesAndQueuesExactlyOneSelectedOutcomeEffect() {
+        DialogueEvent event = DialogueEvent.decode(ResourceLocation.parse("test:auto_route"), JsonParser.parseString("""
+                {
+                  "trigger":"talk",
+                  "presentation":{
+                    "mode":"ask",
+                    "prompt":"dialogue.auto.prompt",
+                    "resume_prompt":"dialogue.auto.resume"
+                  },
+                  "repeat":{"type":"always"},
+                  "start":"route",
+                  "nodes":{
+                    "route":{
+                      "outcomes":[
+                        {
+                          "weight":1,
+                          "actions":[{"type":"mca:hearts","amount":1}],
+                          "next":"done"
+                        },
+                        {
+                          "weight":4,
+                          "actions":[{"type":"mca:hearts","amount":4}],
+                          "next":"done"
+                        }
+                      ]
+                    },
+                    "done":{"line":"dialogue.done","complete":true}
+                  }
+                }
+                """).getAsJsonObject());
+        DialogueSession session = DialogueSession.start(
+                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), 1L, 10L, event);
+        long seed = 17L;
+        double roll = RandomSource.create(seed).nextDouble() * 5.0;
+        int expectedHearts = roll < 1.0 ? 1 : 4;
+        AtomicLong token = new AtomicLong(10L);
+
+        DialogueSession resolved = DialogueEngine.resolveAutomaticTransitions(
+                session,
+                condition -> true,
+                RandomSource.create(seed),
+                token::incrementAndGet
+        );
+
+        assertEquals("done", resolved.nodeId());
+        assertEquals(11L, resolved.offerToken());
+        assertEquals(List.of(), resolved.offeredChoices());
+        assertTrue(resolved.acceptedChoices().isEmpty(), "automatic routing is not a player choice");
+        assertTrue(resolved.selectedOutcomes().isEmpty(), "automatic routing is not remembered as a player choice");
+        DialogueAction.Hearts hearts = (DialogueAction.Hearts) resolved.pendingEffects().getFirst();
+        assertEquals(expectedHearts, hearts.amount());
     }
 
     private static DialogueEvent event(

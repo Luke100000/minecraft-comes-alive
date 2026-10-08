@@ -1,0 +1,55 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "highlighted",
+    "prompt": "dialogue_event.mca.personal.mourning.prompt",
+    "resume_prompt": "dialogue_event.mca.personal.mourning.resume",
+    "topic": "life_event"
+  },
+  "priority": 120,
+  "weight": 1,
+  "requirements": [
+    { "type": "mca:recent_event", "event": "mca:relative_death", "within_ticks": 24000 },
+    { "type": "mca:hearts", "min": 20 }
+  ],
+  "repeat": { "type": "cooldown", "seconds": 5 },
+  "history": "scheduling",
+  "start": "intro",
+  "nodes": {
+    "intro": {
+      "lines": [
+        "dialogue_event.mca.personal.mourning.intro.reminders",
+        "dialogue_event.mca.personal.mourning.intro.well",
+        "dialogue_event.mca.personal.mourning.intro.good_days",
+        "dialogue_event.mca.personal.mourning.intro.catching_up"
+      ],
+      "choices": [
+        {
+          "id": "listen",
+          "text": "dialogue_event.mca.personal.mourning.choice.listen",
+          "actions": [{ "type": "mca:hearts", "amount": 3 }],
+          "next": "listened"
+        },
+        {
+          "id": "give_space",
+          "text": "dialogue_event.mca.personal.mourning.choice.give_space",
+          "next": "space"
+        }
+      ]
+    },
+    "listened": {
+      "lines": [
+        "dialogue_event.mca.personal.mourning.listened",
+        "dialogue_event.mca.personal.mourning.listened.story"
+      ],
+      "complete": true
+    },
+    "space": {
+      "lines": [
+        "dialogue_event.mca.personal.mourning.space",
+        "dialogue_event.mca.personal.mourning.space.sit"
+      ],
+      "complete": true
+    }
+  }
+}

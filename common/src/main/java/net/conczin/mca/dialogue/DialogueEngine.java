@@ -1,9 +1,13 @@
 package net.conczin.mca.dialogue;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.network.Network;
+import net.conczin.mca.network.s2c.InteractionDialogueNodeResponse;
+import net.conczin.mca.network.s2c.InteractionDialogueOptionsResponse;
 import net.conczin.mca.resources.DialogueEvents;
 import net.conczin.mca.server.world.data.DialogueEventHistory;
 import net.minecraft.network.chat.Component;
+import net.minecraft.Util;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -23,6 +27,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.LongSupplier;
 import java.util.function.Predicate;
 import java.util.function.ToDoubleFunction;
 
@@ -45,11 +50,17 @@ public final class DialogueEngine {
      * concrete owner contract instead of treating the handler's close-screen flag as success.
      */
     private static final Set<String> RELIABLE_DIALOGUE_COMMANDS = Set.of(
+            "adopt",
+            "apologize",
             "divorcePapers",
             "divorceConfirm",
-            "stay_in_village"
+            "hire_short",
+            "hire_long",
+            "procreate",
+            "slap",
+            "stay_in_village",
+            "location"
     );
-
     private final DialogueEvents events;
     private final Map<UUID, DialogueSession> sessions = new HashMap<>();
     private final Map<UUID, DialogueOptions> offers = new HashMap<>();
@@ -161,7 +172,8 @@ public final class DialogueEngine {
             }
             offer.consume();
             offers.remove(playerId);
-            DialogueSession resumed = refreshOfferedChoices(retained.resume(nextToken()), context);
+            DialogueSession resumed = resolveAutomaticTransitions(retained.resume(nextToken(), offer.token()), context);
+            resumed = refreshOfferedChoices(resumed, context);
             sessions.put(playerId, resumed);
             return Optional.of(view(resumed, context));
         }
@@ -190,7 +202,6 @@ public final class DialogueEngine {
                 return Optional.empty();
             }
         } else {
-            // LEGACY is introduced by the migration adapter in Task 9.
             return Optional.empty();
         }
 
@@ -202,8 +213,10 @@ public final class DialogueEngine {
                 UUID.randomUUID(),
                 offer.generation(),
                 nextToken(),
+                offer.token(),
                 selected
         );
+        session = resolveAutomaticTransitions(session, context);
         session = refreshOfferedChoices(session, context);
         sessions.put(playerId, session);
         return Optional.of(view(session, context));
@@ -278,6 +291,7 @@ public final class DialogueEngine {
         }
 
         progressed = progressed.withProgress(next, 0, List.of(), nextToken());
+        progressed = resolveAutomaticTransitions(progressed, context);
         progressed = refreshOfferedChoices(progressed, context);
         sessions.put(playerId, progressed);
         return TransitionResult.advanced(view(progressed, context));
@@ -324,6 +338,7 @@ public final class DialogueEngine {
 
         if (node.next().isPresent()) {
             DialogueSession progressed = session.withProgress(node.next().orElseThrow(), 0, List.of(), nextToken());
+            progressed = resolveAutomaticTransitions(progressed, context);
             progressed = refreshOfferedChoices(progressed, context);
             sessions.put(playerId, progressed);
             return TransitionResult.advanced(view(progressed, context));
@@ -352,6 +367,50 @@ public final class DialogueEngine {
         sessions.put(playerId, session.pause(deadline));
     }
 
+    /** Returns whether a screen-exit packet may also close the villager interaction. */
+    public boolean pause(ServerPlayer player, UUID villagerId, UUID sessionId, long offerToken) {
+        Objects.requireNonNull(player, "player");
+        Objects.requireNonNull(villagerId, "villagerId");
+        Objects.requireNonNull(sessionId, "sessionId");
+        UUID playerId = player.getUUID();
+        DialogueOptions offer = offers.get(playerId);
+        DialogueSession session = sessions.get(playerId);
+        boolean matchingOffer = offer != null
+                && offer.villagerId().equals(villagerId)
+                && offer.token() == offerToken;
+        // A screen may close before its first (or refreshed) menu token reaches the client.
+        // InteractionCloseRequest independently authenticates the concrete screen interaction.
+        boolean matchingUnseenMenu = offer != null
+                && offer.villagerId().equals(villagerId)
+                && sessionId.equals(Util.NIL_UUID)
+                && (offerToken == 0L || matchingOffer);
+        boolean matchingActiveSession = session != null
+                && session.status() == DialogueSession.Status.ACTIVE
+                && session.villagerId().equals(villagerId)
+                && session.id().equals(sessionId)
+                && (session.offerToken() == offerToken
+                    || Objects.equals(session.previousOfferToken(), offerToken));
+        boolean matchingPendingMenu = session != null
+                && session.status() == DialogueSession.Status.ACTIVE
+                && session.villagerId().equals(villagerId)
+                && sessionId.equals(Util.NIL_UUID)
+                && Objects.equals(session.previousOfferToken(), offerToken);
+        if ((offer != null && !matchingOffer && !matchingUnseenMenu)
+                || (session != null && session.status() == DialogueSession.Status.ACTIVE
+                    && !matchingActiveSession && !matchingPendingMenu && !matchingUnseenMenu)) {
+            return false;
+        }
+        if (matchingOffer || matchingUnseenMenu) {
+            offers.remove(playerId);
+        }
+        if (matchingActiveSession || matchingPendingMenu || (matchingUnseenMenu
+                && session != null && session.status() == DialogueSession.Status.ACTIVE
+                && session.villagerId().equals(villagerId))) {
+            sessions.put(playerId, session.pause(saturatingAdd(overworldTime(player), PAUSE_TICKS)));
+        }
+        return true;
+    }
+
     public void end(ServerPlayer player) {
         Objects.requireNonNull(player, "player");
         sessions.remove(player.getUUID());
@@ -362,15 +421,26 @@ public final class DialogueEngine {
         Objects.requireNonNull(villager, "villager");
         Entity.RemovalReason reason = villager.getRemovalReason();
         boolean destroyed = reason != null && reason.shouldDestroy();
-        long gameTime = villager.level() instanceof ServerLevel level
-                ? level.getServer().overworld().getGameTime()
-                : 0L;
+        MinecraftServer server = villager.level() instanceof ServerLevel level ? level.getServer() : null;
+        long gameTime = server == null ? 0L : server.overworld().getGameTime();
         sessions.replaceAll((playerId, session) -> {
-            if (!session.villagerId().equals(villager.getUUID()) || destroyed
-                    || session.status() == DialogueSession.Status.PAUSED) {
+            if (!session.villagerId().equals(villager.getUUID())) {
                 return session;
             }
-            return session.pause(saturatingAdd(gameTime, PAUSE_TICKS));
+            ServerPlayer player = server == null ? null : server.getPlayerList().getPlayer(playerId);
+            if (destroyed) {
+                if (player != null) {
+                    notifyEnded(player, session);
+                }
+                return session;
+            }
+            DialogueSession paused = session.status() == DialogueSession.Status.PAUSED
+                    ? session
+                    : session.pause(saturatingAdd(gameTime, PAUSE_TICKS));
+            if (player != null) {
+                notifyPaused(player, paused);
+            }
+            return paused;
         });
         if (destroyed) {
             sessions.entrySet().removeIf(entry -> entry.getValue().villagerId().equals(villager.getUUID()));
@@ -382,34 +452,54 @@ public final class DialogueEngine {
         Objects.requireNonNull(server, "server");
         long generation = events.generation();
         long gameTime = server.overworld().getGameTime();
+        if (gameTime % 20L == 0L) {
+            DialogueEventHistory.get(server.overworld()).pruneExpiredScheduling(gameTime, 64);
+        }
         sessions.entrySet().removeIf(entry -> {
             DialogueSession session = entry.getValue();
             ServerPlayer player = server.getPlayerList().getPlayer(session.playerId());
             if (shouldDiscardSession(session, generation, gameTime, player != null)) {
+                if (player != null) {
+                    notifyEnded(player, session);
+                }
                 return true;
             }
             if (session.status() == DialogueSession.Status.PAUSED) {
                 Entity entity = findLoadedEntity(server, session.villagerId());
-                return entity != null && (!(entity instanceof VillagerEntityMCA villager) || !villager.isAlive() || villager.isRemoved());
+                boolean discard = entity != null
+                        && (!(entity instanceof VillagerEntityMCA villager) || !villager.isAlive() || villager.isRemoved());
+                if (discard) {
+                    notifyEnded(player, session);
+                }
+                return discard;
             }
 
             Entity entity = player.serverLevel().getEntity(session.villagerId());
             if (entity == null) {
-                entry.setValue(session.pause(saturatingAdd(gameTime, PAUSE_TICKS)));
+                DialogueSession paused = session.pause(saturatingAdd(gameTime, PAUSE_TICKS));
+                entry.setValue(paused);
                 offers.remove(session.playerId());
+                notifyPaused(player, paused);
                 return false;
             }
             if (!(entity instanceof VillagerEntityMCA villager) || !villager.isAlive() || villager.isRemoved()) {
+                notifyEnded(player, session);
                 return true;
             }
             if (!canInteract(player, villager)) {
-                entry.setValue(session.pause(saturatingAdd(gameTime, PAUSE_TICKS)));
+                DialogueSession paused = session.pause(saturatingAdd(gameTime, PAUSE_TICKS));
+                entry.setValue(paused);
                 offers.remove(session.playerId());
+                notifyPaused(player, paused);
             }
             return false;
         });
+        Map<UUID, DialogueOptions> reloadInvalidatedMenus = new HashMap<>();
         offers.entrySet().removeIf(entry -> {
             DialogueOptions offer = entry.getValue();
+            if (offer.generation() != generation) {
+                reloadInvalidatedMenus.put(entry.getKey(), offer);
+            }
             if (shouldDiscardOffer(
                     offer,
                     generation,
@@ -425,6 +515,18 @@ public final class DialogueEngine {
                     || !session.id().equals(offer.continuationSessionId().orElseThrow())
                     || !session.canResume(gameTime, generation, offer.villagerId());
         });
+        for (Map.Entry<UUID, DialogueOptions> stale : reloadInvalidatedMenus.entrySet()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(stale.getKey());
+            if (player == null) {
+                continue;
+            }
+            VillagerEntityMCA villager = resolveBoundVillager(player, stale.getValue().villagerId()).orElse(null);
+            if (villager != null
+                    && canInteract(player, villager)
+                    && villager.getInteractions().getInteractingPlayer().filter(player::equals).isPresent()) {
+                Network.sendToPlayer(InteractionDialogueOptionsResponse.from(begin(player, villager)), player);
+            }
+        }
     }
 
     public void clear(MinecraftServer server) {
@@ -504,18 +606,28 @@ public final class DialogueEngine {
 
     static boolean hasNoValidContinuation(DialogueSession session) {
         DialogueEvent.Node node = session.event().nodes().get(session.nodeId());
-        return session.lineIndex() == node.lines().size() - 1
+        return !node.lines().isEmpty()
+                && session.lineIndex() == node.lines().size() - 1
                 && node.choices().isPresent()
                 && session.offeredChoices().isEmpty();
     }
 
-    static boolean canContinue(DialogueSession session) {
+    static AdvanceKind advanceKind(DialogueSession session) {
         DialogueEvent.Node node = session.event().nodes().get(session.nodeId());
-        return session.lineIndex() < node.lines().size() - 1
-                || node.next().isPresent()
-                || node.complete()
-                || node.end()
-                || hasNoValidContinuation(session);
+        if (node.lines().isEmpty()) {
+            return AdvanceKind.NONE;
+        }
+        if (session.lineIndex() < node.lines().size() - 1 || node.next().isPresent()) {
+            return AdvanceKind.NEXT;
+        }
+        if (node.complete() || node.end() || hasNoValidContinuation(session)) {
+            return AdvanceKind.BACK_TO_TOPICS;
+        }
+        return AdvanceKind.NONE;
+    }
+
+    static boolean canContinue(DialogueSession session) {
+        return advanceKind(session) != AdvanceKind.NONE;
     }
 
     static boolean repeatAvailable(DialogueEvent event, boolean completed, long nextEligibleAt, long gameTime) {
@@ -537,9 +649,61 @@ public final class DialogueEngine {
             DialogueEvent.Choice choice,
             Predicate<DialogueCondition> conditionMatches
     ) {
-        return choice.outcomes().orElse(List.of()).stream()
+        return eligibleOutcomes(choice.outcomes().orElse(List.of()), conditionMatches);
+    }
+
+    static List<DialogueEvent.Outcome> eligibleOutcomes(
+            List<DialogueEvent.Outcome> outcomes,
+            Predicate<DialogueCondition> conditionMatches
+    ) {
+        return outcomes.stream()
                 .filter(outcome -> outcome.requirements().stream().allMatch(conditionMatches))
                 .toList();
+    }
+
+    static DialogueSession resolveAutomaticTransitions(
+            DialogueSession session,
+            Predicate<DialogueCondition> conditionMatches,
+            RandomSource random,
+            LongSupplier nextToken
+    ) {
+        DialogueSession current = session;
+        boolean routed = false;
+        while (true) {
+            DialogueEvent.Node node = current.event().nodes().get(current.nodeId());
+            if (node.outcomes().isEmpty()) {
+                // Hidden routing nodes never produce a client-visible token. Rotate once
+                // after the route so an in-flight close can still match the last visible token.
+                if (!routed) {
+                    return current;
+                }
+                return new DialogueSession(
+                        current.playerId(), current.villagerId(), current.id(), current.generation(),
+                        nextToken.getAsLong(), current.status(), current.pauseDeadline(), current.event(),
+                        current.nodeId(), current.lineIndex(), current.offeredChoices(), current.acceptedChoices(),
+                        current.selectedOutcomes(), current.pendingEffects(),
+                        session.previousOfferToken() != null ? session.previousOfferToken() : session.offerToken()
+                );
+            }
+            List<DialogueEvent.Outcome> eligible = eligibleOutcomes(
+                    node.outcomes().orElseThrow(),
+                    conditionMatches
+            );
+            Optional<DialogueEvent.Outcome> picked = weightedPick(
+                    eligible,
+                    DialogueEvent.Outcome::weight,
+                    random
+            );
+            if (picked.isEmpty()) {
+                throw new IllegalStateException(
+                        "Validated automatic dialogue route has no eligible outcome: "
+                                + current.eventId() + "#" + current.nodeId());
+            }
+            DialogueEvent.Outcome outcome = picked.orElseThrow();
+            current = current.appendPendingEffects(outcome.actions())
+                    .withProgress(outcome.next(), 0, List.of(), current.offerToken());
+            routed = true;
+        }
     }
 
     static <T> Optional<T> weightedPick(List<T> candidates, ToDoubleFunction<T> weight, RandomSource random) {
@@ -570,6 +734,9 @@ public final class DialogueEngine {
             DialogueEventHistory history,
             long gameTime
     ) {
+        if (!history.writable()) {
+            return false;
+        }
         if (event.trigger() != DialogueEvent.Trigger.TALK) {
             return false;
         }
@@ -579,14 +746,16 @@ public final class DialogueEngine {
         return repeatAvailable(
                 event,
                 history.completed(context.player().getUUID(), context.villager().getUUID(), event.id()),
-                history.nextEligibleAt(context.player().getUUID(), context.villager().getUUID(), event.id()),
+                history.nextEligibleAt(context.player().getUUID(), context.villager().getUUID(), event.id(), gameTime),
                 gameTime
         );
     }
 
     private DialogueSession refreshOfferedChoices(DialogueSession session, DialogueContext context) {
         DialogueEvent.Node node = session.event().nodes().get(session.nodeId());
-        if (session.lineIndex() != node.lines().size() - 1 || node.choices().isEmpty()) {
+        if (node.lines().isEmpty()
+                || session.lineIndex() != node.lines().size() - 1
+                || node.choices().isEmpty()) {
             return session.withOfferedChoices(List.of());
         }
         List<String> choices = node.choices().orElseThrow().stream()
@@ -602,6 +771,9 @@ public final class DialogueEngine {
             DialogueSession session,
             DialogueContext context
     ) {
+        if (!context.history().writable()) {
+            return false;
+        }
         List<DialogueAction.Command> commands = session.pendingEffects().stream()
                 .filter(DialogueAction.Command.class::isInstance)
                 .map(DialogueAction.Command.class::cast)
@@ -653,16 +825,21 @@ public final class DialogueEngine {
             ServerPlayer player,
             DialogueAction.Command command
     ) {
-        // For this conservative subset the current handler's true result means the command executed.
-        boolean close = villager.getInteractions().handle(player, command.command());
-        if (close) {
-            villager.getInteractions().stopInteracting();
+        var interactions = villager.getInteractions();
+        UUID interactionId = interactions.interactionId();
+        var result = interactions.handleDialogue(player, command.command());
+        if (result.closeScreen()) {
+            interactions.stopInteracting(player, interactionId);
         }
-        return close;
+        return result.accepted();
     }
 
     private DialogueNodeView view(DialogueSession session, DialogueContext context) {
         DialogueEvent.Node node = session.event().nodes().get(session.nodeId());
+        if (node.lines().isEmpty()) {
+            throw new IllegalStateException("Automatic dialogue routing node cannot be rendered: "
+                    + session.eventId() + "#" + session.nodeId());
+        }
         Component line = context.villager().getTranslatable(
                 context.player(),
                 node.lines().get(session.lineIndex())
@@ -680,7 +857,7 @@ public final class DialogueEngine {
                 line,
                 node.silent(),
                 choices,
-                canContinue(session)
+                advanceKind(session)
         );
     }
 
@@ -897,21 +1074,54 @@ public final class DialogueEngine {
             Component line,
             boolean silent,
             List<ChoiceView> choices,
-            boolean canContinue
+            AdvanceKind advanceKind
     ) {
         public DialogueNodeView {
             Objects.requireNonNull(sessionId, "sessionId");
             Objects.requireNonNull(eventId, "eventId");
             Objects.requireNonNull(line, "line");
+            Objects.requireNonNull(advanceKind, "advanceKind");
             choices = List.copyOf(choices);
         }
+
+        public boolean canContinue() {
+            return advanceKind != AdvanceKind.NONE;
+        }
+    }
+
+    private static void notifyPaused(ServerPlayer player, DialogueSession session) {
+        Network.sendToPlayer(
+                InteractionDialogueNodeResponse.paused(session.id(), session.offerToken()),
+                player
+        );
+    }
+
+    private static void notifyEnded(ServerPlayer player, DialogueSession session) {
+        Network.sendToPlayer(
+                InteractionDialogueNodeResponse.ended(session.id(), session.offerToken()),
+                player
+        );
+    }
+
+    private DialogueSession resolveAutomaticTransitions(DialogueSession session, DialogueContext context) {
+        return resolveAutomaticTransitions(
+                session,
+                condition -> matches(condition, context),
+                random,
+                this::nextToken
+        );
+    }
+
+    public enum AdvanceKind {
+        NONE,
+        NEXT,
+        BACK_TO_TOPICS
     }
 
     public enum DialogueSelection {
         RESUME,
         EVENT,
-        AMBIENT,
-        LEGACY
+        AMBIENT
     }
 
     public enum TransitionStatus {

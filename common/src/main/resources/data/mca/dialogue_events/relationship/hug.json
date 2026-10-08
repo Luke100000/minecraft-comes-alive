@@ -1,0 +1,105 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue.main.hug",
+    "resume_prompt": "dialogue_event.mca.relationship.hug.resume",
+    "topic": "relationship"
+  },
+  "priority": 0,
+  "weight": 1,
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "reaction",
+  "nodes": {
+    "reaction": {
+      "outcomes": [
+        {
+          "weight": 5,
+          "actions": [
+            { "type": "mca:hearts", "amount": 5 }
+          ],
+          "next": "success"
+        },
+        {
+          "requirements": [
+            { "type": "mca:personality", "value": "friendly" }
+          ],
+          "weight": 5,
+          "actions": [
+            { "type": "mca:hearts", "amount": 5 }
+          ],
+          "next": "success"
+        },
+        {
+          "requirements": [
+            { "type": "mca:relationship", "value": "promised" }
+          ],
+          "weight": 3,
+          "actions": [
+            { "type": "mca:hearts", "amount": 5 }
+          ],
+          "next": "success"
+        },
+        {
+          "requirements": [
+            { "type": "mca:relationship", "value": "engaged" }
+          ],
+          "weight": 5,
+          "actions": [
+            { "type": "mca:hearts", "amount": 5 }
+          ],
+          "next": "success"
+        },
+        {
+          "requirements": [
+            { "type": "mca:relationship", "value": "spouse" }
+          ],
+          "weight": 8,
+          "actions": [
+            { "type": "mca:hearts", "amount": 5 }
+          ],
+          "next": "success"
+        },
+        {
+          "weight": 3,
+          "actions": [
+            { "type": "mca:hearts", "amount": -3 }
+          ],
+          "next": "fail"
+        },
+        {
+          "requirements": [
+            { "type": "mca:personality", "value": "odd" }
+          ],
+          "weight": 5,
+          "actions": [
+            { "type": "mca:hearts", "amount": -3 }
+          ],
+          "next": "fail"
+        },
+        {
+          "requirements": [
+            { "type": "mca:hearts", "max": 0 }
+          ],
+          "weight": 5,
+          "actions": [
+            { "type": "mca:hearts", "amount": -3 }
+          ],
+          "next": "fail"
+        }
+      ]
+    },
+    "success": {
+      "line": "dialogue.hug.success",
+      "complete": true
+    },
+    "fail": {
+      "line": "dialogue.hug.fail",
+      "complete": true
+    }
+  }
+}

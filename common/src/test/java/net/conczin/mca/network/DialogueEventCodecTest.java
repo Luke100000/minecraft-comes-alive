@@ -3,6 +3,7 @@ package net.conczin.mca.network;
 import com.mojang.serialization.JsonOps;
 import io.netty.buffer.Unpooled;
 import net.conczin.mca.dialogue.DialogueEngine;
+import net.conczin.mca.network.c2s.InteractionCloseRequest;
 import net.conczin.mca.network.c2s.InteractionDialogueAdvanceMessage;
 import net.conczin.mca.network.c2s.InteractionDialogueBeginMessage;
 import net.conczin.mca.network.c2s.InteractionDialogueChoiceMessage;
@@ -10,6 +11,8 @@ import net.conczin.mca.network.c2s.InteractionDialogueLeaveMessage;
 import net.conczin.mca.network.c2s.InteractionDialogueSelectMessage;
 import net.conczin.mca.network.s2c.InteractionDialogueNodeResponse;
 import net.conczin.mca.network.s2c.InteractionDialogueOptionsResponse;
+import net.conczin.mca.network.s2c.InteractionDialogueSelectionRejectedResponse;
+import net.conczin.mca.network.s2c.OpenGuiRequest;
 import net.minecraft.ChatFormatting;
 import net.minecraft.SharedConstants;
 import net.minecraft.network.FriendlyByteBuf;
@@ -35,8 +38,15 @@ class DialogueEventCodecTest {
     }
 
     @Test
+    void rejectedSelectionResponseRoundTripsOriginalOfferToken() {
+        InteractionDialogueSelectionRejectedResponse response = new InteractionDialogueSelectionRejectedResponse(817L);
+        assertEquals(response, roundTrip(InteractionDialogueSelectionRejectedResponse.STREAM_CODEC, response));
+    }
+
+    @Test
     void roundTripsAllClientRequests() {
         UUID villagerId = UUID.fromString("52de5f7b-29b7-4b80-9f92-68f7e054189a");
+        UUID sessionId = UUID.fromString("8adc22e3-4c55-4a43-a103-734caa83c5ed");
         ResourceLocation eventId = ResourceLocation.parse("addon:story/identity");
 
         assertEquals(
@@ -77,8 +87,20 @@ class DialogueEventCodecTest {
                 roundTrip(InteractionDialogueAdvanceMessage.STREAM_CODEC, new InteractionDialogueAdvanceMessage(44L))
         );
         assertEquals(
-                new InteractionDialogueLeaveMessage(),
-                roundTrip(InteractionDialogueLeaveMessage.STREAM_CODEC, new InteractionDialogueLeaveMessage())
+                new InteractionDialogueLeaveMessage(villagerId, sessionId, 45L),
+                roundTrip(InteractionDialogueLeaveMessage.STREAM_CODEC,
+                        new InteractionDialogueLeaveMessage(villagerId, sessionId, 45L))
+        );
+        assertEquals(
+                new InteractionCloseRequest(villagerId, sessionId, sessionId, 46L),
+                roundTrip(InteractionCloseRequest.STREAM_CODEC,
+                        new InteractionCloseRequest(villagerId, sessionId, sessionId, 46L))
+        );
+        assertEquals(
+                new OpenGuiRequest(OpenGuiRequest.Type.INTERACT.ordinal(), 15, sessionId),
+                roundTrip(OpenGuiRequest.STREAM_CODEC,
+                        new OpenGuiRequest(OpenGuiRequest.Type.INTERACT.ordinal(), 15, sessionId)),
+                "the server-issued interaction identity must survive the opening GUI payload"
         );
     }
 
@@ -92,8 +114,6 @@ class DialogueEventCodecTest {
                 1L, DialogueEngine.DialogueSelection.RESUME, Optional.of(eventId)));
         assertThrows(IllegalArgumentException.class, () -> new InteractionDialogueSelectMessage(
                 1L, DialogueEngine.DialogueSelection.AMBIENT, Optional.of(eventId)));
-        assertThrows(IllegalArgumentException.class, () -> new InteractionDialogueSelectMessage(
-                1L, DialogueEngine.DialogueSelection.LEGACY, Optional.of(eventId)));
     }
 
     @Test
@@ -113,14 +133,12 @@ class DialogueEventCodecTest {
                                 Component.translatable("dialogue.addon.zombie.prompt")
                         )
                 ),
-                true,
-                false
+                true
         );
 
         InteractionDialogueOptionsResponse decoded = roundTrip(InteractionDialogueOptionsResponse.STREAM_CODEC, response);
         assertEquals(response.offerToken(), decoded.offerToken());
         assertEquals(response.ambientAvailable(), decoded.ambientAvailable());
-        assertEquals(response.legacyAvailable(), decoded.legacyAvailable());
         assertComponentEquivalent(response.continuation().orElseThrow(), decoded.continuation().orElseThrow());
         assertEquals(response.eventOptions().size(), decoded.eventOptions().size());
         for (int i = 0; i < response.eventOptions().size(); i++) {
@@ -139,7 +157,7 @@ class DialogueEventCodecTest {
                 ResourceLocation.parse("mca:zombie/identity"),
                 Component.literal("Do you think I'm still me?").withStyle(ChatFormatting.ITALIC),
                 false,
-                true,
+                DialogueEngine.AdvanceKind.NEXT,
                 List.of(
                         new InteractionDialogueNodeResponse.Choice("yes", Component.literal("Of course.")),
                         new InteractionDialogueNodeResponse.Choice("unsure", Component.literal("I'm not sure."))
@@ -162,7 +180,8 @@ class DialogueEventCodecTest {
     void nodeStateRequiresViewOnlyWhileActive() {
         UUID sessionId = UUID.randomUUID();
         InteractionDialogueNodeResponse.Node node = new InteractionDialogueNodeResponse.Node(
-                ResourceLocation.parse("mca:test"), Component.literal("line"), false, true, List.of());
+                ResourceLocation.parse("mca:test"), Component.literal("line"), false,
+                DialogueEngine.AdvanceKind.BACK_TO_TOPICS, List.of());
 
         assertThrows(IllegalArgumentException.class, () -> new InteractionDialogueNodeResponse(
                 sessionId, 1L, InteractionDialogueNodeResponse.State.ACTIVE, Optional.empty()));
@@ -183,14 +202,15 @@ class DialogueEventCodecTest {
             ));
         }
         assertThrows(IllegalArgumentException.class, () -> new InteractionDialogueOptionsResponse(
-                1L, Optional.empty(), tooManyOptions, false, false));
+                1L, Optional.empty(), tooManyOptions, false));
 
         List<InteractionDialogueNodeResponse.Choice> tooManyChoices = new ArrayList<>();
         for (int i = 0; i <= InteractionDialogueNodeResponse.MAX_CHOICES; i++) {
             tooManyChoices.add(new InteractionDialogueNodeResponse.Choice("choice_" + i, Component.literal("reply")));
         }
         assertThrows(IllegalArgumentException.class, () -> new InteractionDialogueNodeResponse.Node(
-                ResourceLocation.parse("mca:test"), Component.literal("line"), false, false, tooManyChoices));
+                ResourceLocation.parse("mca:test"), Component.literal("line"), false,
+                DialogueEngine.AdvanceKind.NONE, tooManyChoices));
 
         assertThrows(IllegalArgumentException.class, () -> new InteractionDialogueChoiceMessage(
                 1L, "x".repeat(InteractionDialogueChoiceMessage.MAX_CHOICE_ID_LENGTH + 1)));

@@ -5,6 +5,7 @@ import net.conczin.mca.dialogue.DialogueEngine;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.InteractionDialogueNodeResponse;
+import net.conczin.mca.network.s2c.InteractionDialogueSelectionRejectedResponse;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -49,7 +50,10 @@ public record InteractionDialogueSelectMessage(
                 offerToken,
                 selection,
                 eventId.orElse(null)
-        ).ifPresent(view -> Network.sendToPlayer(InteractionDialogueNodeResponse.active(view), player)));
+        ).ifPresentOrElse(
+                view -> Network.sendToPlayer(InteractionDialogueNodeResponse.active(view), player),
+                () -> Network.sendToPlayer(new InteractionDialogueSelectionRejectedResponse(offerToken), player)
+        ));
     }
 
     private static DialogueEngine.DialogueSelection selectionById(int id) {

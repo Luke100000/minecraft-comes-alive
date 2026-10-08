@@ -6,6 +6,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Mourning;
+import net.conczin.mca.entity.ai.RecentVillagerEvents;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.relationship.CompassionateEntity;
 import net.conczin.mca.entity.ai.relationship.EntityRelationship;
@@ -414,6 +415,12 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
 
                         if (entity instanceof CompassionateEntity<?> compassionateEntity) {
                             compassionateEntity.getRelationships().getFamilyEntry().setDeceased(false);
+                        }
+                        if (entity instanceof VillagerEntityMCA villager) {
+                            villager.getRecentVillagerEvents().record(
+                                    RecentVillagerEvents.REVIVED,
+                                    RecentVillagerEvents.gameTime(villager.level())
+                            );
                         }
                         setEntity(null);
                     });

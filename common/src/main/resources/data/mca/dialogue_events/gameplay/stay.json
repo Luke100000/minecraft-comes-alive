@@ -1,0 +1,76 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue.main.stay",
+    "resume_prompt": "dialogue_event.mca.gameplay.stay.resume",
+    "topic": "service"
+  },
+  "priority": 0,
+  "weight": 1,
+  "requirements": [
+    { "type": "mca:profession", "value": "mca:adventurer" }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "reaction",
+  "nodes": {
+    "reaction": {
+      "outcomes": [
+        {
+          "requirements": [
+            { "type": "mca:memory", "id": "asked_to_stay", "var": "player" }
+          ],
+          "weight": 100000,
+          "actions": [
+            { "type": "mca:remember", "id": "asked_to_stay", "var": "player" }
+          ],
+          "next": "repeat"
+        },
+        {
+          "requirements": [
+            {
+              "type": "mca:not",
+              "condition": { "type": "mca:village_has_space" }
+            }
+          ],
+          "weight": 100000,
+          "next": "no_space"
+        },
+        {
+          "weight": 10,
+          "actions": [
+            { "type": "mca:command", "command": "stay_in_village" }
+          ],
+          "next": "success"
+        },
+        {
+          "weight": 10,
+          "actions": [
+            { "type": "mca:remember", "id": "asked_to_stay", "var": "player" }
+          ],
+          "next": "fail"
+        }
+      ]
+    },
+    "success": {
+      "line": "dialogue.stay.success",
+      "complete": true
+    },
+    "fail": {
+      "line": "dialogue.stay.fail",
+      "complete": true
+    },
+    "repeat": {
+      "line": "dialogue.stay.repeat",
+      "complete": true
+    },
+    "no_space": {
+      "line": "dialogue.stay.no_space",
+      "complete": true
+    }
+  }
+}

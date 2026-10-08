@@ -5,6 +5,7 @@ import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.LongTermMemory;
 import net.conczin.mca.entity.ai.Relationship;
+import net.conczin.mca.entity.ai.RecentVillagerEvents;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.conczin.mca.entity.ai.relationship.AgeState;
@@ -43,6 +44,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
 
     private final Genetics genetics = new Genetics(this);
     private final Traits traits = new Traits(this);
+    private final RecentVillagerEvents recentVillagerEvents = new RecentVillagerEvents();
 
     private final Relationship<ZombieVillagerEntityMCA> relations = new Relationship<>(this);
 
@@ -79,6 +81,10 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     @Override
     public Traits getTraits() {
         return traits;
+    }
+
+    public RecentVillagerEvents getRecentVillagerEvents() {
+        return recentVillagerEvents;
     }
 
     @Override
@@ -253,6 +259,10 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         if (mob instanceof VillagerEntityMCA villager) {
             villager.setInventory(inventory);
             villager.setAge(getAgeState().toAge());
+            villager.getRecentVillagerEvents().record(
+                    RecentVillagerEvents.CURED,
+                    RecentVillagerEvents.gameTime(villager.level())
+            );
         }
 
         return mob;
@@ -263,6 +273,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         output.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
         output.put(VillagerEntityMCA.NICKNAMES_KEY, nicknameData.copy());
         output.put(LongTermMemory.NBT_KEY, longTermMemoryData.copy());
+        recentVillagerEvents.writeToNbt(output);
     }
 
     @Override
@@ -270,6 +281,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         chatAIPrompt = input.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
         nicknameData = input.getCompound(VillagerEntityMCA.NICKNAMES_KEY).copy();
         longTermMemoryData = input.getCompound(LongTermMemory.NBT_KEY).copy();
+        recentVillagerEvents.readFromNbt(input);
     }
 
     @Override
@@ -281,6 +293,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         chatAIPrompt = data.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
         nicknameData = data.getCompound(VillagerEntityMCA.NICKNAMES_KEY).copy();
         longTermMemoryData = data.getCompound(LongTermMemory.NBT_KEY).copy();
+        recentVillagerEvents.readFromNbt(data);
 
         updateAttributes();
 
@@ -304,6 +317,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         nbt.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
         nbt.put(VillagerEntityMCA.NICKNAMES_KEY, nicknameData.copy());
         nbt.put(LongTermMemory.NBT_KEY, longTermMemoryData.copy());
+        recentVillagerEvents.writeToNbt(nbt);
     }
 
     @Override

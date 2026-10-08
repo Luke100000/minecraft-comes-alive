@@ -1,0 +1,150 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue.main.kiss",
+    "resume_prompt": "dialogue_event.mca.relationship.kiss.resume",
+    "topic": "relationship"
+  },
+  "priority": 0,
+  "weight": 1,
+  "requirements": [
+    { "type": "mca:age_group", "value": "adult" },
+    {
+      "type": "mca:not",
+      "condition": { "type": "mca:family", "value": "child" }
+    },
+    {
+      "type": "mca:not",
+      "condition": { "type": "mca:family", "value": "relative" }
+    }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "reaction",
+  "nodes": {
+    "reaction": {
+      "outcomes": [
+        {
+          "weight": 1,
+          "actions": [
+            { "type": "mca:hearts", "amount": 6 }
+          ],
+          "next": "success"
+        },
+        {
+          "requirements": [
+            { "type": "mca:personality", "value": "flirty" }
+          ],
+          "weight": 10,
+          "actions": [
+            { "type": "mca:hearts", "amount": 6 }
+          ],
+          "next": "success"
+        },
+        {
+          "requirements": [
+            { "type": "mca:relationship", "value": "promised" }
+          ],
+          "weight": 5,
+          "actions": [
+            { "type": "mca:hearts", "amount": 6 }
+          ],
+          "next": "success"
+        },
+        {
+          "requirements": [
+            { "type": "mca:relationship", "value": "engaged" }
+          ],
+          "weight": 6,
+          "actions": [
+            { "type": "mca:hearts", "amount": 6 }
+          ],
+          "next": "success"
+        },
+        {
+          "requirements": [
+            { "type": "mca:relationship", "value": "spouse" }
+          ],
+          "weight": 6,
+          "actions": [
+            { "type": "mca:hearts", "amount": 6 }
+          ],
+          "next": "success"
+        },
+        {
+          "weight": 5,
+          "actions": [
+            { "type": "mca:hearts", "amount": -4 }
+          ],
+          "next": "fail"
+        },
+        {
+          "requirements": [
+            { "type": "mca:personality", "value": "odd" }
+          ],
+          "weight": 5,
+          "actions": [
+            { "type": "mca:hearts", "amount": -4 }
+          ],
+          "next": "fail"
+        },
+        {
+          "requirements": [
+            { "type": "mca:hearts", "max": 10 }
+          ],
+          "weight": 5,
+          "actions": [
+            { "type": "mca:hearts", "amount": -4 }
+          ],
+          "next": "fail"
+        },
+        {
+          "weight": 1,
+          "actions": [
+            { "type": "mca:hearts", "amount": -5 },
+            { "type": "mca:command", "command": "slap" }
+          ],
+          "next": "slap"
+        },
+        {
+          "requirements": [
+            { "type": "mca:personality", "value": "odd" }
+          ],
+          "weight": 5,
+          "actions": [
+            { "type": "mca:hearts", "amount": -5 },
+            { "type": "mca:command", "command": "slap" }
+          ],
+          "next": "slap"
+        },
+        {
+          "requirements": [
+            { "type": "mca:hearts", "max": 0 }
+          ],
+          "weight": 5,
+          "actions": [
+            { "type": "mca:hearts", "amount": -5 },
+            { "type": "mca:command", "command": "slap" }
+          ],
+          "next": "slap"
+        }
+      ]
+    },
+    "success": {
+      "line": "dialogue.kiss.success",
+      "complete": true
+    },
+    "fail": {
+      "line": "dialogue.kiss.fail",
+      "complete": true
+    },
+    "slap": {
+      "line": "dialogue.kiss.slap",
+      "complete": true
+    }
+  }
+}

@@ -26,6 +26,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class DialogueEventHistoryTest {
     @TempDir
@@ -161,6 +162,34 @@ class DialogueEventHistoryTest {
     }
 
     @Test
+    void boundedMaintenanceRotatesThroughExpiredSchedulingRecords() {
+        DialogueEventHistory history = new DialogueEventHistory();
+        history.complete(PLAYER_A, VILLAGER, scheduling(STORY_ID, 5L, 5L), Set.of(), 100L, RandomSource.create(51L));
+        history.complete(PLAYER_B, VILLAGER, scheduling(STORY_ID, 5L, 5L), Set.of(), 100L, RandomSource.create(52L));
+        history.complete(PLAYER_A, VILLAGER, scheduling(OTHER_ID, 5L, 5L), Set.of(), 100L, RandomSource.create(53L));
+
+        history.pruneExpiredScheduling(105L, 1);
+        assertEquals(0L, history.nextEligibleAt(PLAYER_A, VILLAGER, STORY_ID));
+        assertEquals(105L, history.nextEligibleAt(PLAYER_B, VILLAGER, STORY_ID));
+        history.pruneExpiredScheduling(105L, 1);
+        assertEquals(0L, history.nextEligibleAt(PLAYER_B, VILLAGER, STORY_ID));
+        assertEquals(105L, history.nextEligibleAt(PLAYER_A, VILLAGER, OTHER_ID));
+        history.pruneExpiredScheduling(105L, 1);
+        assertEquals(0L, history.nextEligibleAt(PLAYER_A, VILLAGER, OTHER_ID));
+    }
+
+    @Test
+    void accessingAnExpiredSchedulingEventPrunesOnlyThatRecord() {
+        DialogueEventHistory history = new DialogueEventHistory();
+        history.complete(PLAYER_A, VILLAGER, scheduling(STORY_ID, 5L, 5L), Set.of(), 100L, RandomSource.create(54L));
+        history.complete(PLAYER_B, VILLAGER, scheduling(STORY_ID, 5L, 5L), Set.of(), 100L, RandomSource.create(55L));
+
+        assertEquals(0L, history.nextEligibleAt(PLAYER_A, VILLAGER, STORY_ID, 105L));
+        assertEquals(0L, history.nextEligibleAt(PLAYER_A, VILLAGER, STORY_ID));
+        assertEquals(105L, history.nextEligibleAt(PLAYER_B, VILLAGER, STORY_ID));
+    }
+
+    @Test
     void schedulingHistoryStoresTimingOnly() {
         DialogueEventHistory history = new DialogueEventHistory();
         DialogueEvent event = scheduling(STORY_ID, 100L, 100L);
@@ -264,13 +293,14 @@ class DialogueEventHistoryTest {
         future.put("records", futureRecords);
 
         DialogueEventHistory loaded = new DialogueEventHistory(future, null);
-        loaded.complete(
+        assertFalse(loaded.writable(), "a future schema must fail closed for gameplay effects");
+        assertThrows(IllegalStateException.class, () -> loaded.complete(
                 PLAYER_A,
                 VILLAGER,
                 story(STORY_ID, DialogueEvent.RepeatType.COOLDOWN, 100L, 100L),
                 Set.of("ignored"),
                 100L,
-                RandomSource.create(14L));
+                RandomSource.create(14L)));
         loaded.pruneExpiredScheduling(Long.MAX_VALUE);
 
         assertFalse(loaded.completed(PLAYER_A, VILLAGER, STORY_ID));

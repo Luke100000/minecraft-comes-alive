@@ -1,0 +1,79 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue_event.mca.cured_zombies.prompt",
+    "resume_prompt": "dialogue_event.mca.cured_zombies.resume",
+    "topic": "personal"
+  },
+  "priority": 50,
+  "weight": 1,
+  "requirements": [
+    { "type": "mca:age_group", "value": "adult" },
+    { "type": "mca:personality", "value": "gloomy" },
+    { "type": "mca:time", "min": 13000, "max": 23000 },
+    { "type": "mca:hearts", "min": 20 }
+  ],
+  "repeat": { "type": "cooldown", "seconds": 5 },
+  "history": "story",
+  "start": "intro",
+  "nodes": {
+    "intro": {
+      "lines": [
+        "dialogue_event.mca.cured_zombies.intro.heard_about_cures",
+        "dialogue_event.mca.cured_zombies.intro.homecoming",
+        "dialogue_event.mca.cured_zombies.intro.same_person"
+      ],
+      "choices": [
+        {
+          "id": "experience_changes_you",
+          "text": "dialogue_event.mca.cured_zombies.choice.experience_changes_you",
+          "actions": [{ "type": "mca:hearts", "amount": 5 }],
+          "next": "reflect"
+        },
+        {
+          "id": "dont_know",
+          "text": "dialogue_event.mca.cured_zombies.choice.dont_know",
+          "next": "uncertain"
+        },
+        {
+          "id": "challenge_the_question",
+          "text": "dialogue_event.mca.cured_zombies.choice.challenge_the_question",
+          "actions": [{ "type": "mca:hearts", "amount": -5 }],
+          "next": "apology"
+        }
+      ]
+    },
+    "reflect": {
+      "lines": [
+        "dialogue_event.mca.cured_zombies.reflect.experience",
+        "dialogue_event.mca.cured_zombies.reflect.more_than_that",
+        "dialogue_event.mca.cured_zombies.reflect.fear"
+      ],
+      "next": "bedtime"
+    },
+    "uncertain": {
+      "lines": [
+        "dialogue_event.mca.cured_zombies.uncertain.guess",
+        "dialogue_event.mca.cured_zombies.uncertain.ask_them",
+        "dialogue_event.mca.cured_zombies.uncertain.bother"
+      ],
+      "next": "bedtime"
+    },
+    "apology": {
+      "lines": [
+        "dialogue_event.mca.cured_zombies.apology.sorry",
+        "dialogue_event.mca.cured_zombies.apology.neighbors",
+        "dialogue_event.mca.cured_zombies.apology.shouldnt_have_said"
+      ],
+      "next": "bedtime"
+    },
+    "bedtime": {
+      "lines": [
+        "dialogue_event.mca.cured_zombies.bedtime.tomorrow",
+        "dialogue_event.mca.cured_zombies.bedtime"
+      ],
+      "complete": true
+    }
+  }
+}

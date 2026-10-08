@@ -5,6 +5,8 @@ import net.conczin.mca.block.TombstoneBlockGameTests;
 import net.conczin.mca.dialogue.DialogueConditionGameTests;
 import net.conczin.mca.dialogue.DialogueActionGameTests;
 import net.conczin.mca.dialogue.DialogueEngineGameTests;
+import net.conczin.mca.dialogue.DialogueLifeEventGameTests;
+import net.conczin.mca.dialogue.DialogueReferenceGameTests;
 import net.conczin.mca.entity.VillagerBedAlignmentGameTests;
 import net.conczin.mca.entity.VillagerCarryPositionGameTests;
 import net.conczin.mca.entity.VillagerChildSuffocationGameTests;
@@ -68,6 +70,8 @@ public final class McaGameTestsRegistration {
             DialogueConditionGameTests.class,
             DialogueActionGameTests.class,
             DialogueEngineGameTests.class,
+            DialogueLifeEventGameTests.class,
+            DialogueReferenceGameTests.class,
             VillagerBedAlignmentGameTests.class,
             VillagerCarryPositionGameTests.class,
             VillagerChildSuffocationGameTests.class,

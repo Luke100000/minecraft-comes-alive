@@ -1,0 +1,28 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ambient",
+    "resume_prompt": "dialogue_event.mca.ambient.root.negative.resume",
+    "topic": "small_talk"
+  },
+  "priority": 0,
+  "weight": 30,
+  "requirements": [
+    {
+      "type": "mca:hearts",
+      "max": -1
+    }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "greeting",
+  "nodes": {
+    "greeting": {
+      "line": "dialogue.greet.negative",
+      "complete": true
+    }
+  }
+}

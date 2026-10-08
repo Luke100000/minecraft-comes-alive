@@ -1,0 +1,57 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "highlighted",
+    "prompt": "dialogue_event.mca.personal.gloomy_reflection.prompt",
+    "resume_prompt": "dialogue_event.mca.personal.gloomy_reflection.resume",
+    "topic": "personal"
+  },
+  "priority": 100,
+  "weight": 1,
+  "requirements": [
+    { "type": "mca:personality", "value": "gloomy" },
+    { "type": "mca:hearts", "min": 40 },
+    { "type": "mca:mood", "value": "sad" },
+    { "type": "mca:time", "min": 13000, "max": 23000 }
+  ],
+  "repeat": { "type": "cooldown", "seconds": 5 },
+  "history": "story",
+  "start": "intro",
+  "nodes": {
+    "intro": {
+      "lines": [
+        "dialogue_event.mca.personal.gloomy_reflection.intro.stuck",
+        "dialogue_event.mca.personal.gloomy_reflection.intro.neighbors",
+        "dialogue_event.mca.personal.gloomy_reflection.intro.chores",
+        "dialogue_event.mca.personal.gloomy_reflection.intro.night"
+      ],
+      "choices": [
+        {
+          "id": "comfort",
+          "text": "dialogue_event.mca.personal.gloomy_reflection.choice.comfort",
+          "actions": [{ "type": "mca:hearts", "amount": 5 }],
+          "next": "comforted"
+        },
+        {
+          "id": "give_space",
+          "text": "dialogue_event.mca.personal.gloomy_reflection.choice.give_space",
+          "next": "space"
+        }
+      ]
+    },
+    "comforted": {
+      "lines": [
+        "dialogue_event.mca.personal.gloomy_reflection.comforted",
+        "dialogue_event.mca.personal.gloomy_reflection.comforted.tomorrow"
+      ],
+      "complete": true
+    },
+    "space": {
+      "lines": [
+        "dialogue_event.mca.personal.gloomy_reflection.space",
+        "dialogue_event.mca.personal.gloomy_reflection.space.walk"
+      ],
+      "complete": true
+    }
+  }
+}

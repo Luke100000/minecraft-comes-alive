@@ -2,12 +2,18 @@ package net.conczin.mca.dialogue;
 
 import com.google.gson.JsonParser;
 import com.mojang.authlib.GameProfile;
+import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Memories;
 import net.conczin.mca.entity.ai.relationship.AgeState;
+import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.registry.EntitiesMCA;
+import net.conczin.mca.registry.ItemsMCA;
+import net.conczin.mca.registry.ProfessionsMCA;
 import net.conczin.mca.resources.DialogueEvents;
 import net.conczin.mca.server.world.data.DialogueEventHistory;
+import net.conczin.mca.server.world.data.FamilyTree;
+import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -15,6 +21,11 @@ import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.npc.VillagerProfession;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.util.FakePlayer;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -24,11 +35,148 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 @PrefixGameTestTemplate(false)
 public final class DialogueActionGameTests {
     private DialogueActionGameTests() {
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void shippedDivorcePapersUsesCommandOwnerOnlyOnFinalAcknowledgement(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        fixture.villager().setProfession(VillagerProfession.CLERIC);
+        ResourceLocation eventId = ResourceLocation.parse("mca:gameplay/divorce_papers");
+        helper.assertTrue(DialogueEvents.INSTANCE.get(eventId).isPresent(), "shipped divorce-papers event must load");
+        DialogueEngine engine = new DialogueEngine(DialogueEvents.INSTANCE, RandomSource.create(1L));
+        DialogueEngine.DialogueOptions menu = engine.begin(fixture.player(), fixture.villager());
+        helper.assertTrue(menu.containsEvent(eventId), "cleric must offer the shipped divorce-papers topic");
+
+        DialogueEngine.DialogueNodeView terminal = engine.select(fixture.player(), menu.token(),
+                DialogueEngine.DialogueSelection.EVENT, eventId).orElseThrow();
+        helper.assertTrue(sessions(engine).get(fixture.player().getUUID()).pendingEffects().size() == 1,
+                "shipped routing must queue exactly one gameplay command");
+        helper.assertTrue(fixture.player().getInventory().countItem(ItemsMCA.DIVORCE_PAPERS) == 0,
+                "selecting the topic must not deliver papers before the final acknowledgement");
+
+        helper.assertTrue(engine.advance(fixture.player(), terminal.offerToken()).completed(),
+                "shipped divorce-papers event must finish through its command owner");
+        helper.assertTrue(fixture.player().getInventory().countItem(ItemsMCA.DIVORCE_PAPERS) == 1,
+                "the shipped topic must deliver exactly one set of divorce papers");
+        helper.assertTrue(engine.advance(fixture.player(), terminal.offerToken()).status()
+                        == DialogueEngine.TransitionStatus.REJECTED,
+                "replayed final acknowledgement must be rejected");
+        helper.assertTrue(fixture.player().getInventory().countItem(ItemsMCA.DIVORCE_PAPERS) == 1,
+                "replayed acknowledgement must not create extra divorce papers");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void shippedHireShortChargesOnceAfterFinalAcknowledgement(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        fixture.villager().setProfession(ProfessionsMCA.ADVENTURER);
+        fixture.player().getInventory().add(new ItemStack(Items.EMERALD, 10));
+        ResourceLocation eventId = ResourceLocation.parse("mca:gameplay/hire");
+        helper.assertTrue(DialogueEvents.INSTANCE.get(eventId).isPresent(), "shipped hire event must load");
+        DialogueEngine engine = new DialogueEngine(DialogueEvents.INSTANCE, RandomSource.create(1L));
+        DialogueEngine.DialogueOptions menu = engine.begin(fixture.player(), fixture.villager());
+        helper.assertTrue(menu.containsEvent(eventId), "adventurer must offer the shipped hire topic");
+
+        DialogueEngine.DialogueNodeView choices = engine.select(fixture.player(), menu.token(),
+                DialogueEngine.DialogueSelection.EVENT, eventId).orElseThrow();
+        helper.assertTrue(choices.choices().stream().anyMatch(choice -> choice.id().equals("short")),
+                "shipped hire choice must be offered to the paying player");
+        DialogueEngine.DialogueNodeView terminal = engine.choose(fixture.player(), choices.offerToken(), "short")
+                .view().orElseThrow();
+        helper.assertTrue(sessions(engine).get(fixture.player().getUUID()).pendingEffects().size() == 1,
+                "affordable shipped hire must queue exactly one gameplay command");
+        helper.assertTrue(fixture.player().getInventory().countItem(Items.EMERALD) == 10,
+                "accepting hire must not charge before final acknowledgement");
+
+        helper.assertTrue(engine.advance(fixture.player(), terminal.offerToken()).completed(),
+                "shipped hire must finish through the existing hire command owner");
+        helper.assertTrue(fixture.player().getInventory().countItem(Items.EMERALD) == 5,
+                "shipped short hire must charge five emeralds exactly once");
+        helper.assertTrue(fixture.villager().getProfession() == ProfessionsMCA.MERCENARY,
+                "the shipped hire must update the existing mercenary profession");
+        helper.assertTrue(fixture.villager().getDespawnDelay() == 24000 * 3,
+                "short hire must set the existing three-day mercenary contract");
+        helper.assertTrue(fixture.villager().getInventory().countItem(Items.IRON_SWORD) == 1,
+                "shipped hire must give the mercenary its equipment exactly once");
+        helper.assertTrue(engine.advance(fixture.player(), terminal.offerToken()).status()
+                        == DialogueEngine.TransitionStatus.REJECTED,
+                "replayed shipped hire acknowledgement must be rejected");
+        helper.assertTrue(fixture.player().getInventory().countItem(Items.EMERALD) == 5,
+                "replayed acknowledgement must not charge another five emeralds");
+        helper.assertTrue(fixture.villager().getDespawnDelay() == 24000 * 3
+                        && fixture.villager().getInventory().countItem(Items.IRON_SWORD) == 1,
+                "replayed acknowledgement must not extend the contract or duplicate equipment");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void shippedHireLongChargesTenEmeraldsForSevenDays(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        fixture.villager().setProfession(ProfessionsMCA.ADVENTURER);
+        fixture.player().getInventory().add(new ItemStack(Items.EMERALD, 10));
+        ResourceLocation eventId = ResourceLocation.parse("mca:gameplay/hire");
+        DialogueEngine engine = new DialogueEngine(DialogueEvents.INSTANCE, RandomSource.create(1L));
+        DialogueEngine.DialogueOptions menu = engine.begin(fixture.player(), fixture.villager());
+        helper.assertTrue(menu.containsEvent(eventId), "shipped hire must be available to an adventurer");
+
+        DialogueEngine.DialogueNodeView choices = engine.select(fixture.player(), menu.token(),
+                DialogueEngine.DialogueSelection.EVENT, eventId).orElseThrow();
+        helper.assertTrue(choices.choices().stream().anyMatch(choice -> choice.id().equals("long")),
+                "the shipped long hire option must be offered");
+        DialogueEngine.DialogueNodeView terminal = engine.choose(fixture.player(), choices.offerToken(), "long")
+                .view().orElseThrow();
+        helper.assertTrue(sessions(engine).get(fixture.player().getUUID()).pendingEffects().size() == 1,
+                "affordable long hire must queue exactly one command");
+        helper.assertTrue(fixture.player().getInventory().countItem(Items.EMERALD) == 10,
+                "long hire must not charge until final acknowledgement");
+
+        helper.assertTrue(engine.advance(fixture.player(), terminal.offerToken()).completed(),
+                "the shipped long hire must complete through the command owner");
+        helper.assertTrue(fixture.player().getInventory().countItem(Items.EMERALD) == 0,
+                "long hire must charge ten emeralds");
+        helper.assertTrue(fixture.villager().getProfession() == ProfessionsMCA.MERCENARY
+                        && fixture.villager().getDespawnDelay() == 24000 * 7,
+                "long hire must create a seven-day mercenary contract");
+        helper.assertTrue(fixture.villager().getInventory().countItem(Items.IRON_SWORD) == 1,
+                "long hire must equip exactly one sword");
+        helper.assertTrue(engine.advance(fixture.player(), terminal.offerToken()).status()
+                        == DialogueEngine.TransitionStatus.REJECTED,
+                "replaying the final acknowledgement must be rejected");
+        helper.assertTrue(fixture.player().getInventory().countItem(Items.EMERALD) == 0
+                        && fixture.villager().getDespawnDelay() == 24000 * 7,
+                "replaying the acknowledgement must not charge or extend the contract");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void shippedHireLongWithoutTenEmeraldsHasNoSideEffects(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        fixture.villager().setProfession(ProfessionsMCA.ADVENTURER);
+        fixture.player().getInventory().add(new ItemStack(Items.EMERALD, 5));
+        ResourceLocation eventId = ResourceLocation.parse("mca:gameplay/hire");
+        DialogueEngine engine = new DialogueEngine(DialogueEvents.INSTANCE, RandomSource.create(1L));
+        DialogueEngine.DialogueOptions menu = engine.begin(fixture.player(), fixture.villager());
+        DialogueEngine.DialogueNodeView choices = engine.select(fixture.player(), menu.token(),
+                DialogueEngine.DialogueSelection.EVENT, eventId).orElseThrow();
+        DialogueEngine.DialogueNodeView noMoney = engine.choose(fixture.player(), choices.offerToken(), "long")
+                .view().orElseThrow();
+
+        helper.assertTrue(sessions(engine).get(fixture.player().getUUID()).pendingEffects().isEmpty(),
+                "unaffordable shipped long hire must not queue a command");
+        helper.assertTrue(engine.advance(fixture.player(), noMoney.offerToken()).completed(),
+                "the authored no-money response must finish cleanly");
+        helper.assertTrue(fixture.player().getInventory().countItem(Items.EMERALD) == 5,
+                "unaffordable long hire must not charge the player");
+        helper.assertTrue(fixture.villager().getProfession() == ProfessionsMCA.ADVENTURER
+                        && fixture.villager().getDespawnDelay() != 24000 * 7,
+                "unaffordable long hire must not create a mercenary contract");
+        helper.succeed();
     }
 
     @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
@@ -256,6 +404,296 @@ public final class DialogueActionGameTests {
         helper.assertTrue(!history.completed(fixture.player().getUUID(), fixture.villager().getUUID(), event.id()),
                 "failed command must prevent completion history");
         helper.assertTrue(sessions(engine).isEmpty(), "failed command should not leave an unfinishable retained run");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void locationCommandReusesRumorsOwnerAndCompletes(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        DialogueEvent event = locationCommandStory(ResourceLocation.parse("mca:test/location_command"));
+        DialogueEngine engine = engine(event);
+        DialogueEventHistory history = DialogueEventHistory.get(fixture.player().serverLevel());
+        List<String> structures = Config.getInstance().structuresInRumors;
+        Config.getInstance().structuresInRumors = List.of();
+        try {
+            DialogueEngine.DialogueNodeView terminal = startAndChoose(engine, fixture, event);
+            DialogueEngine.TransitionResult completed = engine.advance(fixture.player(), terminal.offerToken());
+
+            helper.assertTrue(completed.status() == DialogueEngine.TransitionStatus.COMPLETED,
+                    "location command must complete through its gameplay owner even though that owner keeps the screen open");
+            helper.assertTrue(history.completed(fixture.player().getUUID(), fixture.villager().getUUID(), event.id()),
+                    "successful location command completion must commit dialogue history");
+        } finally {
+            Config.getInstance().structuresInRumors = structures;
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void nonClosingCommandStillCommitsAfterOwnerExecutes(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        DialogueEvent event = commandStory(ResourceLocation.parse("mca:test/non_closing_command"), "slap");
+        DialogueEngine engine = engine(event);
+        DialogueEventHistory history = DialogueEventHistory.get(fixture.player().serverLevel());
+
+        DialogueEngine.DialogueNodeView terminal = startAndChoose(engine, fixture, event);
+        DialogueEngine.TransitionResult completed = engine.advance(fixture.player(), terminal.offerToken());
+
+        helper.assertTrue(completed.status() == DialogueEngine.TransitionStatus.COMPLETED,
+                "a known command whose owner intentionally returns the non-closing result must not be mistaken for command failure");
+        helper.assertTrue(history.completed(fixture.player().getUUID(), fixture.villager().getUUID(), event.id()),
+                "handled non-closing command completion must commit dialogue history");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void rejectedProcreateCommandFailsClosed(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        DialogueEvent event = commandStory(ResourceLocation.parse("mca:test/procreate_rejected"), "procreate");
+        DialogueEngine engine = engine(event);
+        DialogueEventHistory history = DialogueEventHistory.get(fixture.player().serverLevel());
+        fixture.villager().getVillagerBrain().getMemoriesForPlayer(fixture.player()).setHearts(0);
+
+        DialogueEngine.DialogueNodeView terminal = startAndChoose(engine, fixture, event);
+        DialogueEngine.TransitionResult result = engine.advance(fixture.player(), terminal.offerToken());
+
+        helper.assertTrue(result.status() == DialogueEngine.TransitionStatus.ENDED,
+                "rejected procreate command must fail closed instead of committing dialogue completion");
+        helper.assertTrue(!history.completed(fixture.player().getUUID(), fixture.villager().getUUID(), event.id()),
+                "rejected procreate command must not write completion history");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void hireCommandRevalidatesEmeraldPaymentAtCommit(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        DialogueEvent event = commandStory(ResourceLocation.parse("mca:test/hire_rejected"), "hire_short");
+        DialogueEngine engine = engine(event);
+        DialogueEventHistory history = DialogueEventHistory.get(fixture.player().serverLevel());
+
+        DialogueEngine.DialogueNodeView terminal = startAndChoose(engine, fixture, event);
+        DialogueEngine.TransitionResult result = engine.advance(fixture.player(), terminal.offerToken());
+
+        helper.assertTrue(result.status() == DialogueEngine.TransitionStatus.ENDED,
+                "hire must fail closed when the required emerald payment is unavailable at commit");
+        helper.assertTrue(!history.completed(fixture.player().getUUID(), fixture.villager().getUUID(), event.id()),
+                "unpaid hire must not write completion history");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void successfulHireChargesExactlyOnce(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        fixture.villager().setProfession(ProfessionsMCA.ADVENTURER);
+        DialogueEvent event = commandStory(ResourceLocation.parse("mca:test/hire_success"), "hire_short");
+        DialogueEngine engine = engine(event);
+        fixture.player().getInventory().add(new ItemStack(Items.EMERALD, 10));
+
+        DialogueEngine.DialogueNodeView terminal = startAndChoose(engine, fixture, event);
+        DialogueEngine.TransitionResult completed = engine.advance(fixture.player(), terminal.offerToken());
+
+        helper.assertTrue(completed.status() == DialogueEngine.TransitionStatus.COMPLETED,
+                "paid hire must complete through the gameplay command owner");
+        helper.assertTrue(fixture.player().getInventory().countItem(Items.EMERALD) == 5,
+                "hire_short must charge exactly five emeralds once");
+        helper.assertTrue(engine.advance(fixture.player(), terminal.offerToken()).status()
+                        == DialogueEngine.TransitionStatus.REJECTED,
+                "consumed hire token must reject replay");
+        helper.assertTrue(fixture.player().getInventory().countItem(Items.EMERALD) == 5,
+                "replayed hire token must not charge the owner twice");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void changedMarriageRejectsProcreationBeforeFinalCommit(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        fixture.villager().getRelationships().marry(fixture.player());
+        fixture.villager().getVillagerBrain().getMemoriesForPlayer(fixture.player()).setHearts(150);
+        DialogueEvent event = commandStory(ResourceLocation.parse("mca:test/procreate_lost_marriage"), "procreate");
+        DialogueEngine engine = engine(event);
+        DialogueEngine.DialogueNodeView terminal = startAndChoose(engine, fixture, event);
+        FakePlayer other = new FakePlayer(helper.getLevel(), new GameProfile(UUID.randomUUID(), "new-spouse"));
+        fixture.villager().getRelationships().marry(other);
+        helper.assertTrue(fixture.villager().getRelationships().isMarried()
+                        && !fixture.villager().getRelationships().isMarriedTo(fixture.player().getUUID()),
+                "the villager must be married to someone other than the initiating player");
+
+        helper.assertTrue(engine.advance(fixture.player(), terminal.offerToken()).status()
+                        == DialogueEngine.TransitionStatus.ENDED,
+                "procreation must reject when the initiating player is no longer the spouse");
+        helper.assertTrue(!DialogueEventHistory.get(fixture.player().serverLevel()).completed(
+                        fixture.player().getUUID(), fixture.villager().getUUID(), event.id()),
+                "rejected procreation must leave completion history untouched");
+        helper.assertTrue(!fixture.villager().getRelationships().isProcreating(),
+                "a stale procreation acknowledgement must not start pregnancy behavior");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void competingHireRejectsChangedProfessionBeforeCharging(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        fixture.villager().setProfession(ProfessionsMCA.ADVENTURER);
+        fixture.player().getInventory().add(new ItemStack(Items.EMERALD, 10));
+        DialogueEvent event = commandStory(ResourceLocation.parse("mca:test/competing_hire"), "hire_short");
+        DialogueEngine engine = engine(event);
+        DialogueEngine.DialogueNodeView terminal = startAndChoose(engine, fixture, event);
+        FakePlayer other = new FakePlayer(helper.getLevel(), new GameProfile(UUID.randomUUID(), "competing-hirer"));
+        other.getInventory().add(new ItemStack(Items.EMERALD, 10));
+        helper.assertTrue(fixture.villager().getInteractions().handleDialogue(other, "hire_long").accepted(),
+                "another player's paid hire must succeed before the first player acknowledges");
+        helper.assertTrue(other.getInventory().countItem(Items.EMERALD) == 0,
+                "the competing player must pay for the seven-day hire");
+        int swordCount = fixture.villager().getInventory().countItem(Items.IRON_SWORD);
+        int despawnDelay = fixture.villager().getDespawnDelay();
+
+        helper.assertTrue(engine.advance(fixture.player(), terminal.offerToken()).status()
+                        == DialogueEngine.TransitionStatus.ENDED,
+                "a stale hiring decision cannot rehire a mercenary");
+        helper.assertTrue(fixture.player().getInventory().countItem(Items.EMERALD) == 10,
+                "a rejected hire must not charge the player");
+        helper.assertTrue(fixture.villager().getProfession() == ProfessionsMCA.MERCENARY,
+                "the successful competing hire must remain in effect");
+        helper.assertTrue(swordCount == 1 && fixture.villager().getInventory().countItem(Items.IRON_SWORD) == 1,
+                "rejecting the stale hire must not duplicate mercenary equipment");
+        helper.assertTrue(despawnDelay == 24000 * 7 && fixture.villager().getDespawnDelay() == despawnDelay,
+                "rejecting the stale hire must not change the competing contract");
+        helper.assertTrue(!DialogueEventHistory.get(fixture.player().serverLevel()).completed(
+                        fixture.player().getUUID(), fixture.villager().getUUID(), event.id()),
+                "rejected competing hire must not write completion history");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void fullInventoryRejectsDivorcePapersCompletion(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        for (int slot = 0; slot < fixture.player().getInventory().getContainerSize(); slot++) {
+            fixture.player().getInventory().setItem(slot, new ItemStack(Items.DIRT, 64));
+        }
+        DialogueEvent event = commandStory(ResourceLocation.parse("mca:test/full_divorce_papers"), "divorcePapers");
+        DialogueEngine engine = engine(event);
+        DialogueEngine.DialogueNodeView terminal = startAndChoose(engine, fixture, event);
+
+        helper.assertTrue(engine.advance(fixture.player(), terminal.offerToken()).status()
+                        == DialogueEngine.TransitionStatus.ENDED,
+                "no room for divorce papers must not complete the command");
+        helper.assertTrue(!fixture.player().getInventory().contains(ItemsMCA.DIVORCE_PAPERS.getDefaultInstance()),
+                "full inventory must remain free of undelivered divorce papers");
+        helper.assertTrue(!DialogueEventHistory.get(fixture.player().serverLevel()).completed(
+                        fixture.player().getUUID(), fixture.villager().getUUID(), event.id()),
+                "undelivered papers must not write completion history");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void creativeFullInventoryRejectsUndeliveredDivorcePapers(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        for (int slot = 0; slot < fixture.player().getInventory().getContainerSize(); slot++) {
+            fixture.player().getInventory().setItem(slot, new ItemStack(Items.DIRT, 64));
+        }
+        // Vanilla Inventory.add() reports success for creative players even when no slot accepted the item.
+        fixture.player().getAbilities().instabuild = true;
+        DialogueEvent event = commandStory(ResourceLocation.parse("mca:test/creative_full_divorce_papers"), "divorcePapers");
+        DialogueEngine engine = engine(event);
+        DialogueEngine.DialogueNodeView terminal = startAndChoose(engine, fixture, event);
+
+        helper.assertTrue(engine.advance(fixture.player(), terminal.offerToken()).status()
+                        == DialogueEngine.TransitionStatus.ENDED,
+                "creative inventory insertion must not count as delivery if no slot accepted the papers");
+        helper.assertTrue(fixture.player().getInventory().countItem(ItemsMCA.DIVORCE_PAPERS) == 0,
+                "failed creative delivery must not generate divorce papers");
+        helper.assertTrue(!DialogueEventHistory.get(fixture.player().serverLevel()).completed(
+                        fixture.player().getUUID(), fixture.villager().getUUID(), event.id()),
+                "creative insertion without actual delivery must not commit dialogue history");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void availableInventorySlotDeliversDivorcePapersExactlyOnce(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        // Slot 0 is ordinary inventory space. The final container slots include
+        // armor/offhand, which Inventory.add() does not use for generic items.
+        for (int slot = 1; slot < fixture.player().getInventory().getContainerSize(); slot++) {
+            fixture.player().getInventory().setItem(slot, new ItemStack(Items.DIRT, 64));
+        }
+        DialogueEvent event = commandStory(ResourceLocation.parse("mca:test/delivered_divorce_papers"), "divorcePapers");
+        DialogueEngine engine = engine(event);
+        DialogueEngine.DialogueNodeView terminal = startAndChoose(engine, fixture, event);
+
+        helper.assertTrue(engine.advance(fixture.player(), terminal.offerToken()).status()
+                        == DialogueEngine.TransitionStatus.COMPLETED,
+                "divorce papers must complete if the player has a free inventory slot");
+        helper.assertTrue(fixture.player().getInventory().countItem(ItemsMCA.DIVORCE_PAPERS) == 1,
+                "the command must deliver exactly one divorce-paper item");
+        helper.assertTrue(engine.advance(fixture.player(), terminal.offerToken()).status()
+                        == DialogueEngine.TransitionStatus.REJECTED,
+                "a consumed completion token cannot replay the item delivery");
+        helper.assertTrue(fixture.player().getInventory().countItem(ItemsMCA.DIVORCE_PAPERS) == 1,
+                "a stale acknowledgement must not grant duplicate papers");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void completingCommandCannotCloseAnotherPlayersInteraction(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        DialogueEvent event = commandStory(ResourceLocation.parse("mca:test/multiplayer_command_close"), "stay_in_village");
+        DialogueEngine engine = engine(event);
+        DialogueEngine.DialogueNodeView terminal = startAndChoose(engine, fixture, event);
+        FakePlayer other = new FakePlayer(helper.getLevel(), new GameProfile(UUID.randomUUID(), "other-command-player"));
+        fixture.villager().getInteractions().interactAt(other, Vec3.ZERO, InteractionHand.MAIN_HAND);
+        UUID otherInteraction = fixture.villager().getInteractions().interactionId();
+
+        helper.assertTrue(engine.advance(fixture.player(), terminal.offerToken()).status()
+                        == DialogueEngine.TransitionStatus.COMPLETED,
+                "the initiating player's valid command should complete");
+        helper.assertTrue(fixture.villager().getInteractions().matchesInteraction(other, otherInteraction),
+                "one player's completion must not close a different player's active interaction");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void adoptionRejectsWhenAnotherParentAdoptsBeforeAcknowledgement(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        DialogueEvent event = commandStory(ResourceLocation.parse("mca:test/adopt_changed"), "adopt");
+        DialogueEngine engine = engine(event);
+        DialogueEngine.DialogueNodeView terminal = startAndChoose(engine, fixture, event);
+
+        FakePlayer other = new FakePlayer(helper.getLevel(), new GameProfile(UUID.randomUUID(), "other-adopter"));
+        FamilyTree family = FamilyTree.get(helper.getLevel());
+        FamilyTreeNode otherParent = family.getOrCreate(other);
+        FamilyTreeNode child = fixture.villager().getRelationships().getFamilyEntry();
+        child.replaceParents(otherParent, Optional.empty());
+        helper.assertTrue(!family.isOrphan(child), "fixture must have a living adoptive parent");
+
+        DialogueEngine.TransitionResult result = engine.advance(fixture.player(), terminal.offerToken());
+        helper.assertTrue(result.status() == DialogueEngine.TransitionStatus.ENDED,
+                "adoption must be rejected when the child gains a living parent before commit");
+        helper.assertTrue(child.streamParents().anyMatch(otherParent.id()::equals),
+                "rejected adoption must preserve the existing parent");
+        helper.assertTrue(!DialogueEventHistory.get(fixture.player().serverLevel()).completed(
+                        fixture.player().getUUID(), fixture.villager().getUUID(), event.id()),
+                "rejected adoption cannot create completion history");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void divorceRejectsWhenMarriageEndsBeforeAcknowledgement(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        fixture.villager().getRelationships().marry(fixture.player());
+        DialogueEvent event = commandStory(ResourceLocation.parse("mca:test/divorce_changed"), "divorceConfirm");
+        DialogueEngine engine = engine(event);
+        DialogueEngine.DialogueNodeView terminal = startAndChoose(engine, fixture, event);
+
+        fixture.villager().getRelationships().endRelationShip(RelationshipState.SINGLE);
+        Memories memories = fixture.villager().getVillagerBrain().getMemoriesForPlayer(fixture.player());
+        int heartsBefore = memories.getHearts();
+        DialogueEngine.TransitionResult result = engine.advance(fixture.player(), terminal.offerToken());
+        helper.assertTrue(result.status() == DialogueEngine.TransitionStatus.ENDED,
+                "divorce must be rejected if this player is no longer the spouse at commit");
+        helper.assertTrue(memories.getHearts() == heartsBefore,
+                "rejected divorce must not deduct relationship hearts");
+        helper.assertTrue(!DialogueEventHistory.get(fixture.player().serverLevel()).completed(
+                        fixture.player().getUUID(), fixture.villager().getUUID(), event.id()),
+                "rejected divorce cannot create completion history");
         helper.succeed();
     }
 
@@ -493,6 +931,44 @@ public final class DialogueActionGameTests {
                   }
                 }
                 """).getAsJsonObject());
+    }
+
+    private static DialogueEvent locationCommandStory(ResourceLocation id) {
+        return DialogueEvent.decode(id, JsonParser.parseString("""
+                {
+                  "trigger":"talk",
+                  "presentation":{"mode":"ask","prompt":"dialogue.test.prompt","resume_prompt":"dialogue.test.resume"},
+                  "repeat":{"type":"once"},
+                  "start":"start",
+                  "nodes":{
+                    "start":{"line":"dialogue.test.start","choices":[{
+                      "id":"support","text":"dialogue.test.support",
+                      "actions":[{"type":"mca:command","command":"location"}],
+                      "next":"done"
+                    }]},
+                    "done":{"line":"dialogue.test.done","complete":true}
+                  }
+                }
+                """).getAsJsonObject());
+    }
+
+    private static DialogueEvent commandStory(ResourceLocation id, String command) {
+        return DialogueEvent.decode(id, JsonParser.parseString("""
+                {
+                  "trigger":"talk",
+                  "presentation":{"mode":"ask","prompt":"dialogue.test.prompt","resume_prompt":"dialogue.test.resume"},
+                  "repeat":{"type":"once"},
+                  "start":"start",
+                  "nodes":{
+                    "start":{"line":"dialogue.test.start","choices":[{
+                      "id":"support","text":"dialogue.test.support",
+                      "actions":[{"type":"mca:command","command":"%s"}],
+                      "next":"done"
+                    }]},
+                    "done":{"line":"dialogue.test.done","complete":true}
+                  }
+                }
+                """.formatted(command)).getAsJsonObject());
     }
 
     private static DialogueEvent simpleComplete(ResourceLocation id) {

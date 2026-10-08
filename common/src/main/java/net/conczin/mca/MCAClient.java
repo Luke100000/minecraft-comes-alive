@@ -80,8 +80,6 @@ public class MCAClient {
         dialoguePresentation().ifPresent(presentation -> {
             if (client.getConnection() == null) {
                 presentation.clear();
-            } else {
-                presentation.tick(System.nanoTime() / 1_000_000L);
             }
         });
         BlueprintScreen.maintainSessionState(client);

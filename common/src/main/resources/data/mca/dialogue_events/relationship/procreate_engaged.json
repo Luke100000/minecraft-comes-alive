@@ -1,0 +1,27 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue.main.procreate_engaged",
+    "resume_prompt": "dialogue_event.mca.relationship.procreate_engaged.resume",
+    "topic": "relationship"
+  },
+  "priority": 0,
+  "weight": 1,
+  "requirements": [
+    { "type": "mca:relationship", "value": "engaged" },
+    { "type": "mca:age_group", "value": "adult" }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "response",
+  "nodes": {
+    "response": {
+      "line": "dialogue.procreate_engaged",
+      "complete": true
+    }
+  }
+}

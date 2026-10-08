@@ -1,0 +1,293 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue.main.story",
+    "resume_prompt": "dialogue_event.mca.social.story.resume",
+    "topic": "small_talk"
+  },
+  "priority": 0,
+  "weight": 1,
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "story",
+  "start": "prompt",
+  "nodes": {
+    "prompt": {
+      "line": "dialogue.story",
+      "silent": true,
+      "choices": [
+        {
+          "id": "generic",
+          "text": "dialogue.story.generic",
+          "outcomes": [
+            {
+              "weight": 4,
+              "actions": [
+                { "type": "mca:hearts", "amount": 5 }
+              ],
+              "next": "generic_success"
+            },
+            {
+              "requirements": [{ "type": "mca:personality", "value": "friendly" }],
+              "weight": 1,
+              "actions": [
+                { "type": "mca:hearts", "amount": 5 }
+              ],
+              "next": "generic_success"
+            },
+            {
+              "weight": 2,
+              "actions": [
+                { "type": "mca:hearts", "amount": -2 }
+              ],
+              "next": "generic_fail"
+            }
+          ]
+        },
+        {
+          "id": "exploring",
+          "text": "dialogue.story.exploring",
+          "outcomes": [
+            {
+              "weight": 1,
+              "actions": [
+                { "type": "mca:hearts", "amount": 8 }
+              ],
+              "next": "exploring_success"
+            },
+            {
+              "requirements": [{ "type": "mca:personality", "value": "friendly" }],
+              "weight": 1,
+              "actions": [
+                { "type": "mca:hearts", "amount": 8 }
+              ],
+              "next": "exploring_success"
+            },
+            {
+              "requirements": [{ "type": "mca:advancement", "value": "minecraft:adventure/shoot_arrow" }],
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": 8 }
+              ],
+              "next": "exploring_success"
+            },
+            {
+              "requirements": [{ "type": "mca:advancement", "value": "minecraft:adventure/kill_all_mobs" }],
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": 8 }
+              ],
+              "next": "exploring_success"
+            },
+            {
+              "requirements": [{ "type": "mca:advancement", "value": "minecraft:adventure/fall_from_world_height" }],
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": 8 }
+              ],
+              "next": "exploring_success"
+            },
+            {
+              "requirements": [{ "type": "mca:advancement", "value": "minecraft:adventure/spyglass_at_parrot" }],
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": 8 }
+              ],
+              "next": "exploring_success"
+            },
+            {
+              "requirements": [{ "type": "mca:advancement", "value": "minecraft:adventure/voluntary_exile" }],
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": 8 }
+              ],
+              "next": "exploring_success"
+            },
+            {
+              "requirements": [{ "type": "mca:advancement", "value": "minecraft:adventure/adventuring_time" }],
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": 8 }
+              ],
+              "next": "exploring_success"
+            },
+            {
+              "weight": 3,
+              "actions": [
+                { "type": "mca:hearts", "amount": -4 }
+              ],
+              "next": "exploring_fail"
+            }
+          ]
+        },
+        {
+          "id": "nether",
+          "text": "dialogue.story.nether",
+          "outcomes": [
+            {
+              "weight": 1,
+              "actions": [
+                { "type": "mca:hearts", "amount": 8 }
+              ],
+              "next": "nether_success"
+            },
+            {
+              "requirements": [{ "type": "mca:personality", "value": "friendly" }],
+              "weight": 1,
+              "actions": [
+                { "type": "mca:hearts", "amount": 8 }
+              ],
+              "next": "nether_success"
+            },
+            {
+              "requirements": [{ "type": "mca:advancement", "value": "minecraft:nether/root" }],
+              "weight": 8,
+              "actions": [
+                { "type": "mca:hearts", "amount": 8 }
+              ],
+              "next": "nether_success"
+            },
+            {
+              "requirements": [{ "type": "mca:advancement", "value": "minecraft:nether/find_fortress" }],
+              "weight": 8,
+              "actions": [
+                { "type": "mca:hearts", "amount": 8 }
+              ],
+              "next": "nether_success"
+            },
+            {
+              "requirements": [{ "type": "mca:advancement", "value": "minecraft:nether/explore_nether" }],
+              "weight": 15,
+              "actions": [
+                { "type": "mca:hearts", "amount": 8 }
+              ],
+              "next": "nether_success"
+            },
+            {
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": -4 }
+              ],
+              "next": "nether_fail"
+            }
+          ]
+        },
+        {
+          "id": "enderdragon",
+          "text": "dialogue.story.enderdragon",
+          "outcomes": [
+            {
+              "weight": 1,
+              "actions": [
+                { "type": "mca:hearts", "amount": 10 }
+              ],
+              "next": "enderdragon_success"
+            },
+            {
+              "requirements": [{ "type": "mca:personality", "value": "friendly" }],
+              "weight": 1,
+              "actions": [
+                { "type": "mca:hearts", "amount": 10 }
+              ],
+              "next": "enderdragon_success"
+            },
+            {
+              "requirements": [{ "type": "mca:advancement", "value": "minecraft:end/kill_dragon" }],
+              "weight": 100,
+              "actions": [
+                { "type": "mca:hearts", "amount": 10 }
+              ],
+              "next": "enderdragon_success"
+            },
+            {
+              "weight": 6,
+              "actions": [
+                { "type": "mca:hearts", "amount": -5 }
+              ],
+              "next": "enderdragon_fail"
+            }
+          ]
+        },
+        {
+          "id": "wither",
+          "text": "dialogue.story.wither",
+          "outcomes": [
+            {
+              "weight": 1,
+              "actions": [
+                { "type": "mca:hearts", "amount": 12 }
+              ],
+              "next": "wither_success"
+            },
+            {
+              "requirements": [{ "type": "mca:personality", "value": "friendly" }],
+              "weight": 1,
+              "actions": [
+                { "type": "mca:hearts", "amount": 12 }
+              ],
+              "next": "wither_success"
+            },
+            {
+              "requirements": [{ "type": "mca:advancement", "value": "minecraft:nether/summon_wither" }],
+              "weight": 100,
+              "actions": [
+                { "type": "mca:hearts", "amount": 12 }
+              ],
+              "next": "wither_success"
+            },
+            {
+              "weight": 3,
+              "actions": [
+                { "type": "mca:hearts", "amount": -6 }
+              ],
+              "next": "wither_fail"
+            }
+          ]
+        }
+      ]
+    },
+    "generic_success": {
+      "line": "dialogue.story.success",
+      "complete": true
+    },
+    "generic_fail": {
+      "line": "dialogue.story.fail",
+      "complete": true
+    },
+    "exploring_success": {
+      "line": "dialogue.story.exploring.success",
+      "complete": true
+    },
+    "exploring_fail": {
+      "line": "dialogue.story.exploring.fail",
+      "complete": true
+    },
+    "nether_success": {
+      "line": "dialogue.story.nether.success",
+      "complete": true
+    },
+    "nether_fail": {
+      "line": "dialogue.story.nether.fail",
+      "complete": true
+    },
+    "enderdragon_success": {
+      "line": "dialogue.story.enderdragon.success",
+      "complete": true
+    },
+    "enderdragon_fail": {
+      "line": "dialogue.story.enderdragon.fail",
+      "complete": true
+    },
+    "wither_success": {
+      "line": "dialogue.story.wither.success",
+      "complete": true
+    },
+    "wither_fail": {
+      "line": "dialogue.story.wither.fail",
+      "complete": true
+    }
+  }
+}

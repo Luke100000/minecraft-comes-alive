@@ -1,0 +1,19 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ambient",
+    "resume_prompt": "showcase.ambient.work.resume",
+    "topic": "small_talk"
+  },
+  "priority": 150,
+  "weight": 1,
+  "repeat": { "type": "cooldown", "seconds": 5 },
+  "history": "scheduling",
+  "start": "thought",
+  "nodes": {
+    "thought": {
+      "lines": ["showcase.ambient.work.open", "showcase.ambient.work.end"],
+      "complete": true
+    }
+  }
+}

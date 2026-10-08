@@ -1,0 +1,29 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ambient",
+    "resume_prompt": "dialogue_event.mca.ambient.root.morning.resume",
+    "topic": "small_talk"
+  },
+  "priority": 0,
+  "weight": 30,
+  "requirements": [
+    {
+      "type": "mca:time",
+      "min": 23000,
+      "max": 24000
+    }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "greeting",
+  "nodes": {
+    "greeting": {
+      "line": "dialogue.main.morning",
+      "complete": true
+    }
+  }
+}

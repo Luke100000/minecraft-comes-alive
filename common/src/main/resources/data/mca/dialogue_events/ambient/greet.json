@@ -1,0 +1,225 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ambient",
+    "resume_prompt": "dialogue_event.mca.ambient.greet.resume",
+    "topic": "small_talk"
+  },
+  "priority": 0,
+  "weight": 20,
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "greeting",
+  "nodes": {
+    "greeting": {
+      "line": "dialogue.greet",
+      "choices": [
+        {
+          "id": "short",
+          "text": "dialogue.greet.short",
+          "outcomes": [
+            {
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": 4 }
+              ],
+              "next": "success"
+            },
+            {
+              "requirements": [
+                { "type": "mca:personality", "value": "friendly" }
+              ],
+              "weight": 2,
+              "actions": [
+                { "type": "mca:hearts", "amount": 4 }
+              ],
+              "next": "success"
+            },
+            {
+              "requirements": [
+                { "type": "mca:personality", "value": "odd" }
+              ],
+              "weight": 10,
+              "actions": [
+                { "type": "mca:hearts", "amount": 4 }
+              ],
+              "next": "success"
+            },
+            {
+              "requirements": [
+                { "type": "mca:mood", "value": "depressed" }
+              ],
+              "weight": 6,
+              "actions": [
+                { "type": "mca:hearts", "amount": -2 }
+              ],
+              "next": "fail"
+            },
+            {
+              "requirements": [
+                { "type": "mca:mood", "value": "sad" }
+              ],
+              "weight": 4,
+              "actions": [
+                { "type": "mca:hearts", "amount": -2 }
+              ],
+              "next": "fail"
+            },
+            {
+              "requirements": [
+                { "type": "mca:mood", "value": "unhappy" }
+              ],
+              "weight": 2,
+              "actions": [
+                { "type": "mca:hearts", "amount": -2 }
+              ],
+              "next": "fail"
+            },
+            {
+              "requirements": [
+                { "type": "mca:personality", "value": "gloomy" }
+              ],
+              "weight": 6,
+              "actions": [
+                { "type": "mca:hearts", "amount": -2 }
+              ],
+              "next": "fail"
+            },
+            {
+              "requirements": [
+                { "type": "mca:personality", "value": "flirty" }
+              ],
+              "weight": 1,
+              "actions": [
+                { "type": "mca:hearts", "amount": -2 }
+              ],
+              "next": "fail"
+            }
+          ]
+        },
+        {
+          "id": "kind",
+          "text": "dialogue.greet.kind",
+          "outcomes": [
+            {
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": 6 }
+              ],
+              "next": "success"
+            },
+            {
+              "requirements": [
+                { "type": "mca:personality", "value": "gloomy" }
+              ],
+              "weight": 6,
+              "actions": [
+                { "type": "mca:hearts", "amount": 6 }
+              ],
+              "next": "success"
+            },
+            {
+              "requirements": [
+                { "type": "mca:personality", "value": "flirty" }
+              ],
+              "weight": 1,
+              "actions": [
+                { "type": "mca:hearts", "amount": 6 }
+              ],
+              "next": "success"
+            },
+            {
+              "requirements": [
+                { "type": "mca:personality", "value": "odd" }
+              ],
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": -2 }
+              ],
+              "next": "fail"
+            }
+          ]
+        },
+        {
+          "id": "shake_hand",
+          "text": "dialogue.greet.shake_hand",
+          "outcomes": [
+            {
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": 3 }
+              ],
+              "next": "shake_success"
+            },
+            {
+              "requirements": [
+                { "type": "mca:personality", "value": "friendly" }
+              ],
+              "weight": 2,
+              "actions": [
+                { "type": "mca:hearts", "amount": 3 }
+              ],
+              "next": "shake_success"
+            },
+            {
+              "requirements": [
+                { "type": "mca:age_group", "value": "adult" }
+              ],
+              "weight": 3,
+              "actions": [
+                { "type": "mca:hearts", "amount": 3 }
+              ],
+              "next": "shake_success"
+            },
+            {
+              "weight": 3,
+              "actions": [
+                { "type": "mca:hearts", "amount": -2 }
+              ],
+              "next": "shake_fail"
+            },
+            {
+              "requirements": [
+                { "type": "mca:personality", "value": "odd" }
+              ],
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": -2 }
+              ],
+              "next": "shake_fail"
+            },
+            {
+              "requirements": [
+                { "type": "mca:age_group", "value": "child" }
+              ],
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": -2 }
+              ],
+              "next": "shake_fail"
+            }
+          ]
+        }
+      ]
+    },
+    "success": {
+      "line": "dialogue.greet.success",
+      "complete": true
+    },
+    "fail": {
+      "line": "dialogue.greet.fail",
+      "complete": true
+    },
+    "shake_success": {
+      "line": "dialogue.shake_hand.success",
+      "complete": true
+    },
+    "shake_fail": {
+      "line": "dialogue.shake_hand.fail",
+      "complete": true
+    }
+  }
+}

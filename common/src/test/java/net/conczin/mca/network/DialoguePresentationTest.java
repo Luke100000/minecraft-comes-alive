@@ -22,14 +22,65 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DialoguePresentationTest {
     @Test
-    void revealsOneCompleteWordEveryQuarterSecondWithoutSkip() {
+    void rejectedStaleSelectionCanRequestFreshMenuOnlyForItsPendingOffer() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        presentation.beginRequest();
+        assertTrue(presentation.acceptOptions(new InteractionDialogueOptionsResponse(
+                10L, Optional.empty(), List.of(), true)));
+        presentation.markSelectionRequested(DialogueEngine.DialogueSelection.AMBIENT);
+
+        assertFalse(presentation.acceptSelectionRejection(9L), "another offer must not trigger a refresh");
+        assertTrue(presentation.acceptSelectionRejection(10L), "the rejected selection must unblock menu recovery");
+
+        presentation.beginRequest();
+        assertTrue(presentation.options().isEmpty(), "stale options cannot remain clickable during refresh");
+        assertFalse(presentation.acceptSelectionRejection(10L), "duplicate rejection must not repeat the request");
+        assertTrue(presentation.acceptOptions(new InteractionDialogueOptionsResponse(
+                11L, Optional.empty(), List.of(), false)));
+        assertEquals(11L, presentation.options().orElseThrow().offerToken());
+        assertFalse(presentation.acceptSelectionRejection(10L), "late rejection cannot clear a newer server menu");
+    }
+
+    @Test
+    void serverPushedReloadMenuSupersedesPendingSelectionRejection() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        presentation.beginRequest();
+        assertTrue(presentation.acceptOptions(new InteractionDialogueOptionsResponse(
+                20L, Optional.empty(), List.of(), true)));
+        presentation.markSelectionRequested(DialogueEngine.DialogueSelection.AMBIENT);
+
+        assertTrue(presentation.acceptOptions(new InteractionDialogueOptionsResponse(
+                21L, Optional.empty(), List.of(), false)));
+        assertFalse(presentation.acceptSelectionRejection(20L));
+        assertEquals(21L, presentation.options().orElseThrow().offerToken());
+    }
+
+    @Test
+    void staleSelectionAwaitingReplyAcceptsFreshMenuAfterReload() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        presentation.beginRequest();
+        assertTrue(presentation.acceptOptions(new InteractionDialogueOptionsResponse(
+                10L, Optional.empty(), List.of(), false)));
+        presentation.markSelectionRequested(DialogueEngine.DialogueSelection.EVENT);
+
+        assertTrue(presentation.acceptOptions(new InteractionDialogueOptionsResponse(
+                11L, Optional.empty(), List.of(), false)),
+                "new server menu must recover a pending selection invalidated by datapack reload");
+        assertEquals(11L, presentation.options().orElseThrow().offerToken());
+        assertFalse(presentation.acceptNode(active(UUID.randomUUID(), 12L, Component.literal("old"),
+                DialogueEngine.AdvanceKind.NEXT, List.of()), 0L, Locale.ENGLISH),
+                "old in-flight node response must not replace the newly refreshed menu");
+    }
+
+    @Test
+    void revealsOneUnicodeGraphemeEveryFortyMillisecondsWithoutSkip() {
         ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
         UUID sessionId = UUID.randomUUID();
         InteractionDialogueNodeResponse response = active(
                 sessionId,
                 11L,
-                Component.literal("Hello, world!  Again."),
-                true,
+                Component.literal("A\u0301👋!"),
+                DialogueEngine.AdvanceKind.BACK_TO_TOPICS,
                 List.of(new InteractionDialogueNodeResponse.Choice("reply", Component.literal("Hi.")))
         );
 
@@ -38,44 +89,89 @@ class DialoguePresentationTest {
         assertFalse(presentation.canAdvance());
         assertTrue(presentation.visibleChoices().isEmpty());
 
-        presentation.tick(1_249L);
+        presentation.tick(1_039L);
         assertEquals("", presentation.visibleLine().getString());
-        presentation.tick(1_250L);
-        assertEquals("Hello, ", presentation.visibleLine().getString());
+        presentation.tick(1_040L);
+        assertEquals("A\u0301", presentation.visibleLine().getString());
         assertFalse(presentation.canAdvance());
         assertTrue(presentation.visibleChoices().isEmpty());
 
-        presentation.tick(1_499L);
-        assertEquals("Hello, ", presentation.visibleLine().getString());
-        presentation.tick(1_500L);
-        assertEquals("Hello, world!  ", presentation.visibleLine().getString());
+        presentation.tick(1_079L);
+        assertEquals("A\u0301", presentation.visibleLine().getString());
+        presentation.tick(1_080L);
+        assertEquals("A\u0301👋", presentation.visibleLine().getString());
         assertFalse(presentation.canAdvance());
 
-        presentation.tick(1_750L);
-        assertEquals("Hello, world!  Again.", presentation.visibleLine().getString());
+        presentation.tick(1_120L);
+        assertEquals("A\u0301👋!", presentation.visibleLine().getString());
         assertTrue(presentation.canAdvance(), "clicks during reveal must not queue an advance");
+        assertEquals(DialogueEngine.AdvanceKind.BACK_TO_TOPICS, presentation.advanceKind().orElseThrow());
         assertEquals(List.of("reply"), presentation.visibleChoices().stream()
                 .map(InteractionDialogueNodeResponse.Choice::id)
                 .toList());
     }
 
     @Test
-    void stalledFrameRevealsOnlyOneWordInsteadOfBurstingToCatchUp() {
+    void missingOptionalClientTranslationStillRevealsAndEnablesServerAuthoredControls() {
+        String unknownLine = "optional_addon.dialogue.untranslated_server_line";
+        String unknownReply = "optional_addon.dialogue.untranslated_reply";
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        InteractionDialogueNodeResponse response = active(
+                UUID.randomUUID(), 99L, Component.translatable(unknownLine),
+                DialogueEngine.AdvanceKind.NEXT,
+                List.of(new InteractionDialogueNodeResponse.Choice("continue", Component.translatable(unknownReply)))
+        );
+
+        assertTrue(presentation.acceptNode(response, 0L, Locale.ENGLISH),
+                "a server-owned node must not require the client to know its optional translation");
+        assertFalse(presentation.canAdvance(), "missing localization must not bypass the normal reveal timer");
+        tickSteps(presentation, 0L, unknownLine.length());
+        assertEquals(unknownLine, presentation.visibleLine().getString(),
+                "missing localization should remain visible as the key, not discard the node");
+        assertTrue(presentation.canAdvance(), "Next must still be available after revealing an unknown key");
+        assertEquals(List.of("continue"), presentation.visibleChoices().stream()
+                .map(InteractionDialogueNodeResponse.Choice::id).toList(),
+                "the server's stable choice ID must survive missing client localization");
+        assertEquals(unknownReply, presentation.visibleChoices().getFirst().text().getString());
+    }
+
+    @Test
+    void stalledFrameRevealsOnlyOneGraphemeInsteadOfBurstingToCatchUp() {
         ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
         presentation.acceptNode(active(
                 UUID.randomUUID(),
                 12L,
-                Component.literal("One two three four"),
-                true,
+                Component.literal("One"),
+                DialogueEngine.AdvanceKind.NEXT,
                 List.of()
         ), 1_000L, Locale.ENGLISH);
 
         presentation.tick(5_000L);
-        assertEquals("One ", presentation.visibleLine().getString());
-        presentation.tick(5_249L);
-        assertEquals("One ", presentation.visibleLine().getString());
-        presentation.tick(5_250L);
-        assertEquals("One two ", presentation.visibleLine().getString());
+        assertEquals("O", presentation.visibleLine().getString());
+        presentation.tick(5_039L);
+        assertEquals("O", presentation.visibleLine().getString());
+        presentation.tick(5_040L);
+        assertEquals("On", presentation.visibleLine().getString());
+    }
+
+    @Test
+    void slightlyLateFrameKeepsFortyMillisecondScheduleWithoutDrift() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        presentation.acceptNode(active(
+                UUID.randomUUID(),
+                121L,
+                Component.literal("AB"),
+                DialogueEngine.AdvanceKind.NEXT,
+                List.of()
+        ), 1_000L, Locale.ENGLISH);
+
+        presentation.tick(1_050L);
+        assertEquals("A", presentation.visibleLine().getString());
+        presentation.tick(1_079L);
+        assertEquals("A", presentation.visibleLine().getString());
+        presentation.tick(1_080L);
+        assertEquals("AB", presentation.visibleLine().getString(),
+                "a slightly late render frame must not permanently shift the 40 ms reveal schedule");
     }
 
     @Test
@@ -84,16 +180,21 @@ class DialoguePresentationTest {
         presentation.acceptNode(active(
                 UUID.randomUUID(),
                 13L,
-                Component.literal("... 👋 ?!"),
-                true,
+                Component.literal("..."),
+                DialogueEngine.AdvanceKind.NEXT,
                 List.of(new InteractionDialogueNodeResponse.Choice("wave", Component.literal("👋")))
         ), 0L, Locale.ENGLISH);
 
         assertEquals("", presentation.visibleLine().getString());
         assertFalse(presentation.canAdvance());
         assertTrue(presentation.visibleChoices().isEmpty());
-        presentation.tick(250L);
-        assertEquals("... 👋 ?!", presentation.visibleLine().getString());
+        presentation.tick(40L);
+        assertEquals(".", presentation.visibleLine().getString());
+        assertFalse(presentation.canAdvance());
+        presentation.tick(80L);
+        assertEquals("..", presentation.visibleLine().getString());
+        presentation.tick(120L);
+        assertEquals("...", presentation.visibleLine().getString());
         assertTrue(presentation.canAdvance());
         assertEquals(List.of("wave"), presentation.visibleChoices().stream()
                 .map(InteractionDialogueNodeResponse.Choice::id)
@@ -101,20 +202,21 @@ class DialoguePresentationTest {
     }
 
     @Test
-    void preservesUnicodePunctuationAndComponentStylesAtWordBoundaries() {
+    void preservesUnicodePunctuationAndComponentStylesAtGraphemeBoundaries() {
         ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
-        MutableComponent line = Component.literal("Café, 👋 ").withStyle(ChatFormatting.RED)
+        MutableComponent line = Component.literal("Cafe\u0301 👋 ").withStyle(ChatFormatting.RED)
                 .append(Component.literal("friend!").withStyle(ChatFormatting.BOLD));
 
-        presentation.acceptNode(active(UUID.randomUUID(), 21L, line, false, List.of()), 0L, Locale.ENGLISH);
-        presentation.tick(250L);
+        presentation.acceptNode(active(UUID.randomUUID(), 21L, line, DialogueEngine.AdvanceKind.NONE, List.of()),
+                0L, Locale.ENGLISH);
+        tickSteps(presentation, 0L, 7);
 
-        assertEquals("Café, 👋 ", presentation.visibleLine().getString());
+        assertEquals("Cafe\u0301 👋 ", presentation.visibleLine().getString());
         List<StyledPart> firstParts = styledParts(presentation.visibleLine());
-        assertEquals(List.of(new StyledPart("Café, 👋 ", ChatFormatting.RED.getColor())), firstParts);
+        assertEquals(List.of(new StyledPart("Cafe\u0301 👋 ", ChatFormatting.RED.getColor())), firstParts);
 
-        presentation.tick(500L);
-        assertEquals("Café, 👋 friend!", presentation.visibleLine().getString());
+        tickSteps(presentation, 280L, 7);
+        assertEquals("Cafe\u0301 👋 friend!", presentation.visibleLine().getString());
         List<StyledPart> allParts = styledParts(presentation.visibleLine());
         assertEquals(2, allParts.size());
         assertEquals("friend!", allParts.get(1).text());
@@ -127,28 +229,32 @@ class DialoguePresentationTest {
         UUID sessionId = UUID.randomUUID();
         Component source = Component.literal("First second third");
 
-        presentation.acceptNode(active(sessionId, 31L, source, true, List.of()), 0L, Locale.ENGLISH);
-        presentation.tick(250L);
-        assertEquals("First ", presentation.visibleLine().getString());
+        presentation.acceptNode(active(sessionId, 31L, source, DialogueEngine.AdvanceKind.NEXT, List.of()), 0L, Locale.ENGLISH);
+        presentation.tick(40L);
+        assertEquals("F", presentation.visibleLine().getString());
 
         presentation.pause();
         presentation.beginRequest();
+        assertTrue(presentation.sessionId().isEmpty(),
+                "closing while a resumed Talk menu is still loading must not send the old session ID");
+        assertTrue(presentation.offerToken().isEmpty(),
+                "closing while a resumed Talk menu is still loading must not send the old node token");
         presentation.acceptOptions(new InteractionDialogueOptionsResponse(
                 40L,
                 Optional.of(Component.literal("Want to finish what you were saying?")),
                 List.of(),
-                false,
                 false
         ));
         presentation.markSelectionRequested(DialogueEngine.DialogueSelection.RESUME);
-        assertTrue(presentation.acceptNode(active(sessionId, 41L, source, true, List.of()), 10_000L, Locale.ENGLISH));
+        assertTrue(presentation.acceptNode(active(
+                sessionId, 41L, source, DialogueEngine.AdvanceKind.NEXT, List.of()), 10_000L, Locale.ENGLISH));
 
-        assertEquals("First ", presentation.visibleLine().getString(),
+        assertEquals("F", presentation.visibleLine().getString(),
                 "explicit resume must preserve the already resolved/revealed phrase");
-        presentation.tick(10_249L);
-        assertEquals("First ", presentation.visibleLine().getString());
-        presentation.tick(10_250L);
-        assertEquals("First second ", presentation.visibleLine().getString());
+        presentation.tick(10_039L);
+        assertEquals("F", presentation.visibleLine().getString());
+        presentation.tick(10_040L);
+        assertEquals("Fi", presentation.visibleLine().getString());
     }
 
     @Test
@@ -158,21 +264,20 @@ class DialoguePresentationTest {
         UUID stale = UUID.randomUUID();
 
         assertTrue(presentation.acceptNode(
-                active(current, 51L, Component.literal("Current line"), true, List.of()),
+                active(current, 51L, Component.literal("Current line"), DialogueEngine.AdvanceKind.NEXT, List.of()),
                 0L,
                 Locale.ENGLISH
         ));
         assertFalse(presentation.acceptNode(new InteractionDialogueNodeResponse(
                 stale, 50L, InteractionDialogueNodeResponse.State.ENDED, Optional.empty()), 0L, Locale.ENGLISH));
         assertFalse(presentation.acceptNode(
-                active(stale, 52L, Component.literal("Stale replacement"), true, List.of()),
+                active(stale, 52L, Component.literal("Stale replacement"), DialogueEngine.AdvanceKind.NEXT, List.of()),
                 0L,
                 Locale.ENGLISH
         ));
 
         assertEquals(current, presentation.sessionId().orElseThrow());
-        presentation.tick(250L);
-        presentation.tick(500L);
+        tickSteps(presentation, 0L, 12);
         assertEquals("Current line", presentation.visibleLine().getString());
     }
 
@@ -181,20 +286,22 @@ class DialoguePresentationTest {
         ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
         UUID sessionId = UUID.randomUUID();
         assertTrue(presentation.acceptNode(
-                active(sessionId, 51L, Component.literal("Old line"), true, List.of()),
+                active(sessionId, 51L, Component.literal("Old line"), DialogueEngine.AdvanceKind.NEXT, List.of()),
                 0L,
                 Locale.ENGLISH
         ));
 
         presentation.beginRequest();
-        assertFalse(presentation.acceptNode(new InteractionDialogueNodeResponse(
+        assertTrue(presentation.acceptNode(new InteractionDialogueNodeResponse(
                 sessionId,
                 51L,
                 InteractionDialogueNodeResponse.State.PAUSED,
                 Optional.empty()
         ), 5L, Locale.ENGLISH));
+        assertFalse(presentation.nodeVisible(),
+                "authoritative pause must clear stale node controls even while a fresh menu request is pending");
         assertFalse(presentation.acceptNode(
-                active(sessionId, 52L, Component.literal("Late line"), true, List.of()),
+                active(sessionId, 52L, Component.literal("Late line"), DialogueEngine.AdvanceKind.NEXT, List.of()),
                 10L,
                 Locale.ENGLISH
         ));
@@ -202,13 +309,16 @@ class DialoguePresentationTest {
                 53L,
                 Optional.of(Component.literal("Resume?")),
                 List.of(),
-                false,
                 false
         );
         assertTrue(presentation.acceptOptions(menu));
+        assertTrue(presentation.sessionId().isEmpty(),
+                "a fresh menu must not expose the old active session ID to the close packet");
+        assertEquals(53L, presentation.offerToken().orElseThrow(),
+                "closing the visible menu must use its newly issued offer token");
         presentation.markSelectionRequested(DialogueEngine.DialogueSelection.RESUME);
         assertTrue(presentation.acceptNode(
-                active(sessionId, 54L, Component.literal("Old line"), true, List.of()),
+                active(sessionId, 54L, Component.literal("Old line"), DialogueEngine.AdvanceKind.NEXT, List.of()),
                 20L,
                 Locale.ENGLISH
         ));
@@ -224,22 +334,24 @@ class DialoguePresentationTest {
                 sessionId,
                 55L,
                 line,
-                false,
+                DialogueEngine.AdvanceKind.NONE,
                 List.of(new InteractionDialogueNodeResponse.Choice("old", Component.literal("Old")))
         ), 0L, Locale.ENGLISH);
-        presentation.tick(250L);
-        assertEquals("One ", presentation.visibleLine().getString());
+        presentation.tick(40L);
+        assertEquals("O", presentation.visibleLine().getString());
 
         assertTrue(presentation.acceptNode(active(
                 sessionId,
                 55L,
                 line,
-                false,
+                DialogueEngine.AdvanceKind.NONE,
                 List.of(new InteractionDialogueNodeResponse.Choice("new", Component.literal("New")))
         ), 300L, Locale.ENGLISH));
-        assertEquals("One ", presentation.visibleLine().getString());
+        assertEquals("O", presentation.visibleLine().getString());
 
-        presentation.tick(500L);
+        presentation.tick(340L);
+        assertEquals("On", presentation.visibleLine().getString());
+        tickSteps(presentation, 340L, 5);
         assertEquals("One two", presentation.visibleLine().getString());
         assertEquals(List.of("new"), presentation.visibleChoices().stream()
                 .map(InteractionDialogueNodeResponse.Choice::id)
@@ -254,10 +366,10 @@ class DialoguePresentationTest {
                 sessionId,
                 61L,
                 Component.literal("Keep this phrase"),
-                true,
+                DialogueEngine.AdvanceKind.NEXT,
                 List.of(new InteractionDialogueNodeResponse.Choice("x", Component.literal("X")))
         ), 0L, Locale.ENGLISH);
-        presentation.tick(250L);
+        presentation.tick(40L);
 
         assertTrue(presentation.acceptNode(new InteractionDialogueNodeResponse(
                 sessionId, 61L, InteractionDialogueNodeResponse.State.PAUSED, Optional.empty()), 250L, Locale.ENGLISH));
@@ -283,8 +395,7 @@ class DialoguePresentationTest {
                         ResourceLocation.parse("mca:test"),
                         Component.literal("Ask")
                 )),
-                true,
-                false
+                true
         );
 
         presentation.beginRequest();
@@ -303,7 +414,7 @@ class DialoguePresentationTest {
             UUID sessionId,
             long offerToken,
             Component line,
-            boolean canContinue,
+            DialogueEngine.AdvanceKind advanceKind,
             List<InteractionDialogueNodeResponse.Choice> choices
     ) {
         return new InteractionDialogueNodeResponse(
@@ -314,10 +425,16 @@ class DialoguePresentationTest {
                         ResourceLocation.parse("mca:test/story"),
                         line,
                         false,
-                        canContinue,
+                        advanceKind,
                         choices
                 ))
         );
+    }
+
+    private static void tickSteps(ClientHandlerImpl.DialoguePresentation presentation, long startMillis, int count) {
+        for (int i = 1; i <= count; i++) {
+            presentation.tick(startMillis + i * 40L);
+        }
     }
 
     private static List<StyledPart> styledParts(Component component) {

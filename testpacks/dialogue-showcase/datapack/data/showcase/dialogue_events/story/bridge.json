@@ -1,0 +1,54 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "showcase.bridge.prompt",
+    "resume_prompt": "showcase.bridge.resume",
+    "topic": "personal"
+  },
+  "priority": 90,
+  "weight": 1,
+  "repeat": { "type": "cooldown", "seconds": 5 },
+  "history": "story",
+  "start": "memory",
+  "nodes": {
+    "memory": {
+      "lines": [
+        "showcase.bridge.opening",
+        "showcase.bridge.explanation",
+        "showcase.bridge.question"
+      ],
+      "choices": [
+        {
+          "id": "listen",
+          "text": "showcase.bridge.listen",
+          "actions": [{ "type": "mca:hearts", "amount": 5 }],
+          "next": "listened"
+        },
+        {
+          "id": "ask_more",
+          "text": "showcase.bridge.ask_more",
+          "next": "asked"
+        },
+        {
+          "id": "dismiss",
+          "text": "showcase.bridge.dismiss",
+          "actions": [{ "type": "mca:hearts", "amount": -5 }],
+          "next": "dismissed"
+        }
+      ]
+    },
+    "listened": {
+      "lines": ["showcase.bridge.listening_reply", "showcase.bridge.listening_end"],
+      "complete": true
+    },
+    "asked": {
+      "lines": ["showcase.bridge.ask_reply", "showcase.bridge.ask_end"],
+      "complete": true
+    },
+    "dismissed": {
+      "lines": ["showcase.bridge.dismiss_reply", "showcase.bridge.dismiss_end"],
+      "complete": true
+    }
+  }
+}

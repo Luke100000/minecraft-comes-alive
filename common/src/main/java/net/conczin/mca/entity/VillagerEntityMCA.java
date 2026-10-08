@@ -118,6 +118,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     final ResourceLocation EXTRA_HEALTH_EFFECT_ID = MCA.locate("trait_health");
     private final VillagerBrain<VillagerEntityMCA> mcaBrain = new VillagerBrain<>(this);
     private final LongTermMemory longTermMemory = new LongTermMemory(this);
+    private final RecentVillagerEvents recentVillagerEvents = new RecentVillagerEvents();
     private final Genetics genetics = new Genetics(this);
     private final Traits traits = new Traits(this);
     private final Residency residency = new Residency(this);
@@ -299,6 +300,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     public LongTermMemory getLongTermMemory() {
         return longTermMemory;
+    }
+
+    public RecentVillagerEvents getRecentVillagerEvents() {
+        return recentVillagerEvents;
     }
 
     public Residency getResidency() {
@@ -666,7 +671,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             damageAmount *= 0.0f;
         }
 
-        return super.hurt(source, damageAmount);
+        boolean accepted = super.hurt(source, damageAmount);
+        if (accepted && !level().isClientSide) {
+            recentVillagerEvents.record(RecentVillagerEvents.ATTACKED, RecentVillagerEvents.gameTime(level()));
+        }
+        return accepted;
     }
 
     private boolean requestCooldown() {
@@ -1599,6 +1608,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             residency.leaveHome();
         }
 
+        if (mob instanceof ZombieVillagerEntityMCA) {
+            recentVillagerEvents.record(RecentVillagerEvents.ZOMBIFIED, RecentVillagerEvents.gameTime(level()));
+        }
+
         if (mob instanceof VillagerLike<?> zombie) {
             // Restore MCA state after spawn initialization has chosen the vanilla zombie age.
             zombie.copyVillagerAttributesFrom(this);
@@ -1616,6 +1629,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         output.putString(CHAT_AI_PROMPT_KEY, getChatAIPrompt());
         writeNicknames(output);
         longTermMemory.writeToNbt(output);
+        recentVillagerEvents.writeToNbt(output);
     }
 
     @Override
@@ -1623,6 +1637,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         chatAIPrompt = input.getString(CHAT_AI_PROMPT_KEY);
         readNicknames(input);
         longTermMemory.readFromNbt(input);
+        recentVillagerEvents.readFromNbt(input);
     }
 
     @Override
@@ -1645,6 +1660,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         getTypeDataManager().load(this, data);
         relations.readFromNbt(data);
         longTermMemory.readFromNbt(data);
+        recentVillagerEvents.readFromNbt(data);
         readNicknames(data);
         chatAIPrompt = data.getString(CHAT_AI_PROMPT_KEY);
 
@@ -1717,6 +1733,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         relations.writeToNbt(nbt);
         longTermMemory.writeToNbt(nbt);
+        recentVillagerEvents.writeToNbt(nbt);
         writeNicknames(nbt);
 
         getTypeDataManager().save(this, nbt);

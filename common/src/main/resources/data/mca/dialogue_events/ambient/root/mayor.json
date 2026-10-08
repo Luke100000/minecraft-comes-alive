@@ -1,0 +1,28 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ambient",
+    "resume_prompt": "dialogue_event.mca.ambient.root.mayor.resume",
+    "topic": "small_talk"
+  },
+  "priority": 0,
+  "weight": 5,
+  "requirements": [
+    {
+      "type": "mca:rank",
+      "value": "mayor"
+    }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "greeting",
+  "nodes": {
+    "greeting": {
+      "line": "dialogue.greet.mayor",
+      "complete": true
+    }
+  }
+}

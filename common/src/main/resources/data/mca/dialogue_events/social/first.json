@@ -1,0 +1,123 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "highlighted",
+    "prompt": "dialogue_event.mca.social.first.prompt",
+    "resume_prompt": "dialogue_event.mca.social.first.resume",
+    "topic": "introduction"
+  },
+  "priority": 100,
+  "weight": 1,
+  "requirements": [
+    {
+      "type": "mca:not",
+      "condition": {
+        "type": "mca:memory",
+        "id": "seen",
+        "var": "player",
+        "present": true
+      }
+    }
+  ],
+  "repeat": {
+    "type": "once"
+  },
+  "history": "story",
+  "start": "opening",
+  "nodes": {
+    "opening": {
+      "outcomes": [
+        {
+          "weight": 1,
+          "actions": [
+            { "type": "mca:remember", "id": "seen", "var": "player" }
+          ],
+          "next": "main"
+        },
+        {
+          "weight": 8,
+          "actions": [
+            { "type": "mca:remember", "id": "seen", "var": "player" }
+          ],
+          "next": "generic"
+        },
+        {
+          "requirements": [
+            {
+              "type": "mca:not",
+              "condition": { "type": "mca:profession", "value": "mca:guard" }
+            },
+            {
+              "type": "mca:not",
+              "condition": { "type": "mca:profession", "value": "mca:archer" }
+            }
+          ],
+          "weight": 5,
+          "actions": [
+            { "type": "mca:remember", "id": "seen", "var": "player" }
+          ],
+          "next": "question"
+        }
+      ]
+    },
+    "main": {
+      "line": "dialogue.main",
+      "complete": true
+    },
+    "generic": {
+      "line": "dialogue.first.generic",
+      "complete": true
+    },
+    "question": {
+      "line": "dialogue.first.question",
+      "choices": [
+        {
+          "id": "exploring",
+          "text": "dialogue.first.question.exploring",
+          "next": "exploring_reply"
+        },
+        {
+          "id": "settling",
+          "text": "dialogue.first.question.settling",
+          "next": "settling_reply"
+        },
+        {
+          "id": "spent_night",
+          "text": "dialogue.first.question.spent_night",
+          "outcomes": [
+            {
+              "requirements": [
+                {
+                  "type": "mca:village_has_building",
+                  "value": "inn"
+                }
+              ],
+              "weight": 1000,
+              "next": "spent_night_success"
+            },
+            {
+              "weight": 1,
+              "next": "spent_night_failed"
+            }
+          ]
+        }
+      ]
+    },
+    "exploring_reply": {
+      "line": "dialogue.first.exploring",
+      "complete": true
+    },
+    "settling_reply": {
+      "line": "dialogue.first.settling",
+      "complete": true
+    },
+    "spent_night_success": {
+      "line": "dialogue.first.spent_night.success",
+      "complete": true
+    },
+    "spent_night_failed": {
+      "line": "dialogue.first.spent_night.failed",
+      "complete": true
+    }
+  }
+}

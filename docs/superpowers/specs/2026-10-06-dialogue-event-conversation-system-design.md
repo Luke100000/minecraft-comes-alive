@@ -1,6 +1,6 @@
 # Dialogue event conversation system
 
-Status: draft for user review; implementation not started.
+Status: approved design; implementation in progress.
 Primary implementation branch: `dev/1.21.1`, with the same conceptual design
 ported afterward to 26.1.2 and 26.2.
 
@@ -41,7 +41,7 @@ TALK
   -> commit pending story effects, completed event, and choices on completion
   -> return to refreshed Talk options; never automatically chain the next event
   -> if no contextual event qualifies, use ordinary always-eligible/ambient
-     DialogueEvents; a legacy root adapter exists only while old content migrates
+     DialogueEvents; the new Talk flow never depends on the legacy root
 ```
 
 Success means a datapack author can create the whole conversation in one
@@ -63,9 +63,11 @@ The overhaul does not:
   authored use;
 - persist an in-progress conversation across disconnects or server restarts.
 
-Migrating legacy dialogue content is part of delivery, but compatibility can be
-kept temporarily so the rewrite does not require one giant content conversion
-commit.
+Migrating legacy dialogue content is part of delivery and may happen incrementally,
+but the migration does not introduce a throwaway compatibility adapter. Unconverted
+legacy entry points remain on their existing engine only until an equivalent
+`DialogueEvent` path is ready; the new Talk flow does not call back into legacy
+`root`.
 
 ## Player experience
 
@@ -121,9 +123,10 @@ mind?` choice. The server selects the highest-priority eligible ambient tier and
 uses weight only to vary events within that equal-priority tier.
 
 If no contextual DialogueEvent is eligible, TALK still offers ordinary
-conversation through always-eligible or ambient DialogueEvents. During migration,
-unconverted legacy content may additionally be exposed through a compatibility
-adapter; the final architecture does not depend on legacy `root`.
+conversation through always-eligible or ambient DialogueEvents. Shipped data must
+include a lowest-priority baseline ambient path so a normal interactable villager
+cannot regress to a Back-only Talk menu merely because no contextual story is
+eligible. Higher-priority authored ambient events still win normally.
 
 ### Personalized continuation and returning to the menu
 
@@ -162,20 +165,22 @@ accessible while a continuation is offered.
 ### Reading and replying
 
 Nodes may contain several consecutive villager lines. Show one line at a time;
-Continue advances to the next line, and replies appear after the final line is
-fully revealed. Replies use natural language and do not display positive,
-neutral, negative, heart deltas, or outcome probabilities.
+`Next` advances only when another authored passage follows. Replies appear after
+the final line is fully revealed. A completing or ending terminal instead exposes
+`Back to topics`; that final acknowledgement preserves the server-authoritative
+commit boundary and returns to refreshed Talk options. Replies use natural
+language and do not display positive, neutral, negative, heart deltas, or outcome
+probabilities. Resume wording is reserved for the Talk menu when a run is paused.
 
-Provide a client-side typewriter presentation. The agreed timing is
-one complete displayed word every 250 ms, not one character; it is a
-presentation default, not an event condition or server delay. Revealing must
-use locale-aware word boundaries, preserve punctuation/spacing and formatted
-Components, and never split a Unicode character. The reveal cannot be skipped
-or accelerated by clicking, and there is no instant-display setting. Continue
-becomes available only after the current line finishes revealing; clicks during
-reveal neither advance the line nor queue an advance for later. Replies become
-available only after the final line of the passage finishes revealing.
-The server sends the complete current line; there is no packet per revealed word.
+Provide a client-side typewriter presentation. The agreed timing is one Unicode-safe
+user-perceived character (grapheme) every 40 ms; it is a presentation default, not
+an event condition or server delay. Revealing must preserve punctuation/spacing and
+formatted Components and never split combining sequences or emoji graphemes. The
+reveal cannot be skipped or accelerated by clicking, and there is no instant-display
+setting. Progression becomes available only after the current line finishes revealing;
+clicks during reveal neither advance the line nor queue an advance for later. Replies
+become available only after the final line of the passage finishes revealing. The
+server sends the complete current line; there is no packet per revealed character.
 Client reveal timing is not proof that a player read a line and grants no rewards.
 
 ### Pausing and resuming
@@ -562,8 +567,8 @@ cooldown value. `once` remains an explicit author opt-in for exceptional content
 not the policy for the reference stories.
 
 The event system uses `completed`, not an ambiguous `seen` boolean, as the durable
-prerequisite. An event becomes completed only when the server accepts Continue
-after the last line of a `complete: true` node in the matching valid session.
+prerequisite. An event becomes completed only when the server accepts the final
+`Back to topics` acknowledgement after the last line of a `complete: true` node in the matching valid session.
 Merely sending a terminal line or closing its screen does not complete the event.
 
 While an event is active, the server records every accepted choice ID in temporary
@@ -702,8 +707,9 @@ used before weighted selection so debugging and tests are reproducible apart fro
 the random draw itself.
 
 If no contextual ambient event qualifies, the generic choice selects from
-ordinary always-eligible conversation events. During migration only, an
-unconverted legacy root may be surfaced by the compatibility adapter.
+ordinary baseline conversation events. The shipped baseline is a real namespaced
+`DialogueEvent`, not a hardcoded client fallback or a route back into legacy
+`root`.
 
 Priority represents importance/relevance. Weight represents variety among
 already-eligible equivalent ambient content. A failing requirement never becomes
@@ -711,11 +717,14 @@ a low-probability event.
 
 ## Conversation execution
 
-The rewritten engine executes the selected event's own node graph. A node contains
+The rewritten engine executes the selected event's own node graph. A visible node contains
 either `line` (one localization key) or nonempty `lines` (ordered localization
 keys), never both. After its last line, it has exactly one continuation shape:
-`choices`, `next`, `complete: true`, or `end: true`. A `next`-only node advances on
-Continue; it is not an automatic recursive transition. A choice has a stable
+`choices`, `next`, `complete: true`, or `end: true`. A `next`-only visible node advances on
+`Next`; it is not an automatic recursive transition. A line-less routing node may instead
+contain weighted `outcomes`; the server resolves these internal nodes before sending a
+visible node, and authoring requires an unconditional fallback outcome so routing cannot
+strand the session. A choice has a stable
 ID, localisation key, optional hard requirements, and either one direct
 action/next path or an `outcomes` list for server-selected reaction variation.
 
@@ -732,7 +741,7 @@ greetings, jokes, stories, and rock-paper-scissors without carrying forward
 numeric condition modifiers. Conditions answer *can this outcome happen?*;
 `weight` answers *which eligible reaction is chosen?*.
 
-`complete: true` declares a completing terminal; the final Continue acknowledges
+`complete: true` declares a completing terminal; the final `Back to topics` acknowledges
 it and commits completion. `end: true` declares a non-completing terminal.
 Closing the UI, walking away, disconnecting, or acknowledging a non-completing
 terminal never implicitly marks an event complete. Closing/walking away pauses;
@@ -748,7 +757,7 @@ terminal consumes `once` or starts the cooldown; a retryable terminal does neith
 Actions are rewritten as typed, validated data (`mca:hearts`, `mca:mood`,
 `mca:remember`, command where currently supported, and other existing semantics
 that are actually needed). Accepting a choice queues its authored effects in
-server session state. Commit them once on successful final Continue together
+server session state. Commit them once on successful final `Back to topics` together
 with the completion record. Pause/resume preserves that queue; timeout,
 non-completing end, or invalidation discards it. Do not grant hearts repeatedly
 by choosing a rewarding branch, closing, and restarting without completing.
@@ -818,11 +827,13 @@ a menu offer token. Selecting an event sends its ID plus that token. Selecting
 continuation sends `RESUME` plus the menu token; the server derives the retained
 run, never trusting client-supplied resume node/session state. Selecting a choice
 sends its stable ID plus the current active-run offer token.
-Continue sends only the current offer token; the server derives the current
-node/line and next transition. Client packets never provide arbitrary node,
+The progression request sends only the current offer token; the server derives the
+current node/line and next transition. The active node view tells the client whether
+that acknowledgement is `Next` or `Back to topics`; the client does not infer terminal
+semantics from localized text or event IDs. Client packets never provide arbitrary node,
 line-index, outcome, action, or completion state.
 
-Each accepted event selection, choice, or Continue consumes the offer token
+Each accepted event selection, choice, or progression request consumes the offer token
 before advancing or applying effects and issues a fresh one for the next view.
 Pause invalidates the current offer; resume preserves the session identity but
 issues a new offer. Use a server-unique token sequence; a node-local counter
@@ -854,7 +865,7 @@ Before starting an event or accepting an answer, the server verifies:
 - new-event/continuation selections match the current menu offer and target;
 - continuation was offered for this pair and its retained run is still PAUSED,
   within its deadline, and otherwise valid; do not recheck original entry gates;
-- active choice/Continue messages target an ACTIVE run, not PAUSED or expired;
+- active choice/progression messages target an ACTIVE run, not PAUSED or expired;
 - a new-event selection names an offered event, with current entry/repeat gates
   rechecked before replacing any paused run;
 - an active choice belongs to its run's current node, was actually offered, and
@@ -964,9 +975,6 @@ DialogueEventHistory
 
 DialogueSession
   transient server-authoritative active/paused event/node/line/offered choices
-
-LegacyDialogueAdapter
-  temporary migration bridge for unconverted dialogues; removable after migration
 ```
 
 The rewrite should reuse:
@@ -980,9 +988,11 @@ existing villager/player relationship and world-state owners
 Scope engine/session state to a running server and clear it on shutdown; a second
 integrated-server world must not inherit sessions or offers from the first.
 
-`Dialogues`, `Question`, `Answer`, `Result`, and `Actions` remain only behind the
-migration adapter while old resources are converted. They are not dependencies of
-new DialogueEvents and can be removed once migration is complete.
+`Dialogues`, `Question`, `Answer`, `Result`, and `Actions` may remain temporarily
+for as-yet-unmigrated entry points, but there is no new compatibility subsystem
+between them and `DialogueEvent`. New DialogueEvents never depend on those classes.
+Once every production consumer has migrated, the old engine and resources are
+removed together.
 
 `GiftPredicate` may supply implementation inspiration or small domain lookup
 helpers, but the new event requirement contract is boolean and must not inherit
@@ -1246,16 +1256,19 @@ The source audit found several existing weaknesses that directly affect safe
 DialogueEvent execution. They are prerequisites or adjacent fixes, not the
 feature's primary architecture.
 
-1. Bind legacy answers to the active offered question while the migration adapter
-   remains reachable, and retain the current server constraint revalidation.
+1. Any legacy answer packet path that remains reachable during direct migration
+   must retain server-side question/answer/constraint validation. Do not build a
+   new adapter merely to prolong that path; prefer removing the caller as its
+   replacement event is migrated.
 2. Preserve and regression-test the local fail-closed constraint changes. Existing
    shipped references such as `rumors_cooldown` and `child` must be corrected or
    represented by valid conditions rather than restoring silent token dropping.
 3. Regression-test the existing `LongTermMemory` villager/zombie conversion
    preservation before relying on it for recent facts, and give any new structured
    fact owner explicit conversion semantics.
-4. Keep new **event IDs** fully namespaced and path-preserving. Legacy IDs remain
-   isolated inside the temporary adapter instead of constraining the new format.
+4. Keep new **event IDs** fully namespaced and path-preserving. Legacy basename IDs
+   remain confined to the old engine until that content is directly migrated and
+   removed; they do not constrain the new format.
 5. Treat weighted conditions in existing `Result`/`InteractionPredicate` as
    legacy probability logic; do not use them as hard DialogueEvent requirements.
 
@@ -1278,12 +1291,12 @@ branch:
   loader-specific `FabricDialogues` wrapper;
 - no production caller references `Dialogues`, `Question`, `Answer`, `Result`, or
   `Actions`;
-- compatibility tests no longer require the legacy adapter.
+- no production or test-only compatibility bridge remains between the two engines.
 
-At that point the adapter, legacy packets, `Dialogues`, the four legacy dialogue
-data classes, loader registration glue, and old `data/mca/dialogues/` resources
-are deleted in the same cleanup phase. The adapter is not kept as a permanent
-addon compatibility API.
+At that point the legacy packets, `Dialogues`, the four legacy dialogue data
+classes, loader registration glue, and old `data/mca/dialogues/` resources are
+deleted in the same cleanup phase. No legacy compatibility API is added for
+addons; datapacks extend the namespaced `dialogue_events` format.
 
 ## Version portability
 
@@ -1325,8 +1338,8 @@ The implementation is acceptable when automated tests cover at least:
   among eligible outcomes;
 - a choice with zero eligible outcomes is not offered;
 - no contextual DialogueEvent still leaves ordinary new-engine conversation
-  available; migration-only legacy fallback works only while unconverted content
-  remains;
+  available through shipped baseline event data; this path never falls back to
+  legacy `root`;
 - `once` blocks only after explicit completion;
 - closing pauses for 2400 overworld ticks; right-click opens normal controls and
   Talk offers a personalized continuation alongside other topics; selecting that
@@ -1346,14 +1359,15 @@ The implementation is acceptable when automated tests cover at least:
   argument and no guessed generic label or exposure of unchosen story branches;
 - expiry discards unfinished history/effects; disconnect or restart does not
   persist unfinished conversations;
-- typewriter reveals one complete word per 250 ms, with locale-aware, Unicode-safe
-  reveal and no skip/acceleration or instant-display setting; Continue/replies
-  become available only when their current/final passage line is fully revealed;
+- typewriter reveals one Unicode-safe grapheme per 40 ms, preserving formatting,
+  punctuation and spacing with no skip/acceleration or instant-display setting;
+  `Next`, `Back to topics`, and replies become available only when their current/final
+  passage line is fully revealed;
 - clicking during reveal neither exposes the rest of the line nor advances or
   queues advancement;
 - consecutive localization keys play in order; pooled `/1` and `/2` remain
   alternative phrases rather than consecutive lines;
-- terminal lines require final Continue before effects/history/cooldown commit;
+- terminal lines require final `Back to topics` acknowledgement before effects/history/cooldown commit;
 - closing a rewarding branch before completion cannot farm hearts or mood;
 - weather/time/mood changes after starting do not interrupt a valid run;
 - fixed cooldown and random-window cooldown respect stored next-eligible game
@@ -1378,7 +1392,7 @@ The implementation is acceptable when automated tests cover at least:
   the referencing event, while broken shipped `mca:` references fail reload;
 - expired scheduling-only history can be pruned without removing durable completed
   story/choice history;
-- consumed offer tokens reject duplicate event/choice/Continue packets, including
+- consumed offer tokens reject duplicate event/choice/progression packets, including
   packets delivered after pause/resume, completion or resource reload;
 - explicit negation cannot make missing/unknown references pass;
 - unsupported save versions are not silently reset;
@@ -1403,8 +1417,9 @@ This spec and its accompanying migration plan describe the design, not permissio
 to implement it. The
 target architecture is the rewritten DialogueEvent engine: event-owned graphs,
 history, authoritative sessions, typed conditions/actions, and contextual
-selection. The legacy engine may survive temporarily behind an adapter only to
-make migration incremental; it is not part of the desired end state.
+selection. The legacy engine may survive temporarily only for entry points that
+have not yet been migrated; the replacement never routes through a throwaway
+adapter, and the old engine is deleted once those consumers are gone.
 
 Review these refinements together with the written migration plan for
 `dev/1.21.1`. Product implementation still requires explicit authorization;

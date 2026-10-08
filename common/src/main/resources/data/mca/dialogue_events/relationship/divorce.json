@@ -1,0 +1,51 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue.main.divorceInitiate",
+    "resume_prompt": "dialogue_event.mca.relationship.divorce.resume",
+    "topic": "relationship"
+  },
+  "priority": 0,
+  "weight": 1,
+  "requirements": [
+    { "type": "mca:relationship", "value": "spouse" }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "confirm",
+  "nodes": {
+    "confirm": {
+      "line": "dialogue.divorce",
+      "silent": true,
+      "choices": [
+        {
+          "id": "confirm",
+          "text": "dialogue.divorce.confirm",
+          "actions": [
+            { "type": "mca:command", "command": "divorceConfirm" }
+          ],
+          "next": "accepted"
+        },
+        {
+          "id": "cancel",
+          "text": "dialogue.divorce.cancel",
+          "next": "cancelled"
+        }
+      ]
+    },
+    "accepted": {
+      "line": "dialogue.divorce.confirm",
+      "silent": true,
+      "complete": true
+    },
+    "cancelled": {
+      "line": "dialogue.divorce.cancel",
+      "silent": true,
+      "complete": true
+    }
+  }
+}

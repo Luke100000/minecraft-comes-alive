@@ -1,0 +1,44 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "showcase.followup.prompt",
+    "resume_prompt": "showcase.followup.resume",
+    "topic": "personal"
+  },
+  "priority": 95,
+  "weight": 1,
+  "requirements": [
+    { "type": "mca:event_completed", "event": "showcase:story/bridge" },
+    { "type": "mca:event_choice", "event": "showcase:story/bridge", "choice": "listen" }
+  ],
+  "repeat": { "type": "cooldown", "seconds": 5 },
+  "history": "story",
+  "start": "followup",
+  "nodes": {
+    "followup": {
+      "lines": ["showcase.followup.remember", "showcase.followup.invitation"],
+      "choices": [
+        {
+          "id": "help",
+          "text": "showcase.followup.help",
+          "actions": [{ "type": "mca:hearts", "amount": 2 }],
+          "next": "helpful"
+        },
+        {
+          "id": "later",
+          "text": "showcase.followup.later",
+          "next": "later_reply"
+        }
+      ]
+    },
+    "helpful": {
+      "line": "showcase.followup.helpful",
+      "complete": true
+    },
+    "later_reply": {
+      "line": "showcase.followup.later_reply",
+      "complete": true
+    }
+  }
+}

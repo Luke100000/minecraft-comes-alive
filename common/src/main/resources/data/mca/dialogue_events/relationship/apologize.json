@@ -1,0 +1,70 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue.main.apologize",
+    "resume_prompt": "dialogue_event.mca.relationship.apologize.resume",
+    "topic": "relationship"
+  },
+  "priority": 0,
+  "weight": 1,
+  "requirements": [
+    { "type": "mca:hit_by" }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "reaction",
+  "nodes": {
+    "reaction": {
+      "outcomes": [
+        {
+          "weight": 5,
+          "actions": [
+            { "type": "mca:command", "command": "apologize" },
+            { "type": "mca:hearts", "amount": 1 }
+          ],
+          "next": "success"
+        },
+        {
+          "requirements": [
+            { "type": "mca:hearts", "min": 50 }
+          ],
+          "weight": 5,
+          "actions": [
+            { "type": "mca:command", "command": "apologize" },
+            { "type": "mca:hearts", "amount": 1 }
+          ],
+          "next": "success"
+        },
+        {
+          "weight": 2,
+          "actions": [
+            { "type": "mca:hearts", "amount": -1 }
+          ],
+          "next": "fail"
+        },
+        {
+          "requirements": [
+            { "type": "mca:hearts", "max": -30 }
+          ],
+          "weight": 5,
+          "actions": [
+            { "type": "mca:hearts", "amount": -1 }
+          ],
+          "next": "fail"
+        }
+      ]
+    },
+    "success": {
+      "line": "dialogue.apologize.success",
+      "complete": true
+    },
+    "fail": {
+      "line": "dialogue.apologize.fail",
+      "complete": true
+    }
+  }
+}

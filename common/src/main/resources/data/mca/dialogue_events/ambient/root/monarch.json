@@ -1,0 +1,28 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ambient",
+    "resume_prompt": "dialogue_event.mca.ambient.root.monarch.resume",
+    "topic": "small_talk"
+  },
+  "priority": 0,
+  "weight": 10,
+  "requirements": [
+    {
+      "type": "mca:rank",
+      "value": "monarch"
+    }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "greeting",
+  "nodes": {
+    "greeting": {
+      "line": "dialogue.greet.monarch",
+      "complete": true
+    }
+  }
+}

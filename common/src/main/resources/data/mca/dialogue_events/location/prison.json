@@ -1,0 +1,27 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue_event.mca.location.prison.prompt",
+    "resume_prompt": "dialogue_event.mca.location.prison.resume",
+    "topic": "location"
+  },
+  "priority": 40,
+  "weight": 1,
+  "requirements": [
+    { "type": "mca:in_building", "value": "prison" }
+  ],
+  "repeat": { "type": "cooldown", "seconds": 5 },
+  "history": "scheduling",
+  "start": "main",
+  "nodes": {
+    "main": {
+      "lines": [
+        "dialogue_event.mca.location.prison.line",
+        "dialogue_event.mca.location.prison.footsteps",
+        "dialogue_event.mca.location.prison.visitors"
+      ],
+      "complete": true
+    }
+  }
+}

@@ -23,7 +23,8 @@ public record DialogueSession(
         List<String> offeredChoices,
         Set<String> acceptedChoices,
         Map<String, Integer> selectedOutcomes,
-        List<DialogueAction> pendingEffects
+        List<DialogueAction> pendingEffects,
+        Long previousOfferToken
 ) {
     public enum Status {
         ACTIVE,
@@ -46,6 +47,16 @@ public record DialogueSession(
         pendingEffects = List.copyOf(pendingEffects);
     }
 
+    public DialogueSession(
+            UUID playerId, UUID villagerId, UUID id, long generation, long offerToken,
+            Status status, long pauseDeadline, DialogueEvent event, String nodeId,
+            int lineIndex, List<String> offeredChoices, Set<String> acceptedChoices,
+            Map<String, Integer> selectedOutcomes, List<DialogueAction> pendingEffects
+    ) {
+        this(playerId, villagerId, id, generation, offerToken, status, pauseDeadline,
+                event, nodeId, lineIndex, offeredChoices, acceptedChoices, selectedOutcomes, pendingEffects, null);
+    }
+
     public static DialogueSession start(
             UUID playerId,
             UUID villagerId,
@@ -53,6 +64,13 @@ public record DialogueSession(
             long generation,
             long offerToken,
             DialogueEvent event
+    ) {
+        return start(playerId, villagerId, sessionId, generation, offerToken, null, event);
+    }
+
+    public static DialogueSession start(
+            UUID playerId, UUID villagerId, UUID sessionId, long generation,
+            long offerToken, Long previousOfferToken, DialogueEvent event
     ) {
         return new DialogueSession(
                 playerId,
@@ -68,7 +86,8 @@ public record DialogueSession(
                 List.of(),
                 Set.of(),
                 Map.of(),
-                List.of()
+                List.of(),
+                previousOfferToken
         );
     }
 
@@ -79,14 +98,15 @@ public record DialogueSession(
     public DialogueSession withProgress(String nodeId, int lineIndex, List<String> offeredChoices, long offerToken) {
         return new DialogueSession(
                 playerId, villagerId, id, generation, offerToken, status, pauseDeadline, event,
-                nodeId, lineIndex, offeredChoices, acceptedChoices, selectedOutcomes, pendingEffects
+                nodeId, lineIndex, offeredChoices, acceptedChoices, selectedOutcomes, pendingEffects,
+                this.offerToken == offerToken ? previousOfferToken : Long.valueOf(this.offerToken)
         );
     }
 
     public DialogueSession withOfferedChoices(List<String> offeredChoices) {
         return new DialogueSession(
                 playerId, villagerId, id, generation, offerToken, status, pauseDeadline, event,
-                nodeId, lineIndex, offeredChoices, acceptedChoices, selectedOutcomes, pendingEffects
+                nodeId, lineIndex, offeredChoices, acceptedChoices, selectedOutcomes, pendingEffects, previousOfferToken
         );
     }
 
@@ -95,7 +115,7 @@ public record DialogueSession(
         choices.add(Objects.requireNonNull(choiceId, "choiceId"));
         return new DialogueSession(
                 playerId, villagerId, id, generation, offerToken, status, pauseDeadline, event,
-                nodeId, lineIndex, offeredChoices, choices, selectedOutcomes, pendingEffects
+                nodeId, lineIndex, offeredChoices, choices, selectedOutcomes, pendingEffects, previousOfferToken
         );
     }
 
@@ -107,14 +127,14 @@ public record DialogueSession(
         outcomes.put(Objects.requireNonNull(choiceId, "choiceId"), outcomeIndex);
         return new DialogueSession(
                 playerId, villagerId, id, generation, offerToken, status, pauseDeadline, event,
-                nodeId, lineIndex, offeredChoices, acceptedChoices, outcomes, pendingEffects
+                nodeId, lineIndex, offeredChoices, acceptedChoices, outcomes, pendingEffects, previousOfferToken
         );
     }
 
     public DialogueSession withPendingEffects(List<DialogueAction> effects) {
         return new DialogueSession(
                 playerId, villagerId, id, generation, offerToken, status, pauseDeadline, event,
-                nodeId, lineIndex, offeredChoices, acceptedChoices, selectedOutcomes, effects
+                nodeId, lineIndex, offeredChoices, acceptedChoices, selectedOutcomes, effects, previousOfferToken
         );
     }
 
@@ -135,15 +155,24 @@ public record DialogueSession(
             throw new IllegalArgumentException("Dialogue pause deadline must be nonnegative");
         }
         return new DialogueSession(playerId, villagerId, id, generation, offerToken, Status.PAUSED,
-                deadline, event, nodeId, lineIndex, offeredChoices, acceptedChoices, selectedOutcomes, pendingEffects);
+                deadline, event, nodeId, lineIndex, offeredChoices, acceptedChoices, selectedOutcomes, pendingEffects, previousOfferToken);
     }
 
     public DialogueSession resume(long freshOfferToken) {
+        return resume(freshOfferToken, null);
+    }
+
+    public DialogueSession resume(long freshOfferToken, Long previousMenuToken) {
         if (status != Status.PAUSED) {
             throw new IllegalStateException("Only a paused dialogue can resume");
         }
+        if (freshOfferToken == offerToken
+                || Objects.equals(previousOfferToken, freshOfferToken)
+                || Objects.equals(previousMenuToken, freshOfferToken)) {
+            throw new IllegalArgumentException("Resumed dialogue must use a fresh offer token");
+        }
         return new DialogueSession(playerId, villagerId, id, generation, freshOfferToken, Status.ACTIVE,
-                0L, event, nodeId, lineIndex, offeredChoices, acceptedChoices, selectedOutcomes, pendingEffects);
+                0L, event, nodeId, lineIndex, offeredChoices, acceptedChoices, selectedOutcomes, pendingEffects, previousMenuToken);
     }
 
     public boolean canResume(long gameTime, long currentGeneration, UUID targetVillager) {

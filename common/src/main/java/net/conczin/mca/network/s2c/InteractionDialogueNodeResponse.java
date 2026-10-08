@@ -40,11 +40,13 @@ public record InteractionDialogueNodeResponse(
     );
     private static final StreamCodec<ByteBuf, List<Choice>> CHOICES_CODEC =
             ByteBufCodecs.collection(ArrayList::new, CHOICE_CODEC, MAX_CHOICES);
+    private static final StreamCodec<ByteBuf, DialogueEngine.AdvanceKind> ADVANCE_KIND_CODEC =
+            ByteBufCodecs.VAR_INT.map(InteractionDialogueNodeResponse::advanceKindById, Enum::ordinal);
     private static final StreamCodec<ByteBuf, Node> NODE_CODEC = StreamCodec.composite(
             ResourceLocation.STREAM_CODEC, Node::eventId,
             COMPONENT_CODEC, Node::line,
             ByteBufCodecs.BOOL, Node::silent,
-            ByteBufCodecs.BOOL, Node::canContinue,
+            ADVANCE_KIND_CODEC, Node::advanceKind,
             CHOICES_CODEC, Node::choices,
             Node::new
     );
@@ -81,7 +83,7 @@ public record InteractionDialogueNodeResponse(
                         view.eventId(),
                         view.line(),
                         view.silent(),
-                        view.canContinue(),
+                        view.advanceKind(),
                         view.choices().stream().map(choice -> new Choice(choice.id(), choice.text())).toList()
                 ))
         );
@@ -108,6 +110,14 @@ public record InteractionDialogueNodeResponse(
         return values[id];
     }
 
+    private static DialogueEngine.AdvanceKind advanceKindById(int id) {
+        DialogueEngine.AdvanceKind[] values = DialogueEngine.AdvanceKind.values();
+        if (id < 0 || id >= values.length) {
+            throw new IllegalArgumentException("Unknown dialogue advance kind: " + id);
+        }
+        return values[id];
+    }
+
     @Override
     public Type<InteractionDialogueNodeResponse> type() {
         return TYPE;
@@ -123,16 +133,21 @@ public record InteractionDialogueNodeResponse(
             ResourceLocation eventId,
             Component line,
             boolean silent,
-            boolean canContinue,
+            DialogueEngine.AdvanceKind advanceKind,
             List<Choice> choices
     ) {
         public Node {
             Objects.requireNonNull(eventId, "eventId");
             Objects.requireNonNull(line, "line");
+            Objects.requireNonNull(advanceKind, "advanceKind");
             choices = List.copyOf(Objects.requireNonNull(choices, "choices"));
             if (choices.size() > MAX_CHOICES) {
                 throw new IllegalArgumentException("Dialogue node exceeds choice budget: " + choices.size());
             }
+        }
+
+        public boolean canContinue() {
+            return advanceKind != DialogueEngine.AdvanceKind.NONE;
         }
     }
 

@@ -1,0 +1,22 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ambient",
+    "resume_prompt": "dialogue_event.mca.ambient.root.generic.resume",
+    "topic": "small_talk"
+  },
+  "priority": 0,
+  "weight": 5,
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "greeting",
+  "nodes": {
+    "greeting": {
+      "line": "dialogue.main",
+      "complete": true
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "showcase.night.prompt",
+    "resume_prompt": "showcase.night.resume",
+    "topic": "small_talk"
+  },
+  "priority": 60,
+  "weight": 1,
+  "requirements": [{ "type": "mca:time", "value": "night" }],
+  "repeat": { "type": "cooldown", "seconds": 5 },
+  "history": "scheduling",
+  "start": "night",
+  "nodes": {
+    "night": {
+      "lines": ["showcase.night.opening", "showcase.night.thought"],
+      "choices": [
+        { "id": "stars", "text": "showcase.night.stars", "next": "stars_reply" },
+        { "id": "sleep", "text": "showcase.night.sleep", "next": "sleep_reply" }
+      ]
+    },
+    "stars_reply": { "line": "showcase.night.stars_reply", "complete": true },
+    "sleep_reply": { "line": "showcase.night.sleep_reply", "complete": true }
+  }
+}

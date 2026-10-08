@@ -105,6 +105,10 @@ public record DialogueEvent(
             }
             Node node = entry.getValue();
             node.validate(nodeId);
+            for (Outcome outcome : node.outcomes.orElse(List.of())) {
+                outcome.validate("node '" + nodeId + "'");
+                requireNode(outcome.next, "outcome of node '" + nodeId + "'");
+            }
             for (Choice choice : node.choices.orElse(List.of())) {
                 if (!choiceIds.add(choice.id)) {
                     throw invalid("duplicate choice ID '" + choice.id + "'");
@@ -174,6 +178,9 @@ public record DialogueEvent(
     private static List<String> outgoing(Node node) {
         List<String> outgoing = new ArrayList<>();
         node.next.ifPresent(outgoing::add);
+        for (Outcome outcome : node.outcomes.orElse(List.of())) {
+            outgoing.add(outcome.next);
+        }
         for (Choice choice : node.choices.orElse(List.of())) {
             choice.next.ifPresent(outgoing::add);
             for (Outcome outcome : choice.outcomes.orElse(List.of())) {
@@ -207,7 +214,14 @@ public record DialogueEvent(
                     continue;
                 }
                 JsonObject node = nodeEntry.getValue().getAsJsonObject();
-                requireOnly(node, Set.of("line", "lines", "choices", "next", "complete", "end", "retryable", "silent"), "node '" + nodeEntry.getKey() + "'");
+                requireOnly(node, Set.of("line", "lines", "choices", "outcomes", "next", "complete", "end", "retryable", "silent"), "node '" + nodeEntry.getKey() + "'");
+                if (node.has("outcomes") && node.get("outcomes").isJsonArray()) {
+                    for (JsonElement outcomeElement : node.getAsJsonArray("outcomes")) {
+                        if (outcomeElement.isJsonObject()) {
+                            requireOnly(outcomeElement.getAsJsonObject(), Set.of("requirements", "weight", "actions", "next"), "outcome");
+                        }
+                    }
+                }
                 if (node.has("choices") && node.get("choices").isJsonArray()) {
                     for (JsonElement choiceElement : node.getAsJsonArray("choices")) {
                         if (!choiceElement.isJsonObject()) {
@@ -342,6 +356,7 @@ public record DialogueEvent(
     public record Node(
             List<String> lines,
             Optional<List<Choice>> choices,
+            Optional<List<Outcome>> outcomes,
             Optional<String> next,
             boolean complete,
             boolean end,
@@ -352,6 +367,7 @@ public record DialogueEvent(
                 DialogueCodecs.nonblankStringCodec("line").optionalFieldOf("line").forGetter(node -> node.lines.size() == 1 ? Optional.of(node.lines.get(0)) : Optional.empty()),
                 DialogueCodecs.nonblankStringCodec("line").listOf().optionalFieldOf("lines").forGetter(node -> node.lines.size() > 1 ? Optional.of(node.lines) : Optional.empty()),
                 Choice.CODEC.listOf().optionalFieldOf("choices").forGetter(Node::choices),
+                Outcome.CODEC.listOf().optionalFieldOf("outcomes").forGetter(Node::outcomes),
                 DialogueCodecs.nonblankStringCodec("next").optionalFieldOf("next").forGetter(Node::next),
                 Codec.BOOL.optionalFieldOf("complete", false).forGetter(Node::complete),
                 Codec.BOOL.optionalFieldOf("end", false).forGetter(Node::end),
@@ -362,11 +378,11 @@ public record DialogueEvent(
         public Node {
             lines = List.copyOf(lines);
             choices = choices.map(List::copyOf);
+            outcomes = outcomes.map(List::copyOf);
         }
 
-        private static Node fromFields(
-                Optional<String> line,
-                Optional<List<String>> lines,
+        public Node(
+                List<String> lines,
                 Optional<List<Choice>> choices,
                 Optional<String> next,
                 boolean complete,
@@ -374,18 +390,43 @@ public record DialogueEvent(
                 boolean retryable,
                 boolean silent
         ) {
-            if (line.isPresent() == lines.isPresent()) {
-                throw new IllegalArgumentException("node requires exactly one of line or lines");
+            this(lines, choices, Optional.empty(), next, complete, end, retryable, silent);
+        }
+
+        private static Node fromFields(
+                Optional<String> line,
+                Optional<List<String>> lines,
+                Optional<List<Choice>> choices,
+                Optional<List<Outcome>> outcomes,
+                Optional<String> next,
+                boolean complete,
+                boolean end,
+                boolean retryable,
+                boolean silent
+        ) {
+            if (line.isPresent() && lines.isPresent()) {
+                throw new IllegalArgumentException("node cannot define both line and lines");
             }
-            List<String> normalized = line.map(List::of).orElseGet(lines::orElseThrow);
-            if (normalized.isEmpty()) {
+            boolean automatic = outcomes.isPresent();
+            if (automatic && (line.isPresent() || lines.isPresent())) {
+                throw new IllegalArgumentException("automatic routing node must not define line or lines");
+            }
+            if (!automatic && line.isEmpty() && lines.isEmpty()) {
+                throw new IllegalArgumentException("visible node requires exactly one of line or lines");
+            }
+            List<String> normalized = line.map(List::of).orElseGet(() -> lines.orElse(List.of()));
+            if (!automatic && normalized.isEmpty()) {
                 throw new IllegalArgumentException("node lines must not be empty");
             }
-            return new Node(normalized, choices, next, complete, end, retryable, silent);
+            return new Node(normalized, choices, outcomes, next, complete, end, retryable, silent);
         }
 
         private void validate(String nodeId) {
-            int continuations = (choices.isPresent() ? 1 : 0) + (next.isPresent() ? 1 : 0) + (complete ? 1 : 0) + (end ? 1 : 0);
+            int continuations = (choices.isPresent() ? 1 : 0)
+                    + (outcomes.isPresent() ? 1 : 0)
+                    + (next.isPresent() ? 1 : 0)
+                    + (complete ? 1 : 0)
+                    + (end ? 1 : 0);
             if (continuations != 1) {
                 throw new IllegalArgumentException("node '" + nodeId + "' requires exactly one continuation shape");
             }
@@ -394,6 +435,18 @@ public record DialogueEvent(
             }
             if (choices.isPresent() && choices.orElseThrow().size() > MAX_CHOICES) {
                 throw new IllegalArgumentException("node '" + nodeId + "' has too many choices");
+            }
+            if (outcomes.isPresent()) {
+                List<Outcome> routes = outcomes.orElseThrow();
+                if (routes.isEmpty()) {
+                    throw new IllegalArgumentException("node '" + nodeId + "' outcomes must not be empty");
+                }
+                if (routes.stream().noneMatch(outcome -> outcome.requirements().isEmpty())) {
+                    throw new IllegalArgumentException("automatic routing node '" + nodeId + "' requires an unconditional outcome");
+                }
+                if (!lines.isEmpty()) {
+                    throw new IllegalArgumentException("automatic routing node '" + nodeId + "' must not expose dialogue lines");
+                }
             }
         }
     }

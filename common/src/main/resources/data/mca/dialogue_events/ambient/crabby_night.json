@@ -1,0 +1,23 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ambient",
+    "resume_prompt": "dialogue_event.mca.ambient.crabby_night.resume",
+    "topic": "small_talk"
+  },
+  "priority": 20,
+  "weight": 1,
+  "requirements": [
+    { "type": "mca:personality", "value": "crabby" },
+    { "type": "mca:time", "value": "night" }
+  ],
+  "repeat": { "type": "cooldown", "seconds": 5 },
+  "history": "scheduling",
+  "start": "main",
+  "nodes": {
+    "main": {
+      "line": "dialogue_event.mca.ambient.crabby_night.line",
+      "complete": true
+    }
+  }
+}

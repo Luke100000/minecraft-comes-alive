@@ -1,0 +1,148 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue.main.chat",
+    "resume_prompt": "dialogue_event.mca.social.chat.resume",
+    "topic": "small_talk"
+  },
+  "priority": 0,
+  "weight": 1,
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "reaction",
+  "nodes": {
+    "reaction": {
+      "outcomes": [
+        {
+          "weight": 5,
+          "actions": [
+            { "type": "mca:hearts", "amount": 5 }
+          ],
+          "next": "topic"
+        },
+        {
+          "requirements": [
+            { "type": "mca:personality", "value": "gloomy" }
+          ],
+          "weight": 4,
+          "actions": [
+            { "type": "mca:hearts", "amount": 5 }
+          ],
+          "next": "topic"
+        },
+        {
+          "requirements": [
+            { "type": "mca:personality", "value": "sensitive" }
+          ],
+          "weight": 2,
+          "actions": [
+            { "type": "mca:hearts", "amount": 5 }
+          ],
+          "next": "topic"
+        },
+        {
+          "weight": 1,
+          "actions": [
+            { "type": "mca:hearts", "amount": -1 }
+          ],
+          "next": "fail"
+        },
+        {
+          "requirements": [
+            { "type": "mca:personality", "value": "odd" }
+          ],
+          "weight": 5,
+          "actions": [
+            { "type": "mca:hearts", "amount": -1 }
+          ],
+          "next": "fail"
+        },
+        {
+          "requirements": [
+            { "type": "mca:personality", "value": "flirty" }
+          ],
+          "weight": 1,
+          "actions": [
+            { "type": "mca:hearts", "amount": -1 }
+          ],
+          "next": "fail"
+        }
+      ]
+    },
+    "topic": {
+      "outcomes": [
+        {
+          "weight": 4,
+          "next": "success"
+        },
+        {
+          "requirements": [
+            { "type": "mca:biome", "value": "minecraft:plains" }
+          ],
+          "weight": 1,
+          "next": "plains"
+        },
+        {
+          "requirements": [
+            { "type": "mca:biome", "value": "minecraft:savanna" }
+          ],
+          "weight": 1,
+          "next": "savanna"
+        },
+        {
+          "requirements": [
+            { "type": "mca:biome", "value": "minecraft:taiga" }
+          ],
+          "weight": 1,
+          "next": "taiga"
+        },
+        {
+          "requirements": [
+            { "type": "mca:biome", "value": "minecraft:snowy_plains" }
+          ],
+          "weight": 1,
+          "next": "snowy_plains"
+        },
+        {
+          "requirements": [
+            { "type": "mca:biome", "value": "minecraft:desert" }
+          ],
+          "weight": 1,
+          "next": "desert"
+        }
+      ]
+    },
+    "success": {
+      "line": "dialogue.chat.success",
+      "complete": true
+    },
+    "fail": {
+      "line": "dialogue.chat.fail",
+      "complete": true
+    },
+    "plains": {
+      "line": "dialogue.chat.plains",
+      "complete": true
+    },
+    "savanna": {
+      "line": "dialogue.chat.savanna",
+      "complete": true
+    },
+    "taiga": {
+      "line": "dialogue.chat.taiga",
+      "complete": true
+    },
+    "snowy_plains": {
+      "line": "dialogue.chat.snowy_plains",
+      "complete": true
+    },
+    "desert": {
+      "line": "dialogue.chat.desert",
+      "complete": true
+    }
+  }
+}

@@ -298,11 +298,118 @@ class DialogueEventParsingTest {
     }
 
     @Test
-    void defersRecentEventConditionUntilGameplayFactOwnerExists() {
+    void parsesRecentEventConditionWithExplicitWindow() {
+        DialogueEvent event = decode(baseEvent(
+                "[{ \"type\": \"mca:recent_event\", \"event\": \"mca:attacked\", \"within_ticks\": 200 }]",
+                "{ \"type\": \"always\" }"
+        ));
+        DialogueCondition.Defined condition = assertInstanceOf(DialogueCondition.Defined.class, event.requirements().get(0));
+        assertEquals(DialogueCondition.RECENT_EVENT, condition.type());
+
         assertDecodeFails(baseEvent(
                 "[{ \"type\": \"mca:recent_event\", \"event\": \"mca:attacked\" }]",
                 "{ \"type\": \"always\" }"
         ));
+        assertDecodeFails(baseEvent(
+                "[{ \"type\": \"mca:recent_event\", \"event\": \"mca:attacked\", \"within_ticks\": -1 }]",
+                "{ \"type\": \"always\" }"
+        ));
+    }
+
+    @Test
+    void decodesPlayerHitAndLastSeenVillageSpaceConditionsWithoutParameters() {
+        DialogueEvent event = decode(baseEvent(
+                """
+                [
+                  { "type": "mca:hit_by" },
+                  { "type": "mca:village_has_space" }
+                ]
+                """,
+                "{ \"type\": \"always\" }"
+        ));
+
+        DialogueCondition.Defined hitBy = assertInstanceOf(
+                DialogueCondition.Defined.class,
+                event.requirements().get(0)
+        );
+        DialogueCondition.Defined villageHasSpace = assertInstanceOf(
+                DialogueCondition.Defined.class,
+                event.requirements().get(1)
+        );
+        assertEquals(ResourceLocation.fromNamespaceAndPath("mca", "hit_by"), hitBy.type());
+        assertEquals(ResourceLocation.fromNamespaceAndPath("mca", "village_has_space"), villageHasSpace.type());
+    }
+
+    @Test
+    void decodesLineLessAutomaticRoutingNodesWithWeightedOutcomes() {
+        DialogueEvent event = decode("""
+                {
+                  "trigger": "talk",
+                  "presentation": { "mode": "ask", "prompt": "p", "resume_prompt": "r" },
+                  "repeat": { "type": "always" },
+                  "start": "route",
+                  "nodes": {
+                    "route": {
+                      "outcomes": [
+                        {
+                          "weight": 4,
+                          "actions": [{ "type": "mca:hearts", "amount": 2 }],
+                          "next": "done"
+                        },
+                        {
+                          "requirements": [{ "type": "mca:personality", "value": "gloomy" }],
+                          "weight": 1,
+                          "next": "done"
+                        }
+                      ]
+                    },
+                    "done": { "line": "done", "complete": true }
+                  }
+                }
+                """);
+
+        DialogueEvent.Node route = event.nodes().get("route");
+        assertTrue(route.lines().isEmpty());
+        assertEquals(2, route.outcomes().orElseThrow().size());
+        assertInstanceOf(DialogueAction.Hearts.class,
+                route.outcomes().orElseThrow().getFirst().actions().getFirst());
+    }
+
+    @Test
+    void automaticRoutingNodesRequireAnUnconditionalFallbackAndNoVisibleLine() {
+        assertDecodeFails("""
+                {
+                  "trigger": "talk",
+                  "presentation": { "mode": "ask", "prompt": "p", "resume_prompt": "r" },
+                  "repeat": { "type": "always" },
+                  "start": "route",
+                  "nodes": {
+                    "route": {
+                      "line": "must.not.render",
+                      "outcomes": [{ "weight": 1, "next": "done" }]
+                    },
+                    "done": { "line": "done", "complete": true }
+                  }
+                }
+                """);
+        assertDecodeFails("""
+                {
+                  "trigger": "talk",
+                  "presentation": { "mode": "ask", "prompt": "p", "resume_prompt": "r" },
+                  "repeat": { "type": "always" },
+                  "start": "route",
+                  "nodes": {
+                    "route": {
+                      "outcomes": [{
+                        "requirements": [{ "type": "mca:personality", "value": "gloomy" }],
+                        "weight": 1,
+                        "next": "done"
+                      }]
+                    },
+                    "done": { "line": "done", "complete": true }
+                  }
+                }
+                """);
     }
 
     @Test
@@ -314,7 +421,9 @@ class DialogueEventParsingTest {
                 "{ \"type\": \"mca:inventory\", \"item\": \"minecraft:oak_log\", \"tag\": \"minecraft:logs\" }",
                 "{ \"type\": \"mca:inventory\" }",
                 "{ \"type\": \"mca:item\", \"value\": \"minecraft:oak_log\", \"min\": 3, \"max\": 2 }",
-                "{ \"type\": \"mca:health\", \"min\": 1, \"typo\": true }"
+                "{ \"type\": \"mca:health\", \"min\": 1, \"typo\": true }",
+                "{ \"type\": \"mca:hit_by\", \"within_ticks\": 20 }",
+                "{ \"type\": \"mca:village_has_space\", \"value\": true }"
         )) {
             assertDecodeFails(baseEvent("[" + requirement + "]", "{ \"type\": \"always\" }"));
         }

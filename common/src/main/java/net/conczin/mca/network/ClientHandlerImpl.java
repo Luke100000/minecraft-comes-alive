@@ -72,7 +72,7 @@ public class ClientHandlerImpl implements ClientHandler {
                     boolean isOnBlacklist = Config.getInstance().villagerInteractionItemBlacklist.contains(BuiltInRegistries.ITEM.getKey(item.getItem()).toString());
                     if (!isOnBlacklist) {
                         VillagerLike<?> villager = (VillagerLike<?>) client.level.getEntity(message.villager());
-                        client.setScreen(new InteractScreen(villager));
+                        client.setScreen(new InteractScreen(villager, message.interactionId()));
                     }
                 }
                 break;
@@ -180,17 +180,17 @@ public class ClientHandlerImpl implements ClientHandler {
     }
 
     @Override
-    public void handleDialogueResponse(InteractionDialogueResponse message) {
-        Screen screen = client.screen;
-        if (screen instanceof InteractScreen gui) {
-            gui.setDialogue(message.question(), message.answers());
-        }
-    }
-
-    @Override
     public void handleDialogueOptionsResponse(InteractionDialogueOptionsResponse message) {
         if (client.screen instanceof InteractScreen gui && gui.isDialogueMode()) {
             dialoguePresentation.acceptOptions(message);
+        }
+    }
+
+    public void handleDialogueSelectionRejectedResponse(InteractionDialogueSelectionRejectedResponse message) {
+        if (client.screen instanceof InteractScreen gui
+                && gui.isDialogueMode()
+                && dialoguePresentation.acceptSelectionRejection(message.offerToken())) {
+            gui.requestDialogueMenu();
         }
     }
 
@@ -220,14 +220,6 @@ public class ClientHandlerImpl implements ClientHandler {
             if (visibleInteraction) {
                 gui.leaveDialogueMode(false);
             }
-        }
-    }
-
-    @Override
-    public void handleDialogueQuestionResponse(InteractionDialogueQuestionResponse message) {
-        Screen screen = client.screen;
-        if (screen instanceof InteractScreen gui) {
-            gui.setLastPhrase(message.questionText(), message.silent());
         }
     }
 
@@ -331,7 +323,7 @@ public class ClientHandlerImpl implements ClientHandler {
      * It deliberately retains only one menu, one session snapshot and one resolved line.
      */
     public static final class DialoguePresentation {
-        public static final long WORD_REVEAL_MILLIS = 250L;
+        public static final long CHARACTER_REVEAL_MILLIS = 40L;
 
         private InteractionDialogueOptionsResponse options;
         private UUID sessionId;
@@ -342,7 +334,7 @@ public class ClientHandlerImpl implements ClientHandler {
         private InteractionDialogueNodeResponse.Node node;
         private Component resolvedLine = Component.empty();
         private List<Integer> revealCuts = List.of();
-        private int revealedWords;
+        private int revealedCharacters;
         private long nextRevealAt;
         private boolean nodeVisible;
         private boolean menuMode;
@@ -350,13 +342,22 @@ public class ClientHandlerImpl implements ClientHandler {
 
         public boolean acceptOptions(InteractionDialogueOptionsResponse response) {
             Objects.requireNonNull(response, "response");
-            if (!menuMode || nodeVisible || !acceptsNewToken(response.offerToken())) {
+            if ((!menuMode && pendingSelection == null)
+                    || nodeVisible || !acceptsNewToken(response.offerToken())) {
                 return false;
             }
             options = response;
+            menuMode = true;
             pendingSelection = null;
             rememberToken(response.offerToken());
             return true;
+        }
+
+        public boolean acceptSelectionRejection(long rejectedToken) {
+            return pendingSelection != null
+                    && options != null
+                    && !nodeVisible
+                    && options.offerToken() == rejectedToken;
         }
 
         public boolean acceptNode(InteractionDialogueNodeResponse response, long nowMillis, Locale locale) {
@@ -373,11 +374,11 @@ public class ClientHandlerImpl implements ClientHandler {
             Objects.requireNonNull(locale, "locale");
             Objects.requireNonNull(lineResolver, "lineResolver");
 
-            if (menuMode && pendingSelection == null) {
-                return false;
-            }
             if (response.state() != InteractionDialogueNodeResponse.State.ACTIVE) {
                 return acceptTerminal(response);
+            }
+            if (menuMode && pendingSelection == null) {
+                return false;
             }
             if (terminatedSessionId != null && terminatedSessionId.equals(response.sessionId())) {
                 return false;
@@ -409,13 +410,13 @@ public class ClientHandlerImpl implements ClientHandler {
             rememberToken(response.offerToken());
 
             if (preserveResume) {
-                nextRevealAt = saturatingAdd(nowMillis, WORD_REVEAL_MILLIS);
+                nextRevealAt = saturatingAdd(nowMillis, CHARACTER_REVEAL_MILLIS);
             } else if (!preserveCurrentLine) {
                 ResolvedLine resolved = resolveOnce(lineResolver.apply(incoming.line()));
                 resolvedLine = resolved.component();
                 revealCuts = revealCuts(resolved.text(), locale);
-                revealedWords = 0;
-                nextRevealAt = saturatingAdd(nowMillis, WORD_REVEAL_MILLIS);
+                revealedCharacters = 0;
+                nextRevealAt = saturatingAdd(nowMillis, CHARACTER_REVEAL_MILLIS);
             }
 
             pendingSelection = null;
@@ -444,8 +445,11 @@ public class ClientHandlerImpl implements ClientHandler {
                 return;
             }
             if (nowMillis >= nextRevealAt) {
-                revealedWords++;
-                nextRevealAt = saturatingAdd(nowMillis, WORD_REVEAL_MILLIS);
+                revealedCharacters++;
+                long scheduledNext = saturatingAdd(nextRevealAt, CHARACTER_REVEAL_MILLIS);
+                nextRevealAt = nowMillis >= scheduledNext
+                        ? saturatingAdd(nowMillis, CHARACTER_REVEAL_MILLIS)
+                        : scheduledNext;
             }
         }
 
@@ -479,10 +483,15 @@ public class ClientHandlerImpl implements ClientHandler {
         }
 
         public Optional<UUID> sessionId() {
-            return Optional.ofNullable(sessionId);
+            // A Talk menu has no active session, even if a resumable snapshot is retained.
+            // Only an explicit Resume selection promotes that snapshot back to the active view.
+            return menuMode ? Optional.empty() : Optional.ofNullable(sessionId);
         }
 
         public OptionalLong offerToken() {
+            if (menuMode && options == null) {
+                return OptionalLong.empty();
+            }
             return sessionId != null || options != null
                     ? OptionalLong.of(options != null ? options.offerToken() : offerToken)
                     : OptionalLong.empty();
@@ -504,20 +513,25 @@ public class ClientHandlerImpl implements ClientHandler {
             if (!nodeVisible || resolvedLine.getString().isEmpty()) {
                 return Component.empty();
             }
-            if (revealedWords <= 0) {
+            if (revealedCharacters <= 0) {
                 return Component.empty();
             }
             if (isFullyRevealed()) {
                 return resolvedLine;
             }
-            return head(resolvedLine, revealCuts.get(revealedWords - 1));
+            return head(resolvedLine, revealCuts.get(revealedCharacters - 1));
         }
 
         public boolean canAdvance() {
-            return nodeVisible
-                    && isFullyRevealed()
-                    && node != null
-                    && node.canContinue();
+            return advanceKind().isPresent();
+        }
+
+        public Optional<DialogueEngine.AdvanceKind> advanceKind() {
+            if (!nodeVisible || !isFullyRevealed() || node == null
+                    || node.advanceKind() == DialogueEngine.AdvanceKind.NONE) {
+                return Optional.empty();
+            }
+            return Optional.of(node.advanceKind());
         }
 
         public List<InteractionDialogueNodeResponse.Choice> visibleChoices() {
@@ -543,13 +557,13 @@ public class ClientHandlerImpl implements ClientHandler {
             node = null;
             resolvedLine = Component.empty();
             revealCuts = List.of();
-            revealedWords = 0;
+            revealedCharacters = 0;
             nextRevealAt = 0L;
             nodeVisible = false;
         }
 
         private boolean isFullyRevealed() {
-            return revealedWords >= revealCuts.size();
+            return revealedCharacters >= revealCuts.size();
         }
 
         private boolean acceptsNewToken(long candidate) {
@@ -589,34 +603,14 @@ public class ClientHandlerImpl implements ClientHandler {
             if (text.isEmpty()) {
                 return List.of();
             }
-            BreakIterator iterator = BreakIterator.getWordInstance(locale);
+            BreakIterator iterator = BreakIterator.getCharacterInstance(locale);
             iterator.setText(text);
-            List<Integer> wordStarts = new ArrayList<>();
-            int start = iterator.first();
-            for (int end = iterator.next(); end != BreakIterator.DONE; start = end, end = iterator.next()) {
-                if (containsWordCharacter(text, start, end)) {
-                    wordStarts.add(start);
-                }
-            }
-            if (wordStarts.isEmpty()) {
-                return List.of(text.length());
-            }
-            List<Integer> cuts = new ArrayList<>(wordStarts.size());
-            for (int i = 0; i < wordStarts.size(); i++) {
-                cuts.add(i + 1 < wordStarts.size() ? wordStarts.get(i + 1) : text.length());
+            List<Integer> cuts = new ArrayList<>();
+            iterator.first();
+            for (int end = iterator.next(); end != BreakIterator.DONE; end = iterator.next()) {
+                cuts.add(end);
             }
             return List.copyOf(cuts);
-        }
-
-        private static boolean containsWordCharacter(String text, int start, int end) {
-            for (int offset = start; offset < end;) {
-                int codePoint = text.codePointAt(offset);
-                if (Character.isLetterOrDigit(codePoint)) {
-                    return true;
-                }
-                offset += Character.charCount(codePoint);
-            }
-            return false;
         }
 
         private static Component head(Component source, int utf16Length) {

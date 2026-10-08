@@ -1,0 +1,253 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue.main.joke",
+    "resume_prompt": "dialogue_event.mca.social.joke.resume",
+    "topic": "small_talk"
+  },
+  "priority": 0,
+  "weight": 1,
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "prompt",
+  "nodes": {
+    "prompt": {
+      "line": "dialogue.joke",
+      "silent": true,
+      "choices": [
+        {
+          "id": "creative",
+          "text": "dialogue.joke.creative",
+          "outcomes": [
+            {
+              "weight": 4,
+              "actions": [
+                { "type": "mca:hearts", "amount": 5 }
+              ],
+              "next": "success"
+            },
+            {
+              "requirements": [{ "type": "mca:personality", "value": "upbeat" }],
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": 5 }
+              ],
+              "next": "success"
+            },
+            {
+              "requirements": [{ "type": "mca:personality", "value": "friendly" }],
+              "weight": 1,
+              "actions": [
+                { "type": "mca:hearts", "amount": 5 }
+              ],
+              "next": "success"
+            },
+            {
+              "requirements": [{ "type": "mca:mood", "value": "depressed" }],
+              "weight": 7,
+              "actions": [
+                { "type": "mca:hearts", "amount": 5 }
+              ],
+              "next": "success"
+            },
+            {
+              "requirements": [{ "type": "mca:mood", "value": "sad" }],
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": 5 }
+              ],
+              "next": "success"
+            },
+            {
+              "requirements": [{ "type": "mca:personality", "value": "gloomy" }],
+              "weight": 7,
+              "actions": [
+                { "type": "mca:hearts", "amount": 5 }
+              ],
+              "next": "success"
+            },
+            {
+              "weight": 2,
+              "actions": [
+                { "type": "mca:hearts", "amount": -2 }
+              ],
+              "next": "fail"
+            },
+            {
+              "requirements": [{ "type": "mca:personality", "value": "crabby" }],
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": -2 }
+              ],
+              "next": "fail"
+            }
+          ]
+        },
+        {
+          "id": "animal",
+          "text": "dialogue.joke.animal",
+          "outcomes": [
+            {
+              "weight": 4,
+              "actions": [
+                { "type": "mca:hearts", "amount": 5 }
+              ],
+              "next": "animal_success"
+            },
+            {
+              "requirements": [{ "type": "mca:personality", "value": "upbeat" }],
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": 5 }
+              ],
+              "next": "animal_success"
+            },
+            {
+              "requirements": [{ "type": "mca:personality", "value": "friendly" }],
+              "weight": 1,
+              "actions": [
+                { "type": "mca:hearts", "amount": 5 }
+              ],
+              "next": "animal_success"
+            },
+            {
+              "requirements": [{ "type": "mca:trait", "value": "weak" }],
+              "weight": 2,
+              "actions": [
+                { "type": "mca:hearts", "amount": 5 }
+              ],
+              "next": "animal_success"
+            },
+            {
+              "requirements": [{ "type": "mca:personality", "value": "gloomy" }],
+              "weight": 7,
+              "actions": [
+                { "type": "mca:hearts", "amount": 5 }
+              ],
+              "next": "animal_success"
+            },
+            {
+              "weight": 2,
+              "actions": [
+                { "type": "mca:hearts", "amount": -2 }
+              ],
+              "next": "animal_fail"
+            },
+            {
+              "requirements": [{ "type": "mca:personality", "value": "crabby" }],
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": -2 }
+              ],
+              "next": "animal_fail"
+            }
+          ]
+        },
+        {
+          "id": "monster",
+          "text": "dialogue.joke.monster",
+          "outcomes": [
+            {
+              "weight": 4,
+              "actions": [
+                { "type": "mca:hearts", "amount": 5 }
+              ],
+              "next": "monster_success"
+            },
+            {
+              "requirements": [{ "type": "mca:personality", "value": "upbeat" }],
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": 5 }
+              ],
+              "next": "monster_success"
+            },
+            {
+              "requirements": [{ "type": "mca:profession", "value": "mca:guard" }],
+              "weight": 4,
+              "actions": [
+                { "type": "mca:hearts", "amount": 5 }
+              ],
+              "next": "monster_success"
+            },
+            {
+              "requirements": [{ "type": "mca:profession", "value": "mca:archer" }],
+              "weight": 3,
+              "actions": [
+                { "type": "mca:hearts", "amount": 5 }
+              ],
+              "next": "monster_success"
+            },
+            {
+              "requirements": [{ "type": "mca:trait", "value": "tough" }],
+              "weight": 2,
+              "actions": [
+                { "type": "mca:hearts", "amount": 5 }
+              ],
+              "next": "monster_success"
+            },
+            {
+              "requirements": [{ "type": "mca:personality", "value": "gloomy" }],
+              "weight": 7,
+              "actions": [
+                { "type": "mca:hearts", "amount": 5 }
+              ],
+              "next": "monster_success"
+            },
+            {
+              "weight": 2,
+              "actions": [
+                { "type": "mca:hearts", "amount": -2 }
+              ],
+              "next": "monster_fail"
+            },
+            {
+              "requirements": [{ "type": "mca:personality", "value": "crabby" }],
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": -2 }
+              ],
+              "next": "monster_fail"
+            },
+            {
+              "requirements": [{ "type": "mca:personality", "value": "sensitive" }],
+              "weight": 5,
+              "actions": [
+                { "type": "mca:hearts", "amount": -2 }
+              ],
+              "next": "monster_fail"
+            }
+          ]
+        }
+      ]
+    },
+    "success": {
+      "line": "dialogue.joke.creative.success",
+      "complete": true
+    },
+    "fail": {
+      "line": "dialogue.joke.creative.failed",
+      "complete": true
+    },
+    "animal_success": {
+      "line": "dialogue.joke.animal.success",
+      "complete": true
+    },
+    "animal_fail": {
+      "line": "dialogue.joke.animal.failed",
+      "complete": true
+    },
+    "monster_success": {
+      "line": "dialogue.joke.monster.success",
+      "complete": true
+    },
+    "monster_fail": {
+      "line": "dialogue.joke.monster.failed",
+      "complete": true
+    }
+  }
+}

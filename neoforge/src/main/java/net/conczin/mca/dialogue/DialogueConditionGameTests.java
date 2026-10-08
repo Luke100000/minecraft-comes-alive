@@ -4,11 +4,13 @@ import com.mojang.authlib.GameProfile;
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.RecentVillagerEvents;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.entity.ai.relationship.Personality;
 import net.conczin.mca.registry.EntitiesMCA;
+import net.conczin.mca.registry.ProfessionsMCA;
 import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.DialogueEventHistory;
 import net.conczin.mca.server.world.data.FamilyTree;
@@ -66,6 +68,22 @@ public final class DialogueConditionGameTests {
         assertNoMatch(helper, fixture.context(), "{\"type\":\"mca:hearts\",\"max\":19}");
         assertNoMatch(helper, fixture.context(), "{\"type\":\"mca:not\",\"condition\":{\"type\":\"mca:age_group\",\"value\":\"adult\"}}");
         assertMatch(helper, fixture.context(), "{\"type\":\"mca:not\",\"condition\":{\"type\":\"mca:age_group\",\"value\":\"child\"}}");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_conditions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void recentEventConditionUsesAuthoritativeVillagerFacts(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        long now = RecentVillagerEvents.gameTime(fixture.villager().level());
+
+        assertNoMatch(helper, fixture.context(),
+                "{\"type\":\"mca:recent_event\",\"event\":\"mca:attacked\",\"within_ticks\":20}");
+        fixture.villager().getRecentVillagerEvents().record(RecentVillagerEvents.ATTACKED, now - 20L);
+        assertMatch(helper, fixture.context(),
+                "{\"type\":\"mca:recent_event\",\"event\":\"mca:attacked\",\"within_ticks\":20}");
+        assertNoMatch(helper, fixture.context(),
+                "{\"type\":\"mca:recent_event\",\"event\":\"mca:cured\",\"within_ticks\":20}");
+
         helper.succeed();
     }
 
@@ -172,6 +190,9 @@ public final class DialogueConditionGameTests {
         fixture.villager().setProfession(VillagerProfession.FARMER);
         assertMatch(helper, fixture.context(), "{\"type\":\"mca:profession\",\"value\":\"minecraft:farmer\"}");
         assertNoMatch(helper, fixture.context(), "{\"type\":\"mca:profession\",\"value\":\"minecraft:cleric\"}");
+        fixture.villager().setProfession(ProfessionsMCA.GUARD);
+        assertMatch(helper, fixture.context(), "{\"type\":\"mca:profession\",\"value\":\"mca:guard\"}");
+        assertNoMatch(helper, fixture.context(), "{\"type\":\"mca:profession\",\"value\":\"mca:archer\"}");
 
         fixture.villager().getTraits().addTrait(Traits.LACTOSE_INTOLERANCE);
         assertMatch(helper, fixture.context(), "{\"type\":\"mca:trait\",\"value\":\"mca:lactose_intolerance\"}");
@@ -276,6 +297,10 @@ public final class DialogueConditionGameTests {
         assertMatch(helper, fixture.context(), "{\"type\":\"mca:village_has_building\",\"value\":\"infirmary\"}");
         assertNoMatch(helper, fixture.context(), "{\"type\":\"mca:village_has_building\",\"value\":\"prison\"}");
         assertMatch(helper, fixture.context(), "{\"type\":\"mca:in_building\",\"value\":\"infirmary\"}");
+        Fixture visitor = fixture(helper, center);
+        helper.assertTrue(visitor.context().village().isEmpty(),
+                "visitor fixture must not be a member of the registered village");
+        assertMatch(helper, visitor.context(), "{\"type\":\"mca:in_building\",\"value\":\"infirmary\"}");
         assertMatch(helper, fixture.context(), "{\"type\":\"mca:building_assignment\",\"value\":\"infirmary\"}");
         fixture.villager().getBrain().setMemory(
                 MemoryModuleType.JOB_SITE,

@@ -87,7 +87,8 @@ public final class DialogueEvents extends SimpleJsonResourceReloadListener {
         forEachHistoryReference(event, reference -> {
             DialogueEvent target = events.get(reference.event());
             if (target == null) {
-                if (MCA.MOD_ID.equals(reference.event().getNamespace())) {
+                if (MCA.MOD_ID.equals(event.id().getNamespace())
+                        && MCA.MOD_ID.equals(reference.event().getNamespace())) {
                     throw new IllegalArgumentException("missing shipped history event " + reference.event());
                 }
                 return;
@@ -120,6 +121,11 @@ public final class DialogueEvents extends SimpleJsonResourceReloadListener {
             forEachHistoryReference(condition, consumer);
         }
         for (DialogueEvent.Node node : event.nodes().values()) {
+            for (DialogueEvent.Outcome outcome : node.outcomes().orElse(List.of())) {
+                for (DialogueCondition condition : outcome.requirements()) {
+                    forEachHistoryReference(condition, consumer);
+                }
+            }
             for (DialogueEvent.Choice choice : node.choices().orElse(List.of())) {
                 for (DialogueCondition condition : choice.requirements()) {
                     forEachHistoryReference(condition, consumer);

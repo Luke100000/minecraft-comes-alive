@@ -1,0 +1,23 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ambient",
+    "resume_prompt": "dialogue_event.mca.ambient.rain_relaxed.resume",
+    "topic": "small_talk"
+  },
+  "priority": 10,
+  "weight": 1,
+  "requirements": [
+    { "type": "mca:weather", "value": "rain" },
+    { "type": "mca:personality", "value": "relaxed" }
+  ],
+  "repeat": { "type": "cooldown", "seconds": 5 },
+  "history": "scheduling",
+  "start": "main",
+  "nodes": {
+    "main": {
+      "line": "dialogue_event.mca.ambient.rain_relaxed.line",
+      "complete": true
+    }
+  }
+}

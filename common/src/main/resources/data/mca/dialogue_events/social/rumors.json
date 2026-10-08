@@ -1,0 +1,74 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue.main.rumors",
+    "resume_prompt": "dialogue_event.mca.social.rumors.resume",
+    "topic": "small_talk"
+  },
+  "priority": 0,
+  "weight": 1,
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "route",
+  "nodes": {
+    "route": {
+      "outcomes": [
+        {
+          "weight": 10,
+          "actions": [
+            { "type": "mca:command", "command": "location" }
+          ],
+          "next": "location"
+        },
+        {
+          "requirements": [
+            { "type": "mca:hearts", "min": 20 }
+          ],
+          "weight": 5,
+          "actions": [
+            { "type": "mca:command", "command": "location" }
+          ],
+          "next": "location"
+        },
+        {
+          "weight": 1,
+          "next": "lore"
+        },
+        {
+          "requirements": [
+            { "type": "mca:trait", "value": "sirben" }
+          ],
+          "weight": 5,
+          "next": "lore"
+        },
+        {
+          "weight": 5,
+          "next": "failed"
+        },
+        {
+          "requirements": [
+            { "type": "mca:hearts", "max": -5 }
+          ],
+          "weight": 5,
+          "next": "failed"
+        }
+      ]
+    },
+    "location": {
+      "line": "dialogue_event.mca.social.rumors.location",
+      "complete": true
+    },
+    "lore": {
+      "line": "dialogue.rumors.lore",
+      "complete": true
+    },
+    "failed": {
+      "line": "dialogue.rumors.failed",
+      "complete": true
+    }
+  }
+}

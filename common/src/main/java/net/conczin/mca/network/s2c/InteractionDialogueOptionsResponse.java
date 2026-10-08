@@ -23,8 +23,7 @@ public record InteractionDialogueOptionsResponse(
         long offerToken,
         Optional<Component> continuation,
         List<EventOption> eventOptions,
-        boolean ambientAvailable,
-        boolean legacyAvailable
+        boolean ambientAvailable
 ) implements HandleablePayload {
     public static final int MAX_EVENT_OPTIONS = DialogueEngine.MAX_EVENT_OPTIONS;
 
@@ -50,7 +49,6 @@ public record InteractionDialogueOptionsResponse(
             OPTIONAL_COMPONENT_CODEC, InteractionDialogueOptionsResponse::continuation,
             EVENT_OPTIONS_CODEC, InteractionDialogueOptionsResponse::eventOptions,
             ByteBufCodecs.BOOL, InteractionDialogueOptionsResponse::ambientAvailable,
-            ByteBufCodecs.BOOL, InteractionDialogueOptionsResponse::legacyAvailable,
             InteractionDialogueOptionsResponse::new
     );
 
@@ -70,8 +68,7 @@ public record InteractionDialogueOptionsResponse(
                 options.token(),
                 options.continuationPrompt(),
                 entries,
-                options.ambientAvailable(),
-                false
+                options.ambientAvailable()
         );
     }
 

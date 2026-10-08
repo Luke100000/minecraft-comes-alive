@@ -7,6 +7,7 @@ import net.conczin.mca.entity.ai.Chore;
 import net.conczin.mca.entity.ai.Memories;
 import net.conczin.mca.entity.ai.MoveState;
 import net.conczin.mca.entity.ai.Traits;
+import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.registry.CriterionMCA;
 import net.conczin.mca.registry.ItemsMCA;
@@ -38,8 +39,52 @@ import java.util.Comparator;
 import java.util.Optional;
 
 public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityMCA> {
+    private static final java.util.Set<String> DIALOGUE_NON_CLOSING_COMMANDS = java.util.Set.of(
+            "adopt",
+            "apologize",
+            "location",
+            "slap"
+    );
+
     public VillagerCommandHandler(VillagerEntityMCA entity) {
         super(entity);
+    }
+
+    /**
+     * Executes a command for a completing DialogueEvent path without treating the legacy
+     * handler's boolean as an execution-success flag. The legacy boolean only describes whether
+     * the interaction screen should close.
+     */
+    public DialogueCommandResult handleDialogue(ServerPlayer player, String command) {
+        String baseCommand = command.split("\\.", 2)[0];
+        if ("adopt".equals(baseCommand)
+                && (entity.getAgeState() == AgeState.ADULT
+                || !FamilyTree.get((ServerLevel) player.level()).isOrphan(entity.getRelationships().getFamilyEntry()))) {
+            return new DialogueCommandResult(false, false);
+        }
+        if ("divorceConfirm".equals(baseCommand)
+                && !entity.getRelationships().isMarriedTo(player.getUUID())) {
+            return new DialogueCommandResult(false, false);
+        }
+        if ("procreate".equals(baseCommand)) {
+            return handleProcreate(player, entity.getVillagerBrain().getMemoriesForPlayer(player));
+        }
+        if ("divorcePapers".equals(baseCommand)) {
+            Inventory inventory = player.getInventory();
+            int papersBefore = inventory.countItem(ItemsMCA.DIVORCE_PAPERS);
+            inventory.add(new ItemStack(ItemsMCA.DIVORCE_PAPERS));
+            boolean delivered = inventory.countItem(ItemsMCA.DIVORCE_PAPERS) > papersBefore;
+            return new DialogueCommandResult(delivered, delivered);
+        }
+        if ("hire_short".equals(baseCommand)) {
+            return handleHire(player, 5, 3);
+        }
+        if ("hire_long".equals(baseCommand)) {
+            return handleHire(player, 10, 7);
+        }
+        boolean closeScreen = handle(player, command);
+        boolean accepted = closeScreen || DIALOGUE_NON_CLOSING_COMMANDS.contains(baseCommand);
+        return new DialogueCommandResult(accepted, closeScreen);
     }
 
     /**
@@ -143,16 +188,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 entity.getRelationships().getFamilyEntry().replaceParents(parentNode, parentSpouse);
             }
             case "procreate" -> {
-                if (memory.getHearts() < 100) {
-                    entity.sendChatMessage(player, "interaction.procreate.fail.lowhearts");
-                } else if (entity.getTraits().hasTrait(Traits.INFERTILE)) {
-                    entity.sendChatMessage(player, "interaction.procreate.fail.infertile");
-                } else if (entity.getRelationships().mayProcreateAgain(player.level().getGameTime())) {
-                    entity.getRelationships().startProcreating(player.level().getGameTime());
-                } else {
-                    entity.sendChatMessage(player, "interaction.procreate.fail.toosoon");
-                }
-                return true;
+                return handleProcreate(player, memory).closeScreen();
             }
             case "divorcePapers" -> {
                 player.getInventory().add(new ItemStack(ItemsMCA.DIVORCE_PAPERS));
@@ -189,16 +225,10 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 return true;
             }
             case "hire_short" -> {
-                payEmeralds(player, 5);
-                entity.makeMercenary();
-                entity.setDespawnDelay(24000 * 3);
-                return true;
+                return handleHire(player, 5, 3).closeScreen();
             }
             case "hire_long" -> {
-                payEmeralds(player, 10);
-                entity.makeMercenary();
-                entity.setDespawnDelay(24000 * 7);
-                return true;
+                return handleHire(player, 10, 7).closeScreen();
             }
             case "infected" -> {
                 entity.setInfected(!entity.isInfected());
@@ -281,6 +311,49 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
         }
 
         return super.handle(player, command);
+    }
+
+    private DialogueCommandResult handleProcreate(ServerPlayer player, Memories memory) {
+        if (!entity.getRelationships().isMarriedTo(player.getUUID())) {
+            return DialogueCommandResult.rejected(true);
+        }
+        if (memory.getHearts() < 100) {
+            entity.sendChatMessage(player, "interaction.procreate.fail.lowhearts");
+            return DialogueCommandResult.rejected(true);
+        }
+        if (entity.getTraits().hasTrait(Traits.INFERTILE)) {
+            entity.sendChatMessage(player, "interaction.procreate.fail.infertile");
+            return DialogueCommandResult.rejected(true);
+        }
+        if (!entity.getRelationships().mayProcreateAgain(player.level().getGameTime())) {
+            entity.sendChatMessage(player, "interaction.procreate.fail.toosoon");
+            return DialogueCommandResult.rejected(true);
+        }
+        entity.getRelationships().startProcreating(player.level().getGameTime());
+        return DialogueCommandResult.accepted(true);
+    }
+
+    private DialogueCommandResult handleHire(ServerPlayer player, int emeralds, int days) {
+        if (entity.getProfession() != ProfessionsMCA.ADVENTURER) {
+            return DialogueCommandResult.rejected(true);
+        }
+        if (player.getInventory().countItem(Items.EMERALD) < emeralds) {
+            return DialogueCommandResult.rejected(true);
+        }
+        payEmeralds(player, emeralds);
+        entity.makeMercenary();
+        entity.setDespawnDelay(24000 * days);
+        return DialogueCommandResult.accepted(true);
+    }
+
+    public record DialogueCommandResult(boolean accepted, boolean closeScreen) {
+        public static DialogueCommandResult accepted(boolean closeScreen) {
+            return new DialogueCommandResult(true, closeScreen);
+        }
+
+        public static DialogueCommandResult rejected(boolean closeScreen) {
+            return new DialogueCommandResult(false, closeScreen);
+        }
     }
 
     private void payEmeralds(ServerPlayer player, int emeralds) {

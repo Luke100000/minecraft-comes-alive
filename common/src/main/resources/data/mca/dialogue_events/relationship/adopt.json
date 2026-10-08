@@ -1,0 +1,55 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue.main.adopt",
+    "resume_prompt": "dialogue_event.mca.relationship.adopt.resume",
+    "topic": "relationship"
+  },
+  "priority": 0,
+  "weight": 1,
+  "requirements": [
+    { "type": "mca:family", "value": "orphan" },
+    {
+      "type": "mca:not",
+      "condition": { "type": "mca:age_group", "value": "adult" }
+    }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "confirm",
+  "nodes": {
+    "confirm": {
+      "line": "dialogue.adopt",
+      "silent": true,
+      "choices": [
+        {
+          "id": "confirm",
+          "text": "dialogue.adopt.confirm",
+          "actions": [
+            { "type": "mca:command", "command": "adopt" }
+          ],
+          "next": "accepted"
+        },
+        {
+          "id": "cancel",
+          "text": "dialogue.adopt.cancel",
+          "next": "cancelled"
+        }
+      ]
+    },
+    "accepted": {
+      "line": "dialogue.adopt.confirm",
+      "silent": true,
+      "complete": true
+    },
+    "cancelled": {
+      "line": "dialogue.adopt.cancel",
+      "silent": true,
+      "complete": true
+    }
+  }
+}

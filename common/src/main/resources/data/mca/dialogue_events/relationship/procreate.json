@@ -1,0 +1,52 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue.main.procreate",
+    "resume_prompt": "dialogue_event.mca.relationship.procreate.resume",
+    "topic": "relationship"
+  },
+  "priority": 0,
+  "weight": 1,
+  "requirements": [
+    { "type": "mca:relationship", "value": "spouse" },
+    { "type": "mca:age_group", "value": "adult" }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "confirm",
+  "nodes": {
+    "confirm": {
+      "line": "dialogue.procreate",
+      "silent": true,
+      "choices": [
+        {
+          "id": "confirm",
+          "text": "dialogue.procreate.confirm",
+          "actions": [
+            { "type": "mca:command", "command": "procreate" }
+          ],
+          "next": "accepted"
+        },
+        {
+          "id": "cancel",
+          "text": "dialogue.procreate.cancel",
+          "next": "cancelled"
+        }
+      ]
+    },
+    "accepted": {
+      "line": "dialogue.procreate.confirm",
+      "silent": true,
+      "complete": true
+    },
+    "cancelled": {
+      "line": "dialogue.procreate.cancel",
+      "silent": true,
+      "complete": true
+    }
+  }
+}

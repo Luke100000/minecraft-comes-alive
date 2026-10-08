@@ -2,6 +2,7 @@ package net.conczin.mca.resources;
 
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import net.conczin.mca.dialogue.DialogueCondition;
 import net.conczin.mca.dialogue.DialogueEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -24,6 +25,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DialogueEventsTest {
@@ -157,6 +159,62 @@ class DialogueEventsTest {
         assertFalse(events.get(strictMissing).isPresent());
         assertTrue(events.get(externalMissing).isPresent());
         assertTrue(events.get(negatedExternalMissing).isPresent());
+    }
+
+    @Test
+    void addonCanReferenceMissingOptionalMcaHistoryWithoutBeingDropped() {
+        ResourceLocation followup = id("example_addon", "story/followup");
+        ResourceLocation optionalParent = id("mca", "story/optional_parent");
+        DialogueEvents events = new DialogueEvents();
+
+        events.apply(data(
+                followup, eventWithRequirement("""
+                        { "type": "mca:event_completed", "event": "mca:story/optional_parent" }
+                        """)
+        ), null, null);
+
+        DialogueEvent loaded = events.get(followup).orElseThrow();
+        DialogueCondition.EventCompleted prerequisite = assertInstanceOf(
+                DialogueCondition.EventCompleted.class, loaded.requirements().get(0));
+        assertEquals(optionalParent, prerequisite.event());
+        assertFalse(events.get(optionalParent).isPresent(), "missing prerequisites stay unavailable");
+    }
+
+    @Test
+    void automaticNodeOutcomeHistoryReferencesAreValidated() {
+        ResourceLocation scheduling = id("mca", "small_talk/route_target");
+        ResourceLocation invalid = id("example_addon", "story/invalid_route");
+        ResourceLocation valid = id("example_addon", "story/valid_route");
+        DialogueEvents events = new DialogueEvents();
+
+        String routing = """
+                {
+                  "trigger": "talk",
+                  "presentation": {"mode": "ask", "prompt": "route.prompt", "resume_prompt": "resume"},
+                  "repeat": {"type": "always"},
+                  "start": "route",
+                  "nodes": {
+                    "route": {"outcomes": [
+                      {"weight": 1, "requirements": [%s], "next": "done"},
+                      {"weight": 1, "next": "done"}
+                    ]},
+                    "done": {"line": "done", "complete": true}
+                  }
+                }
+                """;
+        events.apply(data(
+                scheduling, schedulingEvent(),
+                invalid, routing.formatted("""
+                        {"type": "mca:event_completed", "event": "mca:small_talk/route_target"}
+                        """),
+                valid, routing.formatted("""
+                        {"type": "mca:event_completed", "event": "optional_addon:story/unknown"}
+                        """)
+        ), null, null);
+
+        assertTrue(events.get(scheduling).isPresent());
+        assertFalse(events.get(invalid).isPresent(), "a node-level outcome cannot depend on scheduling-only history");
+        assertTrue(events.get(valid).isPresent(), "an absent optional addon dependency must remain loadable");
     }
 
     @Test

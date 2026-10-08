@@ -199,6 +199,17 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
 
     @Override
     public void onTragedy(DamageSource cause, @Nullable BlockPos burialSite, RelationshipType type, Entity with) {
+        boolean familyDeath = type == RelationshipType.CHILD
+                || type == RelationshipType.PARENT
+                || type == RelationshipType.SIBLING
+                || type == RelationshipType.SPOUSE;
+        if (familyDeath && entity instanceof VillagerEntityMCA villager) {
+            villager.getRecentVillagerEvents().record(
+                    RecentVillagerEvents.RELATIVE_DEATH,
+                    RecentVillagerEvents.gameTime(villager.level())
+            );
+        }
+
         if (!cause.is(DamageTypes.FELL_OUT_OF_WORLD)) {
             int moodAffect = 5 * type.getProximityAmplifier();
             entity.level().broadcastEntityEvent(entity, Status.MCA_VILLAGER_TRAGEDY);
@@ -212,13 +223,9 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
 
         // CHILD is the callback a parent receives when their child dies; PARENT is the callback
         // a child receives when their parent dies. Both directions should trigger family mourning.
-        boolean familyMourning = type == RelationshipType.CHILD
-                || type == RelationshipType.PARENT
-                || type == RelationshipType.SIBLING
-                || type == RelationshipType.SPOUSE;
         if (Config.getInstance().enableMourning
                 && burialSite != null
-                && familyMourning
+                && familyDeath
                 && !entity.getUUID().equals(with.getUUID())
                 && entity instanceof VillagerEntityMCA villager) {
             Mourning.start(villager, burialSite);

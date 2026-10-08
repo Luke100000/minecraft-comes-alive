@@ -1,0 +1,86 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue.main.hire",
+    "resume_prompt": "dialogue_event.mca.gameplay.hire.resume",
+    "topic": "service"
+  },
+  "priority": 0,
+  "weight": 1,
+  "requirements": [
+    { "type": "mca:profession", "value": "mca:adventurer" }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "offer",
+  "nodes": {
+    "offer": {
+      "line": "dialogue.hire",
+      "silent": true,
+      "choices": [
+        {
+          "id": "short",
+          "text": "dialogue.hire.short",
+          "outcomes": [
+            {
+              "requirements": [
+                { "type": "mca:inventory", "item": "minecraft:emerald", "min": 5 }
+              ],
+              "weight": 10000000000,
+              "actions": [
+                { "type": "mca:command", "command": "hire_short" }
+              ],
+              "next": "hired"
+            },
+            {
+              "weight": 1,
+              "next": "no_money"
+            }
+          ]
+        },
+        {
+          "id": "long",
+          "text": "dialogue.hire.long",
+          "outcomes": [
+            {
+              "requirements": [
+                { "type": "mca:inventory", "item": "minecraft:emerald", "min": 10 }
+              ],
+              "weight": 10000000000,
+              "actions": [
+                { "type": "mca:command", "command": "hire_long" }
+              ],
+              "next": "hired"
+            },
+            {
+              "weight": 1,
+              "next": "no_money"
+            }
+          ]
+        },
+        {
+          "id": "cancel",
+          "text": "dialogue.hire.cancel",
+          "next": "cancelled"
+        }
+      ]
+    },
+    "hired": {
+      "line": "dialogue.hire",
+      "complete": true
+    },
+    "no_money": {
+      "line": "dialogue.no_money",
+      "complete": true
+    },
+    "cancelled": {
+      "line": "dialogue.hire.cancel",
+      "silent": true,
+      "complete": true
+    }
+  }
+}

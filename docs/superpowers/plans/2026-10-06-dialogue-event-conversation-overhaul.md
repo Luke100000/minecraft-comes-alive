@@ -4,13 +4,13 @@
 
 **Goal:** Replace MCA's legacy `Question -> Answer -> Result -> Actions` conversation engine on `dev/1.21.1` with the namespaced, server-authoritative `DialogueEvent` engine from the reviewed design, migrate all shipped dialogue content, and remove the legacy engine after migration.
 
-**Architecture:** `DialogueEvent` owns selection metadata and its inline node graph. `DialogueEvents` reloads immutable namespaced event definitions; `DialogueEngine` evaluates deterministic requirements, owns active/paused sessions, advances ordered lines and nodes using single-use offer tokens, and commits pending effects and pair history on completion. Legacy `Dialogues` remains only behind a temporary adapter while shipped resources migrate, then is deleted.
+**Architecture:** `DialogueEvent` owns selection metadata and its inline node graph. `DialogueEvents` reloads immutable namespaced event definitions; `DialogueEngine` evaluates deterministic requirements, owns active/paused sessions, advances ordered lines and nodes using single-use offer tokens, and commits pending effects and pair history on completion. Legacy `Dialogues` remains untouched only for entry points not yet migrated; the new engine never routes through a compatibility adapter. Once all required consumers are migrated, the old engine is deleted.
 
 **Tech Stack:** Java 21, Minecraft 1.21.1, common multiloader code, Mojang `Codec`/`JsonOps` decoding behind Gson-backed server resource reloads, Minecraft `SavedData`/versioned NBT, custom payloads with `StreamCodec`, Fabric API 0.116.17+1.21.1, NeoForge 21.1.256, JUnit 5, NeoForge GameTests.
 
 **Spec:** `docs/superpowers/specs/2026-10-06-dialogue-event-conversation-system-design.md`
 
-**Review status:** documentation update only; implementation has not begun.
+**Review status:** implementation in progress on `project/dialogue-event-overhaul`; the event engine/session/protocol foundation exists, while shipped-content migration and final legacy cutover remain incomplete.
 Stories repeat after their datapack-authored per-event/pair cooldown and have
 remembered-choice follow-ups; story completions replace choices with the latest completed
 run (Task 3). Talk offers a personalized continuation alongside other topics;
@@ -27,12 +27,12 @@ implementation or reopen the remaining agreed architecture and conditions.
 - New dialogue resources retain full `ResourceLocation` namespace and nested path. Do not inherit legacy basename lookup.
 - Event/choice eligibility is boolean. Randomness is permitted for eligible event/outcome weight and the rolled cooldown interval; phrase variants remain client presentation.
 - Client packets are untrusted. The server owns the villager, event, node, line index, offered IDs, and single-use offer token. Reload generation is separate.
-- Show ordered lines one at a time with Continue, natural replies with hidden effects, and a fixed 250 ms/word client typewriter; reveal complete words, not individual characters. No reveal shortcut, click acceleration or instant-display setting. Enable Continue/replies only after the relevant line finishes revealing.
+- Show ordered lines one at a time with natural progression labels and natural replies with hidden effects. The client typewriter reveals one Unicode-safe user-perceived character (grapheme) every 40 ms; the server still sends the complete line. No reveal shortcut, click acceleration or instant-display setting. Enable progression/replies only after the relevant line finishes revealing. Use `Next` only when another authored passage follows, and `Back to topics` for the final acknowledgement that commits completion/history and returns to Talk options; resume wording appears only in the Talk menu for a paused run.
 - Closing/walking away pauses for 2400 overworld game ticks. Right-click opens normal controls; Talk opens options, including a personalized continuation for this pair. Only selecting continuation resumes. Invalidation/disconnect/restart discards unfinished state.
 - Retain at most one active or paused run per player plus one bounded menu offer. Selecting a different validated new topic with the same or another villager discards the previous paused run; browsing menus/normal controls or sending invalid selections does not.
 - Stories repeat after their authored cooldown and can lead to separate remembered-choice follow-ups. Successful completions replace durable choices with the latest completed run's set; abandoned runs never overwrite completed history. Require an explicit repeat policy; reference stories and small talk author `seconds: 5` for now. Cooldowns apply to this event for this player/villager pair, not all topics; there is no global override of other authored repeat rules.
 - Completion/end refreshes Talk options when interaction is valid; never automatically start the next event. Priority controls highlighting, not forced conversation choice.
-- Queue story effects until final Continue on a completing terminal. No rewards or completion merely from sending the terminal line.
+- Queue story effects until the final `Back to topics` acknowledgement on a completing terminal. No rewards or completion merely from sending the terminal line.
 - `DialogueType`/`Messenger` phrasing fallback stays. Preserve existing translation keys during migration where practical instead of rewriting language assets for cosmetic reasons.
 - Do not broaden this into a gift-system rewrite, quest engine, cutscene system, or general event bus.
 - Preserve unrelated working-tree changes. Commit only files belonging to the current task.
@@ -43,7 +43,7 @@ implementation or reopen the remaining agreed architecture and conditions.
 1. **Trust boundary:** no C2S message can select an event/choice or advance a line without its current single-use offer token; consumed and pre-resume packets never execute effects.
 2. **Save compatibility:** stable choices, pair-scoped story versus scheduling records, versioned NBT, conversion persistence, and missing-addon prerequisites follow the spec; pause state stays transient.
 3. **Selection clarity:** conditions are hard gates; priority orders eligible events; weight only varies equal-priority ambient events or eligible outcomes.
-4. **Migration completeness:** the legacy adapter is temporary and removable; all 19 shipped legacy resources must be accounted for before deleting old classes/packets.
+4. **Migration completeness:** no throwaway legacy adapter is introduced; all 19 shipped legacy resources and every production caller must be accounted for before deleting old classes/packets.
 5. **Multiloader parity:** event JSON semantics and common behavior remain identical on Fabric/NeoForge; only registration/lifecycle seams differ.
 
 ---
@@ -334,9 +334,10 @@ view carries session ID, offer token, complete current line Component, silent
 flag, offered choices, and `canContinue`; it never carries client-executable
 actions. `DialogueOptions` includes an optional personalized continuation prompt,
 ordinary event options and ambient availability, bound to the target villager,
-generation and single-use menu token. `DialogueSelection` includes `RESUME` in
-addition to `EVENT`, `AMBIENT` and migration-only `LEGACY`; only EVENT supplies a
-client event ID. The Task 7 begin handler always calls `begin` to offer options,
+generation and single-use menu token. `DialogueSelection` needs only `RESUME`,
+`EVENT`, and `AMBIENT`; only EVENT supplies a client event ID. Any temporary dead
+`LEGACY` enum/codec value left by earlier Task 7 work is removed before cutover and
+must never be wired to a client fallback. The Task 7 begin handler always calls `begin` to offer options,
 never to auto-resume. `select(..., RESUME, null)` validates the offered paused run
 and resumes it internally with a fresh active-run offer token. Opening the normal
 interaction GUI sends neither begin nor select.
@@ -449,8 +450,8 @@ Protocol shape:
 ```text
 C2S begin:  villager UUID
 S2C options: offerToken + optional continuation(prompt Component)
-             + event options(mode,id,prompt) + ambientAvailable + legacyAvailable
-C2S select: offerToken + selection kind(RESUME|EVENT|AMBIENT|LEGACY) + event ID only for EVENT
+             + event options(mode,id,prompt) + ambientAvailable
+C2S select: offerToken + selection kind(RESUME|EVENT|AMBIENT) + event ID only for EVENT
 S2C node:   sessionId + offerToken + state(ACTIVE|PAUSED|ENDED) + optional active node view
             active view = event ID + current line Component + silent + canContinue + choices(id,text Component)
 C2S choice: offerToken + choice ID
@@ -483,15 +484,19 @@ After completion/end, clear the old node view and show a fresh server menu if
 interaction is valid; newly unlocked events never start automatically. Late old
 responses must not overwrite that newer menu.
 
-Render one complete server-provided line through a client reveal cursor, with the
-agreed fixed interval of 250 ms per complete displayed word.
-Use locale-aware word boundaries; preserve punctuation, spacing and Unicode/
-Component formatting. Provide no skip, accelerated reveal or instant-display
-setting. Disable Continue until the current line is fully revealed; clicks during
-reveal must neither expose the rest of the line nor advance or queue advancement.
-An enabled Continue sends `InteractionDialogueAdvanceMessage`.
+Render one complete server-provided line through a client reveal cursor at a fixed
+40 ms per Unicode-safe user-perceived character (grapheme). Preserve punctuation,
+spacing and Component formatting. Provide no skip, accelerated reveal or
+instant-display setting. Disable progression until the current line is fully
+revealed; clicks during reveal must neither expose the rest of the line nor advance
+or queue advancement. The server-provided node view must distinguish an ordinary
+passage advance from the final acknowledgement: render `Next` only when another
+authored passage follows, and `Back to topics` when the next advance completes or
+ends the run and returns to refreshed Talk options. Both send the existing
+`InteractionDialogueAdvanceMessage`; the label never changes server authority.
 Show replies only when the final passage line is fully revealed. No positive/
-neutral/negative labels or reward/probability previews.
+neutral/negative labels or reward/probability previews. Resume prompts remain
+menu-only and appear only for a paused run selected explicitly through `RESUME`.
 
 Keep the resolved current pooled phrase and reveal progress in a bounded client
 presentation state nested in `ClientHandlerImpl`, not a second authoritative
@@ -506,7 +511,7 @@ client tick/lifecycle seam in `MCAClient` to maintain that transient state.
 - [ ] Send select/choice messages only from currently rendered server-provided options.
 - [ ] `InteractionCloseRequest` pauses an active event with `DialogueEngine.pause(player)` while stopping the current villager interaction; it must not call `end` for ordinary closure. Closing/browsing menus with an already paused run leaves its original deadline and saved line unchanged.
 - [ ] Wire disconnect cleanup through the exact 1.21.1 lifecycle hook or server session validation: disconnect always calls `end`, not `pause`; server stop calls `clear`.
-- [ ] Add presentation tests using controllable elapsed time for one complete word per 250 ms (not individual characters), locale-aware word and Unicode/formatting boundaries, punctuation/spacing and pooled-line preservation. Verify clicks cannot skip/accelerate reveal or advance/queue an advance, no instant-display control exists, and Continue/replies enable only after the relevant line finishes. Codec tests cover advance messages and state-clearing responses.
+- [ ] Add presentation tests using controllable elapsed time for one Unicode-safe grapheme per 40 ms, including combining marks, emoji, punctuation/spacing, Component styles and pooled-line preservation. Verify stalled frames reveal at most one grapheme per client tick, clicks cannot skip/accelerate reveal or advance/queue an advance, no instant-display control exists, replies enable only after the final passage line finishes, and node progression exposes `Next` versus `Back to topics` without client inference. Codec tests cover advance labels/messages and state-clearing responses.
 - [ ] Run focused codec tests and both loader builds:
 
 ```powershell
@@ -515,7 +520,7 @@ client tick/lifecycle seam in `MCAClient` to maintain that transient state.
 .\gradlew.bat :fabric:build :neoforge:build --console=plain
 ```
 
-- [ ] Client smoke: right-click opens ordinary controls; Talk opens options without auto-resume. Test personalized continuation beside other topics, multi-line Continue, hidden consequences, fixed word reveal without shortcuts, close -> right-click -> Talk -> select continuation, topic switching, completion/end back to menu, expiry and stale controls cleared on reload.
+- [ ] Client smoke: right-click opens ordinary controls; Talk opens options without auto-resume. Test personalized continuation beside other topics, multi-line `Next`, final `Back to topics`, hidden consequences, fixed grapheme reveal without shortcuts, close -> right-click -> Talk -> select continuation, topic switching, completion/end back to menu, expiry and stale controls cleared on reload.
 - [ ] Commit, e.g. `Wire server authoritative dialogue protocol`.
 
 ## Task 8: Add authoritative recent-life-event facts at their gameplay owners
@@ -579,46 +584,83 @@ Raid aftermath is intentionally a separate producer step within this task: first
 
 - [ ] Commit, e.g. `Track recent villager life events`.
 
-## Task 9: Add the temporary legacy adapter and close the old packet trust gap
+## Task 9: Establish the direct-migration baseline and cutover inventory
 
 **Files:**
 
-- Create: `common/src/main/java/net/conczin/mca/dialogue/LegacyDialogueAdapter.java`
-- Modify: `common/src/main/java/net/conczin/mca/resources/Dialogues.java`
-- Modify: `common/src/main/java/net/conczin/mca/resources/data/dialogue/Actions.java`
-- Modify: `common/src/main/java/net/conczin/mca/network/c2s/InteractionDialogueMessage.java`
-- Modify: `common/src/main/java/net/conczin/mca/network/s2c/InteractionDialogueResponse.java`
-- Modify: `common/src/main/java/net/conczin/mca/client/gui/InteractScreen.java` (temporary legacy offer token)
-- Create: `common/src/test/java/net/conczin/mca/dialogue/LegacyDialogueAdapterTest.java`
+- Create: `common/src/main/resources/data/mca/dialogue_events/ambient/baseline.json`
+- Create: `common/src/test/java/net/conczin/mca/dialogue/McaDialogueEventResourcesTest.java`
+- Modify this plan/spec only for migration inventory/cutover decisions; do not edit Task 7 UI/network owners from this task.
 
-The adapter exists only so unconverted shipped resources remain usable during the migration commits. It must not become a public addon API.
+Do not create `LegacyDialogueAdapter`. The old engine remains exactly where it
+already exists only for unconverted entry points; the new Talk flow is backed by
+real `DialogueEvent` data from the start.
 
-Track the legacy question and offered answers for the player/villager/current
-single-use offer token. Add the token to the temporary legacy response/answer
-payloads and send it from the legacy answer controls, so returning to the same
-question cannot make a stale answer valid again. Accept an old answer only in an
-active LEGACY session for that exact offered question/answer/token, consuming its
-offer before actions. Existing `Dialogues.selectAnswer` constraint revalidation
-remains a second gate. Preserve the user's local fail-closed constraint changes.
+The first shipped migration resource is a deliberately lowest-priority ambient
+baseline using the existing pooled `dialogue.main` phrasing. It must be a real
+namespaced event and use scheduling-only history so ordinary Talk remains usable
+without growing permanent story history. A zero-second authored cooldown is
+acceptable for this last-resort fallback: higher-priority ambient events win when
+eligible, while the fallback prevents a Back-only Talk menu when all contextual
+content is unavailable.
 
-The adapter is temporary compatibility, not a second implementation of the new
-ordered-line, deferred-reward and pause features. Legacy runs retain their old
-close behaviour while migrated event content demonstrates the final experience;
-the adapter and altered temporary payloads are deleted in Task 12.
+Inventory every legacy resource before cutover. Current 1.21.1 shipped resources
+are exactly these 19 files:
 
-Route legacy `Actions.next` question presentation through the adapter so offered-answer state advances with the old tree. Do not retrofit new event/history semantics into old JSON.
-
-- [ ] RED tests: arbitrary question, arbitrary answer, hidden answer, stale previous question, replayed answer, and wrong villager all fail without executing actions.
-- [ ] Test replay after returning to the same legacy question is rejected by the consumed token, not just by a different question string.
-- [ ] Test a valid legacy root -> next -> answer path still works while the adapter is enabled.
-- [ ] Implement adapter/state bridge.
-- [ ] Run:
-
-```powershell
-.\gradlew.bat :common:test --tests 'net.conczin.mca.dialogue.LegacyDialogueAdapterTest' --console=plain
+```text
+Entry/hub: root.json, main.json
+Ordinary/social: first.json, first.question.json, greet.json, chat.json,
+                 chat.topic.json, joke.json, story.json, rock_paper_scissor.json
+Command-backed/mixed: apologize.json, flirt.json, hug.json, kiss.json, hire.json,
+                      procreate.json, divorce.json, adopt.json, rumors.json
 ```
 
-- [ ] Commit, e.g. `Contain legacy dialogue behind migration adapter`.
+The production legacy-engine consumer/registration inventory is also explicit:
+
+```text
+Reload/data owner:
+  common/.../resources/Dialogues.java
+  common/.../resources/data/dialogue/{Question,Answer,Result,Actions}.java
+
+Legacy network path:
+  common/.../network/c2s/InteractionDialogueInitMessage.java
+  common/.../network/c2s/InteractionDialogueMessage.java
+  common/.../network/s2c/InteractionDialogueResponse.java
+  common/.../network/s2c/InteractionDialogueQuestionResponse.java
+  common/.../network/MessagesMCA.java
+  common/.../network/{ClientHandler,ClientHandlerImpl}.java
+
+Legacy client/loader integration:
+  common/.../client/gui/InteractScreen.java
+  fabric/.../resources/FabricDialogues.java
+  fabric/.../MCAFabric.java
+  neoforge/.../CommonNeoForge.java
+```
+
+`Actions.next` recursively returns to `Dialogues`, so it is part of the old engine
+rather than an independent consumer to preserve. Re-run the production `rg` in
+Task 12 before deletion because later migration work may expose additional callers;
+the cutover is not complete while any production reference remains.
+
+`main.json` is the old interaction hub rather than a conversation graph worth
+preserving verbatim. During migration its individual behaviors are mapped to
+event choices or existing outer interaction commands as appropriate. Command
+strings currently delegated through `VillagerCommandHandler` include `adopt`,
+`apologize`, `divorceConfirm`, `divorcePapers`, `hire_short`, `hire_long`,
+`location`, `procreate`, `slap`, and `stay_in_village`; keep those authoritative
+gameplay owners instead of copying their effects into dialogue code.
+
+- [x] Resource test loads every shipped `data/mca/dialogue_events/**/*.json` through `DialogueEvent.decode` and fails on malformed resources.
+- [x] Assert at least one shipped lowest-priority ambient baseline has no hard requirements and is immediately eligible by repeat policy.
+- [x] Assert the baseline is scheduling-only, fully namespaced, path-preserving, and references a valid pooled MCA dialogue line.
+- [x] Keep legacy resources/classes unchanged in this task; no compatibility packet/session bridge is added.
+- [x] Run:
+
+```powershell
+.\gradlew.bat :common:test --tests 'net.conczin.mca.dialogue.McaDialogueEventResourcesTest' --console=plain
+```
+
+- [ ] Commit, e.g. `Add baseline dialogue event migration path`.
 
 ## Task 10: Migrate ordinary/social dialogue content to DialogueEvents
 
@@ -650,6 +692,11 @@ keys where practical in `line`/`lines`/choice fields. Never interpret pooled `/1
 distinct semantic keys in `lines`. Give repeatable ambient content nonzero
 cooldowns where needed to avoid consecutive repeats; use scheduling-only storage
 unless a later story needs durable history.
+Do not add throwaway confirmation choices merely to enter a migrated conversation.
+Selecting a Talk topic should enter the villager's first authored response directly;
+for example, Chat must not add a silent `Let's chat.` confirmation between choosing
+the Chat topic and hearing the villager. Player choices belong only where the legacy
+conversation actually asks the player to answer or choose a subject.
 Give story conversations explicit cooldowns authored in seconds and expose later
 references as separate events where useful. Reference stories use five seconds
 for now; preserve deliberate interaction-specific repeat restrictions during
@@ -666,7 +713,7 @@ Translate old weighted conditional results deliberately:
 
 - [ ] Add a resource test that loads every new MCA event through the production decoder and asserts no duplicate event/choice IDs, broken node refs, or missing strict `mca:` event prerequisites.
 - [ ] Add assertions that ordinary Talk has at least one eligible baseline path in shipped data.
-- [ ] Migrate the ten resources above and keep their legacy copies only while the adapter comparison is useful.
+- [ ] Migrate the ten resources above directly. Keep each legacy copy only until its production caller no longer needs it; do not route new events through old JSON for comparison.
 - [ ] Run production resource tests + common suite:
 
 ```powershell
@@ -721,7 +768,7 @@ Add the spec's reference contextual stories in the same final schema:
 
 - [ ] Resource tests prove every reference story decodes and its cross-event/choice prerequisites resolve as specified.
 - [ ] Author reference stories, including Phyrra's sample and its distinct remembered-choice follow-up, with `repeat: { "type": "cooldown", "seconds": 5 }`; use the same authored interval for reference small talk. Document random `min_seconds`/`max_seconds` intervals, other explicit repeat policies and the unchanged 2400-tick pause deadline. General speculation must not require the speaker to have been cured.
-- [ ] Test duplicate localization source keys are rejected and all ordered sample lines/player replies/continuation prompts use valid distinct keys. Test all three sample paths through final Continue, per-event/pair cooldown exclusion then renewed eligibility, remembered reply persistence/latest-completed replacement and conditional follow-up availability without automatically starting any event. Each newly completed permitted run applies its authored effects once; duplicate packets never repeat those effects.
+- [ ] Test duplicate localization source keys are rejected and all ordered sample lines/player replies/continuation prompts use valid distinct keys. Test all three sample paths through final `Back to topics`, per-event/pair cooldown exclusion then renewed eligibility, remembered reply persistence/latest-completed replacement and conditional follow-up availability without automatically starting any event. Each newly completed permitted run applies its authored effects once; duplicate packets never repeat those effects.
 - [ ] Write the personality authoring guide: weather/time/mob preferences, tone, consistent exceptions, event-specific continuation labels with optional `%1$s` name, seconds-based story/small-talk cooldowns and separate remembered-choice follow-ups. Add writer templates rather than inventing approved favourites for every personality or adding a gameplay preference registry. Link the verified Stardew documentation and explicitly distinguish MCA's repeatable stories from Stardew's answered-question suppression.
 - [ ] GameTests cover one life-event prerequisite chain and one building-context event end-to-end through `DialogueEngine`.
 - [ ] Verify command-backed migrations still reach the existing gameplay command owner once and respect server constraints.
@@ -758,13 +805,10 @@ Add the spec's reference contextual stories in the same final schema:
 - `common/src/main/java/net/conczin/mca/client/gui/InteractScreen.java`
 - `fabric/src/main/java/net/conczin/mca/fabric/MCAFabric.java`
 - `neoforge/src/main/java/net/conczin/mca/neoforge/CommonNeoForge.java`
-- delete `common/src/main/java/net/conczin/mca/dialogue/LegacyDialogueAdapter.java`
-- delete its compatibility test.
-
 - [ ] Run `rg` proving production code has no references to `Dialogues`, legacy dialogue data classes, or old packet classes before deletion.
 - [ ] Remove old network registrations/client handlers and legacy rendering state.
 - [ ] Remove loader registration for legacy `Dialogues`/`FabricDialogues`.
-- [ ] Delete old resources/classes/adapter.
+- [ ] Delete old resources/classes and any now-dead `LEGACY` protocol enum/field left from intermediate Task 7 work.
 - [ ] Run the resource test to prove all shipped conversational content now lives under `dialogue_events`.
 - [ ] Run:
 
@@ -784,9 +828,9 @@ The `rg` result should contain no production legacy-engine references; investiga
 
 - Modify only tests/docs if final verification exposes a genuine gap; do not add cleanup abstractions without evidence.
 
-- [ ] Run focused dialogue unit suites and the full common suite.
-- [ ] Run all dialogue/life-event GameTests added by this plan.
-- [ ] Run both loader builds serially if shared Gradle output shows any concurrency corruption:
+- [x] Run focused dialogue unit suites and the full common suite.
+- [x] Run all dialogue/life-event GameTests added by this plan.
+- [x] Run both loader builds serially if shared Gradle output shows any concurrency corruption:
 
 ```powershell
 .\gradlew.bat :common:test --console=plain
@@ -796,24 +840,24 @@ The `rg` result should contain no production legacy-engine references; investiga
 .\gradlew.bat :fabric:build :neoforge:build --console=plain
 ```
 
-- [ ] Dedicated-server smoke: datapack reload with valid + intentionally invalid addon event; verify invalid event logs precise ID without weakening other events.
+- [x] Dedicated-server smoke: datapack reload with valid + intentionally invalid addon event; verify invalid event logs precise ID without weakening other events.
 - [ ] Multiplayer smoke with two players and one villager: independent completion/choices/cooldowns.
 - [ ] Verify stories repeat after their authored seconds cooldown while completion stays remembered and latest completed choices gate follow-ups. Abandonment leaves durable history intact, selecting a different validated topic retains only that run, and five-second reference story/small-talk cooldown changes eligibility at 100 ticks without blocking other events or changing pause expiry.
-- [ ] Security smoke: replay consumed offer token, forged IDs, duplicate choice/Continue, pause/resume with stale packets, final-line acknowledgement, unload/death/conversion, disconnect/reconnect and attempted reward farming before completion.
-- [ ] Presentation smoke: fixed 250 ms/word reveal without shortcuts, Continue/replies after full reveal, ordered passages and hidden consequences; right-click shows ordinary UI, Talk offers topic-specific continuation plus other events, and only selecting it resumes. Test browsing versus topic replacement and post-completion menus without chaining. Verify timeout at 2400 ticks without automatic penalty/distant speech.
-- [ ] Reload smoke with active and paused sessions: invalidate when `DialogueEvents.generation()` changes; removed events never execute stale pending effects or resume.
+- [ ] Security smoke: replay consumed offer token, forged IDs, duplicate choice/progression requests, pause/resume with stale packets, final-line acknowledgement, unload/death/conversion, disconnect/reconnect and attempted reward farming before completion.
+- [ ] Presentation smoke: fixed 40 ms/grapheme reveal without shortcuts, `Next`/`Back to topics`/replies only after full reveal, ordered passages and hidden consequences; right-click shows ordinary UI, Talk offers topic-specific continuation plus other events, and only selecting it resumes. Test browsing versus topic replacement and post-completion menus without chaining. Verify timeout at 2400 ticks without automatic penalty/distant speech.
+- [x] Reload smoke with active and paused sessions: invalidate when `DialogueEvents.generation()` changes; removed events never execute stale pending effects or resume.
 - [ ] Client/server resource mismatch smoke: server authority remains correct even if client lacks an optional translation (display may show key, behavior must remain valid).
-- [ ] Inspect final diff for temporary adapter residue, duplicate state, unused legacy translations/resources, and accidental unrelated changes.
-- [ ] Record porting notes for 26.1.2/26.2 limited to actual seams observed: reload listener/identifier APIs, networking codec registration, and SavedData APIs. Do not fork the architecture.
+- [x] Inspect final diff for compatibility-bridge residue, duplicate state, unused legacy translations/resources, and accidental unrelated changes.
+- [x] Record porting notes for 26.1.2/26.2 limited to actual seams observed: reload listener/identifier APIs, networking codec registration, and SavedData APIs. Do not fork the architecture.
 - [ ] Commit any verification-only corrections separately with a precise message.
 
 ## Definition of Done
 
 - TALK runs entirely through `DialogueEvent`/`DialogueEngine` and server-owned sessions.
 - Every shipped legacy dialogue resource is migrated or intentionally replaced.
-- `Dialogues`, `Question`, `Answer`, `Result`, `Actions`, old dialogue payloads, `FabricDialogues`, and `LegacyDialogueAdapter` are gone.
+- `Dialogues`, `Question`, `Answer`, `Result`, `Actions`, old dialogue payloads, and `FabricDialogues` are gone; no compatibility adapter was introduced.
 - Contextual events support hard current-state conditions, pair history, previous stable choices, cooldowns, weighted ambient/outcomes, physical infirmary/prison context, and owned recent-life facts.
-- Ordered lines, fixed 250 ms/word reveal without shortcuts, Talk-menu personalized continuation selected within 2400 ticks, completion-based effects and single-use offer tokens match the spec; no automatic resume or event chaining.
+- Ordered lines, fixed 40 ms/grapheme reveal without shortcuts, explicit `Next` versus final `Back to topics`, Talk-menu personalized continuation selected within 2400 ticks, completion-based effects and single-use offer tokens match the spec; no automatic resume or event chaining.
 - The personality writing guide and speculative/personal cure examples are included; repeatable stories with authored follow-ups, latest-completed-choice history, single retained session and datapack-authored seconds cooldowns (five seconds for reference stories/small talk) follow the spec's approved decisions.
 - Datapacks can add namespaced events without Java and missing optional addon prerequisites fail closed.
 - Both loaders build and focused runtime/security verification passes on 1.21.1.

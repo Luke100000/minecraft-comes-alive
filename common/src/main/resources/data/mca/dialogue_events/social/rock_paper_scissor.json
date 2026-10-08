@@ -1,0 +1,117 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue_event.mca.social.rock_paper_scissor.prompt",
+    "resume_prompt": "dialogue_event.mca.social.rock_paper_scissor.resume",
+    "topic": "game"
+  },
+  "priority": 0,
+  "weight": 1,
+  "requirements": [
+    {
+      "type": "mca:not",
+      "condition": {
+        "type": "mca:age_group",
+        "value": "adult"
+      }
+    }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "round",
+  "nodes": {
+    "round": {
+      "line": "dialogue.rock_paper_scissor",
+      "choices": [
+        {
+          "id": "rock",
+          "text": "dialogue_event.mca.social.rock_paper_scissor.rock",
+          "outcomes": [
+            {
+              "weight": 1,
+              "actions": [
+                { "type": "mca:hearts", "amount": 3 }
+              ],
+              "next": "win_rock"
+            },
+            {
+              "weight": 1,
+              "actions": [
+                { "type": "mca:hearts", "amount": 3 }
+              ],
+              "next": "lose_rock"
+            }
+          ]
+        },
+        {
+          "id": "paper",
+          "text": "dialogue_event.mca.social.rock_paper_scissor.paper",
+          "outcomes": [
+            {
+              "weight": 1,
+              "actions": [
+                { "type": "mca:hearts", "amount": 3 }
+              ],
+              "next": "win_paper"
+            },
+            {
+              "weight": 1,
+              "actions": [
+                { "type": "mca:hearts", "amount": 3 }
+              ],
+              "next": "lose_paper"
+            }
+          ]
+        },
+        {
+          "id": "scissor",
+          "text": "dialogue_event.mca.social.rock_paper_scissor.scissor",
+          "outcomes": [
+            {
+              "weight": 1,
+              "actions": [
+                { "type": "mca:hearts", "amount": 3 }
+              ],
+              "next": "win_scissor"
+            },
+            {
+              "weight": 1,
+              "actions": [
+                { "type": "mca:hearts", "amount": 3 }
+              ],
+              "next": "lose_scissor"
+            }
+          ]
+        }
+      ]
+    },
+    "win_rock": {
+      "line": "dialogue.rock_paper_scissor.win.rock",
+      "complete": true
+    },
+    "lose_rock": {
+      "line": "dialogue.rock_paper_scissor.loose.rock",
+      "complete": true
+    },
+    "win_paper": {
+      "line": "dialogue.rock_paper_scissor.win.paper",
+      "complete": true
+    },
+    "lose_paper": {
+      "line": "dialogue.rock_paper_scissor.loose.paper",
+      "complete": true
+    },
+    "win_scissor": {
+      "line": "dialogue.rock_paper_scissor.win.scissor",
+      "complete": true
+    },
+    "lose_scissor": {
+      "line": "dialogue.rock_paper_scissor.loose.scissor",
+      "complete": true
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue.main.divorcePapers",
+    "resume_prompt": "dialogue_event.mca.gameplay.divorce_papers.resume",
+    "topic": "service"
+  },
+  "priority": 0,
+  "weight": 1,
+  "requirements": [
+    { "type": "mca:profession", "value": "minecraft:cleric" },
+    {
+      "type": "mca:not",
+      "condition": { "type": "mca:relationship", "value": "spouse" }
+    },
+    { "type": "mca:age_group", "value": "adult" }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 5
+  },
+  "history": "scheduling",
+  "start": "route",
+  "nodes": {
+    "route": {
+      "outcomes": [
+        {
+          "weight": 1,
+          "actions": [
+            { "type": "mca:command", "command": "divorcePapers" }
+          ],
+          "next": "papers"
+        }
+      ]
+    },
+    "papers": {
+      "line": "dialogue.divorcePapers",
+      "complete": true
+    }
+  }
+}

@@ -19,8 +19,6 @@ public interface ClientHandler {
 
     void handleVillagerDataResponse(GetVillagerResponse message);
 
-    void handleDialogueResponse(InteractionDialogueResponse message);
-
     void handleDialogueOptionsResponse(InteractionDialogueOptionsResponse message);
 
     void handleDialogueNodeResponse(InteractionDialogueNodeResponse message);
@@ -40,8 +38,6 @@ public interface ClientHandler {
     void handleCustomSkinListResponse(CustomSkinListResponse response);
 
     void handleDestinyGuiRequest(OpenDestinyGuiRequest request);
-
-    void handleDialogueQuestionResponse(InteractionDialogueQuestionResponse response);
 
     void handleConfigResponse(ConfigResponse response);
 

@@ -5,6 +5,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.network.chat.Component;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -14,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DialogueSessionTest {
@@ -58,6 +60,89 @@ class DialogueSessionTest {
         DialogueSession progressed = resumed.withProgress("reply", 1, List.of("comfort"), 778L);
         assertFalse(progressed.acceptsOffer(777L, 7L), "accepted progression must make the old token single-use");
         assertTrue(progressed.acceptsOffer(778L, 7L));
+    }
+
+    @Test
+    void resumeRejectsReusingThePrePauseOfferToken() {
+        DialogueSession paused = DialogueSession.start(PLAYER, VILLAGER, SESSION, 7L, 101L, event())
+                .withProgress("reply", 1, List.of("comfort"), 102L)
+                .pause(3_400L);
+
+        assertFalse(paused.acceptsOffer(102L, 7L));
+        assertThrows(IllegalArgumentException.class, () -> paused.resume(102L),
+                "a token consumed before pause must never become active again on resume");
+        assertThrows(IllegalArgumentException.class, () -> paused.resume(101L),
+                "the preceding token must also remain stale after resume");
+        assertThrows(IllegalArgumentException.class, () -> paused.resume(103L, 103L),
+                "the menu token consumed by RESUME must not become the active token");
+    }
+
+    @Test
+    void resumingAtLastAllowedTickKeepsTheExactPassageChoicesAndUncommittedEffects() {
+        List<DialogueAction> effects = new ArrayList<>(List.of(new DialogueAction.Hearts(4)));
+        DialogueSession active = DialogueSession.start(PLAYER, VILLAGER, SESSION, 7L, 101L, event())
+                .withProgress("reply", 1, List.of("comfort"), 102L)
+                .withAcceptedChoice("ask_why")
+                .withSelectedOutcome("ask_why", 1)
+                .withPendingEffects(effects);
+        DialogueSession paused = active.pause(1_000L + DialogueEngine.PAUSE_TICKS);
+        effects.clear();
+
+        assertFalse(active.canResume(3_399L, 7L, VILLAGER));
+        assertTrue(paused.canResume(3_399L, 7L, VILLAGER));
+        assertFalse(paused.canResume(3_400L, 7L, VILLAGER));
+        assertFalse(paused.canResume(3_399L, 8L, VILLAGER));
+        assertFalse(paused.canResume(3_399L, 7L, OTHER_VILLAGER));
+
+        DialogueSession resumed = paused.resume(103L, 201L);
+        assertEquals(DialogueSession.Status.ACTIVE, resumed.status());
+        assertEquals(0L, resumed.pauseDeadline());
+        assertEquals(SESSION, resumed.id());
+        assertEquals("reply", resumed.nodeId());
+        assertEquals(1, resumed.lineIndex());
+        assertEquals(List.of("comfort"), resumed.offeredChoices());
+        assertEquals(Set.of("ask_why"), resumed.acceptedChoices());
+        assertEquals(Map.of("ask_why", 1), resumed.selectedOutcomes());
+        assertEquals(List.of(new DialogueAction.Hearts(4)), resumed.pendingEffects());
+        assertEquals(201L, resumed.previousOfferToken());
+        assertFalse(resumed.acceptsOffer(102L, 7L));
+        assertTrue(resumed.acceptsOffer(103L, 7L));
+        assertEquals(List.of(new DialogueAction.Hearts(4)), paused.pendingEffects(),
+                "resuming must not consume the queued effects in the retained snapshot");
+    }
+
+    @Test
+    void progressingRotatesOnlyTheImmediatelyPreviousScopedCloseToken() {
+        DialogueSession selected = DialogueSession.start(PLAYER, VILLAGER, SESSION, 7L, 102L, 101L, event());
+        assertEquals(101L, selected.previousOfferToken());
+
+        DialogueSession sameOffer = selected.withProgress("start", 0, List.of(), 102L);
+        assertEquals(101L, sameOffer.previousOfferToken(),
+                "recomputing the same offer must not forget the pending menu close token");
+
+        DialogueSession progressed = sameOffer.withProgress("start", 1, List.of(), 103L);
+        assertEquals(102L, progressed.previousOfferToken());
+        assertFalse(progressed.acceptsOffer(102L, 7L));
+        assertTrue(progressed.acceptsOffer(103L, 7L));
+
+        DialogueSession progressedAgain = progressed.withProgress("reply", 0, List.of(), 104L);
+        assertEquals(103L, progressedAgain.previousOfferToken(),
+                "a scoped close must not authorize arbitrarily old selections");
+        assertFalse(progressedAgain.acceptsOffer(102L, 7L));
+        assertFalse(progressedAgain.acceptsOffer(103L, 7L));
+    }
+
+    @Test
+    void pauseAndResumeEnforceTheirStateAndDeadlineContracts() {
+        DialogueSession active = DialogueSession.start(PLAYER, VILLAGER, SESSION, 7L, 101L, event());
+
+        assertThrows(IllegalArgumentException.class, () -> active.pause(-1L));
+        assertThrows(IllegalStateException.class, () -> active.resume(102L));
+
+        DialogueSession paused = active.pause(3_400L);
+        assertSame(paused, paused.pause(9_999L));
+        assertFalse(paused.acceptsOffer(101L, 7L));
+        assertEquals(3_400L, paused.pauseDeadline());
     }
 
     @Test
@@ -112,10 +197,22 @@ class DialogueSessionTest {
                 PLAYER, VILLAGER, SESSION, 7L, 55L, blockedChoiceEvent());
 
         assertTrue(DialogueEngine.hasNoValidContinuation(blocked));
-        assertTrue(DialogueEngine.canContinue(blocked),
-                "a zero-choice final line must still expose Continue so advance() can end the run safely");
+        assertEquals(DialogueEngine.AdvanceKind.BACK_TO_TOPICS, DialogueEngine.advanceKind(blocked),
+                "a zero-choice final line must still expose the safe final acknowledgement");
         assertFalse(DialogueEngine.hasNoValidContinuation(
                 blocked.withProgress(blocked.nodeId(), 0, List.of("adult"), 56L)));
+    }
+
+    @Test
+    void advanceKindDistinguishesAnotherPassageFromFinalAcknowledgement() {
+        DialogueSession start = DialogueSession.start(PLAYER, VILLAGER, SESSION, 7L, 55L, event());
+        assertEquals(DialogueEngine.AdvanceKind.NEXT, DialogueEngine.advanceKind(start));
+
+        DialogueSession finalLineBeforeChoice = start.withProgress("reply", 1, List.of("comfort"), 56L);
+        assertEquals(DialogueEngine.AdvanceKind.NONE, DialogueEngine.advanceKind(finalLineBeforeChoice));
+
+        DialogueSession completing = start.withProgress("done", 0, List.of(), 57L);
+        assertEquals(DialogueEngine.AdvanceKind.BACK_TO_TOPICS, DialogueEngine.advanceKind(completing));
     }
 
     private static DialogueEvent event() {

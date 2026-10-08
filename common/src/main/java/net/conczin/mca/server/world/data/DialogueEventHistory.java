@@ -15,7 +15,8 @@ import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.saveddata.SavedData;
 
 import java.util.Comparator;
-import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
@@ -45,7 +46,7 @@ public final class DialogueEventHistory extends SavedData {
             .thenComparing(entry -> entry.getKey().villager().toString())
             .thenComparing(entry -> entry.getKey().event().toString());
 
-    private final Map<Key, EventRecord> records = new HashMap<>();
+    private final Map<Key, EventRecord> records = new LinkedHashMap<>();
     private final CompoundTag preservedFutureData;
 
     DialogueEventHistory() {
@@ -95,6 +96,10 @@ public final class DialogueEventHistory extends SavedData {
                 DataFixTypes.SAVED_DATA_COMMAND_STORAGE);
     }
 
+    public boolean writable() {
+        return preservedFutureData == null;
+    }
+
     public boolean completed(UUID player, UUID villager, ResourceLocation event) {
         EventRecord record = records.get(key(player, villager, event));
         return record != null && record.story() && record.completionCount() > 0L;
@@ -111,6 +116,17 @@ public final class DialogueEventHistory extends SavedData {
         return record == null ? 0L : record.nextEligibleAt();
     }
 
+    public long nextEligibleAt(UUID player, UUID villager, ResourceLocation event, long gameTime) {
+        Key key = key(player, villager, event);
+        EventRecord record = records.get(key);
+        if (writable() && record != null && !record.story() && record.nextEligibleAt() <= gameTime) {
+            records.remove(key);
+            setDirty();
+            return 0L;
+        }
+        return record == null ? 0L : record.nextEligibleAt();
+    }
+
     public void complete(
             UUID player,
             UUID villager,
@@ -119,8 +135,8 @@ public final class DialogueEventHistory extends SavedData {
             long gameTime,
             RandomSource random
     ) {
-        if (preservedFutureData != null) {
-            return;
+        if (!writable()) {
+            throw new IllegalStateException("Cannot complete dialogue using unsupported future history schema");
         }
         Objects.requireNonNull(event, "event");
         Objects.requireNonNull(choices, "choices");
@@ -169,6 +185,32 @@ public final class DialogueEventHistory extends SavedData {
             EventRecord record = entry.getValue();
             return !record.story() && record.nextEligibleAt() <= gameTime;
         });
+        if (removed) {
+            setDirty();
+        }
+    }
+
+    /** Scans a bounded rotating slice so old player/villager pairs are eventually reclaimed. */
+    public void pruneExpiredScheduling(long gameTime, int maxEntries) {
+        if (!writable()) {
+            return;
+        }
+        if (gameTime < 0L || maxEntries <= 0) {
+            throw new IllegalArgumentException("Dialogue maintenance requires nonnegative time and a positive scan budget");
+        }
+        Map<Key, EventRecord> retained = new LinkedHashMap<>();
+        Iterator<Map.Entry<Key, EventRecord>> iterator = records.entrySet().iterator();
+        boolean removed = false;
+        for (int scanned = 0; scanned < maxEntries && iterator.hasNext(); scanned++) {
+            Map.Entry<Key, EventRecord> entry = iterator.next();
+            if (entry.getValue().story() || entry.getValue().nextEligibleAt() > gameTime) {
+                retained.put(entry.getKey(), entry.getValue());
+            } else {
+                removed = true;
+            }
+            iterator.remove();
+        }
+        records.putAll(retained);
         if (removed) {
             setDirty();
         }

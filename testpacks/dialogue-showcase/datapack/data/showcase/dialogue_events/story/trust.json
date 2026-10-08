@@ -1,0 +1,26 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "showcase.trust.prompt",
+    "resume_prompt": "showcase.trust.resume",
+    "topic": "personal"
+  },
+  "priority": 65,
+  "weight": 1,
+  "requirements": [{ "type": "mca:hearts", "min": 20 }],
+  "repeat": { "type": "cooldown", "seconds": 5 },
+  "history": "story",
+  "start": "question",
+  "nodes": {
+    "question": {
+      "lines": ["showcase.trust.open", "showcase.trust.question"],
+      "choices": [
+        { "id": "listen", "text": "showcase.trust.listen", "next": "heard" },
+        { "id": "uncertain", "text": "showcase.trust.uncertain", "next": "understood" }
+      ]
+    },
+    "heard": { "line": "showcase.trust.heard", "complete": true },
+    "understood": { "line": "showcase.trust.understood", "complete": true }
+  }
+}

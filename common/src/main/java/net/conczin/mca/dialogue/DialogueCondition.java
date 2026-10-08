@@ -8,20 +8,26 @@ import com.mojang.serialization.Dynamic;
 import com.mojang.serialization.JsonOps;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.LongTermMemory;
+import net.conczin.mca.entity.ai.RecentVillagerEvents;
 import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Gender;
+import net.conczin.mca.registry.ProfessionsMCA;
 import net.conczin.mca.entity.ai.relationship.Personality;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.Rank;
 import net.conczin.mca.resources.Tasks;
+import net.conczin.mca.server.world.data.PlayerSaveData;
+import net.conczin.mca.server.world.data.Village;
+import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
 import net.minecraft.util.GsonHelper;
 import net.minecraft.world.Container;
@@ -71,13 +77,16 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
     ResourceLocation ITEM = MCA.locate("item");
     ResourceLocation TAG = MCA.locate("tag");
     ResourceLocation MEMORY = MCA.locate("memory");
+    ResourceLocation RECENT_EVENT = MCA.locate("recent_event");
     ResourceLocation BUILDING_ASSIGNMENT = MCA.locate("building_assignment");
+    ResourceLocation HIT_BY = MCA.locate("hit_by");
+    ResourceLocation VILLAGE_HAS_SPACE = MCA.locate("village_has_space");
 
     Set<ResourceLocation> BUILTIN_TYPES = Set.of(
             PERSONALITY, MOOD, HEARTS, RELATIONSHIP, FAMILY, AGE_GROUP, PROFESSION, RANK, TRAIT,
             HEALTH, TIME, WEATHER, BIOME, ADVANCEMENT, VILLAGE_HAS_BUILDING, IN_BUILDING,
-            GENDER, PREGNANCY, INVENTORY, ITEM, TAG, MEMORY, BUILDING_ASSIGNMENT,
-            EVENT_COMPLETED, EVENT_CHOICE, NOT
+            GENDER, PREGNANCY, INVENTORY, ITEM, TAG, MEMORY, RECENT_EVENT, BUILDING_ASSIGNMENT,
+            HIT_BY, VILLAGE_HAS_SPACE, EVENT_COMPLETED, EVENT_CHOICE, NOT
     );
 
     Set<String> MOODS = Set.of("depressed", "sad", "unhappy", "passive", "fine", "happy", "overjoyed");
@@ -115,7 +124,10 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
             Map.entry(ITEM, DialogueCondition::evaluateItem),
             Map.entry(TAG, DialogueCondition::evaluateTag),
             Map.entry(MEMORY, DialogueCondition::evaluateMemory),
-            Map.entry(BUILDING_ASSIGNMENT, DialogueCondition::evaluateBuildingAssignment)
+            Map.entry(RECENT_EVENT, DialogueCondition::evaluateRecentEvent),
+            Map.entry(BUILDING_ASSIGNMENT, DialogueCondition::evaluateBuildingAssignment),
+            Map.entry(HIT_BY, DialogueCondition::evaluateHitBy),
+            Map.entry(VILLAGE_HAS_SPACE, DialogueCondition::evaluateVillageHasSpace)
     );
 
     ResourceLocation type();
@@ -210,7 +222,8 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
         } else if (PROFESSION.equals(type)) {
             requireOnly(object, "type", "value");
             ResourceLocation profession = requiredLocation(object, "value");
-            if (BuiltInRegistries.VILLAGER_PROFESSION.getOptional(profession).isEmpty()) {
+            if (BuiltInRegistries.VILLAGER_PROFESSION.getOptional(profession).isEmpty()
+                    && !ProfessionsMCA.PROFESSIONS.containsKey(profession)) {
                 throw new IllegalArgumentException("Unknown villager profession '" + profession + "'");
             }
         } else if (RANK.equals(type)) {
@@ -265,10 +278,22 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
                 throw new IllegalArgumentException("mca:memory var must be 'player'");
             }
             if (object.has("present")) requiredBoolean(object, "present");
+        } else if (RECENT_EVENT.equals(type)) {
+            requireOnly(object, "type", "event", "within_ticks");
+            ResourceLocation event = requiredLocation(object, "event");
+            if (!RecentVillagerEvents.isRegistered(event)) {
+                throw new IllegalArgumentException("Unknown recent villager event '" + event + "'");
+            }
+            long withinTicks = requiredLong(object, "within_ticks");
+            if (withinTicks < 0L) {
+                throw new IllegalArgumentException("mca:recent_event within_ticks must be non-negative");
+            }
         } else if (BUILDING_ASSIGNMENT.equals(type)) {
             requireOnly(object, "type", "value", "source");
             requiredNonblankString(object, "value");
             if (object.has("source")) requireAllowedValue(object, "source", ASSIGNMENT_SOURCES);
+        } else if (HIT_BY.equals(type) || VILLAGE_HAS_SPACE.equals(type)) {
+            requireOnly(object, "type");
         } else {
             throw new IllegalArgumentException("No validator for dialogue condition type " + type);
         }
@@ -353,8 +378,14 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
 
     private static Evaluation evaluateProfession(Defined condition, DialogueContext context) {
         ResourceLocation expected = requiredLocation(condition.definition(), "value");
-        if (BuiltInRegistries.VILLAGER_PROFESSION.getOptional(expected).isEmpty()) return Evaluation.UNAVAILABLE;
-        return result(expected.equals(BuiltInRegistries.VILLAGER_PROFESSION.getKey(context.villager().getProfession())));
+        var registered = BuiltInRegistries.VILLAGER_PROFESSION.getOptional(expected);
+        if (registered.isPresent()) {
+            return result(registered.orElseThrow() == context.villager().getProfession());
+        }
+        var mcaProfession = ProfessionsMCA.PROFESSIONS.get(expected);
+        return mcaProfession == null
+                ? Evaluation.UNAVAILABLE
+                : result(mcaProfession == context.villager().getProfession());
     }
 
     private static Evaluation evaluateRank(Defined condition, DialogueContext context) {
@@ -417,9 +448,9 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
     private static Evaluation evaluateInBuilding(Defined condition, DialogueContext context) {
         String type = requiredNonblankString(condition.definition(), "value");
         if (!isKnownBuildingType(type)) return Evaluation.UNAVAILABLE;
-        return result(context.village()
-                .filter(village -> village.isInBuildingOfType(context.villager().blockPosition(), type))
-                .isPresent());
+        return result(VillageManager.get(context.level())
+                .findVillages(village -> village.isInBuildingOfType(context.villager().blockPosition(), type))
+                .findAny().isPresent());
     }
 
     private static Evaluation evaluateGender(Defined condition, DialogueContext context) {
@@ -478,6 +509,29 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
         String id = LongTermMemory.parseId(definition, context.player());
         boolean present = !definition.has("present") || requiredBoolean(definition, "present");
         return result(context.villager().getLongTermMemory().hasMemory(id) == present);
+    }
+
+    private static Evaluation evaluateRecentEvent(Defined condition, DialogueContext context) {
+        JsonObject definition = condition.definition();
+        ResourceLocation event = requiredLocation(definition, "event");
+        long withinTicks = requiredLong(definition, "within_ticks");
+        return result(context.villager().getRecentVillagerEvents().occurredWithin(
+                event,
+                RecentVillagerEvents.gameTime(context.level()),
+                withinTicks
+        ));
+    }
+
+    private static Evaluation evaluateHitBy(Defined condition, DialogueContext context) {
+        return result(context.villager().isHitBy(context.player()));
+    }
+
+    private static Evaluation evaluateVillageHasSpace(Defined condition, DialogueContext context) {
+        ServerLevel playerLevel = (ServerLevel) context.player().level();
+        return result(PlayerSaveData.get(context.player())
+                .getLastSeenVillage(VillageManager.get(playerLevel))
+                .filter(Village::hasSpace)
+                .isPresent());
     }
 
     private static Evaluation evaluateBuildingAssignment(Defined condition, DialogueContext context) {

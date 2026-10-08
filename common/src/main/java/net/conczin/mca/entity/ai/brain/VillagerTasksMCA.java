@@ -178,7 +178,7 @@ public class VillagerTasksMCA {
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getGuardCorePackage(villager));
             brain.addActivity(Activity.WORK, VillagerTasksMCA.getGuardWorkPackage());
             brain.addActivity(Activity.PANIC, VillagerTasksMCA.getGuardPanicPackage(0.5f));
-            brain.addActivity(Activity.RAID, VillagerTasksMCA.getGuardWorkPackage());
+            brain.addActivity(Activity.RAID, VillagerTasksMCA.getGuardRaidPackage());
         } else {
             brain.setSchedule(SchedulesMCA.getTypeSchedule(villager));
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getWorkingCorePackage(profession, 0.5F));
@@ -650,6 +650,7 @@ public class VillagerTasksMCA {
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getRaidPackage(float speedModifier) {
         return ImmutableList.of(
+                Pair.of(0, new RecordRaidSurvivalTask()),
                 Pair.of(0, new RunOne<>(ImmutableList.of(
                         Pair.of(MoveToSkySeeingSpot.create(speedModifier), 5),
                         Pair.of(VillageBoundRandomStroll.create(speedModifier * 1.1F), 2)
@@ -659,6 +660,13 @@ public class VillagerTasksMCA {
                 getMinimalLookBehavior(),
                 Pair.of(99, ResetRaidStatus.create())
         );
+    }
+
+    private static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getGuardRaidPackage() {
+        return ImmutableList.<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>>builder()
+                .add(Pair.of(0, new RecordRaidSurvivalTask()))
+                .addAll(getGuardWorkPackage())
+                .build();
     }
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getHidePackage(float speedModifier) {

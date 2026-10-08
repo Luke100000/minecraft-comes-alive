@@ -1,0 +1,55 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "highlighted",
+    "prompt": "dialogue_event.mca.personal.revived.prompt",
+    "resume_prompt": "dialogue_event.mca.personal.revived.resume",
+    "topic": "life_event"
+  },
+  "priority": 115,
+  "weight": 1,
+  "requirements": [
+    { "type": "mca:recent_event", "event": "mca:revived", "within_ticks": 24000 },
+    { "type": "mca:hearts", "min": 20 }
+  ],
+  "repeat": { "type": "cooldown", "seconds": 5 },
+  "history": "scheduling",
+  "start": "intro",
+  "nodes": {
+    "intro": {
+      "lines": [
+        "dialogue_event.mca.personal.revived.intro.light",
+        "dialogue_event.mca.personal.revived.intro.market",
+        "dialogue_event.mca.personal.revived.intro.strange"
+      ],
+      "choices": [
+        {
+          "id": "take_time",
+          "text": "dialogue_event.mca.personal.revived.choice.take_time",
+          "actions": [{ "type": "mca:hearts", "amount": 3 }],
+          "next": "take_time"
+        },
+        {
+          "id": "alive_now",
+          "text": "dialogue_event.mca.personal.revived.choice.alive_now",
+          "actions": [{ "type": "mca:hearts", "amount": 1 }],
+          "next": "alive_now"
+        }
+      ]
+    },
+    "take_time": {
+      "lines": [
+        "dialogue_event.mca.personal.revived.take_time",
+        "dialogue_event.mca.personal.revived.take_time.family"
+      ],
+      "complete": true
+    },
+    "alive_now": {
+      "lines": [
+        "dialogue_event.mca.personal.revived.alive_now",
+        "dialogue_event.mca.personal.revived.alive_now.breakfast"
+      ],
+      "complete": true
+    }
+  }
+}

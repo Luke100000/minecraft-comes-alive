@@ -1,0 +1,54 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue_event.mca.cured_zombies_followup.prompt",
+    "resume_prompt": "dialogue_event.mca.cured_zombies_followup.resume",
+    "topic": "personal"
+  },
+  "priority": 55,
+  "weight": 1,
+  "requirements": [
+    { "type": "mca:event_completed", "event": "mca:personal/cured_zombies" },
+    { "type": "mca:event_choice", "event": "mca:personal/cured_zombies", "choice": "experience_changes_you" }
+  ],
+  "repeat": { "type": "cooldown", "seconds": 5 },
+  "history": "scheduling",
+  "start": "main",
+  "nodes": {
+    "main": {
+      "lines": [
+        "dialogue_event.mca.cured_zombies_followup.remember",
+        "dialogue_event.mca.cured_zombies_followup.meeting",
+        "dialogue_event.mca.cured_zombies_followup.question"
+      ],
+      "choices": [
+        {
+          "id": "still_believe_it",
+          "text": "dialogue_event.mca.cured_zombies_followup.choice.still_believe_it",
+          "actions": [{ "type": "mca:hearts", "amount": 2 }],
+          "next": "agree"
+        },
+        {
+          "id": "less_certain",
+          "text": "dialogue_event.mca.cured_zombies_followup.choice.less_certain",
+          "next": "uncertain"
+        }
+      ]
+    },
+    "agree": {
+      "lines": [
+        "dialogue_event.mca.cured_zombies_followup.agree",
+        "dialogue_event.mca.cured_zombies_followup.agree.greeting"
+      ],
+      "complete": true
+    },
+    "uncertain": {
+      "lines": [
+        "dialogue_event.mca.cured_zombies_followup.uncertain",
+        "dialogue_event.mca.cured_zombies_followup.uncertain.listen"
+      ],
+      "complete": true
+    }
+  }
+}
