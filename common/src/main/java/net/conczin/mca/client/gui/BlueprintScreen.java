@@ -77,10 +77,10 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final int NAVIGATION_WIDTH = 80;
     private static final int MAP_NAVIGATION_OFFSET = 180;
     private static final float MAP_MIN_SCALE = 0.5F;
-    private static final float MAP_MAX_SCALE = 4.0F;
+    private static final float MAP_MAX_SCALE = 8.0F;
     private static final double MAP_ZOOM_FACTOR = 1.1D;
     private static final double MAP_DRAG_THRESHOLD = 3.0D;
-    private static final float[] MAP_SCALE_PRESETS = {0.5F, 1.0F, 2.0F, 3.0F, 4.0F};
+    private static final float[] MAP_SCALE_PRESETS = {0.5F, 1.0F, 2.0F, 3.0F, 4.0F, 6.0F, 8.0F};
     private Integer selectedFloorOrdinal;
     private boolean mapScaleFit;
     private float mapScale;

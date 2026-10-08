@@ -1612,8 +1612,8 @@ public final class MCAGroundPathNavigationGameTests {
         });
     }
 
-    @GameTest(batch = "mca_navigation_local_brownian_retry", templateNamespace = "minecraft",
-            template = "bastion/blocks/air", timeoutTicks = 80)
+    @GameTest(batch = "mca_navigation_local_brownian_retry", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 80)
     public static void stalledIndoorStrollWaitsButAPhysicalStepAllowsNewDestination(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(10, 1, 10));
         prepareFlatArea(helper, start, 3, 3);

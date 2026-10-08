@@ -17,6 +17,13 @@ public class CommonConfig {
     public boolean villagersInteractWithFenceGates = true;
 
     /**
+     * If true, MCA villagers may open or close any DoorBlock. Otherwise,
+     * DoorBlocks must be in #minecraft:mob_interactable_doors.
+     * Dramatic Doors follows its own interaction rules.
+     */
+    public boolean villagersInteractWithAnyDoor = false;
+
+    /**
      * Time (in ticks) until a baby grows up when held as an item.
      */
     public int babyItemGrowUpTime = 24000;

@@ -1247,7 +1247,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         //move out
-        residency.leaveHome();
+        residency.leaveVillage();
 
         if (interactedWith) {
             VillagerTrackerManager.update(this);
@@ -1596,7 +1596,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             zombie.setTradeOffers(getOffers().copy());
             zombie.setVillagerXp(getVillagerXp());
             zombie.setPersistenceRequired();
-            residency.leaveHome();
+            residency.leaveVillage();
         }
 
         if (mob instanceof VillagerLike<?> zombie) {

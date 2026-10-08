@@ -6,7 +6,9 @@
 
 * Building, floor, and room detection now handles multi-floor, stacked, irregular, and partially connected builds more consistently.
 * Floors now keep their own geometry across stairs, ladders, doors, landings, uneven rooms, and nearby structures instead of being merged by height alone.
+* Improved building and floor detection around uneven and stepped porches.
 * Added a **Remove Floor** action for empty floors.
+* Building edits no longer apply to the wrong room or floor if you move away before confirming them.
 * Admin building-type changes now apply to the room you are standing in.
 * Rooms can use the building's **Main Room** requirements. The Main Room can be chosen manually or selected automatically.
 * Expanded the **Blueprint Map**:
@@ -26,7 +28,11 @@
 * Villagers can open, close, and walk through fence gates. This is controlled by `villagersInteractWithFenceGates`.
 * Improved home, bed, workplace, and resident assignment, including support for more modded beds.
 * **Set Home** only assigns a bed the villager can reach. If no reachable replacement is available, the current home is kept.
-* Homeless villagers now look for covered indoor space near a bed at night without claiming that bed as their home.
+* Homeless villagers use nearby houses more naturally for nighttime shelter without claiming a bed as their home.
+  * They spread between available houses instead of crowding the nearest one.
+  * Full houses can be skipped in favour of another reachable shelter, while villagers in danger prioritise getting indoors.
+  * Once inside, villagers stay on usable room floor instead of wandering onto beds or getting stuck around doorways.
+* Fixed villagers sometimes getting stuck at trapdoors above ladders and other climbable passages.
 * Mourning now works at village scope:
   * Added `enableMourning` to disable mourning.
   * Ambient mourning happens in small groups instead of pulling the whole village to a graveyard.
@@ -49,7 +55,7 @@
 * Improved archer movement and aiming when approaching, holding position, keeping distance, repositioning, or retreating.
 * Archers avoid crowds and obstacles while retreating and keep facing their target while moving.
 * Guards and archers keep their weapons and armour while peacefully following a player.
-* MCA archer arrows can pass through villagers. This is controlled by `archerArrowsIgnoreVillagers`.
+* MCA archer arrows can pass through villagers and iron golems. This is controlled by `archerArrowsIgnoreVillagers`.
 * Guards can spot visible threats from farther away.
 
 ## Family Tree, ChatAI, Destiny, and villager tools
@@ -58,6 +64,7 @@
 * Family Tree search and navigation now work inside the viewer, with cursor-centred zooming and clearer deceased-villager tooltips.
 * Opening the Family Tree or Villager Tracker with an empty search starts from your player name.
 * ChatAI talks to the villager you interacted with, handles full names and nicknames more accurately, and no longer holds up the server while waiting for a reply.
+* Villager long-term interaction memory now survives infection into a zombie villager and curing back into a villager.
 * Profession changes in the Villager Editor now refresh consistently.
 * Destiny can automatically discover vanilla and modded village structures, including destinations in other dimensions.
 * Added `autoDiscoverDestinyLocations`, `destinySpawnLocationBlacklist`, `destinyOverworldOnly`, and `destinyDimensionBlacklist`. Blacklists support simple `*` wildcards such as `ctov:*`.
@@ -71,11 +78,15 @@
 * Fixed MCA's root and bouquet advancements on 1.21.1.
 * Fixed carried-baby hitboxes, crib positioning, and child ageing from golden apples.
 * Babies are no longer placed where they would immediately spawn inside solid blocks.
+* Ready, named baby items can now be placed directly onto a safe block instead of only being released at the player's position. Unsafe, unsupported, waterlogged, lava-filled, or obstructed placements are rejected.
 * Baby zombie villagers stay babies when converted from vanilla baby zombie villagers.
+* Cribs are easier to interact with.
 * Fixed villager voice pitch changing over time instead of with growth.
 * Fixed villager and player size, eye height, name-tag position, and hitbox updates across growth, respawning, and dimension changes.
+* Fixed carried-villager name tags using a fixed height instead of following the villager's visual size.
 * Fixed translated text not refreshing after changing language or reloading resources.
 * Fixed flirty personality dialogue overriding parent/child dialogue for the player's children.
+* Fixed some dialogue options appearing or behaving incorrectly, including child greetings and rumours.
 
 # 7.7.36
 * Recommended to ***__backup__*** your world.

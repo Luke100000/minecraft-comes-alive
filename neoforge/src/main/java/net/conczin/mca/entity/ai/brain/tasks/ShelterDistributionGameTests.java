@@ -364,7 +364,7 @@ public final class ShelterDistributionGameTests {
     @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air",
             timeoutTicks = 220)
     public static void unreachableShelterBacksOffRepeatedRouteSearches(GameTestHelper helper) {
-        BlockPos center = arena(helper, 46);
+        BlockPos center = arena(helper, 49);
         house(helper.getLevel(), center);
         var incoming = spawn(helper, center.east(2).south(9));
         BlockPos trapped = incoming.blockPosition();

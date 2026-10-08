@@ -1,203 +1,199 @@
 # Nighttime shelter distribution
 
-Status: draft for review. Capacity distribution is not implemented. The user
-selected a maximum of 30 additional walking-route blocks to prefer a house with
-space. Unregistered house membership and admission accounting require engineering
-verification before the implementation plan is finalized.
+Status: implemented inline on `dev/1.21.1`, 2026-10-06; server tests and loader builds verified.
+The server tests cover whole-house discovery, admission, route limits, threats,
+and actual arrivals. Client appearance and village-scale performance remain unverified.
+Fresh results: 48 distribution GameTests, 17 existing shelter GameTests, and
+552 common JUnit tests passed; Fabric and NeoForge builds passed. The focused
+GameTest runs do not establish full GameTest-suite health.
 
 ## Intended outcome
 
-Incoming homeless villagers should prefer the nearest reachable house with space,
-instead of repeatedly gathering around the nearest beds. A house's normal capacity
-target is its total number of beds plus five villagers. Immediate shelter takes
-priority when danger is detected or alternatives require excessive travel.
+Incoming homeless REST villagers prefer the nearest reachable house with space.
+Normal capacity is the number of compatible bed heads in that house plus five
+villagers. They may choose an alternative up to **64 additional walking-route
+blocks**, inclusive, compared with the nearest reachable shelter considered.
 
-Villagers already on suitable indoor floor stay there. Capacity is an admission
-preference, not a reason to evict villagers, prevent bed owners returning, or leave
-villagers outside. Temporary shelter does not change HOME or claim a bed ticket.
-The user's saved world remains inspection evidence only; all testing uses
-disposable worlds.
+This is a soft admission preference. When no under-capacity alternative qualifies,
+overflow prefers the reachable house least over its normal capacity within the
+same 64 additional route blocks, breaking ties by route length and then discovery
+order. Detected danger retains the nearest reachable shelter.
+Already-sheltered villagers stay; returning HOME owners and PANIC/HIDE/fleeing
+movement keep their existing owners. Temporary shelter never claims HOME or a POI
+ticket. Use disposable test worlds; do not modify or copy the user's saved world.
 
-## Current behavior and ownership
+## Current implementation and evidence
 
-`SeekIndoorShelterTask` runs in the homeless REST package. It searches HOME POIs
-within 48 blocks, takes the nearest five bed anchors, and selects reachable indoor
-floor destinations. It excludes bed surfaces and reuses `EnterBuildingTask` floor
-validation. Navigation currently chooses a reachable target from a set of valid
-floor candidates, rather than relying on a single random sample.
+The current shared-code owners are:
 
-`LocalInsideBrownianWalk` currently delegates to vanilla's local indoor wandering
-and applies an existing retry gate. It does not find shelter from outdoors or
-distribute villagers between houses. Preserve its local-wandering responsibility,
-retry cadence, and navigation ownership; destination selection is being corrected
-in the parallel work described below.
+- `SeekIndoorShelterTask`: homeless REST entry; searches compatible HOME anchors
+  within 48 blocks with occupancy ANY and retries after 20–39 ticks. It groups
+  anchors before the ten-house path-request limit, compares actual native route
+  length, and publishes the selected usable floor through existing navigation.
+- `IndoorRoomCache`, owned by `VillageManager`: one transient server-thread cache
+  per level. `resolve(BlockPos bed)` returns one immutable `Room.floorCells()`.
+  Cache misses use fresh `SelectedFloorScanner` and `BuildingRoomScanner`
+  partitioning. Persisted registered room cells are no longer a discovery shortcut.
+  `resolveHouse` and `resolveHouses` retain full-floor evidence and follow supported
+  connector handoffs in that same cache. Registered identity supplies required
+  coverage evidence; stale or unavailable membership bypasses capacity rather
+  than imposing a guessed partial cap.
+- `MemoryModuleTypeMCA.SHELTER_BED`: a selected anchor shared by entry and
+  wandering, without bed ownership. Brain activity cleanup and the core behavior
+  clear it when REST ends or HOME is acquired.
+- `EnterBuildingTask.isUsableFloor`: supported collision-free standing space,
+  excluding doors, bed blocks, and positions immediately above beds. Doorways
+  remain navigation passages; they are excluded as idle destinations.
+- `LocalInsideBrownianWalk`: chooses nearby usable floor in that same resolved
+  room. It now has its own room-based selection rather than delegating to vanilla
+  Brownian selection. It prefers steps of 2–4 blocks when available and retains
+  its 40-tick retry gate.
 
-HOME acquisition remains separate from shelter selection. Existing panic, fleeing,
-raid hiding, and normal bed-return behaviors retain control of their destinations.
-Capacity applies only to ordinary homeless REST shelter selection.
+[Inspect pathfinding task context](thread://01a10d25-2949-7020-9c55-27bd9f739771?hostId=local)
+reports the partition-cache regression failing before its correction, then all
+17 shelter GameTests and both loader builds passing. The saved completion logs
+were inspected for this revision. These are prior-run results, not a fresh rerun
+or proof of distribution, whole-house geometry, performance, or client appearance.
 
-## Coordination with indoor-targeting work
+Retain that architecture and its regressions. Add admission before shelter
+selection; do not rewrite local wandering or create another room scanner/cache.
 
-The active chat [Backport 1.21.1 pathfinding optim (2)](thread://01a10bd3-3dd2-77e1-995d-79adce443bd9?hostId=local)
-is working on local indoor destination selection. Its investigation reports that
-vanilla Brownian wandering can select a support block beneath a bed and navigation
-can raise that destination onto the bed. The earlier regression checked the target
-and the block below it, which did not cover a bed above the selected support block.
+## Selection and incoming lifecycle
 
-That work is correcting selection to use actual standing positions with support
-and destination clearance, exclude bed surfaces, and test real movement around
-beds and leaves, including villagers starting on a bed. These changes are in
-progress, not a completed verification result.
+1. Ordinary selection runs only during homeless REST, with existing combat and
+   walking-target guards. Sleeping or properly sheltered villagers do not relocate.
+2. Discover compatible bed anchors within the existing 48-block radius. Resolve
+   house identity before limiting navigation to ten distinct houses. Multiple
+   beds or rooms in one house must not consume the house budget.
+3. Get standing endpoints from the existing room cache and usable-floor predicate.
+   Capacity membership and movement clearance are separate: occupied beds count
+   toward capacity although they cannot be standing destinations.
+4. Measure each inspected reachable route once. In ordinary conditions choose the
+   shortest under-capacity route at most 64 blocks longer than the shortest
+   reachable route. Discovery order breaks ties. Unknown capacity permits entry.
+5. With no qualifying under-capacity alternative, choose the house with the fewest
+   occupants over its `bedCount + 5` capacity within the same route allowance.
+   Count reserved beds, physical guests and active arrivals, excluding the selector.
+   Equal overflow counts prefer the shorter route, then discovery order. Detected
+   danger selects the shortest reachable route. No reachable shelter retains the existing village-seeking
+   behavior; no new teleport or movement fallback is introduced.
+6. Publish through `EnterBuildingTask.start` and the existing persistent movement
+   owner. Set `SHELTER_BED` to the chosen anchor. Navigation owns movement.
 
-The distribution change must build on the verified indoor-targeting correction.
-Review its final floor-selection API and movement tests before implementation;
-reuse the owning floor predicate where its semantics fit. Do not introduce a
-second indoor selector or preserve the faulty vanilla selection just to keep this
-spec's former description unchanged. Capacity distribution cannot compensate for
-local wandering that continues to converge on a bed.
+Preserve a valid arrival already in progress; do not rerun admission every tick or
+redirect it merely because the house fills later. An expired, cleared, redirected,
+or completed arrival no longer consumes an incoming place. `SHELTER_BED` alone
+is **not** a reservation: it can outlive WALK_TARGET while the villager idles.
 
-## Selection policy
+Trace how `moveTowardsPersistent`, WALK_TARGET, and any retained movement intent
+represent a still-active arrival. Reuse that authoritative lifecycle rather than
+add a shelter reservation map. If a villager has arrived in another suitable room,
+identify its current shelter rather than send it back solely because the selected
+anchor still resolves elsewhere.
 
-1. Keep the existing early exit for sleeping villagers, villagers with HOME, and
-   villagers already standing on suitable indoor floor.
-2. Find nearby bed-bearing shelter candidates within the existing search radius.
-   Group bed anchors by house before applying the candidate/pathfinding budget;
-   five beds in one house must not conceal another house.
-3. Find reachable clear indoor floor destinations using the existing floor checks
-   and navigation. Preserve the nearest reachable candidate as an overflow option.
-4. In normal conditions, prefer the nearest house below its capacity target if
-   its reachable route is at most 30 walking blocks longer than the route to the
-   nearest reachable shelter, regardless of that nearest shelter's capacity.
-5. Use the nearest reachable overflow option when no suitable alternative exists,
-   the alternative requires excessive travel, or the villager's existing threat
-   information indicates danger. Reachability still applies during overflow.
-6. Publish the selected WALK_TARGET through the existing movement owner. Once
-   sheltered, leave subsequent local wandering to Brownian behavior.
+Route length is the sum of geometric distances from the villager's current
+position through the actual entity node positions to the reached endpoint.
+Validate the last reached node as well as the nominal Path target; bed/door target
+normalization must not turn a valid requested floor into an invalid endpoint.
+Node count and straight-line bed distance are insufficient.
 
-Here, "nearest" starts with spatial ordering for candidate discovery. Decisions
-about excessive travel must consider the route returned by navigation: a nearby
-house can require a long detour. Do not describe a path as safe merely because it
-is reachable or because the villager is not currently panicking.
+## House identity and implemented geometry
 
-The 30-block allowance is additional route length, not a new search radius or
-maximum total distance. A route of 38 blocks is acceptable when the nearest
-reachable shelter is 8 route blocks away; a route longer than 38 is not. Detected
-danger takes precedence over this allowance and permits immediate overflow into
-the nearest reachable shelter. Derive route length from path segment distances
-rather than assuming node count equals distance.
+A `Room.floorCells()` set is one selected physical room, not a whole-house
+identity or a vertical-band membership query. Do not implement beds-plus-five
+per room and describe it as the agreed house policy.
 
-## House identity
+For registered houses, logical building identity is scoped to the village and
+dimension. `Village.findPhysicalRoomAt`, `getStructureFor`, and
+`getLogicalBuildingId` supply canonical association. Rooms/floors of one logical
+building share capacity. Persisted identity does not prove current physical
+geometry, especially when autoScan is disabled.
 
-Use MCA's canonical logical building identity, scoped to its village and dimension,
-for registered houses. Rooms and floors belonging to that building share one
-capacity pool. Reuse the existing structure/floor geometry owner to resolve bed
-heads, occupant positions, HOME positions, and walking destinations; do not create
-another persisted house map.
+Unregistered houses use the existing floor scanner and connector owners through
+`IndoorRoomCache.resolveHouse` and `resolveHouses`. Runtime tests cover internal
+rooms, connected floors, and separate neighboring houses. Each query permits up
+to 20 new floor scans and eight materialized floors per house. A producer's
+current-room check and destination selection can perform two queries, permitting
+up to 40 cold scans; warm evidence is shared. Ceiling and connector inspection
+also depends on dimension height. These limits are not an MSPT measurement.
 
-Unregistered houses are a supported case: the existing shelter task handles them,
-and the inspected save has auto-scanning disabled and incomplete registered room
-geometry. A radius around a bed is not reliable house identity, especially for
-neighboring buildings or multiple floors.
+The existing cache retains fresh floor evidence and room components. Registered
+identity supplies additional discovery seeds and required coverage, not trusted
+saved geometry. Loaded HOME POI anchors are queried without reading bed blocks in
+the task's predicate; the cache owns guarded physical bed validation. Cached
+connector reads and destinations also require loaded chunks. No independent
+scanner, automatic registration, second cache, persistent house IDs, or
+radius-based grouping was added. Unknown or incomplete whole-house membership
+permits entry to a resolved room without enforcing a partial bed count. This can
+still crowd; an oversized structure that cannot resolve even a room remains
+outside the existing discovery limits.
 
-Before claiming distribution works for these houses, establish whether the
-existing geometry scanner can provide bounded, read-only house membership without
-registration or expensive repeated full scans. If membership is unknown, preserve
-reachable shelter access rather than enforce a guessed capacity. This conservative
-behavior permits crowding and must be reported as a limitation, not a completed
-solution for unregistered houses.
+Resolve bed heads across the whole known house, including beds outside the initial
+anchor radius when already within resolved geometry. Membership includes sleeping
+and standing occupants in exact physical vertical bands, not only entities whose
+block position equals a floor-cell coordinate.
 
-## Capacity and admission accounting
+## Admission accounting
 
-Count compatible bed heads once across the whole house, regardless of whether a
-bed is occupied. Normal capacity is `bedCount + 5`.
+Normal capacity is `bedCount + 5`; compatible bed heads count once, occupied or
+not. Count children, adult MCA villagers, and vanilla villagers; players and
+monsters do not consume places.
 
-Account for three groups without double-counting a villager:
+Account for valid bed-owner reservations, additional physical occupants, and
+active incoming villagers. Known UUIDs count once per house. A guest standing in
+one house while walking into another occupies the former and reserves arrival in
+the latter. Exclude the selecting villager from the pre-admission total.
 
-- Bed owners with a valid HOME in this house, including those currently away.
-- Other villagers physically inside this house, including sleeping occupants.
-- Other villagers with an active walking destination into this house.
+A claimed HOME POI reserves one place even if its owner is unloaded or unidentified.
+Reconcile loaded HOME brains and valid persisted MCA HOME assignments with those
+claims. Do not count a known owner again when present or incoming, or count the
+same bed through both persisted and live assignments. A valid forced HOME must be
+handled even if its normal ticket state differs. Never infer an owner UUID from a
+POI claim alone or reserve from an invalid/stale bed assignment.
 
-Reserve room for returning bed owners. Their presence inside or their incoming
-destination must not consume a second place. Admission counts concern villagers;
-players and monsters do not consume places. Counting children as occupants is the
-proposed default and should be covered by a test.
+Use one operation-local view of alive loaded villagers and active destinations,
+covering distant arrivals outside a house bounding box and the selecting villager's
+48-block search area. Keep physical membership separate from incoming membership.
+Count and publish sequentially on the server thread so a second selection sees
+the first destination immediately. Preserve HOME and ticket counts.
 
-Derive occupancy and incoming intent from existing authoritative assignments,
-entity positions, and WALK_TARGET state. Use unique entity identities where
-available. Determine how existing POI claims represent unloaded or vanilla bed
-owners before assuming MCA's resident list contains every owner.
+## Safety, threading, and work bounds
 
-Evaluate admission and publish its destination on the server thread. Later
-selections must observe earlier incoming WALK_TARGETs. A changed or cleared target,
-death, or departure must stop consuming an incoming place without a parallel
-reservation counter. Include the boundary case of incoming entities outside the
-local occupant-query area when defining the query scope.
+Ordinary admission must not run during active PANIC/HIDE/fleeing/combat ownership,
+including activity-transition ticks. Detected threats before PANIC may bypass the
+capacity preference. Use the existing memories and all their actual sensor owners:
+vanilla hostiles and MCA's ignited-creeper sensor both write NEAREST_HOSTILE.
+Do not assume every remembered hostile appears in vanilla's type-distance table.
+Historical HURT_BY damage alone must not cause permanent overflow. A live,
+same-level nearby HURT_BY_ENTITY uses the vanilla calm-down distance, squared 36.
 
-## Safety precedence
+Minecraft world, entity, brain, POI, navigation, and room-cache access stays on the
+server thread. An immutable local view is useful for clear accounting, not license
+to access the live world asynchronously. No locks, atomics, concurrent reservation
+maps, parallel streams, or executors are needed.
 
-Capacity does not constrain PANIC, fleeing, or emergency hiding. Preserve their
-existing behavior packages; do not add shelter selection that competes with escape.
-For normal REST selection, use existing threat memories and lifecycle rules rather
-than introduce a second monster scanner. Nearby detected danger permits overflow
-without requiring the PANIC activity to have started already.
+Retain current cadence and cache limits: 512 scan cells, radius 16, 128 entries,
+8192 observed blocks per entry, 65536 total observed blocks, validation every
+40 ticks, failed retry after 200 ticks, and idle expiry after 1200 ticks.
+These are room-cache limits, not proof that repeated whole-house work is cheap.
+Measure cold discovery, warm reuse, many-bed grouping, and loaded-entity accounting;
+bound geometry separately from the ten-house navigation budget. Reuse within an
+operation and avoid forced chunk loading or increased scan defaults without evidence.
 
-When every available house is full, the next house is unreachable, or the next
-route is too long, prefer reachable shelter over waiting outside for capacity.
-When no shelter is reachable, retain existing village-seeking behavior; do not
-invent teleportation or another locomotion fallback.
+## Acceptance and delivery
 
-## Engineering checks before implementation
+The plan must verify whole-house membership first, then admission and route/safety
+selection together. Cover adjacent unregistered houses, connected floors, stale
+registered partitions, whole-house bed enumeration, owner de-duplication, consecutive
+arrivals, cleared/redirected intent, exactly 64 extra route blocks, excessive detours,
+danger including ignited creepers, and all-full/unreachable overflow.
 
-1. **Indoor-targeting dependency:** inspect the parallel agent's completed change
-   and actual movement regressions. Integrate with its final floor checks without
-   overlapping edits while that work is active.
-2. **Unknown house geometry:** support ordinary unregistered village houses using
-   proven read-only geometry where possible. If existing geometry cannot provide
-   reliable membership at bounded cost, report that limitation before narrowing
-   delivery to registered buildings. Preserve shelter access when membership is
-   unknown; do not ask the user to register houses to make shelter movement work.
-3. **Accounting sources:** verify bed-owner information for unloaded and vanilla
-   villagers, and ensure the incoming query cannot omit distant active arrivals.
-4. **Route measurement:** verify path-distance calculation and test the inclusive
-   30-extra-block boundary. Keep this as a local policy constant unless a concrete
-   requirement justifies a configuration option.
+Retain the 17 existing shelter regressions for real entry/wandering, bed and leaf
+surfaces, doors, cache sharing, cold discovery, topology invalidation/expiry, and
+memory cleanup. Add real arrival and emergency-transition tests rather than rely
+only on manually produced destinations. Check both loaders after runtime changes.
+A disposable client check is required to claim natural-looking movement.
 
-## Verification
-
-Use focused GameTests for world and entity behavior, and JUnit only for pure
-admission logic if it can be isolated without artificial wrappers.
-
-| Scenario | Required observation |
-| --- | --- |
-| Nearest house below capacity | Incoming villager selects reachable floor there. |
-| Nearest house full; nearby alternative available | Incoming villager selects the alternative. |
-| Several nearby beds in the full house | Another house is still considered. |
-| Consecutive arrivals competing for the last place | Later arrival observes the earlier walking target. |
-| Returning bed owner already reserved | Owner is not counted twice; guests preserve the owner's place. |
-| Multiple registered rooms/floors | Beds and occupants use the same logical house capacity. |
-| Child or sleeping occupant | Occupant contributes once. |
-| Cleared/changed walking target or removed villager | Old incoming intent no longer consumes capacity. |
-| Alternative unreachable or excessively distant | Nearest reachable full house permits overflow. |
-| Alternative exactly 30 route blocks farther | Under-capacity alternative is eligible. |
-| Alternative more than 30 route blocks farther | Nearest reachable full house permits overflow. |
-| Spatially close alternative requiring a long detour | Route distance, not straight-line distance, controls overflow. |
-| Detected threat before PANIC begins | Ordinary shelter admission permits overflow. |
-| PANIC, fleeing, or emergency hiding | Existing emergency movement is not blocked by capacity. |
-| Villager already sheltered | Capacity does not publish a relocation target. |
-| Neighboring unregistered houses | Supported geometry distinguishes them, or explicit unknown-geometry behavior permits shelter. |
-| Furnished-room movement after arrival | Local wandering does not move villagers back onto beds; include starting on a bed. |
-| All shelter choices | No bed-surface destination or new HOME/ticket claim. |
-
-Run new regression cases before and after the change, then both loader builds.
-Use a disposable client village to observe nighttime arrivals, overflow, and
-multi-floor behavior. Builds and destination-selection tests alone do not prove
-actual crowding or escape behavior. Review the final diff for duplicate state and
-unnecessary abstractions.
-
-## Scope and delivery
-
-This draft changes no runtime behavior and makes no new verification claim.
-Implementation should remain in shared gameplay/geometry owners, with loader code
-limited to existing test registration seams. Keep discovery/pathfinding bounded
-and use the existing staggered shelter cadence. Complete the engineering checks and
-review this spec before writing the implementation plan.
+The inline implementation supplies whole-house discovery and admission in the
+existing shared owners. Delivery records fresh runtime tests and loader builds
+separately from the still-unverified client appearance and village-scale cost.

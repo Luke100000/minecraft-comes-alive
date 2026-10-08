@@ -1,7 +1,9 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
+import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
+import net.conczin.mca.entity.ai.PathingBlockInteraction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
@@ -28,6 +30,32 @@ import java.util.Set;
 @PrefixGameTestTemplate(false)
 public final class DoorInteractionGameTests {
     private DoorInteractionGameTests() {
+    }
+
+    @GameTest(batch = "mca_any_door_config", templateNamespace = "minecraft",
+            template = "bastion/blocks/air")
+    public static void anyDoorConfigAllowsIronDoorInteraction(GameTestHelper helper) {
+        BlockPos doorPos = helper.absolutePos(new BlockPos(5, 2, 4));
+        helper.getLevel().setBlock(doorPos, Blocks.IRON_DOOR.defaultBlockState(), 3);
+
+        boolean oldAnyDoorConfig = Config.getInstance().villagersInteractWithAnyDoor;
+        try {
+            Config.getInstance().villagersInteractWithAnyDoor = false;
+            helper.assertTrue(!PathingBlockInteraction.isOpenable(helper.getLevel().getBlockState(doorPos)),
+                    "iron door should not be MCA-operable under the vanilla tag policy");
+
+            Config.getInstance().villagersInteractWithAnyDoor = true;
+            BlockState closed = helper.getLevel().getBlockState(doorPos);
+            helper.assertTrue(PathingBlockInteraction.isOpenable(closed),
+                    "any-door config should allow an arbitrary DoorBlock");
+            helper.assertTrue(PathingBlockInteraction.setOpen(null, helper.getLevel(), closed, doorPos, true),
+                    "any-door config should let MCA open the arbitrary DoorBlock");
+            helper.assertTrue(helper.getLevel().getBlockState(doorPos).getValue(DoorBlock.OPEN),
+                    "iron door stayed closed after MCA opened it");
+            helper.succeed();
+        } finally {
+            Config.getInstance().villagersInteractWithAnyDoor = oldAnyDoorConfig;
+        }
     }
 
     @GameTest(batch = "mca_door_closing", templateNamespace = "minecraft",

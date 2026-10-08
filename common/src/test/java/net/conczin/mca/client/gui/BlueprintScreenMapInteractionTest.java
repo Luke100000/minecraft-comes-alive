@@ -518,6 +518,13 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
+    void scaleButtonCanCycleBeyondFourToEightAndBack() {
+        assertEquals(6.0F, BlueprintScreen.snapMapScale(4.0F, 1));
+        assertEquals(8.0F, BlueprintScreen.snapMapScale(6.0F, 1));
+        assertEquals(6.0F, BlueprintScreen.snapMapScale(8.0F, -1));
+    }
+
+    @Test
     void customScaleImmediatelyBesidePresetStillSnapsToThatPreset() {
         assertEquals(2.0F, BlueprintScreen.snapMapScale(1.99995F, 1));
         assertEquals(2.0F, BlueprintScreen.snapMapScale(2.00005F, -1));
@@ -527,7 +534,8 @@ class BlueprintScreenMapInteractionTest {
     void wheelZoomProducesCustomScaleAndClampsToPresetRange() {
         assertEquals(1.1F, BlueprintScreen.zoomMapScale(1.0F, 1.0D), 0.0001F);
         assertEquals(0.5F, BlueprintScreen.zoomMapScale(0.5F, -20.0D), 0.0001F);
-        assertEquals(4.0F, BlueprintScreen.zoomMapScale(4.0F, 20.0D), 0.0001F);
+        assertEquals(4.4F, BlueprintScreen.zoomMapScale(4.0F, 1.0D), 0.0001F);
+        assertEquals(8.0F, BlueprintScreen.zoomMapScale(8.0F, 20.0D), 0.0001F);
     }
 
     @Test

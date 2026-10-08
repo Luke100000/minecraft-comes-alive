@@ -1228,6 +1228,16 @@ public class Village implements Iterable<Building> {
         if (home.isPresent() && home.get().dimension() == world.dimension()) {
             long homePosition = home.get().pos().asLong();
             if (authoritativeHomeClaim) {
+                // A replaced bed has a fresh POI ticket. Retire the previous loaded owner's
+                // derived state before the new claimant can sleep, without releasing its ticket.
+                for (Map.Entry<UUID, Long> assignment : residentHomes.entrySet()) {
+                    if (!assignment.getKey().equals(resident) && assignment.getValue() == homePosition) {
+                        if (world.getEntity(assignment.getKey()) instanceof VillagerEntityMCA displaced) {
+                            displaced.getResidency().invalidateHome(home.get());
+                        }
+                        markDirty();
+                    }
+                }
                 ResidentHomeAssignments.claimAuthoritatively(residentHomes, resident, homePosition);
             } else {
                 accepted = ResidentHomeAssignments.claim(residentHomes, resident, homePosition);
