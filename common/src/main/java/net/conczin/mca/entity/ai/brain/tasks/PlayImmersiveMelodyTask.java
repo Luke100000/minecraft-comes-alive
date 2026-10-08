@@ -8,6 +8,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.*;
@@ -19,6 +21,7 @@ public class PlayImmersiveMelodyTask extends Behavior<VillagerEntityMCA> {
     private static final int PERFORMANCE_DURATION = 900;
     private static final int RETRY_COOLDOWN = 2400;
     private static final float JOIN_CHANCE = 0.25f;
+    private static final Map<VillagerEntityMCA, Long> nextAttemptTimes = new WeakHashMap<>();
     private static final Map<VillagerEntityMCA, Long> nextPerformanceTimes = new WeakHashMap<>();
 
     private final List<Performer> performers = new ArrayList<>();
@@ -30,9 +33,15 @@ public class PlayImmersiveMelodyTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel level, VillagerEntityMCA villager) {
-        if (level.getGameTime() < nextPerformanceTimes.getOrDefault(villager, 0L)
-            || Config.getInstance().immersiveMelodiesChance <= 0.0f
-            || villager.getRandom().nextFloat() >= Config.getInstance().immersiveMelodiesChance) {
+        if (!canPerform(villager)
+            || level.getGameTime() < nextAttemptTimes.getOrDefault(villager, 0L)
+            || level.getGameTime() < nextPerformanceTimes.getOrDefault(villager, 0L)
+            || Config.getInstance().immersiveMelodiesChance <= 0.0f) {
+            return false;
+        }
+        // Failed rolls consume the attempt too: RunOne can retry on the next brain tick.
+        nextAttemptTimes.put(villager, level.getGameTime() + RETRY_COOLDOWN);
+        if (villager.getRandom().nextFloat() >= Config.getInstance().immersiveMelodiesChance) {
             return false;
         }
         melody = closestMelody(level, villager).map(ImmersiveMelodies.PlayingMelody::melody)
@@ -43,7 +52,9 @@ public class PlayImmersiveMelodyTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected boolean canStillUse(ServerLevel level, VillagerEntityMCA villager, long time) {
-        return !timedOut(time);
+        return !timedOut(time) && canPerform(villager)
+               && performers.stream().anyMatch(performer -> performer.villager() == villager
+                                                            && villager.getItemInHand(performer.hand()) == performer.instrument());
     }
 
     @Override
@@ -52,19 +63,45 @@ public class PlayImmersiveMelodyTask extends Behavior<VillagerEntityMCA> {
             ImmersiveMelodies.PlayingMelody selectedMelody = closestMelody(level, villager)
                     .orElse(new ImmersiveMelodies.PlayingMelody(melody, level.getGameTime()));
             startPerforming(level, villager, selectedMelody);
-            level.getEntitiesOfClass(VillagerEntityMCA.class, villager.getBoundingBox().inflate(8.0), other -> other != villager && level.getGameTime() >= nextPerformanceTimes.getOrDefault(other, 0L))
+            level.getEntitiesOfClass(VillagerEntityMCA.class, villager.getBoundingBox().inflate(8.0), other -> other != villager && canPerform(other)
+                                                                                                               && level.getGameTime() >= nextPerformanceTimes.getOrDefault(other, 0L))
                     .stream().filter(other -> other.getRandom().nextFloat() < JOIN_CHANCE).forEach(other -> startPerforming(level, other, selectedMelody));
         }
     }
 
     @Override
+    protected void tick(ServerLevel level, VillagerEntityMCA villager, long time) {
+        Iterator<Performer> iterator = performers.iterator();
+        while (iterator.hasNext()) {
+            Performer performer = iterator.next();
+            if (!canPerform(performer.villager())
+                || performer.villager().getItemInHand(performer.hand()) != performer.instrument()) {
+                stopPerforming(level, performer);
+                iterator.remove();
+            }
+        }
+    }
+
+    @Override
     protected void stop(ServerLevel level, VillagerEntityMCA villager, long time) {
-        performers.forEach(performer -> {
-            ImmersiveMelodies.stop(performer.instrument(), level);
-            performer.villager().setItemInHand(performer.hand(), performer.previousStack());
-        });
+        performers.forEach(performer -> stopPerforming(level, performer));
         performers.clear();
         melody = null;
+    }
+
+    private static void stopPerforming(ServerLevel level, Performer performer) {
+        ImmersiveMelodies.stop(performer.instrument(), level);
+        if (performer.villager().getItemInHand(performer.hand()) == performer.instrument()) {
+            performer.villager().setItemInHand(performer.hand(), performer.previousStack());
+        }
+    }
+
+    private static boolean canPerform(VillagerEntityMCA villager) {
+        return villager.isAlive() && !villager.isSleeping() && !villager.isTrading()
+               && !villager.isUsingRecoveryFood()
+               && villager.getBrain().isActive(Activity.MEET)
+               && villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isEmpty()
+               && !villager.getVillagerBrain().isPanicking();
     }
 
     private void startPerforming(ServerLevel level, VillagerEntityMCA villager, ImmersiveMelodies.PlayingMelody melody) {
