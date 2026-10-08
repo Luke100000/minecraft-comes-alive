@@ -1239,8 +1239,11 @@ public class Village implements Iterable<Building> {
                     }
                 }
                 ResidentHomeAssignments.claimAuthoritatively(residentHomes, resident, homePosition);
-            } else {
-                accepted = ResidentHomeAssignments.claim(residentHomes, resident, homePosition);
+            } else if (!ResidentHomeAssignments.claim(residentHomes, resident, homePosition)) {
+                accepted = false;
+                // Reconciliation rejects this memory. Retire its old index entry,
+                // not its anonymous POI ticket, which might have a new claimant.
+                residentHomes.remove(resident);
             }
         } else {
             residentHomes.remove(resident);
@@ -1259,7 +1262,11 @@ public class Village implements Iterable<Building> {
         }
         GlobalPos currentHome = home.get();
         return currentHome.dimension() == world.dimension()
-                && Objects.equals(residentHomes.get(resident.getUUID()), currentHome.pos().asLong());
+                && ownsResidentHome(resident.getUUID(), currentHome.pos());
+    }
+
+    public boolean ownsResidentHome(UUID resident, BlockPos position) {
+        return Objects.equals(residentHomes.get(resident), position.asLong());
     }
 
     boolean repairDuplicateResidentHomes() {

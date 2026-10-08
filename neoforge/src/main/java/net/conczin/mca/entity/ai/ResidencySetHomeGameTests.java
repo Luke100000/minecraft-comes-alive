@@ -14,10 +14,12 @@ import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.behavior.ValidateNearbyPoi;
+import net.minecraft.world.entity.ai.behavior.OneShot;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
@@ -31,6 +33,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @PrefixGameTestTemplate(false)
 public final class ResidencySetHomeGameTests {
@@ -261,6 +264,264 @@ public final class ResidencySetHomeGameTests {
                     "reselected HOME lost its canonical owner");
             owner.discard();
             other.discard();
+        }).thenSucceed();
+    }
+
+    @GameTest(batch = "mca_home_claim_handoff", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void duplicateRememberedHomeCannotPinSomeoneElsesTicket(GameTestHelper helper) {
+        prepareClaimVillage(helper);
+        BlockPos foot = helper.absolutePos(new BlockPos(7, 1, 5));
+        BlockPos head = placeBed(helper, foot, Direction.EAST);
+        VillagerEntityMCA owner = spawnVillager(helper, helper.absolutePos(new BlockPos(2, 1, 5)));
+        helper.assertTrue(owner.getResidency().trySetHome(helper.getLevel(), foot), "owner failed to claim HOME");
+
+        VillagerEntityMCA duplicate = spawnVillager(helper, head.north(3));
+        duplicate.getBrain().setMemory(MemoryModuleType.HOME, GlobalPos.of(helper.getLevel().dimension(), head));
+        helper.assertTrue(!duplicate.getResidency().trySetHome(helper.getLevel(), foot),
+                "a remembered HOME was accepted without owning its occupied POI ticket");
+        helper.assertTrue(!duplicate.getBrain().hasMemoryValue(MemoryModuleTypeMCA.FORCED_HOME),
+                "failed Set Home pinned a duplicate assignment");
+        helper.assertTrue(owner.getResidency().getHomeVillage()
+                        .filter(village -> village.isResidentHomeCurrent(owner)).isPresent(),
+                "failed Set Home displaced the canonical owner");
+        helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(head) == 0,
+                "failed Set Home released the canonical HOME ticket");
+
+        BlockPos freeFoot = helper.absolutePos(new BlockPos(6, 1, 8));
+        BlockPos freeHead = placeBed(helper, freeFoot, Direction.EAST);
+        helper.assertTrue(duplicate.getResidency().trySetHome(helper.getLevel(), freeFoot),
+                "stale HOME memory prevented assigning a genuinely free bed");
+        assertHome(helper, duplicate, freeHead);
+        helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(head) == 0,
+                "reassigning the duplicate released the canonical owner's HOME ticket");
+        helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(freeHead) == 0,
+                "reassigning the duplicate failed to claim its new ticket");
+        owner.discard();
+        duplicate.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_home_claim_handoff", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void staleHomeGiveUpCannotReleaseCanonicalTicket(GameTestHelper helper) {
+        prepareClaimVillage(helper);
+        BlockPos foot = helper.absolutePos(new BlockPos(7, 1, 5));
+        BlockPos head = placeBed(helper, foot, Direction.EAST);
+        VillagerEntityMCA owner = spawnVillager(helper, helper.absolutePos(new BlockPos(2, 1, 5)));
+        helper.assertTrue(owner.getResidency().trySetHome(helper.getLevel(), foot), "initial claim failed");
+
+        VillagerEntityMCA duplicate = spawnVillager(helper, head.north(3));
+        duplicate.getBrain().setMemory(MemoryModuleType.HOME, GlobalPos.of(helper.getLevel().dimension(), head));
+        OneShot<VillagerEntityMCA> walk = ExtendedWalkTowardsTask.createWithFinalTarget(
+                MemoryModuleType.HOME, 0.5F, 1, 0, villager -> true, villager -> { },
+                (level, villager, home) -> Optional.empty());
+        long now = helper.getLevel().getGameTime();
+        walk.tryStart(helper.getLevel(), duplicate, now);
+        duplicate.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        duplicate.getBrain().setMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE, now - 200L);
+        walk.tryStart(helper.getLevel(), duplicate, now + 1L);
+
+        helper.assertTrue(duplicate.getBrain().getMemoryInternal(MemoryModuleType.HOME).isEmpty(),
+                "unreachable stale HOME was not forgotten");
+        helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(head) == 0,
+                "abandoning a stale HOME released another resident's POI ticket");
+        owner.discard();
+        duplicate.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_home_claim_handoff", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void staleVanillaHomeReleaseCannotFreeCanonicalTicket(GameTestHelper helper) {
+        prepareClaimVillage(helper);
+        BlockPos foot = helper.absolutePos(new BlockPos(7, 1, 5));
+        BlockPos head = placeBed(helper, foot, Direction.EAST);
+        VillagerEntityMCA owner = spawnVillager(helper, helper.absolutePos(new BlockPos(2, 1, 5)));
+        helper.assertTrue(owner.getResidency().trySetHome(helper.getLevel(), foot), "owner failed to claim HOME");
+
+        VillagerEntityMCA duplicate = spawnVillager(helper, head.north(3));
+        duplicate.getBrain().setMemory(MemoryModuleType.HOME, GlobalPos.of(helper.getLevel().dimension(), head));
+        duplicate.releasePoi(MemoryModuleType.HOME);
+
+        helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(head) == 0,
+                "vanilla HOME release bypassed MCA ownership and freed the owner's ticket");
+        owner.discard();
+        duplicate.discard();
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void duplicateHomeValidationCannotReleaseAwakeOwnersTicket(GameTestHelper helper) {
+        prepareClaimVillage(helper);
+        BlockPos foot = helper.absolutePos(new BlockPos(7, 1, 5));
+        BlockPos head = placeBed(helper, foot, Direction.EAST);
+        VillagerEntityMCA owner = spawnVillager(helper, helper.absolutePos(new BlockPos(2, 1, 5)));
+        helper.assertTrue(owner.getResidency().trySetHome(helper.getLevel(), foot), "owner did not claim bed");
+        helper.assertTrue(!owner.isSleeping(), "canonical owner must remain awake");
+
+        VillagerEntityMCA stale = spawnVillager(helper, head.north(2));
+        stale.getBrain().setMemory(MemoryModuleType.HOME, GlobalPos.of(helper.getLevel().dimension(), head));
+        BlockState state = helper.getLevel().getBlockState(head);
+        helper.getLevel().setBlock(head, state.setValue(BedBlock.OCCUPIED, true), 3);
+
+        var validator = ValidateNearbyPoi.create(poi -> poi.is(PoiTypes.HOME), MemoryModuleType.HOME);
+        helper.assertTrue(validator.tryStart(helper.getLevel(), stale, helper.getLevel().getGameTime()),
+                "stale HOME validator did not run");
+        helper.assertTrue(stale.getResidency().getHome().isEmpty(), "stale HOME survived validation");
+        helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(head) == 0,
+                "stale HOME validation released awake owner's ticket");
+        stale.discard();
+        owner.discard();
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void rejectedDuplicateHomeReconciliationRetiresPreviousAssignment(GameTestHelper helper) {
+        prepareClaimVillage(helper);
+        BlockPos firstFoot = helper.absolutePos(new BlockPos(5, 1, 5));
+        BlockPos firstHead = placeBed(helper, firstFoot, Direction.EAST);
+        BlockPos secondFoot = helper.absolutePos(new BlockPos(7, 1, 8));
+        BlockPos secondHead = placeBed(helper, secondFoot, Direction.EAST);
+        VillagerEntityMCA first = spawnVillager(helper, helper.absolutePos(new BlockPos(2, 1, 5)));
+        VillagerEntityMCA second = spawnVillager(helper, helper.absolutePos(new BlockPos(2, 1, 8)));
+        helper.assertTrue(first.getResidency().trySetHome(helper.getLevel(), firstFoot), "first claim failed");
+        helper.assertTrue(second.getResidency().trySetHome(helper.getLevel(), secondFoot), "second claim failed");
+        helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(firstHead) == 0,
+                "first claim did not reserve original ticket");
+
+        first.getBrain().setMemory(MemoryModuleType.HOME, GlobalPos.of(helper.getLevel().dimension(), secondHead));
+        first.getResidency().reconcileVillageMembership();
+
+        helper.assertTrue(first.getResidency().getHome().isEmpty(), "conflicting HOME was not rejected");
+        helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(firstHead) == 0,
+                "rejected assignment released an old ticket whose current holder is unknown");
+        helper.assertTrue(first.getResidency().getHomeVillage()
+                        .filter(village -> village.isResidentHomeCurrent(first)).isPresent(),
+                "rejected resident retained its invalid HOME index");
+        helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(secondHead) == 0,
+                "conflict freed canonical resident's ticket");
+        first.discard();
+        second.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_home_claim_handoff", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void rejectingStaleHomeCannotReleaseNewOccupantOfFormerBed(GameTestHelper helper) {
+        prepareClaimVillage(helper);
+        BlockPos oldFoot = helper.absolutePos(new BlockPos(5, 1, 5));
+        BlockPos oldHead = placeBed(helper, oldFoot, Direction.EAST);
+        BlockPos otherFoot = helper.absolutePos(new BlockPos(7, 1, 8));
+        BlockPos otherHead = placeBed(helper, otherFoot, Direction.EAST);
+        VillagerEntityMCA formerOwner = spawnVillager(helper, helper.absolutePos(new BlockPos(2, 1, 5)));
+        VillagerEntityMCA otherOwner = spawnVillager(helper, helper.absolutePos(new BlockPos(2, 1, 8)));
+        helper.assertTrue(formerOwner.getResidency().trySetHome(helper.getLevel(), oldFoot), "original claim failed");
+        helper.assertTrue(otherOwner.getResidency().trySetHome(helper.getLevel(), otherFoot), "other claim failed");
+        replaceBed(helper, oldFoot, oldHead);
+
+        helper.startSequence().thenIdle(2).thenExecute(() -> {
+            PoiManager pois = helper.getLevel().getPoiManager();
+            helper.assertTrue(pois.getFreeTickets(oldHead) == 1, "replaced bed has no available ticket");
+            helper.assertTrue(pois.take(type -> type.is(PoiTypes.HOME),
+                            (type, pos) -> pos.equals(oldHead), oldHead, 1).filter(oldHead::equals).isPresent(),
+                    "new resident could not acquire the replacement ticket");
+
+            formerOwner.getBrain().setMemory(MemoryModuleType.HOME,
+                    GlobalPos.of(helper.getLevel().dimension(), otherHead));
+            formerOwner.getResidency().reconcileVillageMembership();
+            helper.assertTrue(formerOwner.getResidency().getHome().isEmpty(), "conflicting HOME was not rejected");
+            helper.assertTrue(pois.getFreeTickets(oldHead) == 0,
+                    "rejected former owner released a replacement ticket held by another claimant");
+            helper.assertTrue(pois.getFreeTickets(otherHead) == 0,
+                    "rejected former owner released the competing canonical HOME ticket");
+            formerOwner.discard();
+            otherOwner.discard();
+        }).thenSucceed();
+    }
+
+    @GameTest(batch = "mca_home_claim_handoff", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void canonicalHomeReleaseStillFreesItsOwnTicket(GameTestHelper helper) {
+        prepareClaimVillage(helper);
+        BlockPos foot = helper.absolutePos(new BlockPos(7, 1, 5));
+        BlockPos head = placeBed(helper, foot, Direction.EAST);
+        VillagerEntityMCA owner = spawnVillager(helper, helper.absolutePos(new BlockPos(2, 1, 5)));
+        helper.assertTrue(owner.getResidency().trySetHome(helper.getLevel(), foot), "owner failed to claim HOME");
+        helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(head) == 0,
+                "fixture HOME ticket was not claimed");
+
+        owner.releasePoi(MemoryModuleType.HOME);
+        helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(head) == 1,
+                "canonical HOME owner could not release its own ticket");
+        owner.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_home_claim_handoff", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void unloadedFormerOwnerReconcilesHomeOnFirstTick(GameTestHelper helper) {
+        prepareClaimVillage(helper);
+        BlockPos foot = helper.absolutePos(new BlockPos(7, 1, 5));
+        BlockPos head = placeBed(helper, foot, Direction.EAST);
+        VillagerEntityMCA formerOwner = spawnVillager(helper, helper.absolutePos(new BlockPos(2, 1, 5)));
+        helper.assertTrue(formerOwner.getResidency().trySetHome(helper.getLevel(), foot), "initial claim failed");
+        CompoundTag saved = formerOwner.saveWithoutId(new CompoundTag());
+        formerOwner.discard();
+
+        replaceBed(helper, foot, head);
+        VillagerEntityMCA[] loaded = new VillagerEntityMCA[2];
+        helper.startSequence().thenIdle(2).thenExecute(() -> {
+            VillagerEntityMCA claimant = spawnVillager(helper, head.north(3));
+            helper.assertTrue(claimant.getResidency().trySetHome(helper.getLevel(), foot),
+                    "replacement bed was not claimed");
+
+            VillagerEntityMCA reloaded = VillagerFactory.newVillager(helper.getLevel()).build();
+            reloaded.load(saved);
+            helper.assertTrue(reloaded.getResidency().getHome().isPresent(),
+                    "fixture did not restore the former owner's HOME");
+            helper.assertTrue(helper.getLevel().addFreshEntity(reloaded), "former owner could not reload");
+            loaded[0] = claimant;
+            loaded[1] = reloaded;
+        }).thenIdle(2).thenExecute(() -> {
+            helper.assertTrue(loaded[1].getResidency().getHome().isEmpty(),
+                    "reloaded villager retained a HOME already reassigned while unloaded");
+            helper.assertTrue(helper.getLevel().getPoiManager().getFreeTickets(head) == 0,
+                    "reloaded former owner released the new claimant's POI ticket");
+            loaded[1].discard();
+            loaded[0].discard();
+        }).thenSucceed();
+    }
+
+    @GameTest(batch = "mca_home_claim_handoff", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void reloadedDisplacedSleeperDoesNotClearNewSleeperOccupancy(GameTestHelper helper) {
+        prepareClaimVillage(helper);
+        BlockPos foot = helper.absolutePos(new BlockPos(7, 1, 5));
+        BlockPos head = placeBed(helper, foot, Direction.EAST);
+        VillagerEntityMCA formerOwner = spawnVillager(helper, helper.absolutePos(new BlockPos(2, 1, 5)));
+        helper.assertTrue(formerOwner.getResidency().trySetHome(helper.getLevel(), foot), "initial claim failed");
+        formerOwner.startSleeping(head);
+        CompoundTag saved = formerOwner.saveWithoutId(new CompoundTag());
+        formerOwner.discard();
+        replaceBed(helper, foot, head);
+
+        VillagerEntityMCA[] loaded = new VillagerEntityMCA[2];
+        helper.startSequence().thenIdle(2).thenExecute(() -> {
+            VillagerEntityMCA claimant = spawnVillager(helper, head.north(3));
+            helper.assertTrue(claimant.getResidency().trySetHome(helper.getLevel(), foot), "new claim failed");
+            claimant.startSleeping(head);
+            helper.assertTrue(claimant.isSleeping(), "claimant did not sleep");
+
+            VillagerEntityMCA reloaded = VillagerFactory.newVillager(helper.getLevel()).build();
+            reloaded.load(saved);
+            helper.assertTrue(reloaded.isSleeping(), "fixture did not restore stale sleeping pose");
+            helper.assertTrue(helper.getLevel().addFreshEntity(reloaded), "former owner could not reload");
+            loaded[0] = claimant;
+            loaded[1] = reloaded;
+        }).thenIdle(2).thenExecute(() -> {
+            helper.assertTrue(!loaded[1].isSleeping(), "displaced former owner remained asleep");
+            helper.assertTrue(loaded[0].isSleeping(), "canonical claimant stopped sleeping");
+            helper.assertTrue(helper.getLevel().getBlockState(head).getValue(BedBlock.OCCUPIED),
+                    "waking stale former owner cleared the new sleeper's bed occupancy");
+            loaded[0].stopSleeping();
+            helper.assertTrue(!helper.getLevel().getBlockState(head).getValue(BedBlock.OCCUPIED),
+                    "the canonical sleeper waking should leave an unoccupied bed");
+            loaded[1].discard();
+            loaded[0].discard();
         }).thenSucceed();
     }
 

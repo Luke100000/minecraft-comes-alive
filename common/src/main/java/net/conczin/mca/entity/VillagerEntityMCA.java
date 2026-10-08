@@ -29,6 +29,7 @@ import net.conczin.mca.util.network.datasync.CDataParameter;
 import net.conczin.mca.util.network.datasync.CParameter;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.particles.ItemParticleOption;
 import net.minecraft.core.particles.ParticleOptions;
@@ -89,6 +90,8 @@ import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -303,6 +306,13 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     public Residency getResidency() {
         return residency;
+    }
+
+    @Override
+    public void releasePoi(MemoryModuleType<GlobalPos> memoryType) {
+        if (memoryType != MemoryModuleType.HOME || residency.mayReleaseHomePoi()) {
+            super.releasePoi(memoryType);
+        }
     }
 
     @Override
@@ -1171,6 +1181,24 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             return;
         }
         super.travel(input);
+    }
+
+    @Override
+    public void stopSleeping() {
+        Optional<BlockPos> previousBed = getSleepingPos();
+        super.stopSleeping();
+        if (level() instanceof ServerLevel level) {
+            previousBed.filter(level::hasChunkAt).ifPresent(pos -> {
+                BlockState state = level.getBlockState(pos);
+                if (state.getBlock() instanceof BedBlock && !state.getValue(BedBlock.OCCUPIED)
+                        && !level.getEntitiesOfClass(LivingEntity.class, new AABB(pos), other ->
+                        other != this && other.isSleeping()
+                                && other.getSleepingPos().filter(pos::equals).isPresent()).isEmpty()) {
+                    // Waking a displaced sleeper must not clear the current sleeper's bed state.
+                    level.setBlock(pos, state.setValue(BedBlock.OCCUPIED, true), 3);
+                }
+            });
+        }
     }
 
     @Override

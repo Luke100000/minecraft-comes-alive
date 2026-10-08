@@ -212,9 +212,11 @@ public class Residency {
     public void tick() {
         bedDebugLog.tick(entity);
         //report buildings close by
-        if (entity.tickCount % 600 == 0 && entity.requiresHome()) {
+        if (entity.requiresHome() && (entity.tickCount == 1 || entity.tickCount % 600 == 0)) {
             Optional<Village> village = getHomeVillage();
-            if (village.isEmpty() && Config.getInstance().enableAutoScanByDefault || village.filter(Village::isAutoScan).isPresent()) {
+            if (entity.tickCount % 600 == 0
+                    && (village.isEmpty() && Config.getInstance().enableAutoScanByDefault
+                    || village.filter(Village::isAutoScan).isPresent())) {
                 reportBuildings();
             }
 
@@ -288,6 +290,7 @@ public class Residency {
         Optional<BlockPos> rememberedHome = previousHome
                 .filter(home -> home.dimension().equals(level.dimension()))
                 .map(GlobalPos::pos)
+                .filter(home -> mayReleaseHomePoiAt(level, home))
                 .filter(home -> home.distSqr(searchOrigin) <= 64.0D)
                 .filter(home -> poiManager.exists(home, type -> type.is(PoiTypes.HOME)))
                 .filter(home -> BedPoiCompatibility.isAvailableHomePoiState(level.getBlockState(home)));
@@ -340,6 +343,24 @@ public class Residency {
         entity.getBrain().setMemory(MemoryModuleTypeMCA.FORCED_HOME, true);
         onHomeClaimed();
         return true;
+    }
+
+    /** Check MCA's assignment before vanilla releases a remembered HOME ticket. */
+    public boolean mayReleaseHomePoi() {
+        if (!(entity.level() instanceof ServerLevel currentLevel)) {
+            return false;
+        }
+        return getHome().map(home -> {
+            ServerLevel level = currentLevel.getServer().getLevel(home.dimension());
+            return level != null && mayReleaseHomePoiAt(level, home.pos());
+        }).orElse(true);
+    }
+
+    /** Unlike the memory-based check, this also works after vanilla erased HOME. */
+    public boolean mayReleaseHomePoiAt(ServerLevel level, BlockPos position) {
+        return VillageManager.get(level).findNearestVillage(position, Village.BORDER_MARGIN)
+                .map(village -> village.ownsResidentHome(entity.getUUID(), position))
+                .orElse(true);
     }
 
     private boolean canReachBed(ServerLevel level, BlockPos home) {
