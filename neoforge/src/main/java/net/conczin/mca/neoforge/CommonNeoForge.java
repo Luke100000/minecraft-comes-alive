@@ -1,6 +1,7 @@
 package net.conczin.mca.neoforge;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
+import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.block.BlockEntityTypesMCA;
 import net.conczin.mca.entity.ai.ActivitiesMCA;
@@ -14,6 +15,7 @@ import net.conczin.mca.network.s2c.AppearanceCatalogSync;
 import net.conczin.mca.registry.*;
 import net.conczin.mca.resources.*;
 import net.conczin.mca.server.ServerInteractionManager;
+import net.conczin.mca.server.DestinyLocationResolver;
 import net.conczin.mca.server.command.AdminCommand;
 import net.conczin.mca.server.command.Command;
 import net.conczin.mca.server.world.data.VillageManager;
@@ -26,20 +28,26 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.npc.VillagerTrades;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.event.AddReloadListenerEvent;
 import net.neoforged.neoforge.event.OnDatapackSyncEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.EntityAttributeCreationEvent;
+import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.LevelTickEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.event.village.VillagerTradesEvent;
@@ -143,26 +151,54 @@ public final class CommonNeoForge {
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
         ServerInteractionManager.getInstance().tick();
-        MCA.setServer(event.getServer());
     }
 
     @SubscribeEvent
     public static void onDatapackSync(OnDatapackSyncEvent event) {
         EyeCatalog eyeCatalog = EyeCatalog.getInstance();
-        if (event.getPlayer() == null && eyeCatalog != null) {
-            eyeCatalog.repairLoaded(event.getPlayerList().getServer());
+        if (event.getPlayer() == null) {
+            DestinyLocationResolver.refreshCachedDestinations(event.getPlayerList().getServer(), Config.getInstance());
+            if (eyeCatalog != null) {
+                eyeCatalog.repairLoaded(event.getPlayerList().getServer());
+            }
         }
         event.getRelevantPlayers().forEach(AppearanceCatalogSync::send);
     }
 
     @SubscribeEvent
     public static void onServerStarting(ServerStartingEvent event) {
-        MCA.startExecutorService();
+        MCA.startServer(event.getServer());
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void onEntityJoin(EntityJoinLevelEvent event) {
+        if (event.getLevel() instanceof ServerLevel level && event.getEntity() instanceof Villager villager) {
+            // Only index the reference here; joining chunks need not be FULL yet.
+            VillageManager.get(level).trackVillager(villager);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onEntityLeave(EntityLeaveLevelEvent event) {
+        if (event.getLevel() instanceof ServerLevel level && event.getEntity() instanceof Villager villager) {
+            VillageManager.get(level).untrackVillager(villager);
+        }
+    }
+
+    @SubscribeEvent
+    public static void onServerStarted(ServerStartedEvent event) {
+        DestinyLocationResolver.refreshCachedDestinations(event.getServer(), Config.getInstance());
     }
 
     @SubscribeEvent
     public static void onServerStopping(ServerStoppingEvent event) {
-        MCA.shutdownExecutorService();
+        DestinyLocationResolver.clearCachedDestinations(event.getServer());
+        MCA.stopServer(event.getServer());
+    }
+
+    @SubscribeEvent
+    public static void onServerStopped(ServerStoppedEvent event) {
+        MCA.finishServerStop(event.getServer());
     }
 
     @SubscribeEvent
@@ -173,13 +209,20 @@ public final class CommonNeoForge {
     }
 
     @SubscribeEvent
+    public static void onPlayerRespawnEvent(PlayerEvent.PlayerRespawnEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            ServerInteractionManager.getInstance().onPlayerRespawn(player);
+        }
+    }
+
+    @SubscribeEvent
     public static void createDefaultAttributes(EntityAttributeCreationEvent event) {
         EntitiesMCA.registerAttributes((type, supplier) -> event.put(type, supplier.build()));
     }
 
     @SubscribeEvent
     public static void registerNetwork(final RegisterPayloadHandlersEvent event) {
-        MessagesMCA.register(new NeoForgeRegistrar(event.registrar("1")));
+        MessagesMCA.register(new NeoForgeRegistrar(event.registrar("3")));
         Network.registerSender(PacketDistributor::sendToPlayer);
         Network.registerClientSender(PacketDistributor::sendToServer);
     }

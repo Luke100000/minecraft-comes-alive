@@ -12,6 +12,7 @@ import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
 import net.conczin.mca.entity.ai.chatAI.ChatAI;
 import net.conczin.mca.entity.ai.chatAI.ChatAIContext;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
+import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.conczin.mca.entity.ai.relationship.*;
 import net.conczin.mca.entity.interaction.VillagerCommandHandler;
 import net.conczin.mca.registry.*;
@@ -28,12 +29,14 @@ import net.conczin.mca.util.network.datasync.CDataParameter;
 import net.conczin.mca.util.network.datasync.CParameter;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.particles.ItemParticleOption;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -48,6 +51,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.*;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.*;
@@ -56,7 +60,9 @@ import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
 import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
+import net.minecraft.world.entity.ai.control.BodyRotationControl;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.animal.IronGolem;
@@ -83,6 +89,9 @@ import net.minecraft.world.item.ProjectileWeaponItem;
 import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -95,6 +104,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.WeakHashMap;
 import java.util.function.Predicate;
 
 
@@ -107,6 +117,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     static final String NICKNAMES_KEY = "nicknames";
     private static final CDataManager<VillagerEntityMCA> DATA = createTrackedData(VillagerEntityMCA.class).build();
     private static final int RECALCULATE_DIMENSIONS_EVERY_N_TICKS = 100;
+    private static final int PANIC_SCREAM_INTERVAL = 40;
+    private static final Map<Level, Long> LAST_PANIC_SCREAM = new WeakHashMap<>();
     public final ConversationManager conversationManager = new ConversationManager(this);
     private String chatAIPrompt = "";
     final ResourceLocation EXTRA_HEALTH_EFFECT_ID = MCA.locate("trait_health");
@@ -119,15 +131,16 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private final VillagerCommandHandler interactions = new VillagerCommandHandler(this);
     private final UpdatableInventory inventory = new UpdatableInventory(27);
     private final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.UNASSIGNED);
-    private final ArcherMoveControl archerMoveControl;
     long lastCooldown = 0L;
     private PlayerModel playerModel;
+    @Nullable
+    private MCAFishingBobberEntity fishingBobber;
     private int despawnDelay;
     private int burned;
     private long lastHit = 0;
     private int prevGrowthAmount;
     private boolean interactedWith;
-    private int lastAppliedHealthLevel = Integer.MIN_VALUE;
+    private boolean wasPanicking;
     private double lastAppliedHealthBonus = Double.NaN;
     private boolean recoveryFoodUseActive;
     private boolean completingRecoveryFoodUse;
@@ -139,8 +152,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public VillagerEntityMCA(EntityType<VillagerEntityMCA> type, Level w, Gender gender) {
         super(type, w);
         inventory.addListener(this::onInvChange);
-        this.archerMoveControl = new ArcherMoveControl(this);
-        this.moveControl = this.archerMoveControl;
+        this.moveControl = new MCAMoveControl(this);
         genetics.setGender(gender);
         this.setPathfindingMalus(PathType.WATER_BORDER, 16.0F);
         this.setPathfindingMalus(PathType.TRAPDOOR, 8.0F);
@@ -148,14 +160,18 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         this.setPathfindingMalus(PathType.WATER, 16.0F);
     }
 
-    public ArcherMoveControl getArcherMoveControl() {
-        return this.archerMoveControl;
-    }
-
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(Class<E> type) {
         return VillagerLike.createTrackedData(type).addAll(INFECTION_PROGRESS, GROWTH_AMOUNT)
                 .add(Residency::createTrackedData)
                 .add(BreedableRelationship::createTrackedData);
+    }
+
+    @Override
+    protected BodyRotationControl createBodyControl() {
+        return new MCABodyRotationControl(
+                this,
+                () -> this.isUsingItem() && this.getUseItem().getItem() instanceof ProjectileWeaponItem
+        );
     }
 
     private static boolean canEat(ItemStack i) {
@@ -171,10 +187,26 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    public Vec3 handleRelativeFrictionAndCalculateMovement(Vec3 input, float friction) {
+        Vec3 movement = super.handleRelativeFrictionAndCalculateMovement(input, friction);
+        return getNavigation() instanceof MCAGroundPathNavigation navigation
+                ? navigation.adjustClimbableTravelMovement(movement)
+                : movement;
+    }
+
+    @Override
+    public boolean isDescending() {
+        return super.isDescending()
+                || getNavigation() instanceof MCAGroundPathNavigation navigation
+                && navigation.isDescendingThroughScaffolding();
+    }
+
+    @Override
     public void setJumping(boolean jumping) {
         boolean navigationControlsClimb = this.getNavigation() instanceof MCAGroundPathNavigation navigation
-                && navigation.isControllingClimbable();
-        super.setJumping(jumping && !navigationControlsClimb);
+                && navigation.isControllingClimbableMovement();
+        boolean climbableSuppressesJump = this.onClimbable() && !this.getInBlockState().is(Blocks.SCAFFOLDING);
+        super.setJumping(jumping && !climbableSuppressesJump && !navigationControlsClimb);
     }
 
     public static AttributeSupplier.Builder createAttributes() {
@@ -193,6 +225,15 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     public PlayerModel getPlayerModel() {
         return playerModel;
+    }
+
+    @Nullable
+    public MCAFishingBobberEntity getFishingBobber() {
+        return fishingBobber;
+    }
+
+    void setFishingBobber(@Nullable MCAFishingBobberEntity fishingBobber) {
+        this.fishingBobber = fishingBobber;
     }
 
     @Override
@@ -269,6 +310,13 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     public Residency getResidency() {
         return residency;
+    }
+
+    @Override
+    public void releasePoi(MemoryModuleType<GlobalPos> memoryType) {
+        if (memoryType != MemoryModuleType.HOME || residency.mayReleaseHomePoi()) {
+            super.releasePoi(memoryType);
+        }
     }
 
     @Override
@@ -455,7 +503,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (getVehicle() != null && getVehicle().equals(player)) return InteractionResult.PASS;
 
         ItemStack stack = player.getItemInHand(hand);
-        if (!stack.is(TagsMCA.Items.VILLAGER_EGGS) && isAlive() && !isTrading() && !isSleeping() && canInteractWithItemStackInHand(stack) && !getVillagerBrain().isPanicking()) {
+        boolean isOnBlacklist = Config.getInstance().villagerInteractionItemBlacklist.contains(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+        if (!isOnBlacklist && !stack.is(TagsMCA.Items.VILLAGER_EGGS) && isAlive() && !isTrading() && !isSleeping() && canInteractWithItemStackInHand(stack) && !getVillagerBrain().isPanicking()) {
             if (isBaby()) {
                 setUnhappy();
             } else if (!level().isClientSide) {
@@ -532,6 +581,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public final boolean hurt(DamageSource source, float damageAmount) {
+        if (isBaby() && source.is(DamageTypes.IN_WALL)) {
+            return false;
+        }
+
         // no baby squishes
         if (getVehicle() instanceof Player) {
             return super.hurt(source, 0.0f);
@@ -874,14 +927,18 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
                 if (infection > 1.0f) {
                     convertTo(EntityType.ZOMBIE_VILLAGER, false);
-                    discard();
                 }
             }
 
-            // panic screams
-            if (this.tickCount % 90 == 0 && mcaBrain.isPanicking()) {
+            // one scream per villager per panic wave, at most one per level per PANIC_SCREAM_INTERVAL
+            boolean panicking = mcaBrain.isPanicking();
+            long now = level().getGameTime();
+            Long lastScream = LAST_PANIC_SCREAM.get(level());
+            if (panicking && !wasPanicking && (lastScream == null || now - lastScream > PANIC_SCREAM_INTERVAL)) {
+                LAST_PANIC_SCREAM.put(level(), now);
                 sendChatToAllAround("villager.scream");
             }
+            wasPanicking = panicking;
 
             // sirben noises
             if (this.tickCount % 60 == 0 && random.nextInt(50) == 0 && traits.hasTrait(Traits.SIRBEN)) {
@@ -903,11 +960,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         int level = this.getVillagerData().getLevel() - 1;
         double bonus = Config.getInstance().villagerHealthBonusPerLevel * level;
 
-        if (level == lastAppliedHealthLevel && bonus == lastAppliedHealthBonus) {
+        if (bonus == lastAppliedHealthBonus) {
             return;
         }
 
-        lastAppliedHealthLevel = level;
         lastAppliedHealthBonus = bonus;
 
         AttributeInstance instance = this.getAttributes().getInstance(Attributes.MAX_HEALTH);
@@ -928,6 +984,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void refreshDimensions() {
+        float oldWidth = getBbWidth();
+        float oldHeight = getBbHeight();
+
         AgeState current = getAgeState();
         AgeState next = current.getNext();
 
@@ -944,6 +1003,63 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         boolean oldOnGround = this.onGround();
         super.refreshDimensions();
         this.setOnGround(oldOnGround);
+
+        if ((getBbWidth() > oldWidth || getBbHeight() > oldHeight)
+                && isBaby()
+                && level() instanceof ServerLevel serverLevel
+                && serverLevel.getEntity(getUUID()) == this
+                && isInWall()) {
+            // Vanilla already attempts resize repositioning; rescue any remaining collision,
+            // including growth before the first tick when vanilla skips that search.
+            moveToSafePositionIfSuffocating();
+        }
+    }
+
+    /**
+     * Performs one bounded rescue when a young villager is spawned while suffocating,
+     * or when vanilla's resize repositioning cannot resolve a growth collision.
+     */
+    public boolean moveToSafePositionIfSuffocating() {
+        if (!isInWall()) {
+            return true;
+        }
+
+        BlockPos origin = blockPosition();
+        Vec3 currentPosition = position();
+        int[] verticalOffsets = {0, 1, -1};
+
+        for (int radius = 0; radius <= 2; radius++) {
+            for (int dy : verticalOffsets) {
+                for (int dx = -radius; dx <= radius; dx++) {
+                    for (int dz = -radius; dz <= radius; dz++) {
+                        if (Math.max(Math.abs(dx), Math.abs(dz)) != radius) {
+                            continue;
+                        }
+
+                        BlockPos candidate = origin.offset(dx, dy, dz);
+                        double floorHeight = level().getBlockFloorHeight(candidate);
+                        if (!Double.isFinite(floorHeight) || floorHeight >= 1.0D) {
+                            continue;
+                        }
+                        if (getType().isBlockDangerous(level().getBlockState(candidate))
+                                || floorHeight <= 0.0D && getType().isBlockDangerous(level().getBlockState(candidate.below()))) {
+                            continue;
+                        }
+
+                        Vec3 candidatePosition = Vec3.upFromBottomCenterOf(candidate, floorHeight);
+                        AABB candidateBox = getBoundingBox().move(candidatePosition.subtract(currentPosition));
+                        if (!level().noCollision(this, candidateBox)) {
+                            continue;
+                        }
+
+                        setPos(candidatePosition.x, candidatePosition.y, candidatePosition.z);
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     @Override
@@ -1028,16 +1144,18 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             boolean head = passengers.size() > 2 && passengers.get(2) == this;
 
             Vec3 offset = head ? new Vec3(0, 0.55f, 0) : new Vec3(left ? 0.4F : -0.4F, 0.05f, 0).yRot(yaw);
+            Vec3 pos = this.position();
 
-            // todo currently only client side
+            // Keep the physical carry position identical on both sides so the bounding box follows the passenger.
+            this.setPos(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
+
+            // Player genetics rendering is client-only. Preserve its original visual adjustment without moving the physical box.
             if (isClientSide() && MCAClient.useGeneticsRenderer(vehicle.getUUID())) {
-                float height = CommonVillagerModel.getVillager(vehicle).getRawVerticalScaleFactor();
+                float height = CommonVillagerModel.getVillager(vehicle).getVisualVerticalScaleFactor();
                 offset = offset.multiply(1.0f, height, 1.0f);
                 offset = offset.add(0, (height - 1) * 1.5 - 0.7, 0);
+                this.setPosRaw(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
             }
-
-            Vec3 pos = this.position();
-            this.setPosRaw(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
 
             if (vehicle.isShiftKeyDown()) {
                 stopRiding();
@@ -1064,6 +1182,49 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    public void travel(Vec3 input) {
+        if (isSleeping()) {
+            // SleepInBed can start between navigation and MoveControl ticks. Ignore remaining
+            // approach input and gravity while vanilla's sleeping position owns the anchor.
+            setDeltaMovement(Vec3.ZERO);
+            calculateEntityAnimation(false);
+            return;
+        }
+        super.travel(input);
+    }
+
+    @Override
+    public void stopSleeping() {
+        Optional<BlockPos> previousBed = getSleepingPos();
+        super.stopSleeping();
+        if (level() instanceof ServerLevel level) {
+            previousBed.filter(level::hasChunkAt).ifPresent(pos -> {
+                BlockState state = level.getBlockState(pos);
+                if (state.getBlock() instanceof BedBlock && !state.getValue(BedBlock.OCCUPIED)
+                        && !level.getEntitiesOfClass(LivingEntity.class, new AABB(pos), other ->
+                        other != this && other.isSleeping()
+                                && other.getSleepingPos().filter(pos::equals).isPresent()).isEmpty()) {
+                    // Waking a displaced sleeper must not clear the current sleeper's bed state.
+                    level.setBlock(pos, state.setValue(BedBlock.OCCUPIED, true), 3);
+                }
+            });
+        }
+    }
+
+    @Override
+    public boolean isPushable() {
+        return !isSleeping() && super.isPushable();
+    }
+
+    @Override
+    protected void doPush(Entity entity) {
+        if (isSleeping()) {
+            return;
+        }
+        super.doPush(entity);
+    }
+
+    @Override
     public EntityDimensions getDefaultDimensions(Pose pose) {
         Entity vehicle = getVehicle();
         if (vehicle instanceof Player) {
@@ -1074,30 +1235,39 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             return SLEEPING_DIMENSIONS;
         }
 
-        float height = getVerticalScaleFactor() * 2.0F;
-        float width = getHorizontalScaleFactor() * 0.6F;
+        float height = getPhysicalStandingHeight();
+        float width = getPhysicalHorizontalScaleFactor() * 0.6F;
 
-        return EntityDimensions.scalable(width, height).withAttachments(EntityAttachments.builder()
-                .attach(EntityAttachment.VEHICLE, 0.0F, getRawVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F));
+        return EntityDimensions.scalable(width, height).withEyeHeight(getPhysicalStandingEyeHeight()).withAttachments(EntityAttachments.builder()
+                .attach(EntityAttachment.VEHICLE, 0.0F, getVisualVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F)
+                .attach(EntityAttachment.NAME_TAG, 0.0F, getVisualNameTagHeight(), 0.0F));
+    }
+
+    @Override
+    protected void dropCustomDeathLoot(ServerLevel serverLevel, DamageSource cause, boolean recentlyHit) {
+        // MCA owns villager equipment separately, so do not let Mob drop equipped items here.
     }
 
     @Override
     public void die(DamageSource cause) {
-        // deselect equipment as this messes with MobEntities equipment dropping
-        for (EquipmentSlot slot : EquipmentSlot.values()) {
-            this.setItemSlot(slot, ItemStack.EMPTY);
-        }
-
-        //death message
-        if (!level().isClientSide) {
-            getResidency().getHomeVillage().flatMap(Village::getCivilRegistry).ifPresent(r -> r.addText(getCombatTracker().getDeathMessage()));
+        if (dead) {
+            return;
         }
 
         super.die(cause);
 
+        // NeoForge can cancel LivingDeathEvent inside super.die(). Leave MCA's persistent
+        // death state untouched unless vanilla committed the death.
+        if (!dead) {
+            return;
+        }
+
         if (level().isClientSide) {
             return;
         }
+
+        //death message
+        getResidency().getHomeVillage().flatMap(Village::getCivilRegistry).ifPresent(r -> r.addText(getCombatTracker().getDeathMessage()));
 
         //drop stuff
         InventoryUtils.dropAllItems(this, inventory);
@@ -1115,14 +1285,12 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         //move out
-        residency.leaveHome();
+        residency.leaveVillage();
 
         if (interactedWith) {
             VillagerTrackerManager.update(this);
         }
     }
-
-
     @Override
     public void teleportTo(double destX, double destY, double destZ) {
         if (isPassenger()) {
@@ -1268,7 +1436,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public float getVoicePitch() {
         float r = (random.nextFloat() - 0.5f) * 0.05f;
         float g = (genetics.getGene(Genetics.VOICE) - 0.5f) * 0.3f;
-        float a = Mth.lerp(AgeState.getDelta(tickCount), getAgeState().getPitch(), getAgeState().getNext().getPitch());
+        float a = Mth.lerp(AgeState.getDelta(getTrackedValue(GROWTH_AMOUNT)), getAgeState().getPitch(), getAgeState().getNext().getPitch());
         return a + r + g;
     }
 
@@ -1397,6 +1565,24 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         this.lookAt(pos);
     }
 
+    public void moveTowardsPersistent(BlockPos pos, float speed, int closeEnoughDist) {
+        WalkTarget walkTarget = this.brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        if (walkTarget != null
+                && walkTarget.getTarget() instanceof PersistentPathTarget
+                && walkTarget.getTarget().currentBlockPosition().equals(pos)
+                && walkTarget.getSpeedModifier() == speed
+                && walkTarget.getCloseEnoughDist() == closeEnoughDist) {
+            // Chores repeat their intent each tick, but either sink can clear its
+            // memory independently. Retain the walk request and restore looking
+            // through its existing static tracker when needed.
+            if (this.brain.getMemoryInternal(MemoryModuleType.LOOK_TARGET).orElse(null) != walkTarget.getTarget()) {
+                this.brain.setMemory(MemoryModuleType.LOOK_TARGET, walkTarget.getTarget());
+            }
+            return;
+        }
+        BehaviorUtils.setWalkAndLookTargetMemories(this, new PersistentPathTarget(pos), speed, closeEnoughDist);
+    }
+
     public void moveTowards(BlockPos pos, float speed) {
         moveTowards(pos, speed, 1);
     }
@@ -1431,7 +1617,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public <T extends Mob> T convertTo(EntityType<T> type, boolean keepInventory) {
         T mob;
         if (!isRemoved() && type == EntityType.ZOMBIE_VILLAGER) {
-            residency.leaveHome();
             mob = (T) VillagerLike.convertPreservingUuid(this,
                     getGenetics().getGender().getZombieType(),
                     keepInventory,
@@ -1440,12 +1625,21 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             mob = super.convertTo(type, keepInventory);
         }
 
-        if (mob instanceof VillagerLike<?> zombie) {
-            zombie.copyVillagerAttributesFrom(this);
+        if (mob instanceof ZombieVillager zombie) {
+            ServerLevel serverLevel = (ServerLevel) level();
+            zombie.finalizeSpawn(serverLevel, serverLevel.getCurrentDifficultyAt(zombie.blockPosition()),
+                    MobSpawnType.CONVERSION, new Zombie.ZombieGroupData(false, true));
+            zombie.setVillagerData(getVillagerData());
+            zombie.setGossips(getGossips().store(NbtOps.INSTANCE));
+            zombie.setTradeOffers(getOffers().copy());
+            zombie.setVillagerXp(getVillagerXp());
+            zombie.setPersistenceRequired();
+            residency.leaveVillage();
         }
 
-        if (mob instanceof ZombieVillager zombie) {
-            zombie.setPersistenceRequired();
+        if (mob instanceof VillagerLike<?> zombie) {
+            // Restore MCA state after spawn initialization has chosen the vanilla zombie age.
+            zombie.copyVillagerAttributesFrom(this);
         }
 
         if (mob instanceof ZombieVillagerEntityMCA zombie) {
@@ -1459,18 +1653,32 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public void writeAdditionalConversionData(CompoundTag output) {
         output.putString(CHAT_AI_PROMPT_KEY, getChatAIPrompt());
         writeNicknames(output);
+        longTermMemory.writeToNbt(output);
     }
 
     @Override
     public void readAdditionalConversionData(CompoundTag input) {
         chatAIPrompt = input.getString(CHAT_AI_PROMPT_KEY);
         readNicknames(input);
+        longTermMemory.readFromNbt(input);
     }
 
     @Override
     public void readAdditionalSaveData(CompoundTag nbt) {
         CompoundTag data = McaDataFixers.update(nbt);
         super.readAdditionalSaveData(data);
+
+        if (!level().isClientSide && isSleeping()) {
+            boolean sleepingAtHome = getBrain().getMemory(MemoryModuleType.HOME)
+                    .filter(home -> home.dimension().equals(level().dimension()))
+                    .map(home -> home.pos())
+                    .equals(getSleepingPos());
+            if (!sleepingAtHome) {
+                // Vanilla persists SleepingPos independently from the Brain. Do not restore a stale
+                // sleeping pose when the saved villager no longer owns that position as HOME.
+                stopSleeping();
+            }
+        }
 
         getTypeDataManager().load(this, data);
         relations.readFromNbt(data);
@@ -1614,11 +1822,12 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (weaponStack.getItem() instanceof BowItem) {
             ItemStack arrow = this.getProjectile(weaponStack);
             AbstractArrow persistentProjectileEntity = ProjectileUtil.getMobArrow(this, arrow, pullProgress, weaponStack);
-            double x = target.getX() - this.getX();
-            double y = target.getY(0.3333333333333333D) - persistentProjectileEntity.getY();
-            double z = target.getZ() - this.getZ();
-            double vel = Math.sqrt(x * x + z * z);
-            persistentProjectileEntity.shoot(x, y + vel * 0.20000000298023224D, z, 1.6F, 3);
+            Vec3 shot = RangedWeaponHelper.calculateBowShotVector(
+                    persistentProjectileEntity.position(),
+                    target.position(),
+                    target.getBbHeight()
+            );
+            persistentProjectileEntity.shoot(shot.x, shot.y, shot.z, 1.6F, 3.0F);
             this.playSound(SoundEvents.SKELETON_SHOOT, 1.0F, 1.0F / (this.getRandom().nextFloat() * 0.4F + 0.8F));
             this.level().addFreshEntity(persistentProjectileEntity);
         }

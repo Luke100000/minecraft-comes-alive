@@ -10,6 +10,7 @@ import net.conczin.mca.util.network.datasync.CDataParameter;
 import net.conczin.mca.util.network.datasync.CEnumParameter;
 import net.conczin.mca.util.network.datasync.CParameter;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.Entity;
@@ -108,8 +109,12 @@ public class Genetics implements Iterable<Genetics.Gene> {
             temp = random.nextFloat() * 2 - 0.5F;
         }
 
-        float height = entity.asEntity().blockPosition().getY();
-        height -= entity.asEntity().level().getSeaLevel();
+        Entity owningEntity = entity.asEntity();
+        int seaLevel = owningEntity.level() instanceof ServerLevel serverLevel
+                ? serverLevel.getChunkSource().getGenerator().getSeaLevel()
+                : owningEntity.level().getSeaLevel(); // client only is always 63Y
+        float height = owningEntity.blockPosition().getY();
+        height -= seaLevel;
         height /= 128;
 
         setGene(MELANIN, Mth.clamp(temperatureBaseRandom(temp) - height * 0.2f, 0, 1));

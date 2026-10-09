@@ -28,6 +28,5 @@
     "recipes": [
       "mca:cyan_cherry_crib"
     ]
-  },
-  "sends_telemetry_event": false
+  }
 }

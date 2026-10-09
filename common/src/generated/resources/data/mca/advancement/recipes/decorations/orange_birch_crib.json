@@ -28,6 +28,5 @@
     "recipes": [
       "mca:orange_birch_crib"
     ]
-  },
-  "sends_telemetry_event": false
+  }
 }

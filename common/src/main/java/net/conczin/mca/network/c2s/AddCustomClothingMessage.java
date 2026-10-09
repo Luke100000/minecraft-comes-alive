@@ -12,7 +12,8 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.world.entity.player.Player;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
 
 public record AddCustomClothingMessage(String identifier, boolean isHair, String json) implements HandleablePayload {
     public static final CustomPacketPayload.Type<AddCustomClothingMessage> TYPE = new CustomPacketPayload.Type<>(MCA.locate("add_custom_clothing"));
@@ -30,14 +31,36 @@ public record AddCustomClothingMessage(String identifier, boolean isHair, String
     }
 
     @Override
-    public void handle(Player player) {
-        JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
-        if (isHair) {
-            Hair hair = new Hair(identifier, obj);
+    public void handleServer(ServerPlayer player) {
+        if (!CustomClothingManager.canEdit(player) || !isValidLibraryId(identifier) || json.length() > 4096) {
+            return;
+        }
+
+        SkinListEntry entry;
+        try {
+            JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+            entry = isHair ? new Hair(identifier, obj) : new Clothing(identifier, obj);
+        } catch (RuntimeException invalidPayload) {
+            MCA.LOGGER.warn("Ignoring invalid global skin data for {}", identifier);
+            return;
+        }
+        if (entry instanceof Hair hair) {
             CustomClothingManager.getHair().addEntry(identifier, hair);
-        } else {
-            Clothing clothing = new Clothing(identifier, obj);
+        } else if (entry instanceof Clothing clothing) {
             CustomClothingManager.getClothing().addEntry(identifier, clothing);
+        }
+    }
+
+    static boolean isValidLibraryId(String identifier) {
+        ResourceLocation id = ResourceLocation.tryParse(identifier);
+        if (id == null || !"immersive_library".equals(id.getNamespace())
+                || !id.getPath().matches("[0-9]{1,10}")) {
+            return false;
+        }
+        try {
+            return id.getPath().equals(Integer.toString(Integer.parseInt(id.getPath())));
+        } catch (NumberFormatException outOfRange) {
+            return false;
         }
     }
 

@@ -2239,9 +2239,9 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
             // Collision dimensions cap genetic size at 0.999; the renderer uses raw size.
             // Include that size and head/hair/turning room when fitting the visual model.
             float modelHeight = Math.max(entity.getBbHeight(),
-                    villagerVisualization.getRawVerticalScaleFactor() * 2.0F * entity.getScale());
+                    villagerVisualization.getVisualVerticalScaleFactor() * 2.0F * entity.getScale());
             float modelWidth = Math.max(entity.getBbWidth(),
-                    villagerVisualization.getRawHorizontalScaleFactor() * 1.35F * entity.getScale());
+                    villagerVisualization.getVisualHorizontalScaleFactor() * 1.35F * entity.getScale());
             int labelHeight = page.equals("eyes_catalog") ? 10 : 0;
             centerY -= labelHeight / 2.0F;
             scale = VillagerEditorGalleryPolicy.fitPreviewScale(x1 - x0, y1 - y0 - labelHeight,

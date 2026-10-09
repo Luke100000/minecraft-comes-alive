@@ -32,6 +32,12 @@ public abstract class VillagerLayer<T extends LivingEntity, M extends HumanoidMo
         resetTextureExistenceCache();
     }
 
+    public static void clearTextureCaches() {
+        TEXTURE_CACHE.clear();
+        TEXTURE_EXIST_CACHE.clear();
+        TEXTURE_EXIST_CACHE.put(MCA.locate("temp"), true);
+    }
+
     public final M model;
 
     public VillagerLayer(RenderLayerParent<T, M> renderer, M model) {

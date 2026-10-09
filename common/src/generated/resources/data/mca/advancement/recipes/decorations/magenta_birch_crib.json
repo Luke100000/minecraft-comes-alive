@@ -28,6 +28,5 @@
     "recipes": [
       "mca:magenta_birch_crib"
     ]
-  },
-  "sends_telemetry_event": false
+  }
 }

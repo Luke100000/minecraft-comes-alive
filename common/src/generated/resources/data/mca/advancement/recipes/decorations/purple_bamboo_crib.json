@@ -28,6 +28,5 @@
     "recipes": [
       "mca:purple_bamboo_crib"
     ]
-  },
-  "sends_telemetry_event": false
+  }
 }

@@ -61,12 +61,12 @@ public interface EntityRelationship {
     }
 
     default Optional<Entity> getPartner() {
-        UUID partnerUUID = getFamilyEntry().partner();
-        Entity entity = getWorld().getEntity(partnerUUID);
-        if (entity == null) {
-            entity = getWorld().getServer().getPlayerList().getPlayer(partnerUUID);
-        }
-        return Optional.ofNullable(entity);
+        return getPartnerUUID().map(partnerUUID -> {
+            Entity entity = getWorld().getEntity(partnerUUID);
+            return entity == null
+                    ? getWorld().getServer().getPlayerList().getPlayer(partnerUUID)
+                    : entity;
+        });
     }
 
     //try to load a PlayerSaveData before loading the entity
@@ -88,6 +88,9 @@ public interface EntityRelationship {
         if (type == RelationshipType.SELF) {
             getRelationshipStream(getFamilyEntry().streamParents())
                     .forEach(r -> r.onTragedy(cause, burialSite, RelationshipType.CHILD, victim));
+
+            getRelationshipStream(getFamilyEntry().streamChildren())
+                    .forEach(r -> r.onTragedy(cause, burialSite, RelationshipType.PARENT, victim));
 
             getRelationshipStream(getFamilyEntry().siblings().stream())
                     .forEach(r -> r.onTragedy(cause, burialSite, RelationshipType.SIBLING, victim));
@@ -137,16 +140,14 @@ public interface EntityRelationship {
     }
 
     default Optional<UUID> getPartnerUUID() {
-        UUID spouse = getFamilyEntry().partner();
-        if (spouse.equals(Util.NIL_UUID)) {
-            return Optional.empty();
-        } else {
-            return Optional.of(spouse);
-        }
+        return getFamilyEntry().activePartner();
     }
 
     default Optional<Component> getPartnerName() {
-        return getFamilyTree().getOrEmpty(getFamilyEntry().partner()).map(FamilyTreeNode::getName).map(Component::literal);
+        return getPartnerUUID()
+                .flatMap(getFamilyTree()::getOrEmpty)
+                .map(FamilyTreeNode::getName)
+                .map(Component::literal);
     }
 
     default boolean isMarried() {
