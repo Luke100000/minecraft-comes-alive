@@ -134,6 +134,25 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
+    void blueprintStatePersistsUntilTheClientLevelChanges() throws Exception {
+        Object level = new Object();
+        BlueprintScreen.onClientLevelChanged(level);
+
+        BlueprintScreen screen = new BlueprintScreen();
+        setField(screen, "mapScale", 3.0F);
+        setField(screen, "showTerrain", false);
+
+        BlueprintScreen.onClientLevelChanged(level);
+        BlueprintScreen reopened = new BlueprintScreen();
+        assertEquals(3.0F, getField(reopened, "mapScale"));
+        assertEquals(false, getField(reopened, "showTerrain"));
+
+        BlueprintScreen.onClientLevelChanged(new Object());
+        assertEquals(1.0F, getField(reopened, "mapScale"));
+        assertEquals(true, getField(reopened, "showTerrain"));
+    }
+
+    @Test
     void loadedBlueprintDoesNotNeedAnotherInitialVillageRequestWhenResumed() throws Exception {
         BlueprintScreen screen = new BlueprintScreen();
         assertTrue(screen.needsVillageRequestOnInit());
