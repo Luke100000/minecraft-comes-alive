@@ -1,0 +1,96 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "highlighted",
+    "prompt": "dialogue_event.mca.personal.personality_flirty.prompt",
+    "resume_prompt": "dialogue_event.mca.personal.personality_flirty.resume",
+    "topic": "personal"
+  },
+  "priority": 40,
+  "weight": 1,
+  "requirements": [
+    {
+      "type": "mca:personality",
+      "value": "flirty"
+    },
+    {
+      "type": "mca:hearts",
+      "min": 20
+    }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "min_seconds": 300,
+    "max_seconds": 900
+  },
+  "history": "story",
+  "start": "start",
+  "nodes": {
+    "start": {
+      "outcomes": [
+        {
+          "requirements": [
+            {
+              "type": "mca:age_group",
+              "value": "adult"
+            }
+          ],
+          "weight": 3,
+          "next": "context"
+        },
+        {
+          "weight": 1,
+          "next": "ordinary"
+        }
+      ]
+    },
+    "context": {
+      "line": "dialogue_event.mca.personal.personality_flirty.context",
+      "next": "intro"
+    },
+    "ordinary": {
+      "line": "dialogue_event.mca.personal.personality_flirty.ordinary",
+      "next": "intro"
+    },
+    "end_0": {
+      "lines": [
+        "dialogue_event.mca.personal.personality_flirty.end_0.0",
+        "dialogue_event.mca.personal.personality_flirty.end_0.1"
+      ],
+      "complete": true
+    },
+    "end_1": {
+      "lines": [
+        "dialogue_event.mca.personal.personality_flirty.end_1.0",
+        "dialogue_event.mca.personal.personality_flirty.end_1.1"
+      ],
+      "complete": true
+    },
+    "intro": {
+      "lines": [
+        "dialogue_event.mca.personal.personality_flirty.intro.0",
+        "dialogue_event.mca.personal.personality_flirty.intro.1",
+        "dialogue_event.mca.personal.personality_flirty.intro.2",
+        "dialogue_event.mca.personal.personality_flirty.intro.3"
+      ],
+      "choices": [
+        {
+          "id": "speak_sincerely",
+          "text": "dialogue_event.mca.personal.personality_flirty.choice.speak_sincerely",
+          "next": "end_0",
+          "actions": [
+            {
+              "type": "mca:hearts",
+              "amount": 3
+            }
+          ]
+        },
+        {
+          "id": "take_it_slow",
+          "text": "dialogue_event.mca.personal.personality_flirty.choice.take_it_slow",
+          "next": "end_1"
+        }
+      ]
+    }
+  }
+}

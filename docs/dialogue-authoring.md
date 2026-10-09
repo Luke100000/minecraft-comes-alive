@@ -647,8 +647,9 @@ Before submitting an event, check that:
 - each node has exactly one continuation shape and the graph is acyclic;
 - repeatable stories use `history: "story"`; disposable small talk can use
   cooldown + `history: "scheduling"`;
-- current reference stories/small talk use `seconds: 5` unless intentionally
-  testing another authored interval;
+- the personality library uses ranged cooldowns (`min_seconds`/`max_seconds`):
+  300–900 seconds for main stories and 60–180 seconds for everyday entries;
+  legacy social examples and test showcases may still use `seconds: 5`;
 - the 2400-tick pause deadline is not copied into event cooldown data;
 - gameplay facts such as cure, revival, mourning, attack, hospital/prison context,
   or raid survival come from an authoritative condition owner;
@@ -656,3 +657,18 @@ Before submitting an event, check that:
   equivalent legacy effect;
 - completion is intended to commit only after the final `Back to topics`
   acknowledgement.
+
+## Personality story examples
+
+The shipped `personal/personality_introverted.json` demonstrates a story offered
+to a particular personality after 20 hearts, with a night-only variation and an
+unconditional fallback. Its choices lead to distinct, acknowledged endings.
+`personal/personality_flirty.json` puts adult romantic wording only behind a
+conditional `mca:age_group` route, retaining an ordinary fallback.
+
+Two ordinary `ambient/personality_friendly_*.json` conversations share priority
+`0` with the existing greetings and root chatter, rather than hiding those
+conversations behind a higher-priority tier. `personal/personality_anxious_followup.json`
+demonstrates a separate selectable conversation which requires both a completed
+story and the recorded `make_plan` player choice. A story abandoned before its
+final acknowledgement cannot unlock this follow-up.

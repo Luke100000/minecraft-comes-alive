@@ -1,0 +1,43 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue_event.mca.personal.personality_anxious_followup.prompt",
+    "resume_prompt": "dialogue_event.mca.personal.personality_anxious_followup.resume",
+    "topic": "personal"
+  },
+  "priority": 35,
+  "weight": 1,
+  "requirements": [
+    {
+      "type": "mca:event_completed",
+      "event": "mca:personal/personality_anxious"
+    },
+    {
+      "type": "mca:event_choice",
+      "event": "mca:personal/personality_anxious",
+      "choice": "make_plan"
+    },
+    {
+      "type": "mca:personality",
+      "value": "anxious"
+    }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "min_seconds": 300,
+    "max_seconds": 900
+  },
+  "history": "scheduling",
+  "start": "followup",
+  "nodes": {
+    "followup": {
+      "lines": [
+        "dialogue_event.mca.personal.personality_anxious_followup.line.0",
+        "dialogue_event.mca.personal.personality_anxious_followup.line.1",
+        "dialogue_event.mca.personal.personality_anxious_followup.line.2"
+      ],
+      "complete": true
+    }
+  }
+}

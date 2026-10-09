@@ -1,0 +1,96 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "highlighted",
+    "prompt": "dialogue_event.mca.personal.personality_introverted.prompt",
+    "resume_prompt": "dialogue_event.mca.personal.personality_introverted.resume",
+    "topic": "personal"
+  },
+  "priority": 40,
+  "weight": 1,
+  "requirements": [
+    {
+      "type": "mca:personality",
+      "value": "introverted"
+    },
+    {
+      "type": "mca:hearts",
+      "min": 20
+    }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "min_seconds": 300,
+    "max_seconds": 900
+  },
+  "history": "story",
+  "start": "start",
+  "nodes": {
+    "start": {
+      "outcomes": [
+        {
+          "requirements": [
+            {
+              "type": "mca:time",
+              "value": "night"
+            }
+          ],
+          "weight": 3,
+          "next": "context"
+        },
+        {
+          "weight": 1,
+          "next": "ordinary"
+        }
+      ]
+    },
+    "context": {
+      "line": "dialogue_event.mca.personal.personality_introverted.context",
+      "next": "intro"
+    },
+    "ordinary": {
+      "line": "dialogue_event.mca.personal.personality_introverted.ordinary",
+      "next": "intro"
+    },
+    "end_0": {
+      "lines": [
+        "dialogue_event.mca.personal.personality_introverted.end_0.0",
+        "dialogue_event.mca.personal.personality_introverted.end_0.1"
+      ],
+      "complete": true
+    },
+    "end_1": {
+      "lines": [
+        "dialogue_event.mca.personal.personality_introverted.end_1.0",
+        "dialogue_event.mca.personal.personality_introverted.end_1.1"
+      ],
+      "complete": true
+    },
+    "intro": {
+      "lines": [
+        "dialogue_event.mca.personal.personality_introverted.intro.0",
+        "dialogue_event.mca.personal.personality_introverted.intro.1",
+        "dialogue_event.mca.personal.personality_introverted.intro.2",
+        "dialogue_event.mca.personal.personality_introverted.intro.3"
+      ],
+      "choices": [
+        {
+          "id": "set_boundary",
+          "text": "dialogue_event.mca.personal.personality_introverted.choice.set_boundary",
+          "next": "end_0",
+          "actions": [
+            {
+              "type": "mca:hearts",
+              "amount": 3
+            }
+          ]
+        },
+        {
+          "id": "quiet_alternative",
+          "text": "dialogue_event.mca.personal.personality_introverted.choice.quiet_alternative",
+          "next": "end_1"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "highlighted",
+    "prompt": "dialogue_event.mca.personal.personality_greedy.prompt",
+    "resume_prompt": "dialogue_event.mca.personal.personality_greedy.resume",
+    "topic": "personal"
+  },
+  "priority": 40,
+  "weight": 1,
+  "requirements": [
+    {
+      "type": "mca:personality",
+      "value": "greedy"
+    },
+    {
+      "type": "mca:hearts",
+      "min": 20
+    }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "min_seconds": 300,
+    "max_seconds": 900
+  },
+  "history": "story",
+  "start": "start",
+  "nodes": {
+    "start": {
+      "outcomes": [
+        {
+          "requirements": [
+            {
+              "type": "mca:profession",
+              "value": "minecraft:farmer"
+            }
+          ],
+          "weight": 3,
+          "next": "context"
+        },
+        {
+          "weight": 1,
+          "next": "ordinary"
+        }
+      ]
+    },
+    "context": {
+      "line": "dialogue_event.mca.personal.personality_greedy.context",
+      "next": "intro"
+    },
+    "ordinary": {
+      "line": "dialogue_event.mca.personal.personality_greedy.ordinary",
+      "next": "intro"
+    },
+    "end_0": {
+      "lines": [
+        "dialogue_event.mca.personal.personality_greedy.end_0.0",
+        "dialogue_event.mca.personal.personality_greedy.end_0.1"
+      ],
+      "complete": true
+    },
+    "end_1": {
+      "lines": [
+        "dialogue_event.mca.personal.personality_greedy.end_1.0",
+        "dialogue_event.mca.personal.personality_greedy.end_1.1"
+      ],
+      "complete": true
+    },
+    "intro": {
+      "lines": [
+        "dialogue_event.mca.personal.personality_greedy.intro.0",
+        "dialogue_event.mca.personal.personality_greedy.intro.1",
+        "dialogue_event.mca.personal.personality_greedy.intro.2",
+        "dialogue_event.mca.personal.personality_greedy.intro.3"
+      ],
+      "choices": [
+        {
+          "id": "share",
+          "text": "dialogue_event.mca.personal.personality_greedy.choice.share",
+          "next": "end_0",
+          "actions": [
+            {
+              "type": "mca:hearts",
+              "amount": 3
+            }
+          ]
+        },
+        {
+          "id": "keep",
+          "text": "dialogue_event.mca.personal.personality_greedy.choice.keep",
+          "next": "end_1"
+        }
+      ]
+    }
+  }
+}

@@ -5,19 +5,32 @@
     "resume_prompt": "dialogue_event.mca.ambient.crabby_night.resume",
     "topic": "small_talk"
   },
-  "priority": 20,
-  "weight": 1,
+  "priority": 0,
+  "weight": 10,
   "requirements": [
-    { "type": "mca:personality", "value": "crabby" },
-    { "type": "mca:time", "value": "night" }
+    {
+      "type": "mca:personality",
+      "value": "crabby"
+    },
+    {
+      "type": "mca:time",
+      "value": "night"
+    }
   ],
-  "repeat": { "type": "cooldown", "seconds": 5 },
+  "repeat": {
+    "type": "cooldown",
+    "min_seconds": 60,
+    "max_seconds": 180
+  },
   "history": "scheduling",
   "start": "main",
   "nodes": {
     "main": {
-      "line": "dialogue_event.mca.ambient.crabby_night.line",
-      "complete": true
+      "complete": true,
+      "lines": [
+        "dialogue_event.mca.ambient.crabby_night.line",
+        "dialogue_event.mca.ambient.crabby_night.line.more"
+      ]
     }
   }
 }

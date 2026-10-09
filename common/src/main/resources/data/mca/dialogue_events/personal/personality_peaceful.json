@@ -1,0 +1,96 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "highlighted",
+    "prompt": "dialogue_event.mca.personal.personality_peaceful.prompt",
+    "resume_prompt": "dialogue_event.mca.personal.personality_peaceful.resume",
+    "topic": "personal"
+  },
+  "priority": 40,
+  "weight": 1,
+  "requirements": [
+    {
+      "type": "mca:personality",
+      "value": "peaceful"
+    },
+    {
+      "type": "mca:hearts",
+      "min": 20
+    }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "min_seconds": 300,
+    "max_seconds": 900
+  },
+  "history": "story",
+  "start": "start",
+  "nodes": {
+    "start": {
+      "outcomes": [
+        {
+          "requirements": [
+            {
+              "type": "mca:profession",
+              "value": "mca:guard"
+            }
+          ],
+          "weight": 3,
+          "next": "context"
+        },
+        {
+          "weight": 1,
+          "next": "ordinary"
+        }
+      ]
+    },
+    "context": {
+      "line": "dialogue_event.mca.personal.personality_peaceful.context",
+      "next": "intro"
+    },
+    "ordinary": {
+      "line": "dialogue_event.mca.personal.personality_peaceful.ordinary",
+      "next": "intro"
+    },
+    "end_0": {
+      "lines": [
+        "dialogue_event.mca.personal.personality_peaceful.end_0.0",
+        "dialogue_event.mca.personal.personality_peaceful.end_0.1"
+      ],
+      "complete": true
+    },
+    "end_1": {
+      "lines": [
+        "dialogue_event.mca.personal.personality_peaceful.end_1.0",
+        "dialogue_event.mca.personal.personality_peaceful.end_1.1"
+      ],
+      "complete": true
+    },
+    "intro": {
+      "lines": [
+        "dialogue_event.mca.personal.personality_peaceful.intro.0",
+        "dialogue_event.mca.personal.personality_peaceful.intro.1",
+        "dialogue_event.mca.personal.personality_peaceful.intro.2",
+        "dialogue_event.mca.personal.personality_peaceful.intro.3"
+      ],
+      "choices": [
+        {
+          "id": "mediate",
+          "text": "dialogue_event.mca.personal.personality_peaceful.choice.mediate",
+          "next": "end_0",
+          "actions": [
+            {
+              "type": "mca:hearts",
+              "amount": 3
+            }
+          ]
+        },
+        {
+          "id": "hold_boundary",
+          "text": "dialogue_event.mca.personal.personality_peaceful.choice.hold_boundary",
+          "next": "end_1"
+        }
+      ]
+    }
+  }
+}

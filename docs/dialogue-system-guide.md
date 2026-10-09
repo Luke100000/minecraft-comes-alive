@@ -237,7 +237,7 @@ The `repeat` field is mandatory and supports these exact formats:
 { "type": "cooldown", "min_seconds": 30, "max_seconds": 90 }
 ```
 
-Use either `seconds` or the pair `min_seconds`/`max_seconds` for a cooldown, never both. All durations are finite nonnegative seconds, normalized to ticks with `ceil(seconds * 20)`. A range is rolled once on successful completion. Shipped ordinary and reference conversations commonly use five seconds, or 100 ticks at 20 TPS.
+Use either `seconds` or the pair `min_seconds`/`max_seconds` for a cooldown, never both. All durations are finite nonnegative seconds, normalized to ticks with `ceil(seconds * 20)`. A range is rolled once on successful completion. Legacy social/reference conversations commonly use five seconds, or 100 ticks at 20 TPS; authored personality conversations use 60–180 seconds for ambient chatter and 300–900 seconds for stories.
 
 Eligibility and history are scoped to **(player UUID, villager UUID, event ID)**. Successful `story` history records a completion count, latest completion time, next eligible time, and choice IDs from the latest completed run. Repeating the same story with a different reply replaces those remembered choice IDs. Abandoning a run does not rewrite story history.
 
@@ -309,7 +309,7 @@ These shipped resources make useful fixtures:
 | Resource | What to verify |
 | --- | --- |
 | `mca:social/joke` | Ask mode; direct replies; personality/mood-weighted outcomes; hearts changes |
-| `mca:ambient/crabby_night` | `crabby` personality plus night; high-priority ambient selection |
+| `mca:ambient/crabby_night` | `crabby` personality plus night; shares the ordinary priority-0 ambient tier |
 | `mca:personal/cured_zombies` | Adult gloomy speaker, hearts >= 20, day time 13000 to 23000; ordered lines and replies, without a personal cure requirement |
 | `mca:personal/cured_zombies_followup` | Separate Ask topic after `cured_zombies` completion with `experience_changes_you` |
 | `mca:personal/cured_identity` | Highlighted personal story for a speaker with a recorded `mca:cured` event within 24000 ticks |

@@ -2,19 +2,15 @@
   "trigger": "talk",
   "presentation": {
     "mode": "ambient",
-    "resume_prompt": "dialogue_event.mca.ambient.rain_relaxed.resume",
+    "resume_prompt": "dialogue_event.mca.ambient.personality_flirty_compliments.resume",
     "topic": "small_talk"
   },
   "priority": 0,
   "weight": 10,
   "requirements": [
     {
-      "type": "mca:weather",
-      "value": "rain"
-    },
-    {
       "type": "mca:personality",
-      "value": "relaxed"
+      "value": "flirty"
     }
   ],
   "repeat": {
@@ -26,11 +22,11 @@
   "start": "main",
   "nodes": {
     "main": {
-      "complete": true,
       "lines": [
-        "dialogue_event.mca.ambient.rain_relaxed.line",
-        "dialogue_event.mca.ambient.rain_relaxed.line.more"
-      ]
+        "dialogue_event.mca.ambient.personality_flirty_compliments.line.0",
+        "dialogue_event.mca.ambient.personality_flirty_compliments.line.1"
+      ],
+      "complete": true
     }
   }
 }

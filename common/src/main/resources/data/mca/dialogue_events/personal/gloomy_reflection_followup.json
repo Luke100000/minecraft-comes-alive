@@ -9,12 +9,25 @@
   "priority": 90,
   "weight": 1,
   "requirements": [
-    { "type": "mca:event_completed", "event": "mca:personal/gloomy_reflection" },
-    { "type": "mca:event_choice", "event": "mca:personal/gloomy_reflection", "choice": "comfort" },
-    { "type": "mca:personality", "value": "gloomy" },
-    { "type": "mca:time", "value": "night" }
+    {
+      "type": "mca:event_completed",
+      "event": "mca:personal/gloomy_reflection"
+    },
+    {
+      "type": "mca:event_choice",
+      "event": "mca:personal/gloomy_reflection",
+      "choice": "comfort"
+    },
+    {
+      "type": "mca:personality",
+      "value": "gloomy"
+    }
   ],
-  "repeat": { "type": "cooldown", "seconds": 5 },
+  "repeat": {
+    "type": "cooldown",
+    "min_seconds": 300,
+    "max_seconds": 900
+  },
   "history": "scheduling",
   "start": "followup",
   "nodes": {

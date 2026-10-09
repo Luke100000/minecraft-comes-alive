@@ -6,17 +6,25 @@
     "resume_prompt": "dialogue_event.mca.personal.gloomy_reflection.resume",
     "topic": "personal"
   },
-  "priority": 100,
+  "priority": 40,
   "weight": 1,
   "requirements": [
-    { "type": "mca:personality", "value": "gloomy" },
-    { "type": "mca:hearts", "min": 40 },
-    { "type": "mca:mood", "value": "sad" },
-    { "type": "mca:time", "min": 13000, "max": 23000 }
+    {
+      "type": "mca:personality",
+      "value": "gloomy"
+    },
+    {
+      "type": "mca:hearts",
+      "min": 20
+    }
   ],
-  "repeat": { "type": "cooldown", "seconds": 5 },
+  "repeat": {
+    "type": "cooldown",
+    "min_seconds": 300,
+    "max_seconds": 900
+  },
   "history": "story",
-  "start": "intro",
+  "start": "start",
   "nodes": {
     "intro": {
       "lines": [
@@ -29,7 +37,12 @@
         {
           "id": "comfort",
           "text": "dialogue_event.mca.personal.gloomy_reflection.choice.comfort",
-          "actions": [{ "type": "mca:hearts", "amount": 5 }],
+          "actions": [
+            {
+              "type": "mca:hearts",
+              "amount": 5
+            }
+          ],
           "next": "comforted"
         },
         {
@@ -52,6 +65,32 @@
         "dialogue_event.mca.personal.gloomy_reflection.space.walk"
       ],
       "complete": true
+    },
+    "start": {
+      "outcomes": [
+        {
+          "requirements": [
+            {
+              "type": "mca:profession",
+              "value": "minecraft:farmer"
+            }
+          ],
+          "weight": 3,
+          "next": "context"
+        },
+        {
+          "weight": 1,
+          "next": "ordinary"
+        }
+      ]
+    },
+    "context": {
+      "line": "dialogue_event.mca.personal.gloomy_reflection.context_farmer",
+      "next": "intro"
+    },
+    "ordinary": {
+      "line": "dialogue_event.mca.personal.gloomy_reflection.context_everyday",
+      "next": "intro"
     }
   }
 }
