@@ -1,8 +1,40 @@
-name: Java CI with Gradle
+name: Java Release with Gradle
 
-on: [ push ]
+on:
+  push:
+    tags:
+      - '*\+*'
+
 jobs:
+  validate-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      valid: ${{ steps.validate.outputs.valid }}
+      tag: ${{ steps.validate.outputs.tag }}
+      version: ${{ steps.validate.outputs.version }}
+      minecraft_version: ${{ steps.validate.outputs.minecraft_version }}
+    steps:
+      - name: Validate release tag
+        id: validate
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          tag_pattern='^[0-9]+[.][0-9]+[.][0-9]+(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?[+][0-9]+([.][0-9]+){1,2}$'
+
+          if [[ ! "${tag}" =~ ${tag_pattern} ]]; then
+            echo "::notice title=Invalid release tag::Skipping release. Expected '<mod_version>+<minecraft_version>', for example '7.7.1-beta.4+1.20.1'."
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "valid=true" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "version=${tag%%+*}" >> "$GITHUB_OUTPUT"
+          echo "minecraft_version=${tag#*+}" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: validate-tag
+    if: needs.validate-tag.outputs.valid == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -13,7 +45,6 @@ jobs:
       MAVEN_USERNAME: ${{ secrets.MAVEN_USERNAME }}
       MAVEN_TOKEN: ${{ secrets.MAVEN_TOKEN }}
       NO_COLOR: 1
-    if: startsWith(github.ref, 'refs/tags/')
     steps:
       - name: Checkout Commit
         uses: actions/checkout@v6
@@ -36,18 +67,8 @@ jobs:
         run: ./gradlew mergeJars --no-configuration-cache --console=plain --non-interactive
       - name: Publish to Maven
         run: ./gradlew publish --build-cache --configuration-cache --console=plain --non-interactive
-      - name: Get tag
-        if: ${{ success() && startsWith(github.ref, 'refs/tags/') }}
-        id: tag
-        uses: dawidd6/action-get-tag@v1
-      - uses: jungwinter/split@v2
-        id: split
-        with:
-          separator: "+"
-          msg: ${{steps.tag.outputs.tag}}
       - name: "Upload to Distributors"
         uses: Kir-Antipov/mc-publish@v3.3.1
-        if: ${{ success() && startsWith(github.ref, 'refs/tags/') }}
         with:
           modrinth-id: 1W98a849
           modrinth-token: ${{ env.MODRINTH_TOKEN }}
@@ -56,15 +77,15 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           environment: client | server
 
-          name: "[Universal ${{steps.split.outputs._1}}] MCA Reborn - ${{steps.split.outputs._0}}"
+          name: "[Universal ${{needs.validate-tag.outputs.minecraft_version}}] MCA Reborn - ${{needs.validate-tag.outputs.version}}"
           changelog-file: changelog.md
-          version-type: ${{ contains(steps.split.outputs._0, 'beta') && 'beta' || contains(steps.split.outputs._0, 'alpha') && 'alpha' || 'release' }}
+          version-type: ${{ contains(needs.validate-tag.outputs.version, 'beta') && 'beta' || contains(needs.validate-tag.outputs.version, 'alpha') && 'alpha' || 'release' }}
           files: build/libs/*-universal.jar
           loaders: |
             fabric
             forge
           game-versions: |
-            ${{steps.split.outputs._1}}
+            ${{needs.validate-tag.outputs.minecraft_version}}
           java: |
             Java 17
           dependencies: |
