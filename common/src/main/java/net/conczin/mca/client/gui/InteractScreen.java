@@ -50,8 +50,10 @@ public class InteractScreen extends AbstractDynamicScreen {
     private int dialogueRowsHeight;
     private int dialogueViewportHeight;
     private int dialoguePassageScroll;
+    private int dialoguePreviewReplyScroll;
     private DialogueViewport dialogueListViewport;
     private DialogueViewport dialoguePassageViewport;
+    private DialogueViewport dialoguePreviewReplyViewport;
     private long dialogueDisplayedToken;
     private boolean dialogueTokenTracked;
     private long dialogueRenderedToken;
@@ -138,6 +140,10 @@ public class InteractScreen extends AbstractDynamicScreen {
                 int limit = Math.max(0, dialogueRowsHeight - dialogueViewportHeight);
                 int delta = (int) Math.signum(dy) * 24;
                 dialogueScroll = Math.max(0, Math.min(limit, dialogueScroll - delta));
+            } else if (dialoguePreviewReplyViewport != null && dialoguePreviewReplyViewport.contains(x, y)) {
+                int delta = (int) Math.signum(dy) * 20;
+                dialoguePreviewReplyScroll = Math.max(0, Math.min(
+                        dialoguePreviewReplyViewport.limit(), dialoguePreviewReplyScroll - delta));
             } else if (dialoguePassageViewport != null && dialoguePassageViewport.contains(x, y)) {
                 int delta = (int) Math.signum(dy) * 20;
                 dialoguePassageScroll = Math.max(0, Math.min(dialoguePassageViewport.limit(),
@@ -364,6 +370,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         dialogueHits.clear();
         dialogueScroll = 0;
         dialoguePassageScroll = 0;
+        dialoguePreviewReplyScroll = 0;
         clearWidgets();
         dialoguePresentation().ifPresent(ClientHandlerImpl.DialoguePresentation::beginRequest);
         Network.sendToServer(new InteractionDialogueBeginMessage(villager.asEntity().getUUID()));
@@ -381,6 +388,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         dialogueHits.clear();
         dialogueScroll = 0;
         dialoguePassageScroll = 0;
+        dialoguePreviewReplyScroll = 0;
         dialogueTokenTracked = false;
         dialoguePresentation().ifPresent(ClientHandlerImpl.DialoguePresentation::dismissOptions);
         if (notifyServer) {
@@ -459,20 +467,31 @@ public class InteractScreen extends AbstractDynamicScreen {
         if (token.isPresent() && (!dialogueTokenTracked || dialogueDisplayedToken != token.getAsLong())) {
             dialogueScroll = 0;
             dialoguePassageScroll = 0;
+            dialoguePreviewReplyScroll = 0;
             dialogueDisplayedToken = token.getAsLong();
             dialogueTokenTracked = true;
         }
 
         dialogueListViewport = null;
         dialoguePassageViewport = null;
+        dialoguePreviewReplyViewport = null;
         if (presentation.nodeVisible()) {
             drawDialogueNode(context, presentation);
         } else {
-            presentation.options().ifPresent(options -> drawDialogueOptions(context, options));
+            int menuBottom = height - 34;
+            if (presentation.hasPreview() && width < 580) {
+                int passageHeight = Math.max(62, Math.min(190, (height - 60) / 2));
+                menuBottom = Math.max(54, menuBottom - passageHeight - 12);
+            }
+            int finalMenuBottom = menuBottom;
+            presentation.options().ifPresent(options -> drawDialogueOptions(context, options, finalMenuBottom));
+            if (presentation.hasPreview()) {
+                drawDialogueNode(context, presentation);
+            }
         }
     }
 
-    private void drawDialogueOptions(GuiGraphics context, InteractionDialogueOptionsResponse options) {
+    private void drawDialogueOptions(GuiGraphics context, InteractionDialogueOptionsResponse options, int maxBottom) {
         List<DialogueRow> rows = new ArrayList<>();
         options.continuation().ifPresent(prompt -> rows.add(new DialogueRow(
                 prompt,
@@ -497,22 +516,32 @@ public class InteractScreen extends AbstractDynamicScreen {
         }
         if (options.ambientAvailable()) {
             rows.add(new DialogueRow(
-                    Component.translatable("gui.dialogue.ambient"),
+                    Component.translatable(options.preview().isPresent()
+                            ? "gui.dialogue.ambient_other" : "gui.dialogue.ambient"),
                     new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.AMBIENT, null, null)
             ));
         }
-        drawDialogueRows(context, rows, true, height - 34);
+        drawDialogueRows(context, rows, true, maxBottom);
     }
 
     private void drawDialogueNode(GuiGraphics context, ClientHandlerImpl.DialoguePresentation presentation) {
+        boolean preview = presentation.hasPreview() && !presentation.nodeVisible();
         int panelWidth = Math.min(width - 24, Math.min(520, Math.max(220, width * 3 / 4)));
-        int left = (width - panelWidth) / 2;
+        if (preview && width >= 580) {
+            panelWidth = Math.min(panelWidth, width - 282);
+        }
+        int left = preview && width >= 580 ? 12 : (width - panelWidth) / 2;
         boolean hasAdvance = presentation.node().map(node ->
-                node.advanceKind() != DialogueEngine.AdvanceKind.NONE).orElse(false);
+                node.advanceKind() != DialogueEngine.AdvanceKind.NONE).orElse(false)
+                || (preview && presentation.options().flatMap(InteractionDialogueOptionsResponse::preview)
+                        .map(node -> node.advanceKind() != DialogueEngine.AdvanceKind.NONE).orElse(false));
+        int replySpace = preview && presentation.options().flatMap(InteractionDialogueOptionsResponse::preview)
+                .map(node -> !node.choices().isEmpty()).orElse(false)
+                ? Math.min(68, Math.max(20, (height - 70) / 4)) : 0;
         int fullLineHeight = Math.max(1, font.split(presentation.fullLine(), panelWidth - 24).size()) * 10;
-        int desiredHeight = Math.max(92, 30 + fullLineHeight + (hasAdvance ? 28 : 0));
+        int desiredHeight = Math.max(92, 30 + fullLineHeight + replySpace + (hasAdvance ? 28 : 0));
         // Leave room above the passage for replies on smaller GUI scales.
-        int maxPanelHeight = Math.max(62, Math.min(156, (height - 60) / 2));
+        int maxPanelHeight = Math.max(62, Math.min(preview ? 190 : 156, (height - 60) / 2));
         int panelHeight = Math.min(maxPanelHeight, desiredHeight);
         int bottom = height - 34;
         int top = bottom - panelHeight;
@@ -523,7 +552,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         Component visible = presentation.visibleLine();
         List<FormattedCharSequence> lines = font.split(visible, panelWidth - 24);
         int textTop = top + 12;
-        int textBottom = bottom - (hasAdvance ? 29 : 12);
+        int textBottom = Math.max(textTop + 10, bottom - (hasAdvance ? 29 : 12) - replySpace);
         int contentHeight = lines.size() * 10;
         int textLimit = Math.max(0, contentHeight - (textBottom - textTop));
         dialoguePassageScroll = Math.min(dialoguePassageScroll, textLimit);
@@ -548,8 +577,33 @@ public class InteractScreen extends AbstractDynamicScreen {
             replies.add(new DialogueRow(choice.text(),
                     new DialogueClick(DialogueClickKind.CHOICE, null, null, choice.id())));
         }
-        if (!replies.isEmpty()) {
+        if (preview && replySpace > 0) {
+            int replyTop = textBottom + 4;
+            int replyBottom = bottom - (hasAdvance ? 29 : 8);
+            if (replyBottom > replyTop) {
+                int replyContentHeight = 0;
+                for (DialogueRow reply : replies) {
+                    replyContentHeight += dialogueRowHeight(reply, panelWidth);
+                }
+                int replyLimit = Math.max(0, replyContentHeight - (replyBottom - replyTop));
+                dialoguePreviewReplyScroll = Math.min(dialoguePreviewReplyScroll, replyLimit);
+                dialoguePreviewReplyViewport = new DialogueViewport(
+                        left + 8, replyTop, left + panelWidth - 8, replyBottom, replyLimit);
+                context.enableScissor(left + 8, replyTop, left + panelWidth - 8, replyBottom);
+                int replyY = replyTop - dialoguePreviewReplyScroll;
+                for (DialogueRow reply : replies) {
+                    replyY = drawDialogueRow(context, reply, left, panelWidth, replyY, replyTop, replyBottom);
+                }
+                context.disableScissor();
+            }
+        } else if (!replies.isEmpty()) {
             drawDialogueRows(context, replies, false, top - 10);
+        }
+        if (!preview) {
+            Component topics = Component.translatable("gui.dialogue.topics");
+            drawDialogueAction(context, new DialogueRow(topics,
+                    new DialogueClick(DialogueClickKind.TOPICS, null, null, null)),
+                    left + 10, bottom - 24, Math.max(60, font.width(topics) + 16), 18);
         }
         if (canAdvance) {
             DialogueEngine.AdvanceKind advanceKind = presentation.advanceKind().orElseThrow();
@@ -649,9 +703,19 @@ public class InteractScreen extends AbstractDynamicScreen {
             leaveDialogueMode();
             return true;
         }
+        if (click.kind() == DialogueClickKind.TOPICS) {
+            requestDialogueMenu();
+            return true;
+        }
         if (click.kind() == DialogueClickKind.ADVANCE) {
             if (!presentation.canAdvance() || presentation.offerToken().isEmpty()) {
                 return false;
+            }
+            if (presentation.hasPreview()) {
+                if (!presentation.canEngagePreview()) {
+                    return false;
+                }
+                presentation.markSelectionRequested(DialogueEngine.DialogueSelection.AMBIENT);
             }
             long token = presentation.offerToken().orElseThrow();
             Network.sendToServer(new InteractionDialogueAdvanceMessage(token));
@@ -661,6 +725,12 @@ public class InteractScreen extends AbstractDynamicScreen {
             if (presentation.offerToken().isEmpty()
                     || presentation.visibleChoices().stream().noneMatch(choice -> choice.id().equals(click.choiceId()))) {
                 return false;
+            }
+            if (presentation.hasPreview()) {
+                if (!presentation.canEngagePreview()) {
+                    return false;
+                }
+                presentation.markSelectionRequested(DialogueEngine.DialogueSelection.AMBIENT);
             }
             long token = presentation.offerToken().orElseThrow();
             Network.sendToServer(new InteractionDialogueChoiceMessage(token, click.choiceId()));
@@ -691,6 +761,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         SELECT,
         CHOICE,
         ADVANCE,
+        TOPICS,
         BACK
     }
 

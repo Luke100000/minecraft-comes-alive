@@ -32,6 +32,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class DialogueEventCodecTest {
+    @Test
+    void optionsRoundTripRetainsServerSelectedAmbientPreview() {
+        InteractionDialogueNodeResponse.Node preview = new InteractionDialogueNodeResponse.Node(
+                ResourceLocation.parse("mca:ambient/baseline"), Component.literal("Good evening"),
+                false, DialogueEngine.AdvanceKind.NONE, List.of());
+        InteractionDialogueOptionsResponse message = new InteractionDialogueOptionsResponse(
+                57L, Optional.empty(), List.of(), false, Optional.of(preview));
+
+        assertEquals(message, roundTrip(InteractionDialogueOptionsResponse.STREAM_CODEC, message));
+    }
+
     static {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();

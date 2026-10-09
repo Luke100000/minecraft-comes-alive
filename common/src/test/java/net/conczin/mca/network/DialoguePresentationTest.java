@@ -22,6 +22,31 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DialoguePresentationTest {
     @Test
+    void ambientPreviewRevealsWhileMenuOptionsRemainAvailableAndTransitionsToActiveNode() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        InteractionDialogueNodeResponse.Node opening = new InteractionDialogueNodeResponse.Node(
+                ResourceLocation.parse("test:ambient"), Component.literal("Hello"), false,
+                DialogueEngine.AdvanceKind.NEXT, List.of());
+        presentation.beginRequest();
+        assertTrue(presentation.acceptOptions(new InteractionDialogueOptionsResponse(
+                10L, Optional.empty(), List.of(), true, Optional.of(opening)),
+                1_000L, Locale.ENGLISH, line -> line));
+        assertTrue(presentation.options().isPresent(), "topics must remain available alongside the greeting");
+        assertEquals("", presentation.visibleLine().getString());
+        assertFalse(presentation.canAdvance());
+        tickSteps(presentation, 1_000L, 5);
+        assertEquals("Hello", presentation.visibleLine().getString());
+        assertTrue(presentation.canAdvance());
+        presentation.markSelectionRequested(DialogueEngine.DialogueSelection.AMBIENT);
+        assertTrue(presentation.acceptNode(active(UUID.randomUUID(), 11L,
+                Component.literal("Second"), DialogueEngine.AdvanceKind.BACK_TO_TOPICS,
+                List.of()), 1_300L, Locale.ENGLISH));
+        assertTrue(presentation.options().isEmpty());
+        assertEquals("", presentation.visibleLine().getString(),
+                "engagement must display the next line with a fresh reveal");
+    }
+
+    @Test
     void rejectedStaleSelectionCanRequestFreshMenuOnlyForItsPendingOffer() {
         ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
         presentation.beginRequest();

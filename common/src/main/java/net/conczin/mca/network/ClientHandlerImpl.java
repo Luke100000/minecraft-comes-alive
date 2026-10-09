@@ -182,7 +182,10 @@ public class ClientHandlerImpl implements ClientHandler {
     @Override
     public void handleDialogueOptionsResponse(InteractionDialogueOptionsResponse message) {
         if (client.screen instanceof InteractScreen gui && gui.isDialogueMode()) {
-            dialoguePresentation.acceptOptions(message);
+            Locale locale = Locale.forLanguageTag(client.options.languageCode.replace('_', '-'));
+            boolean silent = message.preview().map(InteractionDialogueNodeResponse.Node::silent).orElse(true);
+            dialoguePresentation.acceptOptions(message, System.nanoTime() / 1_000_000L,
+                    locale, line -> gui.resolveDialogueLine(line, silent));
         }
     }
 
@@ -336,17 +339,43 @@ public class ClientHandlerImpl implements ClientHandler {
         private List<Integer> revealCuts = List.of();
         private int revealedCharacters;
         private long nextRevealAt;
+        private Component previewLine = Component.empty();
+        private List<Integer> previewCuts = List.of();
+        private int previewRevealed;
+        private long previewNextRevealAt;
         private boolean nodeVisible;
         private boolean menuMode;
         private DialogueEngine.DialogueSelection pendingSelection;
 
         public boolean acceptOptions(InteractionDialogueOptionsResponse response) {
+            return acceptOptions(response, 0L, Locale.ENGLISH, UnaryOperator.identity());
+        }
+
+        public boolean acceptOptions(
+                InteractionDialogueOptionsResponse response, long nowMillis,
+                Locale locale, UnaryOperator<Component> lineResolver
+        ) {
             Objects.requireNonNull(response, "response");
+            Objects.requireNonNull(locale, "locale");
+            Objects.requireNonNull(lineResolver, "lineResolver");
             if ((!menuMode && pendingSelection == null)
                     || nodeVisible || !acceptsNewToken(response.offerToken())) {
                 return false;
             }
             options = response;
+            response.preview().ifPresent(preview -> {
+                // Preserve the paused session's own line/reveal snapshot separately.
+                ResolvedLine resolved = resolveOnce(lineResolver.apply(preview.line()));
+                previewLine = resolved.component();
+                previewCuts = revealCuts(resolved.text(), locale);
+                previewRevealed = 0;
+                previewNextRevealAt = saturatingAdd(nowMillis, CHARACTER_REVEAL_MILLIS);
+            });
+            if (response.preview().isEmpty()) {
+                previewLine = Component.empty();
+                previewCuts = List.of();
+                previewRevealed = 0;
+            }
             menuMode = true;
             pendingSelection = null;
             rememberToken(response.offerToken());
@@ -441,7 +470,15 @@ public class ClientHandlerImpl implements ClientHandler {
         }
 
         public void tick(long nowMillis) {
-            if (!nodeVisible || isFullyRevealed()) {
+            if ((!nodeVisible && !hasPreview()) || (nodeVisible ? isFullyRevealed()
+                    : previewRevealed >= previewCuts.size())) {
+                return;
+            }
+            if (!nodeVisible) {
+                if (nowMillis >= previewNextRevealAt) {
+                    previewRevealed++;
+                    previewNextRevealAt = saturatingAdd(nowMillis, CHARACTER_REVEAL_MILLIS);
+                }
                 return;
             }
             if (nowMillis >= nextRevealAt) {
@@ -505,12 +542,27 @@ public class ClientHandlerImpl implements ClientHandler {
             return nodeVisible;
         }
 
+        public boolean hasPreview() {
+            return options != null && options.preview().isPresent();
+        }
+
+        public boolean canEngagePreview() {
+            return hasPreview() && menuMode && pendingSelection == null;
+        }
+
         public Component fullLine() {
-            return resolvedLine;
+            return hasPreview() && !nodeVisible ? previewLine : resolvedLine;
         }
 
         public Component visibleLine() {
-            if (!nodeVisible || resolvedLine.getString().isEmpty()) {
+            if (hasPreview() && !nodeVisible) {
+                if (previewRevealed == 0 || previewLine.getString().isEmpty()) {
+                    return Component.empty();
+                }
+                return previewRevealed >= previewCuts.size()
+                        ? previewLine : head(previewLine, previewCuts.get(previewRevealed - 1));
+            }
+            if ((!nodeVisible && !hasPreview()) || resolvedLine.getString().isEmpty()) {
                 return Component.empty();
             }
             if (revealedCharacters <= 0) {
@@ -527,22 +579,33 @@ public class ClientHandlerImpl implements ClientHandler {
         }
 
         public Optional<DialogueEngine.AdvanceKind> advanceKind() {
-            if (!nodeVisible || !isFullyRevealed() || node == null
-                    || node.advanceKind() == DialogueEngine.AdvanceKind.NONE) {
+            if (!(hasPreview() && !nodeVisible ? previewRevealed >= previewCuts.size() : isFullyRevealed())) {
                 return Optional.empty();
             }
-            return Optional.of(node.advanceKind());
+            DialogueEngine.AdvanceKind kind = nodeVisible && node != null
+                    ? node.advanceKind()
+                    : options == null ? DialogueEngine.AdvanceKind.NONE
+                    : options.preview().map(InteractionDialogueNodeResponse.Node::advanceKind)
+                            .orElse(DialogueEngine.AdvanceKind.NONE);
+            return kind == DialogueEngine.AdvanceKind.NONE ? Optional.empty() : Optional.of(kind);
         }
 
         public List<InteractionDialogueNodeResponse.Choice> visibleChoices() {
-            if (!nodeVisible || !isFullyRevealed() || node == null) {
+            if (!(hasPreview() && !nodeVisible ? previewRevealed >= previewCuts.size() : isFullyRevealed())) {
                 return List.of();
             }
-            return node.choices();
+            if (nodeVisible && node != null) {
+                return node.choices();
+            }
+            return options == null ? List.of() : options.preview()
+                    .map(InteractionDialogueNodeResponse.Node::choices).orElse(List.of());
         }
 
         public void clear() {
             options = null;
+            previewLine = Component.empty();
+            previewCuts = List.of();
+            previewRevealed = 0;
             terminatedSessionId = null;
             hasLatestToken = false;
             latestToken = 0L;

@@ -51,6 +51,111 @@ public final class DialogueEngineGameTests {
     }
 
     @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void automaticAmbientOpeningEngagesOnceAndPreservesPausedRun(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        fixture.villager().getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        DialogueEvent event = DialogueEvent.decode(ResourceLocation.parse("mca:test/preview_passages"),
+                JsonParser.parseString("""
+                        {
+                          "trigger":"talk",
+                          "presentation":{"mode":"ambient","resume_prompt":"dialogue.test.resume"},
+                          "repeat":{"type":"always"},
+                          "start":"intro",
+                          "nodes":{
+                            "intro":{"lines":["dialogue.test.one","dialogue.test.two"],"next":"done"},
+                            "done":{"line":"dialogue.test.done","complete":true}
+                          }
+                        }
+                        """).getAsJsonObject());
+        DialogueEngine engine = engine(event, ambientEvent(
+                ResourceLocation.parse("mca:test/preview_other_topic"), -10, 1.0D));
+        UUID playerId = fixture.player().getUUID();
+        DialogueEngine.DialogueOptions offer = engine.begin(fixture.player(), fixture.villager());
+        helper.assertTrue(offer.preview().map(p -> p.eventId().equals(event.id())).orElse(false),
+                "Talk should pin the eligible ambient opening");
+        helper.assertTrue(offer.ambientAvailable(),
+                "another eligible lower-priority ambient topic must remain selectable");
+        helper.assertTrue(!sessions(engine).containsKey(playerId),
+                "showing the first line must not start a story session");
+        helper.assertTrue(engine.advance(fixture.player(), offer.token() + 1).status()
+                        == DialogueEngine.TransitionStatus.REJECTED,
+                "forged preview token cannot advance a story");
+
+        DialogueEngine.TransitionResult firstAdvance = engine.advance(fixture.player(), offer.token());
+        helper.assertTrue(firstAdvance.status() == DialogueEngine.TransitionStatus.ADVANCED,
+                "a valid Next should start the pinned story at its second line");
+        DialogueEngine.DialogueNodeView second = firstAdvance.view().orElseThrow();
+        helper.assertTrue(sessions(engine).get(playerId).lineIndex() == 1,
+                "the first passage must not be repeated");
+        helper.assertTrue(engine.advance(fixture.player(), offer.token()).status()
+                        == DialogueEngine.TransitionStatus.REJECTED,
+                "consumed menu tokens must not advance again");
+
+        DialogueEngine.DialogueOptions topics = engine.begin(fixture.player(), fixture.villager());
+        DialogueSession paused = sessions(engine).get(playerId);
+        helper.assertTrue(paused.status() == DialogueSession.Status.PAUSED,
+                "opening Topics must pause the active story");
+        helper.assertTrue(topics.continuationSessionId().filter(second.sessionId()::equals).isPresent(),
+                "Topics must preserve the event-specific continuation");
+        long originalDeadline = paused.pauseDeadline();
+        DialogueEngine.DialogueOptions reopened = engine.begin(fixture.player(), fixture.villager());
+        helper.assertTrue(sessions(engine).get(playerId).pauseDeadline() == originalDeadline,
+                "browsing Topics may not extend the existing pause deadline");
+        DialogueEngine.DialogueNodeView resumed = engine.select(fixture.player(), reopened.token(),
+                DialogueEngine.DialogueSelection.RESUME, null).orElseThrow();
+        helper.assertTrue(resumed.sessionId().equals(second.sessionId())
+                        && sessions(engine).get(playerId).lineIndex() == 1,
+                "resuming must restore the existing session and second line");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void ambientOpeningReplyDoesNotCommitStoryUntilFinalAcknowledgement(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        fixture.villager().getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        DialogueEvent event = DialogueEvent.decode(ResourceLocation.parse("mca:test/preview_reply"),
+                JsonParser.parseString("""
+                        {
+                          "trigger":"talk",
+                          "presentation":{"mode":"ambient","resume_prompt":"dialogue.test.resume"},
+                          "repeat":{"type":"once"},
+                          "start":"intro",
+                          "nodes":{
+                            "intro":{"line":"dialogue.test.line","choices":[
+                              {"id":"ask_why","text":"dialogue.test.question","next":"done"}
+                            ]},
+                            "done":{"line":"dialogue.test.done","complete":true}
+                          }
+                        }
+                        """).getAsJsonObject());
+        DialogueEngine engine = engine(event);
+        DialogueEventHistory history = DialogueEventHistory.get(fixture.player().serverLevel());
+        DialogueEngine.DialogueOptions offer = engine.begin(fixture.player(), fixture.villager());
+        helper.assertTrue(offer.preview().map(p -> p.choices().stream()
+                        .anyMatch(choice -> choice.id().equals("ask_why"))).orElse(false),
+                "initial natural reply must be present in the offer");
+        helper.assertTrue(!history.completed(fixture.player().getUUID(), fixture.villager().getUUID(), event.id()),
+                "displaying the greeting must not complete a story");
+        helper.assertTrue(engine.choose(fixture.player(), offer.token(), "forged").status()
+                        == DialogueEngine.TransitionStatus.REJECTED,
+                "unoffered opening replies must not change the run");
+        DialogueEngine.TransitionResult accepted = engine.choose(fixture.player(), offer.token(), "ask_why");
+        helper.assertTrue(accepted.status() == DialogueEngine.TransitionStatus.ADVANCED,
+                "an offered opening reply should start the normal story");
+        helper.assertTrue(engine.choose(fixture.player(), offer.token(), "ask_why").status()
+                        == DialogueEngine.TransitionStatus.REJECTED,
+                "replayed initial choices must not be accepted");
+        helper.assertTrue(!history.completed(fixture.player().getUUID(), fixture.villager().getUUID(), event.id()),
+                "accepting a reply must not imply story completion");
+        DialogueEngine.DialogueNodeView end = accepted.view().orElseThrow();
+        helper.assertTrue(engine.advance(fixture.player(), end.offerToken()).completed(),
+                "only final acknowledgement should complete the story");
+        helper.assertTrue(history.completed(fixture.player().getUUID(), fixture.villager().getUUID(), event.id()),
+                "completion must be persisted under the original player/villager pair");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void closingTalkMenuInvalidatesItsOfferToken(GameTestHelper helper) {
         Fixture fixture = fixture(helper);
         DialogueEvent event = simpleEvent(ResourceLocation.parse("mca:test/menu_close"));

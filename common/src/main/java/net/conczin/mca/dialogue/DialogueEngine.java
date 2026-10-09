@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -64,8 +65,10 @@ public final class DialogueEngine {
     private final DialogueEvents events;
     private final Map<UUID, DialogueSession> sessions = new HashMap<>();
     private final Map<UUID, DialogueOptions> offers = new HashMap<>();
+    private final Map<UUID, LinkedHashMap<UUID, ResourceLocation>> recentPreviews = new HashMap<>();
     private final RandomSource random;
     private long tokenSequence;
+    private long previewGeneration = Long.MIN_VALUE;
 
     public DialogueEngine(DialogueEvents events) {
         this(events, RandomSource.create());
@@ -85,7 +88,16 @@ public final class DialogueEngine {
         long gameTime = overworldTime(player);
 
         invalidateReloaded(playerId, generation);
+        if (previewGeneration != generation) {
+            recentPreviews.clear();
+            previewGeneration = generation;
+        }
         DialogueSession retained = expirePaused(playerId, gameTime);
+        if (retained != null && retained.status() == DialogueSession.Status.ACTIVE
+                && retained.villagerId().equals(villager.getUUID())) {
+            retained = retained.pause(saturatingAdd(gameTime, PAUSE_TICKS));
+            sessions.put(playerId, retained);
+        }
         DialogueEventHistory history = DialogueEventHistory.get(player.serverLevel());
         DialogueContext context = new DialogueContext(villager, player, history, id -> events.get(id).isPresent());
 
@@ -102,7 +114,50 @@ public final class DialogueEngine {
 
         Optional<EventOption> highlighted = plan.highlighted().map(event -> option(event, villager));
         List<EventOption> ask = plan.ask().stream().map(event -> option(event, villager)).toList();
-        List<ResourceLocation> ambient = plan.ambient().stream().map(DialogueEvent::id).toList();
+        List<ResourceLocation> ambient = new ArrayList<>(plan.ambient().stream().map(DialogueEvent::id).toList());
+        List<DialogueEvent> previewCandidates = events.all().stream()
+                .filter(event -> eventEligible(event, context, history, gameTime))
+                .filter(event -> pausedEvent == null || !pausedEvent.equals(event.id()))
+                .filter(DialogueEngine::previewable)
+                .filter(event -> {
+                    DialogueEvent.Node first = event.nodes().get(event.start());
+                    return first.lines().size() > 1 || first.next().isPresent()
+                            || first.choices().isEmpty()
+                            || first.choices().orElseThrow().stream().anyMatch(choice ->
+                                    choiceEligible(choice, condition -> matches(condition, context)));
+                })
+                .toList();
+        ResourceLocation last = recentPreviews.getOrDefault(playerId, new LinkedHashMap<>()).get(villager.getUUID());
+        Optional<DialogueEvent> selectedPreview = pickPreview(previewCandidates, last, random);
+        Optional<AmbientPreview> preview = selectedPreview.map(event -> {
+            DialogueEvent.Node node = event.nodes().get(event.start());
+            List<ChoiceView> choices = node.lines().size() == 1
+                    ? node.choices().orElse(List.of()).stream()
+                            .filter(choice -> choiceEligible(choice, condition -> matches(condition, context)))
+                            .map(choice -> new ChoiceView(choice.id(), Component.translatable(choice.text())))
+                            .toList()
+                    : List.of();
+            return new AmbientPreview(event.id(),
+                    villager.getTranslatable(player, node.lines().getFirst()), node.silent(),
+                    previewAdvanceKind(event), choices);
+        });
+        if (selectedPreview.isPresent()) {
+            ResourceLocation picked = selectedPreview.orElseThrow().id();
+            LinkedHashMap<UUID, ResourceLocation> previous = recentPreviews.computeIfAbsent(
+                    playerId, ignored -> new LinkedHashMap<>());
+            previous.remove(villager.getUUID());
+            previous.put(villager.getUUID(), picked);
+            if (previous.size() > 32) {
+                previous.remove(previous.keySet().iterator().next());
+            }
+            ambient.remove(picked);
+            if (ambient.isEmpty()) {
+                ambient.addAll(planSelection(events.all(),
+                        event -> !event.id().equals(picked) && eventEligible(event, context, history, gameTime),
+                        pausedEvent
+                ).ambient().stream().map(DialogueEvent::id).toList());
+            }
+        }
         Optional<Component> continuationPrompt = Optional.empty();
         Optional<UUID> continuationSessionId = Optional.empty();
         if (retained != null
@@ -120,10 +175,55 @@ public final class DialogueEngine {
                 continuationPrompt,
                 nextToken(),
                 ambient,
-                continuationSessionId
+                continuationSessionId,
+                preview
         );
         offers.put(playerId, options);
+        if (selectedPreview.isPresent()) {
+            DialogueEvent shown = selectedPreview.orElseThrow();
+            DialogueEvent.Node node = shown.nodes().get(shown.start());
+            if (shown.history() == DialogueEvent.HistoryPolicy.SCHEDULING
+                    && shown.repeat().maxTicks() > 0L
+                    && node.lines().size() == 1 && node.choices().isEmpty()
+                    && node.next().isEmpty()) {
+                history.complete(playerId, villager.getUUID(), shown, Set.of(), gameTime, random);
+            }
+        }
         return options;
+    }
+
+    static boolean previewable(DialogueEvent event) {
+        if (event.presentation().mode() != DialogueEvent.PresentationMode.AMBIENT) {
+            return false;
+        }
+        DialogueEvent.Node node = event.nodes().get(event.start());
+        if (node.lines().isEmpty() || node.outcomes().isPresent()) {
+            return false;
+        }
+        return node.lines().size() > 1 || node.next().isPresent()
+                || node.choices().isPresent()
+                || (node.complete() && event.history() == DialogueEvent.HistoryPolicy.SCHEDULING);
+    }
+
+    static AdvanceKind previewAdvanceKind(DialogueEvent event) {
+        DialogueEvent.Node node = event.nodes().get(event.start());
+        return node.lines().size() > 1 || node.next().isPresent() ? AdvanceKind.NEXT : AdvanceKind.NONE;
+    }
+
+    static Optional<DialogueEvent> pickPreview(
+            List<DialogueEvent> candidates, @Nullable ResourceLocation previous, RandomSource random
+    ) {
+        List<DialogueEvent> safe = candidates.stream().filter(DialogueEngine::previewable)
+                .sorted(CANONICAL_ORDER).toList();
+        if (safe.isEmpty()) {
+            return Optional.empty();
+        }
+        int highest = safe.stream().mapToInt(DialogueEvent::priority).max().orElseThrow();
+        List<DialogueEvent> tier = safe.stream().filter(event -> event.priority() == highest).toList();
+        if (previous != null && tier.size() > 1) {
+            tier = tier.stream().filter(event -> !event.id().equals(previous)).toList();
+        }
+        return weightedPick(tier, DialogueEvent::weight, random);
     }
 
     public Optional<DialogueNodeView> select(
@@ -228,7 +328,7 @@ public final class DialogueEngine {
         UUID playerId = player.getUUID();
         DialogueSession session = validActiveSession(player, offerToken);
         if (session == null) {
-            return TransitionResult.rejected();
+            return engagePreview(player, offerToken, choiceId);
         }
 
         VillagerEntityMCA villager = resolveBoundVillager(player, session.villagerId()).orElse(null);
@@ -302,7 +402,7 @@ public final class DialogueEngine {
         UUID playerId = player.getUUID();
         DialogueSession session = validActiveSession(player, offerToken);
         if (session == null) {
-            return TransitionResult.rejected();
+            return engagePreview(player, offerToken, null);
         }
 
         VillagerEntityMCA villager = resolveBoundVillager(player, session.villagerId()).orElse(null);
@@ -446,14 +546,20 @@ public final class DialogueEngine {
             sessions.entrySet().removeIf(entry -> entry.getValue().villagerId().equals(villager.getUUID()));
         }
         offers.entrySet().removeIf(entry -> entry.getValue().villagerId().equals(villager.getUUID()));
+        recentPreviews.values().forEach(previous -> previous.remove(villager.getUUID()));
     }
 
     public void tick(MinecraftServer server) {
         Objects.requireNonNull(server, "server");
         long generation = events.generation();
         long gameTime = server.overworld().getGameTime();
+        if (previewGeneration != generation) {
+            recentPreviews.clear();
+            previewGeneration = generation;
+        }
         if (gameTime % 20L == 0L) {
             DialogueEventHistory.get(server.overworld()).pruneExpiredScheduling(gameTime, 64);
+            recentPreviews.keySet().removeIf(id -> server.getPlayerList().getPlayer(id) == null);
         }
         sessions.entrySet().removeIf(entry -> {
             DialogueSession session = entry.getValue();
@@ -532,6 +638,45 @@ public final class DialogueEngine {
     public void clear(MinecraftServer server) {
         sessions.clear();
         offers.clear();
+        recentPreviews.clear();
+    }
+
+    private TransitionResult engagePreview(ServerPlayer player, long token, @Nullable String choiceId) {
+        UUID playerId = player.getUUID();
+        DialogueOptions offer = offers.get(playerId);
+        if (offer == null || !acceptsMenuOffer(offer, token, events.generation()) || offer.preview().isEmpty()) {
+            return TransitionResult.rejected();
+        }
+        DialogueSession old = sessions.get(playerId);
+        if (old != null && old.status() == DialogueSession.Status.ACTIVE) {
+            return TransitionResult.rejected();
+        }
+        VillagerEntityMCA villager = resolveBoundVillager(player, offer.villagerId()).orElse(null);
+        if (villager == null || !canInteract(player, villager)
+                || villager.getInteractions().getInteractingPlayer().filter(player::equals).isEmpty()) {
+            return TransitionResult.rejected();
+        }
+        DialogueContext context = context(player, villager);
+        DialogueEvent event = events.get(offer.preview().orElseThrow().eventId()).orElse(null);
+        if (event == null || !eventEligible(event, context, context.history(), overworldTime(player))) {
+            return TransitionResult.rejected();
+        }
+        AmbientPreview preview = offer.preview().orElseThrow();
+        if (choiceId == null ? preview.advanceKind() != AdvanceKind.NEXT
+                : preview.choices().stream().noneMatch(choice -> choice.id().equals(choiceId))) {
+            return TransitionResult.rejected();
+        }
+        DialogueSession started = DialogueSession.start(playerId, villager.getUUID(), UUID.randomUUID(),
+                offer.generation(), nextToken(), offer.token(), event);
+        started = refreshOfferedChoices(started, context);
+        if (choiceId != null && !started.offeredChoices().contains(choiceId)) {
+            return TransitionResult.rejected();
+        }
+        sessions.put(playerId, started);
+        offer.consume();
+        offers.remove(playerId);
+        return choiceId == null ? advance(player, started.offerToken())
+                : choose(player, started.offerToken(), choiceId);
     }
 
     static SelectionPlan planSelection(
@@ -976,6 +1121,18 @@ public final class DialogueEngine {
         }
     }
 
+    public record AmbientPreview(
+            ResourceLocation eventId, Component line, boolean silent,
+            AdvanceKind advanceKind, List<ChoiceView> choices
+    ) {
+        public AmbientPreview {
+            Objects.requireNonNull(eventId, "eventId");
+            Objects.requireNonNull(line, "line");
+            Objects.requireNonNull(advanceKind, "advanceKind");
+            choices = List.copyOf(choices);
+        }
+    }
+
     public static final class DialogueOptions {
         private final UUID villagerId;
         private final long generation;
@@ -986,6 +1143,7 @@ public final class DialogueEngine {
         private final long token;
         private final List<ResourceLocation> ambientCandidates;
         private final Optional<UUID> continuationSessionId;
+        private final Optional<AmbientPreview> preview;
         private boolean consumed;
 
         DialogueOptions(
@@ -999,6 +1157,17 @@ public final class DialogueEngine {
                 List<ResourceLocation> ambientCandidates,
                 Optional<UUID> continuationSessionId
         ) {
+            this(villagerId, generation, highlighted, ask, ambientAvailable,
+                    continuationPrompt, token, ambientCandidates, continuationSessionId, Optional.empty());
+        }
+
+        DialogueOptions(
+                UUID villagerId, long generation, Optional<EventOption> highlighted,
+                List<EventOption> ask, boolean ambientAvailable,
+                Optional<Component> continuationPrompt, long token,
+                List<ResourceLocation> ambientCandidates, Optional<UUID> continuationSessionId,
+                Optional<AmbientPreview> preview
+        ) {
             this.villagerId = Objects.requireNonNull(villagerId, "villagerId");
             this.generation = generation;
             this.highlighted = Objects.requireNonNull(highlighted, "highlighted");
@@ -1008,6 +1177,7 @@ public final class DialogueEngine {
             this.token = token;
             this.ambientCandidates = List.copyOf(ambientCandidates);
             this.continuationSessionId = Objects.requireNonNull(continuationSessionId, "continuationSessionId");
+            this.preview = Objects.requireNonNull(preview, "preview");
         }
 
         public UUID villagerId() {
@@ -1036,6 +1206,10 @@ public final class DialogueEngine {
 
         public long token() {
             return token;
+        }
+
+        public Optional<AmbientPreview> preview() {
+            return preview;
         }
 
         public boolean consumed() {

@@ -50,7 +50,7 @@ public record InteractionDialogueNodeResponse(
             CHOICES_CODEC, Node::choices,
             Node::new
     );
-    private static final StreamCodec<ByteBuf, Optional<Node>> OPTIONAL_NODE_CODEC =
+    static final StreamCodec<ByteBuf, Optional<Node>> OPTIONAL_NODE_CODEC =
             NODE_CODEC.apply(ByteBufCodecs::optional);
     private static final StreamCodec<ByteBuf, State> STATE_CODEC =
             ByteBufCodecs.VAR_INT.map(InteractionDialogueNodeResponse::stateById, Enum::ordinal);

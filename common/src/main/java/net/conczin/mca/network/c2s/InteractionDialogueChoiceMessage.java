@@ -6,6 +6,7 @@ import net.conczin.mca.dialogue.DialogueEngine;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.InteractionDialogueNodeResponse;
+import net.conczin.mca.network.s2c.InteractionDialogueSelectionRejectedResponse;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -42,6 +43,10 @@ public record InteractionDialogueChoiceMessage(long offerToken, String choiceId)
     static void sendTransition(ServerPlayer player, long requestToken, DialogueEngine.TransitionResult result) {
         if (result.view().isPresent()) {
             Network.sendToPlayer(InteractionDialogueNodeResponse.active(result.view().orElseThrow()), player);
+            return;
+        }
+        if (result.status() == DialogueEngine.TransitionStatus.REJECTED) {
+            Network.sendToPlayer(new InteractionDialogueSelectionRejectedResponse(requestToken), player);
             return;
         }
         if (result.paused()) {

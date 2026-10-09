@@ -168,6 +168,57 @@ class DialogueSelectionTest {
     }
 
     @Test
+    void ambientPreviewPrefersSafeHighestTierAndAlternativeToPreviousPairSelection() {
+        DialogueEvent unsafeHigh = event("test:unsafe", "ambient", 50, 1.0, "always");
+        DialogueEvent safeA = ambientPreview("test:a", 10, 1.0, false);
+        DialogueEvent safeB = ambientPreview("test:b", 10, 3.0, true);
+        DialogueEvent lower = ambientPreview("test:lower", 0, 100.0, false);
+
+        assertFalse(DialogueEngine.previewable(unsafeHigh));
+        assertTrue(DialogueEngine.previewable(safeA));
+        assertTrue(DialogueEngine.previewable(safeB));
+        assertEquals(safeB.id(), DialogueEngine.pickPreview(
+                List.of(unsafeHigh, safeA, safeB, lower),
+                safeA.id(),
+                RandomSource.create(31L)
+        ).orElseThrow().id());
+        assertEquals(safeA.id(), DialogueEngine.pickPreview(
+                List.of(unsafeHigh, safeA, lower),
+                safeA.id(),
+                RandomSource.create(31L)
+        ).orElseThrow().id(), "a single highest-tier candidate remains valid even if repeated");
+    }
+
+    @Test
+    void previewWithMultipleLinesOffersNextWithoutApplyingStoryCompletion() {
+        DialogueEvent multiple = ambientPreview("test:multiple", 3, 1.0, true);
+        DialogueEvent.Node first = multiple.nodes().get(multiple.start());
+
+        assertTrue(DialogueEngine.previewable(multiple));
+        assertEquals(2, first.lines().size());
+        assertEquals(DialogueEngine.AdvanceKind.NEXT, DialogueEngine.previewAdvanceKind(multiple));
+        assertEquals(DialogueEngine.AdvanceKind.NONE, DialogueEngine.previewAdvanceKind(
+                ambientPreview("test:single", 3, 1.0, false)));
+        assertFalse(DialogueEngine.previewable(event("test:story_terminal", "ambient", 3, 1.0, "once")));
+    }
+
+    private static DialogueEvent ambientPreview(String id, int priority, double weight, boolean multiline) {
+        String lineField = multiline ? "\"lines\":[\"dialogue.first\",\"dialogue.second\"]" : "\"line\":\"dialogue.first\"";
+        return DialogueEvent.decode(ResourceLocation.parse(id), JsonParser.parseString("""
+                {
+                  "trigger":"talk",
+                  "presentation":{"mode":"ambient","resume_prompt":"dialogue.resume"},
+                  "priority":%d,
+                  "weight":%s,
+                  "history":"scheduling",
+                  "repeat":{"type":"cooldown","seconds":5},
+                  "start":"main",
+                  "nodes":{"main":{%s,"complete":true}}
+                }
+                """.formatted(priority, weight, lineField)).getAsJsonObject());
+    }
+
+    @Test
     void choicesWithNoEligibleOutcomeAreNotOfferedAndOutcomeDrawIsWeighted() {
         DialogueEvent event = outcomeEvent();
         DialogueEvent.Node node = event.nodes().get(event.start());

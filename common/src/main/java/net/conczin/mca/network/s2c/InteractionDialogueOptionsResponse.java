@@ -23,7 +23,8 @@ public record InteractionDialogueOptionsResponse(
         long offerToken,
         Optional<Component> continuation,
         List<EventOption> eventOptions,
-        boolean ambientAvailable
+        boolean ambientAvailable,
+        Optional<InteractionDialogueNodeResponse.Node> preview
 ) implements HandleablePayload {
     public static final int MAX_EVENT_OPTIONS = DialogueEngine.MAX_EVENT_OPTIONS;
 
@@ -49,12 +50,21 @@ public record InteractionDialogueOptionsResponse(
             OPTIONAL_COMPONENT_CODEC, InteractionDialogueOptionsResponse::continuation,
             EVENT_OPTIONS_CODEC, InteractionDialogueOptionsResponse::eventOptions,
             ByteBufCodecs.BOOL, InteractionDialogueOptionsResponse::ambientAvailable,
+            InteractionDialogueNodeResponse.OPTIONAL_NODE_CODEC, InteractionDialogueOptionsResponse::preview,
             InteractionDialogueOptionsResponse::new
     );
+
+    public InteractionDialogueOptionsResponse(
+            long offerToken, Optional<Component> continuation, List<EventOption> eventOptions,
+            boolean ambientAvailable
+    ) {
+        this(offerToken, continuation, eventOptions, ambientAvailable, Optional.empty());
+    }
 
     public InteractionDialogueOptionsResponse {
         continuation = Objects.requireNonNull(continuation, "continuation");
         eventOptions = List.copyOf(Objects.requireNonNull(eventOptions, "eventOptions"));
+        preview = Objects.requireNonNull(preview, "preview");
         if (eventOptions.size() > MAX_EVENT_OPTIONS) {
             throw new IllegalArgumentException("Dialogue menu exceeds event option budget: " + eventOptions.size());
         }
@@ -68,7 +78,12 @@ public record InteractionDialogueOptionsResponse(
                 options.token(),
                 options.continuationPrompt(),
                 entries,
-                options.ambientAvailable()
+                options.ambientAvailable(),
+                options.preview().map(p -> new InteractionDialogueNodeResponse.Node(
+                        p.eventId(), p.line(), p.silent(), p.advanceKind(),
+                        p.choices().stream().map(choice ->
+                                new InteractionDialogueNodeResponse.Choice(choice.id(), choice.text())).toList()
+                ))
         );
     }
 

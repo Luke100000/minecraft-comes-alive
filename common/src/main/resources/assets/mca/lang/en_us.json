@@ -622,6 +622,8 @@
   "gui.button.talk": "Talk",
   "gui.dialogue.ask": "Ask about...",
   "gui.dialogue.ambient": "What's on your mind?",
+  "gui.dialogue.ambient_other": "Anything else on your mind?",
+  "gui.dialogue.topics": "Topics",
   "gui.dialogue.legacy": "Something else...",
   "gui.dialogue.continue": "Continue",
   "gui.dialogue.next": "Next",
