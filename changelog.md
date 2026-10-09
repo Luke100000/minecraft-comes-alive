@@ -25,8 +25,11 @@
 
 * Villagers now keep useful routes when possible, retry stalled destinations, and recover better during long walks.
 * Improved movement around beds, stairs, ladders, doors, fence gates, walls, and between floors.
+* Villagers can open hand-openable Dramatic Doors and doors included in Dramatic Doors' mob-interaction tags, including tall and short variants.
+* Added `villagersInteractWithAnyDoor` to optionally let villagers operate all vanilla-style doors instead of only mob-interactable ones.
 * Villagers can open, close, and walk through fence gates. This is controlled by `villagersInteractWithFenceGates`.
 * Improved home, bed, workplace, and resident assignment, including support for more modded beds.
+* Added `villagersChangeProfession` so assigning a workplace can preserve a villager's existing profession instead of changing it.
 * **Set Home** only assigns a bed the villager can reach. If no reachable replacement is available, the current home is kept.
 * Homeless villagers use nearby houses more naturally for nighttime shelter without claiming a bed as their home.
   * They spread between available houses instead of crowding the nearest one.
@@ -45,6 +48,7 @@
 * Villagers keep facing their work target during chores.
 * Harvesting villagers prioritise mature crops. They only target empty farmland when they have seeds, and can bonemeal immature crops before moving on.
 * Chopping villagers must reach a tree before they start chopping it.
+* Fixed harvesting loot from blocks that need block-entity data to calculate their drops.
 * Villager fishing now has a visible bobber and line, lure and bite behaviour, splash effects, reeling, weather effects, and visible catches.
 * **Lure** speeds up villager fishing and **Luck of the Sea** affects fishing loot.
 * Rain can speed up bites, and villagers have a short reaction delay before reeling in.
@@ -63,10 +67,15 @@
 * The **Family Tree** has a new layout and navigation for larger branches, including partners, parents, children, siblings, and generated parents.
 * Family Tree search and navigation now work inside the viewer, with cursor-centred zooming and clearer deceased-villager tooltips.
 * Opening the Family Tree or Villager Tracker with an empty search starts from your player name.
+* The whistle's family list no longer includes former partners who are no longer relatives.
 * ChatAI talks to the villager you interacted with, handles full names and nicknames more accurately, and no longer holds up the server while waiting for a reply.
 * Villager long-term interaction memory now survives infection into a zombie villager and curing back into a villager.
+* Fixed a possible error when a villager's interaction memory data is missing.
 * Profession changes in the Villager Editor now refresh consistently.
+* Villager gifts can now be given with **Enter** as well as the right mouse button.
+* Added `whistleCallMakesVillagersFollow` to optionally make villagers follow after being called with the whistle.
 * Destiny can automatically discover vanilla and modded village structures, including destinations in other dimensions.
+* Fixed the Destiny screen reopening repeatedly after it was opened.
 * Added `autoDiscoverDestinyLocations`, `destinySpawnLocationBlacklist`, `destinyOverworldOnly`, and `destinyDimensionBlacklist`. Blacklists support simple `*` wildcards such as `ctov:*`.
 * Destiny no longer teleports to locations that have since been disabled.
 * Destiny and villager structure lookups now run without blocking normal server work.
@@ -74,6 +83,13 @@
 
 ## Other fixes
 
+* Reduced panic scream spam with one scream per villager per panic episode and a level-wide cooldown.
+* Fixed blacklisted interaction items still opening villager interactions or trades.
+* Added `villagerTagBlacklist` to prevent MCA from converting villagers with specified scoreboard tags, including certain modded entities.
+* Updated default VillagersPlus profession-to-clothing mappings and added missing neutral cleric clothing.
+* Improved player-model compatibility defaults for Custom Player Models, Mowzie's Mobs, ParCool, Mo' Bends, and morphing mods.
+* Existing config files now receive new default compatibility-map entries without overwriting their current values or repeatedly restoring removed entries.
+* Fixed vertical compression of the breast mesh on the player model.
 * Restored intended drops and rewards for MCA blocks, books, and entities on 1.21.1, including gravestones, **Silk Touch**, and zombie-villager **Looting** drops.
 * Fixed MCA's root and bouquet advancements on 1.21.1.
 * Fixed carried-baby hitboxes, crib positioning, and child ageing from golden apples.
