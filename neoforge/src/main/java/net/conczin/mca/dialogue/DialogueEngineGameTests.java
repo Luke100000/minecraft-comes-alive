@@ -51,6 +51,59 @@ public final class DialogueEngineGameTests {
     }
 
     @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void browsingTopicsDoesNotReplayAmbientIntroduction(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        DialogueEvent opening = DialogueEvent.decode(ResourceLocation.parse("mca:test/intro_then_topics"),
+                JsonParser.parseString("""
+                        {
+                          "trigger":"talk",
+                          "presentation":{"mode":"ambient","resume_prompt":"dialogue.test.resume"},
+                          "repeat":{"type":"always"},
+                          "start":"intro",
+                          "nodes":{
+                            "intro":{"lines":["dialogue.test.one","dialogue.test.two"],"complete":true}
+                          }
+                        }
+                        """).getAsJsonObject());
+        DialogueEngine engine = engine(opening);
+        DialogueEngine.DialogueOptions initial = engine.begin(fixture.player(), fixture.villager());
+        helper.assertTrue(initial.preview().isPresent(), "initial Talk should include an ambient introduction");
+
+        DialogueEngine.DialogueOptions topics = engine.begin(fixture.player(), fixture.villager(), false);
+        helper.assertTrue(topics.preview().isEmpty(), "Topics must not immediately start another ambient line");
+        helper.assertTrue(topics.ambientAvailable(), "manual ambient conversations should remain selectable");
+        helper.assertTrue(topics.ambientCandidates().contains(opening.id()),
+                "disabling automatic greetings must not hide the ambient event itself");
+        helper.assertTrue(engine.advance(fixture.player(), initial.token()).status()
+                        == DialogueEngine.TransitionStatus.REJECTED,
+                "opening Topics must invalidate the prior preview token");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void offeredTopicRemainsSelectableWhenVillagerFallsAsleep(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        DialogueEvent chat = simpleEvent(ResourceLocation.parse("mca:test/sleeping_chat"));
+        DialogueEngine engine = engine(chat);
+        fixture.villager().getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+
+        DialogueEngine.DialogueOptions menu = engine.begin(fixture.player(), fixture.villager(), false);
+        helper.assertTrue(menu.containsEvent(chat.id()), "an awake villager should offer Chat");
+        fixture.villager().startSleeping(fixture.villager().blockPosition());
+        helper.assertTrue(fixture.villager().isSleeping(), "villager must be sleeping when selecting Chat");
+        helper.assertTrue(fixture.player().canInteractWithEntity(fixture.villager(), 1.0),
+                "villager should remain within interaction reach");
+        helper.assertTrue(fixture.villager().getInteractions().getInteractingPlayer()
+                        .filter(fixture.player()::equals).isPresent(),
+                "the player must still own the open interaction");
+
+        helper.assertTrue(engine.select(fixture.player(), menu.token(),
+                        DialogueEngine.DialogueSelection.EVENT, chat.id()).isPresent(),
+                "a displayed Chat topic must not become unselectable solely because the villager fell asleep");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void automaticAmbientOpeningEngagesOnceAndPreservesPausedRun(GameTestHelper helper) {
         Fixture fixture = fixture(helper);
         fixture.villager().getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
@@ -1032,7 +1085,7 @@ public final class DialogueEngineGameTests {
     }
 
     @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
-    public static void activeRunCannotBeReplacedByForgedBeginSelection(GameTestHelper helper) {
+    public static void openingTopicsPausesActiveRunUntilValidReplacement(GameTestHelper helper) {
         Fixture fixture = fixture(helper);
         DialogueEvent activeEvent = passageEvent(ResourceLocation.parse("mca:test/active_begin"), false);
         DialogueEvent replacementEvent = simpleEvent(ResourceLocation.parse("mca:test/active_begin_replacement"));
@@ -1042,16 +1095,31 @@ public final class DialogueEngineGameTests {
         DialogueEngine.DialogueNodeView active = engine.select(
                 fixture.player(), initial.token(), DialogueEngine.DialogueSelection.EVENT, activeEvent.id()).orElseThrow();
 
-        DialogueEngine.DialogueOptions forgedMenu = engine.begin(fixture.player(), fixture.villager());
-        helper.assertTrue(forgedMenu.containsEvent(replacementEvent.id()),
-                "fixture must prove the forged Begin produced a selectable-looking menu");
+        DialogueEngine.DialogueOptions topics = engine.begin(fixture.player(), fixture.villager(), false);
+        helper.assertTrue(topics.containsEvent(replacementEvent.id()),
+                "Topics should offer a valid replacement event");
+        helper.assertTrue(topics.continuationSessionId().filter(active.sessionId()::equals).isPresent(),
+                "Topics should offer a continuation of the paused run");
+        helper.assertTrue(sessions(engine).get(fixture.player().getUUID()).status() == DialogueSession.Status.PAUSED,
+                "opening Topics must pause the active run rather than replace it");
         helper.assertTrue(engine.select(
-                fixture.player(), forgedMenu.token(), DialogueEngine.DialogueSelection.EVENT, replacementEvent.id()).isEmpty(),
-                "a second Begin must not replace an ACTIVE run"
+                fixture.player(), initial.token(), DialogueEngine.DialogueSelection.EVENT, replacementEvent.id()).isEmpty(),
+                "an older menu token cannot replace the paused run"
+        );
+        helper.assertTrue(engine.select(
+                fixture.player(), topics.token(), DialogueEngine.DialogueSelection.EVENT,
+                ResourceLocation.parse("mca:test/unoffered")).isEmpty(),
+                "an unoffered event cannot replace the paused run"
         );
         DialogueSession retained = sessions(engine).get(fixture.player().getUUID());
-        helper.assertTrue(retained != null && retained.id().equals(active.sessionId()),
-                "the original active session must remain authoritative");
+        helper.assertTrue(retained != null && retained.id().equals(active.sessionId())
+                        && retained.status() == DialogueSession.Status.PAUSED,
+                "rejected selections must preserve the original resumable run");
+        DialogueEngine.DialogueNodeView replacement = engine.select(
+                fixture.player(), topics.token(), DialogueEngine.DialogueSelection.EVENT,
+                replacementEvent.id()).orElseThrow();
+        helper.assertTrue(!replacement.sessionId().equals(active.sessionId()),
+                "a valid selection may explicitly replace the paused run");
         helper.succeed();
     }
 

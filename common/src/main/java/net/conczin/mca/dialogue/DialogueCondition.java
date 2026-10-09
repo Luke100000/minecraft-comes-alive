@@ -40,6 +40,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiFunction;
 
 /**
  * Immutable deterministic dialogue requirements.
@@ -50,7 +52,7 @@ import java.util.Set;
  * {@code mca:not} instead of becoming an accidental match.</p>
  */
 public sealed interface DialogueCondition permits DialogueCondition.Defined, DialogueCondition.EventCompleted,
-        DialogueCondition.EventChoice, DialogueCondition.Not {
+        DialogueCondition.EventChoice, DialogueCondition.Not, DialogueCondition.Registered {
     ResourceLocation NOT = MCA.locate("not");
     ResourceLocation EVENT_COMPLETED = MCA.locate("event_completed");
     ResourceLocation EVENT_CHOICE = MCA.locate("event_choice");
@@ -138,6 +140,16 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
         return evaluate(context) == Evaluation.MATCH;
     }
 
+    /** Register a server-side condition type before dialogue datapacks are loaded. */
+    static <T> void register(ResourceLocation id, Codec<T> codec, BiFunction<T, DialogueContext, Evaluation> evaluator) {
+        Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(codec, "codec");
+        Objects.requireNonNull(evaluator, "evaluator");
+        if (BUILTIN_TYPES.contains(id) || Extensions.TYPES.putIfAbsent(id, new ExtensionType<>(id, codec, evaluator)) != null) {
+            throw new IllegalArgumentException("Dialogue condition type is already registered: " + id);
+        }
+    }
+
     private static DataResult<DialogueCondition> decodeDynamic(Dynamic<?> dynamic) {
         JsonElement element = dynamic.convert(JsonOps.INSTANCE).getValue();
         if (!element.isJsonObject()) {
@@ -148,11 +160,14 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
             return DataResult.error(() -> "Dialogue condition requires string field 'type'");
         }
         ResourceLocation type = ResourceLocation.tryParse(object.get("type").getAsString());
-        if (type == null || !BUILTIN_TYPES.contains(type)) {
+        if (type == null || (!BUILTIN_TYPES.contains(type) && !Extensions.TYPES.containsKey(type))) {
             return DataResult.error(() -> "Unknown dialogue condition type: " + object.get("type"));
         }
 
         try {
+            if (!BUILTIN_TYPES.contains(type)) {
+                return DataResult.success(decodeRegistered(Extensions.TYPES.get(type), object));
+            }
             if (EVENT_COMPLETED.equals(type)) {
                 requireOnly(object, "type", "event");
                 return DataResult.success(new EventCompleted(requiredLocation(object, "event")));
@@ -180,6 +195,9 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
     }
 
     private static Dynamic<?> encodeDynamic(DialogueCondition condition) {
+        if (condition instanceof Registered<?> registered) {
+            return new Dynamic<>(JsonOps.INSTANCE, encodeRegistered(registered));
+        }
         JsonObject object;
         if (condition instanceof Defined defined) {
             object = defined.definition().deepCopy();
@@ -197,6 +215,23 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
             object.add("condition", child);
         }
         return new Dynamic<>(JsonOps.INSTANCE, object);
+    }
+
+    private static <T> Registered<T> decodeRegistered(ExtensionType<T> extension, JsonObject object) {
+        JsonObject values = object.deepCopy();
+        values.remove("type");
+        T value = extension.codec().parse(JsonOps.INSTANCE, values).getOrThrow();
+        return new Registered<>(extension, value);
+    }
+
+    private static <T> JsonObject encodeRegistered(Registered<T> registered) {
+        JsonElement values = registered.extension().codec().encodeStart(JsonOps.INSTANCE, registered.value()).getOrThrow();
+        if (!values.isJsonObject() || values.getAsJsonObject().has("type")) {
+            throw new IllegalArgumentException("Registered dialogue condition codec must encode an object without 'type'");
+        }
+        JsonObject object = values.getAsJsonObject();
+        object.addProperty("type", registered.type().toString());
+        return object;
     }
 
     private static void validateDefined(ResourceLocation type, JsonObject object) {
@@ -741,6 +776,27 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
     @FunctionalInterface
     interface DefinedEvaluator {
         Evaluation evaluate(Defined condition, DialogueContext context);
+    }
+
+    record ExtensionType<T>(ResourceLocation id, Codec<T> codec,
+                            BiFunction<T, DialogueContext, Evaluation> evaluator) {}
+
+    record Registered<T>(ExtensionType<T> extension, T value) implements DialogueCondition {
+        @Override
+        public ResourceLocation type() {
+            return extension.id();
+        }
+
+        @Override
+        public Evaluation evaluate(DialogueContext context) {
+            return Objects.requireNonNull(extension.evaluator().apply(value, context), "Condition evaluation");
+        }
+    }
+
+    final class Extensions {
+        private static final Map<ResourceLocation, ExtensionType<?>> TYPES = new ConcurrentHashMap<>();
+
+        private Extensions() {}
     }
 
     record Defined(ResourceLocation type, JsonObject definition) implements DialogueCondition {

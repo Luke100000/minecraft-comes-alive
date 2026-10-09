@@ -81,6 +81,10 @@ public final class DialogueEngine {
     }
 
     public DialogueOptions begin(ServerPlayer player, VillagerEntityMCA villager) {
+        return begin(player, villager, true);
+    }
+
+    public DialogueOptions begin(ServerPlayer player, VillagerEntityMCA villager, boolean showOpening) {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(villager, "villager");
         UUID playerId = player.getUUID();
@@ -115,7 +119,7 @@ public final class DialogueEngine {
         Optional<EventOption> highlighted = plan.highlighted().map(event -> option(event, villager));
         List<EventOption> ask = plan.ask().stream().map(event -> option(event, villager)).toList();
         List<ResourceLocation> ambient = new ArrayList<>(plan.ambient().stream().map(DialogueEvent::id).toList());
-        List<DialogueEvent> previewCandidates = events.all().stream()
+        List<DialogueEvent> previewCandidates = !showOpening ? List.of() : events.all().stream()
                 .filter(event -> eventEligible(event, context, history, gameTime))
                 .filter(event -> pausedEvent == null || !pausedEvent.equals(event.id()))
                 .filter(DialogueEngine::previewable)
@@ -947,6 +951,8 @@ public final class DialogueEngine {
                 } else {
                     villager.getLongTermMemory().remember(id);
                 }
+            } else if (action instanceof DialogueAction.Registered<?> registered) {
+                registered.execute(context);
             }
         }
 
@@ -1038,7 +1044,8 @@ public final class DialogueEngine {
                 && !villager.isRemoved()
                 && villager.level() == player.level()
                 && !villager.isTrading()
-                && !villager.isSleeping()
+                && (!villager.isSleeping() || villager.getInteractions().getInteractingPlayer()
+                        .filter(player::equals).isPresent())
                 && !villager.getVillagerBrain().isPanicking()
                 && player.canInteractWithEntity(villager, 1.0);
     }

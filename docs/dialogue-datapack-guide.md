@@ -54,6 +54,12 @@ These pack formats are for Minecraft 1.21.1. If you target another Minecraft ver
 
 **Important:** `assets` inside a server datapack is not a replacement for an enabled client resource pack. In multiplayer, the server needs the datapack and each player needs the resource pack (or the server must provide it as a server resource pack).
 
+### NeoForge 1.21.1 compatibility
+
+MCA registers `DialogueEvents` as a **server datapack reload listener** on NeoForge, not as a NeoForge datapack registry. This is intentional: each file is a self-contained conversation that MCA validates and keeps server-side. `/reload` replaces the event snapshot, and normal Minecraft datapack priority determines which version wins when packs define the same resource path.
+
+Use MCA's event-level `requirements` for conditional conversations. NeoForge's separate top-level `neoforge:conditions` format is **not part of the DialogueEvent JSON schema**; adding that field to a conversation is rejected as an unknown field. For optional addons, distribute the dialogue file only when its companion content is installed, or use supported MCA requirements to make it unavailable until a prerequisite exists. See the [NeoForge 1.21.1 codec guide](https://docs.neoforged.net/docs/1.21.1/datastorage/codecs/) for general Mojang codec conventions and the [NeoForge data load conditions guide](https://docs.neoforged.net/docs/1.21.1/resources/server/conditions/) for the separate NeoForge feature.
+
 ## 2. Write your first conversation
 
 Create `data/villager_stories/dialogue_events/hello_neighbor.json` and paste:
@@ -277,3 +283,38 @@ Check these common problems in order:
 For examples shipped with MCA, inspect `common/src/main/resources/data/mca/dialogue_events/` in the source repository. Good starting points are `social/joke.json` (choices and reactions), `ambient/crabby_night.json` (context-sensitive small talk), and `personal/cured_zombies_followup.json` (a story that checks an earlier reply).
 
 For every supported condition, action, and field, read the [DialogueEvent developer guide](dialogue-system-guide.md). For additional writing patterns and templates, see the [DialogueEvent authoring guide](dialogue-authoring.md). Both remain separate from this getting-started guide.
+
+## Addon-defined conditions and actions (Java mods)
+
+Datapacks can author arbitrary events, graphs, requirements, choices and effects using **registered** condition/action types. A datapack alone cannot execute new Java behavior. A Fabric or NeoForge addon can register new namespaced types from its common mod initialization code, **before the server loads dialogue datapacks**:
+
+```java
+import com.mojang.serialization.Codec;
+import net.conczin.mca.dialogue.DialogueAction;
+import net.conczin.mca.dialogue.DialogueCondition;
+import net.minecraft.resources.ResourceLocation;
+
+DialogueCondition.register(
+        ResourceLocation.fromNamespaceAndPath("myaddon", "min_experience"),
+        Codec.INT.fieldOf("levels").codec(),
+        (levels, context) -> context.player().experienceLevel >= levels
+                ? DialogueCondition.Evaluation.MATCH
+                : DialogueCondition.Evaluation.NO_MATCH
+);
+DialogueAction.register(
+        ResourceLocation.fromNamespaceAndPath("myaddon", "give_experience"),
+        Codec.INT.fieldOf("levels").codec(),
+        (levels, context) -> context.player().giveExperienceLevels(levels)
+);
+```
+
+Reference those types in `data/myaddon/dialogue_events/my_story.json` (only the relevant fragments are shown):
+
+```json
+"requirements": [{ "type": "myaddon:min_experience", "levels": 5 }],
+"actions": [{ "type": "myaddon:give_experience", "levels": 1 }]
+```
+
+The codec decodes **all fields except `type`** and must encode a JSON object. It is responsible for validating its own parameters. Conditions return `MATCH`, `NO_MATCH`, or `UNAVAILABLE` (for unavailable dependencies); `mca:not` does not invert `UNAVAILABLE` into a match. Addon condition types work in event, choice and outcome requirements, and addon actions work in choices and outcomes. Addon action executors run only on the **logical server** when the conversation's successful completion is committed; effects should be deterministic and avoid throwing after modifying world state.
+
+Registrations are process-wide and are not removed on `/reload`. Duplicate IDs, including MCA built-in IDs, throw during registration. Unregistered types and invalid parameter payloads cause the referencing dialogue event to fail decoding, with the event ID and reason in the server log. Install the implementing addon on the server before enabling the datapack; this is a new API and does not offer adapters for the removed legacy `Actions.register` or `GiftPredicate.register` dialogue formats.

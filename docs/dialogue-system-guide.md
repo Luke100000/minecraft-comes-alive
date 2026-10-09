@@ -291,13 +291,31 @@ The server sends a complete text Component for each visible passage. `ClientHand
 
 ## 8. Extending functionality in Java
 
-Datapacks can create new events and new combinations of existing conditions and actions. They cannot register a completely new condition or action type through JSON alone. These are fixed built-in codecs; `DialogueAction` is also a sealed interface.
+Datapacks can create namespaced events, nodes, replies, weighted outcomes, requirements and effects. New **behavior** needs a mod: addons may register namespaced condition and action codecs during common mod initialization, before the server reloads dialogue resources. A datapack alone cannot execute arbitrary Java logic.
+
+```java
+DialogueCondition.register(
+    ResourceLocation.fromNamespaceAndPath("myaddon", "min_experience"),
+    Codec.INT.fieldOf("levels").codec(),
+    (levels, ctx) -> ctx.player().experienceLevel >= levels
+        ? DialogueCondition.Evaluation.MATCH : DialogueCondition.Evaluation.NO_MATCH
+);
+DialogueAction.register(
+    ResourceLocation.fromNamespaceAndPath("myaddon", "add_experience"),
+    Codec.INT.fieldOf("levels").codec(),
+    (levels, ctx) -> ctx.player().giveExperienceLevels(levels)
+);
+```
+
+These types can be used as `{"type":"myaddon:min_experience","levels":5}` in event/choice/outcome requirements and `{"type":"myaddon:add_experience","levels":1}` in choice/outcome actions. Codecs parse the object **without `type`**, and must serialize an object without that field. Invalid or unknown types reject the containing resource. Registered action executors run on the logical server only when the final completion is acknowledged; they should not throw after applying partial effects. Condition evaluations must preserve `UNAVAILABLE` when a referenced dependency is missing, including under `mca:not`.
+
+The registry is process-wide, and IDs cannot be duplicated or override built-in types. There is **no legacy `Actions.register`/`GiftPredicate.register` compatibility adapter**. See the [datapack guide](dialogue-datapack-guide.md) for a complete matching JSON example.
 
 If new behavior is necessary, add it at its existing owner:
 
-1. For a **new condition**, update `DialogueCondition`'s type registry, field validator and evaluator. Read state from the gameplay class that already owns it. Preserve the distinction between false and unavailable.
-2. For a **new action**, extend `DialogueAction`'s validated type/codec and implement its server-side commit path in `DialogueEngine`. Define failure and completion behavior before wiring it to content.
-3. For a **new recent gameplay event**, add a registered `RecentVillagerEvents` ID and record it at the real gameplay transition, including the existing villager NBT lifecycle. Dialogue text alone never records gameplay events.
+1. For a **new condition**, register a typed codec and evaluator with `DialogueCondition.register`. Read state from the gameplay class that already owns it; preserve the distinction between false and unavailable.
+2. For a **new action**, register a typed codec and server-side executor with `DialogueAction.register`. Define failure and completion behavior before wiring it to content; the existing completion path handles deferral.
+3. For a **new recent gameplay event**, call `RecentVillagerEvents.register(id)` during mod initialization, then record it at the real gameplay transition. The existing villager NBT lifecycle saves registered IDs; dialogue text alone never records gameplay facts.
 4. For **UI or packet changes**, keep session authority in `DialogueEngine`, validate untrusted client IDs and tokens, and preserve shared behavior across Fabric and NeoForge. Only presentation belongs on the client.
 
 Existing conditions are often sufficient. For example, a story about actually being cured uses `mca:recent_event` with `mca:cured`; a general discussion of cured villagers can use personality, age, time and hearts without claiming a cure happened. The current system has no authored scene specifically for witnessing a killing. An attack or relative-death fact does not automatically provide that dialogue.

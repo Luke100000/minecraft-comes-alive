@@ -3,9 +3,12 @@ package net.conczin.mca.dialogue;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.JsonOps;
 import net.minecraft.resources.ResourceLocation;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -314,6 +317,23 @@ class DialogueEventParsingTest {
                 "[{ \"type\": \"mca:recent_event\", \"event\": \"mca:attacked\", \"within_ticks\": -1 }]",
                 "{ \"type\": \"always\" }"
         ));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void cooldownRepeatCodecRoundTripsFixedAndRangedDurations() throws ReflectiveOperationException {
+        Field field = DialogueEvent.Repeat.class.getDeclaredField("CODEC");
+        field.setAccessible(true);
+        Codec<DialogueEvent.Repeat> codec = (Codec<DialogueEvent.Repeat>) field.get(null);
+
+        for (String repeat : List.of(
+                "{\"type\":\"cooldown\",\"seconds\":5}",
+                "{\"type\":\"cooldown\",\"min_seconds\":2,\"max_seconds\":8}")) {
+            DialogueEvent.Repeat decoded = decode(baseEvent("[]", repeat)).repeat();
+            var encoded = codec.encodeStart(JsonOps.INSTANCE, decoded).getOrThrow();
+            assertEquals(decoded, codec.parse(JsonOps.INSTANCE, encoded).getOrThrow(),
+                    "encoding a cooldown must preserve its normalized duration");
+        }
     }
 
     @Test

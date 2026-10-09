@@ -12,10 +12,13 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.Objects;
 import java.util.OptionalLong;
 import java.util.Set;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
 
 /** Immutable, validated dialogue effects committed by the server at conversation completion. */
 public sealed interface DialogueAction permits DialogueAction.Hearts, DialogueAction.Mood,
-        DialogueAction.Remember, DialogueAction.Command {
+        DialogueAction.Remember, DialogueAction.Command, DialogueAction.Registered {
     ResourceLocation HEARTS = MCA.locate("hearts");
     ResourceLocation MOOD = MCA.locate("mood");
     ResourceLocation REMEMBER = MCA.locate("remember");
@@ -30,6 +33,16 @@ public sealed interface DialogueAction permits DialogueAction.Hearts, DialogueAc
 
     ResourceLocation type();
 
+    /** Register an addon action type before dialogue datapacks are loaded. Effects run at completion. */
+    static <T> void register(ResourceLocation id, Codec<T> codec, BiConsumer<T, DialogueContext> executor) {
+        Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(codec, "codec");
+        Objects.requireNonNull(executor, "executor");
+        if (BUILTIN_TYPES.contains(id) || Extensions.TYPES.putIfAbsent(id, new ExtensionType<>(id, codec, executor)) != null) {
+            throw new IllegalArgumentException("Dialogue action type is already registered: " + id);
+        }
+    }
+
     private static DataResult<DialogueAction> decodeDynamic(Dynamic<?> dynamic) {
         JsonElement element = dynamic.convert(JsonOps.INSTANCE).getValue();
         if (!element.isJsonObject()) {
@@ -40,11 +53,14 @@ public sealed interface DialogueAction permits DialogueAction.Hearts, DialogueAc
             return DataResult.error(() -> "Dialogue action requires string field 'type'");
         }
         ResourceLocation type = ResourceLocation.tryParse(object.get("type").getAsString());
-        if (type == null || !BUILTIN_TYPES.contains(type)) {
+        if (type == null || (!BUILTIN_TYPES.contains(type) && !Extensions.TYPES.containsKey(type))) {
             return DataResult.error(() -> "Unknown dialogue action type: " + object.get("type"));
         }
 
         try {
+            if (!BUILTIN_TYPES.contains(type)) {
+                return DataResult.success(decodeRegistered(Extensions.TYPES.get(type), object));
+            }
             if (HEARTS.equals(type)) {
                 requireOnly(object, "type", "amount");
                 return DataResult.success(new Hearts(requiredInt(object, "amount")));
@@ -84,6 +100,9 @@ public sealed interface DialogueAction permits DialogueAction.Hearts, DialogueAc
     }
 
     private static Dynamic<?> encodeDynamic(DialogueAction action) {
+        if (action instanceof Registered<?> registered) {
+            return new Dynamic<>(JsonOps.INSTANCE, encodeRegistered(registered));
+        }
         JsonObject object = new JsonObject();
         object.addProperty("type", action.type().toString());
         if (action instanceof Hearts hearts) {
@@ -100,6 +119,42 @@ public sealed interface DialogueAction permits DialogueAction.Hearts, DialogueAc
             object.addProperty("command", command.command());
         }
         return new Dynamic<>(JsonOps.INSTANCE, object);
+    }
+
+    private static <T> Registered<T> decodeRegistered(ExtensionType<T> extension, JsonObject object) {
+        JsonObject values = object.deepCopy();
+        values.remove("type");
+        T value = extension.codec().parse(JsonOps.INSTANCE, values).getOrThrow();
+        return new Registered<>(extension, value);
+    }
+
+    private static <T> JsonObject encodeRegistered(Registered<T> registered) {
+        JsonElement values = registered.extension().codec().encodeStart(JsonOps.INSTANCE, registered.value()).getOrThrow();
+        if (!values.isJsonObject() || values.getAsJsonObject().has("type")) {
+            throw new IllegalArgumentException("Registered dialogue action codec must encode an object without 'type'");
+        }
+        JsonObject object = values.getAsJsonObject();
+        object.addProperty("type", registered.type().toString());
+        return object;
+    }
+
+    record ExtensionType<T>(ResourceLocation id, Codec<T> codec, BiConsumer<T, DialogueContext> executor) {}
+
+    record Registered<T>(ExtensionType<T> extension, T value) implements DialogueAction {
+        @Override
+        public ResourceLocation type() {
+            return extension.id();
+        }
+
+        public void execute(DialogueContext context) {
+            extension.executor().accept(value, context);
+        }
+    }
+
+    final class Extensions {
+        private static final Map<ResourceLocation, ExtensionType<?>> TYPES = new ConcurrentHashMap<>();
+
+        private Extensions() {}
     }
 
     private static String requiredNonblankString(JsonObject object, String field) {

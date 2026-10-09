@@ -65,6 +65,12 @@ class DialogueEventCodecTest {
                 roundTrip(InteractionDialogueBeginMessage.STREAM_CODEC, new InteractionDialogueBeginMessage(villagerId))
         );
         assertEquals(
+                new InteractionDialogueBeginMessage(villagerId, false),
+                roundTrip(InteractionDialogueBeginMessage.STREAM_CODEC,
+                        new InteractionDialogueBeginMessage(villagerId, false)),
+                "returning to topics should not request another automatic opening"
+        );
+        assertEquals(
                 new InteractionDialogueSelectMessage(
                         41L,
                         DialogueEngine.DialogueSelection.EVENT,

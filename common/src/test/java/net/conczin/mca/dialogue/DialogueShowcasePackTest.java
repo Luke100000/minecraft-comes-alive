@@ -29,6 +29,12 @@ class DialogueShowcasePackTest {
     @Test
     void optionalShowcaseIsAPlayableTranslatedEventGraph() throws IOException {
         Path pack = findRepoRoot().resolve("testpacks/dialogue-showcase");
+        assertEquals(48, JsonParser.parseString(Files.readString(pack.resolve("datapack/pack.mcmeta")))
+                .getAsJsonObject().getAsJsonObject("pack").get("pack_format").getAsInt(),
+                "the 1.21.1 showcase datapack needs the server-data pack format");
+        assertEquals(34, JsonParser.parseString(Files.readString(pack.resolve("resourcepack/pack.mcmeta")))
+                .getAsJsonObject().getAsJsonObject("pack").get("pack_format").getAsInt(),
+                "the 1.21.1 showcase translations need the client resource-pack format");
         Path events = pack.resolve("datapack/data/showcase/dialogue_events");
         JsonObject translations = JsonParser.parseString(Files.readString(
                 pack.resolve("resourcepack/assets/showcase/lang/en_us.json"))).getAsJsonObject();

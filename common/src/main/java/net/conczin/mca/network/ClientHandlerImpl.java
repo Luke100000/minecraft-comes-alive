@@ -193,7 +193,7 @@ public class ClientHandlerImpl implements ClientHandler {
         if (client.screen instanceof InteractScreen gui
                 && gui.isDialogueMode()
                 && dialoguePresentation.acceptSelectionRejection(message.offerToken())) {
-            gui.requestDialogueMenu();
+            gui.requestDialogueTopics();
         }
     }
 
@@ -217,7 +217,7 @@ public class ClientHandlerImpl implements ClientHandler {
         }
         if (message.state() == InteractionDialogueNodeResponse.State.ENDED) {
             if (visibleInteraction) {
-                gui.requestDialogueMenu();
+                gui.requestDialogueTopics();
             }
         } else if (message.state() == InteractionDialogueNodeResponse.State.PAUSED) {
             if (visibleInteraction) {

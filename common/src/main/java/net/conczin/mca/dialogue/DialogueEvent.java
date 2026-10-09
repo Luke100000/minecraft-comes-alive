@@ -297,10 +297,25 @@ public record DialogueEvent(
     public record Repeat(RepeatType type, long minTicks, long maxTicks) {
         private static final Codec<Repeat> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 RepeatType.CODEC.fieldOf("type").forGetter(Repeat::type),
-                Codec.DOUBLE.optionalFieldOf("seconds").forGetter(repeat -> Optional.empty()),
-                Codec.DOUBLE.optionalFieldOf("min_seconds").forGetter(repeat -> Optional.empty()),
-                Codec.DOUBLE.optionalFieldOf("max_seconds").forGetter(repeat -> Optional.empty())
+                Codec.DOUBLE.optionalFieldOf("seconds").forGetter(Repeat::fixedSeconds),
+                Codec.DOUBLE.optionalFieldOf("min_seconds").forGetter(Repeat::minSeconds),
+                Codec.DOUBLE.optionalFieldOf("max_seconds").forGetter(Repeat::maxSeconds)
         ).apply(instance, Repeat::fromSecondsFields));
+
+        private Optional<Double> fixedSeconds() {
+            return type == RepeatType.COOLDOWN && minTicks == maxTicks
+                    ? Optional.of(minTicks / 20.0) : Optional.empty();
+        }
+
+        private Optional<Double> minSeconds() {
+            return type == RepeatType.COOLDOWN && minTicks != maxTicks
+                    ? Optional.of(minTicks / 20.0) : Optional.empty();
+        }
+
+        private Optional<Double> maxSeconds() {
+            return type == RepeatType.COOLDOWN && minTicks != maxTicks
+                    ? Optional.of(maxTicks / 20.0) : Optional.empty();
+        }
 
         private static Repeat fromSecondsFields(
                 RepeatType type,

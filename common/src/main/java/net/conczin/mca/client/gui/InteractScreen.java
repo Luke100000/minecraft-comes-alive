@@ -366,6 +366,14 @@ public class InteractScreen extends AbstractDynamicScreen {
     }
 
     public void requestDialogueMenu() {
+        requestDialogueMenu(true);
+    }
+
+    public void requestDialogueTopics() {
+        requestDialogueMenu(false);
+    }
+
+    private void requestDialogueMenu(boolean showOpening) {
         dialogueMode = true;
         dialogueHits.clear();
         dialogueScroll = 0;
@@ -373,7 +381,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         dialoguePreviewReplyScroll = 0;
         clearWidgets();
         dialoguePresentation().ifPresent(ClientHandlerImpl.DialoguePresentation::beginRequest);
-        Network.sendToServer(new InteractionDialogueBeginMessage(villager.asEntity().getUUID()));
+        Network.sendToServer(new InteractionDialogueBeginMessage(villager.asEntity().getUUID(), showOpening));
     }
 
     public void leaveDialogueMode() {
@@ -479,7 +487,7 @@ public class InteractScreen extends AbstractDynamicScreen {
             drawDialogueNode(context, presentation);
         } else {
             int menuBottom = height - 34;
-            if (presentation.hasPreview() && width < 580) {
+            if (presentation.hasPreview() && width < 480) {
                 int passageHeight = Math.max(62, Math.min(190, (height - 60) / 2));
                 menuBottom = Math.max(54, menuBottom - passageHeight - 12);
             }
@@ -527,10 +535,10 @@ public class InteractScreen extends AbstractDynamicScreen {
     private void drawDialogueNode(GuiGraphics context, ClientHandlerImpl.DialoguePresentation presentation) {
         boolean preview = presentation.hasPreview() && !presentation.nodeVisible();
         int panelWidth = Math.min(width - 24, Math.min(520, Math.max(220, width * 3 / 4)));
-        if (preview && width >= 580) {
-            panelWidth = Math.min(panelWidth, width - 282);
+        if (preview && width >= 480) {
+            panelWidth = Math.min(panelWidth, width - dialogueMenuWidth() - 36);
         }
-        int left = preview && width >= 580 ? 12 : (width - panelWidth) / 2;
+        int left = preview && width >= 480 ? 12 : (width - panelWidth) / 2;
         boolean hasAdvance = presentation.node().map(node ->
                 node.advanceKind() != DialogueEngine.AdvanceKind.NONE).orElse(false)
                 || (preview && presentation.options().flatMap(InteractionDialogueOptionsResponse::preview)
@@ -599,20 +607,23 @@ public class InteractScreen extends AbstractDynamicScreen {
         } else if (!replies.isEmpty()) {
             drawDialogueRows(context, replies, false, top - 10);
         }
+        int topicsWidth = 0;
         if (!preview) {
             Component topics = Component.translatable("gui.dialogue.topics");
+            topicsWidth = Math.min((panelWidth - 30) / 2, Math.max(60, font.width(topics) + 16));
             drawDialogueAction(context, new DialogueRow(topics,
                     new DialogueClick(DialogueClickKind.TOPICS, null, null, null)),
-                    left + 10, bottom - 24, Math.max(60, font.width(topics) + 16), 18);
+                    left + 10, bottom - 24, topicsWidth, 18);
         }
         if (canAdvance) {
             DialogueEngine.AdvanceKind advanceKind = presentation.advanceKind().orElseThrow();
             Component label = switch (advanceKind) {
                 case NEXT -> Component.translatable("gui.dialogue.next");
-                case BACK_TO_TOPICS -> Component.translatable("gui.dialogue.back_to_topics");
+                // This acknowledges/completes the event; Topics instead pauses it.
+                case BACK_TO_TOPICS -> Component.translatable("gui.button.done");
                 case NONE -> throw new IllegalStateException("Non-advancing dialogue cannot render an advance action");
             };
-            int actionWidth = Math.min(panelWidth - 24, Math.max(68, font.width(label) + 18));
+            int actionWidth = Math.min(panelWidth - topicsWidth - 30, Math.max(68, font.width(label) + 18));
             int actionLeft = left + panelWidth - actionWidth - 10;
             drawDialogueAction(context, new DialogueRow(label,
                     new DialogueClick(DialogueClickKind.ADVANCE, null, null, null)),
@@ -621,12 +632,13 @@ public class InteractScreen extends AbstractDynamicScreen {
     }
 
     private void drawDialogueRows(GuiGraphics context, List<DialogueRow> rows, boolean menu, int maxBottom) {
-        int panelWidth = Math.min(245, Math.min(width - 24, Math.max(185, width / 3)));
+        int panelWidth = dialogueMenuWidth();
         int left = width - panelWidth - 12;
         int contentHeight = rows.stream().mapToInt(row -> dialogueRowHeight(row, panelWidth)).sum();
-        int panelHeight = Math.min(Math.min(menu ? 210 : 170, Math.max(52, maxBottom - 18)),
-                contentHeight + (menu ? 54 : 22));
-        int top = Math.max(18, (maxBottom - panelHeight) / 2);
+        int panelHeight = Math.min(Math.min(menu ? Math.max(245, height * 3 / 4) : 170,
+                        Math.max(52, maxBottom - 18)),
+                menu ? Math.max(210, contentHeight + 54) : contentHeight + 22);
+        int top = menu ? 18 : Math.max(18, (maxBottom - panelHeight) / 2);
         int panelBottom = top + panelHeight;
         int clipTop = top + (menu ? 23 : 12);
         int clipBottom = panelBottom - (menu ? 30 : 10);
@@ -656,6 +668,10 @@ public class InteractScreen extends AbstractDynamicScreen {
             drawDialogueAction(context, new DialogueRow(Component.translatable("gui.button.back"),
                     DialogueClick.back()), left + 8, panelBottom - 26, panelWidth - 16, 20);
         }
+    }
+
+    private int dialogueMenuWidth() {
+        return Math.min(width - 24, Math.min(350, Math.max(225, width * 2 / 5)));
     }
 
     private int dialogueRowHeight(DialogueRow row, int panelWidth) {
@@ -689,8 +705,10 @@ public class InteractScreen extends AbstractDynamicScreen {
     private void drawDialogueAction(GuiGraphics context, DialogueRow row, int x, int y, int w, int h) {
         boolean hover = hoveringOver(x, y, w, h);
         context.fill(x, y, x + w, y + h, hover ? 0xAA655676 : 0x77332D40);
+        context.enableScissor(x + 4, y, x + w - 4, y + h);
         context.drawString(font, row.text(), x + 6, y + (h - 8) / 2,
                 hover ? 0xFFFFE6A6 : 0xFFFFFFFF);
+        context.disableScissor();
         dialogueHits.add(new DialogueHit(x, y, x + w, y + h, row.click()));
     }
 
@@ -704,7 +722,7 @@ public class InteractScreen extends AbstractDynamicScreen {
             return true;
         }
         if (click.kind() == DialogueClickKind.TOPICS) {
-            requestDialogueMenu();
+            requestDialogueTopics();
             return true;
         }
         if (click.kind() == DialogueClickKind.ADVANCE) {

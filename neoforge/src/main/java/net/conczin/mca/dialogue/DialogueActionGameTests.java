@@ -1,6 +1,7 @@
 package net.conczin.mca.dialogue;
 
 import com.google.gson.JsonParser;
+import com.mojang.serialization.Codec;
 import com.mojang.authlib.GameProfile;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
@@ -37,10 +38,54 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @PrefixGameTestTemplate(false)
 public final class DialogueActionGameTests {
+    private static final ResourceLocation CUSTOM_TEST_ACTION = ResourceLocation.parse("dialogue_test:earned_points");
+    private static final AtomicInteger CUSTOM_POINTS = new AtomicInteger();
+
+    static {
+        DialogueAction.register(CUSTOM_TEST_ACTION, Codec.INT.fieldOf("points").codec(),
+                (points, context) -> CUSTOM_POINTS.addAndGet(points));
+    }
+
     private DialogueActionGameTests() {
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void registeredAddonActionRunsOnlyOnFinalAcknowledgement(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        CUSTOM_POINTS.set(0);
+        DialogueEvent event = DialogueEvent.decode(ResourceLocation.parse("dialogue_test:action_story"),
+                JsonParser.parseString("""
+                {
+                  "trigger":"talk",
+                  "presentation":{"mode":"ask","prompt":"test.prompt","resume_prompt":"test.resume"},
+                  "repeat":{"type":"always"},"start":"intro",
+                  "nodes":{
+                    "intro":{"line":"test.intro","choices":[{"id":"yes","text":"test.yes",
+                      "actions":[{"type":"dialogue_test:earned_points","points":7}],"next":"done"}]},
+                    "done":{"line":"test.done","complete":true}
+                  }
+                }
+                """).getAsJsonObject());
+        DialogueEngine engine = engine(event);
+        DialogueEngine.DialogueOptions menu = engine.begin(fixture.player(), fixture.villager());
+        helper.assertTrue(CUSTOM_POINTS.get() == 0, "offering a custom action must not execute it");
+        DialogueEngine.DialogueNodeView intro = engine.select(fixture.player(), menu.token(),
+                DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow();
+        DialogueEngine.DialogueNodeView done = engine.choose(fixture.player(), intro.offerToken(), "yes")
+                .view().orElseThrow();
+        helper.assertTrue(CUSTOM_POINTS.get() == 0, "accepted choice must only queue the registered effect");
+        helper.assertTrue(engine.advance(fixture.player(), done.offerToken()).completed(),
+                "acknowledging the final line must complete the registered action");
+        helper.assertTrue(CUSTOM_POINTS.get() == 7, "the registered executor must receive the authored value");
+        helper.assertTrue(engine.advance(fixture.player(), done.offerToken()).status()
+                        == DialogueEngine.TransitionStatus.REJECTED,
+                "the old token must not repeat an addon effect");
+        helper.assertTrue(CUSTOM_POINTS.get() == 7, "duplicate packets must not replay the registered action");
+        helper.succeed();
     }
 
     @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")

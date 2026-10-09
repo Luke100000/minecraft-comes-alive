@@ -10,6 +10,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class RecentVillagerEvents {
     public static final String NBT_KEY = "recentVillagerEvents";
@@ -21,14 +22,19 @@ public final class RecentVillagerEvents {
     public static final ResourceLocation REVIVED = MCA.locate("revived");
     public static final ResourceLocation RAID_SURVIVED = MCA.locate("raid_survived");
 
-    private static final Set<ResourceLocation> REGISTERED = Set.of(
-            RELATIVE_DEATH,
-            ATTACKED,
-            ZOMBIFIED,
-            CURED,
-            REVIVED,
-            RAID_SURVIVED
-    );
+    private static final Set<ResourceLocation> REGISTERED = ConcurrentHashMap.newKeySet();
+
+    static {
+        REGISTERED.addAll(Set.of(RELATIVE_DEATH, ATTACKED, ZOMBIFIED, CURED, REVIVED, RAID_SURVIVED));
+    }
+
+    /** Register an addon-owned gameplay fact before dialogue events and villager saves are loaded. */
+    public static void register(ResourceLocation event) {
+        Objects.requireNonNull(event, "event");
+        if (!REGISTERED.add(event)) {
+            throw new IllegalArgumentException("Recent villager event is already registered: " + event);
+        }
+    }
 
     private final Map<ResourceLocation, Long> occurrences = new HashMap<>();
 
