@@ -169,7 +169,7 @@ public final class PathingBlockInteraction {
         }
     }
 
-    private static boolean dramaticDoorOpensByHand(Block block) {
+    static boolean dramaticDoorOpensByHand(Block block) {
         Method type = DRAMATIC_DOOR_TYPE.get(block.getClass());
         if (type == null) {
             return false;
