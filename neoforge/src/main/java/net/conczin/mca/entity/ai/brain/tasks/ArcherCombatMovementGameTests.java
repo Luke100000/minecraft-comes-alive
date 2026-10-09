@@ -12,8 +12,10 @@ import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.conczin.mca.registry.ProfessionsMCA;
 import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -2194,6 +2196,11 @@ public final class ArcherCombatMovementGameTests {
                         + moveControlSpeedBeforeTick + ", actual=" + archer.getMoveControl().getSpeedModifier()
         );
         helper.succeed();
+    }
+
+    @AfterBatch(batch = "mca_archer_kite_speed")
+    public static void cleanupKiteSpeedBatch(ServerLevel level) {
+        cleanupTestEntities();
     }
 
     @GameTest(batch = "mca_archer_bow_facing_ownership", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)

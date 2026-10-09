@@ -236,10 +236,8 @@ public class VillagerTasksMCA {
                 Pair.of(0, new DeliverMessageTask()),
                 Pair.of(1, new WanderOrTeleportToTargetTask()),
                 Pair.of(3, new InteractTask(speedModifier)),
-                Pair.of(10, new ExtendedFindPointOfInterestTask(registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME, false, Optional.of((byte) 14), (villager) -> {
-                    // update villagers home/bed position
-                    villager.getResidency().seekHomeAfterClaim();
-                }, (entity, pos) -> {
+                Pair.of(10, new ExtendedFindPointOfInterestTask(registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME, false, Optional.of((byte) 14),
+                        villager -> villager.getResidency().onHomeClaimed(), (entity, pos) -> {
                     // verify that this bed is not blocked
                     VillageManager manager = VillageManager.get((ServerLevel) entity.level());
                     if (entity.requiresHome()) {
@@ -258,16 +256,6 @@ public class VillagerTasksMCA {
                 Pair.of(0, ReactToBell.create()),
                 Pair.of(0, SetRaidStatus.create()),
                 Pair.of(5, GoToWantedItem.create(speedModifier, false, 4)),
-                Pair.of(10, new ExtendedFindPointOfInterestTask(registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME, false, Optional.of((byte) 14), (villager) -> {
-                    // update villagers home/bed position
-                    villager.getResidency().seekHomeAfterClaim();
-                }, (entity, pos) -> {
-                    // verify that this bed is not blocked
-                    VillageManager manager = VillageManager.get((ServerLevel) entity.level());
-                    return manager.findNearestVillage(entity).filter(v -> {
-                        return v.getBuildingAt(pos).filter(b -> b.getBuildingType().noBeds()).isPresent();
-                    }).isEmpty();
-                })),
                 Pair.of(10, new ExtendedFindPointOfInterestTask(registryEntry -> registryEntry.is(PoiTypes.MEETING), MemoryModuleType.MEETING_POINT, true, Optional.of((byte) 14), (villager) -> {
                     //report a town bell, the only building always added
                     villager.getBrain().getMemoryInternal(MemoryModuleType.MEETING_POINT).ifPresent(p -> {
@@ -278,7 +266,7 @@ public class VillagerTasksMCA {
                                 manager.processBuilding(p.pos());
                             }
 
-                            villager.getResidency().seekHome();
+                            villager.getResidency().reconcileVillageMembership();
                         }
                     });
                 }))
@@ -523,7 +511,7 @@ public class VillagerTasksMCA {
                     }
                     return !forced;
                 }, v -> {
-                    v.getResidency().seekHome();
+                    v.getResidency().reconcileVillageMembership();
                 }, (world, villager, home) -> villager.isSleeping()
                         ? Optional.empty()
                         : BedApproachTarget.create(world, home.pos())),

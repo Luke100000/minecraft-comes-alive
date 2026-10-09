@@ -16,6 +16,7 @@ class CommonConfigGameplayOptionsTest {
 
         assertTrue(config.archerArrowsIgnoreVillagers);
         assertTrue(config.villagersInteractWithFenceGates);
+        assertFalse(config.villagersInteractWithAnyDoor);
     }
 
     @Test
@@ -23,12 +24,14 @@ class CommonConfigGameplayOptionsTest {
         CommonConfig config = GSON.fromJson("""
                 {
                   "archerArrowsIgnoreVillagers": false,
-                  "villagersInteractWithFenceGates": false
+                  "villagersInteractWithFenceGates": false,
+                  "villagersInteractWithAnyDoor": true
                 }
                 """, CommonConfig.class);
 
         assertFalse(config.archerArrowsIgnoreVillagers);
         assertFalse(config.villagersInteractWithFenceGates);
+        assertTrue(config.villagersInteractWithAnyDoor);
     }
 
     @Test

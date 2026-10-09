@@ -1228,9 +1228,22 @@ public class Village implements Iterable<Building> {
         if (home.isPresent() && home.get().dimension() == world.dimension()) {
             long homePosition = home.get().pos().asLong();
             if (authoritativeHomeClaim) {
+                // A replaced bed has a fresh POI ticket. Retire the previous loaded owner's
+                // derived state before the new claimant can sleep, without releasing its ticket.
+                for (Map.Entry<UUID, Long> assignment : residentHomes.entrySet()) {
+                    if (!assignment.getKey().equals(resident) && assignment.getValue() == homePosition) {
+                        if (world.getEntity(assignment.getKey()) instanceof VillagerEntityMCA displaced) {
+                            displaced.getResidency().invalidateHome(home.get());
+                        }
+                        markDirty();
+                    }
+                }
                 ResidentHomeAssignments.claimAuthoritatively(residentHomes, resident, homePosition);
-            } else {
-                accepted = ResidentHomeAssignments.claim(residentHomes, resident, homePosition);
+            } else if (!ResidentHomeAssignments.claim(residentHomes, resident, homePosition)) {
+                accepted = false;
+                // Reconciliation rejects this memory. Retire its old index entry,
+                // not its anonymous POI ticket, which might have a new claimant.
+                residentHomes.remove(resident);
             }
         } else {
             residentHomes.remove(resident);
@@ -1249,7 +1262,11 @@ public class Village implements Iterable<Building> {
         }
         GlobalPos currentHome = home.get();
         return currentHome.dimension() == world.dimension()
-                && Objects.equals(residentHomes.get(resident.getUUID()), currentHome.pos().asLong());
+                && ownsResidentHome(resident.getUUID(), currentHome.pos());
+    }
+
+    public boolean ownsResidentHome(UUID resident, BlockPos position) {
+        return Objects.equals(residentHomes.get(resident), position.asLong());
     }
 
     boolean repairDuplicateResidentHomes() {
