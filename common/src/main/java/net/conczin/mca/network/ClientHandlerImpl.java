@@ -327,6 +327,7 @@ public class ClientHandlerImpl implements ClientHandler {
      */
     public static final class DialoguePresentation {
         public static final long CHARACTER_REVEAL_MILLIS = 40L;
+        private static final int MAX_REVIEW_LINES = 64;
 
         private InteractionDialogueOptionsResponse options;
         private UUID sessionId;
@@ -336,6 +337,8 @@ public class ClientHandlerImpl implements ClientHandler {
         private boolean hasLatestToken;
         private InteractionDialogueNodeResponse.Node node;
         private Component resolvedLine = Component.empty();
+        private final List<Component> speechHistory = new ArrayList<>();
+        private int reviewIndex = -1;
         private List<Integer> revealCuts = List.of();
         private int revealedCharacters;
         private long nextRevealAt;
@@ -430,6 +433,15 @@ public class ClientHandlerImpl implements ClientHandler {
                     && node != null;
             boolean preserveCurrentLine = sameOffer && node != null;
 
+            if (!sameSession) {
+                speechHistory.clear();
+                reviewIndex = -1;
+                if (pendingSelection == DialogueEngine.DialogueSelection.AMBIENT
+                        && hasPreview() && !previewLine.getString().isEmpty()) {
+                    rememberSpeech(previewLine);
+                }
+            }
+
             sessionId = response.sessionId();
             offerToken = response.offerToken();
             node = incoming;
@@ -446,6 +458,7 @@ public class ClientHandlerImpl implements ClientHandler {
                 revealCuts = revealCuts(resolved.text(), locale);
                 revealedCharacters = 0;
                 nextRevealAt = saturatingAdd(nowMillis, CHARACTER_REVEAL_MILLIS);
+                rememberSpeech(resolvedLine);
             }
 
             pendingSelection = null;
@@ -551,10 +564,16 @@ public class ClientHandlerImpl implements ClientHandler {
         }
 
         public Component fullLine() {
+            if (reviewingHistory()) {
+                return speechHistory.get(reviewIndex);
+            }
             return hasPreview() && !nodeVisible ? previewLine : resolvedLine;
         }
 
         public Component visibleLine() {
+            if (reviewingHistory()) {
+                return speechHistory.get(reviewIndex);
+            }
             if (hasPreview() && !nodeVisible) {
                 if (previewRevealed == 0 || previewLine.getString().isEmpty()) {
                     return Component.empty();
@@ -579,6 +598,9 @@ public class ClientHandlerImpl implements ClientHandler {
         }
 
         public Optional<DialogueEngine.AdvanceKind> advanceKind() {
+            if (reviewingHistory()) {
+                return Optional.empty();
+            }
             if (!(hasPreview() && !nodeVisible ? previewRevealed >= previewCuts.size() : isFullyRevealed())) {
                 return Optional.empty();
             }
@@ -591,6 +613,9 @@ public class ClientHandlerImpl implements ClientHandler {
         }
 
         public List<InteractionDialogueNodeResponse.Choice> visibleChoices() {
+            if (reviewingHistory()) {
+                return List.of();
+            }
             if (!(hasPreview() && !nodeVisible ? previewRevealed >= previewCuts.size() : isFullyRevealed())) {
                 return List.of();
             }
@@ -614,7 +639,47 @@ public class ClientHandlerImpl implements ClientHandler {
             dropSnapshot();
         }
 
+        public boolean reviewingHistory() {
+            return nodeVisible && reviewIndex >= 0;
+        }
+
+        public boolean canReviewPrevious() {
+            return nodeVisible && (reviewIndex < 0 ? speechHistory.size() > 1 : reviewIndex > 0);
+        }
+
+        public boolean reviewPrevious() {
+            if (!canReviewPrevious()) {
+                return false;
+            }
+            reviewIndex = reviewIndex < 0 ? speechHistory.size() - 2 : reviewIndex - 1;
+            return true;
+        }
+
+        public boolean reviewNext() {
+            if (!reviewingHistory()) {
+                return false;
+            }
+            reviewIndex++;
+            if (reviewIndex == speechHistory.size() - 1) {
+                reviewIndex = -1;
+            }
+            return true;
+        }
+
+        private void rememberSpeech(Component line) {
+            if (line.getString().isEmpty()) {
+                return;
+            }
+            speechHistory.add(line);
+            if (speechHistory.size() > MAX_REVIEW_LINES) {
+                speechHistory.removeFirst();
+            }
+            reviewIndex = -1;
+        }
+
         private void dropSnapshot() {
+            speechHistory.clear();
+            reviewIndex = -1;
             sessionId = null;
             offerToken = 0L;
             node = null;

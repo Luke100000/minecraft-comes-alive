@@ -22,6 +22,86 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DialoguePresentationTest {
     @Test
+    void previousAndNextReviewSpeechWithoutReplayingRevealOrAllowingStaleChoices() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        UUID session = UUID.randomUUID();
+        assertTrue(presentation.acceptNode(active(session, 1L, Component.literal("First line"),
+                DialogueEngine.AdvanceKind.NEXT, List.of()), 0L, Locale.ENGLISH));
+        tickSteps(presentation, 0L, 10);
+        assertTrue(presentation.acceptNode(active(session, 2L, Component.literal("Second line"),
+                DialogueEngine.AdvanceKind.NEXT,
+                List.of(new InteractionDialogueNodeResponse.Choice("yes", Component.literal("Yes")))), 450L, Locale.ENGLISH));
+        presentation.tick(490L);
+        assertEquals("S", presentation.visibleLine().getString());
+
+        assertTrue(presentation.reviewPrevious());
+        assertEquals("First line", presentation.visibleLine().getString(), "old speech is instantly visible");
+        assertTrue(presentation.reviewingHistory());
+        assertFalse(presentation.canAdvance(), "old speech cannot advance the server");
+        assertTrue(presentation.visibleChoices().isEmpty(), "old choices must never be usable");
+        presentation.tick(530L);
+        assertEquals("First line", presentation.visibleLine().getString(), "history does not animate");
+        assertTrue(presentation.reviewNext());
+        assertFalse(presentation.reviewingHistory());
+        assertEquals("Se", presentation.visibleLine().getString(), "live reveal progress resumes without restarting");
+        assertFalse(presentation.reviewNext(), "Next on the live line is owned by server progression");
+        assertFalse(presentation.canAdvance(), "live line is still revealing");
+    }
+
+    @Test
+    void repeatedPacketsAndResumeKeepOneHistoryEntryButReplacementClearsIt() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        UUID original = UUID.randomUUID();
+        assertTrue(presentation.acceptNode(active(original, 1L, Component.literal("Earlier"),
+                DialogueEngine.AdvanceKind.NEXT, List.of()), 0L, Locale.ENGLISH));
+        assertTrue(presentation.acceptNode(active(original, 2L, Component.literal("Current"),
+                DialogueEngine.AdvanceKind.NEXT, List.of()), 100L, Locale.ENGLISH));
+        assertTrue(presentation.acceptNode(active(original, 2L, Component.literal("Current"),
+                DialogueEngine.AdvanceKind.NEXT, List.of()), 120L, Locale.ENGLISH));
+
+        presentation.pause();
+        presentation.beginRequest();
+        assertTrue(presentation.acceptOptions(new InteractionDialogueOptionsResponse(3L,
+                Optional.of(Component.literal("Resume")), List.of(), false)));
+        presentation.markSelectionRequested(DialogueEngine.DialogueSelection.RESUME);
+        assertTrue(presentation.acceptNode(active(original, 4L, Component.literal("Current"),
+                DialogueEngine.AdvanceKind.NEXT, List.of()), 300L, Locale.ENGLISH));
+        assertTrue(presentation.reviewPrevious());
+        assertEquals("Earlier", presentation.visibleLine().getString());
+        assertFalse(presentation.reviewPrevious(), "resume and duplicate packets must not append fake history");
+
+        presentation.beginRequest();
+        assertTrue(presentation.acceptOptions(new InteractionDialogueOptionsResponse(5L,
+                Optional.empty(), List.of(), true)));
+        presentation.markSelectionRequested(DialogueEngine.DialogueSelection.AMBIENT);
+        assertTrue(presentation.acceptNode(active(UUID.randomUUID(), 6L, Component.literal("New session"),
+                DialogueEngine.AdvanceKind.NEXT, List.of()), 400L, Locale.ENGLISH));
+        assertFalse(presentation.reviewPrevious(), "new session must not leak previous villager speech");
+        presentation.clear();
+        assertFalse(presentation.canReviewPrevious());
+    }
+
+    @Test
+    void speechReviewHistoryHasBoundedCapacity() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        UUID session = UUID.randomUUID();
+        for (int i = 0; i < 70; i++) {
+            assertTrue(presentation.acceptNode(active(session, i + 1L, Component.literal("Line " + i),
+                    DialogueEngine.AdvanceKind.NEXT, List.of()), i * 100L, Locale.ENGLISH));
+        }
+        int previousCount = 0;
+        while (presentation.reviewPrevious()) {
+            previousCount++;
+        }
+        assertEquals(63, previousCount, "retain only the last 64 accepted speech lines");
+        assertEquals("Line 6", presentation.visibleLine().getString());
+        for (int i = 0; i < 63; i++) {
+            assertTrue(presentation.reviewNext());
+        }
+        assertFalse(presentation.reviewNext());
+    }
+
+    @Test
     void ambientPreviewRevealsWhileMenuOptionsRemainAvailableAndTransitionsToActiveNode() {
         ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
         InteractionDialogueNodeResponse.Node opening = new InteractionDialogueNodeResponse.Node(

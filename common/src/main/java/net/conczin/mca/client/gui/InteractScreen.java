@@ -45,6 +45,7 @@ public class InteractScreen extends AbstractDynamicScreen {
     private RelationshipState marriageState;
     private Component spouse;
     private boolean dialogueMode;
+    private boolean askExpanded;
     private final List<DialogueHit> dialogueHits = new ArrayList<>();
     private int dialogueScroll;
     private int dialogueRowsHeight;
@@ -375,6 +376,9 @@ public class InteractScreen extends AbstractDynamicScreen {
 
     private void requestDialogueMenu(boolean showOpening) {
         dialogueMode = true;
+        if (showOpening) {
+            askExpanded = false;
+        }
         dialogueHits.clear();
         dialogueScroll = 0;
         dialoguePassageScroll = 0;
@@ -516,11 +520,15 @@ public class InteractScreen extends AbstractDynamicScreen {
                 .filter(option -> option.mode() == InteractionDialogueOptionsResponse.Mode.ASK)
                 .toList();
         if (!ask.isEmpty()) {
-            rows.add(new DialogueRow(Component.translatable("gui.dialogue.ask"), null));
-            ask.forEach(option -> rows.add(new DialogueRow(
-                    option.prompt(),
-                    new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.EVENT, option.id(), null)
-            )));
+            rows.add(new DialogueRow(Component.translatable("gui.dialogue.ask").copy()
+                    .append(askExpanded ? " ▾" : " ▸"),
+                    new DialogueClick(DialogueClickKind.TOGGLE_ASK, null, null, null)));
+            if (askExpanded) {
+                ask.forEach(option -> rows.add(new DialogueRow(
+                        Component.literal("  ").append(option.prompt()),
+                        new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.EVENT, option.id(), null)
+                )));
+            }
         }
         if (options.ambientAvailable()) {
             rows.add(new DialogueRow(
@@ -607,27 +615,40 @@ public class InteractScreen extends AbstractDynamicScreen {
         } else if (!replies.isEmpty()) {
             drawDialogueRows(context, replies, false, top - 10);
         }
-        int topicsWidth = 0;
+        boolean reviewingHistory = presentation.reviewingHistory();
+        boolean showPrevious = !preview && presentation.canReviewPrevious();
+        boolean showNext = canAdvance || reviewingHistory;
+        int actionWidth;
         if (!preview) {
+            int buttonCount = 1 + (showPrevious ? 1 : 0) + (showNext ? 1 : 0);
+            actionWidth = (panelWidth - 20 - (buttonCount - 1) * 6) / buttonCount;
             Component topics = Component.translatable("gui.dialogue.topics");
-            topicsWidth = Math.min((panelWidth - 30) / 2, Math.max(60, font.width(topics) + 16));
             drawDialogueAction(context, new DialogueRow(topics,
                     new DialogueClick(DialogueClickKind.TOPICS, null, null, null)),
-                    left + 10, bottom - 24, topicsWidth, 18);
+                    left + 10, bottom - 24, actionWidth, 18);
+        } else {
+            actionWidth = panelWidth - 20;
         }
-        if (canAdvance) {
-            DialogueEngine.AdvanceKind advanceKind = presentation.advanceKind().orElseThrow();
-            Component label = switch (advanceKind) {
-                case NEXT -> Component.translatable("gui.dialogue.next");
-                // This acknowledges/completes the event; Topics instead pauses it.
-                case BACK_TO_TOPICS -> Component.translatable("gui.button.done");
-                case NONE -> throw new IllegalStateException("Non-advancing dialogue cannot render an advance action");
-            };
-            int actionWidth = Math.min(panelWidth - topicsWidth - 30, Math.max(68, font.width(label) + 18));
-            int actionLeft = left + panelWidth - actionWidth - 10;
+        if (showPrevious) {
+            Component previous = Component.translatable("gui.dialogue.previous");
+            drawDialogueAction(context, new DialogueRow(previous,
+                    new DialogueClick(DialogueClickKind.PREVIOUS, null, null, null)),
+                    left + 16 + actionWidth, bottom - 24, actionWidth, 18);
+        }
+        if (showNext) {
+            Component label = reviewingHistory ? Component.translatable("gui.dialogue.next")
+                    : switch (presentation.advanceKind().orElseThrow()) {
+                        case NEXT -> Component.translatable("gui.dialogue.next");
+                        // This acknowledges/completes the event; Topics instead pauses it.
+                        case BACK_TO_TOPICS -> Component.translatable("gui.button.done");
+                        case NONE -> throw new IllegalStateException("Non-advancing dialogue cannot render an advance action");
+                    };
+            int nextWidth = preview ? Math.min(actionWidth, Math.max(60, font.width(label) + 14)) : actionWidth;
+            int actionLeft = left + panelWidth - nextWidth - 10;
             drawDialogueAction(context, new DialogueRow(label,
-                    new DialogueClick(DialogueClickKind.ADVANCE, null, null, null)),
-                    actionLeft, bottom - 24, actionWidth, 18);
+                    new DialogueClick(reviewingHistory ? DialogueClickKind.REVIEW_NEXT : DialogueClickKind.ADVANCE,
+                            null, null, null)),
+                    actionLeft, bottom - 24, nextWidth, 18);
         }
     }
 
@@ -721,6 +742,24 @@ public class InteractScreen extends AbstractDynamicScreen {
             leaveDialogueMode();
             return true;
         }
+        if (click.kind() == DialogueClickKind.TOGGLE_ASK) {
+            askExpanded = !askExpanded;
+            return true;
+        }
+        if (click.kind() == DialogueClickKind.PREVIOUS) {
+            if (presentation.reviewPrevious()) {
+                dialoguePassageScroll = 0;
+                return true;
+            }
+            return false;
+        }
+        if (click.kind() == DialogueClickKind.REVIEW_NEXT) {
+            if (presentation.reviewNext()) {
+                dialoguePassageScroll = 0;
+                return true;
+            }
+            return false;
+        }
         if (click.kind() == DialogueClickKind.TOPICS) {
             requestDialogueTopics();
             return true;
@@ -779,6 +818,9 @@ public class InteractScreen extends AbstractDynamicScreen {
         SELECT,
         CHOICE,
         ADVANCE,
+        PREVIOUS,
+        REVIEW_NEXT,
+        TOGGLE_ASK,
         TOPICS,
         BACK
     }
