@@ -13,12 +13,14 @@ import net.conczin.mca.util.network.datasync.CDataParameter;
 import net.conczin.mca.util.network.datasync.CParameter;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
+import net.minecraft.world.entity.ai.village.poi.PoiType;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.entity.player.Player;
@@ -27,6 +29,7 @@ import net.minecraft.world.level.pathfinder.Path;
 
 import java.util.Comparator;
 import java.util.Optional;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 /**
@@ -56,21 +59,27 @@ public class Residency {
     public void setWorkplace(ServerPlayer player) {
         ServerLevel level = (ServerLevel) player.level();
         PoiManager poiManager = level.getPoiManager();
+        VillagerProfession currentProfession = entity.getVillagerData().getProfession();
+        boolean keepsProfession = currentProfession != VillagerProfession.NONE
+                && !Config.getServerConfig().villagersChangeProfession;
+        Predicate<Holder<PoiType>> jobSiteFilter = keepsProfession
+                ? currentProfession.heldJobSite()
+                : VillagerProfession.ALL_ACQUIRABLE_JOBS;
         Optional<BlockPos> freeSite = poiManager.findClosest(
-                VillagerProfession.ALL_ACQUIRABLE_JOBS,
+                jobSiteFilter,
                 a -> true,
                 entity.blockPosition(),
                 WORKPLACE_SEARCH_RADIUS,
                 PoiManager.Occupancy.HAS_SPACE
         );
-        Optional<BlockPos> potentialJobSite = getRememberedWorkplace(level, MemoryModuleType.POTENTIAL_JOB_SITE);
-        Optional<BlockPos> currentJobSite = getRememberedWorkplace(level, MemoryModuleType.JOB_SITE);
+        Optional<BlockPos> potentialJobSite = getRememberedWorkplace(level, MemoryModuleType.POTENTIAL_JOB_SITE, jobSiteFilter);
+        Optional<BlockPos> currentJobSite = getRememberedWorkplace(level, MemoryModuleType.JOB_SITE, jobSiteFilter);
 
         selectWorkplaceCandidate(entity.blockPosition(), freeSite, potentialJobSite, currentJobSite).ifPresentOrElse(blockPos -> {
             boolean alreadyOwned = potentialJobSite.filter(blockPos::equals).isPresent()
                     || currentJobSite.filter(blockPos::equals).isPresent();
             if (!alreadyOwned && poiManager.take(
-                    VillagerProfession.ALL_ACQUIRABLE_JOBS,
+                    jobSiteFilter,
                     (registryEntry, candidatePos) -> candidatePos.equals(blockPos),
                     blockPos,
                     1
@@ -88,8 +97,7 @@ public class Residency {
             poiManager.getType(blockPos).flatMap(registryEntry -> BuiltInRegistries.VILLAGER_PROFESSION.stream()
                     .filter(profession -> profession.heldJobSite().test(registryEntry))
                     .findFirst()).ifPresent(profession -> {
-                VillagerProfession oldProfession = entity.getVillagerData().getProfession();
-                if (oldProfession == profession) {
+                if (currentProfession == profession || keepsProfession) {
                     return;
                 }
                 int villagerLevel = entity.getVillagerData().getLevel();
@@ -121,12 +129,12 @@ public class Residency {
         return potentialJobSite.or(() -> freeSite).or(() -> currentJobSite);
     }
 
-    private Optional<BlockPos> getRememberedWorkplace(ServerLevel level, MemoryModuleType<GlobalPos> memoryType) {
+    private Optional<BlockPos> getRememberedWorkplace(ServerLevel level, MemoryModuleType<GlobalPos> memoryType, Predicate<Holder<PoiType>> jobSiteFilter) {
         return entity.getBrain().getMemory(memoryType)
                 .filter(globalPos -> globalPos.dimension().equals(level.dimension()))
                 .map(GlobalPos::pos)
                 .filter(pos -> pos.distSqr(entity.blockPosition()) <= (double) WORKPLACE_SEARCH_RADIUS * WORKPLACE_SEARCH_RADIUS)
-                .filter(pos -> level.getPoiManager().exists(pos, VillagerProfession.ALL_ACQUIRABLE_JOBS));
+                .filter(pos -> level.getPoiManager().exists(pos, jobSiteFilter));
     }
 
     private void clearWorkplaceMemory(MemoryModuleType<GlobalPos> memoryType, GlobalPos selectedWorkplace) {

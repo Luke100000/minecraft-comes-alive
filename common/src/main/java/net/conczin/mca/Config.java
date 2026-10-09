@@ -13,12 +13,14 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 public final class Config extends CommonConfig {
     private static final int VERSION = 2;
+    private static final int DEFAULTS_VERSION = 1;
     private static final Config INSTANCE = loadOrCreate();
 
     private static CommonConfig serverConfig;
@@ -630,6 +632,15 @@ public final class Config extends CommonConfig {
     public List<String> villagerDimensionBlacklist = List.of();
 
     /**
+     * Villagers carrying any of these scoreboard tags are never converted into MCA villagers.
+     * Used to leave tagged villagers of other mods untouched, e.g. From the Fog's door ghosts.
+     */
+    public List<String> villagerTagBlacklist = List.of(
+            "doorGhost",
+            "herobrineEntity"
+    );
+
+    /**
      * List of allowed spawn reasons for villager conversion.
      */
     public List<String> allowedSpawnReasons = List.of(
@@ -861,7 +872,13 @@ public final class Config extends CommonConfig {
      * Maps modded professions to MCA professions for clothing conversion.
      * Only adult clothing is used; toddlers and children remain unchanged.
      */
-    public Map<String, String> professionConversionsMap = Map.of();
+    public Map<String, String> professionConversionsMap = Map.of(
+            "villagersplus:alchemist", "minecraft:cleric",
+            "villagersplus:horticulturist", "minecraft:farmer",
+            "villagersplus:miner", "mca:miner",
+            "villagersplus:oceanographer", "minecraft:fisherman",
+            "villagersplus:occultist", "mca:cultist"
+    );
 
     /**
      * Maps traits to shader locations, applied to players when camera entity has the trait.
@@ -880,7 +897,13 @@ public final class Config extends CommonConfig {
             "morph", "arms",
             "firstpersonmod", "arms",
             "firstperson", "arms",
-            "epicfight", "all"
+            "epicfight", "all",
+            "mowziesmobs", "all",
+            "cpm", "all",
+            "walkers", "arms",
+            "remorphed", "arms",
+            "parcool", "all",
+            "mobends", "all"
     );
 
     /**
@@ -904,6 +927,23 @@ public final class Config extends CommonConfig {
         return new File("./config/mca.json");
     }
 
+    /**
+     * Which set of default map entries this config has already been migrated to; 0 means it
+     * predates the migration. Persisted so a default a user removes is not restored on reload.
+     */
+    public int configDefaultsVersion;
+
+    /**
+     * Adds default map entries a config file predates without dropping any it already has.
+     */
+    private static <K, V> Map<K, V> mergeDefaults(Map<K, V> current, Map<K, V> defaults) {
+        Map<K, V> merged = new LinkedHashMap<>(defaults);
+        if (current != null) {
+            merged.putAll(current);
+        }
+        return merged;
+    }
+
     public static Config loadOrCreate() {
         File file = getConfigFile();
         if (file.exists()) {
@@ -912,6 +952,11 @@ public final class Config extends CommonConfig {
                 Config config = gson.fromJson(reader, Config.class);
                 if (config == null || config.version != VERSION) {
                     config = new Config();
+                } else if (config.configDefaultsVersion < DEFAULTS_VERSION) {
+                    Config defaults = new Config();
+                    config.professionConversionsMap = mergeDefaults(config.professionConversionsMap, defaults.professionConversionsMap);
+                    config.playerRendererBlacklist = mergeDefaults(config.playerRendererBlacklist, defaults.playerRendererBlacklist);
+                    config.configDefaultsVersion = DEFAULTS_VERSION;
                 }
                 config.save();
                 return config;
@@ -975,6 +1020,7 @@ public final class Config extends CommonConfig {
 
         try (FileWriter writer = new FileWriter(getConfigFile())) {
             version = VERSION;
+            configDefaultsVersion = DEFAULTS_VERSION;
             Gson gson = new GsonBuilder().setPrettyPrinting().create();
             gson.toJson(this, writer);
         } catch (IOException e) {
