@@ -46,11 +46,11 @@ import java.util.function.Consumer;
 
 @SuppressWarnings("deprecation")
 public class BlueprintScreen extends ExtendedScreen {
-    private static final BlueprintSessionState SESSION_STATE = new BlueprintSessionState();
+    private static Object sessionLevelIdentity;
 
     public static void maintainSessionState(Minecraft client) {
         BlueprintTerrainRenderer.onClientLevelChanged(client.level);
-        SESSION_STATE.onClientLevelChanged(client.level);
+        onClientLevelChanged(client.level);
     }
 
     //gui element Y positions
@@ -81,11 +81,11 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final double MAP_ZOOM_FACTOR = 1.1D;
     private static final double MAP_DRAG_THRESHOLD = 3.0D;
     private static final float[] MAP_SCALE_PRESETS = {0.5F, 1.0F, 2.0F, 3.0F, 4.0F, 6.0F, 8.0F};
-    private Integer selectedFloorOrdinal;
-    private boolean mapScaleFit;
-    private float mapScale;
-    private boolean playerCentered;
-    private boolean showPlayerHead;
+    private static Integer selectedFloorOrdinal = 0;
+    private static boolean mapScaleFit = true;
+    private static float mapScale = 1.0F;
+    private static boolean playerCentered;
+    private static boolean showPlayerHead = true;
     // 1.19.3: This needs to be the MC type, DO NOT TOUCH !!!
     private final List<net.minecraft.client.gui.components.Button> catalogButtons = new LinkedList<>();
     private Village village;
@@ -113,8 +113,8 @@ public class BlueprintScreen extends ExtendedScreen {
     private TooltipButtonWidget removeRoomButton;
     private ButtonWidget removeBuildingButton;
     private boolean selectPlayerFloorOnNextVillageResponse;
-    private boolean showBuildingIcons;
-    private boolean showTerrain;
+    private static boolean showBuildingIcons = true;
+    private static boolean showTerrain = true;
     private List<Integer> floorOrdinals = List.of();
     private int structureCount;
     private RoomTypeResolver roomTypeResolver = RoomTypeResolver.create(null);
@@ -122,10 +122,10 @@ public class BlueprintScreen extends ExtendedScreen {
     private BlueprintMapGeometry mapGeometry = BlueprintMapGeometry.empty();
     private final BlueprintMapRenderer mapRenderer = new BlueprintMapRenderer();
     private final MapPanState mapPanState = new MapPanState();
-    private Integer mapCenterVillageId;
-    private boolean mapCenterAutomatic;
-    private double mapCenterX;
-    private double mapCenterZ;
+    private static Integer mapCenterVillageId;
+    private static boolean mapCenterAutomatic = true;
+    private static double mapCenterX;
+    private static double mapCenterZ;
     private BuildingType selectedBuilding;
     private UUID selectedVillager;
     private BlockPos lastRoomScanPosition;
@@ -138,17 +138,22 @@ public class BlueprintScreen extends ExtendedScreen {
 
     public BlueprintScreen() {
         super(Component.literal("Blueprint"));
-        SESSION_STATE.restore(this);
     }
 
     static void onClientLevelChanged(Object levelIdentity) {
-        SESSION_STATE.onClientLevelChanged(levelIdentity);
-    }
-
-    @Override
-    public void removed() {
-        SESSION_STATE.remember(this);
-        super.removed();
+        if (sessionLevelIdentity == levelIdentity) return;
+        sessionLevelIdentity = levelIdentity;
+        selectedFloorOrdinal = 0;
+        mapScaleFit = true;
+        mapScale = 1.0F;
+        playerCentered = false;
+        showPlayerHead = true;
+        showBuildingIcons = true;
+        showTerrain = true;
+        mapCenterVillageId = null;
+        mapCenterAutomatic = true;
+        mapCenterX = 0.0D;
+        mapCenterZ = 0.0D;
     }
 
     private void saveVillage() {
@@ -944,69 +949,6 @@ public class BlueprintScreen extends ExtendedScreen {
             active = false;
             panning = false;
             return wasPanning;
-        }
-    }
-
-    private static final class BlueprintSessionState {
-        private Object levelIdentity;
-        private Integer selectedFloorOrdinal = 0;
-        private boolean mapScaleFit = true;
-        private float mapScale = 1.0F;
-        private boolean playerCentered;
-        private boolean showPlayerHead = true;
-        private boolean showBuildingIcons = true;
-        private boolean showTerrain = true;
-        private Integer mapCenterVillageId;
-        private boolean mapCenterAutomatic = true;
-        private double mapCenterX;
-        private double mapCenterZ;
-
-        void onClientLevelChanged(Object levelIdentity) {
-            if (this.levelIdentity == levelIdentity) return;
-            this.levelIdentity = levelIdentity;
-            reset();
-        }
-
-        void restore(BlueprintScreen screen) {
-            screen.selectedFloorOrdinal = selectedFloorOrdinal;
-            screen.mapScaleFit = mapScaleFit;
-            screen.mapScale = mapScale;
-            screen.playerCentered = playerCentered;
-            screen.showPlayerHead = showPlayerHead;
-            screen.showBuildingIcons = showBuildingIcons;
-            screen.showTerrain = showTerrain;
-            screen.mapCenterVillageId = mapCenterVillageId;
-            screen.mapCenterAutomatic = mapCenterAutomatic;
-            screen.mapCenterX = mapCenterX;
-            screen.mapCenterZ = mapCenterZ;
-        }
-
-        void remember(BlueprintScreen screen) {
-            selectedFloorOrdinal = screen.selectedFloorOrdinal;
-            mapScaleFit = screen.mapScaleFit;
-            mapScale = screen.mapScale;
-            playerCentered = screen.playerCentered;
-            showPlayerHead = screen.showPlayerHead;
-            showBuildingIcons = screen.showBuildingIcons;
-            showTerrain = screen.showTerrain;
-            mapCenterVillageId = screen.mapCenterVillageId;
-            mapCenterAutomatic = screen.mapCenterAutomatic;
-            mapCenterX = screen.mapCenterX;
-            mapCenterZ = screen.mapCenterZ;
-        }
-
-        private void reset() {
-            selectedFloorOrdinal = 0;
-            mapScaleFit = true;
-            mapScale = 1.0F;
-            playerCentered = false;
-            showPlayerHead = true;
-            showBuildingIcons = true;
-            showTerrain = true;
-            mapCenterVillageId = null;
-            mapCenterAutomatic = true;
-            mapCenterX = 0.0D;
-            mapCenterZ = 0.0D;
         }
     }
 
