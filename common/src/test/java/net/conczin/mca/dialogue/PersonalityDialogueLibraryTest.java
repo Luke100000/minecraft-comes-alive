@@ -126,6 +126,55 @@ class PersonalityDialogueLibraryTest {
         assertEquals(Set.of("comfort", "give_space"), ids);
     }
 
+    @Test
+    void followupDoesNotInventNightOrRepairs() throws Exception {
+        JsonObject locale = translations();
+        for (String suffix : List.of("prompt", "resume", "remember", "small_step", "progress", "morning")) {
+            String line = locale.get("dialogue_event.mca.personal.gloomy_reflection_followup." + suffix).getAsString();
+            assertFalse(line.toLowerCase(java.util.Locale.ROOT).matches(
+                    ".*(night|sunrise|morning|latch|repair|fixed|door).*"), suffix + ": " + line);
+        }
+        String repair = locale.get("dialogue_event.mca.ambient.personality_crabby_good_work.line.0").getAsString();
+        assertFalse(repair.contains("has been") || repair.contains("properly fixed"), repair);
+    }
+
+    @Test
+    void hourIndependentAmbientTopicsCannotAssumeAfternoonOrSunset() throws Exception {
+        JsonObject locale = translations();
+        for (String subject : List.of("relaxed_afternoon", "upbeat_prediction")) {
+            JsonObject ambient = json("ambient/personality_" + subject);
+            assertEquals(1, ambient.getAsJsonArray("requirements").size());
+            JsonArray passages = ambient.getAsJsonObject("nodes").getAsJsonObject("main").getAsJsonArray("lines");
+            for (var key : passages) {
+                String line = locale.get(key.getAsString()).getAsString();
+                assertFalse(line.toLowerCase(java.util.Locale.ROOT).matches(
+                        ".*(afternoon|sunset|before sunrise|before dusk).*"), line);
+            }
+        }
+    }
+
+    @Test
+    void personalityAmbientResumeLabelsAreSpecificAndNatural() throws Exception {
+        JsonObject locale = translations();
+        for (Entry entry : COVERAGE) {
+            for (String path : List.of(entry.first(), entry.second())) {
+                if (path.equals("ambient/crabby_night") || path.equals("ambient/rain_relaxed")) continue;
+                String key = json(path).getAsJsonObject("presentation").get("resume_prompt").getAsString();
+                String label = locale.get(key).getAsString();
+                assertFalse(label.startsWith("We were talking about "), key + ": " + label);
+                assertTrue(label.length() >= 22, key + " should describe the conversation");
+            }
+        }
+    }
+
+    private static JsonObject translations() throws IOException {
+        try (InputStream input = PersonalityDialogueLibraryTest.class.getClassLoader()
+                .getResourceAsStream("assets/mca_dialogue/lang/en_us.json")) {
+            assertNotNull(input);
+            return JsonParser.parseString(new String(input.readAllBytes(), StandardCharsets.UTF_8)).getAsJsonObject();
+        }
+    }
+
     private static void assertPersonalityCoverage(Entry entry) throws Exception {
         JsonObject story = json(entry.story());
         assertEquals("highlighted", story.getAsJsonObject("presentation").get("mode").getAsString());

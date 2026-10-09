@@ -1,5 +1,8 @@
 package net.conczin.mca.server.world.data;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import net.conczin.mca.dialogue.DialogueEvent;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -17,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -37,6 +41,39 @@ class DialogueEventHistoryTest {
     private static final UUID VILLAGER = UUID.fromString("00000000-0000-0000-0000-000000000010");
     private static final ResourceLocation STORY_ID = id("story/example");
     private static final ResourceLocation OTHER_ID = id("story/other");
+
+    @Test
+    void anxiousFollowupUnlocksOnlyAfterLatestCompletedMakePlanChoice() throws Exception {
+        ResourceLocation storyId = id("personal/personality_anxious");
+        String resource = "data/mca/dialogue_events/personal/personality_anxious.json";
+        DialogueEvent story;
+        try (var stream = getClass().getClassLoader().getResourceAsStream(resource)) {
+            assertTrue(stream != null, resource);
+            story = DialogueEvent.decode(storyId, JsonParser.parseString(
+                    new String(stream.readAllBytes(), StandardCharsets.UTF_8)).getAsJsonObject());
+        }
+        String followupResource = "data/mca/dialogue_events/personal/personality_anxious_followup.json";
+        try (var stream = getClass().getClassLoader().getResourceAsStream(followupResource)) {
+            assertTrue(stream != null, followupResource);
+            JsonArray requirements = JsonParser.parseString(
+                    new String(stream.readAllBytes(), StandardCharsets.UTF_8))
+                    .getAsJsonObject().getAsJsonArray("requirements");
+            assertTrue(requirements.toString().contains("\"event\":\"mca:personal/personality_anxious\""));
+            assertTrue(requirements.toString().contains("\"choice\":\"make_plan\""));
+        }
+        DialogueEventHistory history = new DialogueEventHistory();
+        assertFalse(history.completed(PLAYER_A, VILLAGER, storyId));
+        // Unfinished dialogue has not committed; neither history prerequisite is true.
+        assertFalse(history.chose(PLAYER_A, VILLAGER, storyId, "make_plan"));
+        history.complete(PLAYER_A, VILLAGER, story, Set.of("offer_reassurance"), 1_000L, RandomSource.create(1L));
+        assertTrue(history.completed(PLAYER_A, VILLAGER, storyId));
+        assertFalse(history.chose(PLAYER_A, VILLAGER, storyId, "make_plan"));
+        history.complete(PLAYER_A, VILLAGER, story, Set.of("make_plan"), 25_000L, RandomSource.create(2L));
+        assertTrue(history.chose(PLAYER_A, VILLAGER, storyId, "make_plan"));
+        assertFalse(history.chose(PLAYER_B, VILLAGER, storyId, "make_plan"));
+        history.complete(PLAYER_A, VILLAGER, story, Set.of("offer_reassurance"), 50_000L, RandomSource.create(3L));
+        assertFalse(history.chose(PLAYER_A, VILLAGER, storyId, "make_plan"));
+    }
 
     @Test
     void storyCompletionChoicesAndCooldownRoundTrip() {
