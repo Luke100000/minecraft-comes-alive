@@ -1,31 +1,105 @@
 package net.conczin.mca.mixin.client;
 
-import com.llamalad7.mixinextras.injector.ModifyReturnValue;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.conczin.mca.MCAClient;
-import net.minecraft.client.renderer.RenderType;
+import net.conczin.mca.client.model.MCAModelMorphology;
+import net.conczin.mca.client.resources.SkinExporter;
+import net.conczin.mca.entity.VillagerLike;
+import net.conczin.mca.entity.ai.relationship.AgeState;
+import net.minecraft.client.model.EntityModel;
+import net.minecraft.client.model.PlayerModel;
+import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
+import net.minecraft.util.FastColor;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.player.Player;
-import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
 @Mixin(LivingEntityRenderer.class)
-public class MixinLivingEntityRenderer<T extends LivingEntity> {
-    @ModifyReturnValue(
-            method = "getRenderType(Lnet/minecraft/world/entity/LivingEntity;ZZZ)Lnet/minecraft/client/renderer/RenderType;",
-            at = @At("RETURN")
+public abstract class MixinLivingEntityRenderer {
+    @WrapOperation(
+            method = "render(Lnet/minecraft/world/entity/LivingEntity;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/client/model/EntityModel;setupAnim(Lnet/minecraft/world/entity/Entity;FFFFF)V"
+            )
     )
-    private @Nullable RenderType mca$hideVanillaPlayerModel(
-            @Nullable RenderType original,
-            T entity,
-            boolean showBody,
-            boolean translucent,
-            boolean showOutline
+    private void mca$applyPlayerRenderStateAfterAnimation(
+            EntityModel<?> model,
+            Entity entity,
+            float limbAngle,
+            float limbDistance,
+            float animationProgress,
+            float headYaw,
+            float headPitch,
+            Operation<Void> original
     ) {
-        // Disable the original model while MCA's villager renderer is active.
-        return entity instanceof Player && MCAClient.useVillagerRenderer(entity.getUUID())
-                ? null
-                : original;
+        if (!(entity instanceof AbstractClientPlayer player)
+                || !(model instanceof PlayerModel<?> playerModel)
+                || !MCAClient.isPlayerRendererAllowed()) {
+            original.call(model, entity, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
+            return;
+        }
+
+        VillagerLike<?> villager = MCAClient.getGeneticsPlayerData(player.getUUID())
+                .orElse(null);
+        if (villager == null) {
+            original.call(model, entity, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
+            return;
+        }
+
+        if (villager.getAgeState() == AgeState.BABY && !player.isPassenger()) {
+            limbDistance = (float) Math.sin(player.tickCount / 12.0F);
+            limbAngle = (float) Math.cos(player.tickCount / 9.0F) * 3.0F;
+            headYaw += (float) Math.sin(player.tickCount / 2.0F);
+        }
+
+        original.call(model, entity, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
+
+        MCAModelMorphology.applyHeadScale(playerModel.head, playerModel.hat, villager.getVillagerDimensions().getHead());
+
+        if (villager.getPlayerModel() == VillagerLike.PlayerModel.VILLAGER) {
+            playerModel.jacket.visible = false;
+            playerModel.leftSleeve.visible = false;
+            playerModel.rightSleeve.visible = false;
+            playerModel.leftPants.visible = false;
+            playerModel.rightPants.visible = false;
+        }
+    }
+
+    @WrapOperation(
+            method = "render(Lnet/minecraft/world/entity/LivingEntity;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/client/model/EntityModel;renderToBuffer(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;III)V"
+            )
+    )
+    private void mca$tintVillagerSkin(
+            EntityModel<?> model,
+            PoseStack matrices,
+            VertexConsumer vertices,
+            int light,
+            int overlay,
+            int color,
+            Operation<Void> original,
+            LivingEntity entity
+    ) {
+        VillagerLike<?> villager = entity instanceof VillagerLike<?> villagerEntity
+                ? villagerEntity
+                : entity instanceof AbstractClientPlayer player && MCAClient.useVillagerRenderer(player.getUUID())
+                        ? MCAClient.resolveVillager(player)
+                        : null;
+        if (villager != null) {
+            color = FastColor.ARGB32.multiply(
+                    color,
+                    SkinExporter.getSkinColor(villager)
+            );
+        }
+        original.call(model, matrices, vertices, light, overlay, color);
     }
 }

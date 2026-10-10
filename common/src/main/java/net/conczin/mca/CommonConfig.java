@@ -53,6 +53,12 @@ public class CommonConfig {
     public int addContentGloballyPermissionLevel = 3;
 
     /**
+     * Additionally allow non-privileged players to contribute new global skins,
+     * without permission to replace or remove existing entries.
+     */
+    public boolean allowEveryoneToAddContentGlobally = false;
+
+    /**
      * Allow players to modify their size.
      */
     public boolean allowPlayerSizeAdjustment = true;

@@ -24,9 +24,15 @@ public class CustomClothingManager {
     static final Storage<Clothing> CLOTHING_DUMMY = new Storage<>();
     static final Storage<Hair> HAIR_DUMMY = new Storage<>();
 
-    public static boolean canEdit(ServerPlayer player) {
+    /** Global entries belong to the server; a client-side button is not authorization. */
+    public static boolean canManage(ServerPlayer player) {
         return player.hasPermissions(Config.getInstance().addContentGloballyPermissionLevel)
                || player.serverLevel().getServer().isSingleplayerOwner(player.getGameProfile());
+    }
+
+    public static boolean canAdd(ServerPlayer player, boolean alreadyExists) {
+        return canManage(player)
+                || (!alreadyExists && Config.getInstance().allowEveryoneToAddContentGlobally);
     }
 
     public static Storage<Clothing> getClothing() {

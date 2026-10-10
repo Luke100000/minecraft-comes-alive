@@ -64,9 +64,9 @@ public final class Workspace {
 
     public SkinListEntry toListEntry() {
         if (skinType == SkinLibraryScreen.SkinType.CLOTHING) {
-            return new Clothing("immersive_library:" + contentid, profession, temperature, false, gender);
+            return new Clothing(SkinCache.libraryIdentifier(contentid), profession, temperature, false, gender);
         } else {
-            return new Hair("immersive_library:" + contentid);
+            return new Hair(SkinCache.libraryIdentifier(contentid));
         }
     }
 

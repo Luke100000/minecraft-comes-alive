@@ -31,6 +31,7 @@ public class LimitedVillagerEditorScreen extends VillagerEditorScreen {
     @Override
     protected void setPage(String page) {
         this.page = page;
+        clearWidgets();
 
         if (page.equals("general")) {
             int y = height / 2 - 40;
@@ -42,7 +43,9 @@ public class LimitedVillagerEditorScreen extends VillagerEditorScreen {
             //which model to use
             if (villagerUUID.equals(playerUUID)) {
                 addModelSelectionWidgets(width / 2, y);
+                y += 24;
             }
+            addSlimToggle(width / 2, y);
         }
     }
 
@@ -50,7 +53,7 @@ public class LimitedVillagerEditorScreen extends VillagerEditorScreen {
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
         super.render(context, mouseX, mouseY, delta);
 
-        int y = height / 2 + 20;
+        int y = height / 2 + 44;
         List<Component> wrap = FlowingText.wrap(Component.translatable("gui.villager_editor.customization_hint"), DATA_WIDTH);
         for (Component text : wrap) {
             context.drawCenteredString(font, text, width / 2 + DATA_WIDTH / 2, y, 0xFFFFFFFF);
