@@ -301,6 +301,7 @@ Common examples:
 { "type": "mca:trait", "value": "lactose_intolerance" }
 { "type": "mca:health", "min": 1.0, "max": 10.0 }
 { "type": "mca:infected" }
+{ "type": "mca:infected", "min": 0.2, "max": 0.8 }
 { "type": "mca:time", "value": "night" }
 { "type": "mca:time", "min": 13000, "max": 23000 }
 { "type": "mca:weather", "value": "rain" }
@@ -309,6 +310,12 @@ Common examples:
 { "type": "mca:village_has_building", "value": "infirmary" }
 { "type": "mca:in_building", "value": "infirmary" }
 ```
+
+`mca:infected` requires an active infection. Its optional inclusive `min`/`max`
+bounds use infection progress from `0.0` to `1.0` (for example, `0.2` is 20%).
+Omit either bound for an open-ended infection stage, or omit both to match any
+currently infected villager. A healthy villager never matches, even with
+`"max": 0.0`.
 
 `village_has_building` means the village contains that building type.
 `in_building` means this villager is actually inside that building context. Use
@@ -341,6 +348,20 @@ history:
 Use only registered recent-event IDs. The engine does not invent facts such as
 "recently mourned", "recently cured", or "recently revived" just because a
 conversation wants them.
+
+Omit `within_ticks` to match any recorded occurrence, however long ago it
+happened:
+
+```json
+{ "type": "mca:recent_event", "event": "mca:cured" }
+```
+
+With `within_ticks`, only the latest recorded occurrence is tested against the
+specified window. Without it, the check remains true after the window expires.
+Combine the permanent condition with `mca:not` around a time-bounded condition
+to write stories about past cures but exclude recently cured villagers. The
+`mca:cured` event is recorded when an MCA zombie villager is converted back;
+curing an infection *before* zombification does not currently record that event.
 
 ## Story history and follow-ups
 

@@ -104,6 +104,34 @@ class DialogueEventParsingTest {
     }
 
     @Test
+    void acceptsOptionalInfectionProgressBoundsAndPreservesThemOnRoundTrip() {
+        for (String requirement : List.of(
+                "{ \"type\": \"mca:infected\" }",
+                "{ \"type\": \"mca:infected\", \"min\": 0.2 }",
+                "{ \"type\": \"mca:infected\", \"max\": 0.8 }",
+                "{ \"type\": \"mca:infected\", \"min\": 0.2, \"max\": 0.8 }"
+        )) {
+            DialogueCondition condition = decode(baseEvent("[" + requirement + "]", "{ \"type\": \"always\" }"))
+                    .requirements().getFirst();
+            assertEquals(JsonParser.parseString(requirement),
+                    DialogueCondition.CODEC.encodeStart(JsonOps.INSTANCE, condition).getOrThrow());
+        }
+    }
+
+    @Test
+    void rejectsInvalidInfectionProgressBounds() {
+        for (String requirement : List.of(
+                "{ \"type\": \"mca:infected\", \"min\": -0.01 }",
+                "{ \"type\": \"mca:infected\", \"max\": 1.01 }",
+                "{ \"type\": \"mca:infected\", \"min\": 0.8, \"max\": 0.2 }",
+                "{ \"type\": \"mca:infected\", \"min\": \"0.2\" }",
+                "{ \"type\": \"mca:infected\", \"max\": null }"
+        )) {
+            assertDecodeFails(baseEvent("[" + requirement + "]", "{ \"type\": \"always\" }"));
+        }
+    }
+
+    @Test
     void rejectsDuplicateChoiceIdsAcrossNodes() {
         assertDecodeFails("""
                 {
@@ -316,7 +344,7 @@ class DialogueEventParsingTest {
     }
 
     @Test
-    void parsesRecentEventConditionWithExplicitWindow() {
+    void parsesRecentEventConditionWithOptionalWindow() {
         DialogueEvent event = decode(baseEvent(
                 "[{ \"type\": \"mca:recent_event\", \"event\": \"mca:attacked\", \"within_ticks\": 200 }]",
                 "{ \"type\": \"always\" }"
@@ -324,10 +352,12 @@ class DialogueEventParsingTest {
         DialogueCondition.Defined condition = assertInstanceOf(DialogueCondition.Defined.class, event.requirements().get(0));
         assertEquals(DialogueCondition.RECENT_EVENT, condition.type());
 
-        assertDecodeFails(baseEvent(
-                "[{ \"type\": \"mca:recent_event\", \"event\": \"mca:attacked\" }]",
+        DialogueCondition ever = decode(baseEvent(
+                "[{ \"type\": \"mca:recent_event\", \"event\": \"mca:cured\" }]",
                 "{ \"type\": \"always\" }"
-        ));
+        )).requirements().getFirst();
+        assertEquals(JsonParser.parseString("{ \"type\": \"mca:recent_event\", \"event\": \"mca:cured\" }"),
+                DialogueCondition.CODEC.encodeStart(JsonOps.INSTANCE, ever).getOrThrow());
         assertDecodeFails(baseEvent(
                 "[{ \"type\": \"mca:recent_event\", \"event\": \"mca:attacked\", \"within_ticks\": -1 }]",
                 "{ \"type\": \"always\" }"

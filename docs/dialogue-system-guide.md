@@ -176,6 +176,7 @@ Every requirement is a typed JSON object, for example `{ "type": "mca:hearts", "
 | `mca:rank` | `value`: MCA `Rank` enum for the player's rank in the villager's village |
 | `mca:trait` | `value`: registered MCA trait, such as `lactose_intolerance` |
 | `mca:health` | `min` and/or `max`: villager's current health |
+| `mca:infected` | Active infection; optional inclusive progress `min`/`max` from 0.0 to 1.0, or neither for any infection |
 | `mca:gender` | `value`: valid MCA `Gender` enum |
 | `mca:pregnancy` | Required boolean `value`; if true, optional `min_progress`, `max_progress`, `child_gender` |
 | `mca:time` | `value: "day"` / `"night"`, or a `min`/`max` range in [0, 24000] game-time ticks |
@@ -189,7 +190,7 @@ Every requirement is a typed JSON object, for example `{ "type": "mca:hearts", "
 | `mca:tag` | `value`: item tag ID; optional `min`/`max` count in player's inventory |
 | `mca:inventory` | Exactly one `item` ID or `tag` ID; optional `min`/`max` inventory count |
 | `mca:memory` | `id`: long-term villager memory; optional `var: "player"` and `present` (default true) |
-| `mca:recent_event` | `event`: a registered villager life-event ID; required nonnegative `within_ticks` |
+| `mca:recent_event` | `event`: a registered villager life-event ID; optional nonnegative `within_ticks` (omitted means ever occurred) |
 | `mca:hit_by` | No additional fields; villager's tracked hit-by-this-player state |
 | `mca:village_has_space` | No additional fields; capacity in the player's last-seen village |
 | `mca:event_completed` | `event`: full event ID with a successful `story` completion for this pair |

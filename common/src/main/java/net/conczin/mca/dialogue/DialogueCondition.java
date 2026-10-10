@@ -274,7 +274,10 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
             requireOnly(object, "type", "min", "max");
             validateDoubleRange(object, "health", 0.0D, Double.MAX_VALUE);
         } else if (INFECTED.equals(type)) {
-            requireOnly(object, "type");
+            requireOnly(object, "type", "min", "max");
+            if (object.has("min") || object.has("max")) {
+                validateDoubleRange(object, "infected", 0.0D, 1.0D);
+            }
         } else if (TIME.equals(type)) {
             requireOnly(object, "type", "value", "min", "max");
             boolean named = object.has("value");
@@ -323,8 +326,7 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
             if (!RecentVillagerEvents.isRegistered(event)) {
                 throw new IllegalArgumentException("Unknown recent villager event '" + event + "'");
             }
-            long withinTicks = requiredLong(object, "within_ticks");
-            if (withinTicks < 0L) {
+            if (object.has("within_ticks") && requiredLong(object, "within_ticks") < 0L) {
                 throw new IllegalArgumentException("mca:recent_event within_ticks must be non-negative");
             }
         } else if (BUILDING_ASSIGNMENT.equals(type)) {
@@ -445,7 +447,8 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
     }
 
     private static Evaluation evaluateInfected(Defined condition, DialogueContext context) {
-        return result(context.villager().isInfected());
+        return result(context.villager().isInfected()
+                && inDoubleRange(condition.definition(), context.villager().getInfectionProgress()));
     }
 
     private static Evaluation evaluateTime(Defined condition, DialogueContext context) {
@@ -557,12 +560,13 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
     private static Evaluation evaluateRecentEvent(Defined condition, DialogueContext context) {
         JsonObject definition = condition.definition();
         ResourceLocation event = requiredLocation(definition, "event");
-        long withinTicks = requiredLong(definition, "within_ticks");
-        return result(context.villager().getRecentVillagerEvents().occurredWithin(
-                event,
+        RecentVillagerEvents events = context.villager().getRecentVillagerEvents();
+        if (!definition.has("within_ticks")) {
+            return result(events.hasOccurred(event));
+        }
+        return result(events.occurredWithin(event,
                 RecentVillagerEvents.gameTime(context.level()),
-                withinTicks
-        ));
+                requiredLong(definition, "within_ticks")));
     }
 
     private static Evaluation evaluateHitBy(Defined condition, DialogueContext context) {

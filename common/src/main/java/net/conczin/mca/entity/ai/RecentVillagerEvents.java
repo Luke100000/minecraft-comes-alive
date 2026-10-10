@@ -46,6 +46,10 @@ public final class RecentVillagerEvents {
         occurrences.merge(event, gameTime, Math::max);
     }
 
+    public boolean hasOccurred(ResourceLocation event) {
+        return REGISTERED.contains(event) && occurrences.containsKey(event);
+    }
+
     public boolean occurredWithin(ResourceLocation event, long gameTime, long withinTicks) {
         Objects.requireNonNull(event, "event");
         if (withinTicks < 0 || !REGISTERED.contains(event)) {

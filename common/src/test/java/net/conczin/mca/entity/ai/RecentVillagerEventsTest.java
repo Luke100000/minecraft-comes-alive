@@ -48,4 +48,23 @@ class RecentVillagerEventsTest {
         assertTrue(events.occurredWithin(RecentVillagerEvents.REVIVED, 510L, 10L));
         assertFalse(events.occurredWithin(RecentVillagerEvents.REVIVED, 511L, 10L));
     }
+
+    @Test
+    void recordsAOnceOccurredFactPermanentlyAcrossReloadsAndRepeatedCures() {
+        RecentVillagerEvents events = new RecentVillagerEvents();
+        assertFalse(events.hasOccurred(RecentVillagerEvents.CURED));
+        events.record(RecentVillagerEvents.CURED, 1_000L);
+
+        CompoundTag nbt = new CompoundTag();
+        events.writeToNbt(nbt);
+        RecentVillagerEvents restored = new RecentVillagerEvents();
+        restored.readFromNbt(nbt);
+
+        assertTrue(restored.hasOccurred(RecentVillagerEvents.CURED));
+        assertFalse(restored.occurredWithin(RecentVillagerEvents.CURED, 50_000L, 24_000L));
+        restored.record(RecentVillagerEvents.CURED, 50_000L);
+        assertTrue(restored.hasOccurred(RecentVillagerEvents.CURED));
+        assertTrue(restored.occurredWithin(RecentVillagerEvents.CURED, 50_000L, 0L));
+        assertFalse(restored.hasOccurred(MCA.locate("not_registered")));
+    }
 }
