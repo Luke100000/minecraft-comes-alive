@@ -73,7 +73,7 @@ public class VillagerEntityBaseModelMCA<T extends LivingEntity & VillagerLike<T>
     @Override
     public void prepareMobModel(T entity, float limbAngle, float limbDistance, float tickDelta) {
         updateArmPoses(entity);
-        super.prepareMobModel(entity, limbDistance, limbAngle, tickDelta);
+        super.prepareMobModel(entity, limbAngle, limbDistance, tickDelta);
         riding |= entity.getAgeState() == AgeState.BABY;
     }
 
@@ -136,7 +136,7 @@ public class VillagerEntityBaseModelMCA<T extends LivingEntity & VillagerLike<T>
         }
 
         //and add our own
-        limbAngle /= (0.2f + villager.getRawVerticalScaleFactor());
+        limbAngle /= (0.2f + villager.getVisualVerticalScaleFactor());
 
         super.setupAnim(villager, limbAngle, limbDistance, animationProgress, headYaw, headPitch);
 
