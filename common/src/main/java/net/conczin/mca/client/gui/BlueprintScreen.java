@@ -1419,7 +1419,7 @@ public class BlueprintScreen extends ExtendedScreen {
         this.tooltipFactory = BlueprintTooltipFactory.create(village, roomTypeResolver);
         this.mapGeometry = BlueprintMapGeometry.build(village, roomTypeResolver);
         RoomScanPlan scanContext = getPlayerRoomScanPlan();
-        if (selectPlayerFloorOnNextVillageResponse
+        if (selectPlayerFloorOnNextVillageResponse && selectedFloorOrdinal != null
                 && scanContext.mode() == Village.RoomScanMode.UPDATE_ROOM) {
             selectPlayerFloor(scanContext);
         }
