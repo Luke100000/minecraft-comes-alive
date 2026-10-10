@@ -4,6 +4,7 @@ plugins {
 }
 
 dependencies {
+    compileOnly "net.conczin:immersive_melodies:${immersive_melodies_version}+${minecraft_version}+neoforge"
     implementation(jarJar(
             "io.github.llamalad7:mixinextras-neoforge:${mixin_extras_version}"
     )) {

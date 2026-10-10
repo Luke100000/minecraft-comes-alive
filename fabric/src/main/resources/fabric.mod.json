@@ -35,5 +35,9 @@
     "java": ">=17"
   },
   "suggests": {
+    "immersive_melodies": ">=${immersive_melodies_version}"
+  },
+  "breaks": {
+    "immersive_melodies": "<${immersive_melodies_version}"
   }
 }
