@@ -102,7 +102,6 @@ public class ExtendedFindPointOfInterestTask extends Behavior<VillagerEntityMCA>
         };
         Set<Pair<Holder<PoiType>, BlockPos>> set = pointOfInterestStorage
                 .findAllClosestFirstWithType(this.poiType, predicate, villager.blockPosition(), POI_SORTING_RADIUS, PoiManager.Occupancy.HAS_SPACE)
-                .limit(MAX_POSITIONS_PER_RUN)
                 .filter(poi -> {
                     boolean valid = isValidPoi(serverWorld, poi.getSecond());
                     if (!valid) {
@@ -110,6 +109,7 @@ public class ExtendedFindPointOfInterestTask extends Behavior<VillagerEntityMCA>
                     }
                     return valid;
                 })
+                .limit(MAX_POSITIONS_PER_RUN)
                 .collect(Collectors.toSet());
         Path path = findPathToPois(villager, set);
         if (path != null && path.canReach()) {
