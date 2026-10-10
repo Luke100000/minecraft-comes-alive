@@ -271,12 +271,18 @@ Current built-in server actions are:
 { "type": "mca:remember", "id": "some_memory" }
 { "type": "mca:remember", "id": "some_memory", "var": "player", "time": 24000 }
 { "type": "mca:command", "command": "existing_villager_command" }
+{ "type": "mca:slap", "amount": 2.0 }
 ```
 
 Actions are server-owned and are committed with the successful conversation
 completion, not when the client merely displays a line. Use `mca:command` only to
 delegate to an existing MCA gameplay command owner; do not reimplement gameplay
 logic in dialogue data.
+
+`mca:slap` makes the villager swing an empty hand when one is available and hit
+the player with the specified positive amount of vanilla mob-attack damage
+(1.0 damage = half a heart). It does not equip or use a weapon. Legacy
+`{ "type": "mca:command", "command": "slap" }` remains supported at 1.0 damage.
 
 `mca:hearts` already follows MCA's heart-reward behavior. Do not automatically add
 an equal `mca:mood` action beside it just to mimic legacy dialogue data, because

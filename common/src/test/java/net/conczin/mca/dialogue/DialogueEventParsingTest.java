@@ -530,6 +530,36 @@ class DialogueEventParsingTest {
     }
 
     @Test
+    void slapActionAcceptsPositiveDamageAndRoundTrips() {
+        for (String definition : List.of(
+                "{ \"type\": \"mca:slap\", \"amount\": 1 }",
+                "{ \"type\": \"mca:slap\", \"amount\": 2.5 }"
+        )) {
+            DialogueAction action = DialogueAction.CODEC.parse(JsonOps.INSTANCE,
+                    JsonParser.parseString(definition)).getOrThrow();
+            DialogueAction.Slap slap = assertInstanceOf(DialogueAction.Slap.class, action);
+            assertTrue(slap.amount() > 0);
+            assertEquals(JsonParser.parseString(definition),
+                    DialogueAction.CODEC.encodeStart(JsonOps.INSTANCE, action).getOrThrow());
+        }
+    }
+
+    @Test
+    void slapActionRejectsInvalidDamage() {
+        for (String definition : List.of(
+                "{ \"type\": \"mca:slap\" }",
+                "{ \"type\": \"mca:slap\", \"amount\": 0 }",
+                "{ \"type\": \"mca:slap\", \"amount\": -1 }",
+                "{ \"type\": \"mca:slap\", \"amount\": 1e400 }",
+                "{ \"type\": \"mca:slap\", \"amount\": \"2\" }",
+                "{ \"type\": \"mca:slap\", \"amount\": 1, \"typo\": true }"
+        )) {
+            assertTrue(DialogueAction.CODEC.parse(JsonOps.INSTANCE,
+                    JsonParser.parseString(definition)).error().isPresent());
+        }
+    }
+
+    @Test
     void rejectsChoiceIdsAndChoiceListsThatExceedWireBounds() {
         assertDecodeFails("""
                 {

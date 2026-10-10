@@ -18,13 +18,14 @@ import java.util.function.BiConsumer;
 
 /** Immutable, validated dialogue effects committed by the server at conversation completion. */
 public sealed interface DialogueAction permits DialogueAction.Hearts, DialogueAction.Mood,
-        DialogueAction.Remember, DialogueAction.Command, DialogueAction.Registered {
+        DialogueAction.Remember, DialogueAction.Command, DialogueAction.Slap, DialogueAction.Registered {
     ResourceLocation HEARTS = MCA.locate("hearts");
     ResourceLocation MOOD = MCA.locate("mood");
     ResourceLocation REMEMBER = MCA.locate("remember");
     ResourceLocation COMMAND = MCA.locate("command");
+    ResourceLocation SLAP = MCA.locate("slap");
 
-    Set<ResourceLocation> BUILTIN_TYPES = Set.of(HEARTS, MOOD, REMEMBER, COMMAND);
+    Set<ResourceLocation> BUILTIN_TYPES = Set.of(HEARTS, MOOD, REMEMBER, COMMAND, SLAP);
 
     Codec<DialogueAction> CODEC = Codec.PASSTHROUGH.comapFlatMap(
             DialogueAction::decodeDynamic,
@@ -69,6 +70,14 @@ public sealed interface DialogueAction permits DialogueAction.Hearts, DialogueAc
                 requireOnly(object, "type", "amount");
                 return DataResult.success(new Mood(requiredInt(object, "amount")));
             }
+            if (SLAP.equals(type)) {
+                requireOnly(object, "type", "amount");
+                if (!object.has("amount") || !object.get("amount").isJsonPrimitive()
+                        || !object.getAsJsonPrimitive("amount").isNumber()) {
+                    throw new IllegalArgumentException("mca:slap requires a numeric amount");
+                }
+                return DataResult.success(new Slap(object.get("amount").getAsFloat()));
+            }
             if (REMEMBER.equals(type)) {
                 requireOnly(object, "type", "id", "var", "time");
                 String id = requiredNonblankString(object, "id");
@@ -109,6 +118,8 @@ public sealed interface DialogueAction permits DialogueAction.Hearts, DialogueAc
             object.addProperty("amount", hearts.amount());
         } else if (action instanceof Mood mood) {
             object.addProperty("amount", mood.amount());
+        } else if (action instanceof Slap slap) {
+            object.addProperty("amount", slap.amount());
         } else if (action instanceof Remember remember) {
             object.addProperty("id", remember.id());
             if (remember.playerScoped()) {
@@ -214,6 +225,19 @@ public sealed interface DialogueAction permits DialogueAction.Hearts, DialogueAc
         @Override
         public ResourceLocation type() {
             return MOOD;
+        }
+    }
+
+    record Slap(float amount) implements DialogueAction {
+        public Slap {
+            if (!Float.isFinite(amount) || amount <= 0.0f) {
+                throw new IllegalArgumentException("mca:slap amount must be finite and positive");
+            }
+        }
+
+        @Override
+        public ResourceLocation type() {
+            return SLAP;
         }
     }
 

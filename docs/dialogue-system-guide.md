@@ -213,6 +213,7 @@ Actions are permitted on a direct choice or a selected outcome. An event or node
 | `mca:mood` | Integer `amount` | Adjusts the villager's mood by that delta |
 | `mca:remember` | Nonblank `id`, optional `var: "player"`, optional positive integer `time` in ticks | Records villager long-term memory, optionally scoped to this player or timed |
 | `mca:command` | Nonblank `command` | Delegates to a supported existing villager interaction command |
+| `mca:slap` | Positive finite numeric `amount` (damage points) | Villager swings an empty hand when available and damages the player using vanilla mob-attack attribution |
 
 Examples:
 
@@ -221,6 +222,7 @@ Examples:
 { "type": "mca:mood", "amount": -2 }
 { "type": "mca:remember", "id": "heard_about_storm", "var": "player", "time": 24000 }
 { "type": "mca:command", "command": "stay_in_village" }
+{ "type": "mca:slap", "amount": 2.0 }
 ```
 
 The current `mca:command` allowlist in `DialogueEngine` is `adopt`, `apologize`, `divorcePapers`, `divorceConfirm`, `hire_short`, `hire_long`, `procreate`, `slap`, `stay_in_village`, and `location`. The engine allows at most **one** command action in a run and requires the owner to report it accepted before committing. It does not execute arbitrary Minecraft command strings.

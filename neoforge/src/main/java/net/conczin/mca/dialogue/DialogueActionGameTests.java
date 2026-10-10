@@ -23,6 +23,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -492,6 +493,65 @@ public final class DialogueActionGameTests {
     }
 
     @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void slapActionUsesEmptyHandAndVillagerDamageOnce(GameTestHelper helper) {
+        Fixture fixture = fixture(helper, true);
+        disableFakePlayerSpawnProtection(fixture.player());
+        fixture.player().setHealth(20.0f);
+        fixture.villager().setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.IRON_SWORD));
+        DialogueEvent event = DialogueEvent.decode(ResourceLocation.parse("mca:test/slap_action"),
+                JsonParser.parseString("""
+                {
+                  "trigger":"talk",
+                  "presentation":{"mode":"ask","prompt":"test.prompt","resume_prompt":"test.resume"},
+                  "repeat":{"type":"once"},"start":"start",
+                  "nodes":{
+                    "start":{"line":"test.start","choices":[{
+                      "id":"support","text":"test.support",
+                      "actions":[{"type":"mca:slap","amount":3.0}],"next":"done"}]},
+                    "done":{"line":"test.done","complete":true}
+                  }
+                }
+                """).getAsJsonObject());
+        DialogueEngine engine = engine(event);
+        DialogueEngine.DialogueNodeView terminal = startAndChoose(engine, fixture, event);
+        helper.assertTrue(fixture.player().getHealth() == 20.0f,
+                "offering and choosing the reply must not slap before final acknowledgement");
+
+        helper.assertTrue(engine.advance(fixture.player(), terminal.offerToken()).completed(),
+                "acknowledging the last line must apply the slap");
+        helper.assertTrue(fixture.player().getHealth() == 17.0f,
+                "authored slap must deal 3 damage, but health was " + fixture.player().getHealth());
+        helper.assertTrue(fixture.player().getLastDamageSource() != null
+                        && fixture.player().getLastDamageSource().getEntity() == fixture.villager(),
+                "damage must be attributed to the slapping villager");
+        helper.assertTrue(fixture.villager().swinging && fixture.villager().swingingArm == InteractionHand.OFF_HAND,
+                "an occupied main hand must use the empty off hand for vanilla swing animation");
+        helper.assertTrue(fixture.villager().getMainHandItem().is(Items.IRON_SWORD)
+                        && fixture.villager().getOffhandItem().isEmpty(),
+                "slapping must not disturb villager equipment");
+        helper.assertTrue(engine.advance(fixture.player(), terminal.offerToken()).status()
+                        == DialogueEngine.TransitionStatus.REJECTED,
+                "a used acknowledgement token must not repeat damage");
+        helper.assertTrue(fixture.player().getHealth() == 17.0f,
+                "slap damage must be applied only once");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void legacySlapCommandKeepsDefaultDamageAndSwings(GameTestHelper helper) {
+        Fixture fixture = fixture(helper, true);
+        disableFakePlayerSpawnProtection(fixture.player());
+        fixture.player().setHealth(20.0f);
+        helper.assertTrue(fixture.villager().getInteractions().handleDialogue(fixture.player(), "slap").accepted(),
+                "legacy slap command should remain supported");
+        helper.assertTrue(fixture.player().getHealth() == 19.0f,
+                "legacy slap command must retain 1 damage default");
+        helper.assertTrue(fixture.villager().swinging && fixture.villager().swingingArm == InteractionHand.MAIN_HAND,
+                "an empty main hand must swing through vanilla animation");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void rejectedProcreateCommandFailsClosed(GameTestHelper helper) {
         Fixture fixture = fixture(helper);
         DialogueEvent event = commandStory(ResourceLocation.parse("mca:test/procreate_rejected"), "procreate");
@@ -798,17 +858,37 @@ public final class DialogueActionGameTests {
     }
 
     private static Fixture fixture(GameTestHelper helper) {
+        return fixture(helper, false);
+    }
+
+    private static Fixture fixture(GameTestHelper helper, boolean damageablePlayer) {
         BlockPos position = helper.absolutePos(BlockPos.ZERO);
-        ServerPlayer player = new FakePlayer(
-                helper.getLevel(),
-                new GameProfile(UUID.randomUUID(), "dialogue-actions")
-        );
+        GameProfile profile = new GameProfile(UUID.randomUUID(), "dialogue-actions");
+        ServerPlayer player = damageablePlayer ? new FakePlayer(helper.getLevel(), profile) {
+            @Override
+            public boolean isInvulnerableTo(DamageSource source) {
+                // NeoForge FakePlayer is permanently invulnerable by default.
+                return false;
+            }
+        } : new FakePlayer(helper.getLevel(), profile);
         player.setPos(position.getCenter());
         VillagerEntityMCA villager = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(helper.getLevel()));
         villager.setAgeState(AgeState.ADULT);
         villager.setPos(player.getX() + 1.0D, player.getY(), player.getZ());
         helper.getLevel().addFreshEntity(villager);
         return new Fixture(player, villager);
+    }
+
+    private static void disableFakePlayerSpawnProtection(ServerPlayer player) {
+        // FakePlayers used in dialogue fixtures are not ticked; their vanilla 60-tick
+        // spawn invulnerability would otherwise suppress every normal mob attack.
+        try {
+            Field field = ServerPlayer.class.getDeclaredField("spawnInvulnerableTime");
+            field.setAccessible(true);
+            field.setInt(player, 0);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("Could not disable FakePlayer spawn protection", exception);
+        }
     }
 
     @SuppressWarnings("unchecked")

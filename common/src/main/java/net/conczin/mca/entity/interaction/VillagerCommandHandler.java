@@ -23,6 +23,7 @@ import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Saddleable;
 import net.minecraft.world.entity.ai.util.RandomPos;
@@ -307,10 +308,18 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                     entity.sendChatMessage(player, "dialogue.location.forgot");
                 }
             }
-            case "slap" -> player.hurt(player.level().damageSources().cramming(), 1.0f);
+            case "slap" -> slap(player, 1.0f);
         }
 
         return super.handle(player, command);
+    }
+
+    /** Swing an empty hand when possible and apply villager-attributed damage. */
+    public void slap(ServerPlayer player, float amount) {
+        InteractionHand hand = entity.getMainHandItem().isEmpty() ? InteractionHand.MAIN_HAND
+                : InteractionHand.OFF_HAND;
+        entity.swing(hand);
+        player.hurt(entity.damageSources().mobAttack(entity), amount);
     }
 
     private DialogueCommandResult handleProcreate(ServerPlayer player, Memories memory) {

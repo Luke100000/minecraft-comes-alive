@@ -942,6 +942,8 @@ public final class DialogueEngine {
                 villager.getVillagerBrain().rewardHearts(player, hearts.amount());
             } else if (action instanceof DialogueAction.Mood mood) {
                 villager.getVillagerBrain().modifyMoodValue(mood.amount());
+            } else if (action instanceof DialogueAction.Slap slap) {
+                villager.getInteractions().slap(player, slap.amount());
             } else if (action instanceof DialogueAction.Remember remember) {
                 String id = remember.playerScoped()
                         ? remember.id() + "." + player.getUUID()
