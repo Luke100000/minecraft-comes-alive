@@ -89,6 +89,21 @@ class DialogueEventParsingTest {
     }
 
     @Test
+    void decodesCurrentInfectionRequirementAndNegation() {
+        DialogueEvent event = decode(baseEvent("""
+                [
+                  { "type": "mca:infected" },
+                  { "type": "mca:not", "condition": { "type": "mca:infected" } }
+                ]
+                """, "{ \"type\": \"always\" }"));
+
+        DialogueCondition.Defined infected = assertInstanceOf(DialogueCondition.Defined.class, event.requirements().getFirst());
+        assertEquals(ResourceLocation.fromNamespaceAndPath("mca", "infected"), infected.type());
+        DialogueCondition.Not not = assertInstanceOf(DialogueCondition.Not.class, event.requirements().get(1));
+        assertEquals(ResourceLocation.fromNamespaceAndPath("mca", "infected"), not.condition().type());
+    }
+
+    @Test
     void rejectsDuplicateChoiceIdsAcrossNodes() {
         assertDecodeFails("""
                 {
@@ -442,6 +457,7 @@ class DialogueEventParsingTest {
                 "{ \"type\": \"mca:inventory\" }",
                 "{ \"type\": \"mca:item\", \"value\": \"minecraft:oak_log\", \"min\": 3, \"max\": 2 }",
                 "{ \"type\": \"mca:health\", \"min\": 1, \"typo\": true }",
+                "{ \"type\": \"mca:infected\", \"progress\": 0.2 }",
                 "{ \"type\": \"mca:hit_by\", \"within_ticks\": 20 }",
                 "{ \"type\": \"mca:village_has_space\", \"value\": true }"
         )) {

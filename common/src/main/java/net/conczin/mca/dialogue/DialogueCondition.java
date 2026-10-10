@@ -67,6 +67,7 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
     ResourceLocation RANK = MCA.locate("rank");
     ResourceLocation TRAIT = MCA.locate("trait");
     ResourceLocation HEALTH = MCA.locate("health");
+    ResourceLocation INFECTED = MCA.locate("infected");
     ResourceLocation TIME = MCA.locate("time");
     ResourceLocation WEATHER = MCA.locate("weather");
     ResourceLocation BIOME = MCA.locate("biome");
@@ -86,7 +87,7 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
 
     Set<ResourceLocation> BUILTIN_TYPES = Set.of(
             PERSONALITY, MOOD, HEARTS, RELATIONSHIP, FAMILY, AGE_GROUP, PROFESSION, RANK, TRAIT,
-            HEALTH, TIME, WEATHER, BIOME, ADVANCEMENT, VILLAGE_HAS_BUILDING, IN_BUILDING,
+            HEALTH, INFECTED, TIME, WEATHER, BIOME, ADVANCEMENT, VILLAGE_HAS_BUILDING, IN_BUILDING,
             GENDER, PREGNANCY, INVENTORY, ITEM, TAG, MEMORY, RECENT_EVENT, BUILDING_ASSIGNMENT,
             HIT_BY, VILLAGE_HAS_SPACE, EVENT_COMPLETED, EVENT_CHOICE, NOT
     );
@@ -114,6 +115,7 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
             Map.entry(RANK, DialogueCondition::evaluateRank),
             Map.entry(TRAIT, DialogueCondition::evaluateTrait),
             Map.entry(HEALTH, DialogueCondition::evaluateHealth),
+            Map.entry(INFECTED, DialogueCondition::evaluateInfected),
             Map.entry(TIME, DialogueCondition::evaluateTime),
             Map.entry(WEATHER, DialogueCondition::evaluateWeather),
             Map.entry(BIOME, DialogueCondition::evaluateBiome),
@@ -271,6 +273,8 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
         } else if (HEALTH.equals(type)) {
             requireOnly(object, "type", "min", "max");
             validateDoubleRange(object, "health", 0.0D, Double.MAX_VALUE);
+        } else if (INFECTED.equals(type)) {
+            requireOnly(object, "type");
         } else if (TIME.equals(type)) {
             requireOnly(object, "type", "value", "min", "max");
             boolean named = object.has("value");
@@ -438,6 +442,10 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
 
     private static Evaluation evaluateHealth(Defined condition, DialogueContext context) {
         return result(inDoubleRange(condition.definition(), context.villager().getHealth()));
+    }
+
+    private static Evaluation evaluateInfected(Defined condition, DialogueContext context) {
+        return result(context.villager().isInfected());
     }
 
     private static Evaluation evaluateTime(Defined condition, DialogueContext context) {

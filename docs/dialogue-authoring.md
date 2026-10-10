@@ -300,6 +300,7 @@ Common examples:
 { "type": "mca:profession", "value": "minecraft:farmer" }
 { "type": "mca:trait", "value": "lactose_intolerance" }
 { "type": "mca:health", "min": 1.0, "max": 10.0 }
+{ "type": "mca:infected" }
 { "type": "mca:time", "value": "night" }
 { "type": "mca:time", "min": 13000, "max": 23000 }
 { "type": "mca:weather", "value": "rain" }
