@@ -20,7 +20,7 @@ import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.zombie.Zombie;
@@ -139,7 +139,7 @@ public final class ShelterDistributionGameTests {
         BlockPos nearest = house(helper.getLevel(), center);
         BlockPos alternative = house(helper.getLevel(), center.east(16));
         fill(helper, center, 3);
-        Villager owner = new Villager(EntityType.VILLAGER, helper.getLevel());
+        Villager owner = new Villager(EntityTypes.VILLAGER, helper.getLevel());
         owner.setPos(Vec3.atBottomCenterOf(center.east(3).south(3)));
         owner.setNoAi(true);
         owner.getBrain().setMemory(MemoryModuleType.HOME, GlobalPos.of(helper.getLevel().dimension(), nearest));
@@ -365,7 +365,7 @@ public final class ShelterDistributionGameTests {
     @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air",
             timeoutTicks = 220)
     public static void unreachableShelterBacksOffRepeatedRouteSearches(GameTestHelper helper) {
-        BlockPos center = arena(helper, 46);
+        BlockPos center = arena(helper, 49);
         house(helper.getLevel(), center);
         var incoming = spawn(helper, center.east(2).south(9));
         BlockPos trapped = incoming.blockPosition();
@@ -408,7 +408,7 @@ public final class ShelterDistributionGameTests {
         BlockPos alternative = house(helper.getLevel(), center.east(16));
         fill(helper, center, 6);
         var incoming = spawn(helper, center.east(2).south(9));
-        var threat = new Zombie(EntityType.ZOMBIE, helper.getLevel());
+        var threat = new Zombie(EntityTypes.ZOMBIE, helper.getLevel());
         threat.setPos(incoming.position().add(30, 0, 0));
         THREATS.add(threat);
         incoming.getBrain().setMemory(MemoryModuleType.NEAREST_HOSTILE, threat);
@@ -426,7 +426,7 @@ public final class ShelterDistributionGameTests {
         BlockPos alternative = house(helper.getLevel(), center.east(16));
         fill(helper, center, 6);
         var incoming = spawn(helper, center.east(2).south(9));
-        var threat = new Villager(EntityType.VILLAGER, helper.getLevel());
+        var threat = new Villager(EntityTypes.VILLAGER, helper.getLevel());
         THREATS.add(threat);
         helper.runAfterDelay(10, () -> {
             threat.setPos(incoming.position().add(6, 0, 0));
@@ -686,8 +686,8 @@ public final class ShelterDistributionGameTests {
         BlockPos alternative = house(helper.getLevel(), center.east(16));
         fill(helper, center, 6);
         var incoming = spawn(helper, center.east(2).south(9));
-        LivingEntity threat = creeper ? new Creeper(EntityType.CREEPER, helper.getLevel())
-                : new Zombie(EntityType.ZOMBIE, helper.getLevel());
+        LivingEntity threat = creeper ? new Creeper(EntityTypes.CREEPER, helper.getLevel())
+                : new Zombie(EntityTypes.ZOMBIE, helper.getLevel());
         threat.setPos(incoming.position().add(2, 0, 0));
         THREATS.add(threat);
         // Memory tests do not tick or spawn the threat, so ignited creepers cannot explode fixtures.
@@ -892,7 +892,7 @@ public final class ShelterDistributionGameTests {
         var manager = VillageManager.get(helper.getLevel());
         helper.runAfterDelay(10, () -> {
             helper.assertTrue(manager.getLoadedVillagers().contains(villager), "spawned MCA villager was not indexed");
-            var vanilla = new Villager(EntityType.VILLAGER, helper.getLevel());
+            var vanilla = new Villager(EntityTypes.VILLAGER, helper.getLevel());
             vanilla.setPos(Vec3.atBottomCenterOf(center.east(2)));
             vanilla.setNoAi(true);
             boolean overwrite = Config.getInstance().overwriteOriginalVillagers;
@@ -1220,7 +1220,7 @@ public final class ShelterDistributionGameTests {
     }
 
     private static BlockPos bed(ServerLevel level, BlockPos foot) {
-        var state = Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.EAST);
+        var state = Blocks.BED.pick(net.minecraft.world.item.DyeColor.WHITE).defaultBlockState().setValue(BedBlock.FACING, Direction.EAST);
         put(level, foot, state.setValue(BedBlock.PART, BedPart.FOOT));
         put(level, foot.east(), state.setValue(BedBlock.PART, BedPart.HEAD));
         return foot.east();

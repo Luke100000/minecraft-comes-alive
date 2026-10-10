@@ -101,6 +101,9 @@ public class ExtendedFindPointOfInterestTask extends Behavior<VillagerEntityMCA>
         };
         Set<Pair<Holder<PoiType>, BlockPos>> set = pointOfInterestStorage
                 .findAllClosestFirstWithType(this.poiType, predicate, villager.blockPosition(), POI_SORTING_RADIUS, PoiManager.Occupancy.HAS_SPACE)
+                // The limit MUST come before the validation filter: findAllClosestFirstWithType
+                // force-loads the chunks of every POI within POI_SORTING_RADIUS, so running the
+                // filter first would scan and load the whole radius on every attempt and spike CPU.
                 .limit(MAX_POSITIONS_PER_RUN)
                 .filter(poi -> {
                     boolean valid = isValidPoi(serverWorld, poi.getSecond());

@@ -75,7 +75,7 @@ public final class ArcherArrowFriendlyFireGameTests {
         BlockPos targetPos = helper.absolutePos(new BlockPos(8, 2, 4));
 
         VillagerEntityMCA archer = spawnVillager(helper, archerPos, true);
-        IronGolem golem = EntityType.IRON_GOLEM.create(helper.getLevel(), EntitySpawnReason.STRUCTURE);
+        IronGolem golem = EntityTypes.IRON_GOLEM.create(helper.getLevel(), EntitySpawnReason.STRUCTURE);
         if (golem == null) {
             throw new IllegalStateException("failed to create iron golem bystander");
         }
@@ -84,7 +84,7 @@ public final class ArcherArrowFriendlyFireGameTests {
         golem.setNoGravity(true);
         helper.getLevel().addFreshEntity(golem);
 
-        Zombie target = EntityType.ZOMBIE.create(helper.getLevel(), EntitySpawnReason.STRUCTURE);
+        Zombie target = EntityTypes.ZOMBIE.create(helper.getLevel(), EntitySpawnReason.STRUCTURE);
         if (target == null) {
             throw new IllegalStateException("failed to create zombie target");
         }

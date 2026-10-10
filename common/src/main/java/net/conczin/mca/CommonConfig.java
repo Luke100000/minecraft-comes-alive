@@ -17,6 +17,25 @@ public class CommonConfig {
     public boolean villagersInteractWithFenceGates = true;
 
     /**
+     * If true, MCA villagers may open or close any DoorBlock. Otherwise,
+     * DoorBlocks must be in #minecraft:mob_interactable_doors.
+     * Dramatic Doors follows its own interaction rules.
+     */
+    public boolean villagersInteractWithAnyDoor = false;
+
+    /**
+     * If true, binding a villager to a work station of another profession changes
+     * its profession, resets its level and re-rolls its trades. If false, an
+     * existing profession is kept. Villagers without a profession still adopt one.
+     */
+    public boolean villagersChangeProfession = true;
+
+    /**
+     * If true, a villager called with the whistle also starts following the player.
+     */
+    public boolean whistleCallMakesVillagersFollow = false;
+
+    /**
      * Time (in ticks) until a baby grows up when held as an item.
      */
     public int babyItemGrowUpTime = 24000;

@@ -1,5 +1,6 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
+import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.ai.behavior.BehaviorControl;
@@ -12,7 +13,7 @@ import net.minecraft.world.entity.npc.villager.VillagerProfession;
 
 public class LoseUnimportantJobTask {
     protected static boolean shouldRun(ServerLevel world, Villager entity) {
-        return !((VillagerEntityMCA) entity).isProfessionImportant();
+        return Config.getServerConfig().villagersChangeProfession && !((VillagerEntityMCA) entity).isProfessionImportant();
     }
 
     public static BehaviorControl<Villager> create() {

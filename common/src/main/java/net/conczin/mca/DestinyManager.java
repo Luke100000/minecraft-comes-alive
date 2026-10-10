@@ -15,6 +15,7 @@ public class DestinyManager {
         if (openDestiny && client.gui.screen() == null) {
             assert client.player != null;
             client.gui.setScreen(new DestinyScreen(client.player.getUUID(), allowTeleportation));
+            openDestiny = false;
         }
     }
 

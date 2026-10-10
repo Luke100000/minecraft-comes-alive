@@ -87,7 +87,7 @@ public final class HomelessShelterGameTests {
             Village village = registerStrollHouse(helper, center);
             VillagerEntityMCA villager = spawn(helper, center.north(2));
             STROLL_VILLAGERS.add(villager);
-            villager.getResidency().seekHome();
+            villager.getResidency().reconcileVillageMembership();
             Building room = village.findPhysicalRoomAt(head).orElseThrow();
             helper.assertTrue(room.containsFloorPosition(villager.blockPosition()), "fixture origin is outside registered room");
             helper.assertTrue(!BedApproachTarget.create(helper.getLevel(), head).orElseThrow()
@@ -107,7 +107,7 @@ public final class HomelessShelterGameTests {
             Village village = registerStrollHouse(helper, center);
             VillagerEntityMCA villager = spawn(helper, center.east().south(3));
             STROLL_VILLAGERS.add(villager);
-            villager.getResidency().seekHome();
+            villager.getResidency().reconcileVillageMembership();
             Building room = village.findPhysicalRoomAt(villager.blockPosition()).orElseThrow();
             helper.assertTrue(!room.containsFloorPosition(center.east().south(5))
                     && !helper.getLevel().canSeeSky(center.east().south(5)), "fixture lacks covered exterior floor");
@@ -228,12 +228,12 @@ public final class HomelessShelterGameTests {
             owner[0] = spawn(helper, head);
             STROLL_VILLAGERS.add(owner[0]);
             owner[0].getBrain().setMemory(MemoryModuleType.HOME, GlobalPos.of(level.dimension(), head));
-            if (registered) owner[0].getResidency().seekHomeAfterClaim();
+            if (registered) owner[0].getResidency().onHomeClaimed();
             owner[0].startSleeping(head);
             for (BlockPos position : List.of(head.west(), center.north(2), center.west(2))) {
                 VillagerEntityMCA villager = spawn(helper, position);
                 STROLL_VILLAGERS.add(villager);
-                villager.getResidency().seekHome();
+                villager.getResidency().reconcileVillageMembership();
                 if (position.equals(head.west())) {
                     villager.setPos(Vec3.atBottomCenterOf(position).add(0.0D, 0.5625D, 0.0D));
                 }
@@ -821,7 +821,7 @@ public final class HomelessShelterGameTests {
         ServerLevel level = helper.getLevel();
         BlockPos secondFoot = center.west(3).south();
         BlockPos secondHead = secondFoot.east();
-        var bed = Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.EAST);
+        var bed = Blocks.BED.pick(net.minecraft.world.item.DyeColor.WHITE).defaultBlockState().setValue(BedBlock.FACING, Direction.EAST);
         level.setBlock(secondFoot, bed.setValue(BedBlock.PART, BedPart.FOOT), 3);
         level.setBlock(secondHead, bed.setValue(BedBlock.PART, BedPart.HEAD), 3);
         BlockPos gate = center.west(4);

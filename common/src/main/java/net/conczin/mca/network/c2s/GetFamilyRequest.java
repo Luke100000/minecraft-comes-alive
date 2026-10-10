@@ -5,6 +5,7 @@ import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.GetFamilyResponse;
+import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
@@ -24,8 +25,9 @@ public record GetFamilyRequest() implements HandleablePayload {
     public void handleServer(ServerPlayer player) {
         CompoundTag familyData = new CompoundTag();
         PlayerSaveData playerData = PlayerSaveData.get(player);
+        FamilyTreeNode familyEntry = playerData.getFamilyEntry();
         Stream.concat(
-                        playerData.getFamilyEntry().getAllRelatives(4),
+                        familyEntry.getAllRelatives(4).filter(familyEntry::isRelative),
                         playerData.getPartnerUUID().stream()
                 ).distinct()
                 .map(uuid -> player.level().getEntity(uuid))

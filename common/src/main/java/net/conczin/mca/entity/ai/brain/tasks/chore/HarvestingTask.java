@@ -15,6 +15,7 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.BoneMealItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.*;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
@@ -269,12 +270,14 @@ public class HarvestingTask extends AbstractChoreTask {
 
     private void harvestCrops(ServerLevel world, BlockPos pos) {
         BlockState state = world.getBlockState(pos);
+        BlockEntity blockEntity = world.getBlockEntity(pos);
         if (world.destroyBlock(pos, false, villager)) {
             LootParams.Builder builder = new LootParams.Builder(world)
                     .withParameter(LootContextParams.ORIGIN, villager.position())
                     .withParameter(LootContextParams.TOOL, ItemStack.EMPTY)
                     .withParameter(LootContextParams.THIS_ENTITY, villager)
                     .withParameter(LootContextParams.BLOCK_STATE, state)
+                    .withOptionalParameter(LootContextParams.BLOCK_ENTITY, blockEntity)
                     .withLuck(0);
 
             state.getBlock().getLootTable().ifPresent(lootTable -> {

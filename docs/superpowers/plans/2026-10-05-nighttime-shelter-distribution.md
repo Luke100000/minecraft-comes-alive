@@ -1,160 +1,290 @@
 # Nighttime Shelter Distribution Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Native execution in this chat is recommended because these changes share live entity state and geometry interfaces.
+> **For agentic workers:** Use superpowers:executing-plans for sequential inline implementation. Checkboxes record verified work; documentation reconciliation is not gameplay completion.
 
-**Goal:** Prefer the nearest reachable house below its `bedCount + 5` capacity, allowing overflow for danger or alternatives more than 30 route blocks farther away.
+**Goal:** Incoming homeless REST villagers prefer the nearest reachable whole house below `bedCount + 5`, with safe overflow and at most 64 additional route blocks.
 
-**Architecture:** Resolve house membership through existing MCA geometry, derive admission from bed claims and live villager state, and select a destination in `SeekIndoorShelterTask`. Keep observation, admission, and WALK_TARGET publication on the server thread. Use operation-local geometry snapshots; do not persist shelter reservations or introduce a second movement owner.
+**Architecture:** Reuse `IndoorRoomCache` for room destinations, `SHELTER_BED` for selection, and existing navigation for movement. Establish read-only whole-house membership through the canonical floor/connector owner, then derive admission from existing claims and live intent on the server thread. No independent scanner, cache, persistent reservations, or movement owner.
 
-**Tech Stack:** Minecraft 1.21.1, Java 21 mod source, existing Fabric/NeoForge integration, Gradle wrapper, common JUnit and NeoForge GameTests. Re-read current build metadata before execution; the configured Gradle daemon JDK does not change the source language level.
+**Tech Stack:** Minecraft 1.21.1, Java 21 source, current Fabric/NeoForge Gradle lanes. The daemon JDK does not change the source language level.
 
 **Spec:** [Nighttime shelter distribution design](../specs/2026-10-05-nighttime-shelter-distribution-design.md).
 
-## Global Constraints
+## Revision and execution status
 
-- Normal capacity is `bedCount + 5`; compatible bed heads count once, occupied or not.
-- Maximum additional walking-route distance is **30 blocks**, inclusive, relative to the nearest reachable shelter in the inspected candidate set.
-- Preserve the current **48-block** anchor search radius and **20–39 tick** staggered shelter retry cadence. The additional travel allowance does not expand the search radius.
-- Group anchors before limiting path requests to **five distinct houses** per attempt. Several beds must not use up the house budget.
-- Guide incoming homeless REST villagers; already-sheltered villagers stay. Normal HOME return is not subject to this admission rule.
-- PANIC, fleeing, and emergency hiding retain their existing movement owners. Detected danger permits overflow during REST before PANIC begins.
-- Preserve HOME, bed tickets, floor/room registration, and dimension ownership. Read-only geometry must not mark village data dirty or register houses.
-- Keep mutable world, entity, brain, POI, and navigation access on the server thread. No locks, atomics, parallel streams, executors, or asynchronous scans are required.
-- Ordinary unregistered village houses are required. Unknown membership preserves shelter access, but is a reported limitation rather than proof that distribution works.
-- Preserve unrelated staged/unstaged changes. Do not create checkouts/worktrees, use WSL, commit, push, or stage all files. The user requested a plan; those actions are not authorized by an imported workflow.
-- Use disposable worlds only. Do not modify or copy the user's `neoforge/run/saves/New World`.
+Revised 2026-10-05 using
+[Inspect pathfinding task context](thread://01a10d25-2949-7020-9c55-27bd9f739771?hostId=local)
+and the current source. That chat's completed change removes the stale registered
+cache shortcut and doorway idle targets. Prior saved logs show **17 shelter tests
+and both loader builds passed**. Fresh implementation checks are recorded below.
 
-## Review Focus
+Execution started inline on `dev/1.21.1` at the user's explicit request.
+The fresh baseline passed all 17 shelter tests. New admission regressions failed
+for the intended behavior before the change, then passed after implementation.
+The earlier documentation-only scope is superseded by the inline implementation.
 
-1. Two adjacent unregistered houses sharing a roof must not become one capacity pool: Task 2 geometry regression.
-2. A claimed bed with an unloaded/vanilla owner must still reserve a place without counting a loaded owner twice: Task 3 admission regression.
-3. An incoming villager beyond the local house bounding box must count, and a cleared target must stop counting: Task 3 lifecycle regression.
-4. A house straddling the discovery radius must count its whole known geometry, not just anchors within 48 blocks: Task 2 boundary regression.
-5. A spatially close house behind a long wall must not defeat the 30-route-block safety fallback: Task 4 route regression.
+The old Task 2 proposed a geometry adapter as if room discovery still needed a
+new implementation. Room discovery, shared caching, remembered selection, and
+room-local wandering now exist and are reused. Whole-house grouping now uses fresh
+floor evidence in that same cache; a room is not treated as a guessed capacity pool.
+
+The user subsequently authorized inline implementation. The source now supplies
+whole-house admission. Client appearance and larger-village profiling remain open.
+
+## Global constraints
+
+- Capacity `bedCount + 5`; additional route allowance **64.0 blocks inclusive**.
+- Preserve anchor radius **48 blocks**, shelter retry **20–39 ticks**, local wandering retry **40 ticks**, and current room-cache limits/invalidation.
+- Group before limiting navigation to **ten distinct houses**; separately establish a bounded geometry-discovery budget.
+- Guide incoming homeless REST villagers only. Already sheltered villagers stay; HOME owners return independently.
+- PANIC/HIDE/fleeing/combat movement retains priority. Danger and unavailable/too-distant alternatives permit overflow.
+- Preserve HOME/tickets, registered geometry, and existing movement ownership.
+- Use immutable local data where useful; mutable Minecraft access and count/publish stay on the server thread.
+- No threads, locks, executors, parallel streams, new reservation map, new long-lived cache, or automatic registration.
+- Support ordinary unregistered houses. Unknown whole-house membership permits entry without a guessed cap and is reported as a limitation.
+- Work in the current checkout, preserving other edits. No WSL, new checkout/worktree, staging, commit, or push.
+- Disposable worlds only. Do not modify or copy `neoforge/run/saves/New World`.
+- Run Gradle jobs serially; use only this checkout's supported GameTest filter.
+
+## Review focus
+
+1. Rooms/floors in one house must share capacity without merging adjacent houses.
+2. Returning, sleeping, forced-HOME, vanilla, and unloaded owners must not be counted twice or omitted.
+3. A remembered bed without active arrival must not reserve indefinitely; distant active arrivals must count.
+4. A reached path node must be usable floor even when navigation normalizes the requested target.
+5. Cache expiry, removed partitions, sensor differences, and emergency transitions must not revive stale membership or obstruct escape.
 
 ## File and responsibility map
 
-- Existing `common/src/main/java/net/conczin/mca/entity/ai/brain/tasks/SeekIndoorShelterTask.java`: candidate grouping, operation-local admission, route comparison, and existing destination publication.
-- Existing `common/src/main/java/net/conczin/mca/entity/ai/brain/tasks/EnterBuildingTask.java`: consume the parallel agent's `static boolean hasStandingSpace(Level, PathfinderMob, BlockPos)`; do not create another clearance predicate.
-- Proposed `common/src/main/java/net/conczin/mca/server/world/data/ShelterHouseGeometry.java`: narrow read-only adapter to package-private canonical geometry, needed because registered and unregistered membership cannot be inferred from a bed radius. Task 1 must establish feasibility before this class is kept.
-- Existing `common/src/main/java/net/conczin/mca/server/world/data/Village.java`: only a narrow HOME snapshot accessor if existing APIs cannot provide owner UUIDs and HOME positions. No new persisted fields.
-- Proposed `common/src/test/java/net/conczin/mca/server/world/data/ShelterHouseGeometryTest.java`: Minecraft-aware geometry fixtures and registration immutability.
-- Proposed `neoforge/src/main/java/net/conczin/mca/entity/ai/brain/tasks/ShelterDistributionGameTests.java`: new distribution tests, separate from the other agent's active indoor-movement tests.
-- Existing `neoforge/src/main/java/net/conczin/mca/gametest/McaGameTestsRegistration.java`: register the new class through the established focused test lane.
-- Existing `neoforge/src/main/java/net/conczin/mca/entity/ai/brain/tasks/HomelessShelterGameTests.java`: reuse the other agent's tests without concurrent edits.
+| File | Responsibility |
+| --- | --- |
+| `common/.../entity/ai/brain/tasks/SeekIndoorShelterTask.java` | Ordinary admission, grouped candidates, route comparison, chosen anchor. |
+| `common/.../server/world/data/IndoorRoomCache.java` | Existing room resolution/reuse/invalidation; extend only a proven necessary read-only seam. |
+| `common/.../entity/ai/brain/tasks/EnterBuildingTask.java` | Existing `isUsableFloor(Level, PathfinderMob, BlockPos)` and movement publication. |
+| `common/.../entity/ai/brain/tasks/LocalInsideBrownianWalk.java` | Existing room-local wandering; no capacity policy. |
+| `common/.../entity/ai/MemoryModuleTypeMCA.java` and `brain/VillagerTasksMCA.java` | Existing selection lifecycle and activity guards; change only for a reproduced lifecycle defect. |
+| `common/.../server/world/data/Village.java` | Canonical registered identity and, only if needed, immutable valid HOME snapshot access. |
+| `common/.../server/world/data/ShelterHouseGeometry.java` | Conditional narrow read-only whole-house adapter; create only if Task 1 proves it necessary. |
+| `common/src/test/java/net/conczin/mca/server/world/data/ShelterHouseGeometryTest.java` | Pure immutable membership/grouping assertions when a separable algorithm exists. |
+| `common/src/test/java/net/conczin/mca/entity/ai/brain/tasks/ShelterRouteDistanceTest.java` | Actual Path/Node geometric distance. |
+| `neoforge/src/main/java/net/conczin/mca/entity/ai/brain/tasks/ShelterDistributionGameTests.java` | New admission, lifecycle, route, safety, and arrival regressions. |
+| `neoforge/src/main/java/net/conczin/mca/gametest/McaGameTestsRegistration.java` | Register the new focused test class. |
+| `neoforge/src/main/java/net/conczin/mca/entity/ai/brain/tasks/HomelessShelterGameTests.java` | Existing 17 regressions; consume without overlapping another agent's edits. |
 
-All source paths above are relative to the current repository root. Do not modify the parallel floor-regions implementation merely to satisfy proposed interfaces; adapt the read-only adapter to its final APIs.
+The common ellipses expand to `common/src/main/java/net/conczin/mca`.
+Do not add all proposed files automatically. Follow the current owning APIs.
 
-### Task 1: Establish the indoor-selector and geometry prerequisites
+### Task 1: Refresh the baseline and settle membership interfaces
 
-**Files:** Read the files above and `SelectedFloorScanner.java`, `StructureScanner.java`, `StructureConnector.java`, `FloorGrouping.java`, `FloorGeometry.java`, and the current `Village.java`. Record findings in this plan before implementation.
+**Files:** Read the owners above plus `SelectedFloorScanner`, `BuildingRoomScanner`,
+`RoomPartitioner`, `StructureScanner`, `StructureConnector`, `FloorGeometry`,
+`Structure`, `StructureFloor`, and persistent movement lifecycle.
 
-**Interfaces:** Consumes the completed indoor-selector change and existing structure/floor discovery. Produces a verified mapping for Task 2 and a bounded-cost geometry decision; no gameplay deliverable yet.
+**Consumes:** `IndoorRoomCache.resolve(BlockPos): Optional<Room>`,
+`Room.floorCells(): Set<BlockPos>`, `EnterBuildingTask.isUsableFloor`,
+and `SHELTER_BED: GlobalPos`.
 
-- [ ] Refresh [Backport 1.21.1 pathfinding optim (2)](thread://01a10bd3-3dd2-77e1-995d-79adce443bd9?hostId=local) with `read_thread`. Inspect the actual local diff and fresh test results. Do not message that chat without user authorization or overlap its active edits.
-- [ ] Confirm `EnterBuildingTask.hasStandingSpace` and the actual feet-position selector are present. Run `.\gradlew.bat :neoforge:runGameTestServer -PmcaGameTest=HomelessShelterGameTests --console=plain --no-daemon --no-parallel` once the other agent's Gradle work ends. Require actual movement, leaves, bed-surface, and shelter-reachability cases to pass. An earlier target-only test is insufficient.
-- [ ] Trace read-only unregistered house discovery using `SelectedFloorScanner.Observation`, `StructureScanner.observeFloor`, canonical door ownership, and vertical connectors. Verify one-floor discovery is not silently treated as whole-house discovery. Include an adjacent-house fixture, a staircase, and incomplete registered geometry with autoScan disabled.
-- [ ] Establish a per-operation bound using existing scanner/pathfinding limits. Default building limits are currently 8192 cells and radius 320; these defaults alone are not evidence that repeated scans every 20–39 ticks are affordable. Measure visited cells and elapsed scan time for small natural houses, the multi-floor fixture, and failure at the existing size limit. Identify reuse of observations within the operation and confirm no forced chunk loading.
-- [ ] Record the chosen geometry entry points, measured work, unloaded-chunk behavior, and any required narrow extension in this plan. If exact unregistered whole-house identity cannot be proved within bounded work, report the concrete limitation before implementing Task 2. Do not substitute a radius, register buildings automatically, or silently downgrade the requirement to registered houses.
+**Produces:** An evidence-backed whole-house query contract and bounded-work decision
+for Task 2, plus the arrival lifecycle that Task 3 will count.
 
-This checkpoint is intentional: current source exposes floor discovery, not a proven public read-only whole-house query. A finalized geometry algorithm cannot responsibly be claimed before this investigation.
+- [x] Read the referenced chat and current shared-code changes; confirm fresh discovery, shared room reuse, selected-bed cleanup, room-local wandering, and doorway idle exclusion. Existing performance savings are unmeasured.
+- [x] Run `.\gradlew.bat :neoforge:runGameTestServer -PmcaGameTest=HomelessShelterGameTests --console=plain --no-daemon --no-parallel`.
+  **Expected:** all 17 current required tests actually execute and pass, including partition removal after expiry and real movement. Record exit status and count; old logs are baseline evidence only.
+- [x] Trace registered logical identity separately from fresh physical membership. Trace unregistered internal-door/vertical connector discovery without registering or marking village data dirty. Demonstrate neighboring houses and connected floors using current fixtures.
+- [x] Trace `moveTowardsPersistent`, WALK_TARGET, path completion/retry, REST cleanup, and HOME acquisition. Define when an arrival is active; selected-bed memory alone is insufficient. Verify current-room detection when a retained selected bed points elsewhere.
+- [ ] Measure cold/warm discovery, shared-bed reuse, and the boundary/failure cases. Record visited work, elapsed time, loaded chunk scope, and a total per-attempt geometry bound. Room-cache scan limits alone do not bound repeated house queries.
+- [x] Write the final read-only membership interface into this plan before Task 2. It must distinguish complete membership from unknown, expose compatible bed heads and exact physical membership, and supply existing cached rooms for standing destinations. If the owning API cannot prove whole-house membership at bounded cost, record the exact gap; do not replace it with a per-room cap or blindly copy scanners.
 
-### Task 2: Resolve distinct houses and whole-house membership
+**Expected:** a verified interface, not an assumed `Room == House` conversion.
+This prerequisite is implemented by the recorded contract below.
 
-**Files:** Create `ShelterHouseGeometry.java` and `ShelterHouseGeometryTest.java`. Extend existing geometry owners only where Task 1 identified a necessary narrow read-only seam.
+**Recorded implementation contract:** Reuse `IndoorRoomCache.resolveHouse(BlockPos)`
+and `resolveHouses(List<BlockPos>, int)`. Immutable House exposes compatible bed
+heads, room destinations, exact physical-column membership, and known/unknown
+completeness. Retain fresh full-floor evidence and components in the existing
+cache entry; follow `SelectedFloorScanner.Result.adjacentFloorSeeds()` and existing
+vertical connector handoffs. Registered logical identity supplies additional floor
+seeds, not trusted persisted geometry. Discovery permits 20 new floor scans per
+operation and at most eight floors per house (4096 materialized cells); existing
+per-floor and observed-block/cache limits remain. Unknown membership bypasses capacity.
+The connected-room bed-count regression went RED to GREEN using this owner.
 
-**Interfaces:** Proposed public API in `net.conczin.mca.server.world.data`:
+### Task 2: Implement proven whole-house membership
 
-```java
-static List<House> discover(ServerLevel level, @Nullable Village village,
-                            List<BlockPos> orderedBedAnchors);
-```
+**Files:** Existing geometry owner from Task 1; conditional
+`ShelterHouseGeometry.java` and pure common test; new
+`ShelterDistributionGameTests.java` plus its registrar entry for live-world geometry.
 
-`ShelterHouseGeometry` is public and its method is public static. `House` is a nested immutable public data carrier exposing `Set<BlockPos> bedHeads()`, `Set<BlockPos> floorCells()`, `boolean contains(BlockPos position)`, and `boolean membershipKnown()`. Choose record versus final class to fit the established geometry representation; do not expose mutable world state. A nullable village supports villagers without MCA residency and follows the repository's annotation convention.
+**Consumes:** Task 1's recorded interface and current room cache. **Produces:**
+an operation-local immutable house view with complete bed heads, physical membership,
+canonical identity when present, and known/unknown status. No second mutable store.
 
-- [ ] Write `adjacentUnregisteredHousesRemainDistinct`, `connectedFloorsShareCapacityIdentity`, `incompleteRegisteredHouseUsesFreshGeometry`, `bedOutsideAnchorRadiusStillCountsInResolvedHouse`, and `discoveryDoesNotRegisterOrMutateVillage` tests. Assert two nearby houses remain distinct, connected floors belong to one house, every compatible bed head is counted once, and serialized village data is unchanged. Include an occupied bed and a BedBlock subclass.
+- [x] Register the new GameTest class using the existing disposable-world lane.
+  Write `adjacentUnregisteredHousesRemainDistinct`,
+  `connectedFloorsShareCapacityIdentity`,
+  `wholeHouseBedsExtendBeyondAnchorSearchRadius`,
+  `staleRegisteredRoomDoesNotImposePartialCapacity`, and
+  `registeredDiscoveryDoesNotMutateVillage`.
+  **Assertions:** neighboring houses are separate; internal rooms/floors share one house;
+  occupied/subclass bed heads count once; physical membership includes sleeping and
+  raised standing positions within their exact bands; serialized village state is unchanged.
+- [x] Write unloaded and incomplete membership cases; review oversized discovery bounds.
+  **Assertions:** unknown is explicit, no partial bed count is enforced, no chunk is force-loaded, and known reachable room access is retained. Oversized structures without a resolvable room remain unsupported; no oversized-runtime guarantee is claimed.
+- [x] Run `:neoforge:runGameTestServer -PmcaGameTest=ShelterDistributionGameTests`
+  with the Gradle flags from Task 1. Keep live scanning, changed partitions, bed
+  states, chunk-loading, and village immutability in GameTests; existing common
+  geometry tests exercise immutable cells/topology without a running ServerLevel.
+  Add and run the focused common class only for a separable pure grouping algorithm.
+  **Expected RED:** an observable grouping/membership failure with a valid fixture;
+  missing types or setup failures do not reproduce the requirement.
+- [x] Implement the smallest read-only seam established in Task 1. Scope registered IDs to village/dimension; do not trust persisted topology as current. Reuse existing scanner/connector semantics and cache validation where they fit.
+- [x] Deduplicate all known house beds, including those outside the anchor radius. Group anchors before the ten-house path budget. Resolve repeated beds/rooms once per attempt; enforce the separately recorded geometry bound.
+- [x] Rerun the focused geometry GameTests and any added pure common class.
+  **Expected GREEN:** all membership and immutability assertions pass within the recorded bound. Remove any provisional adapter that an existing owner can replace.
 
-  The adjacent-house fixture must assert:
-  ```java
-  assertEquals(2, houses.size());
-  assertTrue(firstHouse.contains(firstBedHead));
-  assertFalse(firstHouse.contains(secondBedHead));
-  assertEquals(Set.of(firstBedHead), firstHouse.bedHeads());
-  assertEquals(villageBefore, villageAfter);
-  ```
-- [ ] Run `.\gradlew.bat :common:test --tests 'net.conczin.mca.server.world.data.ShelterHouseGeometryTest' --console=plain --no-daemon --no-parallel`. Wire a compilable initial adapter so RED is an incorrect grouping/omitted-floor assertion, not a missing-type or fixture error.
-- [ ] Implement the adapter using Task 1's verified geometry. Registered grouping uses logical building identity scoped to the passed village. Unregistered grouping uses fresh proven topology. Merge fresh evidence with incomplete registered geometry without allocating persistent IDs. Capture whole-house membership, including vertical bands, rather than equating occupied positions with exact floor-cell coordinates.
-- [ ] De-duplicate compatible bed heads over the resolved whole-house geometry, beyond the initial anchor radius where geometry is already resolved. Return one House per identity in nearest-anchor order. Treat unsupported or unloaded geometry as `membershipKnown() == false`; retain that anchor's existing bounded shelter floor candidates but do not invent a capacity number.
-- [ ] Re-run the focused common tests. Require all assertions to pass, and confirm Task 1's work bounds still hold. Document unknown-membership cases and keep geometry snapshots local to one discovery operation.
+### Task 3: Add admission and final route/safety policy together
 
-### Task 3: Derive admission from claims, occupants, and incoming targets
+**Files:** `SeekIndoorShelterTask.java`, conditional narrow `Village.java` HOME
+accessor, `ShelterDistributionGameTests.java`, registrar, and route-distance test.
 
-**Files:** Modify `SeekIndoorShelterTask.java`; add only if needed `Village.java` HOME accessor. Create/register `ShelterDistributionGameTests.java`.
+**Consumes:** Task 2 complete/unknown house views; Task 1 active-arrival lifecycle.
+**Produces:** final ordinary selection in existing
+`protected Optional<BlockPos> getNextPosition(VillagerEntityMCA villager)`.
+Keep route comparison internal to this task; do not ship an intermediate policy
+that sends villagers farther merely because a house has space.
 
-**Interfaces:** Task 2 supplies House membership. Task 3 adds private `boolean hasCapacity(ServerLevel level, House house, List<AbstractVillager> loadedVillagers, Map<UUID, BlockPos> residentHomes)` to the task. If needed, add public `Map<UUID, BlockPos> getResidentHomePositions()` to Village returning an immutable server-thread snapshot, never the mutable map.
+Implemented package-private seam:
+`static double routeLength(VillagerEntityMCA villager, Path path)`.
+Numeric route cases run in GameTests because native node positions depend on
+the actual entity width/scale. No separate common route test or geometry adapter
+was needed.
+Keep admission/danger helpers private unless a real owning seam needs wider access.
 
-- [ ] Add `lastPlaceIncludesPendingArrival`, `returningOwnerIsCountedOnce`, `claimedBedReservesUnloadedOwner`, `vanillaOwnerAndChildCountOnce`, `distantIncomingTargetCounts`, and `clearedOrChangedTargetReleasesIncomingPlace`. With one bed, assert six accounted places fill the normal capacity and a seventh incoming guest uses another house. Exercise public behavior through actual WALK_TARGET production; do not weaken assertions to inspect a private counter.
-- [ ] Register the test class, then run `.\gradlew.bat :neoforge:runGameTestServer -PmcaGameTest=ShelterDistributionGameTests --console=plain --no-daemon --no-parallel`. Require a valid behavior failure before adding admission.
-- [ ] Take one snapshot of alive loaded MCA and vanilla `AbstractVillager` entities per selection using the existing ServerLevel iteration API. Inspect all loaded villagers' incoming WALK_TARGETs, not only entities within a house's bounding box. This includes arrivals currently outside the original discovery radius. Discard the snapshot after publication; measure the cost in Task 5 rather than keeping an unowned cache.
-- [ ] Reserve one place per valid claimed HOME bed, including unidentified/unloaded owners, and reconcile with known valid HOME owners from persisted MCA assignments and loaded brains. POI claims provide occupancy, not UUID ownership. Count each known owner once; do not double-count the same bed via persisted and live assignments. Read claims without calling `take` or `release`.
-- [ ] Count additional loaded occupants and incoming villagers by UUID. Exclude already-accounted owners and the selecting villager, count each guest at most once per house, and respect HOME dimension. A guest physically in one house while heading to another occupies a place in the former and has an incoming place in the latter. Ignore cleared targets and dead/removed entities.
-- [ ] Use the comparison `accountedPlaces < house.bedHeads().size() + 5`. Unknown membership bypasses the capacity preference. Observe and publish on the same server thread without an async boundary; later villagers read the WALK_TARGET immediately. Preserve owners' return behavior.
-- [ ] Integrate admission into `getNextPosition` with Task 2's distinct-house discovery: provisionally try the nearest under-capacity reachable house, keeping the nearest reachable house as overflow when all are full. Task 4 replaces this provisional spatial ordering with the route-distance and danger policy. For the consecutive-arrival fixture, assert the first incoming WALK_TARGET belongs to the house's last place and the second belongs to the alternative before ticking either villager's movement.
-- [ ] Re-run the class and verify consecutive arrivals, target lifecycle, unloaded reservations, and mixed vanilla/MCA occupants. No concurrent reservation map, tracked capacity property, lock, or executor should appear in the diff.
+- [x] Extend the registered class using nonoverlapping disposable arenas and established cleanup.
+  Add `lastPlaceIncludesPendingArrival`, `distantIncomingTargetCounts`,
+  `rememberedBedWithoutArrivalDoesNotReserve`, `clearedOrRedirectedArrivalReleasesPlace`,
+  `returningOwnerIsCountedOnce`, `claimedBedReservesUnloadedOwner`,
+  `vanillaOwnerChildAndSleeperCountOnce`, and `forcedHomeOwnerIsReservedOnce`.
+  **Assertions:** one bed gives six accounted places; the next guest chooses the alternative;
+  consecutive selections see the published arrival before either villager moves;
+  stale/invalid assignments do not reserve and HOME/ticket state does not change.
+- [x] Add `fullNearestHouseUsesNearbyAlternative`, `multipleBedsDoNotHideNextHouse`,
+  `exactlyThirtyExtraRouteBlocksAreAllowed`, `moreThanThirtyExtraRouteBlocksUsesOverflow`,
+  `longDetourUsesOverflow`, `allHousesFullStillSelectsShelter`, and `unreachableAlternativeUsesOverflow`.
+  **Assertions:** decisions use measured routes; an 8-block baseline admits a 38-block alternative,
+  but not 39; reachable overflow remains available.
+- [x] Add `liveThreatBeforePanicUsesOverflow`, `ignitedCreeperUsesOverflow`,
+  `staleOrDeadThreatDoesNotForceOverflow`, the existing sheltered-idle regressions,
+  and `arrivedElsewhereDoesNotFollowStaleSelection`.
+  Test active PANIC/HIDE/combat transition precedence and an endpoint normalized toward a bed or door.
+- [x] Run the new GameTest class before implementing policy; verify native route arithmetic in that runtime lane.
+  **Expected RED:** valid selection/lifecycle failures. Verify straight, diagonal,
+  and vertical route lengths with real Minecraft Path/Node values; diagonal distance is sqrt(2).
+- [x] Take one server-thread snapshot of alive loaded MCA/vanilla villagers and active intents per selection. It must include distant incoming destinations.
+  Reserve claimed HOME beds and reconcile valid persisted/live owners by bed and UUID;
+  count extra occupants/arrivals once, excluding the selector. Add an immutable HOME accessor only if existing APIs cannot expose the needed evidence.
+- [x] Use existing usable-floor checks and at most ten grouped-house path requests.
+  Reject unreachable paths or invalid actual endpoints; measure each accepted route once.
+  Select the shortest under-capacity route within baseline + 64.0, preserving discovery-order ties;
+   unknown capacity allows entry. With no qualifying under-capacity alternative,
+   prefer the house least over capacity within the same route allowance; break
+   ties by route length, then discovery order. Detected danger uses the baseline.
+- [x] Reuse threat memories and current sensor/lifecycle semantics. NEAREST_HOSTILE includes
+  MCA's ignited creepers, not just vanilla's hostile-distance table. HURT_BY_ENTITY must be alive,
+  same-level and within squared distance 36; historical damage alone is insufficient.
+  Preserve activity guards and valid arrivals, then publish through the existing movement owner.
+- [x] Rerun the new distribution class and the existing shelter class.
+  **Expected GREEN:** all accounting, route, endpoint, lifecycle, safety, and HOME/ticket assertions pass.
+  Review for duplicate reservations, guessed membership, and unnecessary abstractions.
 
-### Task 4: Select nearest shelter with route allowance and emergency overflow
+### Task 4: Verify actual arrivals, bounded cost, and final integration
 
-**Files:** Modify `SeekIndoorShelterTask.java`; extend `ShelterDistributionGameTests.java`. Add pure path-distance tests to `common/src/test/java/net/conczin/mca/entity/ai/brain/tasks/ShelterRouteDistanceTest.java` if the package's configured Minecraft-aware lane supports constructing Path/Node.
+**Files:** New distribution GameTests; existing shelter tests and final shared-code diff.
 
-**Interfaces:** Keep protected `Optional<BlockPos> getNextPosition(VillagerEntityMCA villager)` and existing publication intact. Change private floor selection to return `Optional<Path> findReachableFloor(ServerLevel level, VillagerEntityMCA villager, Iterable<BlockPos> candidates)` so route measurement uses the path actually selected. Add package-private `static double routeLength(Vec3 origin, Path path)` for the pure-distance test and private `boolean hasDetectedDanger(VillagerEntityMCA villager)` for existing live threat memories.
+**Consumes:** completed Tasks 1–3. **Produces:** runtime evidence and a candid delivery report.
 
-- [ ] Add `nearestHouseWithSpaceWins`, `fullNearestHouseUsesNearbyAlternative`, `multipleBedsDoNotHideNextHouse`, `exactlyThirtyExtraRouteBlocksAreAllowed`, `moreThanThirtyExtraRouteBlocksUsesOverflow`, `longDetourUsesOverflow`, `allHousesFullStillSelectsShelter`, `unreachableAlternativeUsesOverflow`, `detectedHostileAllowsImmediateOverflow`, and `alreadyShelteredDoesNotRelocate`. Include a threat remembered before PANIC, and a stale/dead threat that should not force overflow.
-- [ ] Run the focused GameTest class and require behavior failures. For pure distance, assert straight, diagonal, and vertical node segments have their geometric lengths, not their node counts; an 8-block route plus 30 additional blocks is eligible and a 39-block route is not. Use fixtures with measured actual route lengths in GameTests, not assumed anchor distances.
+- [x] Add `consecutiveArrivalsEnterDifferentHousesAtCapacity` with real ticking entities,
+  and `emergencyMovementIsNotBlockedByCapacity`. Include connected floors and
+  villagers initially on a bed. **Expected:** usable-floor arrival, local room wandering,
+  no capacity-induced eviction, no new HOME/ticket claim, emergency movement retains priority.
+- [x] Run the new class and require actual ticks/arrivals. Repair fixture setup failures
+  at their owner; do not change unrelated navigation or the user's saved world.
+- [ ] Measure equivalent cold/warm small and larger loaded-village attempts.
+  Record loaded entity count, discovered houses, scanned/validated blocks, path requests,
+  and elapsed time. **Expected:** at most ten house path requests, unchanged producer cadence,
+  bounded geometry, shared reuse, no forced chunks. Do not claim CPU/MSPT savings from code inspection.
+- [x] Run serially with `--console=plain --no-daemon --no-parallel`:
+  `:common:test` (native route and live geometry cases use GameTests);
+  `:neoforge:runGameTestServer -PmcaGameTest=ShelterDistributionGameTests`;
+  `:neoforge:runGameTestServer -PmcaGameTest=HomelessShelterGameTests`;
+  and `:fabric:build :neoforge:build`.
+  **Expected:** actual required counts, zero failed required tests, exit code 0. Record exact results.
+- [ ] Observe a disposable client village at night: nearest full house, nearby alternative,
+  monsters, already sheltered villagers, and furnishings. Record the observed result;
+  if unavailable, report client appearance/naturalness as unverified.
+- [x] Review the focused diff and `git diff --check`; use one fresh read-only reviewer.
+  Review all five focus cases, fix material defects with regression evidence, and
+  report any remaining unknown-house or performance limitation. Preserve unrelated edits.
 
-  The route-distance oracle can use real Minecraft nodes:
-  ```java
-  Path diagonal = new Path(List.of(new Node(0, 0, 0), new Node(1, 0, 1)),
-          new BlockPos(1, 0, 1), true);
-  assertEquals(Math.sqrt(2.0D), SeekIndoorShelterTask.routeLength(
-          new Vec3(0.5D, 0.0D, 0.5D), diagonal), 1.0E-6D);
-  ```
-- [ ] Discover nearby compatible HOME anchors with occupancy ANY and existing radius 48. Group through Task 2 before evaluating at most five distinct houses. Reuse candidate floor validation and navigation's set-target path request; reject paths that cannot reach an actual valid standing destination. Do not add per-candidate random-sample rejection or pass solid support blocks as feet targets.
-- [ ] Measure a fresh route from the villager's position through the path's entity node positions using summed Euclidean segment distances. Empty paths are eligible only when the destination is already reached and valid. Capture each reachable candidate's route once, preserving the path/target association; do not call a pathfinding distance a threat-safety proof.
-- [ ] Among inspected reachable candidates, find the minimum measured route as the overflow baseline. In ordinary conditions choose the shortest under-capacity route with `routeLength <= baseline + 30.0D`; ties preserve discovery order. Unknown membership allows admission without a guessed cap. If none qualifies, return the baseline destination.
-- [ ] For danger, use a live same-level NEAREST_HOSTILE memory and the sensor's current hostile-distance predicate. A remembered live same-level HURT_BY_ENTITY qualifies within squared distance `36.0D`, matching 1.21.1 `VillagerCalmDown`'s nearby-attacker rule. Historical damage alone does not force permanent overflow. Re-read the final MCA/vanilla sensor and calm-down ownership before wiring this predicate; if inaccessible, compare existing API/access options before copying the hostile-distance table. Preserve PANIC/HIDE/raid packages and ensure REST cannot overwrite their escape target during an activity transition.
-- [ ] Re-run the class and path-distance tests. Verify every selected endpoint has clearance and support, excludes bed surfaces, preserves HOME/tickets, and still handles the existing unreachable-floor-sample regression.
+## Execution preflight and handoff
 
-### Task 5: Prove actual arrivals, emergency precedence, and bounded work
+Dependencies are sequential: Task 1 fixes the membership/arrival contracts;
+Task 2 supplies complete house views; Task 3 publishes the final policy;
+Task 4 verifies actual movement and cost. Each later task reads recorded rulings.
 
-**Files:** Extend `ShelterDistributionGameTests.java` using existing disposable-world terrain and real tick patterns; review the final shared-code diff.
+Use the current checkout and a plan-scoped ignored ledger at
+`.superpowers/sdd/2026-10-05-nighttime-shelter-distribution/progress.md`.
+Native PowerShell bookkeeping replaces the skill's Bash helper scripts; this
+does not authorize WSL or a new worktree. Keep evidence while changes remain
+uncommitted. Do not ask again for permission for work already authorized.
 
-**Interfaces:** Complete Task 2 geometry, Task 3 admission, Task 4 selection; existing REST behavior, navigation, door interaction, and corrected local wandering.
+Implementation is present inline and uncommitted. Fresh baseline: 17/17 shelter
+tests passed. New admission RED/GREEN: 16/16 passed after the implementation.
+Expanded runtime checks verified connected floors, exact 30/31 route boundaries,
+actual two-house arrivals, unloaded POI handling, and stale registered membership.
+Two fresh review findings (cached connector reads and wide native endpoints) were
+reproduced and fixed; both regressions pass in the 35-test GREEN run, with successful process exit.
+Fresh integration verification: all 17 existing shelter GameTests passed, all
+533 common JUnit tests passed with no failures/errors/skips, and both Fabric and
+NeoForge builds passed. The 35 distribution cases include actual arrivals and an
+explicit incomplete-membership admission assertion. These focused runs do not
+prove the full GameTest suite. Initial missing-class discovery output was resolved
+by the successful serialized retry; its cause was not conclusively established.
 
-- [ ] Add `consecutiveArrivalsEnterDifferentHousesAtCapacity` with real ticking villagers and two furnished houses, and `emergencyMovementIsNotBlockedByCapacity` exercising active PANIC/HIDE transitions. Include multiple floors and villagers initially standing on a bed. Require arrival on interior floor and unchanged HOME; capacity need not prohibit transient collision pushes or emergency overflow.
-- [ ] Run the new GameTest class. If fixtures stall in terrain setup, inspect stacks and repair the fixture owner; do not call that a production regression, alter unrelated navigation, or modify the user's world. Real ticks must execute; NoAI/manual producer tests alone do not satisfy this task.
-- [ ] Measure one normal shelter attempt in the same loaded small/large village fixture before and after the change. Record loaded villager count, candidate houses, geometry cells inspected, path requests, and elapsed time. Require no more than five house path requests, unchanged producer cadence, no forced chunk loading, and no repeat full geometry scan for each occupant/bed within the same attempt. If the whole-level entity snapshot or geometry work is excessive, optimize the existing owner after documenting the evidence; do not hide the cost with an indefinite cache.
-- [ ] Run, serially with other agents' jobs:
+The small two-house fixture measures cold/warm lookup and selection and verifies
+shared room reuse and two house path requests. Larger-village MSPT profiling and
+total ceiling/connector block-read measurements above remain unchecked.
 
-  ```powershell
-  .\gradlew.bat :common:test --tests 'net.conczin.mca.server.world.data.ShelterHouseGeometryTest' --console=plain --no-daemon --no-parallel
-  .\gradlew.bat :neoforge:runGameTestServer -PmcaGameTest=ShelterDistributionGameTests --console=plain --no-daemon --no-parallel
-  .\gradlew.bat :neoforge:runGameTestServer -PmcaGameTest=HomelessShelterGameTests --console=plain --no-daemon --no-parallel
-  .\gradlew.bat :fabric:build :neoforge:build --console=plain --no-daemon --no-parallel
-  ```
+The existing cache remains the single geometry owner. Each house query permits
+20 new floor scans and at most eight materialized floors; current-room lookup
+and destination selection are separate queries, so a cold producer attempt may
+permit up to 40 scans before shared reuse. Ceiling/connector inspection additionally
+depends on the dimension height. Observation storage retains its 8192-block entry
+and 65536-block total limits. This is a bounded discovery policy, not evidence
+of a village-scale CPU/MSPT improvement.
 
-  Run the route-distance class when added. Require actual required-test counts, fresh completion logs, and zero process exit codes; do not report merely registering/skipping tests as validation.
-- [ ] Observe a disposable client village at night with incoming villagers, a full house, a nearby alternative, and detected monsters. Confirm no capacity-induced eviction, natural interior wandering, and overflow. If client validation is unavailable, state that limitation and do not claim visible crowding is fully fixed.
-- [ ] Review `git diff --check` and the focused source diff. Remove duplicated predicates or admission state, confirm no world files are source artifacts, and report exact checks and unresolved runtime/performance limitations. Leave changes uncommitted unless the user requests a Git action.
+Unknown membership preserves known room access and bypasses the soft cap.
+Oversized structures without a resolvable room remain outside existing discovery
+limits. The whole-house grouping, native route arithmetic, and danger cases use
+the 35-test distribution class; conditional common classes and the standalone
+geometry adapter listed above were not needed or created.
+Client appearance/naturalness remains unverified. Evidence and rulings stay in
+the plan-scoped ignored ledger because no commit or cleanup was authorized.
 
-## Execution handoff
+## 2026-10-06 shelter limit revision
 
-This is a plan, not a gameplay change or proof that unknown house geometry is solved.
-Task 1 resolves the remaining technical uncertainty before the proposed adapter is
-implemented. Read the approved spec and current source together; refresh the
-parallel indoor/floor work at execution time.
+The pre-fix client log showed useful houses omitted by the five-house cutoff and
+reachable alternatives rejected by the 30-block additional-route allowance.
+The current policy considers up to ten houses and permits 64 extra route blocks,
+inclusive. Bed acquisition retains its bounded five-candidate state validation;
+the 48-block anchor radius, retry cadence, geometry limits, and ownership remain.
 
-Recommended method: native execution in this chat, sequentially, preserving the
-other agent's changes. Ask for plan review and execution-method selection before
-starting implementation. Use only reviewer/subagent capabilities actually available
-in the session; a fresh user-visible chat is not a substitute for an internal
-review agent without explicit user authorization.
+The pre-change 48-test distribution run failed five expected admission cases.
+After the change, all 48 passed, covering an available sixth house, real routes
+beyond the old allowance, exact 64/65 boundaries, and less-crowded overflow.
+The real detour fixture was extended to exceed 64 extra blocks and still rejects
+the distant alternative. All 17 existing shelter GameTests and 552 common JUnit
+tests passed, with no JUnit failures/errors/skips. Fabric and NeoForge builds and
+the final diff check passed. Checks ran serially in disposable GameTest worlds.
+The larger house budget permits more route searches per selection; village-scale
+MSPT and client appearance remain unverified.
