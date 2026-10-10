@@ -173,16 +173,16 @@ public class CribEntity extends Entity implements CTrackedEntity<CribEntity> {
     public void tick() {
         super.tick();
 
-        if (this.onGround()) {
-            this.setDeltaMovement(Vec3.ZERO);
-        } else if (!this.isNoGravity()) {
-            this.setDeltaMovement(this.getDeltaMovement().add(0.0, -0.04, 0.0));
-        }
+        if (level() instanceof ServerLevel serverLevel) {
+            if (this.onGround()) {
+                this.setDeltaMovement(Vec3.ZERO);
+            } else if (!this.isNoGravity()) {
+                this.setDeltaMovement(this.getDeltaMovement().add(0.0, -0.04, 0.0));
+            }
 
-        this.move(MoverType.SELF, this.getDeltaMovement());
+            this.move(MoverType.SELF, this.getDeltaMovement());
 
-        if (getTrackedValue(BABY) != ItemStack.EMPTY && getTrackedValue(BABY).getItem() instanceof BabyItem) {
-            if (level() instanceof ServerLevel serverLevel) {
+            if (getTrackedValue(BABY) != ItemStack.EMPTY && getTrackedValue(BABY).getItem() instanceof BabyItem) {
                 getTrackedValue(BABY).getItem().inventoryTick(getTrackedValue(BABY), serverLevel, this, null);
             }
         }
