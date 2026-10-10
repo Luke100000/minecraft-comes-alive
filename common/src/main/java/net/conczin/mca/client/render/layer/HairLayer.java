@@ -36,7 +36,7 @@ public class HairLayer<T extends LivingEntity> extends VillagerLayer<T> {
         int overlay = LivingEntityRenderer.getOverlayCoords(villager, 0);
         int color = getColor(villager, tickDelta);
         var villagerData = MCAClient.resolveVillager(villager);
-        boolean renderedLayeredHair = false;
+        boolean hasLayeredHair = false;
 
         for (LayeredHair.Category category : LayeredHair.Category.RENDER_ORDER) {
             String identifier = villagerData.getLayeredHair(category);
@@ -44,20 +44,20 @@ public class HairLayer<T extends LivingEntity> extends VillagerLayer<T> {
                 continue;
             }
 
+            hasLayeredHair = true;
+
             ResourceLocation texture = getTexture(identifier);
             if (canUse(texture)) {
                 renderModel(transform, provider, light, color, texture, overlay, visibility);
-                renderedLayeredHair = true;
             }
 
             ResourceLocation overlayTexture = getOverlayTexture(identifier);
             if (canUse(overlayTexture)) {
                 renderModel(transform, provider, light, 0xFFFFFFFF, overlayTexture, overlay, visibility);
-                renderedLayeredHair = true;
             }
         }
 
-        if (!renderedLayeredHair) {
+        if (!hasLayeredHair) {
             super.renderFinal(transform, provider, light, villager, tickDelta, visibility);
         }
     }
