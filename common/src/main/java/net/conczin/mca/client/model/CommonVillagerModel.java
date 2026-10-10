@@ -74,7 +74,7 @@ public interface CommonVillagerModel<T extends LivingEntity> {
                 // the torso. Apply the current body transform first so EMF torso animation,
                 // crouching and scaling all carry the chest along without duplicating transforms.
                 getBodyPart().translateAndRotate(matrices);
-                matrices.scale(1.0f, 1.0f, breastSize * 0.75f + 0.75f);
+                matrices.scale(breastSize * 0.2f + 1.05f, breastSize * 0.75f + 0.75f, breastSize * 0.75f + 0.75f);
                 for (ModelPart part : getBreastParts()) {
                     part.render(matrices, vertices, light, overlay, color);
                 }
