@@ -487,44 +487,6 @@ public final class ResidencySetHomeGameTests {
         }).thenSucceed();
     }
 
-    @GameTest(batch = "mca_home_claim_handoff", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
-    public static void reloadedDisplacedSleeperDoesNotClearNewSleeperOccupancy(GameTestHelper helper) {
-        prepareClaimVillage(helper);
-        BlockPos foot = helper.absolutePos(new BlockPos(7, 1, 5));
-        BlockPos head = placeBed(helper, foot, Direction.EAST);
-        VillagerEntityMCA formerOwner = spawnVillager(helper, helper.absolutePos(new BlockPos(2, 1, 5)));
-        helper.assertTrue(formerOwner.getResidency().trySetHome(helper.getLevel(), foot), "initial claim failed");
-        formerOwner.startSleeping(head);
-        CompoundTag saved = formerOwner.saveWithoutId(new CompoundTag());
-        formerOwner.discard();
-        replaceBed(helper, foot, head);
-
-        VillagerEntityMCA[] loaded = new VillagerEntityMCA[2];
-        helper.startSequence().thenIdle(2).thenExecute(() -> {
-            VillagerEntityMCA claimant = spawnVillager(helper, head.north(3));
-            helper.assertTrue(claimant.getResidency().trySetHome(helper.getLevel(), foot), "new claim failed");
-            claimant.startSleeping(head);
-            helper.assertTrue(claimant.isSleeping(), "claimant did not sleep");
-
-            VillagerEntityMCA reloaded = VillagerFactory.newVillager(helper.getLevel()).build();
-            reloaded.load(saved);
-            helper.assertTrue(reloaded.isSleeping(), "fixture did not restore stale sleeping pose");
-            helper.assertTrue(helper.getLevel().addFreshEntity(reloaded), "former owner could not reload");
-            loaded[0] = claimant;
-            loaded[1] = reloaded;
-        }).thenIdle(2).thenExecute(() -> {
-            helper.assertTrue(!loaded[1].isSleeping(), "displaced former owner remained asleep");
-            helper.assertTrue(loaded[0].isSleeping(), "canonical claimant stopped sleeping");
-            helper.assertTrue(helper.getLevel().getBlockState(head).getValue(BedBlock.OCCUPIED),
-                    "waking stale former owner cleared the new sleeper's bed occupancy");
-            loaded[0].stopSleeping();
-            helper.assertTrue(!helper.getLevel().getBlockState(head).getValue(BedBlock.OCCUPIED),
-                    "the canonical sleeper waking should leave an unoccupied bed");
-            loaded[1].discard();
-            loaded[0].discard();
-        }).thenSucceed();
-    }
-
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void duplicateHomeValidationKeepsCanonicalResidentTicket(GameTestHelper helper) {
         placeFloor(helper, 1, 10, 2, 8);

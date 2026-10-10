@@ -89,8 +89,6 @@ import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.BedBlock;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -1190,24 +1188,6 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             return;
         }
         super.travel(input);
-    }
-
-    @Override
-    public void stopSleeping() {
-        Optional<BlockPos> previousBed = getSleepingPos();
-        super.stopSleeping();
-        if (level() instanceof ServerLevel level) {
-            previousBed.filter(level::hasChunkAt).ifPresent(pos -> {
-                BlockState state = level.getBlockState(pos);
-                if (state.getBlock() instanceof BedBlock && !state.getValue(BedBlock.OCCUPIED)
-                        && !level.getEntitiesOfClass(LivingEntity.class, new AABB(pos), other ->
-                        other != this && other.isSleeping()
-                                && other.getSleepingPos().filter(pos::equals).isPresent()).isEmpty()) {
-                    // Waking a displaced sleeper must not clear the current sleeper's bed state.
-                    level.setBlock(pos, state.setValue(BedBlock.OCCUPIED, true), 3);
-                }
-            });
-        }
     }
 
     @Override
