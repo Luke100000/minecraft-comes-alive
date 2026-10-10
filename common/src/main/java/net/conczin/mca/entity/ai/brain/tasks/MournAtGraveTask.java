@@ -3,6 +3,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 import com.google.common.collect.ImmutableMap;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
+import net.conczin.mca.util.InventoryUtils;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.ai.behavior.Behavior;
@@ -52,7 +53,7 @@ public class MournAtGraveTask extends Behavior<VillagerEntityMCA> {
     @Override
     protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
         remainingDialogues = DIALOGUE_COUNT;
-        villager.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(getFlower(villager)));
+        villager.setItemInHand(InteractionHand.MAIN_HAND, InventoryUtils.temporary(new ItemStack(getFlower(villager))));
     }
 
     @Override

@@ -6,6 +6,7 @@ import immersive_melodies.item.InstrumentItem;
 import immersive_melodies.resources.ServerMelodyManager;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.util.InventoryUtils;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
@@ -26,8 +27,8 @@ public class PlayImmersiveMelodyTask extends Behavior<VillagerEntityMCA> {
     private static final Map<VillagerEntityMCA, Long> nextAttemptTimes = new WeakHashMap<>();
     private static final Map<VillagerEntityMCA, Long> nextPerformanceTimes = new WeakHashMap<>();
 
-    private final List<Performer> performers = new ArrayList<>();
-    private ResourceLocation melody;
+    private InstrumentItem.Playback selectedPlayback;
+    private Performance performance;
 
     public PlayImmersiveMelodyTask() {
         super(ImmutableMap.of(), PERFORMANCE_DURATION, PERFORMANCE_DURATION);
@@ -46,76 +47,84 @@ public class PlayImmersiveMelodyTask extends Behavior<VillagerEntityMCA> {
         if (villager.getRandom().nextFloat() >= Config.getInstance().immersiveMelodiesChance) {
             return false;
         }
-        String namespace = Config.getInstance().immersiveMelodiesNamespace;
-        melody = closestMelody(level, villager).map(InstrumentItem.Playback::melody)
+        selectedPlayback = closestMelody(level, villager)
                 .or(() -> ServerMelodyManager.getRandomMelody(villager.getRandom(),
-                        id -> "*".equals(namespace) || id.getNamespace().equals(namespace)))
+                                PlayImmersiveMelodyTask::isAllowedMelody)
+                        .map(id -> new InstrumentItem.Playback(id, level.getGameTime())))
                 .orElse(null);
-        return melody != null;
+        return selectedPlayback != null;
     }
 
     @Override
     protected boolean canStillUse(ServerLevel level, VillagerEntityMCA villager, long time) {
-        return !timedOut(time) && canPerform(villager)
-               && performers.stream().anyMatch(performer -> performer.villager() == villager
-                                                            && villager.getItemInHand(performer.hand()) == performer.instrument());
+        return performance != null && performance.canContinue(level);
     }
 
     @Override
     protected void start(ServerLevel level, VillagerEntityMCA villager, long time) {
-        if (melody != null) {
-            InstrumentItem.Playback selectedMelody = closestMelody(level, villager)
-                    .orElse(new InstrumentItem.Playback(melody, level.getGameTime()));
-            startPerforming(level, villager, selectedMelody);
+        if (selectedPlayback != null) {
+            performance = new Performance(villager.getUUID(), selectedPlayback, time + PERFORMANCE_DURATION);
+            performance.ownerInstrument = startPerforming(level, villager, performance);
+            if (performance.ownerInstrument.isEmpty()) return;
+
             level.getEntitiesOfClass(VillagerEntityMCA.class, villager.getBoundingBox().inflate(8.0), other -> other != villager && canPerform(other)
                                                                                                                && level.getGameTime() >= nextPerformanceTimes.getOrDefault(other, 0L))
-                    .stream().filter(other -> other.getRandom().nextFloat() < JOIN_CHANCE).forEach(other -> startPerforming(level, other, selectedMelody));
-        }
-    }
-
-    @Override
-    protected void tick(ServerLevel level, VillagerEntityMCA villager, long time) {
-        Iterator<Performer> iterator = performers.iterator();
-        while (iterator.hasNext()) {
-            Performer performer = iterator.next();
-            if (!canPerform(performer.villager())
-                || performer.villager().getItemInHand(performer.hand()) != performer.instrument()) {
-                stopPerforming(level, performer);
-                iterator.remove();
-            }
+                    .stream().filter(other -> other.getRandom().nextFloat() < JOIN_CHANCE).forEach(other -> startPerforming(level, other, performance));
         }
     }
 
     @Override
     protected void stop(ServerLevel level, VillagerEntityMCA villager, long time) {
-        performers.forEach(performer -> stopPerforming(level, performer));
-        performers.clear();
-        melody = null;
+        if (performance != null) {
+            performance.active = false;
+            stopPerforming(level, villager, performance.ownerInstrument);
+        }
+        performance = null;
+        selectedPlayback = null;
     }
 
-    private static void stopPerforming(ServerLevel level, Performer performer) {
-        ((InstrumentItem) performer.instrument().getItem()).pause(performer.instrument(), level);
-        if (performer.villager().getItemInHand(performer.hand()) == performer.instrument()) {
-            performer.villager().setItemInHand(performer.hand(), performer.previousStack());
+    private static void stopPerforming(ServerLevel level, VillagerEntityMCA villager, ItemStack stack) {
+        if (stack.getItem() instanceof InstrumentItem instrument) {
+            instrument.pause(stack, level);
+        }
+
+        if (villager.getMainHandItem() == stack) {
+            villager.setItemInHand(InteractionHand.MAIN_HAND, ItemStack.EMPTY);
         }
     }
 
     private static boolean canPerform(VillagerEntityMCA villager) {
-        return villager.isAlive() && !villager.isSleeping() && !villager.isTrading()
-               && !villager.isUsingRecoveryFood()
+        return villager.isAlive() && !villager.isRemoved() && !villager.isSleeping() && !villager.isTrading()
+               && !villager.isUsingRecoveryFood() && !villager.isUsingItem()
                && villager.getBrain().isActive(Activity.MEET)
                && villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isEmpty()
                && !villager.getVillagerBrain().isPanicking();
     }
 
-    private void startPerforming(ServerLevel level, VillagerEntityMCA villager, InstrumentItem.Playback melody) {
-        Items.getRandomInstrument(villager.getRandom()).ifPresent(stack -> {
-            ItemStack previous = villager.getMainHandItem().copy();
-            ((InstrumentItem) stack.getItem()).play(stack, melody.melody(), melody.startTime(), villager);
-            villager.setItemInHand(InteractionHand.MAIN_HAND, stack);
-            performers.add(new Performer(villager, InteractionHand.MAIN_HAND, stack, previous));
-            nextPerformanceTimes.put(villager, level.getGameTime() + RETRY_COOLDOWN);
+    private static ItemStack startPerforming(ServerLevel level, VillagerEntityMCA villager, Performance performance) {
+        ItemStack stack = Items.getRandomInstrument(villager.getRandom()).orElse(ItemStack.EMPTY);
+        if (!(stack.getItem() instanceof InstrumentItem instrument)) return ItemStack.EMPTY;
+
+        InventoryUtils.temporary(stack);
+        instrument.play(stack, performance.playback.melody(), performance.playback.startTime(), villager);
+        villager.setItemInHand(InteractionHand.MAIN_HAND, stack);
+
+        // Each participant checks the shared session from its own tick, even after the owner unloads.
+        villager.setMelodyTick(() -> {
+            if (villager.level() == level && performance.canContinue(level) && canPerform(villager)
+                && villager.getMainHandItem() == stack && stack.getItem() instanceof InstrumentItem) {
+                return true;
+            }
+            stopPerforming(level, villager, stack);
+            return false;
         });
+        nextPerformanceTimes.put(villager, level.getGameTime() + RETRY_COOLDOWN);
+        return stack;
+    }
+
+    private static boolean isAllowedMelody(ResourceLocation id) {
+        String namespace = Config.getInstance().immersiveMelodiesNamespace;
+        return "*".equals(namespace) || id.getNamespace().equals(namespace);
     }
 
     private static Optional<InstrumentItem.Playback> closestMelody(ServerLevel level, VillagerEntityMCA villager) {
@@ -123,10 +132,30 @@ public class PlayImmersiveMelodyTask extends Behavior<VillagerEntityMCA> {
                 .sorted(Comparator.comparingDouble(villager::distanceToSqr))
                 .map(other -> InstrumentItem.getPlayback(other.getMainHandItem()))
                 .flatMap(Optional::stream)
+                .filter(playback -> isAllowedMelody(playback.melody()))
+                .filter(playback -> ServerMelodyManager.getDatapackMelodies().containsKey(playback.melody())
+                                    || ServerMelodyManager.getIndex().getMelodies().containsKey(playback.melody()))
                 .findFirst();
     }
 
-    private record Performer(VillagerEntityMCA villager, InteractionHand hand, ItemStack instrument,
-                             ItemStack previousStack) {
+    private static final class Performance {
+        private final UUID owner;
+        private final InstrumentItem.Playback playback;
+        private final long deadline;
+        private ItemStack ownerInstrument = ItemStack.EMPTY;
+        private boolean active = true;
+
+        private Performance(UUID owner, InstrumentItem.Playback playback, long deadline) {
+            this.owner = owner;
+            this.playback = playback;
+            this.deadline = deadline;
+        }
+
+        private boolean canContinue(ServerLevel level) {
+            return active && level.getGameTime() < deadline
+                   && ownerInstrument.getItem() instanceof InstrumentItem
+                   && level.getEntity(owner) instanceof VillagerEntityMCA villager
+                   && villager.getMainHandItem() == ownerInstrument && canPerform(villager);
+        }
     }
 }
