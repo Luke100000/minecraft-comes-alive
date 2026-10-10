@@ -34,6 +34,12 @@ public abstract class VillagerLayer<S extends HumanoidRenderState, M extends Hum
         TEXTURE_EXIST_CACHE.put(MCA.locate("temp"), true);
     }
 
+    public static void clearTextureCaches() {
+        TEXTURE_CACHE.clear();
+        TEXTURE_EXIST_CACHE.clear();
+        TEXTURE_EXIST_CACHE.put(MCA.locate("temp"), true);
+    }
+
     public final M model;
 
     public VillagerLayer(RenderLayerParent<S, M> renderer, M model) {

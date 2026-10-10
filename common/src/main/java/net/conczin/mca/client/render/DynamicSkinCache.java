@@ -99,6 +99,16 @@ public final class DynamicSkinCache {
                    clothes + "_" +
                    String.format(java.util.Locale.ROOT, "%05d", infectionProgressKey);
         }
+
+        boolean references(String identifier) {
+            return identifier.equals(skin)
+                   || identifier.equals(hairBase)
+                   || identifier.equals(hairBangs)
+                   || identifier.equals(hairBack)
+                   || identifier.equals(hairFront)
+                   || identifier.equals(hairExtra)
+                   || identifier.equals(clothes);
+        }
     }
 
     private static final Set<SkinKey> INCOMPLETE_CACHE = new HashSet<>();
@@ -133,6 +143,27 @@ public final class DynamicSkinCache {
             }
         }
         return false;
+    }
+
+    public static void clear() {
+        CACHE.values().forEach(DynamicSkinCache::releaseDynamicTexture);
+        CACHE.clear();
+        INCOMPLETE_CACHE.clear();
+    }
+
+    /** Evict stitched skins when a source texture changes under the same identifier. */
+    public static void invalidateSourceTexture(Identifier source) {
+        if (source == null) {
+            return;
+        }
+        CACHE.entrySet().removeIf(entry -> {
+            if (!entry.getKey().references(source.toString())) {
+                return false;
+            }
+            releaseDynamicTexture(entry.getValue());
+            INCOMPLETE_CACHE.remove(entry.getKey());
+            return true;
+        });
     }
 
     public static Identifier getOrCreateStitchedSkin(VillagerVisuals visuals) {
@@ -214,5 +245,11 @@ public final class DynamicSkinCache {
 
     private static String keyId(String key) {
         return UUID.nameUUIDFromBytes(key.getBytes(StandardCharsets.UTF_8)).toString();
+    }
+
+    private static void releaseDynamicTexture(Identifier id) {
+        if (id.getNamespace().equals(MCA.MOD_ID) && id.getPath().startsWith("dynamic/")) {
+            Minecraft.getInstance().getTextureManager().release(id);
+        }
     }
 }

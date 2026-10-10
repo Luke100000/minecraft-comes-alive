@@ -1,9 +1,11 @@
 package net.conczin.mca.entity.ai.brain.sensor;
 
+import com.google.common.collect.Iterables;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Gender;
+import net.conczin.mca.gametest.GameTestTerrain;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.Entity;
@@ -33,6 +35,7 @@ public final class VillagerMCABabiesSensorGameTests {
         cleanupTestEntities();
         try {
             BlockPos origin = helper.absolutePos(new BlockPos(3, 2, 3));
+            GameTestTerrain.prepareFlatArea(helper, origin.east(2), 8, 3);
             VillagerEntityMCA observer = spawnMcaVillager(helper, origin, Gender.MALE, 0);
             VillagerEntityMCA nearestBaby = spawnMcaVillager(
                     helper, origin.east(2), Gender.FEMALE, AgeState.BABY.toAge());
@@ -50,6 +53,9 @@ public final class VillagerMCABabiesSensorGameTests {
                             List.<LivingEntity>of(nearestBaby, adult, vanillaBaby, fartherBaby)
                     )
             );
+            helper.assertTrue(Iterables.size(observer.getBrain().getMemory(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES)
+                            .orElseThrow().findAll(entity -> true)) == 4,
+                    "baby sensor fixture must have four visible candidates");
 
             new VillagerMCABabiesSensor().doTick(helper.getLevel(), observer);
 

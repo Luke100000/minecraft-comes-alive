@@ -25,6 +25,7 @@ import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.ScaffoldingBlock;
 import net.minecraft.world.level.block.SnowLayerBlock;
@@ -50,6 +51,44 @@ public final class MCAGroundPathNavigationGameTests {
     private static final Set<ChunkPos> PROGRESSIVE_FORCED_CHUNKS = new HashSet<>();
 
     private MCAGroundPathNavigationGameTests() {
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 40)
+    public static void partialHeightAirborneLadderEntryStartsClimbing(GameTestHelper helper) {
+        BlockPos first = helper.absolutePos(new BlockPos(5, 5, 5));
+        for (int y = 0; y < 3; y++) {
+            BlockPos position = first.above(y);
+            helper.getLevel().setBlock(position.south(), Blocks.STONE.defaultBlockState(), 3);
+            helper.getLevel().setBlock(position,
+                    Blocks.LADDER.defaultBlockState().setValue(LadderBlock.FACING, Direction.NORTH), 3);
+        }
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0)
+                .withPosition(new Vec3(first.getX() + 0.5D, first.getY() - 0.312D, first.getZ() + 0.5D))
+                .spawn(EntitySpawnReason.STRUCTURE);
+        villager.setNoAi(true);
+        try {
+            villager.setOnGround(false);
+            helper.assertTrue(!villager.onClimbable(), "fixture starts inside ladder instead of just below it");
+            Path path = new Path(List.of(
+                    new Node(first.getX(), first.getY(), first.getZ()),
+                    new Node(first.getX(), first.getY() + 1, first.getZ()),
+                    new Node(first.getX(), first.getY() + 2, first.getZ())
+            ), first.above(2), true);
+            helper.assertTrue(villager.getNavigation().moveTo(path, 0.55D), "reachable upward ladder path did not start");
+            villager.setDeltaMovement(Vec3.ZERO);
+            villager.getNavigation().tick();
+            helper.assertTrue(villager.getNavigation() instanceof MCAGroundPathNavigation navigation
+                            && navigation.isControllingClimbableMovement()
+                            && villager.getDeltaMovement().y > 0.0D,
+                    "MCA did not enter ladder from partial-height airborne feet: position=" + villager.position()
+                            + ", delta=" + villager.getDeltaMovement()
+                            + ", path=" + villager.getNavigation().getPath());
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
     }
 
     @GameTest(batch = "mca_vine_column_descent", templateNamespace = "minecraft",
@@ -1602,8 +1641,8 @@ public final class MCAGroundPathNavigationGameTests {
         });
     }
 
-    @GameTest(batch = "mca_navigation_local_brownian_retry", templateNamespace = "minecraft",
-            template = "bastion/blocks/air", timeoutTicks = 80)
+    @GameTest(batch = "mca_navigation_local_brownian_retry", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 80)
     public static void stalledIndoorStrollWaitsButAPhysicalStepAllowsNewDestination(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(10, 1, 10));
         prepareFlatArea(helper, start, 3, 3);

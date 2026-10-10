@@ -29,15 +29,17 @@ The primary TALK flow is:
 
 ```text
 TALK
-  -> collect DialogueEvents for this player/villager
+  -> offer a personalized continuation if this pair has a valid paused run
+  -> also collect other DialogueEvents for this player/villager
   -> evaluate hard requirements
   -> evaluate completion, previous-choice, and repeat/cooldown state
   -> classify eligible events by presentation mode
   -> show one highlighted contextual prompt plus other selectable topics
-  -> player chooses an event or the generic conversation option
-  -> create a server-owned DialogueSession at the event's start node
-  -> execute event nodes, choices, and actions
-  -> record completed event and choices when the event explicitly completes
+  -> player chooses continuation, another topic, ambient conversation, or leaves
+  -> continuation resumes the exact saved run; a new topic starts at its start node
+  -> advance ordered lines and execute validated node/choice transitions
+  -> commit pending story effects, completed event, and choices on completion
+  -> return to refreshed Talk options; never automatically chain the next event
   -> if no contextual event qualifies, use ordinary always-eligible/ambient
      DialogueEvents; a legacy root adapter exists only while old content migrates
 ```
@@ -69,6 +71,12 @@ commit.
 
 Talking to a villager remains voluntary. Eligible events modify the available
 conversation choices rather than hijacking the interaction.
+
+Right-click opens normal interaction controls; Talk opens the conversation menu.
+Neither action automatically starts or resumes a story. The player can select a
+personalized continuation, the highlighted topic, another eligible Ask topic,
+ambient conversation, an ordinary interaction, or leave. Priority decides which
+new topic is highlighted, not which conversation the player must play.
 
 The overhaul may make a **minimal extension to the existing Talk UI**
 to expose highlighted, `Ask about...`, and ambient event choices. It must not
@@ -117,6 +125,107 @@ conversation through always-eligible or ambient DialogueEvents. During migration
 unconverted legacy content may additionally be exposed through a compatibility
 adapter; the final architecture does not depend on legacy `root`.
 
+### Personalized continuation and returning to the menu
+
+When this player/villager pair has a valid paused run, its continuation appears
+in a dedicated slot alongside new topics; it does not compete for the highlighted
+slot. Its label is authored for that event and localized, not the generic
+"Continue our conversation". Examples:
+
+```text
+Alice, about what you said about cured villagers...
+You were telling me about your brother...
+About the storm keeping you awake...
+```
+
+Use required `presentation.resume_prompt` translation keys for every event mode,
+including ambient events. The server builds the prompt Component and supplies
+the speaking villager's current display name as optional translation argument
+`%1$s`; writers need not repeat the name when a topic-specific phrase is more
+natural. Keep speaker context visible in the existing screen. Do not generate
+labels from event IDs, expose an unchosen branch, or add an extra NPC line when
+resuming. An event-level label is sufficient; node-specific labels are not needed.
+
+Browsing Talk/Ask options or choosing Back/Leave preserves the paused run and its
+original deadline. Selecting its continuation resumes the saved node/line with
+a fresh token. Selecting another valid event, including another topic with the
+same villager, replaces the paused run and discards its unfinished effects and
+choices. Invalid/stale selections do not abandon it. Do not offer the paused
+event as a second new-start option, including through the ambient candidate pool.
+
+After explicit completion or a non-completing end, return to refreshed Talk
+options if interaction remains valid; otherwise close normally. A completed
+story is absent until its authored cooldown expires, and newly eligible follow-ups
+may appear. No follow-up or other event starts until the player selects it. Other eligible topics remain
+accessible while a continuation is offered.
+
+### Reading and replying
+
+Nodes may contain several consecutive villager lines. Show one line at a time;
+Continue advances to the next line, and replies appear after the final line is
+fully revealed. Replies use natural language and do not display positive,
+neutral, negative, heart deltas, or outcome probabilities.
+
+Provide a client-side typewriter presentation. The agreed timing is
+one complete displayed word every 250 ms, not one character; it is a
+presentation default, not an event condition or server delay. Revealing must
+use locale-aware word boundaries, preserve punctuation/spacing and formatted
+Components, and never split a Unicode character. The reveal cannot be skipped
+or accelerated by clicking, and there is no instant-display setting. Continue
+becomes available only after the current line finishes revealing; clicks during
+reveal neither advance the line nor queue an advance for later. Replies become
+available only after the final line of the passage finishes revealing.
+The server sends the complete current line; there is no packet per revealed word.
+Client reveal timing is not proof that a player read a line and grants no rewards.
+
+### Pausing and resuming
+
+Closing the screen or walking out of interaction range pauses the conversation.
+The server retains its node, line index, accepted choices, already-selected
+outcomes, and pending story effects in memory. Right-clicking that same villager
+opens the normal interaction screen. Pressing its existing Talk button within
+the pause window offers the event's personalized continuation alongside other
+eligible topics. Only selecting that continuation resumes the saved graph.
+Opening either screen alone does not resume, reset the deadline, or launch a
+conversation.
+
+The pause window is 2400 overworld game ticks (approximately two minutes at
+20 TPS), counted from suspension rather than continuously refreshed by rejected
+packets. Server lag extends the real elapsed time. Resuming requires a living,
+loaded, interactable villager in the same dimension and normal interaction range.
+Resume uses a fresh offer token; packets from before suspension stay invalid.
+
+At expiry, discard unfinished choices and pending effects without marking the
+event complete or consuming its normal repeat policy. The villager may deliver
+one localized line such as "I guess you don't want to talk..." if the player and
+villager are currently loaded and within normal speech range. Do not load chunks,
+send a remote reprimand, or apply an automatic hearts penalty. Do not reroll a
+previously selected outcome while resuming. The same resolved current line should
+be restored rather than choosing another pooled translation on every reopen.
+
+Disconnect, server stop, villager death/removal/conversion, and datapack reload
+invalidate unfinished sessions; these are not resumable save records. Temporary
+unload suspends an existing session without retaining a strong entity reference;
+its existing pause deadline still runs. Starting a different conversation with
+the same or another villager ends the previous paused run, invalidates its offers, and
+discards its unfinished choices and effects without completion or cooldown.
+Retain at most one active or paused run per player. Merely opening another
+villager's interaction screen or browsing Talk options does not abandon the
+paused run. A continuation is offered only for the paused run's own villager.
+
+### Personality writing consistency
+
+Maintain an author-facing guide for each personality: usual tone, weather and
+time-of-day preferences, favourite mobs, recurring interests, and exceptions.
+These are writing conventions first, not a new gameplay preference registry.
+Writers should use the guide consistently across ordinary and contextual stories.
+Introduce a mechanically queryable preference only when concrete content or
+gameplay needs an authoritative lookup.
+
+Personality remains one requirement, not the owner of a conversation list.
+Preferences influence writing and optional requirements; they do not make every
+villager of that personality share completion or cooldown state.
+
 ## Resource ownership and IDs
 
 Dialogue events are datapack resources:
@@ -155,11 +264,13 @@ DialogueEvent
   presentation
     mode              HIGHLIGHTED | ASK | AMBIENT
     prompt            translation key for selectable modes
+    resume_prompt     required event-specific continuation translation key
     topic             optional organizational string
   priority            integer, default 0
   weight              positive number, default 1
   requirements[]      deterministic hard requirements
-  repeat              ALWAYS | ONCE | COOLDOWN
+  repeat              required: ALWAYS | ONCE | COOLDOWN (stories use cooldown)
+  history             STORY (default) | SCHEDULING
   start               node ID within this event
   nodes{}             namespaced event-owned conversation graph
 ```
@@ -172,6 +283,7 @@ An example resource:
   "presentation": {
     "mode": "highlighted",
     "prompt": "dialogue_event.mca.personal.gloomy_reflection.prompt",
+    "resume_prompt": "dialogue_event.mca.personal.gloomy_reflection.resume",
     "topic": "personal"
   },
   "priority": 100,
@@ -182,7 +294,7 @@ An example resource:
     { "type": "mca:mood", "value": "sad" },
     { "type": "mca:time", "min": 13000, "max": 23000 }
   ],
-  "repeat": { "type": "once" },
+  "repeat": { "type": "cooldown", "seconds": 5 },
   "start": "intro",
   "nodes": {
     "intro": {
@@ -209,7 +321,8 @@ An example resource:
     },
     "goodbye": {
       "line": "dialogue_event.mca.personal.gloomy_reflection.goodbye",
-      "end": true
+      "end": true,
+      "retryable": true
     }
   }
 }
@@ -231,6 +344,25 @@ between nodes without silently breaking later `event_choice` prerequisites.
 
 Event requirements are deterministic boolean gates. They are not chance
 modifiers. All entries in `requirements` must pass for an event to be eligible.
+
+Requirements use typed fields, not legacy comma-separated shorthand. For example,
+adult, gloomy, nighttime, and at least 20 hearts are positive requirements:
+
+```json
+[
+  { "type": "mca:age_group", "value": "adult" },
+  { "type": "mca:personality", "value": "gloomy" },
+  { "type": "mca:time", "min": 13000, "max": 23000 },
+  { "type": "mca:hearts", "min": 20 }
+]
+```
+
+The night range above is an authored window, not a claim that all vanilla night
+or sleeping checks use those exact boundaries. Genuine exclusions use the explicit
+`mca:not` wrapper, for example
+`{ "type": "mca:not", "condition": { "type": "mca:age_group", "value": "adult" } }`.
+Unknown or unavailable references remain unavailable under negation and cannot
+become eligible just because `not` inverted a failed lookup.
 
 This deliberately differs from the existing `InteractionPredicate`/`Result`
 system, where conditions can contribute numeric weight. Weight is used only
@@ -274,7 +406,8 @@ condition.
 - village/building state only where the current MCA APIs can already answer the
   question reliably;
 - `event_completed`;
-- `event_choice`.
+- `event_choice`;
+- explicit `not` wrapping a supported condition;
 - mourning/recent relative death;
 - recently hurt/attacked;
 - raid aftermath;
@@ -376,9 +509,16 @@ next eligible game time for cooldown events
 completed choice IDs (event-wide unique stable IDs)
 ```
 
-In-progress state is not persisted. If a player closes the screen, disconnects,
-or the server stops before explicit event completion, the event remains eligible
-later and its temporary choices are discarded.
+In-progress state is not persisted to disk. Screen closure suspends it in memory
+for the pause window; timeout, disconnect, or server stop discard its temporary
+choices and pending effects. Resuming within the window continues the same run.
+
+`history: "story"` retains durable completion/choice state, including for repeatable
+stories. `history: "scheduling"` is allowed only with `repeat.type: "cooldown"` and
+retains only next-eligible timing for ordinary small talk. Such an event cannot be
+the target of `event_completed` or `event_choice`; reject a resolved reference to
+it rather than silently invent durable history. This makes cooldown pruning real
+without deleting facts that later stories depend on.
 
 This produces the desired continuity without making shared world facts
 player-specific. Two players can therefore have different conversation histories
@@ -386,9 +526,45 @@ with the same villager while both observe that the villager was recently cured.
 
 ## Seen/completed and previous-choice semantics
 
+### Remembered questions and authored follow-ups
+
+Stardew's documented `$q` mechanism can replace an already-answered question
+with fallback dialogue; `$r` identifies replies and their reactions, and `$p`
+checks a remembered reply. Its simpler `$y` exchanges can repeat without durable
+answer IDs. These are distinct mechanisms, not a universal latest-answer-overwrite
+rule. [Stardew dialogue documentation](https://stardewvalleywiki.com/Modding:Dialogue)
+Event prerequisites can also check previously selected answer IDs through
+`ChoseDialogueAnswers`.
+[Stardew event documentation](https://stardewvalleywiki.com/Modding:Event_data)
+
+MCA adopts remembered replies and authored follow-ups, not Stardew's command
+syntax, location ownership or automatic suppression of answered questions.
+Stories are repeatable after their datapack-authored cooldown for each
+player/villager/event tuple. Completion remains remembered even after the story
+becomes eligible again. A separate follow-up has its own namespaced ID,
+requirements, graph and repeat rule, including `event_completed`/`event_choice`
+prerequisites for the first story. No separate question-history subsystem or new
+global answer-ID namespace is needed.
+
+For example, after completing `mca:personal/cured_zombies` with
+`experience_changes_you`, an eligible follow-up can say "I've been thinking about
+what you said about experience changing people...". Other replies can unlock
+different follow-ups. Replaying the original story after its cooldown is allowed;
+authors may also write distinct follow-ups that acknowledge the latest completed
+answer rather than repeat the original wording.
+Follow-up requirements still decide availability and the player chooses whether
+to start it. This does not force immediate follow-ups or automatic chaining.
+
+Ordinary repeatable small talk normally uses scheduling-only history and a
+cooldown. Stories use durable latest-run choice replacement. Every event must
+author its `repeat` policy: there is no implicit once-only story policy or global
+cooldown value. `once` remains an explicit author opt-in for exceptional content,
+not the policy for the reference stories.
+
 The event system uses `completed`, not an ambiguous `seen` boolean, as the durable
-prerequisite. An event becomes completed only when its dialogue explicitly reaches
-an event-completion action while the matching active session is valid.
+prerequisite. An event becomes completed only when the server accepts Continue
+after the last line of a `complete: true` node in the matching valid session.
+Merely sending a terminal line or closing its screen does not complete the event.
 
 While an event is active, the server records every accepted choice ID in temporary
 session state. On successful completion those choice IDs are committed to
@@ -419,6 +595,15 @@ such as `yes`, `no`, or `leave`. Authors should therefore use semantic stable ID
 such as `comfort`, `ask_why`, or `defend_village` when that choice may be referenced
 by later stories.
 
+For stories, each successful completion replaces the
+previous choice set with the choices from that latest completed run. Do not
+accumulate choices across repeated runs or preserve the first run permanently. Choices not taken in
+the latest completed run no longer satisfy `event_choice`, while `event_completed`
+remains true and the completion count advances. An unfinished or abandoned run
+does not overwrite the previous completed choices.
+Follow-ups evaluate this one saved completed choice set; they do not alternate
+between conflicting answers retained from different runs.
+
 ## Repeat and cooldown policy
 
 Initial repeat policies are intentionally small:
@@ -429,32 +614,71 @@ once
 cooldown
 ```
 
-`once` means once per villager-player pair after successful completion.
-`always` adds no history gate.
+`repeat` is required. Story conversations, including Phyrra's sample and
+follow-ups, use `cooldown` so they can repeat. `once` is available only when an
+author explicitly wants an exceptional event to stop after successful completion
+for that villager-player pair. `always` adds no history gate and can repeat
+immediately. Completion prerequisites do not themselves prohibit repeating.
 
-`cooldown` uses a minimum and maximum number of game ticks:
+`cooldown` is authored in seconds inside the conversation's JSON. A fixed
+interval uses:
 
 ```json
 {
   "type": "cooldown",
-  "min_ticks": 48000,
-  "max_ticks": 120000
+  "seconds": 5
 }
 ```
 
-Equal min/max values are a fixed cooldown. Different values create the requested
-random interval; after successful completion the server rolls the next eligible
-game time within the inclusive range. This is useful for repeatable small talk so
-it does not reappear on a mechanical exact schedule.
+For an authored random interval use `min_seconds` and `max_seconds` instead of
+`seconds`, for example:
 
-Conversation cooldown is pair-scoped. A world fact may expire
+```json
+{
+  "type": "cooldown",
+  "min_seconds": 30,
+  "max_seconds": 90
+}
+```
+
+Exactly one form is permitted: `seconds`, or both `min_seconds` and `max_seconds`.
+Values must be finite, nonnegative numbers; range minimum must not exceed maximum.
+Fractional seconds are permitted. Normalize durations to game ticks with
+`ceil(seconds * 20)`, checking representability before conversion. For ranges,
+roll once within the inclusive normalized tick bounds on successful completion
+and persist the next eligible overworld game time. Do not reroll on menu opening,
+resume, reload or restart. Reject obsolete `min_ticks`/`max_ticks` authoring fields
+rather than retaining a second unit format.
+
+For now, reference stories and small talk each author `seconds: 5` for development
+and feedback: five game-clock seconds equals 100 ticks at 20 TPS. The interval
+starts only after successful completion; it is not the 2400-tick pause/resume
+deadline. Server lag extends real elapsed time and offline time does not advance
+the cooldown. Keep game ticks and absolute timestamps internal to execution/save
+data; seconds are the datapack authoring unit. This temporary sample value is not
+a global override of other authored intervals or explicit `once` policies.
+
+Conversation cooldown is scoped to `(player UUID, villager UUID, event ID)`, not
+a lockout on all conversations with that villager. Other eligible topics and
+follow-ups remain selectable while this event is cooling down. Eligibility for
+a new run also rechecks its current hard requirements. A world fact may expire
 globally, but whether a player has recently had a particular conversation is a
 relationship-history concern.
 
+For example, finishing an event with Alice blocks that event only for this
+player/Alice pair until its cooldown expires. Bob remains eligible even if he has
+the same personality, and another player has independent history with Alice.
+`event_completed` is a historical fact; it does not itself ban a cooldown event
+forever. Authors should give ordinary repeatable conversations a nonzero cooldown
+to avoid consecutive repeats. `always` is an explicit authoring choice that may
+repeat immediately, not an automatic anti-repetition policy.
+
 ## Selection rules
 
-On TALK, the server evaluates events in a stable canonical ID order and produces
-the eligible set. Selection then follows presentation mode.
+On TALK, the server offers any valid same-pair paused continuation separately,
+then evaluates new events in stable canonical ID order to produce the eligible
+set. Exclude the paused event from new-start/ambient candidates. New-event
+selection follows presentation mode; continuation is never a priority/weight draw.
 
 ### Highlighted selection
 
@@ -488,12 +712,16 @@ a low-probability event.
 ## Conversation execution
 
 The rewritten engine executes the selected event's own node graph. A node contains
-a localisation key and either choices or a terminal state. A choice has a stable
+either `line` (one localization key) or nonempty `lines` (ordered localization
+keys), never both. After its last line, it has exactly one continuation shape:
+`choices`, `next`, `complete: true`, or `end: true`. A `next`-only node advances on
+Continue; it is not an automatic recursive transition. A choice has a stable
 ID, localisation key, optional hard requirements, and either one direct
 action/next path or an `outcomes` list for server-selected reaction variation.
 
 An outcome has deterministic hard requirements, a positive `weight`, zero or more
-typed server-side actions, and an optional next node. When a choice uses outcomes,
+typed server-side actions, and a required next node. Direct choices also require
+`next`; explicit terminal nodes define how a path ends. When a choice uses outcomes,
 the server first removes outcomes whose hard requirements fail, then performs a
 weighted draw only among the remaining outcomes. If no outcome remains eligible,
 that choice is not offered to the player. Direct choices are equivalent to one
@@ -504,10 +732,11 @@ greetings, jokes, stories, and rock-paper-scissors without carrying forward
 numeric condition modifiers. Conditions answer *can this outcome happen?*;
 `weight` answers *which eligible reaction is chosen?*.
 
-`complete: true` is explicit event completion. `end: true` ends the conversation
-without consuming a once-only event. Closing the UI, walking away, disconnecting,
-or reaching an ordinary non-completing terminal never implicitly marks an event
-complete.
+`complete: true` declares a completing terminal; the final Continue acknowledges
+it and commits completion. `end: true` declares a non-completing terminal.
+Closing the UI, walking away, disconnecting, or acknowledging a non-completing
+terminal never implicitly marks an event complete. Closing/walking away pauses;
+an acknowledged `end` discards the unfinished run immediately.
 
 Terminal intent must be explicit. A terminal node must specify exactly one of
 `complete: true` or `end: true`. For `once` and `cooldown` events, a reachable
@@ -518,10 +747,40 @@ terminal consumes `once` or starts the cooldown; a retryable terminal does neith
 
 Actions are rewritten as typed, validated data (`mca:hearts`, `mca:mood`,
 `mca:remember`, command where currently supported, and other existing semantics
-that are actually needed). They execute only on the server after the session
-accepts the offered choice. The old numeric `Result` probability/constraint model
-is not carried into the new engine; random variation is represented explicitly
-where authored content needs it.
+that are actually needed). Accepting a choice queues its authored effects in
+server session state. Commit them once on successful final Continue together
+with the completion record. Pause/resume preserves that queue; timeout,
+non-completing end, or invalidation discards it. Do not grant hearts repeatedly
+by choosing a rewarding branch, closing, and restarting without completing.
+Each permitted repeat that reaches successful completion applies its authored
+effects once for that run. The five-second sample interval therefore permits
+frequent completed rewards during development; authors can tune cooldowns and
+reward amounts for production without introducing a separate hidden reward gate.
+
+Gameplay command effects are supported only on a completing path and must be
+revalidated at commit through the existing command owner. Keep commands out of
+retryable/non-completing paths, and avoid mixing multiple irreversible commands
+into one completion. A failed command must not award story rewards or mark the
+event complete. Do not implement general rollback of Minecraft world changes;
+command-specific execution/failure semantics must be reviewed during migration.
+
+Define action side effects against the actual MCA owner. In particular,
+`VillagerBrain.rewardHearts` also changes mood, interaction fatigue and advancement
+state; preserve intended migrated behaviour and do not apply those effects twice
+through a separate mood action. Pending effects are not simulated world facts for
+evaluating later choices in the same conversation.
+
+The old numeric `Result` probability/constraint model is not carried into the new
+engine; random variation is represented explicitly where authored content needs it.
+
+Check event requirements and repeat availability when offering and starting an
+event. Once it starts, changing time/weather/mood or the expiry of its triggering
+recent fact does not cancel it, including on valid resume. Recheck interaction
+validity, explicit choice/outcome requirements, and action-specific constraints
+before the relevant transition. If a displayed choice loses eligibility, refresh
+the offered choices without executing it or redrawing a previously accepted
+outcome. If no choices remain, end the run without completion or effects and
+return to ordinary Talk; do not invent an eligible result.
 
 `DialogueType` keeps its existing purpose: it controls how a line is phrased or
 which translation fallback is selected. DialogueEvent requirements decide what
@@ -532,59 +791,119 @@ eligibility and line phrasing without merging those responsibilities.
 
 DialogueEvent selection and progression are server authoritative.
 
-At most one active event conversation exists per player. Its transient server
-session contains at least:
+At most one retained event conversation exists per player, either active or
+paused. Selecting a different new run with the same or another villager discards
+the old paused run only after the new selection has passed validation;
+durable history for the two player/villager pairs remains independent. Its
+transient server session contains at least:
 
 ```text
 player UUID
 villager UUID
 event ID
-generation/token
+reload generation
+session identity
+single-use offer token
+ACTIVE or PAUSED status and pause-expiry game time
 current node ID
+current line index
 currently offered choice IDs
-temporary selected node/choice path
+temporary accepted stable choice IDs and selected outcomes
+pending story effects
 ```
 
-The TALK/event-list response sends only displayable prompt/event identifiers and
-presentation data. Selecting an event sends the chosen event ID plus the current
-generation/token. Selecting a choice sends only the choice identity for the active
-node; the server never trusts a client-supplied arbitrary dialogue state.
+The TALK/event-list response sends displayable new-topic prompts/event IDs, an
+optional server-built continuation prompt for this pair, presentation data, and
+a menu offer token. Selecting an event sends its ID plus that token. Selecting
+continuation sends `RESUME` plus the menu token; the server derives the retained
+run, never trusting client-supplied resume node/session state. Selecting a choice
+sends its stable ID plus the current active-run offer token.
+Continue sends only the current offer token; the server derives the current
+node/line and next transition. Client packets never provide arbitrary node,
+line-index, outcome, action, or completion state.
+
+Each accepted event selection, choice, or Continue consumes the offer token
+before advancing or applying effects and issues a fresh one for the next view.
+Pause invalidates the current offer; resume preserves the session identity but
+issues a new offer. Use a server-unique token sequence; a node-local counter
+restarting at zero on every conversation is insufficient. Reload generation
+belongs to the immutable resource snapshot and is not reused as an offer token.
+The engine retains one bounded current menu offer alongside at most one run per
+player; a menu offer is not a second dialogue session or history owner. It binds
+sender, target villager, generation, offered event IDs, ambient candidates and
+whether continuation was offered. Refreshing it invalidates the old menu token,
+but does not replace the paused run or refresh its deadline. A forged or expired
+`RESUME` selection is rejected, never interpreted as permission to restart.
+
+Keep the current interaction UI flow: opening the GUI shows its normal controls
+and sends no dialogue begin/resume request. The Talk button sends the begin
+request, whose server handler returns the menu with optional continuation and
+other eligible topics. It never auto-resumes. The existing select request's
+`RESUME` kind performs explicit resume; no resume-only packet is needed.
+Retain the resolved current line in the client presentation state during the
+pause window so pooled phrase fallback does not reroll it on reopen; clear that
+presentation state when its session is replaced, completed, expired or invalidated.
 
 Before starting an event or accepting an answer, the server verifies:
 
-- the active player and villager match;
+- the sender owns the applicable menu offer or run, and the target villager
+  matches that authoritative state (a new menu may target Bob while Alice is paused);
 - the villager still exists and is interactable;
 - the player is still within the normal interaction distance;
-- the generation/token is current;
-- the event is the event offered by the current TALK result;
-- the choice belongs to the current node and was actually offered;
-- hard choice requirements still pass where applicable.
+- the resource snapshot generation and single-use offer token are current;
+- new-event/continuation selections match the current menu offer and target;
+- continuation was offered for this pair and its retained run is still PAUSED,
+  within its deadline, and otherwise valid; do not recheck original entry gates;
+- active choice/Continue messages target an ACTIVE run, not PAUSED or expired;
+- a new-event selection names an offered event, with current entry/repeat gates
+  rechecked before replacing any paused run;
+- an active choice belongs to its run's current node, was actually offered, and
+  still passes explicit choice requirements where applicable.
 
 Stale, replayed, or forged selections are ignored without applying actions.
 
-The same answer-validity check should harden the legacy dialogue packet path as a
-prerequisite fix because the current implementation validates question/answer
-existence but does not re-run the eligibility gate before executing the result.
+The temporary legacy packet path also needs active-question/offered-answer
+validation. The currently inspected `dev/1.21.1` `Dialogues.selectAnswer` already
+rechecks answer constraints; retain that gate instead of claiming it is absent.
+It still does not bind the supplied question/answer pair to an active offered
+question. Local `Constraint` changes also reject unknown constraint tokens;
+preserve and verify those existing changes rather than replacing them blindly.
 
 ## Reload validation and failure behaviour
 
 `DialogueEvents` is a server resource reload listener and publishes one immutable
 registry snapshot only after reload preparation succeeds.
 
+Use Mojang codecs with `JsonOps` for typed definition/condition/action decoding,
+with a separate graph/reference validation pass and resource ID supplied by the
+loader. The 1.21.1 Gson reload listener supplies JSON trees; it does not require
+a second handwritten serialization contract. Report errors with event ID and
+field/node/choice context. Never accept a partially decoded definition with
+missing requirements after codec errors.
+
 Each event is validated for:
 
 - canonical namespaced resource ID;
 - recognized trigger and presentation mode;
-- nonblank prompt for selectable modes;
+- nonblank prompt for selectable modes and nonblank event-specific `resume_prompt`
+  for every mode; missing client translations display their key without changing
+  server authority, and shipped-language tests check that keys actually resolve;
 - finite positive weight;
 - finite positive outcome weights;
-- valid repeat range with `0 <= min_ticks <= max_ticks`;
+- required repeat policy; cooldown has exactly one seconds form, finite
+  nonnegative durations and ordered range bounds, with overflow-safe conversion
+  to ticks and next-eligible timestamp calculation;
+- valid history policy, with scheduling-only storage restricted to cooldown events;
 - recognized condition types and valid condition arguments;
 - recognized MCA-owned enum/registry values where the server can validate them;
 - valid start node, node IDs, event-wide unique choice IDs, and next-node
   references;
-- every nonterminal node has at least one valid choice or explicit automatic
-  transition if such transitions are later supported;
+- each node has exactly one of nonblank `line` or nonempty nonblank `lines`;
+- each node has exactly one continuation shape: nonempty `choices`, `next`,
+  `complete: true`, or `end: true`;
+- every direct choice and every outcome has a valid `next` node;
+- acyclic node graph for this format; repetition uses event repeat policy, not
+  unbounded reward-bearing loops inside an event;
 - each choice uses exactly one execution shape: direct `actions`/`next` or a
   nonempty `outcomes` list;
 - a choice with outcomes is offered only when at least one outcome is currently
@@ -594,6 +913,13 @@ Each event is validated for:
   into `retryable: true`;
 - references from MCA-owned shipped resources to missing `mca:` events are reload
   errors.
+
+Validate referenced stable choice IDs when the target exists; resolved history
+references must target story-retaining events. Diagnose cyclic event prerequisites
+as warnings because arbitrary world conditions prevent a general reachability
+proof; reject an unconditional completed-before dependency cycle in shipped
+resources during resource tests. Do not claim the loader can prove every event's
+conditions satisfiable. Runtime zero-choice handling follows the execution rules.
 
 One malformed event is logged and skipped without invalidating unrelated valid
 events. Unknown requirements are never dropped. A failed resource must not become
@@ -621,17 +947,23 @@ DialogueEvents
 DialogueEvent
   immutable decoded event definition and nested presentation/repeat records
 
-DialogueEventCondition
+DialogueCondition
   deterministic condition decoding/evaluation against an explicit context
 
+DialogueAction
+  typed queued effects and validated completion-time execution
+
+DialogueContext
+  current villager/player/world references for one server evaluation, not a cache
+
 DialogueEngine
-  eligibility, highlighted/ask/ambient selection, and node progression
+  eligibility, presentation selection, line/node progression and session lifecycle
 
 DialogueEventHistory
   SavedData for pair-scoped completion, choices, and cooldowns
 
 DialogueSession
-  transient server-authoritative per-player active event/node/offered choices
+  transient server-authoritative active/paused event/node/line/offered choices
 
 LegacyDialogueAdapter
   temporary migration bridge for unconverted dialogues; removable after migration
@@ -644,6 +976,9 @@ DialogueType
 InteractScreen rendering where practical
 existing villager/player relationship and world-state owners
 ```
+
+Scope engine/session state to a running server and clear it on shutdown; a second
+integrated-server world must not inherit sessions or offers from the first.
 
 `Dialogues`, `Question`, `Answer`, `Result`, and `Actions` remain only behind the
 migration adapter while old resources are converted. They are not dependencies of
@@ -660,22 +995,38 @@ disappear when a villager entity unloads. Event records are keyed by UUID and
 namespaced event ID.
 
 The record is dirtied only when completion/history changes, not on eligibility
-checks. Cooldowns store the rolled `nextEligibleGameTime`; they are not rerolled
-every time the player talks.
+checks (and when pruning actually removes scheduling records). Cooldowns store
+the rolled `nextEligibleGameTime`; they are not rerolled every time the player
+talks. Use overworld game time consistently for history and pause deadlines.
+
+SavedData starts with explicit `schema_version: 1`. Validate loaded IDs and
+timestamps, bound input collections, and keep version upgrade logic at the
+history owner. Do not silently clear saves with an unsupported future version.
+Stable IDs are save-facing API; changing an event/choice ID requires an explicit
+migration or documented story reset, not an accidental rename.
 
 Villager death does not immediately erase pair history. A UUID identifies the
 personality/relationship subject MCA already uses for family identity, and losing
-the entity should not make a player able to replay once-only history if the same
-villager is restored.
+the entity should not erase completed replies or bypass a stored cooldown if the
+same villager is restored. Explicit author-selected `once` policies also remain
+consumed after restoration.
 
-History is bounded by storing one `EventRecord` per player/villager/event tuple,
-not an append-only conversation log. Durable story state (completion and recorded
+History has bounded records per player/villager/event tuple, not an append-only
+conversation log. It is not a globally constant-size database: the number of
+distinct pairs and durable stories can grow. Durable story state (completion and recorded
 choice IDs) is retained indefinitely because later events may depend on it. Pure
 scheduling state with no durable completion/choice history may be removed lazily
 once its cooldown has expired. An orphaned player/villager pair that contains only
 such expired scheduling state may be removed as a whole; a pair containing durable
 story state is retained unless an explicit administrative/save-migration purge is
 performed. Entity death or temporary unload alone is never a cleanup signal.
+
+Scheduling-only events must not store completion counts or choice sets, so their
+records can actually expire. Prune those records lazily on relevant accesses and
+in bounded maintenance batches; avoid scanning the entire save on every TALK.
+Keep removed-addon durable records to allow reinstalling its story chain; provide
+an explicit administrative purge/migration path for obsolete IDs and player data.
+Do not silently evict permanent story state to meet an arbitrary cap.
 
 MCA villager/zombie conversion preserves the same UUID. On `dev/1.21.1`, the
 current conversion pipeline also writes and restores `LongTermMemory` through
@@ -700,6 +1051,12 @@ small server-side extension points once the built-in codec registry shape is
 stable. No client-supplied action code is ever executed. Custom conditions must be
 deterministic for a given evaluation context.
 
+Translation `/1`, `/2`, etc. are MCA's pooled alternative phrasings, not a sequence
+of spoken lines. Use unique semantic keys for ordered `lines`, for example
+`intro.heard_about_cures` and `intro.same_person`. Player replies and villager
+responses also require distinct keys. Reject duplicate keys in shipped language
+source validation; ordinary JSON parsing may otherwise discard earlier entries.
+
 Addon event IDs always retain their namespace. An addon named `example_addon`
 therefore cannot collide accidentally with `mca:personal/gloomy_reflection` merely by
 using the same filename.
@@ -712,26 +1069,31 @@ than large quantities of writing.
 1. **Gloomy nighttime reflection**
    - personality + hearts + sad mood + nighttime;
    - highlighted;
-   - once per pair;
+   - repeatable per pair, `seconds: 5` for now;
    - at least one meaningful choice.
 2. **Grumpy nighttime conversation**
    - personality + nighttime;
    - ambient or ask;
-   - random 2-5 day cooldown.
+   - fixed `seconds: 5` cooldown for now.
 3. **Weather/ambience conversation**
    - rain or thunder + personality/trait preference;
-   - repeatable random cooldown.
+   - repeatable, fixed `seconds: 5` cooldown for now; random intervals remain supported.
 4. **Trait conversation**
    - ordinary trait requirement, with lactose intolerance as a concrete data
      example rather than a hard-coded special case.
 5. **Mourning conversation**
    - recent relative death + relationship context;
    - highlighted/ask;
-   - once or long cooldown.
-6. **Zombie cure identity conversation**
-   - recently cured;
-   - asks whether the villager feels like the same person;
-   - meaningful branching choice.
+   - repeatable per pair with `seconds: 5` for now, while the recent-death
+     requirements still hold; later grief conversations may be separate events.
+6. **Cured-zombie identity discussion and personal cure story**
+   - Phyrra's speculative discussion: adult + gloomy + nighttime + hearts >= 20;
+   - the speculative speaker need not have been cured;
+   - separate personal story may require `mca:recent_event` for a successfully
+     recorded cure on the speaking villager;
+   - both demonstrate meaningful branching choices and ordered response lines.
+   - repeatable per pair with `seconds: 5` for now and separately authored
+     remembered-choice follow-ups.
 7. **Recently revived conversation**
    - recently revived + mood/relationship;
    - highlighted or ask.
@@ -742,9 +1104,141 @@ than large quantities of writing.
    - requires completion of event 1;
    - requires a specific earlier stable choice ID;
    - proves persistent relationship continuity.
+   - appears as a selectable new topic, not an automatic next event.
 
-These events should be written as test/sample content, not treated as the final
+All reference stories, including follow-ups, author a five-second cooldown for
+now and retain story history where later content needs it. These events should
+be written as test/sample content, not treated as the final
 volume or tone of MCA's production dialogue.
+
+### Phyrra's conversation in the new authoring format
+
+Resource: `data/mca/dialogue_events/personal/cured_zombies.json`.
+This story is repeatable with an authored `seconds: 5` cooldown for each
+player/villager pair. Its latest completed replies remain available to separately
+authored follow-up events; cooldown expiry does not erase them. Reward amounts below
+remain illustrative content values. The four positive entry
+requirements are confirmed; the old `!adult`, `!night`, `!gloomy`, and `!20`
+tokens must not be interpreted as the intended exclusions.
+
+```json
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue_event.mca.cured_zombies.prompt",
+    "resume_prompt": "dialogue_event.mca.cured_zombies.resume"
+  },
+  "priority": 50,
+  "requirements": [
+    { "type": "mca:age_group", "value": "adult" },
+    { "type": "mca:personality", "value": "gloomy" },
+    { "type": "mca:time", "min": 13000, "max": 23000 },
+    { "type": "mca:hearts", "min": 20 }
+  ],
+  "repeat": { "type": "cooldown", "seconds": 5 },
+  "history": "story",
+  "start": "intro",
+  "nodes": {
+    "intro": {
+      "lines": [
+        "dialogue_event.mca.cured_zombies.intro.heard_about_cures",
+        "dialogue_event.mca.cured_zombies.intro.same_person"
+      ],
+      "choices": [
+        {
+          "id": "experience_changes_you",
+          "text": "dialogue_event.mca.cured_zombies.choice.experience_changes_you",
+          "actions": [{ "type": "mca:hearts", "amount": 5 }],
+          "next": "reflect"
+        },
+        {
+          "id": "dont_know",
+          "text": "dialogue_event.mca.cured_zombies.choice.dont_know",
+          "next": "uncertain"
+        },
+        {
+          "id": "challenge_the_question",
+          "text": "dialogue_event.mca.cured_zombies.choice.challenge_the_question",
+          "actions": [{ "type": "mca:hearts", "amount": -5 }],
+          "next": "apology"
+        }
+      ]
+    },
+    "reflect": {
+      "lines": [
+        "dialogue_event.mca.cured_zombies.reflect.experience",
+        "dialogue_event.mca.cured_zombies.reflect.more_than_that"
+      ],
+      "next": "bedtime"
+    },
+    "uncertain": {
+      "lines": [
+        "dialogue_event.mca.cured_zombies.uncertain.guess",
+        "dialogue_event.mca.cured_zombies.uncertain.bother"
+      ],
+      "next": "bedtime"
+    },
+    "apology": {
+      "lines": [
+        "dialogue_event.mca.cured_zombies.apology.sorry",
+        "dialogue_event.mca.cured_zombies.apology.shouldnt_have_said"
+      ],
+      "next": "bedtime"
+    },
+    "bedtime": {
+      "line": "dialogue_event.mca.cured_zombies.bedtime",
+      "complete": true
+    }
+  }
+}
+```
+
+Matching language entries use unique keys, not repeated `/1` keys:
+
+```json
+{
+  "dialogue_event.mca.cured_zombies.prompt": "Something on your mind?",
+  "dialogue_event.mca.cured_zombies.resume": "%1$s, about what you said about cured villagers...",
+  "dialogue_event.mca.cured_zombies.intro.heard_about_cures": "I heard about some zombies being able to be cured and turning back into people.",
+  "dialogue_event.mca.cured_zombies.intro.same_person": "I can't help but wonder if they're still the same person after that, or if something is... different.",
+  "dialogue_event.mca.cured_zombies.choice.experience_changes_you": "I wonder about that too. Maybe they're just different from the experience.",
+  "dialogue_event.mca.cured_zombies.choice.dont_know": "I wouldn't know.",
+  "dialogue_event.mca.cured_zombies.choice.challenge_the_question": "That's a cruel thing to think about other villagers. Haven't they been through enough?",
+  "dialogue_event.mca.cured_zombies.reflect.experience": "I hadn't thought of it like that. It's a lot to go through.",
+  "dialogue_event.mca.cured_zombies.reflect.more_than_that": "But what if it's more than that?",
+  "dialogue_event.mca.cured_zombies.uncertain.guess": "I suppose I shouldn't try to guess either.",
+  "dialogue_event.mca.cured_zombies.uncertain.bother": "Sorry, I shouldn't bother you with this.",
+  "dialogue_event.mca.cured_zombies.apology.sorry": "You're right. I'm sorry...",
+  "dialogue_event.mca.cured_zombies.apology.shouldnt_have_said": "I knew I shouldn't have said anything.",
+  "dialogue_event.mca.cured_zombies.bedtime": "Thanks for listening. I need to go to bed now."
+}
+```
+
+## Approved gameplay decisions
+
+These decisions include the later remembered-question and player-choice
+refinements; none authorizes product implementation:
+
+1. **Task 3 — remembered stories:** stories can repeat after their authored
+   per-event/pair cooldown, with separate follow-ups reflecting the recorded
+   answer. Each story remembers the latest completed
+   run's choice set, replacing rather than accumulating previous choices. If a
+   player first says cured people are unchanged, then later says experience
+   changes them, follow-ups remember only the second completed answer. Abandoning
+   a later attempt leaves the previous completed choice set intact.
+2. **Task 5 — conversation selection:** Talk offers an authored, personalized
+   continuation alongside other eligible topics instead of auto-resuming.
+   Selecting a different valid topic with Alice or Bob abandons the paused run.
+   Keep at most one active or paused run per player. Browsing either villager's
+   normal controls or Talk menu does not abandon it or reset its deadline.
+   Durable history/cooldown remains independent for each pair.
+3. **Task 11 — repeat interval for now:** reference conversations, including
+   stories, Phyrra's speculative cured-zombie discussion and small talk, author
+   `repeat: { "type": "cooldown", "seconds": 5 }` in their datapack JSON.
+   Optional random intervals use `min_seconds`/`max_seconds`. Keep the two-minute
+   pause window unchanged and retain per-event random cooldown support for later
+   content tuning. This supersedes the earlier once-only reference-story decision.
 
 ## Prerequisite hardening retained from the audit
 
@@ -752,11 +1246,11 @@ The source audit found several existing weaknesses that directly affect safe
 DialogueEvent execution. They are prerequisites or adjacent fixes, not the
 feature's primary architecture.
 
-1. Revalidate legacy dialogue answers on the server before applying results for as
-   long as the migration adapter remains reachable.
-2. Reject or fail closed on unknown hard constraints instead of silently dropping
-   them. Existing shipped references such as `rumors_cooldown` and `child` must be
-   corrected or represented by valid conditions.
+1. Bind legacy answers to the active offered question while the migration adapter
+   remains reachable, and retain the current server constraint revalidation.
+2. Preserve and regression-test the local fail-closed constraint changes. Existing
+   shipped references such as `rumors_cooldown` and `child` must be corrected or
+   represented by valid conditions rather than restoring silent token dropping.
 3. Regression-test the existing `LongTermMemory` villager/zombie conversion
    preservation before relying on it for recent facts, and give any new structured
    fact owner explicit conversion semantics.
@@ -834,13 +1328,49 @@ The implementation is acceptable when automated tests cover at least:
   available; migration-only legacy fallback works only while unconverted content
   remains;
 - `once` blocks only after explicit completion;
-- closing or disconnecting before completion does not consume a once-only event;
+- closing pauses for 2400 overworld ticks; right-click opens normal controls and
+  Talk offers a personalized continuation alongside other topics; selecting that
+  continuation resumes the same node/line/choices without rerolling an outcome;
+- opening the interaction screen or browsing Talk options does not resume the
+  run or extend its deadline;
+- menu browsing preserves the paused run/deadline, while selecting a different
+  valid topic with the same or another villager abandons it without effects;
+  invalid/stale selections preserve it, and at most one run is retained;
+- a paused event appears only as continuation, not as a second new-start option
+  or an ambient draw candidate; priority does not hide continuation/other topics;
+- completing a story excludes that event until its authored cooldown expires;
+  completion/choices survive expiry, and other topics or choice-dependent
+  follow-ups appear when eligible and selected by the player;
+- completion/end returns to refreshed Talk options, never auto-starts another event;
+- continuation prompts are event-specific/localized, with optional villager-name
+  argument and no guessed generic label or exposure of unchosen story branches;
+- expiry discards unfinished history/effects; disconnect or restart does not
+  persist unfinished conversations;
+- typewriter reveals one complete word per 250 ms, with locale-aware, Unicode-safe
+  reveal and no skip/acceleration or instant-display setting; Continue/replies
+  become available only when their current/final passage line is fully revealed;
+- clicking during reveal neither exposes the rest of the line nor advances or
+  queues advancement;
+- consecutive localization keys play in order; pooled `/1` and `/2` remain
+  alternative phrases rather than consecutive lines;
+- terminal lines require final Continue before effects/history/cooldown commit;
+- closing a rewarding branch before completion cannot farm hearts or mood;
+- weather/time/mood changes after starting do not interrupt a valid run;
 - fixed cooldown and random-window cooldown respect stored next-eligible game
   time and random bounds;
+- reference stories and small talk author `seconds: 5`, normalized to 100 ticks:
+  unavailable at completion + 99
+  ticks and eligible at completion + 100 ticks if other requirements still hold;
+- missing repeat policy, conflicting seconds forms, obsolete tick fields,
+  non-finite/negative seconds, reversed ranges and conversion overflow are rejected;
+  fractional positive seconds round upward to a tick and random bounds roll only
+  at completion;
 - two players have independent history with the same villager;
 - a prior event-completion requirement works after save/reload;
 - a prior stable event choice requirement works after save/reload even if its node
   is later reorganized;
+- a repeat completion replaces the prior choice set; choices omitted from the
+  latest completed run no longer match, and an abandoned attempt changes nothing;
 - duplicate choice IDs within one event are rejected;
 - `once`/`cooldown` events reject reachable non-completing terminals unless they
   explicitly set `retryable: true`;
@@ -848,7 +1378,12 @@ The implementation is acceptable when automated tests cover at least:
   the referencing event, while broken shipped `mca:` references fail reload;
 - expired scheduling-only history can be pruned without removing durable completed
   story/choice history;
-- stale/replayed event or choice packets cannot execute actions;
+- consumed offer tokens reject duplicate event/choice/Continue packets, including
+  packets delivered after pause/resume, completion or resource reload;
+- explicit negation cannot make missing/unknown references pass;
+- unsupported save versions are not silently reset;
+- resolved history references cannot target scheduling-only events;
+- zero available choices ends safely without completion/effects;
 - hidden/invalid legacy answers are rejected server-side;
 - recent life-event facts have explicit owners and expiry semantics;
 - both Fabric and NeoForge builds remain healthy for the target branch.
@@ -858,13 +1393,19 @@ understand why they feel contextually appropriate without seeing implementation
 labels, make a choice, and later receive a follow-up conversation that reflects
 that choice.
 
+Delivery also includes the personality writing guide and the speculative/personal
+cure examples. Follow the recorded gameplay decisions above in their dependent
+plan tasks; documentation approval does not authorize implementation.
+
 ## Delivery boundary
 
-This spec authorizes a future implementation plan, not implementation itself. The
+This spec and its accompanying migration plan describe the design, not permission
+to implement it. The
 target architecture is the rewritten DialogueEvent engine: event-owned graphs,
 history, authoritative sessions, typed conditions/actions, and contextual
 selection. The legacy engine may survive temporarily behind an adapter only to
 make migration incremental; it is not part of the desired end state.
 
-Only after this revised design is reviewed should implementation be decomposed
-into a written migration plan for `dev/1.21.1` and then ported to 26.1.2/26.2.
+Review these refinements together with the written migration plan for
+`dev/1.21.1`. Product implementation still requires explicit authorization;
+version-specific adapters can be ported to 26.1.2/26.2 after 1.21.1 is verified.

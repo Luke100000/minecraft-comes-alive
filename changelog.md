@@ -22,14 +22,18 @@
   * Added clearer controls for adding floors and basements, updating or removing rooms, and managing room requirement sharing.
   * Added map scale options, fit-to-village, terrain and building-icon toggles, player-centred mode and a player-marker toggle.
   * Improved map performance, water rendering and seabed visibility.
+* Building edits now retain the originally selected room and floor if the player moves before confirming.
+* Improved building and floor detection around uneven and stepped porches.
   * Adjusted some map colours for readability.
 
 ## Villager movement, homes & mourning
 
 * Villagers should move and sleep more reliably, including around beds, ladders, doors, gates and between floors.
 * Villagers can now open, close and path through fence gates. This can be controlled with the `villagersInteractWithFenceGates` config option.
+* Villagers can operate compatible Dramatic Doors variants and optionally all vanilla-style doors with `villagersInteractWithAnyDoor`.
 * Villagers are better at recognising when they have actually reached the correct room or building.
 * Fixed workplace assignment and job ownership issues.
+* Added `villagersChangeProfession` to preserve existing professions when assigning a workplace.
 * Fixed duplicate home and bed assignments.
 * Fixed villagers sometimes losing or being assigned the wrong home.
 * Villagers can now recognise more modded beds as valid homes.
@@ -46,6 +50,7 @@
 
 * Villagers are less likely to stop facing their current work target during persistent chores.
 * Harvesting villagers now prioritise mature crops instead of wandering toward empty farmland.
+* Fixed harvesting drops that require block-entity data.
   * Immature crops can be bonemealed before villagers move on to planting.
   * Empty farmland is only targeted when the villager actually has seeds to plant.
   * If harvesting is interrupted, progress no longer carries over to the next crop and makes it finish too quickly.
@@ -64,6 +69,7 @@
 
 * Improved archer movement in combat, including approaching, holding position, repositioning, kiting and emergency retreats.
 * Archers are better at avoiding crowds and obstacles while retreating and keep facing their target while moving.
+* Guards and archers keep their equipment while peacefully following a player.
 * Fixed archers continuing to use a bow or crossbow during an emergency retreat.
 * Archers no longer repeatedly overwrite movement targets published by other AI while holding position or kiting.
 * MCA archer arrows can now pass through villagers instead of hitting them. This can be controlled with the `archerArrowsIgnoreVillagers` config option.
@@ -73,6 +79,7 @@
 
 * Interacting with a villager now selects that exact villager for ChatAI conversations.
 * Improved full-name and nickname targeting so partial names are less likely to select the wrong villager.
+* Villager interaction memory now survives zombie infection and curing.
 * Waiting for ChatAI responses no longer blocks the server, and requests now time out if they take too long.
 * Profession changes made in the Villager Editor now apply and refresh more consistently.
 * Improved Destiny location configuration:
@@ -107,6 +114,10 @@
 * Fixed villager brain refreshes losing live memories, including guard combat state when switching to Follow.
 * Fixed recovery food replacing or deleting a villager's held weapon/tool, with proper eating and cancellation behavior.
 * Fixed scaled player hitboxes not being refreshed and synchronized when joining a server.
+* Fixed panic scream spam, blacklisted items opening interactions, and some dialogue option eligibility.
+* Added `villagerTagBlacklist` for excluding tagged entities from MCA villager conversion.
+* Added compatibility defaults for additional player-animation mods and migrated new compatibility settings without overwriting user choices.
+* Improved safe baby placement and crib interactions.
 * Fixed adding skins to the server-wide pool not working without cheats in singleplayer.
 * Fixed custom player size and hitbox resetting after changing dimensions.
 
