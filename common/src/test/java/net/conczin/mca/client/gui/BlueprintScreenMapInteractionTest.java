@@ -176,6 +176,56 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
+    void addingUpperFloorOrBasementSelectsItsFloor() throws Exception {
+        for (int newFloor : List.of(1, -1)) {
+            BlueprintScreen.onClientLevelChanged(new Object());
+            int y = newFloor > 0 ? 72 : 56;
+            BlueprintScreen screen = blueprintAt(new BlockPos(0, y, 0));
+            screen.setVillage(villageWithStructures(1, List.of(new BlockPos(0, 64, 0))));
+            setField(screen, "selectPlayerFloorOnNextVillageResponse", true);
+
+            screen.setVillage(villageWithSecondFloor(newFloor, true));
+
+            assertEquals(newFloor, getField(screen, "selectedFloorOrdinal"));
+        }
+    }
+
+    @Test
+    void addingRoomOnAnotherFloorSelectsThatFloor() throws Exception {
+        BlueprintScreen screen = blueprintAt(new BlockPos(0, 72, 0));
+        screen.setVillage(villageWithSecondFloor(1, false));
+        setField(screen, "selectPlayerFloorOnNextVillageResponse", true);
+
+        screen.setVillage(villageWithSecondFloor(1, true));
+
+        assertEquals(1, getField(screen, "selectedFloorOrdinal"));
+    }
+
+    @Test
+    void addingRoomWhileShowingAllFloorsKeepsAllFloorsSelected() throws Exception {
+        BlueprintScreen screen = blueprintAt(new BlockPos(0, 72, 0));
+        screen.setVillage(villageWithSecondFloor(1, false));
+        setField(screen, "selectedFloorOrdinal", null);
+        setField(screen, "selectPlayerFloorOnNextVillageResponse", true);
+
+        screen.setVillage(villageWithSecondFloor(1, true));
+
+        assertEquals(null, getField(screen, "selectedFloorOrdinal"));
+    }
+
+    @Test
+    void failedRoomAdditionDoesNotChangeSelectedFloor() throws Exception {
+        BlueprintScreen screen = blueprintAt(new BlockPos(0, 72, 0));
+        screen.setVillage(villageWithSecondFloor(1, false));
+        setField(screen, "selectPlayerFloorOnNextVillageResponse", true);
+
+        screen.setVillage(villageWithSecondFloor(1, false));
+
+        assertEquals(0, getField(screen, "selectedFloorOrdinal"));
+        assertEquals(false, getField(screen, "selectPlayerFloorOnNextVillageResponse"));
+    }
+
+    @Test
     void registeredRoomScanCarriesExpectedRoomId() {
         Building room = room(42);
         RoomScanPlan plan = RoomScanPlan.updateRoom(room, BlockPos.ZERO);
@@ -987,6 +1037,35 @@ class BlueprintScreenMapInteractionTest {
         room.setStructureId(10);
         room.setFloorId(0);
         return room;
+    }
+
+    private static BlueprintScreen blueprintAt(BlockPos position) throws Exception {
+        BlueprintScreen screen = new BlueprintScreen();
+        Minecraft client = allocate(Minecraft.class);
+        client.player = allocate(LocalPlayer.class);
+        Field minecraftField = Screen.class.getDeclaredField("minecraft");
+        minecraftField.setAccessible(true);
+        minecraftField.set(screen, client);
+        Field playerPosition = Entity.class.getDeclaredField("blockPosition");
+        playerPosition.setAccessible(true);
+        playerPosition.set(client.player, position);
+        setField(screen, "page", "map");
+        return screen;
+    }
+
+    private static Village villageWithSecondFloor(int number, boolean withRoom) throws Exception {
+        int y = number > 0 ? 72 : 56;
+        Village village = new Village(1, null);
+        Structure structure = new Structure(10, BlockPos.ZERO, List.of(
+                floor(0, 64, 68, 0), floor(1, y, y + 4, number)));
+        registerStructure(village, structure, room(1));
+        if (withRoom) {
+            Building added = room(2);
+            added.setFloorId(1);
+            registerRoom(village, added);
+        }
+        village.calculateDimensions();
+        return village;
     }
 
     private static Village villageWithStructures(int villageId, List<BlockPos> cells) throws Exception {
