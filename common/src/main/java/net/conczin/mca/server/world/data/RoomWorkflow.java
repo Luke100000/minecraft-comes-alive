@@ -36,7 +36,7 @@ public final class RoomWorkflow {
                             Building.validationResult.NOT_IN_BUILDING, source, expectedTargetBuildingId);
                 }
                 Outcome outcome = commitAddition(
-                        analyzeAttachedRoom(village, analysis, expectedTargetBuildingId), selectedType);
+                        materializeAttachedRoom(village, analysis, expectedTargetBuildingId), selectedType);
                 return withProspectiveFloorNumber(outcome, plan.prospectiveFloorNumber());
             }
             if (expectedTargetBuildingId >= 0) {
@@ -99,7 +99,7 @@ public final class RoomWorkflow {
         SelectedFloorScanner.Result floorScan = structureScan.scan();
         List<RoomPartitioner.Component> components = BuildingRoomScanner.components(world, floorScan);
         BuildingRoomScanner.Result selectedGeometry = BuildingRoomScanner.materializeSelected(
-                structureScan.source(), Config.getInstance().maxBuildingSize, floor.id(),
+                structureScan.source(), Config.getInstance().maxBuildingSize,
                 floorScan.floor(), components);
         BuildingScanResult selected = roomResultFromGeometry(
                 village, candidate, floor, selectedGeometry);
@@ -153,7 +153,7 @@ public final class RoomWorkflow {
         List<RoomPartitioner.Component> components = analysis.observation() == null
                 ? BuildingRoomScanner.components(world, fresh.scan()) : analysis.components();
         BuildingRoomScanner.Result selected = BuildingRoomScanner.materializeSelected(
-                scanSeed, Config.getInstance().maxBuildingSize, floor.id(),
+                scanSeed, Config.getInstance().maxBuildingSize,
                 fresh.scannedFloor(), components);
         BuildingScanResult addition = roomResultFromGeometry(
                 village, refreshed, refreshedFloor, selected);
@@ -177,12 +177,13 @@ public final class RoomWorkflow {
         Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
         if (village == null) return failedRoom(Building.validationResult.NOT_IN_BUILDING, source, null);
         RoomScanPlanner.Analysis analysis = RoomScanPlanner.analyze(village, world, source);
-        return analyzeAttachedRoom(village, analysis, expectedTargetBuildingId);
+        return materializeAttachedRoom(village, analysis, expectedTargetBuildingId);
     }
 
     BuildingScanResult analyzeAttachedRoom(Village village,
-                                           RoomScanPlan plan,
+                                           RoomScanPlanner.Analysis captured,
                                            int expectedTargetBuildingId) {
+        RoomScanPlan plan = captured == null ? null : captured.plan();
         BlockPos source = plan == null ? BlockPos.ZERO : plan.interactionSource();
         if (village == null || plan == null) {
             return failedRoom(Building.validationResult.NOT_IN_BUILDING, source, village);
@@ -191,14 +192,15 @@ public final class RoomWorkflow {
         RoomScanPlan current = fresh.plan();
         if (plan.mode() != current.mode() || plan.targetBuildingId() != current.targetBuildingId()
                 || plan.prospectiveFloorNumber() != current.prospectiveFloorNumber()
-                || plan.selectedAttachmentFloor() == null || current.selectedAttachmentFloor() == null
-                || !plan.selectedAttachmentFloor().geometry().sameCellPositions(current.selectedAttachmentFloor().geometry())) {
+                || captured.observation() == null || fresh.observation() == null
+                || !captured.observation().scan().floor()
+                        .sameCellPositions(fresh.observation().scan().floor())) {
             return failedRoom(Building.validationResult.NOT_IN_BUILDING, source, village);
         }
-        return analyzeAttachedRoom(village, fresh, expectedTargetBuildingId);
+        return materializeAttachedRoom(village, fresh, expectedTargetBuildingId);
     }
 
-    private BuildingScanResult analyzeAttachedRoom(Village village,
+    private BuildingScanResult materializeAttachedRoom(Village village,
                                                    RoomScanPlanner.Analysis analysis,
                                                    int expectedTargetBuildingId) {
         RoomScanPlan plan = analysis.plan();
@@ -228,12 +230,9 @@ public final class RoomWorkflow {
         }
 
         candidate.setLogicalBuildingId(plan.targetBuildingId());
-        List<RoomPartitioner.Component> components = structureScan.scannedFloor()
-                .sameCellPositions(analysis.observation().scan().floor())
-                ? analysis.components() : BuildingRoomScanner.components(world, structureScan.scan());
         BuildingRoomScanner.Result geometry = BuildingRoomScanner.materializeSelected(
                 plan.scanSeed(), Config.getInstance().maxBuildingSize,
-                attachmentFloor.id(), structureScan.scannedFloor(), components);
+                structureScan.scannedFloor(), analysis.components());
         return roomResultFromGeometry(village, candidate, attachmentFloor, geometry)
                 .withSource(source)
                 .withPendingStructure(candidate);
@@ -241,12 +240,6 @@ public final class RoomWorkflow {
 
     private StructureScanner.Result resolvePlannedAttachmentScan(Village village, RoomScanPlanner.Analysis analysis) {
         RoomScanPlan plan = analysis.plan();
-        StructureFloor plannedFloor = plan.selectedAttachmentFloor();
-        if (plannedFloor == null) {
-            return StructureScanner.Result.failure(
-                    Building.validationResult.NOT_IN_BUILDING, plan.interactionSource());
-        }
-
         Collection<Structure> existing = village.getStructures().values();
         StructureScanner.FloorObservation observation = analysis.observation();
         if (observation == null) {
@@ -254,11 +247,7 @@ public final class RoomWorkflow {
                     Building.validationResult.NOT_IN_BUILDING, plan.interactionSource());
         }
 
-        // Planning and materialization consume the same one selected-Floor observation.
-        if (!observation.scan().floor().sameCellPositions(plannedFloor.geometry())) {
-            return StructureScanner.Result.failure(
-                    Building.validationResult.NOT_IN_BUILDING, plan.interactionSource());
-        }
+        // Planning and materialization consume the same selected-Floor observation.
         return StructureScanner.resultFromObservedFloor(
                 plan.scanSeed(), observation.scan(), existing, -1, plan.targetBuildingId());
     }
@@ -305,8 +294,7 @@ public final class RoomWorkflow {
         }
 
         BuildingRoomScanner.Result geometry = BuildingRoomScanner.materialize(
-                fresh.source(), Config.getInstance().maxBuildingSize, persistedFloor.id(),
-                fresh.scannedFloor(), components, selectedComponent);
+                fresh.source(), Config.getInstance().maxBuildingSize, components, selectedComponent);
         BuildingScanResult selected = materializeRoom(village, refreshed, refreshedFloor, geometry);
         if (selected.result() != Building.validationResult.SUCCESS) {
             return RegisteredRoomUpdate.failure(selected.result(), source, village);
@@ -399,7 +387,7 @@ public final class RoomWorkflow {
         }
         RoomScanPlanner.Analysis analysis = RoomScanPlanner.analyze(village, world, source);
         Outcome outcome = commitAddition(
-                analyzeAttachedRoom(village, analysis, expectedBuildingId), selectedType);
+                materializeAttachedRoom(village, analysis, expectedBuildingId), selectedType);
         return withProspectiveFloorNumber(outcome, analysis.plan().prospectiveFloorNumber());
     }
 

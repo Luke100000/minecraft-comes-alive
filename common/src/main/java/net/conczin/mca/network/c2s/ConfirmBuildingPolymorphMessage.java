@@ -30,14 +30,23 @@ public record ConfirmBuildingPolymorphMessage(BlockPos source,
     @Override
     public void handleServer(ServerPlayer player) {
         try {
-            ServerLevel level = (ServerLevel) player.level();
+            ServerLevel level = player.level();
+            BlockPos currentPosition = player.blockPosition();
+            if (!matchesContinuationSource(source, currentPosition)) return;
+            // A stale choice must not normalize an embedded player onto a different surface.
+            if (level.getBlockState(source).isCollisionShapeFullBlock(level, source)) return;
+
             VillageManager manager = VillageManager.get(level);
             ReportBuildingMessage.executeScanAction(
-                    new RoomWorkflow(manager, level), player, player.blockPosition(),
+                    new RoomWorkflow(manager, level), player, source,
                     chosenType, action, expectedTargetId);
         } finally {
             GetVillageRequest.sendResponse(player);
         }
+    }
+
+    static boolean matchesContinuationSource(BlockPos source, BlockPos currentPosition) {
+        return source != null && source.equals(currentPosition);
     }
 
     @Override

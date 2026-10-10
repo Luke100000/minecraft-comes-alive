@@ -90,6 +90,7 @@ final class FloorGeometry {
         return Optional.ofNullable(cellsByPosition.get(feet));
     }
 
+    /** Legacy representative height; fresh scans use their ordinary surface evidence. */
     int anchorY() {
         Map<Integer, Long> counts = cells.stream().collect(Collectors.groupingBy(
                 cell -> cell.feet().getY(), Collectors.counting()));

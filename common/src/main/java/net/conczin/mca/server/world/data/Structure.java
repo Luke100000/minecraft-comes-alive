@@ -27,9 +27,10 @@ public final class Structure implements VillageBuilding {
         this.id = id;
         logicalBuildingId = id;
         this.source = source.immutable();
-        for (StructureFloor floor : floors) {
+        for (StructureFloor floor : Objects.requireNonNull(floors, "floors")) {
             putFloorUnique(floor);
         }
+        requireFloor();
         recomputeBoundsFromFloors();
     }
 
@@ -42,7 +43,14 @@ public final class Structure implements VillageBuilding {
                 value -> StructureFloor.load((CompoundTag) value))) {
             putFloorUnique(floor);
         }
+        requireFloor();
         recomputeBoundsFromFloors();
+    }
+
+    private void requireFloor() {
+        if (floors.isEmpty()) {
+            throw new IllegalArgumentException("Structure " + id + " requires at least one StructureFloor");
+        }
     }
 
     private void putFloorUnique(StructureFloor floor) {
@@ -231,21 +239,25 @@ public final class Structure implements VillageBuilding {
     boolean replaceFloorGeometry(int floorId, FloorGeometry scannedFloor) {
         StructureFloor existing = floors.get(floorId);
         if (existing == null || scannedFloor == null) return false;
-        floors.put(floorId, new StructureFloor(floorId, existing.floorNumber(), scannedFloor));
+        floors.put(floorId, new StructureFloor(
+                floorId, existing.floorNumber(), existing.anchorY(), scannedFloor));
         if (floorId == 0) originGeometryApproximate = false;
         recomputeBoundsFromFloors();
         return true;
     }
 
     boolean removeFloor(int floorId) {
-        if (floors.remove(floorId) == null) return false;
-        if (!floors.isEmpty()) recomputeBoundsFromFloors();
+        if (!floors.containsKey(floorId) || floors.size() == 1) return false;
+        floors.remove(floorId);
+        recomputeBoundsFromFloors();
         return true;
     }
 
     private void recomputeBoundsFromFloors() {
         List<StructureFloor> current = getFloors();
-        if (current.isEmpty()) return;
+        if (current.isEmpty()) {
+            throw new IllegalStateException("Structure " + id + " has no floors");
+        }
 
         List<FloorGeometry.Cell> cells = current.stream()
                 .flatMap(floor -> floor.geometry().cells().stream())

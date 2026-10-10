@@ -11,8 +11,10 @@ import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -22,6 +24,7 @@ import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
+import java.util.HashSet;
 import java.util.Set;
 
 @GameTestHolder("minecraft")
@@ -386,6 +389,95 @@ public final class DoorInteractionGameTests {
                         .orElse(Set.of())
                         .contains(GlobalPos.of(helper.getLevel().dimension(), hatch)),
                 "hatch opened by the villager was not remembered for closing");
+
+        villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_stale_toggleable_memory", templateNamespace = "minecraft",
+            template = "bastion/blocks/air")
+    public static void distantRememberedToggleableDoesNotLoadChunk(GameTestHelper helper) {
+        BlockPos villagerPos = helper.absolutePos(new BlockPos(2, 2, 4));
+        BlockPos distant = villagerPos.offset(1024, 0, 1024);
+        ChunkPos distantChunk = ChunkPos.containing(distant);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(villagerPos))
+                .withName("Stale Toggleable Probe")
+                .spawn(EntitySpawnReason.STRUCTURE);
+        villager.setNoAi(true);
+        villager.refreshBrain(helper.getLevel());
+
+        GlobalPos remembered = GlobalPos.of(helper.getLevel().dimension(), distant);
+        villager.getBrain().setMemory(MemoryModuleType.DOORS_TO_CLOSE, new HashSet<>(Set.of(remembered)));
+        helper.assertTrue(helper.getLevel().getChunkSource().getChunkNow(distantChunk.x(), distantChunk.z()) == null,
+                "fixture distant chunk was already loaded");
+
+        SmarterOpenDoorsTask.closeDoors(helper.getLevel(), villager, null, null);
+
+        helper.assertTrue(!villager.getBrain().getMemory(MemoryModuleType.DOORS_TO_CLOSE)
+                        .orElse(Set.of()).contains(remembered),
+                "stale remembered toggleable was not discarded");
+        helper.assertTrue(helper.getLevel().getChunkSource().getChunkNow(distantChunk.x(), distantChunk.z()) == null,
+                "stale remembered toggleable forced a distant chunk load");
+        villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_trapdoor_interaction", templateNamespace = "minecraft",
+            template = "bastion/blocks/air")
+    public static void villagerOpensTrapdoorOneBlockAboveLadderFromEitherDirection(GameTestHelper helper) {
+        BlockPos ladder = helper.absolutePos(new BlockPos(5, 2, 4));
+        BlockPos hatch = ladder.above();
+        BlockPos upperExit = hatch.east();
+        BlockPos upperFinal = upperExit.east();
+
+        helper.getLevel().setBlock(ladder.west(), Blocks.STONE.defaultBlockState(), 3);
+        helper.getLevel().setBlock(ladder, Blocks.LADDER.defaultBlockState()
+                .setValue(LadderBlock.FACING, Direction.EAST), 3);
+        helper.getLevel().setBlock(hatch, Blocks.OAK_TRAPDOOR.defaultBlockState(), 3);
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(ladder))
+                .withName("Ladder Hatch Probe")
+                .spawn(EntitySpawnReason.STRUCTURE);
+        villager.setNoAi(true);
+        villager.refreshBrain(helper.getLevel());
+
+        Path ascending = new Path(List.of(
+                node(ladder),
+                node(upperExit),
+                node(upperFinal)
+        ), upperFinal, true);
+        ascending.setNextNodeIndex(1);
+        villager.getBrain().setMemory(MemoryModuleType.PATH, ascending);
+
+        long gameTime = helper.getLevel().getGameTime();
+        SmarterOpenDoorsTask ascendingTask = new SmarterOpenDoorsTask();
+        helper.assertTrue(ascendingTask.tryStart(helper.getLevel(), villager, gameTime),
+                "door task did not run while leaving the ladder through the hatch");
+        helper.assertTrue(helper.getLevel().getBlockState(hatch).getValue(TrapDoorBlock.OPEN),
+                "closed hatch one block above the ladder was not opened while climbing up");
+
+        helper.getLevel().setBlock(hatch, helper.getLevel().getBlockState(hatch)
+                .setValue(TrapDoorBlock.OPEN, false), 3);
+        villager.getBrain().eraseMemory(MemoryModuleType.DOORS_TO_CLOSE);
+        villager.setPos(Vec3.atBottomCenterOf(upperExit));
+
+        Path descending = new Path(List.of(
+                node(upperExit),
+                node(ladder),
+                node(ladder.below())
+        ), ladder.below(), true);
+        descending.setNextNodeIndex(1);
+        villager.getBrain().setMemory(MemoryModuleType.PATH, descending);
+
+        SmarterOpenDoorsTask descendingTask = new SmarterOpenDoorsTask();
+        helper.assertTrue(descendingTask.tryStart(helper.getLevel(), villager, gameTime + 1),
+                "door task did not run while approaching the ladder hatch from above");
+        helper.assertTrue(helper.getLevel().getBlockState(hatch).getValue(TrapDoorBlock.OPEN),
+                "closed hatch one block above the ladder was not opened from the top side");
 
         villager.discard();
         helper.succeed();

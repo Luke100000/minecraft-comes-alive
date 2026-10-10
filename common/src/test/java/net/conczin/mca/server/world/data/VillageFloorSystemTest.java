@@ -768,7 +768,7 @@ class VillageFloorSystemTest {
     }
 
     @Test
-    void replacingOneFloorGeometryDoesNotRenumberNeighboringFloors() {
+    void replacingOneFloorGeometryPreservesStoreyIdentityAndNeighborNumbers() {
         Village village = new Village(1, null);
         Structure structure = structure(10, 77,
                 TestStructureFloors.create(3, 64, 70, -1, region(64)),
@@ -782,7 +782,7 @@ class VillageFloorSystemTest {
         assertEquals(-1, structure.getFloor(3).orElseThrow().floorNumber());
         assertEquals(0, structure.getFloor(7).orElseThrow().floorNumber());
         assertEquals(1, structure.getFloor(9).orElseThrow().floorNumber());
-        assertEquals(75, structure.getFloor(7).orElseThrow().anchorY());
+        assertEquals(74, structure.getFloor(7).orElseThrow().anchorY());
     }
 
     @Test

@@ -3,6 +3,7 @@ package net.conczin.mca.server.world.data;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -103,7 +104,8 @@ final class RoomScanPlanner {
                                      List<RoomPartitioner.Component> components) {
         Building.validationResult result = plan.mode() == Village.RoomScanMode.ADD_ATTACHMENT
                 && !plan.hasProspectiveFloor()
-                ? prospectiveNumber(village, plan.targetBuildingId(), plan.selectedAttachmentFloor()).result()
+                ? prospectiveNumber(village, plan.targetBuildingId(), new StructureFloor(
+                        0, 0, observation.scan().anchorY(), observation.scan().floor())).result()
                 : Building.validationResult.SUCCESS;
         return new Analysis(plan, observation, components, result);
     }
@@ -133,7 +135,7 @@ final class RoomScanPlanner {
         RoomScanPlan attachment = attachmentPlan(village, source, observation).orElse(null);
         if (attachment != null) return attachment;
 
-        FloorTarget expansion = selectSameFloorTarget(village, observation.scan().floor()).orElse(null);
+        FloorTarget expansion = selectSameFloorTarget(village, observation).orElse(null);
         if (expansion != null && validExpansion(village, observation, expansion)) {
             RoomPartitioner.Component selected = selectFreshComponent(
                     observation.scan().floor(), observation.seed(), components);
@@ -169,14 +171,15 @@ final class RoomScanPlanner {
                                                          BlockPos source,
                                                          StructureScanner.FloorObservation observation) {
         if (village == null || observation == null) return Optional.empty();
-        StructureFloor candidateFloor = new StructureFloor(0, 0, observation.scan().floor());
+        StructureFloor candidateFloor = new StructureFloor(
+                0, 0, observation.scan().anchorY(), observation.scan().floor());
         Village.AttachmentTarget target = village.selectAttachmentTarget(
                 candidateFloor, observation.verticalConnections(), observation.scan().adjacentFloorSeeds()).orElse(null);
         if (target == null) return Optional.empty();
 
         FloorGrouping.NumberDecision number = prospectiveNumber(village, target.buildingId(), candidateFloor);
         return Optional.of(RoomScanPlan.attachment(
-                target.buildingId(), number.number().orElse(Integer.MIN_VALUE), source, observation.seed(), candidateFloor));
+                target.buildingId(), number.number().orElse(Integer.MIN_VALUE), source, observation.seed()));
     }
 
     private static FloorGrouping.NumberDecision prospectiveNumber(Village village, int buildingId,
@@ -199,14 +202,31 @@ final class RoomScanPlanner {
                 == Building.validationResult.SUCCESS;
     }
 
-    private static Optional<FloorTarget> selectSameFloorTarget(Village village, FloorGeometry freshFloor) {
-        if (village == null || freshFloor == null) return Optional.empty();
-        List<FloorTarget> matches = village.getStructures().values().stream()
-                .flatMap(structure -> structure.getFloors().stream()
-                        .filter(floor -> floor.overlapsNearbyFloorBand(freshFloor))
-                        .map(floor -> new FloorTarget(structure.getId(), floor.id())))
-                .limit(2)
-                .toList();
+    private static Optional<FloorTarget> selectSameFloorTarget(Village village,
+                                                               StructureScanner.FloorObservation observation) {
+        if (village == null || observation == null || observation.scan().floor() == null) return Optional.empty();
+        StructureFloor freshFloor = new StructureFloor(
+                0, 0, observation.scan().anchorY(), observation.scan().floor());
+        List<FloorTarget> exact = new ArrayList<>(2);
+        List<FloorTarget> nearby = new ArrayList<>(2);
+        for (Structure structure : village.getStructures().values()) {
+            for (StructureFloor floor : structure.getFloors()) {
+                FloorTarget target = new FloorTarget(structure.getId(), floor.id());
+                // Exact ownership survives changes to a surface's representative height.
+                // Projected overlap is only a fallback for changed geometry.
+                boolean sharesCells = freshFloor.geometry().cells().stream().anyMatch(cell ->
+                        freshFloor.geometry().isRoomIdentityCell(cell.feet())
+                                && floor.geometry().isRoomIdentityCell(cell.feet())
+                                && floor.geometry().cellAt(cell.feet()).isPresent());
+                if (sharesCells) {
+                    exact.add(target);
+                    if (exact.size() > 1) return Optional.empty();
+                } else if (nearby.size() < 2 && floor.overlapsNearbyFloorBand(freshFloor)) {
+                    nearby.add(target);
+                }
+            }
+        }
+        List<FloorTarget> matches = exact.isEmpty() ? nearby : exact;
         return matches.size() == 1 ? Optional.of(matches.getFirst()) : Optional.empty();
     }
 

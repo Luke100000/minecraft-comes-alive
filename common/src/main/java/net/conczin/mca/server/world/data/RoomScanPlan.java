@@ -13,8 +13,7 @@ public record RoomScanPlan(Optional<Building> currentRoom,
                            BlockPos interactionSource,
                            BlockPos scanSeed,
                            int targetStructureId,
-                           int targetFloorId,
-                           StructureFloor selectedAttachmentFloor) {
+                           int targetFloorId) {
     private static final int NO_TARGET_BUILDING = -1;
     private static final int NO_PROSPECTIVE_FLOOR = Integer.MIN_VALUE;
     private static final int NO_INTERACTION_STRUCTURE = -1;
@@ -30,15 +29,14 @@ public record RoomScanPlan(Optional<Building> currentRoom,
         boolean noExistingFloor = targetStructureId == NO_INTERACTION_STRUCTURE
                 && targetFloorId == NO_INTERACTION_FLOOR;
         boolean noAttachment = targetBuildingId == NO_TARGET_BUILDING
-                && prospectiveFloorNumber == NO_PROSPECTIVE_FLOOR
-                && selectedAttachmentFloor == null;
+                && prospectiveFloorNumber == NO_PROSPECTIVE_FLOOR;
         boolean valid = switch (mode) {
             case ADD_BUILDING -> currentRoom.isEmpty() && noExistingFloor && noAttachment;
             case ADD_ROOM -> currentRoom.isEmpty() && existingFloor && noAttachment;
             case UPDATE_ROOM -> currentRoom.filter(room -> room.getStructureId() == targetStructureId
                     && room.getFloorId() == targetFloorId).isPresent() && existingFloor && noAttachment;
             case ADD_ATTACHMENT -> currentRoom.isEmpty() && noExistingFloor
-                    && targetBuildingId >= 0 && selectedAttachmentFloor != null;
+                    && targetBuildingId >= 0;
         };
         if (!valid) throw new IllegalArgumentException("Inconsistent Room scan target for " + mode);
     }
@@ -46,7 +44,7 @@ public record RoomScanPlan(Optional<Building> currentRoom,
     public static RoomScanPlan addBuilding(BlockPos source) {
         return new RoomScanPlan(Optional.empty(), Village.RoomScanMode.ADD_BUILDING,
                 NO_TARGET_BUILDING, NO_PROSPECTIVE_FLOOR, source, source,
-                NO_INTERACTION_STRUCTURE, NO_INTERACTION_FLOOR, null);
+                NO_INTERACTION_STRUCTURE, NO_INTERACTION_FLOOR);
     }
 
     public static RoomScanPlan updateRoom(Building room, BlockPos source) {
@@ -57,7 +55,7 @@ public record RoomScanPlan(Optional<Building> currentRoom,
         if (room == null) throw new IllegalArgumentException("Update Room requires a selected Room");
         return new RoomScanPlan(Optional.of(room), Village.RoomScanMode.UPDATE_ROOM,
                 NO_TARGET_BUILDING, NO_PROSPECTIVE_FLOOR, source, scanSeed,
-                room.getStructureId(), room.getFloorId(), null);
+                room.getStructureId(), room.getFloorId());
     }
 
     public static RoomScanPlan addRoom(int structureId, int floorId, BlockPos source) {
@@ -70,17 +68,16 @@ public record RoomScanPlan(Optional<Building> currentRoom,
                                        BlockPos scanSeed) {
         return new RoomScanPlan(Optional.empty(), Village.RoomScanMode.ADD_ROOM,
                 NO_TARGET_BUILDING, NO_PROSPECTIVE_FLOOR, source, scanSeed,
-                structureId, floorId, null);
+                structureId, floorId);
     }
 
     public static RoomScanPlan attachment(int targetBuildingId,
                                           int floorNumber,
                                           BlockPos source,
-                                          BlockPos scanSeed,
-                                          StructureFloor selectedFloor) {
+                                          BlockPos scanSeed) {
         return new RoomScanPlan(Optional.empty(), Village.RoomScanMode.ADD_ATTACHMENT,
                 targetBuildingId, floorNumber, source, scanSeed,
-                NO_INTERACTION_STRUCTURE, NO_INTERACTION_FLOOR, selectedFloor);
+                NO_INTERACTION_STRUCTURE, NO_INTERACTION_FLOOR);
     }
 
     public boolean hasProspectiveFloor() {

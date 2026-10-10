@@ -25,6 +25,7 @@ import net.conczin.mca.entity.ai.brain.tasks.ExtendedFindPointOfInterestTaskGame
 import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.GuardEquipmentGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.HomelessShelterGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ShelterDistributionGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ValidateNearbyPoiGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.WanderOrTeleportToTargetTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.AbstractChoreTaskGameTests;
@@ -108,6 +109,7 @@ public final class McaGameTestRegistration {
             ExtendedWalkTowardsTaskGameTests.class,
             GuardEquipmentGameTests.class,
             HomelessShelterGameTests.class,
+            ShelterDistributionGameTests.class,
             ValidateNearbyPoiGameTests.class,
             WanderOrTeleportToTargetTaskGameTests.class,
             AbstractChoreTaskGameTests.class,

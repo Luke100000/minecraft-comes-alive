@@ -178,6 +178,7 @@ class RoomDFUTest {
         assertFalse(structureTag.contains("mainRoomAutomatic"));
         assertFalse(structureTag.contains("surfaceReferenceY"));
         assertTrue(floorTag.getInt("floorNumber").isPresent());
+        assertTrue(floorTag.getInt("anchorY").isPresent());
         assertTrue(logicalTag.contains("mainRoomId"));
         assertTrue(logicalTag.contains("inheritanceEnabled"));
         assertFalse(logicalTag.contains("groundStructureId"));
@@ -208,6 +209,8 @@ class RoomDFUTest {
         assertEquals(structure.getLogicalBuildingId(), reloadedStructure.getLogicalBuildingId());
         assertEquals(structure.getFloor(0).orElseThrow().floorNumber(),
                 reloadedStructure.getFloor(0).orElseThrow().floorNumber());
+        assertEquals(structure.getFloor(0).orElseThrow().anchorY(),
+                reloadedStructure.getFloor(0).orElseThrow().anchorY());
         assertEquals(room.getFloorCells(), reloadedRoom.getFloorCells());
         assertEquals(room.getStructureId(), reloadedRoom.getStructureId());
         assertEquals(room.getFloorId(), reloadedRoom.getFloorId());
@@ -295,6 +298,15 @@ class RoomDFUTest {
         malformed.getList("structures").orElseThrow()
                 .getCompound(0).orElseThrow().getList("floors").orElseThrow()
                 .getCompound(0).orElseThrow().remove("id");
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
+    void canonicalStructureWithNoFloorsIsRejectedAtDfuBoundary() {
+        CompoundTag malformed = canonicalVillage().save();
+        malformed.getList("structures").orElseThrow()
+                .getCompound(0).orElseThrow().put("floors", new ListTag());
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
     }
