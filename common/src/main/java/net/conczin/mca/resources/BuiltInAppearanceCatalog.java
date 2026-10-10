@@ -8,7 +8,6 @@ import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.HairStyle;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.minecraft.resources.ResourceLocation;
-
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -18,13 +17,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-public final class BuiltInSkinCatalog {
+public final class BuiltInAppearanceCatalog {
     private static final List<String> BODY_SKIN_FILES = List.of("skins", "female", "male");
     private static final List<String> GENDERED_SKIN_FILES = List.of("female", "male", "neutral");
     private static final List<String> HAIR_LAYER_FILES = List.of("back", "bangs", "base", "extra", "front");
     private static final Catalog CATALOG = load();
 
-    private BuiltInSkinCatalog() {
+    private BuiltInAppearanceCatalog() {
     }
 
     public static Catalog get() {
@@ -37,16 +36,16 @@ public final class BuiltInSkinCatalog {
         HashMap<String, LayeredHair> layeredHair = new HashMap<>();
         HashMap<String, HairStyle> hairStyles = new HashMap<>();
 
-        readBundledJsonFiles(ClothingList.ID.getPath(), GENDERED_SKIN_FILES, (id, file) -> SkinCatalogLoader.addClothing(clothing, id, file));
-        readBundledJsonFiles(BodySkinList.ID.getPath(), BODY_SKIN_FILES, (id, file) -> SkinCatalogLoader.addBodySkins(bodySkins, id, file));
-        readBundledJsonFiles(HairStyleList.ID.getPath(), GENDERED_SKIN_FILES, (id, file) -> SkinCatalogLoader.addHairStyles(hairStyles, id, file));
-        readBundledJsonFiles(LayeredHairList.ID.getPath(), HAIR_LAYER_FILES, (id, file) -> SkinCatalogLoader.addLayeredHair(layeredHair, id, file));
+        readBundledJsonFiles(ClothingList.ID.getPath(), GENDERED_SKIN_FILES, (id, file) -> AppearanceCatalogLoader.addClothing(clothing, id, file));
+        readBundledJsonFiles(BodySkinList.ID.getPath(), BODY_SKIN_FILES, (id, file) -> AppearanceCatalogLoader.addBodySkins(bodySkins, id, file));
+        readBundledJsonFiles(HairStyleList.ID.getPath(), GENDERED_SKIN_FILES, (id, file) -> AppearanceCatalogLoader.addHairStyles(hairStyles, id, file));
+        readBundledJsonFiles(LayeredHairList.ID.getPath(), HAIR_LAYER_FILES, (id, file) -> AppearanceCatalogLoader.addLayeredHair(layeredHair, id, file));
 
         return new Catalog(clothing, bodySkins, layeredHair, hairStyles);
     }
 
     private static void readBundledJsonFiles(String directory, List<String> files, JsonFileConsumer consumer) {
-        ClassLoader loader = BuiltInSkinCatalog.class.getClassLoader();
+        ClassLoader loader = BuiltInAppearanceCatalog.class.getClassLoader();
         List<String> missing = new ArrayList<>();
         boolean foundAny = false;
         for (String file : files) {
@@ -71,7 +70,12 @@ public final class BuiltInSkinCatalog {
         }
     }
 
-    public record Catalog(Map<String, Clothing> clothing, Map<String, BodySkin> bodySkins, Map<String, LayeredHair> layeredHair, Map<String, HairStyle> hairStyles) {
+    public record Catalog(
+            Map<String, Clothing> clothing,
+            Map<String, BodySkin> bodySkins,
+            Map<String, LayeredHair> layeredHair,
+            Map<String, HairStyle> hairStyles
+    ) {
         public Catalog {
             clothing = Map.copyOf(clothing);
             bodySkins = Map.copyOf(bodySkins);

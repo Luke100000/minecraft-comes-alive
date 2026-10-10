@@ -287,7 +287,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         inventory.clearContent();
         InventoryUtils.readFromNBT(this.registryAccess(), inventory, data);
 
-        validateClothes();
+        validateAppearance();
     }
 
     @Override

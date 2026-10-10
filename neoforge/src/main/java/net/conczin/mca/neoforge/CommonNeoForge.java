@@ -11,6 +11,7 @@ import net.conczin.mca.entity.interaction.gifts.GiftLoader;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.MessagesMCA;
 import net.conczin.mca.network.Network;
+import net.conczin.mca.network.s2c.AppearanceCatalogSync;
 import net.conczin.mca.registry.*;
 import net.conczin.mca.resources.*;
 import net.conczin.mca.server.ServerInteractionManager;
@@ -114,6 +115,7 @@ public final class CommonNeoForge {
         event.addListener(new ClothingList());
         event.addListener(new HairStyleList());
         event.addListener(new LayeredHairList());
+        event.addListener(new EyeCatalog());
         event.addListener(new GiftLoader());
         event.addListener(new Dialogues());
         event.addListener(new Tasks());
@@ -152,6 +154,18 @@ public final class CommonNeoForge {
     }
 
     @SubscribeEvent
+    public static void onDatapackSync(OnDatapackSyncEvent event) {
+        EyeCatalog eyeCatalog = EyeCatalog.getInstance();
+        if (event.getPlayer() == null) {
+            DestinyLocationResolver.refreshCachedDestinations(event.getPlayerList().getServer(), Config.getInstance());
+            if (eyeCatalog != null) {
+                eyeCatalog.repairLoaded(event.getPlayerList().getServer());
+            }
+        }
+        event.getRelevantPlayers().forEach(AppearanceCatalogSync::send);
+    }
+
+    @SubscribeEvent
     public static void onServerStarting(ServerStartingEvent event) {
         MCA.startServer(event.getServer());
     }
@@ -174,13 +188,6 @@ public final class CommonNeoForge {
     @SubscribeEvent
     public static void onServerStarted(ServerStartedEvent event) {
         DestinyLocationResolver.refreshCachedDestinations(event.getServer(), Config.getInstance());
-    }
-
-    @SubscribeEvent
-    public static void onDatapackSync(OnDatapackSyncEvent event) {
-        if (event.getPlayer() == null) {
-            DestinyLocationResolver.refreshCachedDestinations(event.getPlayerList().getServer(), Config.getInstance());
-        }
     }
 
     @SubscribeEvent

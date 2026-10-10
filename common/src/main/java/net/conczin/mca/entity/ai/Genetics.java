@@ -3,10 +3,13 @@ package net.conczin.mca.entity.ai;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.Gender;
+import net.conczin.mca.resources.EyeCatalog;
+import net.conczin.mca.resources.EyeStyles;
 import net.conczin.mca.util.network.datasync.CDataManager;
 import net.conczin.mca.util.network.datasync.CDataParameter;
 import net.conczin.mca.util.network.datasync.CEnumParameter;
 import net.conczin.mca.util.network.datasync.CParameter;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
@@ -27,8 +30,8 @@ public class Genetics implements Iterable<Genetics.Gene> {
     public static final GeneType HEMOGLOBIN = new GeneType("Hemoglobin");
     public static final GeneType EUMELANIN = new GeneType("Eumelanin");
     public static final GeneType PHEOMELANIN = new GeneType("Pheomelanin");
+    public static final GeneType EYE_COLOR = new GeneType("EyeColor");
     public static final GeneType SKIN = new GeneType("Skin");
-    public static final GeneType FACE = new GeneType("Face");
     public static final GeneType EYE_BRIGHTNESS = new GeneType("EyeBrightness");
     public static final GeneType VOICE = new GeneType("Voice");
     public static final GeneType VOICE_TONE = new GeneType("VoiceTone");
@@ -91,6 +94,9 @@ public class Genetics implements Iterable<Genetics.Gene> {
             getGenome(type).randomize();
         }
 
+        EyeCatalog eyes = EyeCatalog.getInstance();
+        entity.setEyeTexture(eyes == null ? EyeStyles.DEFAULT : eyes.pick(getGender()));
+
         // size is more centered
         setGene(SIZE, centeredRandom());
         setGene(WIDTH, centeredRandom());
@@ -133,6 +139,12 @@ public class Genetics implements Iterable<Genetics.Gene> {
         for (GeneType type : GENOMES) {
             getGenome(type).mutate(mother, father);
         }
+
+        ResourceLocation inheritedEye = random.nextBoolean()
+                ? mother.entity.getEyeTexture()
+                : father.entity.getEyeTexture();
+        EyeCatalog eyes = EyeCatalog.getInstance();
+        entity.setEyeTexture(eyes == null ? inheritedEye : eyes.resolve(inheritedEye, getGender()));
     }
 
     public void combine(Genetics mother, Genetics father, long seed) {

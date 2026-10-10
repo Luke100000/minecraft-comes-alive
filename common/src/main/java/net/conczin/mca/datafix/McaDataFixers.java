@@ -5,6 +5,7 @@ import com.mojang.datafixers.DataFixer;
 import com.mojang.datafixers.DataFixerBuilder;
 import com.mojang.datafixers.schemas.Schema;
 import com.mojang.serialization.Dynamic;
+import net.conczin.mca.datafix.fixes.EyeGeneticsFix;
 import net.conczin.mca.datafix.fixes.MourningSiteMemoryFix;
 import net.conczin.mca.datafix.fixes.PersonalityAndTraitsFix;
 import net.minecraft.nbt.CompoundTag;
@@ -22,7 +23,7 @@ import java.util.Objects;
  */
 public final class McaDataFixers {
     public static final String DATA_VERSION_KEY = "MCADataVersion";
-    public static final int CURRENT_VERSION = 2;
+    public static final int CURRENT_VERSION = 3;
     public static final DSL.TypeReference MCA_DATA = () -> "mca:data";
 
     private static final String LEGACY_MCA_DATA_KEY = "MCAData";
@@ -110,8 +111,12 @@ public final class McaDataFixers {
         builder.addSchema(0, McaDataSchema::new);
         Schema versionOne = builder.addSchema(1, Schema::new);
         builder.addFixer(new PersonalityAndTraitsFix(versionOne));
-        Schema versionTwo = builder.addSchema(2, Schema::new);
-        builder.addFixer(new MourningSiteMemoryFix(versionTwo));
+        // Both branches released distinct migrations as version 2. Reapply the
+        // idempotent fixes at version 3 so either version-2 save gets both.
+        builder.addSchema(2, Schema::new);
+        Schema versionThree = builder.addSchema(3, Schema::new);
+        builder.addFixer(new MourningSiteMemoryFix(versionThree));
+        builder.addFixer(new EyeGeneticsFix(versionThree));
         return builder.build().fixer();
     }
 }
