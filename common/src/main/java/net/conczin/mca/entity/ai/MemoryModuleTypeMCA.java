@@ -36,6 +36,7 @@ public interface MemoryModuleTypeMCA {
     MemoryModuleType<Boolean> FORCED_HOME = register("forced_home", Optional.of(Codec.BOOL));
     MemoryModuleType<RangedCombatState> RANGED_COMBAT_STATE = register("ranged_combat_state", Optional.empty());
     MemoryModuleType<GlobalPos> CANT_REACH_WALK_TARGET = register("cant_reach_walk_target", Optional.empty());
+    MemoryModuleType<GlobalPos> SHELTER_BED = register("shelter_bed", Optional.empty());
 
     static <U> MemoryModuleType<U> register(String name, Optional<Codec<U>> codec) {
         Identifier id = MCA.locate(name);

@@ -10,6 +10,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.PathNavigationRegion;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.pathfinder.Node;
@@ -330,6 +331,21 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         }
         if (climbable) {
             return PathType.WALKABLE;
+        }
+
+        if (state.getBlock() instanceof DoorBlock
+                && !state.getValue(BlockStateProperties.OPEN)) {
+            // Pathfinding and SmarterOpenDoorsTask must agree on the same door policy.
+            // Vanilla's evaluator otherwise accepts every hand-openable DoorBlock even
+            // when vanilla's door AI would refuse to operate it.
+            return PathingBlockInteraction.canInteractWithDoor(state)
+                    ? PathType.WALKABLE_DOOR
+                    : PathType.DOOR_IRON_CLOSED;
+        }
+
+        if (PathingBlockInteraction.isDramaticDoorOpenable(state)
+                && !state.getValue(BlockStateProperties.OPEN)) {
+            return PathType.WALKABLE_DOOR;
         }
 
         if (PathingBlockInteraction.canInteractWithFenceGate(state)

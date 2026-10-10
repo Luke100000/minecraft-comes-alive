@@ -26,6 +26,7 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.creativetab.v1.FabricCreativeModeTab;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerEntityEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
@@ -45,6 +46,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.resources.PreparableReloadListener;
 import net.minecraft.world.item.CreativeModeTab;
+import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
@@ -83,6 +85,12 @@ public final class MCAFabric implements ModInitializer {
         FabricEntityDataRegistry.register(MCAEntityDataSerializers.COMPOUND_TAG_ID, MCAEntityDataSerializers.COMPOUND_TAG);
         FabricEntityDataRegistry.register(MCAEntityDataSerializers.OPTIONAL_UUID_ID, MCAEntityDataSerializers.OPTIONAL_UUID);
 
+        ServerEntityEvents.ENTITY_LOAD.register((entity, level) -> {
+            if (entity instanceof Villager villager) VillageManager.get(level).trackVillager(villager);
+        });
+        ServerEntityEvents.ENTITY_UNLOAD.register((entity, level) -> {
+            if (entity instanceof Villager villager) VillageManager.get(level).untrackVillager(villager);
+        });
         BedPoiCompatibilityFabric.init();
         registerHelper(BuiltInRegistries.ITEM, ItemsMCA::registerItems);
         registerHelper(BuiltInRegistries.BLOCK, BlocksMCA::registerBlocks);

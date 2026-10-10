@@ -24,6 +24,9 @@ import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.LadderBlock;
+import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.ScaffoldingBlock;
 import net.minecraft.world.level.block.SnowLayerBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -48,6 +51,44 @@ public final class MCAGroundPathNavigationGameTests {
     private static final Set<ChunkPos> PROGRESSIVE_FORCED_CHUNKS = new HashSet<>();
 
     private MCAGroundPathNavigationGameTests() {
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 40)
+    public static void partialHeightAirborneLadderEntryStartsClimbing(GameTestHelper helper) {
+        BlockPos first = helper.absolutePos(new BlockPos(5, 5, 5));
+        for (int y = 0; y < 3; y++) {
+            BlockPos position = first.above(y);
+            helper.getLevel().setBlock(position.south(), Blocks.STONE.defaultBlockState(), 3);
+            helper.getLevel().setBlock(position,
+                    Blocks.LADDER.defaultBlockState().setValue(LadderBlock.FACING, Direction.NORTH), 3);
+        }
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0)
+                .withPosition(new Vec3(first.getX() + 0.5D, first.getY() - 0.312D, first.getZ() + 0.5D))
+                .spawn(EntitySpawnReason.STRUCTURE);
+        villager.setNoAi(true);
+        try {
+            villager.setOnGround(false);
+            helper.assertTrue(!villager.onClimbable(), "fixture starts inside ladder instead of just below it");
+            Path path = new Path(List.of(
+                    new Node(first.getX(), first.getY(), first.getZ()),
+                    new Node(first.getX(), first.getY() + 1, first.getZ()),
+                    new Node(first.getX(), first.getY() + 2, first.getZ())
+            ), first.above(2), true);
+            helper.assertTrue(villager.getNavigation().moveTo(path, 0.55D), "reachable upward ladder path did not start");
+            villager.setDeltaMovement(Vec3.ZERO);
+            villager.getNavigation().tick();
+            helper.assertTrue(villager.getNavigation() instanceof MCAGroundPathNavigation navigation
+                            && navigation.isControllingClimbableMovement()
+                            && villager.getDeltaMovement().y > 0.0D,
+                    "MCA did not enter ladder from partial-height airborne feet: position=" + villager.position()
+                            + ", delta=" + villager.getDeltaMovement()
+                            + ", path=" + villager.getNavigation().getPath());
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
     }
 
     @GameTest(batch = "mca_vine_column_descent", templateNamespace = "minecraft",
@@ -1578,13 +1619,10 @@ public final class MCAGroundPathNavigationGameTests {
         villager.refreshBrain(helper.getLevel());
         villager.getBrain().removeAllBehaviors();
         villager.setNoAi(true);
+        villager.setOnGround(true);
 
         BlockPos feet = villager.blockPosition();
-        for (int x = -2; x <= 2; x++) {
-            for (int z = -2; z <= 2; z++) {
-                helper.getLevel().setBlock(feet.offset(x, 2, z), Blocks.STONE.defaultBlockState(), 3);
-            }
-        }
+        prepareStrollRoom(helper, feet);
         villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
         helper.succeedWhen(() -> {
             helper.assertTrue(!helper.getLevel().canSeeSky(villager.blockPosition()),
@@ -1592,7 +1630,7 @@ public final class MCAGroundPathNavigationGameTests {
                             + "; roof=" + helper.getLevel().getBlockState(feet.above(2)));
             helper.assertTrue(LocalInsideBrownianWalk.create(0.5F)
                             .tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime()),
-                    "indoor Brownian walk did not start under a roof");
+                    "indoor Brownian walk did not start inside its bed room");
             WalkTarget published = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
                     .orElseThrow();
             helper.assertTrue(!(published.getTarget() instanceof PersistentPathTarget),
@@ -1603,8 +1641,8 @@ public final class MCAGroundPathNavigationGameTests {
         });
     }
 
-    @GameTest(batch = "mca_navigation_local_brownian_retry", templateNamespace = "minecraft",
-            template = "bastion/blocks/air", timeoutTicks = 80)
+    @GameTest(batch = "mca_navigation_local_brownian_retry", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 80)
     public static void stalledIndoorStrollWaitsButAPhysicalStepAllowsNewDestination(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(10, 1, 10));
         prepareFlatArea(helper, start, 3, 3);
@@ -1615,12 +1653,9 @@ public final class MCAGroundPathNavigationGameTests {
         villager.refreshBrain(helper.getLevel());
         villager.getBrain().removeAllBehaviors();
         villager.setNoAi(true);
+        villager.setOnGround(true);
         BlockPos feet = villager.blockPosition();
-        for (int x = -2; x <= 2; x++) {
-            for (int z = -2; z <= 2; z++) {
-                helper.getLevel().setBlock(feet.offset(x, 2, z), Blocks.STONE.defaultBlockState(), 3);
-            }
-        }
+        prepareStrollRoom(helper, feet);
 
         var stroll = LocalInsideBrownianWalk.create(0.5F);
         villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
@@ -1655,11 +1690,8 @@ public final class MCAGroundPathNavigationGameTests {
         villager.refreshBrain(helper.getLevel());
         villager.getBrain().removeAllBehaviors();
         villager.setNoAi(true);
-        for (int x = -2; x <= 2; x++) {
-            for (int z = -2; z <= 2; z++) {
-                helper.getLevel().setBlock(start.offset(x, 2, z), Blocks.STONE.defaultBlockState(), 3);
-            }
-        }
+        villager.setOnGround(true);
+        prepareStrollRoom(helper, start);
 
         var stroll = LocalInsideBrownianWalk.create(0.5F);
         helper.runAfterDelay(5, () -> {
@@ -1706,6 +1738,7 @@ public final class MCAGroundPathNavigationGameTests {
         villager.refreshBrain(helper.getLevel());
         villager.getBrain().removeAllBehaviors();
         villager.setNoAi(true);
+        villager.setOnGround(true);
         villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
 
         var stroll = LocalInsideBrownianWalk.create(0.5F);
@@ -1719,11 +1752,7 @@ public final class MCAGroundPathNavigationGameTests {
                 helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty(),
                         "outdoor rejection published a walk target");
 
-                for (int x = -2; x <= 2; x++) {
-                    for (int z = -2; z <= 2; z++) {
-                        helper.getLevel().setBlock(start.offset(x, 2, z), Blocks.STONE.defaultBlockState(), 3);
-                    }
-                }
+                prepareStrollRoom(helper, start);
                 // canSeeSky reads propagated sky light, not just the newly placed roof blocks.
                 helper.startSequence().thenWaitUntil(() -> {
                     helper.assertTrue(helper.getLevel().getGameTime() - gameTime < 40L,
@@ -1822,6 +1851,30 @@ public final class MCAGroundPathNavigationGameTests {
     public static void releaseProgressiveNavigationChunks(ServerLevel level) {
         PROGRESSIVE_FORCED_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x(), chunk.z(), false));
         PROGRESSIVE_FORCED_CHUNKS.clear();
+    }
+
+    private static void prepareStrollRoom(GameTestHelper helper, BlockPos center) {
+        ServerLevel level = helper.getLevel();
+        ChunkPos min = ChunkPos.containing(center.offset(-16, 0, -16));
+        ChunkPos max = ChunkPos.containing(center.offset(16, 0, 16));
+        for (int x = min.x(); x <= max.x(); x++) {
+            for (int z = min.z(); z <= max.z(); z++) {
+                level.getChunk(x, z);
+            }
+        }
+        for (int x = -2; x <= 2; x++) {
+            for (int z = -2; z <= 2; z++) {
+                level.setBlock(center.offset(x, 2, z), Blocks.STONE.defaultBlockState(), 3);
+                if (Math.abs(x) == 2 || Math.abs(z) == 2) {
+                    level.setBlock(center.offset(x, 0, z), Blocks.STONE.defaultBlockState(), 3);
+                    level.setBlock(center.offset(x, 1, z), Blocks.STONE.defaultBlockState(), 3);
+                }
+            }
+        }
+        BlockPos foot = center.north().west();
+        var bed = Blocks.BED.pick(net.minecraft.world.item.DyeColor.WHITE).defaultBlockState().setValue(BedBlock.FACING, Direction.EAST);
+        level.setBlock(foot, bed.setValue(BedBlock.PART, BedPart.FOOT), 3);
+        level.setBlock(foot.east(), bed.setValue(BedBlock.PART, BedPart.HEAD), 3);
     }
 
     private static String summarizePath(Path path) {

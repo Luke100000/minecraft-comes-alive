@@ -1,5 +1,8 @@
 classTweaker v1 official
 
+# Reuse the vanilla live-hostile distance predicate for shelter overflow.
+accessible method net/minecraft/world/entity/ai/sensing/VillagerHostilesSensor isMatchingEntity (Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/entity/LivingEntity;)Z
+
 # Reuse native chunk scheduling without the public API's server-thread managedBlock.
 accessible method net/minecraft/server/level/ServerChunkCache getChunkFutureMainThread (IILnet/minecraft/world/level/chunk/status/ChunkStatus;Z)Ljava/util/concurrent/CompletableFuture;
 # Hold generated chunks for the duration of an interruptible async structure search.

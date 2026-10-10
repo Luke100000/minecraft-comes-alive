@@ -29,6 +29,7 @@ import net.conczin.mca.util.network.datasync.CParameter;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.particles.ItemParticleOption;
 import net.minecraft.core.particles.ParticleOptions;
@@ -111,6 +112,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.WeakHashMap;
 import java.util.function.Predicate;
 
 
@@ -128,6 +130,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             serializer -> SynchedEntityData.defineId(VillagerEntityMCA.class, serializer)
     )).build();
     private static final int RECALCULATE_DIMENSIONS_EVERY_N_TICKS = 100;
+    private static final int PANIC_SCREAM_INTERVAL = 40;
+    private static final Map<Level, Long> LAST_PANIC_SCREAM = new WeakHashMap<>();
     public final ConversationManager conversationManager = new ConversationManager(this);
     private String chatAIPrompt = "";
     final Identifier EXTRA_HEALTH_EFFECT_ID = MCA.locate("trait_health");
@@ -150,6 +154,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private int prevVisualAge;
     private boolean ageStateEventsEnabled;
     private boolean interactedWith;
+    private boolean wasPanicking;
     private double lastAppliedHealthBonus = Double.NaN;
     private boolean recoveryFoodUseActive;
     private boolean completingRecoveryFoodUse;
@@ -381,6 +386,13 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     public Residency getResidency() {
         return residency;
+    }
+
+    @Override
+    public void releasePoi(MemoryModuleType<GlobalPos> memoryType) {
+        if (memoryType != MemoryModuleType.HOME || residency.mayReleaseHomePoi()) {
+            super.releasePoi(memoryType);
+        }
     }
 
     @Override
@@ -640,7 +652,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (getVehicle() != null && getVehicle().equals(player)) return InteractionResult.PASS;
 
         ItemStack stack = player.getItemInHand(hand);
-        if (!stack.is(TagsMCA.Items.VILLAGER_EGGS) && isAlive() && !isTrading() && !isSleeping() && canInteractWithItemStackInHand(stack) && !getVillagerBrain().isPanicking()) {
+        boolean isOnBlacklist = Config.getInstance().villagerInteractionItemBlacklist.contains(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+        if (!isOnBlacklist && !stack.is(TagsMCA.Items.VILLAGER_EGGS) && isAlive() && !isTrading() && !isSleeping() && canInteractWithItemStackInHand(stack) && !getVillagerBrain().isPanicking()) {
             if (isBaby()) {
                 setUnhappy();
             } else if (!level().isClientSide()) {
@@ -1060,10 +1073,15 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                 }
             }
 
-            // panic screams
-            if (this.tickCount % 90 == 0 && mcaBrain.isPanicking()) {
+            // one scream per villager per panic wave, at most one per level per PANIC_SCREAM_INTERVAL
+            boolean panicking = mcaBrain.isPanicking();
+            long now = level().getGameTime();
+            Long lastScream = LAST_PANIC_SCREAM.get(level());
+            if (panicking && !wasPanicking && (lastScream == null || now - lastScream > PANIC_SCREAM_INTERVAL)) {
+                LAST_PANIC_SCREAM.put(level(), now);
                 sendChatToAllAround("villager.scream");
             }
+            wasPanicking = panicking;
 
             // sirben noises
             if (this.tickCount % 60 == 0 && random.nextInt(50) == 0 && traits.hasTrait(Traits.SIRBEN)) {
@@ -1390,7 +1408,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         //move out
-        residency.leaveHome();
+        residency.leaveVillage();
 
         if (interactedWith) {
             VillagerTrackerManager.update(this);
@@ -1774,7 +1792,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
             if (mob instanceof ZombieVillager && params.type().shouldDiscardAfterConversion()) {
                 if (convertingToZombieVillager) {
-                    residency.leaveHome();
+                    residency.leaveVillage();
                 }
                 mob.setUUID(oldUuid);
                 // Vanilla registers the converted mob before discarding the source. Free the
@@ -1923,12 +1941,14 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public void writeAdditionalConversionData(CompoundTag output) {
         output.putString(CHAT_AI_PROMPT_KEY, chatAIPrompt);
         writeNicknames(output);
+        longTermMemory.writeToNbt(output);
     }
 
     @Override
     public void readAdditionalConversionData(CompoundTag input) {
         chatAIPrompt = input.getString(CHAT_AI_PROMPT_KEY).orElse("");
         readNicknames(input);
+        longTermMemory.readFromNbt(input);
     }
 
     @Override

@@ -31,17 +31,18 @@ class BuildingDiagnosticsTest {
             throw failure;
         });
 
-        assertNull(attempt.plan());
+        assertNull(attempt.analysis());
         assertEquals(failure, attempt.failure());
     }
 
     @Test
-    void roomPlanProbeReturnsSuccessfulPlanUnchanged() {
-        RoomScanPlan expected = RoomScanPlan.addBuilding(new BlockPos(1, 64, 2));
+    void roomPlanProbeReturnsSuccessfulAnalysisUnchanged() {
+        RoomScanPlanner.Analysis expected = new RoomScanPlanner.Analysis(
+                RoomScanPlan.addBuilding(new BlockPos(1, 64, 2)));
 
         BuildingDiagnostics.PlanAttempt attempt = BuildingDiagnostics.planAttempt(() -> expected);
 
-        assertEquals(expected, attempt.plan());
+        assertEquals(expected, attempt.analysis());
         assertNull(attempt.failure());
     }
 }

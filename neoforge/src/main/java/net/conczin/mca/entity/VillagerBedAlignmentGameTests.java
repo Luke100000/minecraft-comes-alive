@@ -3,6 +3,7 @@ package net.conczin.mca.entity;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Gender;
+import net.conczin.mca.gametest.GameTestTerrain;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -13,11 +14,13 @@ import net.minecraft.world.entity.EntityAttachment;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.conczin.mca.neoforge.gametest.GameTestHolder;
 import net.conczin.mca.neoforge.gametest.PrefixGameTestTemplate;
@@ -34,33 +37,43 @@ public final class VillagerBedAlignmentGameTests {
 
     @GameTest(batch = "mca_villager_bed_alignment", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void sleepingVillagerKeepsBedAnchorThroughMovementTicks(GameTestHelper helper) {
-        helper.setTime(18_000L);
-        for (Direction facing : Direction.Plane.HORIZONTAL) {
-            BlockPos bedHead = placeBed(helper, new BlockPos(3, 1, 3), facing);
-            VillagerEntityMCA villager = createAdultMale(helper, bedHead);
-            villager.getBrain().setMemory(MemoryModuleType.HOME,
-                    GlobalPos.of(helper.getLevel().dimension(), bedHead));
-            villager.getBrain().setActiveActivityIfPossible(Activity.REST);
-            // Navigation ticks before Brain and MoveControl ticks after SleepInBed.
-            villager.getMoveControl().setWantedPosition(villager.getX(), villager.getY(), villager.getZ() - 1.0D, 0.5D);
-            villager.startSleeping(bedHead);
-            Vec3 anchor = villager.position();
-            // Movement input can remain from the approach on the tick SleepInBed starts.
-            villager.setZza(1.0F);
-            for (int tick = 0; tick < 20; tick++) {
-                helper.getLevel().tickNonPassenger(villager);
-                helper.assertTrue(villager.isSleeping(), "fixture woke during movement ticks");
-                helper.assertTrue(villager.position().distanceToSqr(anchor) < EPSILON * EPSILON,
-                        "sleeping villager moved off the " + facing + " bed anchor: "
-                                + anchor + " -> " + villager.position());
+        long previousDayTime = helper.getLevel().clockManager().getInstance(
+                helper.getLevel().dimensionType().defaultClock().orElseThrow()).totalTicks();
+        try {
+            helper.setTime(18000L);
+            BlockPos bedFoot = helper.absolutePos(new BlockPos(3, 1, 3));
+            GameTestTerrain.prepareFlatArea(helper, bedFoot, 6, 3);
+            helper.getLevel().getEntitiesOfClass(Monster.class, new AABB(bedFoot).inflate(12.0D))
+                    .forEach(Monster::discard);
+            for (Direction facing : Direction.Plane.HORIZONTAL) {
+                BlockPos bedHead = placeBed(helper, new BlockPos(3, 1, 3), facing);
+                VillagerEntityMCA villager = createAdultMale(helper, bedHead);
+                villager.getBrain().setMemory(MemoryModuleType.HOME,
+                        GlobalPos.of(helper.getLevel().dimension(), bedHead));
+                villager.getBrain().setActiveActivityIfPossible(Activity.REST);
+                // Navigation ticks before Brain and MoveControl ticks after SleepInBed.
+                villager.getMoveControl().setWantedPosition(villager.getX(), villager.getY(), villager.getZ() - 1.0D, 0.5D);
+                villager.startSleeping(bedHead);
+                Vec3 anchor = villager.position();
+                // Movement input can remain from the approach on the tick SleepInBed starts.
+                villager.setZza(1.0F);
+                for (int tick = 0; tick < 20; tick++) {
+                    helper.getLevel().tickNonPassenger(villager);
+                    helper.assertTrue(villager.isSleeping(), "fixture woke during movement ticks");
+                    helper.assertTrue(villager.position().distanceToSqr(anchor) < EPSILON * EPSILON,
+                            "sleeping villager moved off the " + facing + " bed anchor: "
+                                    + anchor + " -> " + villager.position());
+                }
+                villager.stopSleeping();
+                Vec3 awakePosition = villager.position();
+                villager.setDeltaMovement(0.1D, 0.0D, 0.0D);
+                villager.travel(Vec3.ZERO);
+                helper.assertTrue(villager.position().distanceToSqr(awakePosition) > EPSILON,
+                        "villager could not resume movement after waking");
+                villager.discard();
             }
-            villager.stopSleeping();
-            Vec3 awakePosition = villager.position();
-            villager.setDeltaMovement(0.1D, 0.0D, 0.0D);
-            villager.travel(Vec3.ZERO);
-            helper.assertTrue(villager.position().distanceToSqr(awakePosition) > EPSILON,
-                    "villager could not resume movement after waking");
-            villager.discard();
+        } finally {
+            helper.setTime(previousDayTime);
         }
         helper.succeed();
     }

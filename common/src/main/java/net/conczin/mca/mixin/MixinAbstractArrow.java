@@ -9,6 +9,7 @@ import net.conczin.mca.registry.ProfessionsMCA;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.animal.golem.IronGolem;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.entity.projectile.arrow.AbstractArrow;
 import org.spongepowered.asm.mixin.Mixin;
@@ -20,7 +21,7 @@ abstract class MixinAbstractArrow {
     @ModifyReturnValue(method = "canHitEntity", at = @At("RETURN"))
     private boolean mca$ignoreVillagersForArcherArrows(boolean original, Entity target) {
         return original && !(Config.getServerConfig().archerArrowsIgnoreVillagers
-                && target instanceof Villager
+                && (target instanceof Villager || target instanceof IronGolem)
                 && mca$getMcaArcherOwner() != null);
     }
 

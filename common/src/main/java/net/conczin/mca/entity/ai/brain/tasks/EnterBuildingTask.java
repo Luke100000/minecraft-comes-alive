@@ -1,9 +1,11 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.BedPoiCompatibility;
 import net.conczin.mca.server.world.data.Building;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.behavior.Behavior;
@@ -97,6 +99,14 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
 
     protected boolean isGoodFloorWalkTarget(Level world, VillagerEntityMCA villager, BlockPos pos) {
         return hasStandingSpace(world, villager, pos);
+    }
+
+    /** Idle standing space within a room, excluding sleep surfaces and doorways. */
+    static boolean isUsableFloor(Level world, PathfinderMob mob, BlockPos pos) {
+        return !world.getBlockState(pos).is(BlockTags.DOORS)
+                && !BedPoiCompatibility.isCompatibleBedState(world.getBlockState(pos))
+                && !BedPoiCompatibility.isCompatibleBedState(world.getBlockState(pos.below()))
+                && hasStandingSpace(world, mob, pos);
     }
 
     static boolean hasStandingSpace(Level world, PathfinderMob mob, BlockPos pos) {

@@ -399,7 +399,7 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
                         }
 
                         if (entity instanceof CompassionateEntity<?> compassionateEntity) {
-                            compassionateEntity.getRelationships().getFamilyEntry().setDeceased(false);
+                            compassionateEntity.getRelationships().onResurrection();
                         }
 
                         setEntity(null);

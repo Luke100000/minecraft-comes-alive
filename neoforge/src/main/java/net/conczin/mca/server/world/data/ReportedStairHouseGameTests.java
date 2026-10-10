@@ -65,8 +65,11 @@ public final class ReportedStairHouseGameTests {
                             && initial.scannedFloor().anchorY() == origin.getY() + 3,
                     "initial registration from a basement step or edge failed: " + initial.result());
         }
-        helper.assertTrue(StructureScanner.observeFloor(level, bottom.above(2), List.of()).isEmpty(),
-                "standing normalization searched through an unsupported two-block gap");
+        var grounded = StructureScanner.observeFloor(level, bottom, List.of()).orElseThrow();
+        var airborne = StructureScanner.observeFloor(level, bottom.above(2), List.of()).orElse(null);
+        helper.assertTrue(airborne != null && airborne.seed().equals(grounded.seed())
+                        && airborne.scan().floor().sameExactGeometry(grounded.scan().floor()),
+                "airborne basement selection did not resolve the same floor below");
         helper.assertTrue(StructureScanner.observeFloor(level, bottom.above(3), List.of()).isEmpty(),
                 "standing normalization searched through a solid ceiling");
         var addition = workflow.analyzeRoom(bottom.above());
