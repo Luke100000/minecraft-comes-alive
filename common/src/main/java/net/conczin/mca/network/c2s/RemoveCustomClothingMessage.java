@@ -8,7 +8,7 @@ import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.entity.player.Player;
+import net.minecraft.server.level.ServerPlayer;
 
 public record RemoveCustomClothingMessage(Type kind, String identifier) implements HandleablePayload {
     public static final CustomPacketPayload.Type<RemoveCustomClothingMessage> TYPE = new CustomPacketPayload.Type<>(MCA.locate("remove_custom_clothing"));
@@ -23,7 +23,11 @@ public record RemoveCustomClothingMessage(Type kind, String identifier) implemen
     }
 
     @Override
-    public void handle(Player player) {
+    public void handleServer(ServerPlayer player) {
+        if (!CustomClothingManager.canEdit(player)) {
+            return;
+        }
+
         if (kind == Type.CLOTHING) {
             CustomClothingManager.getClothing().removeEntry(identifier);
         } else if (kind == Type.HAIR) {

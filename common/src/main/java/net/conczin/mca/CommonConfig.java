@@ -7,6 +7,35 @@ import java.util.Map;
 public class CommonConfig {
 
     /**
+     * If true, arrows fired by MCA archers pass through villagers instead of hitting them.
+     */
+    public boolean archerArrowsIgnoreVillagers = true;
+
+    /**
+     * If true, MCA villagers may path through and open or close fence gates.
+     */
+    public boolean villagersInteractWithFenceGates = true;
+
+    /**
+     * If true, MCA villagers may open or close any DoorBlock. Otherwise,
+     * DoorBlocks must be in #minecraft:mob_interactable_doors.
+     * Dramatic Doors follows its own interaction rules.
+     */
+    public boolean villagersInteractWithAnyDoor = false;
+
+    /**
+     * If true, binding a villager to a work station of another profession changes
+     * its profession, resets its level and re-rolls its trades. If false, an
+     * existing profession is kept. Villagers without a profession still adopt one.
+     */
+    public boolean villagersChangeProfession = true;
+
+    /**
+     * If true, a villager called with the whistle also starts following the player.
+     */
+    public boolean whistleCallMakesVillagersFollow = false;
+
+    /**
      * Time (in ticks) until a baby grows up when held as an item.
      */
     public int babyItemGrowUpTime = 24000;
@@ -17,9 +46,11 @@ public class CommonConfig {
     public int villagerMaxAgeTime = 384000;
 
     /**
-     * If true, allows non-ops to add skins from the library to the server wide pool.
+     * Permission level required to add or remove skins from the server wide pool.
+     * On singleplayer the world owner always has access.
+     * Set to 0 to allow everyone.
      */
-    public boolean allowEveryoneToAddContentGlobally = false;
+    public int addContentGloballyPermissionLevel = 3;
 
     /**
      * Allow players to modify their size.
@@ -55,6 +86,30 @@ public class CommonConfig {
             "minecraft:village_savanna",
             "minecraft:ancient_city"
     );
+
+    /**
+     * Automatically adds registered village structures to the Destiny screen.
+     * Disable this to use {@link #destinySpawnLocations} as the complete manual list.
+     */
+    public boolean autoDiscoverDestinyLocations = true;
+
+    /**
+     * Removes matching locations from the Destiny screen after manual and automatic locations are combined.
+     * Supports simple '*' wildcards, including whole namespaces such as "ctov:*".
+     */
+    public List<String> destinySpawnLocationBlacklist = List.of();
+
+    /**
+     * Restricts dimension-bound Destiny destinations to the Overworld.
+     * Dimensionless choices such as "somewhere" remain available.
+     */
+    public boolean destinyOverworldOnly = false;
+
+    /**
+     * Removes Destiny destinations from matching dimensions after Minecraft determines where they can generate.
+     * Supports simple '*' wildcards, including whole namespaces such as "some_mod:*".
+     */
+    public List<String> destinyDimensionBlacklist = List.of();
 
     /**
      * Maps Destiny locations to translation keys for UI text.

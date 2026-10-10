@@ -19,6 +19,48 @@ dependencies {
     //runtimeOnly "maven.modrinth:packet-fixer:${packetfixer_neoforge_version}"
 }
 
+def focusedGameTest = providers.gradleProperty('mcaGameTest')
+def validateFocusedGameTest = { String rawSelector ->
+    def selector = rawSelector.trim()
+    def parts = selector.split('#', -1)
+    if (parts.length < 1 || parts.length > 2 || parts[0].isBlank() || (parts.length == 2 && parts[1].isBlank())) {
+        throw new GradleException("Invalid mcaGameTest selector '${rawSelector}'; expected ClassName or ClassName#methodName")
+    }
+
+    def requestedClass = parts[0]
+    def simpleClass = requestedClass.tokenize('.').last()
+    def registrationSource = file('src/main/java/net/conczin/mca/gametest/McaGameTestsRegistration.java').getText('UTF-8')
+    def classEntry = java.util.regex.Pattern.compile(
+            '(?m)^\\s*' + java.util.regex.Pattern.quote(simpleClass) + '\\.class,?\\s*$'
+    )
+    def qualifiedImport = java.util.regex.Pattern.compile(
+            '(?m)^import\\s+' + java.util.regex.Pattern.quote(requestedClass) + ';$'
+    )
+    if (!classEntry.matcher(registrationSource).find()
+            || (requestedClass.contains('.') && !qualifiedImport.matcher(registrationSource).find())) {
+        throw new GradleException("Unknown MCA GameTest class '${requestedClass}'")
+    }
+
+    if (parts.length == 2) {
+        def candidates = fileTree('src/main/java') {
+            include "**/${simpleClass}.java"
+        }.files
+        if (candidates.size() != 1) {
+            throw new GradleException("Could not resolve MCA GameTest source for '${requestedClass}'")
+        }
+        def methodName = parts[1]
+        def source = candidates.first().getText('UTF-8')
+        def methodPattern = java.util.regex.Pattern.compile(
+                "(?s)@GameTest(?:\\s*\\([^)]*\\))?\\s+public\\s+(?:static\\s+)?void\\s+"
+                        + java.util.regex.Pattern.quote(methodName)
+                        + "\\s*\\("
+        )
+        if (!methodPattern.matcher(source).find()) {
+            throw new GradleException("Unknown MCA GameTest method '${methodName}' in ${simpleClass}")
+        }
+    }
+}
+
 neoForge {
     version = neoforge_version
     parchment {
@@ -40,6 +82,52 @@ neoForge {
         server {
             server()
         }
+        gameTestServer {
+            type.set('gameTestServer')
+            gameDirectory = file('run-gametest/')
+            ideName = "NeoForge GameTest Server (${project.path})"
+            systemProperty('neoforge.enabledGameTestNamespaces', "${mod_id},minecraft")
+            systemProperty('mca.gametest.enabled', 'true')
+            focusedGameTest.orNull?.with { selectedGameTest ->
+                validateFocusedGameTest(selectedGameTest)
+                systemProperty('mca.gametest.select', selectedGameTest)
+            }
+        }
+        benchmarkGameTestServer {
+            type.set('gameTestServer')
+            gameDirectory = file('run-abbenchmark/')
+            ideName = "NeoForge A/B GameTest Server (${project.path})"
+            systemProperty('neoforge.enabledGameTestNamespaces', 'mca_ab')
+            systemProperty('mca.pathABBenchmark', 'true')
+            // Exclude development-only StackWalker diagnostics from comparative CPU samples.
+            systemProperty('mca.pathDebug.benchmarkWithoutDiagnostics', 'true')
+        }
+        benchmarkOpenGameTestServer {
+            type.set('gameTestServer')
+            gameDirectory = file('run-abopen/')
+            ideName = "NeoForge Open-Only Path Benchmark (${project.path})"
+            systemProperty('neoforge.enabledGameTestNamespaces', 'mca_ab')
+            systemProperty('mca.pathABBenchmark', 'true')
+            systemProperty('mca.pathABOpenOnly', 'true')
+            // Isolate released navigation costs; regular development runs still retain all path debug logs.
+            systemProperty('mca.pathDebug.benchmarkWithoutDiagnostics', 'true')
+        }
+        searchBudgetGameTestServer {
+            type.set('gameTestServer')
+            def horizon = providers.gradleProperty('mcaSearchHorizon').getOrElse('160')
+            def nodeCap = providers.gradleProperty('mcaSearchNodeCap').getOrElse('0')
+            def runLabel = providers.gradleProperty('mcaSearchRun').getOrElse('first')
+            if (!(horizon ==~ /\d+/) || !(nodeCap ==~ /\d+/) || !(runLabel ==~ /[a-z0-9-]+/)) {
+                throw new GradleException('Search experiment settings must be numeric with a simple run label')
+            }
+            // Each alternative gets its own disposable world; never use a player's save.
+            gameDirectory = file("run-searchbudget-${horizon}-${nodeCap}-${runLabel}/")
+            systemProperty('neoforge.enabledGameTestNamespaces', 'mca_ab')
+            systemProperty('mca.pathSearchBenchmark', 'true')
+            systemProperty('mca.pathSearchHorizon', horizon)
+            systemProperty('mca.pathSearchNodeCap', nodeCap)
+            // Work-count experiment, not a release CPU comparison: keep diagnostics enabled.
+        }
     }
     mods {
         "${mod_id}" {
@@ -55,6 +143,15 @@ tasks.named('processResources', ProcessResources) {
     from(project(':common').layout.buildDirectory.file('generated/accesstransformer.cfg')) {
         into 'META-INF'
     }
+}
+
+tasks.named('jar') {
+    exclude '**/*GameTests*.class'
+    exclude 'net/conczin/mca/gametest/**'
+    exclude 'net/conczin/mca/benchmark/**'
+    exclude 'data/mca/gametest/**'
+    exclude 'data/mca/structure/gametest/**'
+    exclude 'data/mca_ab/**'
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }

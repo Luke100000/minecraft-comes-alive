@@ -29,3 +29,12 @@ __pycache__/
 
 # Local credentials
 *.env
+
+# NeoForge dev/run directories
+neoforge/run-gametest*/
+neoforge/run-abbenchmark
+neoforge/run-abopen
+neoforge/run-searchbudget-*
+
+# Local dev/runtime output
+fabric/config/

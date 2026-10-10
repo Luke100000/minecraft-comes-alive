@@ -12,12 +12,21 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
 
+    testImplementation "net.fabricmc:fabric-loader-junit:${fabric_loader_version}"
+    testImplementation platform('org.junit:junit-bom:6.1.3')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
     modLocalRuntime "maven.modrinth:sodium:${sodium_version}"
     //modLocalRuntime "maven.modrinth:iris:${iris_version}"
     modLocalRuntime "maven.modrinth:ferrite-core:${ferritecore_version}"
     modLocalRuntime "maven.modrinth:packet-fixer:${packetfixer_version}"
     modCompileOnly "net.conczin:immersive_melodies:${immersive_melodies_version}+${minecraft_version}+fabric"
     modLocalRuntime "net.conczin:immersive_melodies:${immersive_melodies_version}+${minecraft_version}+fabric"
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
 }
 
 def devUsername = providers.gradleProperty('mca_dev_username').orElse('Dev').get()
