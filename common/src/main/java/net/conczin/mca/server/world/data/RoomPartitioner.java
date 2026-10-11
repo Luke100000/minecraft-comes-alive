@@ -27,7 +27,7 @@ final class RoomPartitioner {
     private static final Comparator<Component> COMPONENT_ORDER = Comparator.comparing(
             (Component component) -> component.cells().stream()
                     .map(FloorGeometry.Cell::feet).min(CELL_ORDER).orElseThrow(), CELL_ORDER);
-    private static final Comparator<Component> OWNER_ORDER =
+    static final Comparator<Component> OWNER_ORDER =
             Comparator.comparingInt(Component::area).reversed()
                     .thenComparing(COMPONENT_ORDER);
 
