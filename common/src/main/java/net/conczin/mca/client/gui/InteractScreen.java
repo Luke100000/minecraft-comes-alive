@@ -26,6 +26,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 import org.lwjgl.glfw.GLFW;
 
@@ -34,6 +35,14 @@ import java.util.stream.Collectors;
 
 public class InteractScreen extends AbstractDynamicScreen {
     public static final ResourceLocation ICON_TEXTURES = MCA.locate("textures/gui.png");
+    private static final int PAPER = 0xFFE6C995;
+    private static final int INK = 0xFF292018;
+    private static final int MENU = 0xEE201917;
+    private static final int FRAME = 0xFF67452F;
+    private static final int GOLD = 0xFFD7A34D;
+    private static final int CREAM = 0xFFEEE2D2;
+    private static final int FOOTER_HEIGHT = 27;
+    private static final long HEIGHT_TWEEN_MILLIS = 120L;
     private static Analysis analysis;
     private final VillagerLike<?> villager;
     private final UUID interactionId;
@@ -51,13 +60,18 @@ public class InteractScreen extends AbstractDynamicScreen {
     private int dialogueRowsHeight;
     private int dialogueViewportHeight;
     private int dialoguePassageScroll;
-    private int dialoguePreviewReplyScroll;
     private DialogueViewport dialogueListViewport;
     private DialogueViewport dialoguePassageViewport;
-    private DialogueViewport dialoguePreviewReplyViewport;
     private long dialogueDisplayedToken;
     private boolean dialogueTokenTracked;
     private long dialogueRenderedToken;
+    private float dialogueHeightStart;
+    private int dialogueHeightTarget;
+    private long dialogueHeightStartedAt;
+    private int dialogueStoryHeight;
+    private boolean dialogueHeightInitialized;
+    private boolean qHeld;
+    private int dialogueKeyboardIndex = -1;
 
     public InteractScreen(VillagerLike<?> villager, UUID interactionId) {
         super(Component.literal("Interact"));
@@ -97,6 +111,8 @@ public class InteractScreen extends AbstractDynamicScreen {
     @Override
     public void init() {
         dialogueHits.clear();
+        dialogueHeightInitialized = false;
+        dialogueStoryHeight = 0;
         Network.sendToServer(new GetInteractDataRequest(villager.asEntity().getId()));
     }
 
@@ -141,10 +157,6 @@ public class InteractScreen extends AbstractDynamicScreen {
                 int limit = Math.max(0, dialogueRowsHeight - dialogueViewportHeight);
                 int delta = (int) Math.signum(dy) * 24;
                 dialogueScroll = Math.max(0, Math.min(limit, dialogueScroll - delta));
-            } else if (dialoguePreviewReplyViewport != null && dialoguePreviewReplyViewport.contains(x, y)) {
-                int delta = (int) Math.signum(dy) * 20;
-                dialoguePreviewReplyScroll = Math.max(0, Math.min(
-                        dialoguePreviewReplyViewport.limit(), dialoguePreviewReplyScroll - delta));
             } else if (dialoguePassageViewport != null && dialoguePassageViewport.contains(x, y)) {
                 int delta = (int) Math.signum(dy) * 20;
                 dialoguePassageScroll = Math.max(0, Math.min(dialoguePassageViewport.limit(),
@@ -174,6 +186,10 @@ public class InteractScreen extends AbstractDynamicScreen {
                         return handleDialogueClick(hit.click());
                     }
                 }
+                if (dialoguePassageViewport != null && dialoguePassageViewport.contains(posX, posY)
+                        && presentation.revealFully()) {
+                    return true;
+                }
             }
         }
 
@@ -188,17 +204,59 @@ public class InteractScreen extends AbstractDynamicScreen {
 
     @Override
     public boolean keyPressed(int keyChar, int keyCode, int unknown) {
-        // Hotkey to leave gift mode
         if (keyChar == GLFW.GLFW_KEY_ESCAPE) {
-            if (inGiftMode) {
-                inGiftMode = false;
-                setLayout("interact");
-            } else {
-                onClose();
+            onClose();
+            return true;
+        }
+        if (keyChar == GLFW.GLFW_KEY_Q) {
+            if (!qHeld) {
+                qHeld = true;
+                navigateBack();
             }
             return true;
         }
-        return false;
+        if (dialogueMode && (keyChar == GLFW.GLFW_KEY_UP || keyChar == GLFW.GLFW_KEY_DOWN)) {
+            if (!dialogueHits.isEmpty()) {
+                int direction = keyChar == GLFW.GLFW_KEY_DOWN ? 1 : -1;
+                dialogueKeyboardIndex = Math.floorMod(dialogueKeyboardIndex + direction, dialogueHits.size());
+            }
+            return true;
+        }
+        if (dialogueMode && (keyChar == GLFW.GLFW_KEY_ENTER || keyChar == GLFW.GLFW_KEY_KP_ENTER
+                || keyChar == GLFW.GLFW_KEY_SPACE) && dialogueKeyboardIndex >= 0
+                && dialogueKeyboardIndex < dialogueHits.size()) {
+            if (dialoguePresentation().map(p -> p.offerToken().orElse(Long.MIN_VALUE) == dialogueRenderedToken)
+                    .orElse(false)) {
+                return handleDialogueClick(dialogueHits.get(dialogueKeyboardIndex).click());
+            }
+        }
+        return super.keyPressed(keyChar, keyCode, unknown);
+    }
+
+    @Override
+    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == GLFW.GLFW_KEY_Q) {
+            qHeld = false;
+            return true;
+        }
+        return super.keyReleased(keyCode, scanCode, modifiers);
+    }
+
+    private void navigateBack() {
+        if (dialogueMode) {
+            if (dialoguePresentation().map(ClientHandlerImpl.DialoguePresentation::nodeVisible).orElse(false)) {
+                requestDialogueTopics();
+            } else {
+                leaveDialogueMode();
+            }
+        } else if (inGiftMode) {
+            inGiftMode = false;
+            setLayout("interact");
+        } else if (getActiveScreen().equals("locations")) {
+            setLayout("interact");
+        } else if (!getActiveScreen().equals("main")) {
+            setLayout("main");
+        }
     }
 
     private void drawIcons(GuiGraphics context) {
@@ -382,7 +440,9 @@ public class InteractScreen extends AbstractDynamicScreen {
         dialogueHits.clear();
         dialogueScroll = 0;
         dialoguePassageScroll = 0;
-        dialoguePreviewReplyScroll = 0;
+        dialogueKeyboardIndex = -1;
+        dialogueHeightInitialized = false;
+        dialogueStoryHeight = 0;
         clearWidgets();
         dialoguePresentation().ifPresent(ClientHandlerImpl.DialoguePresentation::beginRequest);
         Network.sendToServer(new InteractionDialogueBeginMessage(villager.asEntity().getUUID(), showOpening));
@@ -400,8 +460,10 @@ public class InteractScreen extends AbstractDynamicScreen {
         dialogueHits.clear();
         dialogueScroll = 0;
         dialoguePassageScroll = 0;
-        dialoguePreviewReplyScroll = 0;
         dialogueTokenTracked = false;
+        dialogueKeyboardIndex = -1;
+        dialogueHeightInitialized = false;
+        dialogueStoryHeight = 0;
         dialoguePresentation().ifPresent(ClientHandlerImpl.DialoguePresentation::dismissOptions);
         if (notifyServer) {
             Network.sendToServer(new InteractionDialogueLeaveMessage(villager.asEntity().getUUID(), sessionId, offerToken));
@@ -436,14 +498,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         } else if (id.equals("gui.button.professions")) {
             setLayout("professions");
         } else if (id.equals("gui.button.backarrow")) {
-            if (inGiftMode) {
-                inGiftMode = false;
-                setLayout("interact");
-            } else if (getActiveScreen().equals("locations")) {
-                setLayout("interact");
-            } else {
-                setLayout("main");
-            }
+            navigateBack();
         } else if (id.equals("gui.button.locations")) {
             setLayout("locations");
         } else if (button.notifyServer()) {
@@ -464,8 +519,90 @@ public class InteractScreen extends AbstractDynamicScreen {
                 : Optional.empty();
     }
 
+    private List<DialogueRow> dialogueRows(ClientHandlerImpl.DialoguePresentation presentation) {
+        List<DialogueRow> rows = new ArrayList<>();
+        boolean preview = presentation.hasPreview() && !presentation.nodeVisible();
+        if (!presentation.nodeVisible()) {
+            presentation.options().ifPresent(options -> {
+                options.continuation().ifPresent(prompt -> rows.add(new DialogueRow(prompt,
+                        new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.RESUME, null, null))));
+                options.eventOptions().stream()
+                        .filter(option -> option.mode() == InteractionDialogueOptionsResponse.Mode.HIGHLIGHTED)
+                        .forEach(option -> rows.add(new DialogueRow(option.prompt(),
+                                new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.EVENT, option.id(), null))));
+                List<InteractionDialogueOptionsResponse.EventOption> ask = options.eventOptions().stream()
+                        .filter(option -> option.mode() == InteractionDialogueOptionsResponse.Mode.ASK).toList();
+                if (!ask.isEmpty()) {
+                    rows.add(new DialogueRow(Component.translatable("gui.dialogue.ask").copy()
+                            .append(askExpanded ? " ▾" : " ▸"),
+                            new DialogueClick(DialogueClickKind.TOGGLE_ASK, null, null, null)));
+                    if (askExpanded) {
+                        ask.forEach(option -> rows.add(new DialogueRow(
+                                Component.literal("  ").append(option.prompt()),
+                                new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.EVENT, option.id(), null))));
+                    }
+                }
+                if (options.ambientAvailable()) {
+                    rows.add(new DialogueRow(Component.translatable(options.preview().isPresent()
+                            ? "gui.dialogue.ambient_other" : "gui.dialogue.ambient"),
+                            new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.AMBIENT, null, null)));
+                }
+            });
+        }
+        if (presentation.nodeVisible() || preview) {
+            for (InteractionDialogueNodeResponse.Choice choice : presentation.visibleChoices()) {
+                rows.add(new DialogueRow(choice.text(),
+                        new DialogueClick(DialogueClickKind.CHOICE, null, null, choice.id())));
+            }
+            if (!preview && presentation.canReviewPrevious()) {
+                rows.add(new DialogueRow(Component.translatable("gui.dialogue.previous"),
+                        new DialogueClick(DialogueClickKind.PREVIOUS, null, null, null)));
+            }
+            if (presentation.canAdvance() || presentation.reviewingHistory()) {
+                Component label = presentation.reviewingHistory() ? Component.translatable("gui.dialogue.next")
+                        : switch (presentation.advanceKind().orElseThrow()) {
+                            case NEXT -> Component.translatable("gui.dialogue.next");
+                            case BACK_TO_TOPICS -> Component.translatable("gui.button.done");
+                            case NONE -> throw new IllegalStateException("Non-advancing dialogue cannot render an advance action");
+                        };
+                rows.add(new DialogueRow(label, new DialogueClick(
+                        presentation.reviewingHistory() ? DialogueClickKind.REVIEW_NEXT : DialogueClickKind.ADVANCE,
+                        null, null, null)));
+            }
+        }
+        return rows;
+    }
+
+    private int dialoguePanelWidth() {
+        return Math.min(Math.max(1, width - 24), 560);
+    }
+
+    private int dialoguePaperHeight(ClientHandlerImpl.DialoguePresentation presentation, int panelWidth) {
+        if (!presentation.nodeVisible() && !presentation.hasPreview()) {
+            return 0;
+        }
+        return Math.max(43, font.split(presentation.fullLine(), Math.max(1, panelWidth - 28)).size() * 10 + 22);
+    }
+
+    private int dialogueTargetHeight(ClientHandlerImpl.DialoguePresentation presentation) {
+        int panelWidth = dialoguePanelWidth();
+        List<DialogueRow> rows = dialogueRows(presentation);
+        int listHeight = rows.isEmpty() ? 0 : rows.stream().mapToInt(row -> dialogueRowHeight(row, panelWidth)).sum() + 10;
+        int desiredHeight = dialoguePaperHeight(presentation, panelWidth) + listHeight + FOOTER_HEIGHT;
+        int maximumHeight = Math.max(FOOTER_HEIGHT + 20, Math.min(height - 54, height * 3 / 5));
+        return Math.min(maximumHeight, Math.max(FOOTER_HEIGHT + 20, desiredHeight));
+    }
+
+    private float animatedDialogueHeight(long nowMillis) {
+        float progress = Mth.clamp((nowMillis - dialogueHeightStartedAt) / (float) HEIGHT_TWEEN_MILLIS, 0.0f, 1.0f);
+        float remaining = 1.0f - progress;
+        return Mth.lerp(1.0f - remaining * remaining * remaining, dialogueHeightStart, dialogueHeightTarget);
+    }
+
     private void drawDialogueEventState(GuiGraphics context) {
         dialogueHits.clear();
+        dialogueListViewport = null;
+        dialoguePassageViewport = null;
         if (!dialogueMode) {
             return;
         }
@@ -473,251 +610,144 @@ public class InteractScreen extends AbstractDynamicScreen {
         if (presentation == null) {
             return;
         }
-
         OptionalLong token = presentation.offerToken();
         dialogueRenderedToken = token.orElse(Long.MIN_VALUE);
         if (token.isPresent() && (!dialogueTokenTracked || dialogueDisplayedToken != token.getAsLong())) {
             dialogueScroll = 0;
             dialoguePassageScroll = 0;
-            dialoguePreviewReplyScroll = 0;
+            dialogueKeyboardIndex = -1;
             dialogueDisplayedToken = token.getAsLong();
             dialogueTokenTracked = true;
         }
 
-        dialogueListViewport = null;
-        dialoguePassageViewport = null;
-        dialoguePreviewReplyViewport = null;
-        if (presentation.nodeVisible()) {
-            drawDialogueNode(context, presentation);
-        } else {
-            int menuBottom = height - 34;
-            if (presentation.hasPreview() && width < 480) {
-                int passageHeight = Math.max(62, Math.min(190, (height - 60) / 2));
-                menuBottom = Math.max(54, menuBottom - passageHeight - 12);
-            }
-            int finalMenuBottom = menuBottom;
-            presentation.options().ifPresent(options -> drawDialogueOptions(context, options, finalMenuBottom));
-            if (presentation.hasPreview()) {
-                drawDialogueNode(context, presentation);
-            }
-        }
-    }
-
-    private void drawDialogueOptions(GuiGraphics context, InteractionDialogueOptionsResponse options, int maxBottom) {
-        List<DialogueRow> rows = new ArrayList<>();
-        options.continuation().ifPresent(prompt -> rows.add(new DialogueRow(
-                prompt,
-                new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.RESUME, null, null)
-        )));
-        options.eventOptions().stream()
-                .filter(option -> option.mode() == InteractionDialogueOptionsResponse.Mode.HIGHLIGHTED)
-                .forEach(option -> rows.add(new DialogueRow(
-                        option.prompt(),
-                        new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.EVENT, option.id(), null)
-                )));
-
-        List<InteractionDialogueOptionsResponse.EventOption> ask = options.eventOptions().stream()
-                .filter(option -> option.mode() == InteractionDialogueOptionsResponse.Mode.ASK)
-                .toList();
-        if (!ask.isEmpty()) {
-            rows.add(new DialogueRow(Component.translatable("gui.dialogue.ask").copy()
-                    .append(askExpanded ? " ▾" : " ▸"),
-                    new DialogueClick(DialogueClickKind.TOGGLE_ASK, null, null, null)));
-            if (askExpanded) {
-                ask.forEach(option -> rows.add(new DialogueRow(
-                        Component.literal("  ").append(option.prompt()),
-                        new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.EVENT, option.id(), null)
-                )));
-            }
-        }
-        if (options.ambientAvailable()) {
-            rows.add(new DialogueRow(
-                    Component.translatable(options.preview().isPresent()
-                            ? "gui.dialogue.ambient_other" : "gui.dialogue.ambient"),
-                    new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.AMBIENT, null, null)
-            ));
-        }
-        drawDialogueRows(context, rows, true, maxBottom);
-    }
-
-    private void drawDialogueNode(GuiGraphics context, ClientHandlerImpl.DialoguePresentation presentation) {
-        boolean preview = presentation.hasPreview() && !presentation.nodeVisible();
-        int panelWidth = Math.min(width - 24, Math.min(520, Math.max(220, width * 3 / 4)));
-        if (preview && width >= 480) {
-            panelWidth = Math.min(panelWidth, width - dialogueMenuWidth() - 36);
-        }
-        int left = preview && width >= 480 ? 12 : (width - panelWidth) / 2;
-        boolean hasAdvance = presentation.node().map(node ->
-                node.advanceKind() != DialogueEngine.AdvanceKind.NONE).orElse(false)
-                || (preview && presentation.options().flatMap(InteractionDialogueOptionsResponse::preview)
-                        .map(node -> node.advanceKind() != DialogueEngine.AdvanceKind.NONE).orElse(false));
-        int replySpace = preview && presentation.options().flatMap(InteractionDialogueOptionsResponse::preview)
-                .map(node -> !node.choices().isEmpty()).orElse(false)
-                ? Math.min(68, Math.max(20, (height - 70) / 4)) : 0;
-        int fullLineHeight = Math.max(1, font.split(presentation.fullLine(), panelWidth - 24).size()) * 10;
-        int desiredHeight = Math.max(92, 30 + fullLineHeight + replySpace + (hasAdvance ? 28 : 0));
-        // Leave room above the passage for replies on smaller GUI scales.
-        int maxPanelHeight = Math.max(62, Math.min(preview ? 190 : 156, (height - 60) / 2));
-        int panelHeight = Math.min(maxPanelHeight, desiredHeight);
+        int panelWidth = dialoguePanelWidth();
+        int left = (width - panelWidth) / 2;
         int bottom = height - 34;
+        int target = dialogueTargetHeight(presentation);
+        if (!presentation.nodeVisible()) {
+            dialogueStoryHeight = 0;
+        } else {
+            dialogueStoryHeight = Math.max(dialogueStoryHeight, target);
+            target = dialogueStoryHeight;
+        }
+        long nowMillis = System.nanoTime() / 1_000_000L;
+        if (!dialogueHeightInitialized) {
+            dialogueHeightStart = FOOTER_HEIGHT + 20;
+            dialogueHeightTarget = FOOTER_HEIGHT + 20;
+            dialogueHeightStartedAt = nowMillis;
+            dialogueHeightInitialized = true;
+        }
+        if (target != dialogueHeightTarget) {
+            dialogueHeightStart = animatedDialogueHeight(nowMillis);
+            dialogueHeightTarget = target;
+            dialogueHeightStartedAt = nowMillis;
+        }
+        int panelHeight = Math.round(animatedDialogueHeight(nowMillis));
         int top = bottom - panelHeight;
-        boolean canAdvance = presentation.canAdvance();
+        List<DialogueRow> rows = dialogueRows(presentation);
+        int paperDesired = dialoguePaperHeight(presentation, panelWidth);
+        int availableContent = Math.max(0, panelHeight - FOOTER_HEIGHT);
+        int paperHeight = paperDesired == 0 ? 0 : Math.min(availableContent,
+                Math.min(paperDesired, Math.max(20, availableContent - (rows.isEmpty() ? 0 : 26))));
+        int footerTop = bottom - FOOTER_HEIGHT;
+        int menuTop = top + paperHeight;
 
-        context.fill(left, top, left + panelWidth, bottom, 0xBB101019);
-        context.hLine(left + 8, left + panelWidth - 8, top + 4, 0xFF79738C);
-        Component visible = presentation.visibleLine();
-        List<FormattedCharSequence> lines = font.split(visible, panelWidth - 24);
-        int textTop = top + 12;
-        int textBottom = Math.max(textTop + 10, bottom - (hasAdvance ? 29 : 12) - replySpace);
-        int contentHeight = lines.size() * 10;
-        int textLimit = Math.max(0, contentHeight - (textBottom - textTop));
-        dialoguePassageScroll = Math.min(dialoguePassageScroll, textLimit);
-        dialoguePassageViewport = new DialogueViewport(left + 8, textTop,
-                left + panelWidth - 8, textBottom, textLimit);
-        context.enableScissor(left + 8, textTop, left + panelWidth - 8, textBottom);
-        int y = textTop - dialoguePassageScroll;
-        for (FormattedCharSequence line : lines) {
-            context.drawString(font, line, left + 12, y, 0xFFFFFFFF);
-            y += 10;
-        }
-        context.disableScissor();
-        if (dialoguePassageScroll > 0) {
-            context.drawString(font, "▲", left + panelWidth - 18, textTop, 0xFFD5CDD8);
-        }
-        if (dialoguePassageScroll < textLimit) {
-            context.drawString(font, "▼", left + panelWidth - 18, textBottom - 10, 0xFFD5CDD8);
-        }
-
-        List<DialogueRow> replies = new ArrayList<>();
-        for (InteractionDialogueNodeResponse.Choice choice : presentation.visibleChoices()) {
-            replies.add(new DialogueRow(choice.text(),
-                    new DialogueClick(DialogueClickKind.CHOICE, null, null, choice.id())));
-        }
-        if (preview && replySpace > 0) {
-            int replyTop = textBottom + 4;
-            int replyBottom = bottom - (hasAdvance ? 29 : 8);
-            if (replyBottom > replyTop) {
-                int replyContentHeight = 0;
-                for (DialogueRow reply : replies) {
-                    replyContentHeight += dialogueRowHeight(reply, panelWidth);
-                }
-                int replyLimit = Math.max(0, replyContentHeight - (replyBottom - replyTop));
-                dialoguePreviewReplyScroll = Math.min(dialoguePreviewReplyScroll, replyLimit);
-                dialoguePreviewReplyViewport = new DialogueViewport(
-                        left + 8, replyTop, left + panelWidth - 8, replyBottom, replyLimit);
-                context.enableScissor(left + 8, replyTop, left + panelWidth - 8, replyBottom);
-                int replyY = replyTop - dialoguePreviewReplyScroll;
-                for (DialogueRow reply : replies) {
-                    replyY = drawDialogueRow(context, reply, left, panelWidth, replyY, replyTop, replyBottom);
+        context.fill(left - 2, top - 2, left + panelWidth + 2, bottom + 2, FRAME);
+        if (paperHeight > 0) {
+            context.fill(left, top, left + panelWidth, menuTop, PAPER);
+            context.fill(left + 5, top + 4, left + 7, menuTop - 3, GOLD);
+            int textTop = top + 9;
+            int textBottom = menuTop - 6;
+            if (textBottom > textTop) {
+                List<FormattedCharSequence> lines = font.split(presentation.visibleLine(), Math.max(1, panelWidth - 28));
+                int totalTextHeight = lines.size() * 10;
+                int scrollLimit = Math.max(0, totalTextHeight - (textBottom - textTop));
+                dialoguePassageScroll = Mth.clamp(dialoguePassageScroll, 0, scrollLimit);
+                dialoguePassageViewport = new DialogueViewport(left, top,
+                        left + panelWidth, menuTop, scrollLimit);
+                context.enableScissor(left + 10, textTop, left + panelWidth - 8, textBottom);
+                int y = textTop - dialoguePassageScroll;
+                for (FormattedCharSequence line : lines) {
+                    context.drawString(font, line, left + 14, y, INK, false);
+                    y += 10;
                 }
                 context.disableScissor();
+                if (dialoguePassageScroll > 0) {
+                    context.drawString(font, "▲", left + panelWidth - 17, textTop, INK);
+                }
+                if (dialoguePassageScroll < scrollLimit) {
+                    context.drawString(font, "▼", left + panelWidth - 17, textBottom - 10, INK);
+                }
             }
-        } else if (!replies.isEmpty()) {
-            drawDialogueRows(context, replies, false, top - 10);
         }
-        boolean reviewingHistory = presentation.reviewingHistory();
-        boolean showPrevious = !preview && presentation.canReviewPrevious();
-        boolean showNext = canAdvance || reviewingHistory;
-        int actionWidth;
-        if (!preview) {
-            int buttonCount = 1 + (showPrevious ? 1 : 0) + (showNext ? 1 : 0);
-            actionWidth = (panelWidth - 20 - (buttonCount - 1) * 6) / buttonCount;
-            Component topics = Component.translatable("gui.dialogue.topics");
-            drawDialogueAction(context, new DialogueRow(topics,
-                    new DialogueClick(DialogueClickKind.TOPICS, null, null, null)),
-                    left + 10, bottom - 24, actionWidth, 18);
-        } else {
-            actionWidth = panelWidth - 20;
+        context.fill(left, menuTop, left + panelWidth, bottom, MENU);
+        if (paperHeight > 0) {
+            context.fill(left, menuTop, left + panelWidth, menuTop + 2, FRAME);
         }
-        if (showPrevious) {
-            Component previous = Component.translatable("gui.dialogue.previous");
-            drawDialogueAction(context, new DialogueRow(previous,
-                    new DialogueClick(DialogueClickKind.PREVIOUS, null, null, null)),
-                    left + 16 + actionWidth, bottom - 24, actionWidth, 18);
-        }
-        if (showNext) {
-            Component label = reviewingHistory ? Component.translatable("gui.dialogue.next")
-                    : switch (presentation.advanceKind().orElseThrow()) {
-                        case NEXT -> Component.translatable("gui.dialogue.next");
-                        // This acknowledges/completes the event; Topics instead pauses it.
-                        case BACK_TO_TOPICS -> Component.translatable("gui.button.done");
-                        case NONE -> throw new IllegalStateException("Non-advancing dialogue cannot render an advance action");
-                    };
-            int nextWidth = preview ? Math.min(actionWidth, Math.max(60, font.width(label) + 14)) : actionWidth;
-            int actionLeft = left + panelWidth - nextWidth - 10;
-            drawDialogueAction(context, new DialogueRow(label,
-                    new DialogueClick(reviewingHistory ? DialogueClickKind.REVIEW_NEXT : DialogueClickKind.ADVANCE,
-                            null, null, null)),
-                    actionLeft, bottom - 24, nextWidth, 18);
-        }
-    }
 
-    private void drawDialogueRows(GuiGraphics context, List<DialogueRow> rows, boolean menu, int maxBottom) {
-        int panelWidth = dialogueMenuWidth();
-        int left = width - panelWidth - 12;
-        int contentHeight = rows.stream().mapToInt(row -> dialogueRowHeight(row, panelWidth)).sum();
-        int panelHeight = Math.min(Math.min(menu ? Math.max(245, height * 3 / 4) : 170,
-                        Math.max(52, maxBottom - 18)),
-                menu ? Math.max(210, contentHeight + 54) : contentHeight + 22);
-        int top = menu ? 18 : Math.max(18, (maxBottom - panelHeight) / 2);
-        int panelBottom = top + panelHeight;
-        int clipTop = top + (menu ? 23 : 12);
-        int clipBottom = panelBottom - (menu ? 30 : 10);
-        context.fill(left, top, left + panelWidth, panelBottom, 0xBB101019);
-        context.hLine(left + 8, left + panelWidth - 8, top + 4, 0xFF79738C);
-        if (menu) {
-            context.drawString(font, Component.translatable("gui.button.talk"), left + 12, top + 11, 0xFFE6E0EF);
+        int clipTop = menuTop + 5;
+        int clipBottom = footerTop - 3;
+        if (!rows.isEmpty() && clipBottom > clipTop) {
+            dialogueRowsHeight = rows.stream().mapToInt(row -> dialogueRowHeight(row, panelWidth)).sum();
+            dialogueViewportHeight = clipBottom - clipTop;
+            int scrollLimit = Math.max(0, dialogueRowsHeight - dialogueViewportHeight);
+            dialogueScroll = Mth.clamp(dialogueScroll, 0, scrollLimit);
+            dialogueListViewport = new DialogueViewport(left + 8, clipTop,
+                    left + panelWidth - 8, clipBottom, scrollLimit);
+            context.enableScissor(left + 8, clipTop, left + panelWidth - 8, clipBottom);
+            int y = clipTop - dialogueScroll;
+            for (DialogueRow row : rows) {
+                y = drawDialogueRow(context, row, left, panelWidth, y, clipTop, clipBottom);
+            }
+            context.disableScissor();
+            if (dialogueScroll > 0) {
+                context.drawString(font, "▲", left + panelWidth - 18, clipTop, GOLD);
+            }
+            if (dialogueScroll < scrollLimit) {
+                context.drawString(font, "▼", left + panelWidth - 18, clipBottom - 10, GOLD);
+            }
         }
-        dialogueRowsHeight = contentHeight;
-        dialogueViewportHeight = Math.max(1, clipBottom - clipTop);
-        int limit = Math.max(0, contentHeight - dialogueViewportHeight);
-        dialogueScroll = Math.max(0, Math.min(limit, dialogueScroll));
-        dialogueListViewport = new DialogueViewport(left + 8, clipTop, left + panelWidth - 8, clipBottom, limit);
-        context.enableScissor(left + 8, clipTop, left + panelWidth - 8, clipBottom);
-        int y = clipTop - dialogueScroll;
-        for (DialogueRow row : rows) {
-            y = drawDialogueRow(context, row, left, panelWidth, y, clipTop, clipBottom);
-        }
-        context.disableScissor();
-        if (dialogueScroll > 0) {
-            context.drawString(font, "▲", left + panelWidth - 18, clipTop, 0xFFD5CDD8);
-        }
-        if (dialogueScroll < limit) {
-            context.drawString(font, "▼", left + panelWidth - 18, clipBottom - 10, 0xFFD5CDD8);
-        }
-        if (menu) {
-            drawDialogueAction(context, new DialogueRow(Component.translatable("gui.button.back"),
-                    DialogueClick.back()), left + 8, panelBottom - 26, panelWidth - 16, 20);
-        }
-    }
-
-    private int dialogueMenuWidth() {
-        return Math.min(width - 24, Math.min(350, Math.max(225, width * 2 / 5)));
+        context.fill(left, footerTop, left + panelWidth, footerTop + 1, FRAME);
+        boolean active = presentation.nodeVisible();
+        Component back = Component.literal("Q ").append(Component.translatable(
+                active ? "gui.dialogue.topics" : "gui.button.back"));
+        drawDialogueAction(context, new DialogueRow(back, new DialogueClick(
+                active ? DialogueClickKind.TOPICS : DialogueClickKind.BACK, null, null, null)),
+                left + 6, footerTop + 3, (panelWidth - 18) / 2, 20);
+        drawDialogueAction(context, new DialogueRow(Component.literal("Esc ")
+                .append(Component.translatable("gui.dialogue.close")),
+                new DialogueClick(DialogueClickKind.CLOSE, null, null, null)),
+                left + panelWidth / 2 + 3, footerTop + 3, (panelWidth - 18) / 2, 20);
     }
 
     private int dialogueRowHeight(DialogueRow row, int panelWidth) {
-        return Math.max(20, font.split(row.text(), panelWidth - 24).size() * 10 + 10);
+        return Math.max(22, font.split(row.text(), Math.max(1, panelWidth - 30)).size() * 10 + 10);
     }
 
     private int drawDialogueRow(GuiGraphics context, DialogueRow row,
                                 int left, int panelWidth, int y, int clipTop, int clipBottom) {
-        List<FormattedCharSequence> lines = font.split(row.text(), panelWidth - 24);
+        List<FormattedCharSequence> lines = font.split(row.text(), Math.max(1, panelWidth - 30));
         int rowHeight = dialogueRowHeight(row, panelWidth);
-        int hitTop = Math.max(y - 2, clipTop);
+        int hitTop = Math.max(y, clipTop);
         int hitBottom = Math.min(y + rowHeight - 2, clipBottom);
-        boolean hover = row.click() != null && hitBottom > hitTop
-                && hoveringOver(left + 8, hitTop, panelWidth - 16, hitBottom - hitTop);
-        if (row.click() != null && hitBottom > hitTop) {
+        boolean clickable = row.click() != null && hitBottom > hitTop;
+        boolean hover = clickable && hoveringOver(left + 8, hitTop, panelWidth - 16, hitBottom - hitTop);
+        boolean focused = clickable && dialogueKeyboardIndex == dialogueHits.size();
+        if (clickable) {
             context.fill(left + 8, hitTop, left + panelWidth - 8, hitBottom,
-                    hover ? 0xAA655676 : 0x55332D40);
+                    hover || focused ? 0xCC67452F : 0x88402D24);
+            if (hover || focused) {
+                context.fill(left + 8, hitTop, left + 11, hitBottom, GOLD);
+            }
         }
-        int color = row.click() == null ? 0xFFB0B0B0 : hover ? 0xFFFFE6A6 : 0xFFFFFFFF;
-        int lineY = y + 3;
+        int textHeight = (lines.size() - 1) * 10 + font.lineHeight;
+        int lineY = y + (rowHeight - textHeight) / 2;
         for (FormattedCharSequence line : lines) {
-            context.drawString(font, line, left + 12, lineY, color);
+            context.drawString(font, line, left + 16, lineY,
+                    hover || focused ? GOLD : CREAM);
             lineY += 10;
         }
-        if (row.click() != null && hitBottom > hitTop) {
+        if (clickable) {
             dialogueHits.add(new DialogueHit(left + 8, hitTop, left + panelWidth - 8, hitBottom, row.click()));
         }
         return y + rowHeight;
@@ -725,10 +755,14 @@ public class InteractScreen extends AbstractDynamicScreen {
 
     private void drawDialogueAction(GuiGraphics context, DialogueRow row, int x, int y, int w, int h) {
         boolean hover = hoveringOver(x, y, w, h);
-        context.fill(x, y, x + w, y + h, hover ? 0xAA655676 : 0x77332D40);
+        boolean focused = dialogueKeyboardIndex == dialogueHits.size();
+        context.fill(x, y, x + w, y + h, hover || focused ? 0xCC67452F : 0x9935261D);
+        if (hover || focused) {
+            context.fill(x, y, x + 2, y + h, GOLD);
+        }
         context.enableScissor(x + 4, y, x + w - 4, y + h);
-        context.drawString(font, row.text(), x + 6, y + (h - 8) / 2,
-                hover ? 0xFFFFE6A6 : 0xFFFFFFFF);
+        context.drawString(font, row.text(), x + 6, y + (h - font.lineHeight) / 2,
+                hover || focused ? GOLD : CREAM);
         context.disableScissor();
         dialogueHits.add(new DialogueHit(x, y, x + w, y + h, row.click()));
     }
@@ -740,6 +774,10 @@ public class InteractScreen extends AbstractDynamicScreen {
         }
         if (click.kind() == DialogueClickKind.BACK) {
             leaveDialogueMode();
+            return true;
+        }
+        if (click.kind() == DialogueClickKind.CLOSE) {
+            onClose();
             return true;
         }
         if (click.kind() == DialogueClickKind.TOGGLE_ASK) {
@@ -822,7 +860,8 @@ public class InteractScreen extends AbstractDynamicScreen {
         REVIEW_NEXT,
         TOGGLE_ASK,
         TOPICS,
-        BACK
+        BACK,
+        CLOSE
     }
 
     private record DialogueClick(
@@ -830,11 +869,7 @@ public class InteractScreen extends AbstractDynamicScreen {
             DialogueEngine.DialogueSelection selection,
             ResourceLocation eventId,
             String choiceId
-    ) {
-        static DialogueClick back() {
-            return new DialogueClick(DialogueClickKind.BACK, null, null, null);
-        }
-    }
+    ) { }
 
     private record DialogueRow(Component text, DialogueClick click) {
     }

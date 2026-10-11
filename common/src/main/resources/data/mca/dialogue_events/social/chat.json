@@ -13,8 +13,36 @@
     "seconds": 5
   },
   "history": "scheduling",
-  "start": "reaction",
+  "start": "prompt",
   "nodes": {
+    "prompt": {
+      "line": "dialogue_event.mca.social.chat.opening",
+      "choices": [
+        { "id": "day", "text": "dialogue_event.mca.social.chat.choice.day", "next": "day_reaction" },
+        { "id": "village", "text": "dialogue_event.mca.social.chat.choice.village", "next": "reaction" },
+        { "id": "news", "text": "dialogue_event.mca.social.chat.choice.news", "next": "news_reaction" }
+      ]
+    },
+    "day_reaction": {
+      "outcomes": [
+        { "weight": 5, "actions": [{ "type": "mca:hearts", "amount": 5 }], "next": "day_success" },
+        { "requirements": [{ "type": "mca:personality", "value": "gloomy" }], "weight": 4, "actions": [{ "type": "mca:hearts", "amount": 5 }], "next": "day_success" },
+        { "requirements": [{ "type": "mca:personality", "value": "sensitive" }], "weight": 2, "actions": [{ "type": "mca:hearts", "amount": 5 }], "next": "day_success" },
+        { "weight": 1, "actions": [{ "type": "mca:hearts", "amount": -1 }], "next": "day_fail" },
+        { "requirements": [{ "type": "mca:personality", "value": "odd" }], "weight": 5, "actions": [{ "type": "mca:hearts", "amount": -1 }], "next": "day_fail" },
+        { "requirements": [{ "type": "mca:personality", "value": "flirty" }], "weight": 1, "actions": [{ "type": "mca:hearts", "amount": -1 }], "next": "day_fail" }
+      ]
+    },
+    "news_reaction": {
+      "outcomes": [
+        { "weight": 5, "actions": [{ "type": "mca:hearts", "amount": 5 }], "next": "news_success" },
+        { "requirements": [{ "type": "mca:personality", "value": "gloomy" }], "weight": 4, "actions": [{ "type": "mca:hearts", "amount": 5 }], "next": "news_success" },
+        { "requirements": [{ "type": "mca:personality", "value": "sensitive" }], "weight": 2, "actions": [{ "type": "mca:hearts", "amount": 5 }], "next": "news_success" },
+        { "weight": 1, "actions": [{ "type": "mca:hearts", "amount": -1 }], "next": "news_fail" },
+        { "requirements": [{ "type": "mca:personality", "value": "odd" }], "weight": 5, "actions": [{ "type": "mca:hearts", "amount": -1 }], "next": "news_fail" },
+        { "requirements": [{ "type": "mca:personality", "value": "flirty" }], "weight": 1, "actions": [{ "type": "mca:hearts", "amount": -1 }], "next": "news_fail" }
+      ]
+    },
     "reaction": {
       "outcomes": [
         {
@@ -117,11 +145,27 @@
       ]
     },
     "success": {
-      "line": "dialogue.chat.success",
+      "line": "dialogue_event.mca.social.chat.village.success",
       "complete": true
     },
     "fail": {
-      "line": "dialogue.chat.fail",
+      "line": "dialogue_event.mca.social.chat.village.fail",
+      "complete": true
+    },
+    "day_success": {
+      "line": "dialogue_event.mca.social.chat.day.success",
+      "complete": true
+    },
+    "day_fail": {
+      "line": "dialogue_event.mca.social.chat.day.fail",
+      "complete": true
+    },
+    "news_success": {
+      "line": "dialogue_event.mca.social.chat.news.success",
+      "complete": true
+    },
+    "news_fail": {
+      "line": "dialogue_event.mca.social.chat.news.fail",
       "complete": true
     },
     "plains": {

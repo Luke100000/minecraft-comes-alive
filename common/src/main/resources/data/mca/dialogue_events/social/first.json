@@ -32,41 +32,9 @@
           "actions": [
             { "type": "mca:remember", "id": "seen", "var": "player" }
           ],
-          "next": "main"
-        },
-        {
-          "weight": 8,
-          "actions": [
-            { "type": "mca:remember", "id": "seen", "var": "player" }
-          ],
-          "next": "generic"
-        },
-        {
-          "requirements": [
-            {
-              "type": "mca:not",
-              "condition": { "type": "mca:profession", "value": "mca:guard" }
-            },
-            {
-              "type": "mca:not",
-              "condition": { "type": "mca:profession", "value": "mca:archer" }
-            }
-          ],
-          "weight": 5,
-          "actions": [
-            { "type": "mca:remember", "id": "seen", "var": "player" }
-          ],
           "next": "question"
         }
       ]
-    },
-    "main": {
-      "line": "dialogue.main",
-      "complete": true
-    },
-    "generic": {
-      "line": "dialogue.first.generic",
-      "complete": true
     },
     "question": {
       "line": "dialogue.first.question",
@@ -96,6 +64,15 @@
               "next": "spent_night_success"
             },
             {
+              "requirements": [
+                {
+                  "type": "mca:not",
+                  "condition": {
+                    "type": "mca:village_has_building",
+                    "value": "inn"
+                  }
+                }
+              ],
               "weight": 1,
               "next": "spent_night_failed"
             }

@@ -16,12 +16,11 @@
   "start": "prompt",
   "nodes": {
     "prompt": {
-      "line": "dialogue.story",
-      "silent": true,
+      "line": "dialogue_event.mca.social.story.opening",
       "choices": [
         {
           "id": "generic",
-          "text": "dialogue.story.generic",
+          "text": "dialogue_event.mca.social.story.choice.generic",
           "outcomes": [
             {
               "weight": 4,
@@ -49,7 +48,7 @@
         },
         {
           "id": "exploring",
-          "text": "dialogue.story.exploring",
+          "text": "dialogue_event.mca.social.story.choice.exploring",
           "outcomes": [
             {
               "weight": 1,
@@ -125,7 +124,7 @@
         },
         {
           "id": "nether",
-          "text": "dialogue.story.nether",
+          "text": "dialogue_event.mca.social.story.choice.nether",
           "outcomes": [
             {
               "weight": 1,
@@ -177,7 +176,7 @@
         },
         {
           "id": "enderdragon",
-          "text": "dialogue.story.enderdragon",
+          "text": "dialogue_event.mca.social.story.choice.enderdragon",
           "outcomes": [
             {
               "weight": 1,
@@ -213,7 +212,7 @@
         },
         {
           "id": "wither",
-          "text": "dialogue.story.wither",
+          "text": "dialogue_event.mca.social.story.choice.wither",
           "outcomes": [
             {
               "weight": 1,
@@ -250,43 +249,43 @@
       ]
     },
     "generic_success": {
-      "line": "dialogue.story.success",
+      "line": "dialogue_event.mca.social.story.generic.success",
       "complete": true
     },
     "generic_fail": {
-      "line": "dialogue.story.fail",
+      "line": "dialogue_event.mca.social.story.generic.fail",
       "complete": true
     },
     "exploring_success": {
-      "line": "dialogue.story.exploring.success",
+      "line": "dialogue_event.mca.social.story.exploring.success",
       "complete": true
     },
     "exploring_fail": {
-      "line": "dialogue.story.exploring.fail",
+      "line": "dialogue_event.mca.social.story.exploring.fail",
       "complete": true
     },
     "nether_success": {
-      "line": "dialogue.story.nether.success",
+      "line": "dialogue_event.mca.social.story.nether.success",
       "complete": true
     },
     "nether_fail": {
-      "line": "dialogue.story.nether.fail",
+      "line": "dialogue_event.mca.social.story.nether.fail",
       "complete": true
     },
     "enderdragon_success": {
-      "line": "dialogue.story.enderdragon.success",
+      "line": "dialogue_event.mca.social.story.enderdragon.success",
       "complete": true
     },
     "enderdragon_fail": {
-      "line": "dialogue.story.enderdragon.fail",
+      "line": "dialogue_event.mca.social.story.enderdragon.fail",
       "complete": true
     },
     "wither_success": {
-      "line": "dialogue.story.wither.success",
+      "line": "dialogue_event.mca.social.story.wither.success",
       "complete": true
     },
     "wither_fail": {
-      "line": "dialogue.story.wither.fail",
+      "line": "dialogue_event.mca.social.story.wither.fail",
       "complete": true
     }
   }

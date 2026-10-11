@@ -178,9 +178,41 @@ class McaDialogueEventResourcesTest {
 
         DialogueEvent chat = byId.get(id("social/chat"));
         DialogueEvent.Node chatStart = chat.nodes().get(chat.start());
-        assertTrue(chatStart.lines().isEmpty(), "Chat selection must route internally before rendering a villager line");
-        assertTrue(chatStart.choices().isEmpty(), "Chat selection must not require a throwaway player confirmation");
-        assertTrue(chatStart.outcomes().isPresent(), "Chat must preserve the legacy automatic weighted reaction");
+        assertEquals(List.of("dialogue_event.mca.social.chat.opening"), chatStart.lines(),
+                "Chat must start with an actual conversational opening");
+        assertEquals(Set.of("day", "village", "news"),
+                chatStart.choices().orElseThrow().stream()
+                        .map(DialogueEvent.Choice::id).collect(java.util.stream.Collectors.toSet()));
+        assertTrue(chatStart.outcomes().isEmpty(), "Chat must not react before the player has said something");
+        for (DialogueEvent.Choice choice : chatStart.choices().orElseThrow()) {
+            assertTrue(translations.get(choice.text()).getAsString().endsWith("?"),
+                    () -> "Chat choices must be actual player questions: " + choice.text());
+            DialogueEvent.Node reaction = chat.nodes().get(choice.next().orElseThrow());
+            assertTrue(reaction.outcomes().isPresent(),
+                    () -> "Chat must retain weighted reactions after question " + choice.id());
+            assertEquals(6, reaction.outcomes().orElseThrow().size(),
+                    "Chat should preserve the original personality-dependent positive/negative weights");
+        }
+
+        for (String social : List.of("joke", "story")) {
+            DialogueEvent event = byId.get(id("social/" + social));
+            DialogueEvent.Node prompt = event.nodes().get(event.start());
+            assertFalse(prompt.silent(), social + " must visibly invite player dialogue");
+            assertFalse(prompt.lines().isEmpty(), social + " must start with a villager prompt");
+            assertTrue(prompt.choices().isPresent(), social + " must have spoken player choices");
+            for (DialogueEvent.Choice choice : prompt.choices().orElseThrow()) {
+                String text = translations.get(choice.text()).getAsString();
+                assertTrue(text.length() > 30,
+                        () -> social + " choice must be a real joke/story rather than a category: " + text);
+                choice.outcomes().orElseThrow().forEach(outcome -> {
+                    DialogueEvent.Node reply = event.nodes().get(outcome.next());
+                    assertTrue(reply.lines().stream().allMatch(line ->
+                                    line.startsWith("dialogue_event.mca.social." + social
+                                            + "." + choice.id() + ".")),
+                            () -> "Replies must match the player's " + social + " choice: " + choice.id());
+                });
+            }
+        }
 
         DialogueEvent rumors = byId.get(id("social/rumors"));
         DialogueEvent.Node rumorsStart = rumors.nodes().get(rumors.start());
@@ -190,11 +222,19 @@ class McaDialogueEventResourcesTest {
 
         DialogueEvent first = byId.get(id("social/first"));
         DialogueEvent.Node firstStart = first.nodes().get(first.start());
-        assertTrue(firstStart.lines().isEmpty(), "First contact must preserve the legacy automatic opening draw");
-        assertTrue(firstStart.choices().isEmpty(), "First contact must not force a reply before its opening draw");
-        assertTrue(firstStart.outcomes().orElseThrow().stream()
-                        .allMatch(outcome -> hasPlayerSeenRemember(outcome.actions())),
-                "all first-contact opening outcomes must preserve legacy player-scoped seen memory");
+        assertTrue(firstStart.lines().isEmpty(), "First contact marks the player seen before showing its question");
+        assertTrue(firstStart.choices().isEmpty(), "The player should answer the greeting, not confirm it");
+        assertEquals(1, firstStart.outcomes().orElseThrow().size(),
+                "First contact must not randomly skip the opening question");
+        DialogueEvent.Outcome introduction = firstStart.outcomes().orElseThrow().getFirst();
+        assertEquals("question", introduction.next());
+        assertTrue(hasPlayerSeenRemember(introduction.actions()),
+                "First contact must preserve player-scoped seen memory");
+        DialogueEvent.Node question = first.nodes().get("question");
+        assertEquals(3, question.choices().orElseThrow().size());
+        assertEquals(Set.of("exploring", "settling", "spent_night"),
+                question.choices().orElseThrow().stream()
+                        .map(DialogueEvent.Choice::id).collect(java.util.stream.Collectors.toSet()));
 
     }
 

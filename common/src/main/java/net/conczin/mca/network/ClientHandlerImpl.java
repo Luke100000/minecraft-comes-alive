@@ -593,6 +593,24 @@ public class ClientHandlerImpl implements ClientHandler {
             return head(resolvedLine, revealCuts.get(revealedCharacters - 1));
         }
 
+        public boolean revealFully() {
+            if (reviewingHistory()) {
+                return false;
+            }
+            if (hasPreview() && !nodeVisible) {
+                if (previewRevealed >= previewCuts.size()) {
+                    return false;
+                }
+                previewRevealed = previewCuts.size();
+                return true;
+            }
+            if (!nodeVisible || isFullyRevealed()) {
+                return false;
+            }
+            revealedCharacters = revealCuts.size();
+            return true;
+        }
+
         public boolean canAdvance() {
             return advanceKind().isPresent();
         }

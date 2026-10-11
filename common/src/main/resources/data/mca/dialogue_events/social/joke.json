@@ -16,12 +16,11 @@
   "start": "prompt",
   "nodes": {
     "prompt": {
-      "line": "dialogue.joke",
-      "silent": true,
+      "line": "dialogue_event.mca.social.joke.opening",
       "choices": [
         {
           "id": "creative",
-          "text": "dialogue.joke.creative",
+          "text": "dialogue_event.mca.social.joke.choice.creative",
           "outcomes": [
             {
               "weight": 4,
@@ -89,7 +88,7 @@
         },
         {
           "id": "animal",
-          "text": "dialogue.joke.animal",
+          "text": "dialogue_event.mca.social.joke.choice.animal",
           "outcomes": [
             {
               "weight": 4,
@@ -149,7 +148,7 @@
         },
         {
           "id": "monster",
-          "text": "dialogue.joke.monster",
+          "text": "dialogue_event.mca.social.joke.choice.monster",
           "outcomes": [
             {
               "weight": 4,
@@ -226,27 +225,27 @@
       ]
     },
     "success": {
-      "line": "dialogue.joke.creative.success",
+      "line": "dialogue_event.mca.social.joke.creative.success",
       "complete": true
     },
     "fail": {
-      "line": "dialogue.joke.creative.failed",
+      "line": "dialogue_event.mca.social.joke.creative.fail",
       "complete": true
     },
     "animal_success": {
-      "line": "dialogue.joke.animal.success",
+      "line": "dialogue_event.mca.social.joke.animal.success",
       "complete": true
     },
     "animal_fail": {
-      "line": "dialogue.joke.animal.failed",
+      "line": "dialogue_event.mca.social.joke.animal.fail",
       "complete": true
     },
     "monster_success": {
-      "line": "dialogue.joke.monster.success",
+      "line": "dialogue_event.mca.social.joke.monster.success",
       "complete": true
     },
     "monster_fail": {
-      "line": "dialogue.joke.monster.failed",
+      "line": "dialogue_event.mca.social.joke.monster.fail",
       "complete": true
     }
   }
