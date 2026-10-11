@@ -166,12 +166,13 @@ Some other useful requirements:
 | `mca:time` | `{"type":"mca:time","value":"night"}` | Only at night |
 | `mca:personality` | `{"type":"mca:personality","value":"crabby"}` | Only for crabby villagers |
 | `mca:profession` | `{"type":"mca:profession","value":"minecraft:farmer"}` | Only for farmers |
-| `mca:biome` | `{"type":"mca:biome","value":"minecraft:plains"}` | Only when the villager is in plains |
+| `mca:biome` | `{"type":"mca:biome","values":["minecraft:plains"]}` | Biome IDs or tags; `scope: "current"` (default) or `"home"` |
 | `mca:hearts` | `{"type":"mca:hearts","min":20}` | At least 20 hearts with this player |
 
 You can also put `requirements` on an individual **choice** or **outcome**. This hides or excludes only that reply or outcome, rather than the whole event.
 
-For all available condition types and exact supported values, see the [developer guide](dialogue-system-guide.md).
+For all available condition types, outcome priorities and complete biome
+selector examples, see the [authoritative authoring guide](dialogue-authoring.md#biome-selectors-and-ordered-outcomes).
 
 ## 6. Pick how the topic appears
 

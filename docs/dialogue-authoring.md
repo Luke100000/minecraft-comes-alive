@@ -311,7 +311,9 @@ Common examples:
 { "type": "mca:time", "value": "night" }
 { "type": "mca:time", "min": 13000, "max": 23000 }
 { "type": "mca:weather", "value": "rain" }
-{ "type": "mca:biome", "value": "minecraft:plains" }
+{ "type": "mca:biome", "values": ["minecraft:plains"] }
+{ "type": "mca:biome", "values": ["minecraft:plains", "#mca:forest_biomes"], "scope": "current" }
+{ "type": "mca:biome", "values": ["#mca:snowy_biomes"], "scope": "home" }
 { "type": "mca:advancement", "value": "minecraft:story/mine_diamond" }
 { "type": "mca:village_has_building", "value": "infirmary" }
 { "type": "mca:in_building", "value": "infirmary" }
@@ -327,6 +329,41 @@ currently infected villager. A healthy villager never matches, even with
 `in_building` means this villager is actually inside that building context. Use
 the latter for lines such as hospital/prison conversations that depend on the
 speaker's current location.
+
+### Biome selectors and ordered outcomes
+
+`mca:biome` requires a nonempty **`values` array**, even for a single ID.
+Each value is an exact biome identifier or a `#namespace:biome_tag`, and the
+condition matches when **any** value matches. The old single-string `value`
+shape is not supported. Vanilla or modded biome membership comes from the live
+server registry and worldgen biome tags; datapacks can extend an MCA category
+under `data/mca/tags/worldgen/biome/`.
+
+`scope: "current"` (the default) checks the villager's position. `scope: "home"`
+checks the villager's home village center when safely loaded. A villager
+without a home uses its current biome instead; a known home in an inaccessible
+chunk produces an unavailable result, not a forced chunk load. Use neutral
+wording if the same line can be spoken by a villager with no home.
+
+For dialogue **outcomes**, optional integer `priority` defaults to `0`. The
+engine chooses the highest-priority eligible outcome, then uses `weight` among
+that tier. This is separate from the event's top-level `priority`.
+
+```json
+{
+  "outcomes": [
+    { "requirements": [{ "type": "mca:biome", "values": ["minecraft:plains"] }],
+      "priority": 20, "next": "plains" },
+    { "requirements": [{ "type": "mca:biome", "values": ["#mca:forest_biomes"] }],
+      "priority": 10, "next": "forest" },
+    { "priority": 0, "next": "generic" }
+  ]
+}
+```
+
+The unconditional generic outcome remains selectable when the exact ID/tag is
+missing or unknown. See the shipped `social/local_area.json` for both current
+and home examples. Unknown tags never become true under `mca:not`.
 
 Negate a known condition explicitly:
 

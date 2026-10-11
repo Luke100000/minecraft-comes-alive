@@ -10,7 +10,7 @@ Restore believable dialogue without losing the villager's established personalit
 
 The agreed biome experience has two entry points: occasional ambient remarks and a selectable Ask topic about the local area. Village-life remarks use the villager's home-village biome; descriptions of the immediate surroundings use their current biome. Support exact biome IDs, tag selectors beginning with `#`, and multiple alternatives. Prefer exact dialogue over category dialogue, with a generic fallback. Datapacks can extend the categories and add specialized conversations.
 
-Preserve event identities, existing localization keys where their meanings still fit, choice IDs, placeholders, heart changes, history, pause/resume and completion semantics, and unrelated uncommitted changes. Do not revive the old dialogue engine or introduce AI-generated runtime text.
+Preserve current DialogueEvent gameplay behavior, live event and choice identities, placeholders, heart changes, history, pause/resume and completion semantics, and unrelated uncommitted changes. This is a development-only format cutover: no old dialogue engine, old-schema support or compatibility adapter. Existing translation keys can be replaced or deleted only after verifying the new engine's actual references and dynamic personality fallback.
 
 ## Evidence and existing behavior
 
@@ -22,11 +22,11 @@ Preserve event identities, existing localization keys where their meanings still
 
 ## Biome selector design
 
-Extend the existing `mca:biome` condition instead of adding a parallel condition type. The following are equivalent forms for one exact biome, with optional scope:
+Extend the existing `mca:biome` condition instead of adding a parallel condition type. Use one schema for one or many selectors:
 
 ```json
-{ "type": "mca:biome", "value": "minecraft:plains" }
-{ "type": "mca:biome", "value": "minecraft:plains", "scope": "current" }
+{ "type": "mca:biome", "values": ["minecraft:plains"] }
+{ "type": "mca:biome", "values": ["minecraft:plains"], "scope": "current" }
 ```
 
 The expanded form supports one or more IDs and/or tags:
@@ -43,15 +43,15 @@ The expanded form supports one or more IDs and/or tags:
 }
 ```
 
-- Exactly one of `value` or `values` must be supplied; `values` must be nonempty. Each entry is a biome resource location or a `#`-prefixed biome tag location. Match **any** listed selector (OR). Reject malformed selectors, empty values and repeated selector entries during decoding.
-- `scope` permits `current` (the default, preserving every existing datapack condition) or `home`. `current` reads the villager's actual biome. `home` reads the home village's biome at its authoritative center when safely accessible. If the villager has **no** home village, use the current biome as the agreed fallback, but author the line neutrally so it does not claim a nonexistent home. If a known home exists but its biome cannot be resolved safely without loading chunks or crossing dimensions, do not invent the answer; route to generic dialogue.
+- `values` is required and must be a nonempty array; reject the former single-string `value` field. Each entry is a biome resource location or a `#`-prefixed biome tag location. Match **any** listed selector (OR). Reject malformed selectors, empty values and repeated selector entries during decoding. Migrate all shipped event resources to `values` in the same change.
+- `scope` permits `current` (the default) or `home`. `current` reads the villager's actual biome. `home` reads the home village's biome at its authoritative center when safely accessible. If the villager has **no** home village, use the current biome as the agreed fallback, but author the line neutrally so it does not claim a nonexistent home. If a known home exists but its biome cannot be resolved safely without loading chunks or crossing dimensions, do not invent the answer; route to generic dialogue.
 - Resolve IDs and tags against the active server biome registry and tag data for each evaluation, so modded biomes and datapack reloads work without a separate cached list. Use the registry's native biome-tag membership API and standard `data/<namespace>/tags/worldgen/biome/*.json` files.
 - Missing IDs/tags must not make a negated selector accidentally match. If any alternative matches, return `MATCH`; otherwise, if any selector is unresolved, return `UNAVAILABLE`; return `NO_MATCH` only when all selectors resolve and none matches. Keep the existing `mca:not` handling for `UNAVAILABLE`. A real, empty tag has no matching biome; distinguish it from a tag absent from the registry when possible.
 - MCA ships a modest set of category tags for the writing actually provided (for instance `mca:snowy_biomes` and forest/desert equivalents). Tag files can be extended by datapacks; do not infer category membership from a biome's display name or namespace.
 
 ### Exact, category, fallback precedence
 
-Add an **optional integer `priority`** to dialogue `Outcome`, default `0`. When selecting either a choice outcome or a hidden automatic-node outcome, filter eligible outcomes to the greatest priority, then apply the existing weighted random selection within that tier. Outcomes that omit `priority` behave exactly as before. Validate the field and preserve the chosen outcome's original index for session history.
+Add an **optional integer `priority`** to dialogue `Outcome`, default `0`. When selecting either a choice outcome or a hidden automatic-node outcome, filter eligible outcomes to the greatest priority, then apply the existing weighted random selection within that tier. Omitted priorities keep current DialogueEvent content working; this is the new engine's default, not legacy support. Validate the field and preserve the chosen outcome's original index for session history.
 
 In authored biome routing, use explicit priorities such as **20** for exact IDs, **10** for category tags and **0** for the unconditional generic route. A combined `values` condition is one matching group; use separate outcomes when exact-versus-tag precedence matters. This gives datapack authors an explicit override mechanism without teaching the core engine biome-specific precedence rules. A failing or unavailable high-priority selector does not suppress a lower-priority eligible fallback.
 
@@ -75,7 +75,7 @@ Apply the Humanizer skill's full process: identify artificial patterns, rewrite 
 
 Create contextual reactions for the new Chat, Joke and Story keys in the nine existing personality packs where the personality translation scheme supports them. Retain neutral base translations as the fallback. Inspect other built-in personalities and their resolution paths before assuming every personality owns a dedicated pack. Respect age restrictions for romantic content and do not assert unrecorded raids, family events, harvest failures, or personal histories.
 
-When changing locale values, preserve the existing keys, `/1` alternatives, `%` formatting placeholders, escapes and valid JSON. Changes to prompts, choices or line meaning require checking the neighboring branch and the old translation contract. Do not modify other languages or wipe translated keys because the English sentence changed.
+When changing locale values, preserve actively used keys, `/1` alternatives, `%` formatting placeholders, escapes and valid JSON. Verify the new engine's direct and dynamic personality/pool references before deleting unused keys. Changes to prompts, choices or line meaning require checking neighboring new-engine branches; there is no old translation contract to maintain. Do not modify other languages or remove referenced translated keys merely because an English sentence changed.
 
 ## Scope and delivery
 
@@ -98,4 +98,4 @@ One integrator owns merges into the shared base localization file. Authors can w
 
 ## Explicit exclusions
 
-No generative runtime dialogue, new NPC memories or simulated lore facts, wholesale rewriting merely to change style, additional translated languages, UI redesign, or unrelated Java refactoring. Keep the old dialogue branch as reference material, not as a second execution engine.
+No generative runtime dialogue, new NPC memories or simulated lore facts, wholesale rewriting merely to change style, additional translated languages, UI redesign, old-schema compatibility or unrelated Java refactoring. The old dialogue branch can inform writing only; it is not an execution engine or a compatibility target.

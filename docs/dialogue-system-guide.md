@@ -181,7 +181,7 @@ Every requirement is a typed JSON object, for example `{ "type": "mca:hearts", "
 | `mca:pregnancy` | Required boolean `value`; if true, optional `min_progress`, `max_progress`, `child_gender` |
 | `mca:time` | `value: "day"` / `"night"`, or a `min`/`max` range in [0, 24000] game-time ticks |
 | `mca:weather` | `value`: `clear`, `rain`, or `thunder`; ordinary rain excludes thunderstorms |
-| `mca:biome` | `value`: biome ID at the villager's position |
+| `mca:biome` | Required nonempty `values` array: biome IDs or `#namespace:tag`; optional `scope: "current"` (default) or `"home"`. See the [authoring reference](dialogue-authoring.md#biome-selectors-and-ordered-outcomes) |
 | `mca:advancement` | `value`: ID of an advancement completed by this player |
 | `mca:village_has_building` | `value`: registered building type in the villager's home village |
 | `mca:in_building` | `value`: building type containing the villager's current position |

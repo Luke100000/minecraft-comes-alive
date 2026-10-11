@@ -25,6 +25,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -189,6 +190,16 @@ class McaDialogueEventResourcesTest {
             assertTrue(routes.stream().anyMatch(outcome -> outcome.priority() == 20));
             assertTrue(routes.stream().anyMatch(outcome -> outcome.priority() == 10));
             assertTrue(routes.stream().anyMatch(outcome -> outcome.priority() == 0 && outcome.requirements().isEmpty()));
+            routes.stream().filter(outcome -> !outcome.requirements().isEmpty()).forEach(outcome -> {
+                assertEquals(1, outcome.requirements().size());
+                DialogueCondition.Defined biome = assertInstanceOf(DialogueCondition.Defined.class,
+                        outcome.requirements().getFirst());
+                assertEquals(DialogueCondition.BIOME, biome.type());
+                String actualScope = biome.definition().has("scope")
+                        ? biome.definition().get("scope").getAsString() : "current";
+                assertEquals(scope.equals("home") ? "home" : "current", actualScope,
+                        "home and here questions must sample the intended biome");
+            });
         }
         assertTrue(events.stream().anyMatch(event -> event.id().getPath().startsWith("ambient/biome_")),
                 "biome remarks must be eligible ambient events");
