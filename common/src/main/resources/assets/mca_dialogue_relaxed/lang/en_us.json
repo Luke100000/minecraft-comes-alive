@@ -1,4 +1,10 @@
 {
+  "relaxed.dialogue_event.mca.social.chat.village.success/1": "I like how familiar it all feels. Nobody seems in a hurry to change that.",
+  "relaxed.dialogue_event.mca.social.chat.day.fail/1": "It's been a lot today. Can we talk when things settle down?",
+  "relaxed.dialogue_event.mca.social.joke.monster.success/1": "That one's silly. I like it, though.",
+  "relaxed.dialogue_event.mca.social.joke.creative.fail/1": "Market prices are complicated enough without ladders.",
+  "relaxed.dialogue_event.mca.social.story.generic.success/1": "Good thing there was a pond nearby. Nice save.",
+  "relaxed.dialogue_event.mca.social.story.nether.fail/1": "Sounds exhausting. I'm happy keeping my feet on solid ground.",
   "relaxed.dialogue.main/1": "Yo, sup.",
   "relaxed.dialogue.main/2": "Hey, what's crackin'?",
   "relaxed.dialogue.main/3": "Oh hey, didn't see you there.",

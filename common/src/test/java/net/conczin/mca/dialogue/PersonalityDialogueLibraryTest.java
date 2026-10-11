@@ -19,6 +19,25 @@ import java.util.stream.Collectors;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PersonalityDialogueLibraryTest {
+    @Test
+    void originalNineEnglishPersonalitiesHaveContextSpecificConversationResponses() throws Exception {
+        for (String personality : List.of("crabby", "flirty", "gloomy", "greedy", "introverted",
+                "odd", "playful", "relaxed", "sensitive")) {
+            String path = "assets/mca_dialogue_" + personality + "/lang/en_us.json";
+            try (InputStream stream = PersonalityDialogueLibraryTest.class.getClassLoader().getResourceAsStream(path)) {
+                assertNotNull(stream, path);
+                JsonObject locale = JsonParser.parseString(new String(stream.readAllBytes(), StandardCharsets.UTF_8)).getAsJsonObject();
+                for (String line : List.of("chat.village.success/1", "chat.day.fail/1",
+                        "joke.monster.success/1", "joke.creative.fail/1",
+                        "story.generic.success/1", "story.nether.fail/1")) {
+                    String key = personality + ".dialogue_event.mca.social." + line;
+                    assertTrue(locale.has(key), path + ": " + key);
+                    assertTrue(locale.get(key).getAsString().length() >= 15, key);
+                }
+            }
+        }
+    }
+
     private record Entry(String name, String story, String first, String second, String contextType) { }
 
     private static final List<Entry> COVERAGE = List.of(

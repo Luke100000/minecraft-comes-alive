@@ -1,4 +1,10 @@
 {
+  "odd.dialogue_event.mca.social.chat.village.success/1": "I like this village. Everyone's strange in their own helpful way.",
+  "odd.dialogue_event.mca.social.chat.day.fail/1": "Today feels like a pebble in my boot. I'll explain another time.",
+  "odd.dialogue_event.mca.social.joke.monster.success/1": "Poor skeleton. Perhaps its guts are out looking for it.",
+  "odd.dialogue_event.mca.social.joke.creative.fail/1": "If the market prices climb a ladder, do we have to fetch them?",
+  "odd.dialogue_event.mca.social.story.generic.success/1": "The pond won that battle without lifting a finger. Clever pond.",
+  "odd.dialogue_event.mca.social.story.nether.fail/1": "Striders seem unbothered by lava. I'd be bothered enough for both of us.",
   "odd.dialogue.main/1": "Well, well, well, fancy meeting you here!",
   "odd.dialogue.main/2": "Well, well, well, look who decided to show up! How's life treating you?",
   "odd.dialogue.main/3": "Oh, look who decided to grace us with their presence! How's it going?",

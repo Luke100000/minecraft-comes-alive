@@ -1,4 +1,10 @@
 {
+  "introverted.dialogue_event.mca.social.chat.village.success/1": "I like knowing the neighbors. It's nice not having to say much.",
+  "introverted.dialogue_event.mca.social.chat.day.fail/1": "I could use some quiet. It's been a tiring day.",
+  "introverted.dialogue_event.mca.social.joke.monster.success/1": "That skeleton joke caught me off guard. I actually laughed.",
+  "introverted.dialogue_event.mca.social.joke.creative.fail/1": "I've heard enough about market prices for one day.",
+  "introverted.dialogue_event.mca.social.story.generic.success/1": "I'm relieved you found that pond. Creepers scare me.",
+  "introverted.dialogue_event.mca.social.story.nether.fail/1": "That sounds frightening. I'm glad you made it back.",
   "introverted.dialogue.main/1": "Oh... um, h-hello...",
   "introverted.dialogue.main/2": "H-hey... um, h-how are you today?",
   "introverted.dialogue.main/3": "H-hi... g-good to see you...",

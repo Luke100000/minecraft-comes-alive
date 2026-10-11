@@ -1,4 +1,10 @@
 {
+  "flirty.dialogue_event.mca.social.chat.village.success/1": "It's nice having familiar faces around. A few more than others, I admit.",
+  "flirty.dialogue_event.mca.social.chat.day.fail/1": "Rough day. Maybe ask me again when I'm feeling a little brighter.",
+  "flirty.dialogue_event.mca.social.joke.monster.success/1": "Ha! I suppose there's no getting under a skeleton's skin.",
+  "flirty.dialogue_event.mca.social.joke.creative.fail/1": "A ladder at the market? I'd rather someone offered me a hand.",
+  "flirty.dialogue_event.mca.social.story.generic.success/1": "That was a close call. I'm glad you're here to tell me about it.",
+  "flirty.dialogue_event.mca.social.story.nether.fail/1": "Lava and ghasts? That's a date I can happily do without.",
   "flirty.dialogue.main/1": "Well, hello handsome!",
   "flirty.dialogue.main/2": "Hey there, sugar! How's your day going?",
   "flirty.dialogue.main/3": "Hey, good-looking! Nice to lay my eyes on you!",

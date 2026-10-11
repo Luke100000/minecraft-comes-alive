@@ -1,4 +1,10 @@
 {
+  "crabby.dialogue_event.mca.social.chat.village.success/1": "I like that folk help each other. Wouldn't get half the work done otherwise.",
+  "crabby.dialogue_event.mca.social.chat.day.fail/1": "It's been a long day. I'd rather be left alone for a bit.",
+  "crabby.dialogue_event.mca.social.joke.monster.success/1": "Heh. A skeleton with no guts. At least that one's worth a chuckle.",
+  "crabby.dialogue_event.mca.social.joke.creative.fail/1": "Prices are high enough. Don't give those merchants ideas.",
+  "crabby.dialogue_event.mca.social.story.generic.success/1": "Jumped into a pond to dodge a creeper? Hmph. Not a bad move.",
+  "crabby.dialogue_event.mca.social.story.nether.fail/1": "You rode over lava while ghasts chased you? Sounds like poor planning.",
   "crabby.dialogue.main/1": "What do you want?",
   "crabby.dialogue.main/2": "What's your problem today?",
   "crabby.dialogue.main/3": "Oh, it's you again.",

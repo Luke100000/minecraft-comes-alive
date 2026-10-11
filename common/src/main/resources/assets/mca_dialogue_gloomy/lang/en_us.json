@@ -1,4 +1,10 @@
 {
+  "gloomy.dialogue_event.mca.social.chat.village.success/1": "There's comfort in knowing people. I just wish it lasted longer.",
+  "gloomy.dialogue_event.mca.social.chat.day.fail/1": "I've had better days. I'd rather not go over it all again.",
+  "gloomy.dialogue_event.mca.social.joke.monster.success/1": "Well, at least that skeleton has one less thing to worry about.",
+  "gloomy.dialogue_event.mca.social.joke.creative.fail/1": "I doubt anyone at the market would find that funny.",
+  "gloomy.dialogue_event.mca.social.story.generic.success/1": "A pond was there just in time. You were luckier than most.",
+  "gloomy.dialogue_event.mca.social.story.nether.fail/1": "One wrong move and you'd have been gone. I can hardly imagine it.",
   "gloomy.dialogue.main/1": "Oh, hello... I suppose.",
   "gloomy.dialogue.main/2": "Hey... How are you today? Not that it matters.",
   "gloomy.dialogue.main/3": "Oh, it's you... Good to see you, I guess.",

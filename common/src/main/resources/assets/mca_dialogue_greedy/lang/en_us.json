@@ -1,4 +1,10 @@
 {
+  "greedy.dialogue_event.mca.social.chat.village.success/1": "People here know how to trade favors. That's worth something.",
+  "greedy.dialogue_event.mca.social.chat.day.fail/1": "My day hasn't gone well, and there's nothing to show for it.",
+  "greedy.dialogue_event.mca.social.joke.monster.success/1": "Heh! A skeleton with nothing inside. Can't sell much of that.",
+  "greedy.dialogue_event.mca.social.joke.creative.fail/1": "Higher prices? The traders don't need any encouragement.",
+  "greedy.dialogue_event.mca.social.story.generic.success/1": "Quick thinking! A creeper can't take what it can't catch.",
+  "greedy.dialogue_event.mca.social.story.nether.fail/1": "All that risk for a ride across lava? Better be something valuable at the end.",
   "greedy.dialogue.main/1": "Well, well, well, if it isn't you again!",
   "greedy.dialogue.main/2": "Hey! Spill the beans, how's life treating you today?",
   "greedy.dialogue.main/3": "Ah, good ol' familiar face! What mischief have you been up to?",

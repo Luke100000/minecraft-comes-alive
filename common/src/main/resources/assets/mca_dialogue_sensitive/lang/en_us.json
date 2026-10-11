@@ -1,4 +1,10 @@
 {
+  "sensitive.dialogue_event.mca.social.chat.village.success/1": "I like that people notice when someone needs a hand.",
+  "sensitive.dialogue_event.mca.social.chat.day.fail/1": "It's been a hard day. I just need a little space right now.",
+  "sensitive.dialogue_event.mca.social.joke.monster.success/1": "That made me laugh. I needed that today.",
+  "sensitive.dialogue_event.mca.social.joke.creative.fail/1": "The traders have enough worries without teasing them about prices.",
+  "sensitive.dialogue_event.mca.social.story.generic.success/1": "That must have been terrifying. I'm so glad you escaped.",
+  "sensitive.dialogue_event.mca.social.story.nether.fail/1": "You must have been scared out there. I'm glad you're safe.",
   "sensitive.dialogue.main/1": "Oh, um, hello there...",
   "sensitive.dialogue.main/2": "Hi... I hope you're doing well today.",
   "sensitive.dialogue.main/3": "Hey, it's nice to see you... I guess.",

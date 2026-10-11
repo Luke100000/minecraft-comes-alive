@@ -1,4 +1,10 @@
 {
+  "playful.dialogue_event.mca.social.chat.village.success/1": "There's always someone here with a story. Some of them are even true!",
+  "playful.dialogue_event.mca.social.chat.day.fail/1": "Long day. Tell me a better one tomorrow, will you?",
+  "playful.dialogue_event.mca.social.joke.monster.success/1": "That skeleton never stood a chance against that joke!",
+  "playful.dialogue_event.mca.social.joke.creative.fail/1": "Ha! The traders would climb two ladders if they could charge twice as much.",
+  "playful.dialogue_event.mca.social.story.generic.success/1": "Now that's a dramatic splash! I bet the creeper wasn't impressed.",
+  "playful.dialogue_event.mca.social.story.nether.fail/1": "Riding a strider under ghast fire? I'd have been screaming the whole way!",
   "playful.dialogue.main/1": "Well, well, well, look who decided to grace us with their presence!",
   "playful.dialogue.main/2": "Yo, how's life treating you today, my friend?",
   "playful.dialogue.main/3": "Well, well, well, if it isn't my favorite person in the whole village!",
