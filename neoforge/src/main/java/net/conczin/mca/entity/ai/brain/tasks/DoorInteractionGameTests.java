@@ -4,6 +4,7 @@ import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.PathingBlockInteraction;
+import net.conczin.mca.entity.ai.relationship.Gender;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
@@ -447,6 +448,55 @@ public final class DoorInteractionGameTests {
                 "stale remembered toggleable forced a distant chunk load");
         villager.discard();
         helper.succeed();
+    }
+
+    @GameTest(batch = "mca_shared_gate_closing", templateNamespace = "minecraft",
+            template = "bastion/blocks/air")
+    public static void gateRemainsOpenWhileAnotherVillagerUsesItsPath(GameTestHelper helper) {
+        BlockPos gate = helper.absolutePos(new BlockPos(5, 2, 4));
+        BlockPos ownerPos = helper.absolutePos(new BlockPos(2, 2, 4));
+        BlockPos otherPos = gate.west();
+        helper.getLevel().setBlock(gate, Blocks.OAK_FENCE_GATE.defaultBlockState()
+                .setValue(BlockStateProperties.OPEN, true), 3);
+
+        VillagerEntityMCA owner = VillagerFactory.newVillager(helper.getLevel())
+                .withGender(Gender.MALE).withAge(0).withPosition(Vec3.atBottomCenterOf(ownerPos))
+                .spawn(MobSpawnType.STRUCTURE);
+        VillagerEntityMCA other = VillagerFactory.newVillager(helper.getLevel())
+                .withGender(Gender.MALE).withAge(0).withPosition(Vec3.atBottomCenterOf(otherPos))
+                .spawn(MobSpawnType.STRUCTURE);
+        owner.setNoAi(true);
+        other.setNoAi(true);
+        owner.refreshBrain(helper.getLevel());
+        other.refreshBrain(helper.getLevel());
+        try {
+            GlobalPos rememberedGate = GlobalPos.of(helper.getLevel().dimension(), gate);
+            owner.getBrain().setMemory(MemoryModuleType.DOORS_TO_CLOSE,
+                    new HashSet<>(Set.of(rememberedGate)));
+            owner.getBrain().setMemory(MemoryModuleType.NEAREST_LIVING_ENTITIES, List.of(other));
+            Path otherPath = new Path(List.of(node(otherPos), node(gate), node(gate.east())), gate.east(), true);
+            otherPath.setNextNodeIndex(1);
+            other.getBrain().setMemory(MemoryModuleType.PATH, otherPath);
+
+            SmarterOpenDoorsTask.closeDoors(helper.getLevel(), owner, null, null);
+            helper.assertTrue(helper.getLevel().getBlockState(gate).getValue(BlockStateProperties.OPEN),
+                    "the gate closed while another villager was following its path");
+            helper.assertTrue(owner.getBrain().getMemory(MemoryModuleType.DOORS_TO_CLOSE)
+                            .orElse(Set.of()).contains(rememberedGate),
+                    "gate ownership was dropped while another villager still needed it");
+
+            other.getBrain().eraseMemory(MemoryModuleType.PATH);
+            SmarterOpenDoorsTask.closeDoors(helper.getLevel(), owner, null, null);
+            helper.assertTrue(!helper.getLevel().getBlockState(gate).getValue(BlockStateProperties.OPEN),
+                    "gate was not closed after the other villager abandoned its path");
+            helper.assertTrue(!owner.getBrain().getMemory(MemoryModuleType.DOORS_TO_CLOSE)
+                            .orElse(Set.of()).contains(rememberedGate),
+                    "gate ownership was not released after closing");
+            helper.succeed();
+        } finally {
+            owner.discard();
+            other.discard();
+        }
     }
 
     @GameTest(batch = "mca_trapdoor_interaction", templateNamespace = "minecraft",

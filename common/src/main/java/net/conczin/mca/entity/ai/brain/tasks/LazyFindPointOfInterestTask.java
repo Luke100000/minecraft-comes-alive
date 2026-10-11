@@ -7,17 +7,17 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.Holder;
 import net.minecraft.network.protocol.game.DebugPackets;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.behavior.AcquirePoi;
 import net.minecraft.world.entity.ai.behavior.BehaviorControl;
 import net.minecraft.world.entity.ai.behavior.OneShot;
-import net.minecraft.world.entity.ai.behavior.declarative.BehaviorBuilder;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.entity.ai.village.poi.PoiType;
 import net.minecraft.world.level.pathfinder.Path;
-import org.apache.commons.lang3.mutable.MutableLong;
 
 import java.util.Optional;
 import java.util.Set;
@@ -30,73 +30,71 @@ import java.util.stream.Collectors;
 public class LazyFindPointOfInterestTask extends AcquirePoi {
     private static final int MIN_DELAY = 200;
 
-    public static BehaviorControl<PathfinderMob> create(Predicate<Holder<PoiType>> poiPredicate, MemoryModuleType<GlobalPos> poiPosModule, MemoryModuleType<GlobalPos> potentialPoiPosModule, boolean onlyRunIfChild, Optional<Byte> entityStatus) {
-        MutableLong cooldown = new MutableLong(0L);
-        Long2ObjectMap<RetryMarker> long2ObjectMap = new Long2ObjectOpenHashMap<>();
-        OneShot<PathfinderMob> singleTickTask = BehaviorBuilder.create(taskContext -> {
-            return taskContext.group(taskContext.absent(potentialPoiPosModule)).apply(taskContext, queryResult -> {
-                return (world, entity, time) -> {
-                    if (onlyRunIfChild && entity.isBaby()) {
-                        return false;
-                    } else if (cooldown.getValue() == 0L) {
-                        cooldown.setValue(world.getGameTime() + (long) world.random.nextInt(MIN_DELAY));
-                        return false;
-                    } else if (world.getGameTime() < cooldown.getValue()) {
-                        return false;
-                    } else {
-                        cooldown.setValue(time + MIN_DELAY + (long) world.getRandom().nextInt(MIN_DELAY));
+    public static BehaviorControl<PathfinderMob> create(Predicate<Holder<PoiType>> poiPredicate,
+                                                        MemoryModuleType<GlobalPos> poiPosModule,
+                                                        MemoryModuleType<GlobalPos> potentialPoiPosModule,
+                                                        boolean onlyRunIfAdult, Optional<Byte> entityStatus) {
+        return new OneShot<>() {
+            private long nextAttemptTime;
+            private final Long2ObjectMap<RetryMarker> retryMarkers = new Long2ObjectOpenHashMap<>();
 
-                        PoiManager pointOfInterestStorage = world.getPoiManager();
-                        long2ObjectMap.long2ObjectEntrySet().removeIf(entry -> {
-                            return !entry.getValue().isAttempting(time);
-                        });
+            @Override
+            public String debugString() {
+                return LazyFindPointOfInterestTask.class.getSimpleName();
+            }
 
-                        Predicate<BlockPos> predicate2 = pos -> {
-                            RetryMarker retryMarker = long2ObjectMap.get(pos.asLong());
-                            if (retryMarker == null) {
-                                return true;
-                            } else if (!retryMarker.shouldRetry(time)) {
-                                return false;
-                            } else {
-                                retryMarker.setAttemptTime(time);
-                                return true;
-                            }
-                        };
+            @Override
+            public boolean trigger(ServerLevel world, PathfinderMob entity, long time) {
+                if (!entity.getBrain().checkMemory(potentialPoiPosModule, MemoryStatus.VALUE_ABSENT)
+                        || !entity.getBrain().checkMemory(poiPosModule, MemoryStatus.VALUE_ABSENT)
+                        || (onlyRunIfAdult && entity.isBaby())) {
+                    return false;
+                }
+                if (nextAttemptTime == 0L) {
+                    nextAttemptTime = world.getGameTime() + world.random.nextInt(MIN_DELAY);
+                    return false;
+                }
+                if (world.getGameTime() < nextAttemptTime) {
+                    return false;
+                }
+                nextAttemptTime = time + MIN_DELAY + world.getRandom().nextInt(MIN_DELAY);
 
-                        Set<Pair<Holder<PoiType>, BlockPos>> set = pointOfInterestStorage.findAllClosestFirstWithType(poiPredicate, predicate2, entity.blockPosition(), 48, PoiManager.Occupancy.HAS_SPACE).limit(5L).collect(Collectors.toSet());
-                        Path path = findPathToPois(entity, set);
-                        if (path != null && path.canReach()) {
-                            BlockPos blockPos = path.getTarget();
-                            pointOfInterestStorage.getType(blockPos).ifPresent(poiType -> {
-                                pointOfInterestStorage.take(poiPredicate, (registryEntry, blockPos2) -> {
-                                    return blockPos2.equals(blockPos);
-                                }, blockPos, 1);
-                                queryResult.set(GlobalPos.of(world.dimension(), blockPos));
-                                entityStatus.ifPresent(status -> {
-                                    world.broadcastEntityEvent(entity, status);
-                                });
-                                long2ObjectMap.clear();
-                                DebugPackets.sendPoiTicketCountPacket(world, blockPos);
-                            });
-                        } else {
-                            for (Pair<Holder<PoiType>, BlockPos> registryEntryBlockPosPair : set) {
-                                long2ObjectMap.computeIfAbsent(registryEntryBlockPosPair.getSecond().asLong(), m -> {
-                                    return new RetryMarker(world.random, time);
-                                });
-                            }
-                        }
-
+                PoiManager poiManager = world.getPoiManager();
+                retryMarkers.long2ObjectEntrySet().removeIf(entry -> !entry.getValue().isAttempting(time));
+                Predicate<BlockPos> eligible = pos -> {
+                    RetryMarker retry = retryMarkers.get(pos.asLong());
+                    if (retry == null) {
                         return true;
                     }
+                    if (!retry.shouldRetry(time)) {
+                        return false;
+                    }
+                    retry.setAttemptTime(time);
+                    return true;
                 };
-            });
-        });
 
-        return potentialPoiPosModule == poiPosModule ? singleTickTask : BehaviorBuilder.create(context -> {
-            return context.group(context.absent(poiPosModule)).apply(context, poiPos -> {
-                return singleTickTask;
-            });
-        });
+                Set<Pair<Holder<PoiType>, BlockPos>> candidates = poiManager
+                        .findAllClosestFirstWithType(poiPredicate, eligible, entity.blockPosition(), 48, PoiManager.Occupancy.HAS_SPACE)
+                        .limit(5)
+                        .collect(Collectors.toSet());
+                Path path = findPathToPois(entity, candidates);
+                if (path != null && path.canReach()) {
+                    BlockPos target = path.getTarget();
+                    poiManager.getType(target).ifPresent(type -> {
+                        poiManager.take(poiPredicate, (entry, pos) -> pos.equals(target), target, 1);
+                        entity.getBrain().setMemory(potentialPoiPosModule, GlobalPos.of(world.dimension(), target));
+                        entityStatus.ifPresent(status -> world.broadcastEntityEvent(entity, status));
+                        retryMarkers.clear();
+                        DebugPackets.sendPoiTicketCountPacket(world, target);
+                    });
+                } else {
+                    for (Pair<Holder<PoiType>, BlockPos> candidate : candidates) {
+                        retryMarkers.computeIfAbsent(candidate.getSecond().asLong(), pos -> new RetryMarker(world.random, time));
+                    }
+                }
+                return true;
+            }
+        };
     }
 
     private static class RetryMarker {
