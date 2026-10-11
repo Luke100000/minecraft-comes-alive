@@ -374,7 +374,7 @@ public final class DialogueEngine {
                     choice,
                     condition -> matches(condition, context)
             );
-            DialogueEvent.Outcome outcome = weightedPick(eligible, DialogueEvent.Outcome::weight, random).orElse(null);
+            DialogueEvent.Outcome outcome = pickOutcome(eligible, random).orElse(null);
             if (outcome == null) {
                 DialogueSession refreshed = refreshOfferedChoices(session, context);
                 if (refreshed.offeredChoices().isEmpty()) {
@@ -838,11 +838,7 @@ public final class DialogueEngine {
                     node.outcomes().orElseThrow(),
                     conditionMatches
             );
-            Optional<DialogueEvent.Outcome> picked = weightedPick(
-                    eligible,
-                    DialogueEvent.Outcome::weight,
-                    random
-            );
+            Optional<DialogueEvent.Outcome> picked = pickOutcome(eligible, random);
             if (picked.isEmpty()) {
                 throw new IllegalStateException(
                         "Validated automatic dialogue route has no eligible outcome: "
@@ -853,6 +849,13 @@ public final class DialogueEngine {
                     .withProgress(outcome.next(), 0, List.of(), current.offerToken());
             routed = true;
         }
+    }
+
+    static Optional<DialogueEvent.Outcome> pickOutcome(List<DialogueEvent.Outcome> eligible, RandomSource random) {
+        if (eligible.isEmpty()) return Optional.empty();
+        int highest = eligible.stream().mapToInt(DialogueEvent.Outcome::priority).max().orElseThrow();
+        return weightedPick(eligible.stream().filter(outcome -> outcome.priority() == highest).toList(),
+                DialogueEvent.Outcome::weight, random);
     }
 
     static <T> Optional<T> weightedPick(List<T> candidates, ToDoubleFunction<T> weight, RandomSource random) {

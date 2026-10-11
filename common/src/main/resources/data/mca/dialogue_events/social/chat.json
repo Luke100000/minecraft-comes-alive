@@ -109,35 +109,35 @@
         },
         {
           "requirements": [
-            { "type": "mca:biome", "value": "minecraft:plains" }
+            { "type": "mca:biome", "values": ["minecraft:plains"] }
           ],
           "weight": 1,
           "next": "plains"
         },
         {
           "requirements": [
-            { "type": "mca:biome", "value": "minecraft:savanna" }
+            { "type": "mca:biome", "values": ["minecraft:savanna"] }
           ],
           "weight": 1,
           "next": "savanna"
         },
         {
           "requirements": [
-            { "type": "mca:biome", "value": "minecraft:taiga" }
+            { "type": "mca:biome", "values": ["minecraft:taiga"] }
           ],
           "weight": 1,
           "next": "taiga"
         },
         {
           "requirements": [
-            { "type": "mca:biome", "value": "minecraft:snowy_plains" }
+            { "type": "mca:biome", "values": ["minecraft:snowy_plains"] }
           ],
           "weight": 1,
           "next": "snowy_plains"
         },
         {
           "requirements": [
-            { "type": "mca:biome", "value": "minecraft:desert" }
+            { "type": "mca:biome", "values": ["minecraft:desert"] }
           ],
           "weight": 1,
           "next": "desert"

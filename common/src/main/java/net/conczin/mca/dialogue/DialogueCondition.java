@@ -24,6 +24,7 @@ import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
@@ -34,7 +35,9 @@ import net.minecraft.world.Container;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.biome.Biome;
 
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -293,7 +296,27 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
         } else if (WEATHER.equals(type)) {
             requireOnly(object, "type", "value");
             requireAllowedValue(object, "value", WEATHER_STATES);
-        } else if (BIOME.equals(type) || ADVANCEMENT.equals(type)) {
+        } else if (BIOME.equals(type)) {
+            requireOnly(object, "type", "values", "scope");
+            if (!object.has("values") || !object.get("values").isJsonArray()
+                    || object.getAsJsonArray("values").isEmpty()) {
+                throw new IllegalArgumentException("mca:biome requires a nonempty values array");
+            }
+            if (object.has("scope") && !Set.of("current", "home").contains(requiredNonblankString(object, "scope"))) {
+                throw new IllegalArgumentException("mca:biome scope must be current or home");
+            }
+            Set<String> seen = new HashSet<>();
+            for (JsonElement element : object.getAsJsonArray("values")) {
+                if (!element.isJsonPrimitive() || !element.getAsJsonPrimitive().isString()) {
+                    throw new IllegalArgumentException("mca:biome selector must be a string");
+                }
+                String selector = element.getAsString();
+                String id = selector.startsWith("#") ? selector.substring(1) : selector;
+                if (ResourceLocation.tryParse(id) == null || id.isBlank() || !seen.add(selector)) {
+                    throw new IllegalArgumentException("Invalid or duplicate biome selector '" + selector + "'");
+                }
+            }
+        } else if (ADVANCEMENT.equals(type)) {
             requireOnly(object, "type", "value");
             requiredLocation(object, "value");
         } else if (VILLAGE_HAS_BUILDING.equals(type) || IN_BUILDING.equals(type)) {
@@ -470,12 +493,33 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
     }
 
     private static Evaluation evaluateBiome(Defined condition, DialogueContext context) {
-        ResourceLocation expected = requiredLocation(condition.definition(), "value");
-        if (context.level().registryAccess().registryOrThrow(Registries.BIOME).getOptional(expected).isEmpty()) {
-            return Evaluation.UNAVAILABLE;
+        JsonObject definition = condition.definition();
+        BlockPos position = context.villager().blockPosition();
+        if ("home".equals(definition.has("scope") ? definition.get("scope").getAsString() : "current")) {
+            Optional<Village> home = context.village();
+            if (home.isPresent()) {
+                position = new BlockPos(home.orElseThrow().getCenter());
+                if (context.level().getChunkSource().getChunkNow(position.getX() >> 4, position.getZ() >> 4) == null) {
+                    return Evaluation.UNAVAILABLE;
+                }
+            }
         }
-        var biomeKey = context.level().getBiome(context.villager().blockPosition()).unwrapKey();
-        return biomeKey.map(key -> result(key.location().equals(expected))).orElse(Evaluation.UNAVAILABLE);
+        var registry = context.level().registryAccess().registryOrThrow(Registries.BIOME);
+        var biome = context.level().getBiome(position);
+        boolean unavailable = false;
+        for (JsonElement element : definition.getAsJsonArray("values")) {
+            String selector = element.getAsString();
+            if (selector.startsWith("#")) {
+                TagKey<Biome> tag = TagKey.create(Registries.BIOME, ResourceLocation.parse(selector.substring(1)));
+                if (registry.getTag(tag).isEmpty()) unavailable = true;
+                else if (biome.is(tag)) return Evaluation.MATCH;
+            } else {
+                ResourceLocation id = ResourceLocation.parse(selector);
+                if (registry.getOptional(id).isEmpty()) unavailable = true;
+                else if (biome.unwrapKey().map(key -> key.location().equals(id)).orElse(false)) return Evaluation.MATCH;
+            }
+        }
+        return unavailable ? Evaluation.UNAVAILABLE : Evaluation.NO_MATCH;
     }
 
     private static Evaluation evaluateAdvancement(Defined condition, DialogueContext context) {

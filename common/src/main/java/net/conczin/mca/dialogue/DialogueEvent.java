@@ -218,7 +218,7 @@ public record DialogueEvent(
                 if (node.has("outcomes") && node.get("outcomes").isJsonArray()) {
                     for (JsonElement outcomeElement : node.getAsJsonArray("outcomes")) {
                         if (outcomeElement.isJsonObject()) {
-                            requireOnly(outcomeElement.getAsJsonObject(), Set.of("requirements", "weight", "actions", "next"), "outcome");
+                            requireOnly(outcomeElement.getAsJsonObject(), Set.of("requirements", "weight", "actions", "next", "priority"), "outcome");
                         }
                     }
                 }
@@ -232,7 +232,7 @@ public record DialogueEvent(
                         if (choice.has("outcomes") && choice.get("outcomes").isJsonArray()) {
                             for (JsonElement outcomeElement : choice.getAsJsonArray("outcomes")) {
                                 if (outcomeElement.isJsonObject()) {
-                                    requireOnly(outcomeElement.getAsJsonObject(), Set.of("requirements", "weight", "actions", "next"), "outcome");
+                                    requireOnly(outcomeElement.getAsJsonObject(), Set.of("requirements", "weight", "actions", "next", "priority"), "outcome");
                                 }
                             }
                         }
@@ -510,13 +510,15 @@ public record DialogueEvent(
             List<DialogueCondition> requirements,
             double weight,
             List<DialogueAction> actions,
-            String next
+            String next,
+            int priority
     ) {
         private static final Codec<Outcome> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 DialogueCondition.CODEC.listOf().optionalFieldOf("requirements", List.of()).forGetter(Outcome::requirements),
                 Codec.DOUBLE.optionalFieldOf("weight", 1.0).forGetter(Outcome::weight),
                 DialogueAction.CODEC.listOf().optionalFieldOf("actions", List.of()).forGetter(Outcome::actions),
-                DialogueCodecs.nonblankStringCodec("next").fieldOf("next").forGetter(Outcome::next)
+                DialogueCodecs.nonblankStringCodec("next").fieldOf("next").forGetter(Outcome::next),
+                Codec.INT.optionalFieldOf("priority", 0).forGetter(Outcome::priority)
         ).apply(instance, Outcome::new));
 
         public Outcome {

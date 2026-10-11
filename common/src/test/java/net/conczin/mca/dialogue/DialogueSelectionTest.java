@@ -20,6 +20,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DialogueSelectionTest {
     @Test
+    void outcomePrioritySelectsHighestTierThenPreservesWeightedDraw() {
+        DialogueEvent.Outcome generic = new DialogueEvent.Outcome(List.of(), 100.0, List.of(), "generic", 0);
+        DialogueEvent.Outcome preferredA = new DialogueEvent.Outcome(List.of(), 1.0, List.of(), "a", 20);
+        DialogueEvent.Outcome preferredB = new DialogueEvent.Outcome(List.of(), 4.0, List.of(), "b", 20);
+        assertEquals("b", DialogueEngine.pickOutcome(List.of(generic, preferredA, preferredB),
+                RandomSource.create(17L)).orElseThrow().next());
+        assertTrue(DialogueEngine.pickOutcome(List.of(), RandomSource.create(17L)).isEmpty());
+    }
+    @Test
     void continuationPromptUsesAuthoredKeyAndVillagerNameArgument() {
         DialogueEvent event = event("test:resume", "ask", 1, 1.0, "always");
         Component villagerName = Component.literal("Mara");

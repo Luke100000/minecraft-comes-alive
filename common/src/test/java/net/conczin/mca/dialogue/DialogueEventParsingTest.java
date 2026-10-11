@@ -20,6 +20,43 @@ class DialogueEventParsingTest {
     private static final ResourceLocation EVENT_ID = ResourceLocation.fromNamespaceAndPath("mca", "personal/test");
 
     @Test
+    void biomeUsesOnlyValuesArrayAndSupportsTagsAndScope() {
+        for (String selector : List.of(
+                "{\"type\":\"mca:biome\",\"values\":[\"minecraft:plains\"]}",
+                "{\"type\":\"mca:biome\",\"values\":[\"minecraft:plains\",\"#mca:snowy_biomes\"],\"scope\":\"home\"}"
+        )) {
+            DialogueEvent event = decode(baseEvent("[" + selector + "]", "{\"type\":\"always\"}"));
+            DialogueCondition.Defined biome = assertInstanceOf(DialogueCondition.Defined.class, event.requirements().getFirst());
+            assertEquals(JsonParser.parseString(selector), biome.definition());
+        }
+        for (String selector : List.of(
+                "{\"type\":\"mca:biome\",\"value\":\"minecraft:plains\"}",
+                "{\"type\":\"mca:biome\",\"values\":[]}",
+                "{\"type\":\"mca:biome\",\"values\":[\"minecraft:plains\",\"minecraft:plains\"]}",
+                "{\"type\":\"mca:biome\",\"values\":[\"#\"]}",
+                "{\"type\":\"mca:biome\",\"values\":[\"minecraft:plains\"],\"scope\":\"elsewhere\"}"
+        )) {
+            assertDecodeFails(baseEvent("[" + selector + "]", "{\"type\":\"always\"}"));
+        }
+    }
+
+    @Test
+    void outcomesDecodePriorityInBothRouteKindsAndDefaultToZero() {
+        DialogueEvent event = decode("""
+                {"trigger":"talk","presentation":{"mode":"ask","prompt":"p","resume_prompt":"r"},
+                 "repeat":{"type":"always"},"start":"start","nodes":{
+                  "start":{"line":"start","choices":[{"id":"choose","text":"choose","outcomes":[
+                    {"priority":20,"next":"route"},{"next":"done"}]}]},
+                  "route":{"outcomes":[{"priority":10,"next":"done"},{"next":"done"}]},
+                  "done":{"line":"done","complete":true}
+                 }}
+                """);
+        assertEquals(20, event.nodes().get("start").choices().orElseThrow().getFirst().outcomes().orElseThrow().getFirst().priority());
+        assertEquals(0, event.nodes().get("start").choices().orElseThrow().getFirst().outcomes().orElseThrow().get(1).priority());
+        assertEquals(10, event.nodes().get("route").outcomes().orElseThrow().getFirst().priority());
+    }
+
+    @Test
     void nestedEnumsAndRepeatCanInitializeBeforeOuterEventCodec() {
         DialogueEvent.Repeat repeat = new DialogueEvent.Repeat(DialogueEvent.RepeatType.COOLDOWN, 100L, 100L);
 
