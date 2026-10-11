@@ -405,8 +405,8 @@ public final class ExtendedWalkTowardsTaskGameTests {
         helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
                         .filter(target -> target == unrelatedTarget).isPresent(),
                 "missing HOME erased a walk target belonging to another behavior");
-        helper.assertTrue("ExtendedWalkTowardsTask".equals(task.debugString()),
-                "direct producer lost its diagnostic name");
+        helper.assertTrue(task.debugString().startsWith("OneShot["),
+                "walk producer lost its declarative brain-memory diagnostics");
 
         villager.discard();
         helper.succeed();

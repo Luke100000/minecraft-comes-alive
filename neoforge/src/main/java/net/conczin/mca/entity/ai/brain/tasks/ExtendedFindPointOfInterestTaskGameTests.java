@@ -59,8 +59,8 @@ public final class ExtendedFindPointOfInterestTaskGameTests {
                 MemoryModuleType.POTENTIAL_JOB_SITE,
                 false,
                 Optional.empty());
-        helper.assertTrue("LazyFindPointOfInterestTask".equals(task.debugString()),
-                "lazy POI behavior lost its diagnostic name");
+        helper.assertTrue(task.debugString().startsWith("OneShot["),
+                "lazy POI behavior lost its declarative brain-memory diagnostics");
         GlobalPos fakeJob = GlobalPos.of(helper.getLevel().dimension(), feet);
         villager.getBrain().setMemory(MemoryModuleType.JOB_SITE, fakeJob);
         helper.assertTrue(!task.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime()),
