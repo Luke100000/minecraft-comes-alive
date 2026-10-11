@@ -22,6 +22,7 @@ public final class ClientConfig {
     public final ModConfigSpec.ConfigValue<Boolean> forceVillagerPlayerModel;
     public final ModConfigSpec.ConfigValue<List<? extends String>> shaderLocationsMap;
     public final ModConfigSpec.ConfigValue<List<? extends String>> playerRendererBlacklist;
+    public final ModConfigSpec.ConfigValue<Integer> defaultMapsVersion;
     public final ModConfigSpec.ConfigValue<Boolean> scaleEyeHeightWithPlayerHeight;
     private final Config.DecodedMapCache<String, String> shaderLocationsCache =
             new Config.DecodedMapCache<>(String.class, String.class, "shaderLocationsMap");
@@ -142,8 +143,17 @@ public final class ClientConfig {
             "morph", "arms",
             "firstpersonmod", "arms",
             "firstperson", "arms",
-            "epicfight", "all"
+            "epicfight", "all",
+            "mowziesmobs", "all",
+            "cpm", "all",
+            "walkers", "arms",
+            "remorphed", "arms",
+            "parcool", "all",
+            "mobends", "all"
     )), () -> "", value -> Config.isMapEntry(value, String.class, String.class));
+        defaultMapsVersion = builder
+                .comment("Internal migration version for upstream player renderer blacklist defaults.")
+                .defineInRange("defaultMapsVersion", 0, 0, 1);
         scaleEyeHeightWithPlayerHeight = builder
 
                 .comment("Moves the player's eye height according to their in-game height. Does not change hitbox size.")

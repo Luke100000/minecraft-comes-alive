@@ -7,6 +7,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.Brain;
@@ -54,10 +55,11 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
                 continue;
             }
 
-            // We cannot operate a remembered toggleable from another dimension.
-            // Distance alone is not a reason to forget it: the behavior may not
-            // run again until after the villager has already cleared the block.
-            if (!globalPos.dimension().equals(world.dimension())) {
+            // MCA deliberately remembers a toggleable until the villager's body
+            // has cleared it, which can be farther than vanilla's 3-block cutoff.
+            // Never retain that behavior by synchronously loading an old chunk.
+            if (!globalPos.dimension().equals(world.dimension())
+                    || world.getChunkSource().getChunkNow(blockPos.getX() >> 4, blockPos.getZ() >> 4) == null) {
                 iterator.remove();
                 continue;
             }
@@ -221,6 +223,30 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
         }
     }
 
+    private void openTrapdoorAboveClimbableTransition(ServerLevel world, LivingEntity entity,
+                                                      @Nullable Node firstNode, @Nullable Node secondNode) {
+        if (firstNode == null || secondNode == null || Math.abs(firstNode.y - secondNode.y) != 1) {
+            return;
+        }
+
+        Node lowerNode = firstNode.y < secondNode.y ? firstNode : secondNode;
+        Node upperNode = lowerNode == firstNode ? secondNode : firstNode;
+        int horizontalDistance = Math.abs(lowerNode.x - upperNode.x) + Math.abs(lowerNode.z - upperNode.z);
+        if (horizontalDistance > 1) {
+            return;
+        }
+
+        BlockPos lowerPos = lowerNode.asBlockPos();
+        if (!world.getBlockState(lowerPos).is(BlockTags.CLIMBABLE)) {
+            return;
+        }
+
+        BlockPos trapdoorPos = lowerPos.above();
+        if (PathingBlockInteraction.isHandOpenableTrapDoor(world.getBlockState(trapdoorPos))) {
+            this.openToggleableAt(world, entity, trapdoorPos);
+        }
+    }
+
     private void openToggleableAt(ServerLevel world, LivingEntity entity, BlockPos pos) {
         BlockState state = world.getBlockState(pos);
         if (PathingBlockInteraction.setOpen(entity, world, state, pos, true)) {
@@ -269,6 +295,8 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
         makePathToggleablePassable(world, entity, nextNode, previousNode, false);
         openToggleablesBetweenPathNodes(world, entity, previousNode, nextNode);
         openToggleablesBetweenPathNodes(world, entity, nextNode, followingNode);
+        openTrapdoorAboveClimbableTransition(world, entity, previousNode, nextNode);
+        openTrapdoorAboveClimbableTransition(world, entity, nextNode, followingNode);
     }
 
     private void rememberToCloseToggleable(ServerLevel world, LivingEntity entity, BlockPos pos) {

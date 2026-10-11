@@ -17,10 +17,7 @@ import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class StairWallPathfindingGameTests {
     private static final int ROUTE_TIMEOUT_TICKS = 140;

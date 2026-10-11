@@ -16,7 +16,6 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.List;
@@ -24,8 +23,6 @@ import java.util.Optional;
 import java.util.Set;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class EnterBuildingGameTests {
     private EnterBuildingGameTests() {

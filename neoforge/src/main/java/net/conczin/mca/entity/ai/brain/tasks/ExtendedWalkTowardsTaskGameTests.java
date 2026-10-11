@@ -18,15 +18,12 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.Optional;
 import java.util.function.Predicate;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class ExtendedWalkTowardsTaskGameTests {
     private static final int TEST_TIMEOUT = 1200;
@@ -256,16 +253,20 @@ public final class ExtendedWalkTowardsTaskGameTests {
         int distance = (int)Math.floor(villager.getAttributeValue(Attributes.FOLLOW_RANGE)) + 24;
         BlockPos oldHome = villager.blockPosition().east(distance);
         BlockPos newHome = villager.blockPosition().south(distance);
-        setHome(villager, newHome);
-        villager.getBrain().setMemory(
-                MemoryModuleType.WALK_TARGET,
-                new WalkTarget(new PersistentPathTarget(oldHome), 0.5F, 0)
-        );
-        villager.getBrain().setMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE,
-                helper.getLevel().getGameTime() - 10L);
-
         OneShot<VillagerEntityMCA> task = createTask(ignored -> false);
-        task.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime());
+        long gameTime = helper.getLevel().getGameTime();
+
+        setHome(villager, oldHome);
+        task.tryStart(helper.getLevel(), villager, gameTime);
+        helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                        .filter(target -> target.getTarget() instanceof PersistentPathTarget)
+                        .isPresent(),
+                "old HOME did not publish a producer-owned long-distance target");
+        WalkTargetFailureMemory.record(villager, oldHome, gameTime - 10L);
+
+        villager.getBrain().setMemory(MemoryModuleType.HOME,
+                GlobalPos.of(helper.getLevel().dimension(), newHome));
+        task.tryStart(helper.getLevel(), villager, gameTime + 1L);
 
         helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty(),
                 "changed destination left the stale long-distance walk target active");
@@ -283,6 +284,7 @@ public final class ExtendedWalkTowardsTaskGameTests {
         BlockPos start = villager.blockPosition();
         BlockPos home = start.east(80);
         BlockPos finalApproach = home.west(2);
+        BlockPosTracker semanticFinalTarget = new BlockPosTracker(finalApproach);
         setHome(villager, home);
 
         OneShot<VillagerEntityMCA> task = ExtendedWalkTowardsTask.createWithFinalTarget(
@@ -292,7 +294,7 @@ public final class ExtendedWalkTowardsTaskGameTests {
                 TEST_TIMEOUT,
                 ignored -> false,
                 ignored -> { },
-                (world, entity, destination) -> Optional.of(new BlockPosTracker(finalApproach))
+                (world, entity, destination) -> Optional.of(semanticFinalTarget)
         );
         long gameTime = helper.getLevel().getGameTime();
         task.tryStart(helper.getLevel(), villager, gameTime);
@@ -311,8 +313,160 @@ public final class ExtendedWalkTowardsTaskGameTests {
                 .orElseThrow(() -> new AssertionError("semantic final target was not published after transit handoff"));
         helper.assertTrue(!(finalTarget.getTarget() instanceof PersistentPathTarget),
                 "semantic final target was replaced by persistent transit state");
+        helper.assertTrue(finalTarget.getTarget() == semanticFinalTarget,
+                "destination ownership replaced the resolver's semantic PositionTracker object");
         helper.assertTrue(finalTarget.getTarget().currentBlockPosition().equals(finalApproach),
                 "semantic final target did not retain its resolved approach position");
+
+        WalkTargetFailureMemory.record(villager, home, gameTime);
+        villager.setPos(Vec3.atBottomCenterOf(finalApproach));
+        task.tryStart(helper.getLevel(), villager, gameTime + 3L);
+        helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE).isEmpty(),
+                "reaching the owned semantic final target did not complete the journey and clear failure state");
+
+        villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_persistent_final_handoff", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void ownedSemanticFinalTargetProgressClearsStaleFailureAge(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        BlockPos start = villager.blockPosition();
+        BlockPos home = start.east(10);
+        BlockPos finalApproach = home.west();
+        setHome(villager, home);
+
+        OneShot<VillagerEntityMCA> task = ExtendedWalkTowardsTask.createWithFinalTarget(
+                MemoryModuleType.HOME,
+                0.5F,
+                1,
+                TEST_TIMEOUT,
+                ignored -> false,
+                ignored -> { },
+                (world, entity, destination) -> Optional.of(new BlockPosTracker(finalApproach))
+        );
+        long gameTime = helper.getLevel().getGameTime();
+        task.tryStart(helper.getLevel(), villager, gameTime);
+        helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).isPresent(),
+                "semantic final target was not published");
+
+        villager.getBrain().setMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE, gameTime - 200L);
+        WalkTargetFailureMemory.syncAfterVanillaPathAttempt(villager, finalApproach);
+        task.tryStart(helper.getLevel(), villager, gameTime + 1L);
+
+        helper.assertTrue(WalkTargetFailureMemory.hasFailureFor(villager, home),
+                "owned semantic final-target failure was not attributed to its logical destination");
+
+        villager.setPos(Vec3.atBottomCenterOf(start.east(5)));
+        task.tryStart(helper.getLevel(), villager, gameTime + 2L);
+
+        helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE).isEmpty(),
+                "real progress under the owned semantic final target retained stale failure age");
+        villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_persistent_final_handoff", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void erasedDestinationRetractsProducerOwnedLongDistanceTarget(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        int distance = (int)Math.floor(villager.getAttributeValue(Attributes.FOLLOW_RANGE)) + 24;
+        BlockPos home = villager.blockPosition().east(distance);
+        setHome(villager, home);
+
+        OneShot<VillagerEntityMCA> task = createTask(ignored -> false);
+        long gameTime = helper.getLevel().getGameTime();
+        task.tryStart(helper.getLevel(), villager, gameTime);
+        helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                        .filter(target -> target.getTarget() instanceof PersistentPathTarget)
+                        .isPresent(),
+                "far HOME did not publish a persistent transit target");
+
+        villager.getBrain().eraseMemory(MemoryModuleType.HOME);
+        task.tryStart(helper.getLevel(), villager, gameTime + 1L);
+
+        helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty(),
+                "erasing HOME left its producer-owned long-distance movement active");
+        villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_persistent_final_handoff", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void erasedDestinationClearsOwnedSemanticFinalTargetFailure(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        BlockPos home = villager.blockPosition().east(6);
+        BlockPos finalApproach = home.west();
+        setHome(villager, home);
+
+        OneShot<VillagerEntityMCA> task = ExtendedWalkTowardsTask.createWithFinalTarget(
+                MemoryModuleType.HOME,
+                0.5F,
+                1,
+                TEST_TIMEOUT,
+                ignored -> false,
+                ignored -> { },
+                (world, entity, destination) -> Optional.of(new BlockPosTracker(finalApproach))
+        );
+        long gameTime = helper.getLevel().getGameTime();
+        task.tryStart(helper.getLevel(), villager, gameTime);
+        helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).isPresent(),
+                "semantic final target was not published");
+
+        villager.getBrain().setMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE, gameTime);
+        WalkTargetFailureMemory.syncAfterVanillaPathAttempt(villager, finalApproach);
+        villager.getBrain().eraseMemory(MemoryModuleType.HOME);
+        task.tryStart(helper.getLevel(), villager, gameTime + 1L);
+
+        helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty(),
+                "erasing HOME left its producer-owned semantic final target active");
+        helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE).isEmpty(),
+                "erasing HOME retained failure state owned by its semantic final target");
+        villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_persistent_final_handoff", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void changedDestinationClearsOwnedSemanticFinalTargetButPreservesForeignWalkTarget(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        BlockPos oldHome = villager.blockPosition().east(6);
+        BlockPos newHome = villager.blockPosition().south(6);
+        setHome(villager, oldHome);
+
+        OneShot<VillagerEntityMCA> task = ExtendedWalkTowardsTask.createWithFinalTarget(
+                MemoryModuleType.HOME,
+                0.5F,
+                1,
+                TEST_TIMEOUT,
+                ignored -> false,
+                ignored -> { },
+                (world, entity, destination) -> Optional.of(new BlockPosTracker(destination.pos().west()))
+        );
+        long gameTime = helper.getLevel().getGameTime();
+        task.tryStart(helper.getLevel(), villager, gameTime);
+
+        WalkTarget oldFinalTarget = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                .orElseThrow(() -> new AssertionError("initial HOME did not publish its semantic final target"));
+        helper.assertTrue(oldFinalTarget.getTarget().currentBlockPosition().equals(oldHome.west()),
+                "initial semantic final target did not belong to the old HOME");
+
+        villager.getBrain().setMemory(MemoryModuleType.HOME,
+                GlobalPos.of(helper.getLevel().dimension(), newHome));
+        task.tryStart(helper.getLevel(), villager, gameTime + 1L);
+
+        helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty(),
+                "changed HOME retained the stale semantic final target owned by the destination producer");
+
+        WalkTarget foreignTarget = new WalkTarget(new BlockPosTracker(villager.blockPosition().north(4)), 0.5F, 1);
+        villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET, foreignTarget);
+        task.tryStart(helper.getLevel(), villager, gameTime + 2L);
+
+        WalkTarget retainedForeignTarget = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                .orElseThrow(() -> new AssertionError("destination producer erased an unrelated foreign walk target"));
+        helper.assertTrue(retainedForeignTarget == foreignTarget,
+                "destination producer replaced unrelated foreign WALK_TARGET ownership");
 
         villager.discard();
         helper.succeed();

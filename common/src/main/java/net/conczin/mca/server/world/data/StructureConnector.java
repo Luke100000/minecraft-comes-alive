@@ -2,7 +2,7 @@ package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.level.Level;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
@@ -36,13 +36,13 @@ final class StructureConnector {
      * when it is part of the same contiguous column as a ladder; standalone decorative trapdoors
      * remain ordinary boundaries and cannot create a Floor transition by themselves.
      */
-    static boolean isVertical(Level world, BlockPos pos) {
+    static boolean isVertical(BlockGetter world, BlockPos pos) {
         return isVerticalElement(world.getBlockState(pos))
                 && !verticalColumnFromConnector(world, pos).isEmpty();
     }
 
     /** An open top exit, including a Floor opening one block above the end of the climb. */
-    static boolean isVerticalTopExit(Level world, BlockPos pos) {
+    static boolean isVerticalTopExit(BlockGetter world, BlockPos pos) {
         BlockState state = world.getBlockState(pos);
         if (!state.getFluidState().isEmpty() || !state.getCollisionShape(world, pos).isEmpty()) {
             return false;
@@ -75,7 +75,7 @@ final class StructureConnector {
         return state.getBlock() instanceof DoorBlock ? ownerSide(state) : null;
     }
 
-    static Map<BlockPos, Direction> doorOwnerSides(Level world, FloorGeometry geometry) {
+    static Map<BlockPos, Direction> doorOwnerSides(BlockGetter world, FloorGeometry geometry) {
         if (world == null || geometry == null) return Map.of();
 
         LinkedHashMap<BlockPos, Direction> ownerSides = new LinkedHashMap<>();
@@ -89,7 +89,7 @@ final class StructureConnector {
 
     /** Returns physical connector markers together with the exact Floor cells that own them. */
     static List<FloorConnector.Marker> connectorMarkersForFloor(
-            Level world, Collection<BlockPos> connectors, FloorGeometry geometry) {
+            BlockGetter world, Collection<BlockPos> connectors, FloorGeometry geometry) {
         if (connectors.isEmpty() || geometry.cells().isEmpty()) return List.of();
 
         LinkedHashMap<BlockPos, FloorConnector.Marker> result = new LinkedHashMap<>();
@@ -153,12 +153,12 @@ final class StructureConnector {
     }
 
     /** Returns the connector column for an occupied connector or its short open top exit. */
-    static List<BlockPos> verticalColumn(Level world, BlockPos pos) {
+    static List<BlockPos> verticalColumn(BlockGetter world, BlockPos pos) {
         BlockPos connector = verticalInteractionConnector(world, pos);
         return connector == null ? List.of() : verticalColumnFromConnector(world, connector);
     }
 
-    static BlockPos verticalInteractionConnector(Level world, BlockPos pos) {
+    static BlockPos verticalInteractionConnector(BlockGetter world, BlockPos pos) {
         // The climb can end at the support layer's underside: one air block then separates it
         // from the adjoining Floor's feet. Do not bridge solids, fluids or taller shafts.
         for (int depth = 0; depth <= MAX_VERTICAL_EXIT_DISTANCE; depth++) {
@@ -172,7 +172,7 @@ final class StructureConnector {
         return null;
     }
 
-    private static List<BlockPos> verticalColumnFromConnector(Level world, BlockPos connector) {
+    private static List<BlockPos> verticalColumnFromConnector(BlockGetter world, BlockPos connector) {
         if (!isVerticalElement(world.getBlockState(connector))) return List.of();
 
         BlockPos bottom = connector;
@@ -196,14 +196,14 @@ final class StructureConnector {
         return type != null && type.vertical();
     }
 
-    static List<BlockPos> verticalHandoffCandidates(Level world, BlockPos source) {
+    static List<BlockPos> verticalHandoffCandidates(BlockGetter world, BlockPos source) {
         return verticalColumn(world, source).stream()
                 .flatMap(connector -> handoffs(connector).stream())
                 .distinct()
                 .toList();
     }
 
-    static List<BlockPos> horizontalHandoffCandidates(Level world, BlockPos source) {
+    static List<BlockPos> horizontalHandoffCandidates(BlockGetter world, BlockPos source) {
         BlockState sourceState = world.getBlockState(source);
         if (!isHorizontalBoundary(sourceState)) return List.of();
 
@@ -262,7 +262,7 @@ final class StructureConnector {
         return touchesFirst && touchesSecond;
     }
 
-    static List<VerticalConnection> verticalConnections(Level world,
+    static List<VerticalConnection> verticalConnections(BlockGetter world,
                                                         StructureFloor candidate,
                                                         Collection<Structure> existing) {
         if (world == null || candidate == null || existing == null) {
@@ -307,7 +307,7 @@ final class StructureConnector {
         return List.copyOf(probes);
     }
 
-    private static List<BlockPos> verticalColumnAtFloorCell(Level world,
+    private static List<BlockPos> verticalColumnAtFloorCell(BlockGetter world,
                                                              StructureFloor floor,
                                                              BlockPos floorCell) {
         for (BlockPos probe : verticalProbePositions(floor, floorCell)) {

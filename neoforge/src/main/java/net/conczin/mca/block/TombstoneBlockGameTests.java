@@ -23,13 +23,10 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.List;
 import java.util.UUID;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class TombstoneBlockGameTests {
     private TombstoneBlockGameTests() {

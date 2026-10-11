@@ -322,7 +322,7 @@ final class ClimbTraversal {
     private boolean isEnteringUpwardClimb(Context context) {
         return context.pathTargetsClimbable()
                 && context.verticalDirection() > 0
-                && context.climbableNode().y - this.mob.getY() >= 0.5D
+                && context.climbableNode().y > this.mob.getY()
                 && isHorizontallyAlignedWithClimbable(context.climbableNode());
     }
 

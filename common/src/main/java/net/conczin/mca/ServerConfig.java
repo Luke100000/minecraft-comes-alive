@@ -14,6 +14,9 @@ public final class ServerConfig {
     public final ModConfigSpec.ConfigValue<Integer> villagerChatAIContextPermissionLevel;
     public final ModConfigSpec.ConfigValue<Boolean> archerArrowsIgnoreVillagers;
     public final ModConfigSpec.ConfigValue<Boolean> villagersInteractWithFenceGates;
+    public final ModConfigSpec.ConfigValue<Boolean> villagersInteractWithAnyDoor;
+    public final ModConfigSpec.ConfigValue<Boolean> villagersChangeProfession;
+    public final ModConfigSpec.ConfigValue<Boolean> whistleCallMakesVillagersFollow;
     public final ModConfigSpec.ConfigValue<Integer> babyItemGrowUpTime;
     public final ModConfigSpec.ConfigValue<Integer> villagerMaxAgeTime;
     public final ModConfigSpec.ConfigValue<Integer> addContentGloballyPermissionLevel;
@@ -30,6 +33,7 @@ public final class ServerConfig {
     public final ModConfigSpec.ConfigValue<List<? extends String>> enabledTraits;
     public final ModConfigSpec.ConfigValue<Boolean> overwriteOriginalVillagers;
     public final ModConfigSpec.ConfigValue<List<? extends String>> moddedVillagerWhitelist;
+    public final ModConfigSpec.ConfigValue<List<? extends String>> villagerTagBlacklist;
     public final ModConfigSpec.ConfigValue<Boolean> overwriteOriginalZombieVillagers;
     public final ModConfigSpec.ConfigValue<Boolean> overwriteAllZombiesWithZombieVillagers;
     public final ModConfigSpec.ConfigValue<List<? extends String>> moddedZombieVillagerWhitelist;
@@ -139,6 +143,7 @@ public final class ServerConfig {
     public final ModConfigSpec.ConfigValue<List<? extends String>> unSafeBlocksToTeleportOn;
     public final ModConfigSpec.ConfigValue<List<? extends String>> structuresInRumors;
     public final ModConfigSpec.ConfigValue<List<? extends String>> professionConversionsMap;
+    public final ModConfigSpec.ConfigValue<Integer> defaultMapsVersion;
     public final ModConfigSpec.ConfigValue<List<? extends String>> taxesMap;
     private final Config.DecodedMapCache<String, String> destinyLocationsToTranslationCache =
             new Config.DecodedMapCache<>(String.class, String.class, "destinyLocationsToTranslationMap");
@@ -268,6 +273,10 @@ public final class ServerConfig {
                 .translation("mca.configuration.moddedVillagerWhitelist")
                 .defineListAllowEmpty("moddedVillagerWhitelist", List.of(), () -> "",
                         value -> Config.isLoadSafeRegistryId(value, Registries.ENTITY_TYPE));
+        villagerTagBlacklist = builder
+                .comment("Scoreboard tags which prevent vanilla villagers from being converted to MCA villagers.")
+                .translation("mca.configuration.villagerTagBlacklist")
+                .defineListAllowEmpty("villagerTagBlacklist", List.of("doorGhost", "herobrineEntity"), () -> "", value -> value instanceof String);
         overwriteOriginalZombieVillagers = builder
 
                 .comment("Overwrite vanilla zombie villagers with MCA zombie villagers.")
@@ -623,7 +632,16 @@ public final class ServerConfig {
 
                 .comment("Maps modded professions to MCA professions for clothing conversion. Only adult clothing is used; toddlers and children remain unchanged.")
                 .translation("mca.configuration.professionConversionsMap")
-                .defineListAllowEmpty("professionConversionsMap", Config.encodeMap(Map.of()), () -> "", Config::isProfessionConversionEntry);
+                .defineListAllowEmpty("professionConversionsMap", Config.encodeMap(Map.of(
+                        "villagersplus:alchemist", "minecraft:cleric",
+                        "villagersplus:horticulturist", "minecraft:farmer",
+                        "villagersplus:miner", "mca:miner",
+                        "villagersplus:oceanographer", "minecraft:fisherman",
+                        "villagersplus:occultist", "mca:cultist"
+                )), () -> "", Config::isProfessionConversionEntry);
+        defaultMapsVersion = builder
+                .comment("Internal migration version for upstream profession conversion defaults.")
+                .defineInRange("defaultMapsVersion", 0, 0, 1);
         builder.pop();
 
         builder.translation("mca.configuration.section.tracker").push("tracker");
@@ -650,6 +668,18 @@ public final class ServerConfig {
                 .comment("If true, MCA villagers may path through and open or close fence gates.")
                 .translation("mca.configuration.villagersInteractWithFenceGates")
                 .define("villagersInteractWithFenceGates", true);
+        villagersInteractWithAnyDoor = builder
+                .comment("Allow MCA villagers to open any DoorBlock, not just those in the mob-interactable doors tag; Dramatic Doors uses its own rules.")
+                .translation("mca.configuration.villagersInteractWithAnyDoor")
+                .define("villagersInteractWithAnyDoor", false);
+        villagersChangeProfession = builder
+                .comment("Allow villagers changing workstations to change profession and reset their trades.")
+                .translation("mca.configuration.villagersChangeProfession")
+                .define("villagersChangeProfession", true);
+        whistleCallMakesVillagersFollow = builder
+                .comment("Make villagers follow the player after being called using a whistle.")
+                .translation("mca.configuration.whistleCallMakesVillagersFollow")
+                .define("whistleCallMakesVillagersFollow", false);
         guardSpawnFraction = builder
 
                 .comment("Fraction (0-1) of villagers that spawn as guards.")

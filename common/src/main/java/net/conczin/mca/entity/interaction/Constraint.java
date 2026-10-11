@@ -108,9 +108,13 @@ public enum Constraint implements BiPredicate<VillagerLike<?>, ServerPlayer> {
     NOT_HIT_BY("!hit_by", (villager, player) -> !HIT_BY.test(villager, player)),
 
     RIDING("riding", (villager, player) -> villager.asEntity().isPassenger()),
-    NOT_RIDING("!riding", (villager, player) -> !villager.asEntity().isPassenger());
+    NOT_RIDING("!riding", (villager, player) -> !villager.asEntity().isPassenger()),
 
-    public static final Map<String, Constraint> REGISTRY = Stream.of(values()).collect(Collectors.toMap(a -> a.id, Function.identity()));
+    INVALID("<invalid>", (villager, player) -> false);
+
+    public static final Map<String, Constraint> REGISTRY = Stream.of(values())
+            .filter(constraint -> constraint != INVALID)
+            .collect(Collectors.toMap(a -> a.id, Function.identity()));
     private final String id;
     private final BiPredicate<VillagerLike<?>, ServerPlayer> check;
     Constraint(String id, BiPredicate<VillagerLike<?>, ServerPlayer> check) {
@@ -135,10 +139,19 @@ public enum Constraint implements BiPredicate<VillagerLike<?>, ServerPlayer> {
         if (MCA.isBlankString(constraints)) {
             return new ArrayList<>();
         }
-        return Stream.of(constraints.split(","))
-                .map(REGISTRY::get)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
+
+        List<Constraint> parsed = new ArrayList<>();
+        for (String id : constraints.split(",")) {
+            String normalizedId = id.trim();
+            Constraint constraint = REGISTRY.get(normalizedId);
+            if (constraint == null) {
+                MCA.LOGGER.warn("Unknown interaction constraint '{}'", normalizedId);
+                parsed.add(INVALID);
+            } else {
+                parsed.add(constraint);
+            }
+        }
+        return parsed;
     }
 
     @Override

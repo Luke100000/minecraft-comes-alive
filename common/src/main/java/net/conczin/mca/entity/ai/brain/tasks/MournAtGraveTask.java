@@ -87,7 +87,6 @@ public class MournAtGraveTask extends Behavior<VillagerEntityMCA> {
     @Override
     protected void stop(ServerLevel world, VillagerEntityMCA villager, long time) {
         boolean completed = remainingDialogues == 0 && EnterGraveyardTask.isWithinMourningArea(villager);
-        restorePreviousHand(villager);
 
         if (completed || Mourning.isKnownInvalidSite(villager)) {
             Mourning.finish(villager);
@@ -99,20 +98,6 @@ public class MournAtGraveTask extends Behavior<VillagerEntityMCA> {
         } else {
             Mourning.retry(villager);
         }
-    }
-
-    private void restorePreviousHand(VillagerEntityMCA villager) {
-        ItemStack currentMainHand = villager.getMainHandItem();
-        villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_FLOWER)
-                .filter(mourningFlower -> ItemStack.matches(currentMainHand, mourningFlower))
-                .flatMap(mourningFlower -> villager.getBrain()
-                        .getMemoryInternal(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND))
-                .ifPresent(previousMainHand -> villager.setItemInHand(
-                        InteractionHand.MAIN_HAND,
-                        previousMainHand.copy()
-                ));
-        villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND);
-        villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_FLOWER);
     }
 
     private static int getDialogueDelay(VillagerEntityMCA villager) {

@@ -17,13 +17,10 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class ArcherSpiderCombatGameTests {
     private static final List<Entity> TEST_ENTITIES = new ArrayList<>();

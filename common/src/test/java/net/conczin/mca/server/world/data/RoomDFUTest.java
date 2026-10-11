@@ -178,6 +178,7 @@ class RoomDFUTest {
         assertFalse(structureTag.contains("mainRoomAutomatic"));
         assertFalse(structureTag.contains("surfaceReferenceY"));
         assertTrue(floorTag.contains("floorNumber", net.minecraft.nbt.Tag.TAG_INT));
+        assertTrue(floorTag.contains("anchorY", net.minecraft.nbt.Tag.TAG_INT));
         assertTrue(logicalTag.contains("mainRoomId"));
         assertTrue(logicalTag.contains("inheritanceEnabled"));
         assertFalse(logicalTag.contains("groundStructureId"));
@@ -208,6 +209,8 @@ class RoomDFUTest {
         assertEquals(structure.getLogicalBuildingId(), reloadedStructure.getLogicalBuildingId());
         assertEquals(structure.getFloor(0).orElseThrow().floorNumber(),
                 reloadedStructure.getFloor(0).orElseThrow().floorNumber());
+        assertEquals(structure.getFloor(0).orElseThrow().anchorY(),
+                reloadedStructure.getFloor(0).orElseThrow().anchorY());
         assertEquals(room.getFloorCells(), reloadedRoom.getFloorCells());
         assertEquals(room.getStructureId(), reloadedRoom.getStructureId());
         assertEquals(room.getFloorId(), reloadedRoom.getFloorId());
@@ -295,6 +298,15 @@ class RoomDFUTest {
         malformed.getList("structures", net.minecraft.nbt.Tag.TAG_COMPOUND)
                 .getCompound(0).getList("floors", net.minecraft.nbt.Tag.TAG_COMPOUND)
                 .getCompound(0).remove("id");
+
+        assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
+    }
+
+    @Test
+    void canonicalStructureWithNoFloorsIsRejectedAtDfuBoundary() {
+        CompoundTag malformed = canonicalVillage().save();
+        malformed.getList("structures", net.minecraft.nbt.Tag.TAG_COMPOUND)
+                .getCompound(0).put("floors", new ListTag());
 
         assertThrows(IllegalArgumentException.class, () -> RoomDFU.load(malformed));
     }
@@ -479,6 +491,32 @@ class RoomDFUTest {
         TestFloorFootprint region = TestFloorFootprint.fromFootprint(
                 anchorY, List.of(new BlockPos(0, anchorY, 0), new BlockPos(1, anchorY, 0)));
         return TestStructureFloors.create(id, anchorY, ceilingY, number, region);
+    }
+
+    @Test
+    void inconsistentSavedStoreyLabelsRoundTripWithoutNewRepair() {
+        Village village = canonicalVillage();
+        int[] heights = {72, 76, 78, 78};
+        int[] numbers = {1, 2, 3, 2};
+        for (int index = 0; index < heights.length; index++) {
+            int id = 21 + index;
+            BlockPos position = new BlockPos(10 + index * 3, heights[index], 0);
+            StructureFloor floor = new StructureFloor(0, numbers[index], new FloorGeometry(
+                    List.of(new FloorGeometry.Cell(position, heights[index] + 4)), java.util.Map.of()));
+            Structure structure = new Structure(id, position, List.of(floor));
+            structure.setLogicalBuildingId(20);
+            Building room = new Building(position);
+            room.setId(11 + index);
+            room.setStructureId(id);
+            room.setFloorId(0);
+            room.setGeometry(position, position.above(3), List.of(position));
+            village.registerStructure(structure, room);
+        }
+        Village reloaded = new Village(village.save(), null);
+        for (int index = 0; index < heights.length; index++) {
+            assertEquals(numbers[index], reloaded.getStructure(21 + index).orElseThrow()
+                    .getFloor(0).orElseThrow().floorNumber());
+        }
     }
 
     private static Village canonicalVillage() {

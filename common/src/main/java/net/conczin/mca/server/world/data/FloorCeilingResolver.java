@@ -2,7 +2,7 @@ package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.BlockTags;
-import net.minecraft.world.level.Level;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.HashMap;
@@ -11,10 +11,10 @@ import java.util.OptionalInt;
 
 /** Resolves and caches the nearest physical non-leaf ceiling above exact floor cells. */
 final class FloorCeilingResolver {
-    private final Level world;
+    private final BlockGetter world;
     private final Map<BlockPos, OptionalInt> cache = new HashMap<>();
 
-    FloorCeilingResolver(Level world) {
+    FloorCeilingResolver(BlockGetter world) {
         this.world = world;
     }
 

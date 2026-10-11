@@ -13,12 +13,14 @@ class CommonConfigGameplayOptionsTest {
     void gameplaySafetyOptionsDefaultEnabled() {
         assertTrue(Config.SERVER.archerArrowsIgnoreVillagers.getDefault());
         assertTrue(Config.SERVER.villagersInteractWithFenceGates.getDefault());
+        assertFalse(Config.SERVER.villagersInteractWithAnyDoor.getDefault());
     }
 
     @Test
     void gameplaySafetyOptionsAcceptServerOverrides() {
         assertTrue(Config.SERVER.archerArrowsIgnoreVillagers.getSpec().test(false));
         assertTrue(Config.SERVER.villagersInteractWithFenceGates.getSpec().test(false));
+        assertTrue(Config.SERVER.villagersInteractWithAnyDoor.getSpec().test(true));
     }
 
     @Test

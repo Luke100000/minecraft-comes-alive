@@ -1,60 +1,97 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
+import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
 import net.minecraft.core.BlockPos;
-import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.PathfinderMob;
-import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.behavior.BehaviorControl;
-import net.minecraft.world.entity.ai.behavior.InsideBrownianWalk;
+import net.minecraft.world.entity.ai.behavior.declarative.BehaviorBuilder;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
 
 /**
- * Throttles vanilla's indoor Brownian stroll producer so a blocked villager
- * does not continuously publish new bounded local path requests.
+ * Selects short walks within the same resolved room used for shelter entry.
  */
 public final class LocalInsideBrownianWalk {
     private LocalInsideBrownianWalk() {
     }
 
     public static BehaviorControl<PathfinderMob> create(float speedModifier) {
-        BehaviorControl<PathfinderMob> vanilla = InsideBrownianWalk.create(speedModifier);
         WalkTargetRetryGate retryGate = new WalkTargetRetryGate(40L, 1.0D);
-        return new BehaviorControl<>() {
-            @Override
-            public Behavior.Status getStatus() {
-                return vanilla.getStatus();
-            }
+        return BehaviorBuilder.create(context -> context.group(context.absent(MemoryModuleType.WALK_TARGET))
+                .apply(context, walkTarget -> (level, mob, gameTime) -> {
+                    BlockPos origin = mob.blockPosition();
+                    if (!(mob instanceof VillagerEntityMCA villager)) {
+                        return false;
+                    }
+                    if (!retryGate.canReserve(origin, origin, gameTime)) {
+                        PathRequestDiagnostics.recordDeferredProducerRetry(mob);
+                        return false;
+                    }
+                    var room = SeekIndoorShelterTask.currentRoom(villager);
+                    if (room.isEmpty()) return false;
+                    List<BlockPos> candidates = new ArrayList<>();
+                    for (BlockPos pos : room.orElseThrow().floorCells()) {
+                        if (!pos.equals(origin) && pos.distSqr(origin) <= 16.0D
+                                && EnterBuildingTask.isUsableFloor(level, mob, pos)) {
+                            candidates.add(pos.immutable());
+                        }
+                    }
+                    if (candidates.stream().anyMatch(pos -> pos.distSqr(origin) >= 4.0D)) {
+                        // Prefer a short walk across the room, but keep small
+                        // steps when furniture leaves only nearby floor space.
+                        candidates.removeIf(pos -> pos.distSqr(origin) < 4.0D);
+                    }
+                    if (candidates.isEmpty()) return false;
 
-            @Override
-            public boolean tryStart(ServerLevel level, PathfinderMob mob, long gameTime) {
-                BlockPos origin = mob.blockPosition();
-                if (!retryGate.canReserve(origin, origin, gameTime)) {
-                    PathRequestDiagnostics.recordDeferredProducerRetry(mob);
-                    return false;
-                }
-                if (!vanilla.tryStart(level, mob, gameTime)) {
-                    return false;
-                }
-                // Vanilla may reject before scanning (an existing target or open sky).
-                // Only an accepted attempt consumes this producer's retry allowance.
-                retryGate.tryReserve(origin, origin, gameTime);
-                return true;
-            }
+                    BlockPos preferred = candidates.get(level.getRandom().nextInt(candidates.size()));
+                    walkTarget.set(new WalkTarget(new RoomStrollTarget(preferred, Set.copyOf(candidates)), speedModifier, 0));
+                    retryGate.tryReserve(origin, origin, gameTime);
+                    return true;
+                }));
+    }
 
-            @Override
-            public void tickOrStop(ServerLevel level, PathfinderMob mob, long gameTime) {
-                vanilla.tickOrStop(level, mob, gameTime);
-            }
+    /** Movement owns path selection; the producer only supplies equivalent room-local endpoints. */
+    private static final class RoomStrollTarget implements MultiTargetPositionTracker {
+        private final BlockPos preferred;
+        private final Set<BlockPos> targets;
 
-            @Override
-            public void doStop(ServerLevel level, PathfinderMob mob, long gameTime) {
-                vanilla.doStop(level, mob, gameTime);
-            }
+        private RoomStrollTarget(BlockPos preferred, Set<BlockPos> targets) {
+            this.preferred = preferred.immutable();
+            this.targets = targets;
+        }
 
-            @Override
-            public String debugString() {
-                return vanilla.debugString();
-            }
-        };
+        @Override
+        public Vec3 currentPosition() {
+            return Vec3.atBottomCenterOf(preferred);
+        }
+
+        @Override
+        public BlockPos currentBlockPosition() {
+            return preferred;
+        }
+
+        @Override
+        public boolean isVisibleBy(LivingEntity livingEntity) {
+            return true;
+        }
+
+        @Override
+        public Set<BlockPos> getPathTargets(Mob mob) {
+            return targets;
+        }
+
+        @Override
+        public boolean isReached(Mob mob, int closeEnoughDistance) {
+            return targets.stream().anyMatch(target -> target.distManhattan(mob.blockPosition()) <= closeEnoughDistance);
+        }
     }
 }

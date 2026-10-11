@@ -9,12 +9,9 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.Objects;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class VillagerCarryPositionGameTests {
     private static final double EPSILON = 1.0E-6D;

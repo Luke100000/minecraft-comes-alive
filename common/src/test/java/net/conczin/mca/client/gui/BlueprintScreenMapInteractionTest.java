@@ -12,15 +12,21 @@ import net.conczin.mca.server.world.data.Structure;
 import net.conczin.mca.server.world.data.StructureFloor;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.SharedConstants;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.Bootstrap;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import sun.misc.Unsafe;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
@@ -35,6 +41,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BlueprintScreenMapInteractionTest {
@@ -72,6 +80,8 @@ class BlueprintScreenMapInteractionTest {
         setField(first, "mapCenterAutomatic", false);
         setField(first, "mapCenterX", 123.25D);
         setField(first, "mapCenterZ", -45.75D);
+        setField(first, "lastRoomScanPosition", BlockPos.ZERO);
+        setField(first, "cachedRoomScanPlan", RoomScanPlan.addBuilding(BlockPos.ZERO));
         first.removed();
 
         BlueprintScreen reopened = new BlueprintScreen();
@@ -87,6 +97,8 @@ class BlueprintScreenMapInteractionTest {
         assertEquals(false, getField(reopened, "mapCenterAutomatic"));
         assertEquals(123.25D, getDoubleField(reopened, "mapCenterX"), 0.0000001D);
         assertEquals(-45.75D, getDoubleField(reopened, "mapCenterZ"), 0.0000001D);
+        assertEquals(null, getField(reopened, "lastRoomScanPosition"));
+        assertEquals(null, getField(reopened, "cachedRoomScanPlan"));
     }
 
     @Test
@@ -122,6 +134,25 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
+    void blueprintStatePersistsUntilTheClientLevelChanges() throws Exception {
+        Object level = new Object();
+        BlueprintScreen.onClientLevelChanged(level);
+
+        BlueprintScreen screen = new BlueprintScreen();
+        setField(screen, "mapScale", 3.0F);
+        setField(screen, "showTerrain", false);
+
+        BlueprintScreen.onClientLevelChanged(level);
+        BlueprintScreen reopened = new BlueprintScreen();
+        assertEquals(3.0F, getField(reopened, "mapScale"));
+        assertEquals(false, getField(reopened, "showTerrain"));
+
+        BlueprintScreen.onClientLevelChanged(new Object());
+        assertEquals(1.0F, getField(reopened, "mapScale"));
+        assertEquals(true, getField(reopened, "showTerrain"));
+    }
+
+    @Test
     void loadedBlueprintDoesNotNeedAnotherInitialVillageRequestWhenResumed() throws Exception {
         BlueprintScreen screen = new BlueprintScreen();
         assertTrue(screen.needsVillageRequestOnInit());
@@ -145,6 +176,56 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
+    void addingUpperFloorOrBasementSelectsItsFloor() throws Exception {
+        for (int newFloor : List.of(1, -1)) {
+            BlueprintScreen.onClientLevelChanged(new Object());
+            int y = newFloor > 0 ? 72 : 56;
+            BlueprintScreen screen = blueprintAt(new BlockPos(0, y, 0));
+            screen.setVillage(villageWithStructures(1, List.of(new BlockPos(0, 64, 0))));
+            setField(screen, "selectPlayerFloorOnNextVillageResponse", true);
+
+            screen.setVillage(villageWithSecondFloor(newFloor, true));
+
+            assertEquals(newFloor, getField(screen, "selectedFloorOrdinal"));
+        }
+    }
+
+    @Test
+    void addingRoomOnAnotherFloorSelectsThatFloor() throws Exception {
+        BlueprintScreen screen = blueprintAt(new BlockPos(0, 72, 0));
+        screen.setVillage(villageWithSecondFloor(1, false));
+        setField(screen, "selectPlayerFloorOnNextVillageResponse", true);
+
+        screen.setVillage(villageWithSecondFloor(1, true));
+
+        assertEquals(1, getField(screen, "selectedFloorOrdinal"));
+    }
+
+    @Test
+    void addingRoomWhileShowingAllFloorsKeepsAllFloorsSelected() throws Exception {
+        BlueprintScreen screen = blueprintAt(new BlockPos(0, 72, 0));
+        screen.setVillage(villageWithSecondFloor(1, false));
+        setField(screen, "selectedFloorOrdinal", null);
+        setField(screen, "selectPlayerFloorOnNextVillageResponse", true);
+
+        screen.setVillage(villageWithSecondFloor(1, true));
+
+        assertEquals(null, getField(screen, "selectedFloorOrdinal"));
+    }
+
+    @Test
+    void failedRoomAdditionDoesNotChangeSelectedFloor() throws Exception {
+        BlueprintScreen screen = blueprintAt(new BlockPos(0, 72, 0));
+        screen.setVillage(villageWithSecondFloor(1, false));
+        setField(screen, "selectPlayerFloorOnNextVillageResponse", true);
+
+        screen.setVillage(villageWithSecondFloor(1, false));
+
+        assertEquals(0, getField(screen, "selectedFloorOrdinal"));
+        assertEquals(false, getField(screen, "selectPlayerFloorOnNextVillageResponse"));
+    }
+
+    @Test
     void registeredRoomScanCarriesExpectedRoomId() {
         Building room = room(42);
         RoomScanPlan plan = RoomScanPlan.updateRoom(room, BlockPos.ZERO);
@@ -154,6 +235,67 @@ class BlueprintScreenMapInteractionTest {
 
         assertEquals(ReportBuildingMessage.Action.SCAN_ROOM, message.action());
         assertEquals(42, message.expectedTargetId());
+    }
+
+    @Test
+    void roomScanPreviewIsReusedWhileStationaryAndRefreshesAfterMovement() throws Exception {
+        BlueprintScreen screen = new BlueprintScreen();
+        Minecraft client = allocate(Minecraft.class);
+        client.player = allocate(LocalPlayer.class);
+        Field minecraftField = Screen.class.getDeclaredField("minecraft");
+        minecraftField.setAccessible(true);
+        minecraftField.set(screen, client);
+        setField(screen, "village", new Village(1, null));
+        BlockPos position = new BlockPos(4, 64, 8);
+        Field playerPosition = Entity.class.getDeclaredField("blockPosition");
+        playerPosition.setAccessible(true);
+        playerPosition.set(client.player, position);
+        Method preview = BlueprintScreen.class.getDeclaredMethod("getPlayerRoomScanPlan");
+        preview.setAccessible(true);
+        RoomScanPlan initial = (RoomScanPlan) preview.invoke(screen);
+
+        client.player.tickCount = 20;
+        assertSame(initial, preview.invoke(screen));
+        client.player.tickCount = 200;
+        assertSame(initial, preview.invoke(screen));
+
+        BlockPos movedPosition = position.offset(1, 0, 0);
+        playerPosition.set(client.player, movedPosition);
+        RoomScanPlan moved = (RoomScanPlan) preview.invoke(screen);
+        assertNotSame(initial, moved);
+        assertEquals(Village.RoomScanMode.ADD_BUILDING, moved.mode());
+        assertEquals(new BlockPos(5, 64, 8), moved.interactionSource());
+    }
+
+    @Test
+    void villageResponseInvalidatesRoomScanPreview() throws Exception {
+        BlueprintScreen screen = new BlueprintScreen();
+        setField(screen, "page", "map");
+        setField(screen, "lastRoomScanPosition", BlockPos.ZERO);
+        setField(screen, "cachedRoomScanPlan", RoomScanPlan.addBuilding(BlockPos.ZERO));
+
+        screen.setVillage(new Village(1, null));
+
+        assertEquals(null, getField(screen, "lastRoomScanPosition"));
+        assertEquals(null, getField(screen, "cachedRoomScanPlan"));
+    }
+
+    @Test
+    void attachmentButtonDistinguishesBasementsFromUpperFloors() throws Exception {
+        BlueprintScreen screen = new BlueprintScreen();
+        TooltipButtonWidget button = new TooltipButtonWidget(0, 0, 100, 20, "", ignored -> {});
+        setField(screen, "structureScanButton", button);
+        Method update = BlueprintScreen.class.getDeclaredMethod("updateStructureScanControl", RoomScanPlan.class);
+        update.setAccessible(true);
+
+        for (int floorNumber : List.of(-1, -2, 1, 2, Integer.MIN_VALUE)) {
+            RoomScanPlan plan = RoomScanPlan.attachment(10, floorNumber, BlockPos.ZERO, BlockPos.ZERO);
+            update.invoke(screen, plan);
+            assertEquals(Component.translatable(plan.hasProspectiveFloor() && floorNumber < 0
+                    ? "gui.blueprint.addBasement" : "gui.blueprint.addFloor"), button.getMessage());
+            assertEquals(ReportBuildingMessage.Action.ADD_ATTACHMENT,
+                    BlueprintScreen.structureScanMessage(plan.mode(), plan).action());
+        }
     }
 
     @Test
@@ -270,6 +412,10 @@ class BlueprintScreenMapInteractionTest {
 
             List<AbstractWidget> initialNavigation = screen.children().stream().skip(1).limit(5)
                     .map(AbstractWidget.class::cast).toList();
+            assertEquals(screen.width / 2 - 180, initialNavigation.getFirst().getX(),
+                    "Keep navigation at its original horizontal position");
+            assertEquals(screen.height / 2 - 56, initialNavigation.getFirst().getY(),
+                    "Keep navigation at its original vertical position");
             for (String section : List.of("rank", "catalog", "villagers", "rules", "map")) {
                 var sectionButton = screen.children().stream()
                         .filter(child -> child instanceof net.minecraft.client.gui.components.Button button
@@ -325,7 +471,7 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
-    void mapGrowsIntoAvailableSpaceWithoutScalingButtonsAndRefitsAfterResize() throws Exception {
+    void mapGrowthStaysModestWithoutScalingButtonsAndRefitsAfterResize() throws Exception {
         BlueprintScreen screen = new BlueprintScreen();
         setField(screen, "village", new Village(1, null));
         setField(screen, "page", "map");
@@ -340,8 +486,8 @@ class BlueprintScreenMapInteractionTest {
         screen.height = 496;
         screen.init();
         BlueprintMapViewport expanded = (BlueprintMapViewport) currentViewport.invoke(screen);
-        assertTrue(expanded.halfSize() >= compact.halfSize() * 2,
-                "Use extra GUI space for a visibly larger map");
+        assertTrue(expanded.halfSize() > compact.halfSize(), "Allow modest growth with extra GUI space");
+        assertTrue(expanded.halfSize() <= 90, "Limit map diameter to 20 percent above its original size");
         assertEquals(427, expanded.centerX());
         assertTrue(expanded.top() >= 29, "Reserve title space");
         for (var child : screen.children()) {
@@ -355,6 +501,9 @@ class BlueprintScreenMapInteractionTest {
         assertTrue(floorPrevious.getY() >= expanded.bottom(), "Keep controls below expanded map");
         AbstractWidget playerCentered = (AbstractWidget) getField(screen, "playerCenteredButton");
         assertTrue(playerCentered.getX() >= expanded.right(), "Keep side controls outside expanded map");
+        AbstractWidget navigation = (AbstractWidget) screen.children().get(1);
+        assertTrue(navigation.getX() + navigation.getWidth() < expanded.left(),
+                "Leave a gap between original navigation and expanded map");
 
         screen.width = 427;
         screen.height = 248;
@@ -438,6 +587,13 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
+    void scaleButtonCanCycleBeyondFourToEightAndBack() {
+        assertEquals(6.0F, BlueprintScreen.snapMapScale(4.0F, 1));
+        assertEquals(8.0F, BlueprintScreen.snapMapScale(6.0F, 1));
+        assertEquals(6.0F, BlueprintScreen.snapMapScale(8.0F, -1));
+    }
+
+    @Test
     void customScaleImmediatelyBesidePresetStillSnapsToThatPreset() {
         assertEquals(2.0F, BlueprintScreen.snapMapScale(1.99995F, 1));
         assertEquals(2.0F, BlueprintScreen.snapMapScale(2.00005F, -1));
@@ -447,7 +603,8 @@ class BlueprintScreenMapInteractionTest {
     void wheelZoomProducesCustomScaleAndClampsToPresetRange() {
         assertEquals(1.1F, BlueprintScreen.zoomMapScale(1.0F, 1.0D), 0.0001F);
         assertEquals(0.5F, BlueprintScreen.zoomMapScale(0.5F, -20.0D), 0.0001F);
-        assertEquals(4.0F, BlueprintScreen.zoomMapScale(4.0F, 20.0D), 0.0001F);
+        assertEquals(4.4F, BlueprintScreen.zoomMapScale(4.0F, 1.0D), 0.0001F);
+        assertEquals(8.0F, BlueprintScreen.zoomMapScale(8.0F, 20.0D), 0.0001F);
     }
 
     @Test
@@ -717,7 +874,7 @@ class BlueprintScreenMapInteractionTest {
         registerStructure(village, structure, main);
 
         RoomScanPlan plan = RoomScanPlan.attachment(
-                10, -1, BlockPos.ZERO, BlockPos.ZERO, structure.getFloor(0).orElseThrow());
+                10, -1, BlockPos.ZERO, BlockPos.ZERO);
         BlueprintScreen.RemovalControlState state = BlueprintScreen.removalControlState(village, plan, -1);
 
         assertFalse(state.visible());
@@ -882,6 +1039,35 @@ class BlueprintScreenMapInteractionTest {
         return room;
     }
 
+    private static BlueprintScreen blueprintAt(BlockPos position) throws Exception {
+        BlueprintScreen screen = new BlueprintScreen();
+        Minecraft client = allocate(Minecraft.class);
+        client.player = allocate(LocalPlayer.class);
+        Field minecraftField = Screen.class.getDeclaredField("minecraft");
+        minecraftField.setAccessible(true);
+        minecraftField.set(screen, client);
+        Field playerPosition = Entity.class.getDeclaredField("blockPosition");
+        playerPosition.setAccessible(true);
+        playerPosition.set(client.player, position);
+        setField(screen, "page", "map");
+        return screen;
+    }
+
+    private static Village villageWithSecondFloor(int number, boolean withRoom) throws Exception {
+        int y = number > 0 ? 72 : 56;
+        Village village = new Village(1, null);
+        Structure structure = new Structure(10, BlockPos.ZERO, List.of(
+                floor(0, 64, 68, 0), floor(1, y, y + 4, number)));
+        registerStructure(village, structure, room(1));
+        if (withRoom) {
+            Building added = room(2);
+            added.setFloorId(1);
+            registerRoom(village, added);
+        }
+        village.calculateDimensions();
+        return village;
+    }
+
     private static Village villageWithStructures(int villageId, List<BlockPos> cells) throws Exception {
         Village village = new Village(villageId, null);
         int structureId = 10;
@@ -922,6 +1108,12 @@ class BlueprintScreenMapInteractionTest {
                 "setGeometry", BlockPos.class, BlockPos.class, java.util.Collection.class);
         setGeometry.setAccessible(true);
         setGeometry.invoke(room, cell, cell, Set.of(cell));
+    }
+
+    private static <T> T allocate(Class<T> type) throws ReflectiveOperationException {
+        Field field = Unsafe.class.getDeclaredField("theUnsafe");
+        field.setAccessible(true);
+        return type.cast(((Unsafe) field.get(null)).allocateInstance(type));
     }
 
     private static void setField(Object target, String name, Object value) throws Exception {

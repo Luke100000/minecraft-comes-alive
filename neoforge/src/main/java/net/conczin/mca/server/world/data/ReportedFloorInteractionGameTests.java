@@ -5,13 +5,11 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.TrapDoorBlock;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.List;
 
 /** Geometry from the September 19 diagnose traces, without saved entities or inventories. */
-@GameTestHolder("mca")
 @PrefixGameTestTemplate(false)
 public final class ReportedFloorInteractionGameTests {
     private static final String TEMPLATE = "gametest/reported_floor_transitions";

@@ -8,6 +8,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobSpawnType;
@@ -21,10 +22,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class ValidateNearbyPoiGameTests {
     private ValidateNearbyPoiGameTests() {
@@ -56,6 +54,7 @@ public final class ValidateNearbyPoiGameTests {
         helper.assertTrue(!helper.getLevel().getBlockState(head).is(BlockTags.BEDS),
                 "fixture bed unexpectedly belongs to #minecraft:beds");
 
+        VillagerEntityMCA observer = spawnVillager(helper, head.relative(Direction.NORTH), "Untagged Bed Observer");
         var poiManager = helper.getLevel().getPoiManager();
         helper.assertTrue(poiManager.take(
                         poi -> poi.is(PoiTypes.HOME),
@@ -63,15 +62,13 @@ public final class ValidateNearbyPoiGameTests {
                         head,
                         1
                 ).filter(head::equals).isPresent(),
-                "fixture could not claim the untagged bed HOME ticket");
+                "validating villager could not claim the untagged bed HOME ticket");
+        observer.getBrain().setMemory(MemoryModuleType.HOME,
+                GlobalPos.of(helper.getLevel().dimension(), head));
 
         VillagerEntityMCA sleeper = spawnVillager(helper, head.relative(Direction.SOUTH), "Untagged Bed Owner");
         sleeper.startSleeping(head);
         helper.assertTrue(sleeper.isSleeping(), "fixture owner did not start sleeping");
-
-        VillagerEntityMCA observer = spawnVillager(helper, head.relative(Direction.NORTH), "Untagged Bed Observer");
-        observer.getBrain().setMemory(MemoryModuleType.HOME,
-                GlobalPos.of(helper.getLevel().dimension(), head));
 
         var validator = ValidateNearbyPoi.create(poi -> poi.is(PoiTypes.HOME), MemoryModuleType.HOME);
         helper.assertTrue(validator.tryStart(helper.getLevel(), observer, helper.getLevel().getGameTime()),
@@ -79,7 +76,7 @@ public final class ValidateNearbyPoiGameTests {
         helper.assertTrue(observer.getBrain().getMemoryInternal(MemoryModuleType.HOME).isEmpty(),
                 "validator ignored an occupied MCA-compatible BedBlock outside #minecraft:beds");
         helper.assertTrue(poiManager.getFreeTickets(head) == 0,
-                "validating the occupied untagged bed released its sleeping owner's HOME ticket");
+                "validating the occupied untagged bed released the sleeping villager's HOME ticket");
         helper.succeed();
     }
 
@@ -90,6 +87,7 @@ public final class ValidateNearbyPoiGameTests {
         BlockPos head = foot.relative(facing);
         placeBed(helper, foot, facing);
 
+        VillagerEntityMCA observer = spawnVillager(helper, head.relative(Direction.NORTH), "Ticket Owner");
         var poiManager = helper.getLevel().getPoiManager();
         helper.assertTrue(poiManager.existsAtPosition(PoiTypes.HOME, head),
                 "fixture bed head was not registered as a HOME POI");
@@ -99,26 +97,51 @@ public final class ValidateNearbyPoiGameTests {
                         head,
                         1
                 ).filter(head::equals).isPresent(),
-                "fixture could not claim the bed HOME ticket");
+                "validating villager could not claim the bed HOME ticket");
         helper.assertTrue(poiManager.getFreeTickets(head) == 0,
                 "fixture HOME ticket was not claimed");
-
-        VillagerEntityMCA sleeper = spawnVillager(helper, head.relative(Direction.SOUTH), "Sleeping Owner");
-        sleeper.startSleeping(head);
-        helper.assertTrue(sleeper.isSleeping(), "fixture owner did not start sleeping");
-
-        VillagerEntityMCA observer = spawnVillager(helper, head.relative(Direction.NORTH), "Duplicate Observer");
         observer.getBrain().setMemory(MemoryModuleType.HOME,
                 GlobalPos.of(helper.getLevel().dimension(), head));
+
+        VillagerEntityMCA sleeper = spawnVillager(helper, head.relative(Direction.SOUTH), "Physical Sleeper");
+        sleeper.startSleeping(head);
+        helper.assertTrue(sleeper.isSleeping(), "fixture sleeper did not start sleeping");
 
         var validator = ValidateNearbyPoi.create(poi -> poi.is(PoiTypes.HOME), MemoryModuleType.HOME);
         helper.assertTrue(validator.tryStart(helper.getLevel(), observer, helper.getLevel().getGameTime()),
                 "HOME validator did not run");
 
         helper.assertTrue(observer.getBrain().getMemoryInternal(MemoryModuleType.HOME).isEmpty(),
-                "observer retained HOME already occupied by another villager");
+                "validating villager retained HOME already occupied by another sleeper");
         helper.assertTrue(poiManager.getFreeTickets(head) == 0,
                 "validating a duplicate HOME released the sleeping villager's POI ticket");
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void sleepingVillagerWithoutHomeWakesOnLoad(GameTestHelper helper) {
+        BlockPos foot = helper.absolutePos(new BlockPos(3, 1, 3));
+        Direction facing = Direction.EAST;
+        BlockPos head = foot.relative(facing);
+        placeBed(helper, foot, facing);
+
+        VillagerEntityMCA villager = spawnVillager(helper, head.relative(Direction.SOUTH), "Stale Sleeper");
+        villager.startSleeping(head);
+        villager.getBrain().eraseMemory(MemoryModuleType.HOME);
+
+        helper.assertTrue(villager.isSleeping(), "fixture villager did not start in the stale sleeping state");
+        CompoundTag saved = villager.saveWithoutId(new CompoundTag());
+        helper.assertTrue(saved.contains("SleepingX"), "fixture did not persist SleepingPos");
+
+        villager.stopSleeping();
+        villager.discard();
+
+        VillagerEntityMCA reloaded = VillagerFactory.newVillager(helper.getLevel()).build();
+        reloaded.load(saved);
+
+        helper.assertTrue(!reloaded.isSleeping(), "villager restored stale SleepingPos without HOME");
+        helper.assertTrue(!helper.getLevel().getBlockState(head).getValue(BedBlock.OCCUPIED),
+                "stale loaded sleeper left the bed marked occupied");
         helper.succeed();
     }
 
@@ -129,6 +152,7 @@ public final class ValidateNearbyPoiGameTests {
         BlockPos head = foot.relative(facing);
         placeBed(helper, foot, facing);
 
+        Villager observer = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new BlockPos(4, 1, 2));
         var poiManager = helper.getLevel().getPoiManager();
         helper.assertTrue(poiManager.take(
                         poi -> poi.is(PoiTypes.HOME),
@@ -136,15 +160,13 @@ public final class ValidateNearbyPoiGameTests {
                         head,
                         1
                 ).filter(head::equals).isPresent(),
-                "fixture could not claim the vanilla villager HOME ticket");
-
-        VillagerEntityMCA sleeper = spawnVillager(helper, head.relative(Direction.SOUTH), "MCA Sleeping Owner");
-        sleeper.startSleeping(head);
-        helper.assertTrue(sleeper.isSleeping(), "fixture MCA villager did not start sleeping");
-
-        Villager observer = helper.spawnWithNoFreeWill(EntityType.VILLAGER, new BlockPos(4, 1, 2));
+                "validating vanilla villager could not claim the HOME ticket");
         observer.getBrain().setMemory(MemoryModuleType.HOME,
                 GlobalPos.of(helper.getLevel().dimension(), head));
+
+        VillagerEntityMCA sleeper = spawnVillager(helper, head.relative(Direction.SOUTH), "Physical Sleeper");
+        sleeper.startSleeping(head);
+        helper.assertTrue(sleeper.isSleeping(), "fixture MCA villager did not start sleeping");
 
         var validator = ValidateNearbyPoi.create(poi -> poi.is(PoiTypes.HOME), MemoryModuleType.HOME);
         helper.assertTrue(validator.tryStart(helper.getLevel(), observer, helper.getLevel().getGameTime()),

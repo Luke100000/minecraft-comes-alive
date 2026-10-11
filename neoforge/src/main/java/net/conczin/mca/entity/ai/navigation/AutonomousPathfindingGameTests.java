@@ -29,7 +29,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.HashSet;
@@ -45,7 +44,6 @@ import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath;
  * sink and natural entity ticks. No test creates a path, advances a node, moves
  * a mob or invokes a behavior's start method directly.
  */
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class AutonomousPathfindingGameTests {
     private static final String DETOUR_BATCH = "mca_autonomous_live_detour";

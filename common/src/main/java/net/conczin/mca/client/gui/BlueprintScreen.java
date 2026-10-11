@@ -46,11 +46,11 @@ import java.util.function.Consumer;
 
 @SuppressWarnings("deprecation")
 public class BlueprintScreen extends ExtendedScreen {
-    private static final BlueprintSessionState SESSION_STATE = new BlueprintSessionState();
+    private static Object sessionLevelIdentity;
 
     public static void maintainSessionState(Minecraft client) {
         BlueprintTerrainRenderer.onClientLevelChanged(client.level);
-        SESSION_STATE.onClientLevelChanged(client.level);
+        onClientLevelChanged(client.level);
     }
 
     //gui element Y positions
@@ -59,8 +59,10 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final int POSITION_MARRIAGE = 40;
     private static final ResourceLocation ICON_TEXTURES = MCA.locate("textures/buildings.png");
     private static final int MAP_HALF_SIZE = 75;
-    private static final int TITLE_OFFSET = 96;
-    private static final int LAYOUT_HEIGHT = 225;
+    private static final int MAP_MAX_HALF_SIZE = 90;
+    private static final int MAP_TITLE_GAP = 29;
+    private static final int MAP_CONTROL_ROWS_HEIGHT = 46;
+    private static final int LAYOUT_MARGIN = 12;
     private static final int MAP_INNER_MARGIN = 6;
     private static final float MAP_MAX_FIT_SCALE = 2.0f;
     private static final int MAP_CONTROL_GAP = 2;
@@ -72,17 +74,18 @@ public class BlueprintScreen extends ExtendedScreen {
     private static final int PLAYER_HEAD_ICON_SIZE = 16;
     private static final int MAP_SIDE_CONTROL_GUTTER = 14;
     private static final int MAP_SIDE_CONTROL_WIDTH = 110;
+    private static final int NAVIGATION_WIDTH = 80;
     private static final int MAP_NAVIGATION_OFFSET = 180;
     private static final float MAP_MIN_SCALE = 0.5F;
-    private static final float MAP_MAX_SCALE = 4.0F;
+    private static final float MAP_MAX_SCALE = 8.0F;
     private static final double MAP_ZOOM_FACTOR = 1.1D;
     private static final double MAP_DRAG_THRESHOLD = 3.0D;
-    private static final float[] MAP_SCALE_PRESETS = {0.5F, 1.0F, 2.0F, 3.0F, 4.0F};
-    private Integer selectedFloorOrdinal;
-    private boolean mapScaleFit;
-    private float mapScale;
-    private boolean playerCentered;
-    private boolean showPlayerHead;
+    private static final float[] MAP_SCALE_PRESETS = {0.5F, 1.0F, 2.0F, 3.0F, 4.0F, 6.0F, 8.0F};
+    private static Integer selectedFloorOrdinal = 0;
+    private static boolean mapScaleFit = true;
+    private static float mapScale = 1.0F;
+    private static boolean playerCentered;
+    private static boolean showPlayerHead = true;
     // 1.19.3: This needs to be the MC type, DO NOT TOUCH !!!
     private final List<net.minecraft.client.gui.components.Button> catalogButtons = new LinkedList<>();
     private Village village;
@@ -110,8 +113,8 @@ public class BlueprintScreen extends ExtendedScreen {
     private TooltipButtonWidget removeRoomButton;
     private ButtonWidget removeBuildingButton;
     private boolean selectPlayerFloorOnNextVillageResponse;
-    private boolean showBuildingIcons;
-    private boolean showTerrain;
+    private static boolean showBuildingIcons = true;
+    private static boolean showTerrain = true;
     private List<Integer> floorOrdinals = List.of();
     private int structureCount;
     private RoomTypeResolver roomTypeResolver = RoomTypeResolver.create(null);
@@ -119,10 +122,10 @@ public class BlueprintScreen extends ExtendedScreen {
     private BlueprintMapGeometry mapGeometry = BlueprintMapGeometry.empty();
     private final BlueprintMapRenderer mapRenderer = new BlueprintMapRenderer();
     private final MapPanState mapPanState = new MapPanState();
-    private Integer mapCenterVillageId;
-    private boolean mapCenterAutomatic;
-    private double mapCenterX;
-    private double mapCenterZ;
+    private static Integer mapCenterVillageId;
+    private static boolean mapCenterAutomatic = true;
+    private static double mapCenterX;
+    private static double mapCenterZ;
     private BuildingType selectedBuilding;
     private UUID selectedVillager;
     private BlockPos lastRoomScanPosition;
@@ -135,17 +138,22 @@ public class BlueprintScreen extends ExtendedScreen {
 
     public BlueprintScreen() {
         super(Component.literal("Blueprint"));
-        SESSION_STATE.restore(this);
     }
 
     static void onClientLevelChanged(Object levelIdentity) {
-        SESSION_STATE.onClientLevelChanged(levelIdentity);
-    }
-
-    @Override
-    public void removed() {
-        SESSION_STATE.remember(this);
-        super.removed();
+        if (sessionLevelIdentity == levelIdentity) return;
+        sessionLevelIdentity = levelIdentity;
+        selectedFloorOrdinal = 0;
+        mapScaleFit = true;
+        mapScale = 1.0F;
+        playerCentered = false;
+        showPlayerHead = true;
+        showBuildingIcons = true;
+        showTerrain = true;
+        mapCenterVillageId = null;
+        mapCenterAutomatic = true;
+        mapCenterX = 0.0D;
+        mapCenterZ = 0.0D;
     }
 
     private void saveVillage() {
@@ -229,10 +237,10 @@ public class BlueprintScreen extends ExtendedScreen {
         //page selection
         int layoutY = layoutBaseY();
         int bx = width / 2 - MAP_NAVIGATION_OFFSET;
-        int by = layoutY - 56;
+        int by = height / 2 - 56;
         if (!page.equals("rename") && (!page.equals("empty") && !page.equals("waiting"))) {
             for (String p : new String[]{"map", "rank", "catalog", "villagers", "rules"}) {
-                ButtonWidget widget = new ButtonWidget(bx, by, 80, 20, Component.translatable("gui.blueprint." + p), b -> setPage(p));
+                ButtonWidget widget = new ButtonWidget(bx, by, NAVIGATION_WIDTH, 20, Component.translatable("gui.blueprint." + p), b -> setPage(p));
                 addRenderableWidget(widget);
                 if (page.equals(p) || ("advanced".equals(page) && "map".equals(p))) {
                     widget.active = false;
@@ -250,8 +258,8 @@ public class BlueprintScreen extends ExtendedScreen {
                 }));
                 break;
             case "map", "advanced": {
-                bx = width / 2 + MAP_HALF_SIZE + MAP_SIDE_CONTROL_GUTTER;
-                int floorControlY = layoutY + 87;
+                bx = width / 2 + mapHalfSize() + MAP_SIDE_CONTROL_GUTTER;
+                int floorControlY = layoutY + 8 + mapHalfSize() + 4;
 
                 // Map and Advanced are two control modes over the same map view. Keep all
                 // display/navigation controls shared so Advanced cannot lose floor controls,
@@ -618,9 +626,10 @@ public class BlueprintScreen extends ExtendedScreen {
         RemovalControlState removalState = removalControlState(village, scanContext, selectedFloorOrdinal);
         int y = layoutBaseY() - 56 + 22 * 3;
 
-        structureScanButton.setMessage(getStructureScanTranslationKey(primaryMode));
-        structureScanButton.setTooltip(Tooltip.create(Component.translatable(
-                getStructureScanTranslationKey(primaryMode) + ".tooltip")));
+        String scanKey = primaryMode == Village.RoomScanMode.ADD_ATTACHMENT
+                && scanContext.hasProspectiveFloor() && scanContext.prospectiveFloorNumber() < 0
+                ? "gui.blueprint.addBasement" : getStructureScanTranslationKey(primaryMode);
+        structureScanButton.setMessage(scanKey);
         structureScanButton.active = true;
         structureScanButton.setY(y);
         y += 22;
@@ -674,7 +683,7 @@ public class BlueprintScreen extends ExtendedScreen {
         final PoseStack matrices = context.pose();
         //name
         matrices.pushPose();
-        matrices.translate(width / 2, layoutBaseY() - TITLE_OFFSET, 0.0D);
+        matrices.translate(width / 2, layoutTitleY(), 0.0D);
         matrices.scale(2.0f, 2.0f, 2.0f);
         if (isVillage) {
             context.drawCenteredString(font, village.getName(), 0, 0, 0xffffffff);
@@ -685,7 +694,7 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     private void renderStats(GuiGraphics context) {
-        int x = width / 2 + (page.equals("rank") ? -70 : 105);
+        int x = width / 2 + (page.equals("rank") ? -70 : mapHalfSize() + 30);
         int y = layoutBaseY() - 50;
 
         //rank
@@ -703,7 +712,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
         if (!village.isAutoScan() && structureCount <= 1) {
             context.drawCenteredString(font, Component.translatable("gui.blueprint.autoScanDisabled"),
-                    width / 2, layoutBaseY() - 77, 0xaaffffff);
+                    width / 2, layoutBaseY() + 8 - mapHalfSize() - 10, 0xaaffffff);
         }
 
         LocalPlayer player = minecraft == null ? null : minecraft.player;
@@ -812,7 +821,7 @@ public class BlueprintScreen extends ExtendedScreen {
     private float getMapScale() {
         if (!mapScaleFit || village == null) return mapScale;
         int horizontalSpan = Math.max(village.getBox().getXSpan(), village.getBox().getZSpan());
-        int usablePixels = (MAP_HALF_SIZE - MAP_INNER_MARGIN) * 2;
+        int usablePixels = (mapHalfSize() - MAP_INNER_MARGIN) * 2;
         return Math.min((float) usablePixels / Math.max(1, horizontalSpan), MAP_MAX_FIT_SCALE);
     }
 
@@ -862,16 +871,27 @@ public class BlueprintScreen extends ExtendedScreen {
                 && mouseY >= viewport.top() && mouseY < viewport.bottom();
     }
 
+    private int mapHalfSize() {
+        int horizontalSpace = width / 2 - MAP_SIDE_CONTROL_WIDTH - MAP_SIDE_CONTROL_GUTTER - LAYOUT_MARGIN;
+        int verticalSpace = (height - MAP_TITLE_GAP - MAP_CONTROL_ROWS_HEIGHT - 2 * LAYOUT_MARGIN) / 2;
+        return Math.max(MAP_HALF_SIZE, Math.min(MAP_MAX_HALF_SIZE, Math.min(horizontalSpace, verticalSpace)));
+    }
+
+    private int layoutTitleY() {
+        int layoutHeight = mapHalfSize() * 2 + MAP_TITLE_GAP + MAP_CONTROL_ROWS_HEIGHT;
+        return (height - layoutHeight) / 2;
+    }
+
     private int layoutBaseY() {
-        // Share one anchor across sections so navigation stays fixed while both map rows fit.
-        return (height - LAYOUT_HEIGHT) / 2 + TITLE_OFFSET;
+        // Share one anchor across sections; only the map grows with the available GUI area.
+        return layoutTitleY() + MAP_TITLE_GAP + mapHalfSize() - 8;
     }
 
     private BlueprintMapViewport currentViewport() {
         return BlueprintMapViewport.create(
                 width / 2,
                 layoutBaseY() + 8,
-                MAP_HALF_SIZE,
+                mapHalfSize(),
                 mapCenterX,
                 mapCenterZ,
                 getMapScale()
@@ -929,69 +949,6 @@ public class BlueprintScreen extends ExtendedScreen {
             active = false;
             panning = false;
             return wasPanning;
-        }
-    }
-
-    private static final class BlueprintSessionState {
-        private Object levelIdentity;
-        private Integer selectedFloorOrdinal = 0;
-        private boolean mapScaleFit = true;
-        private float mapScale = 1.0F;
-        private boolean playerCentered;
-        private boolean showPlayerHead = true;
-        private boolean showBuildingIcons = true;
-        private boolean showTerrain = true;
-        private Integer mapCenterVillageId;
-        private boolean mapCenterAutomatic = true;
-        private double mapCenterX;
-        private double mapCenterZ;
-
-        void onClientLevelChanged(Object levelIdentity) {
-            if (this.levelIdentity == levelIdentity) return;
-            this.levelIdentity = levelIdentity;
-            reset();
-        }
-
-        void restore(BlueprintScreen screen) {
-            screen.selectedFloorOrdinal = selectedFloorOrdinal;
-            screen.mapScaleFit = mapScaleFit;
-            screen.mapScale = mapScale;
-            screen.playerCentered = playerCentered;
-            screen.showPlayerHead = showPlayerHead;
-            screen.showBuildingIcons = showBuildingIcons;
-            screen.showTerrain = showTerrain;
-            screen.mapCenterVillageId = mapCenterVillageId;
-            screen.mapCenterAutomatic = mapCenterAutomatic;
-            screen.mapCenterX = mapCenterX;
-            screen.mapCenterZ = mapCenterZ;
-        }
-
-        void remember(BlueprintScreen screen) {
-            selectedFloorOrdinal = screen.selectedFloorOrdinal;
-            mapScaleFit = screen.mapScaleFit;
-            mapScale = screen.mapScale;
-            playerCentered = screen.playerCentered;
-            showPlayerHead = screen.showPlayerHead;
-            showBuildingIcons = screen.showBuildingIcons;
-            showTerrain = screen.showTerrain;
-            mapCenterVillageId = screen.mapCenterVillageId;
-            mapCenterAutomatic = screen.mapCenterAutomatic;
-            mapCenterX = screen.mapCenterX;
-            mapCenterZ = screen.mapCenterZ;
-        }
-
-        private void reset() {
-            selectedFloorOrdinal = 0;
-            mapScaleFit = true;
-            mapScale = 1.0F;
-            playerCentered = false;
-            showPlayerHead = true;
-            showBuildingIcons = true;
-            showTerrain = true;
-            mapCenterVillageId = null;
-            mapCenterAutomatic = true;
-            mapCenterX = 0.0D;
-            mapCenterZ = 0.0D;
         }
     }
 
@@ -1225,13 +1182,13 @@ public class BlueprintScreen extends ExtendedScreen {
         final PoseStack matrices = context.pose();
         //title
         matrices.pushPose();
-        matrices.translate(width / 2, layoutBaseY() - TITLE_OFFSET, 0.0D);
+        matrices.translate(width / 2, layoutTitleY(), 0.0D);
         matrices.scale(2.0f, 2.0f, 2.0f);
         context.drawCenteredString(font, Component.translatable("gui.blueprint.catalogFull"), 0, 0, 0xffffffff);
         matrices.popPose();
 
         //explanation
-        context.drawCenteredString(font, Component.translatable("gui.blueprint.catalogHint").withStyle(ChatFormatting.GRAY), width / 2, layoutBaseY() - 74, 0xffffffff);
+        context.drawCenteredString(font, Component.translatable("gui.blueprint.catalogHint").withStyle(ChatFormatting.GRAY), width / 2, layoutTitleY() + 22, 0xffffffff);
 
         //building
         int x = width / 2 + 35;
@@ -1462,7 +1419,7 @@ public class BlueprintScreen extends ExtendedScreen {
         this.tooltipFactory = BlueprintTooltipFactory.create(village, roomTypeResolver);
         this.mapGeometry = BlueprintMapGeometry.build(village, roomTypeResolver);
         RoomScanPlan scanContext = getPlayerRoomScanPlan();
-        if (selectPlayerFloorOnNextVillageResponse
+        if (selectPlayerFloorOnNextVillageResponse && selectedFloorOrdinal != null
                 && scanContext.mode() == Village.RoomScanMode.UPDATE_ROOM) {
             selectPlayerFloor(scanContext);
         }

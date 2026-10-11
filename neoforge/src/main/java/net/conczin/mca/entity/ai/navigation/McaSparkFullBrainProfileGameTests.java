@@ -18,7 +18,6 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.io.IOException;
@@ -30,7 +29,6 @@ import java.util.List;
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
 
 /** Temporary Spark fixture: actual MCA Brain, including sensors and activity scheduling. */
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class McaSparkFullBrainProfileGameTests {
     private static final String BATCH = "zz_mca_spark_full_brain";

@@ -8,10 +8,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class AbstractChoreTaskGameTests {
     private AbstractChoreTaskGameTests() {

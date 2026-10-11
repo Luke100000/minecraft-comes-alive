@@ -150,6 +150,7 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
 
     public Map<UUID, Memories> getMemories() {
         CompoundTag nbt = entity.getTrackedValue(MEMORIES);
+        nbt = nbt == null ? new CompoundTag() : nbt;
         Map<UUID, Memories> memories = new HashMap<>();
         for (String uuid : nbt.getAllKeys()) {
             memories.put(UUID.fromString(uuid), Memories.fromCNBT(entity, nbt.getCompound(uuid)));

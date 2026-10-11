@@ -44,12 +44,17 @@ public class VillagerTrackerManager extends SavedData {
     }
 
     public void remove(UUID id) {
-        entries.remove(id);
-        setDirty();
+        if (entries.remove(id) != null) {
+            setDirty();
+        }
     }
 
     public void set(Entity entity) {
-        entries.put(entity.getUUID(), GlobalPos.of(entity.level().dimension(), entity.blockPosition()));
+        UUID id = entity.getUUID();
+        GlobalPos pos = GlobalPos.of(entity.level().dimension(), entity.blockPosition());
+        if (!pos.equals(entries.put(id, pos))) {
+            setDirty();
+        }
     }
 
     public GlobalPos get(UUID id) {

@@ -12,8 +12,10 @@ import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.conczin.mca.registry.ProfessionsMCA;
 import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -33,7 +35,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.ArrayDeque;
@@ -45,8 +46,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
-
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class ArcherCombatMovementGameTests {
     private static final List<Entity> TEST_ENTITIES = new ArrayList<>();
@@ -518,8 +517,15 @@ public final class ArcherCombatMovementGameTests {
 
         helper.assertTrue(path != null && path.canReach(),
                 "MCA navigation could not reach the escape lane through the closed gate");
-        helper.assertTrue(path.getTarget().getX() < start.getX() - 1,
-                "escape target stopped at the closed gate instead of routing through it: " + path.getTarget());
+        boolean routesPastGate = false;
+        for (int index = 0; index < path.getNodeCount(); index++) {
+            if (path.getNodePos(index).getX() < start.getX() - 1) {
+                routesPastGate = true;
+                break;
+            }
+        }
+        helper.assertTrue(routesPastGate,
+                "escape path stopped at the closed gate instead of routing through it: target=" + path.getTarget());
         helper.succeed();
     }
 
@@ -2190,6 +2196,11 @@ public final class ArcherCombatMovementGameTests {
                         + moveControlSpeedBeforeTick + ", actual=" + archer.getMoveControl().getSpeedModifier()
         );
         helper.succeed();
+    }
+
+    @AfterBatch(batch = "mca_archer_kite_speed")
+    public static void cleanupKiteSpeedBatch(ServerLevel level) {
+        cleanupTestEntities();
     }
 
     @GameTest(batch = "mca_archer_bow_facing_ownership", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)

@@ -27,9 +27,10 @@ public final class Structure implements VillageBuilding {
         this.id = id;
         logicalBuildingId = id;
         this.source = source.immutable();
-        for (StructureFloor floor : floors) {
+        for (StructureFloor floor : Objects.requireNonNull(floors, "floors")) {
             putFloorUnique(floor);
         }
+        requireFloor();
         recomputeBoundsFromFloors();
     }
 
@@ -42,7 +43,14 @@ public final class Structure implements VillageBuilding {
                 value -> StructureFloor.load((CompoundTag) value))) {
             putFloorUnique(floor);
         }
+        requireFloor();
         recomputeBoundsFromFloors();
+    }
+
+    private void requireFloor() {
+        if (floors.isEmpty()) {
+            throw new IllegalArgumentException("Structure " + id + " requires at least one StructureFloor");
+        }
     }
 
     private void putFloorUnique(StructureFloor floor) {
@@ -170,12 +178,16 @@ public final class Structure implements VillageBuilding {
                                                       Collection<Building> structureRooms) {
         Collection<Building> localRooms = structureRooms == null ? List.of() : structureRooms;
         FloorCell physical = resolvePhysicalFloorCell(pos).orElse(null);
+        InteractionPosition physicalPosition = null;
         if (physical != null) {
-            return Optional.of(new InteractionPosition(physical.floor(),
-                    roomAtCell(localRooms, physical.floor(), physical.cell().feet())));
+            physicalPosition = new InteractionPosition(physical.floor(),
+                    roomAtCell(localRooms, physical.floor(), physical.cell().feet()));
+            if (physicalPosition.room() != null) return Optional.of(physicalPosition);
         }
-        if (connectorColumn.isEmpty()) return Optional.empty();
-        StructureFloor floor = floorAtHeight(pos.getY()).orElse(null);
+        if (connectorColumn.isEmpty()) return Optional.ofNullable(physicalPosition);
+        // A fresh Floor can acquire the supported ladder entry before its Room is updated.
+        // Its persisted connector still identifies that Room on this exact ladder column.
+        StructureFloor floor = physical == null ? floorAtHeight(pos.getY()).orElse(null) : physical.floor();
         if (floor == null) return Optional.empty();
         Building owner = null;
         boolean matched = false;
@@ -188,7 +200,7 @@ public final class Structure implements VillageBuilding {
             }
             owner = candidate;
         }
-        return matched ? Optional.of(new InteractionPosition(floor, owner)) : Optional.empty();
+        return matched ? Optional.of(new InteractionPosition(floor, owner)) : Optional.ofNullable(physicalPosition);
     }
 
     private static Building roomAtCell(Collection<Building> rooms, StructureFloor floor, BlockPos feet) {
@@ -227,21 +239,25 @@ public final class Structure implements VillageBuilding {
     boolean replaceFloorGeometry(int floorId, FloorGeometry scannedFloor) {
         StructureFloor existing = floors.get(floorId);
         if (existing == null || scannedFloor == null) return false;
-        floors.put(floorId, new StructureFloor(floorId, existing.floorNumber(), scannedFloor));
+        floors.put(floorId, new StructureFloor(
+                floorId, existing.floorNumber(), existing.anchorY(), scannedFloor));
         if (floorId == 0) originGeometryApproximate = false;
         recomputeBoundsFromFloors();
         return true;
     }
 
     boolean removeFloor(int floorId) {
-        if (floors.remove(floorId) == null) return false;
-        if (!floors.isEmpty()) recomputeBoundsFromFloors();
+        if (!floors.containsKey(floorId) || floors.size() == 1) return false;
+        floors.remove(floorId);
+        recomputeBoundsFromFloors();
         return true;
     }
 
     private void recomputeBoundsFromFloors() {
         List<StructureFloor> current = getFloors();
-        if (current.isEmpty()) return;
+        if (current.isEmpty()) {
+            throw new IllegalStateException("Structure " + id + " has no floors");
+        }
 
         List<FloorGeometry.Cell> cells = current.stream()
                 .flatMap(floor -> floor.geometry().cells().stream())

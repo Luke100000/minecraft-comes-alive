@@ -26,9 +26,7 @@ public final class BuildingDiagnostics {
         VillageManager manager = VillageManager.get(world);
         RoomWorkflow roomWorkflow = new RoomWorkflow(manager, world);
         Village village = manager.findNearestVillage(pos, Village.MERGE_MARGIN).orElse(null);
-        PlanAttempt planAttempt = planAttempt(() -> village == null
-                ? RoomScanPlan.addBuilding(pos)
-                : village.getRoomScanPlan(world, pos));
+        PlanAttempt planAttempt = planAttempt(() -> RoomScanPlanner.analyze(village, world, pos));
         if (planAttempt.failure() != null) {
             RuntimeException failure = planAttempt.failure();
             log(traceId, "roomPlanFailure position={} dimension={} village={} type={} message={}",
@@ -40,7 +38,7 @@ public final class BuildingDiagnostics {
             log(traceId, "verdict={}", verdict);
             return new Result(traceId, StructuralPosition.OUTSIDE, "SCAN_FAILED", verdict);
         }
-        RoomScanPlan plan = planAttempt.plan();
+        RoomScanPlan plan = planAttempt.analysis().plan();
         StructuralPosition position = structuralPosition(plan);
         String uiAction = uiAction(plan.mode());
 
@@ -105,7 +103,7 @@ public final class BuildingDiagnostics {
                 StructureFloor roomFloor = inspected.getFloor(room.getFloorId()).orElse(null);
                 boolean sameColumn = room.containsFloorColumn(pos.getX(), pos.getZ());
                 boolean elevatedWithinBand = roomFloor != null
-                        && pos.getY() > roomFloor.anchorY() + StructureFloor.BAND_TOLERANCE
+                        && pos.getY() > roomFloor.anchorY() + StructureFloor.ANCHOR_PROXIMITY
                         && pos.getY() < roomFloor.maxPhysicalCeilingY();
                 RoomTypeResolver.Context resolved = roomTypeResolver.resolve(room);
                 log(traceId, "room id={} directType={} effectiveType={} structureId={} floorId={} floor={} footprintArea={} ownPoi={} effectivePoi={} containsColumn={} elevatedWithinSameFloorBand={}",
@@ -134,7 +132,7 @@ public final class BuildingDiagnostics {
             case ADD_BUILDING -> roomWorkflow.analyzeBuildingAddition(pos).result();
             case ADD_ROOM -> roomWorkflow.analyzeRoom(pos).result();
             case ADD_ATTACHMENT -> roomWorkflow.analyzeAttachedRoom(
-                    village, plan, plan.targetBuildingId()).result();
+                    village, planAttempt.analysis(), plan.targetBuildingId()).result();
             case UPDATE_ROOM -> room == null
                     ? Building.validationResult.NOT_IN_BUILDING
                     : roomWorkflow.analyzeRegisteredRoomUpdate(village, room.getId(), pos).result();
@@ -181,7 +179,7 @@ public final class BuildingDiagnostics {
                 .orElse(null);
     }
 
-    static PlanAttempt planAttempt(Supplier<RoomScanPlan> supplier) {
+    static PlanAttempt planAttempt(Supplier<RoomScanPlanner.Analysis> supplier) {
         try {
             return new PlanAttempt(supplier.get(), null);
         } catch (RuntimeException failure) {
@@ -246,7 +244,7 @@ public final class BuildingDiagnostics {
                         + freshPlayerFloor.anchorY();
             }
             if (persistentRoomFloor != null
-                    && pos.getY() > persistentRoomFloor.anchorY() + StructureFloor.BAND_TOLERANCE
+                    && pos.getY() > persistentRoomFloor.anchorY() + StructureFloor.ANCHOR_PROXIMITY
                     && pos.getY() < persistentRoomFloor.maxPhysicalCeilingY()) {
                 return "ELEVATED_POSITION_IN_SAME_FLOOR_BAND: no separate StructureFloor anchor currently owns this Y, "
                         + "so Room lookup remains on Floor " + room.getFloorId() + " @" + persistentRoomFloor.anchorY();
@@ -369,7 +367,7 @@ public final class BuildingDiagnostics {
                          String verdict) {
     }
 
-    record PlanAttempt(RoomScanPlan plan, RuntimeException failure) {
+    record PlanAttempt(RoomScanPlanner.Analysis analysis, RuntimeException failure) {
     }
 
     public enum StructuralPosition {

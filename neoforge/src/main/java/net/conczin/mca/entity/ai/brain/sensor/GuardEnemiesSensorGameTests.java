@@ -21,6 +21,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)

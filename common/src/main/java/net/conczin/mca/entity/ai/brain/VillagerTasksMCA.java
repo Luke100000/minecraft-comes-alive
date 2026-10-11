@@ -8,6 +8,7 @@ import net.conczin.mca.Config;
 import net.conczin.mca.entity.EquipmentSet;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.ActivitiesMCA;
+import net.conczin.mca.entity.ai.BedPoiCompatibility;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Mourning;
 import net.conczin.mca.entity.ai.RangedWeaponHelper;
@@ -45,6 +46,9 @@ import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 
 import java.util.Optional;
 
@@ -98,7 +102,8 @@ public class VillagerTasksMCA {
             MemoryModuleTypeMCA.MOURNING_FLOWER,
             MemoryModuleTypeMCA.FORCED_HOME,
             MemoryModuleTypeMCA.RANGED_COMBAT_STATE,
-            MemoryModuleTypeMCA.CANT_REACH_WALK_TARGET
+            MemoryModuleTypeMCA.CANT_REACH_WALK_TARGET,
+            MemoryModuleTypeMCA.SHELTER_BED
     );
 
     public static final ImmutableList<SensorType<? extends Sensor<? super Villager>>> SENSOR_TYPES = ImmutableList.of(
@@ -147,7 +152,8 @@ public class VillagerTasksMCA {
             brain.addActivity(Activity.IDLE, VillagerTasksMCA.getMercenaryPackage(0.5f));
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getGuardCorePackage(villager));
             brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F));
-            brain.addActivityWithConditions(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F), ImmutableSet.of(Pair.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT)));
+            brain.addActivityAndRemoveMemoriesWhenStopped(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F),
+                    ImmutableSet.of(Pair.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT)), ImmutableSet.of(MemoryModuleTypeMCA.SHELTER_BED));
             brain.addActivity(ActivitiesMCA.CHORE, VillagerTasksMCA.getChorePackage());
             noDefault = true;
         } else if (!villager.requiresHome()) {
@@ -156,7 +162,8 @@ public class VillagerTasksMCA {
             brain.addActivity(Activity.IDLE, VillagerTasksMCA.getAdventurerPackage(0.5f));
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage());
             brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F));
-            brain.addActivityWithConditions(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F), ImmutableSet.of(Pair.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT)));
+            brain.addActivityAndRemoveMemoriesWhenStopped(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F),
+                    ImmutableSet.of(Pair.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT)), ImmutableSet.of(MemoryModuleTypeMCA.SHELTER_BED));
             noDefault = true;
         } else if (age == AgeState.BABY) {
             brain.setSchedule(Schedule.VILLAGER_BABY);
@@ -186,7 +193,8 @@ public class VillagerTasksMCA {
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getImportantCorePackage(0.5F));
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getCorePackage(0.5F));
             brain.addActivityWithConditions(Activity.MEET, VillagerTasksMCA.getMeetPackage(0.5F), ImmutableSet.of(Pair.of(MemoryModuleType.MEETING_POINT, MemoryStatus.VALUE_PRESENT)));
-            brain.addActivityWithConditions(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F), ImmutableSet.of(Pair.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT)));
+            brain.addActivityAndRemoveMemoriesWhenStopped(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F),
+                    ImmutableSet.of(Pair.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT)), ImmutableSet.of(MemoryModuleTypeMCA.SHELTER_BED));
             brain.addActivity(Activity.IDLE, VillagerTasksMCA.getIdlePackage(0.5F));
             brain.addActivity(Activity.PANIC, VillagerTasksMCA.getPanicPackage(0.5F));
             brain.addActivity(Activity.PRE_RAID, VillagerTasksMCA.getPreRaidPackage(0.5F));
@@ -218,6 +226,9 @@ public class VillagerTasksMCA {
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getImportantCorePackage(float speedModifier) {
         return ImmutableList.of(
+                Pair.of(0, EraseMemoryIf.<VillagerEntityMCA>create(v -> !v.getBrain().isActive(Activity.REST)
+                        || v.getBrain().hasMemoryValue(MemoryModuleType.HOME),
+                        MemoryModuleTypeMCA.SHELTER_BED)),
                 Pair.of(0, new Swim(0.8F)),
                 Pair.of(0, new SmarterOpenDoorsTask()),
                 Pair.of(0, new LookAtTargetSink(45, 90)),
@@ -225,10 +236,8 @@ public class VillagerTasksMCA {
                 Pair.of(0, new DeliverMessageTask()),
                 Pair.of(1, new WanderOrTeleportToTargetTask()),
                 Pair.of(3, new InteractTask(speedModifier)),
-                Pair.of(10, new ExtendedFindPointOfInterestTask(registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME, false, Optional.of((byte) 14), (villager) -> {
-                    // update villagers home/bed position
-                    villager.getResidency().seekHomeAfterClaim();
-                }, (entity, pos) -> {
+                Pair.of(10, new ExtendedFindPointOfInterestTask(registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME, false, Optional.of((byte) 14),
+                        villager -> villager.getResidency().onHomeClaimed(), (entity, pos) -> {
                     // verify that this bed is not blocked
                     VillageManager manager = VillageManager.get((ServerLevel) entity.level());
                     if (entity.requiresHome()) {
@@ -247,16 +256,6 @@ public class VillagerTasksMCA {
                 Pair.of(0, ReactToBell.create()),
                 Pair.of(0, SetRaidStatus.create()),
                 Pair.of(5, GoToWantedItem.create(speedModifier, false, 4)),
-                Pair.of(10, new ExtendedFindPointOfInterestTask(registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME, false, Optional.of((byte) 14), (villager) -> {
-                    // update villagers home/bed position
-                    villager.getResidency().seekHomeAfterClaim();
-                }, (entity, pos) -> {
-                    // verify that this bed is not blocked
-                    VillageManager manager = VillageManager.get((ServerLevel) entity.level());
-                    return manager.findNearestVillage(entity).filter(v -> {
-                        return v.getBuildingAt(pos).filter(b -> b.getBuildingType().noBeds()).isPresent();
-                    }).isEmpty();
-                })),
                 Pair.of(10, new ExtendedFindPointOfInterestTask(registryEntry -> registryEntry.is(PoiTypes.MEETING), MemoryModuleType.MEETING_POINT, true, Optional.of((byte) 14), (villager) -> {
                     //report a town bell, the only building always added
                     villager.getBrain().getMemoryInternal(MemoryModuleType.MEETING_POINT).ifPresent(p -> {
@@ -267,7 +266,7 @@ public class VillagerTasksMCA {
                                 manager.processBuilding(p.pos());
                             }
 
-                            villager.getResidency().seekHome();
+                            villager.getResidency().reconcileVillageMembership();
                         }
                     });
                 }))
@@ -428,7 +427,8 @@ public class VillagerTasksMCA {
     }
 
     public static boolean isOnDuty(VillagerEntityMCA villager) {
-        return getActivity(villager) == Activity.WORK
+        return isFollowingPlayer(villager)
+               || getActivity(villager) == Activity.WORK
                || villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isPresent()
                || getPreferredTarget(villager).isPresent();
     }
@@ -492,8 +492,18 @@ public class VillagerTasksMCA {
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getRestPackage(float speed) {
         return ImmutableList.of(
+                Pair.of(1, BehaviorBuilder.create(context -> context.group(
+                        context.present(MemoryModuleType.HOME)
+                ).apply(context, homeMemory -> (world, villager, time) -> {
+                    if (!isForcedHomeOccupiedByOtherSleeper(world, villager, context.get(homeMemory))) {
+                        return false;
+                    }
+
+                    ExtendedWalkTowardsTask.clearOwnedWalkTarget(villager, MemoryModuleType.HOME);
+                    return true;
+                }))),
                 // try to reach the bed, and if not a set home, forget if out of range
-                Pair.of(2, ExtendedWalkTowardsTask.createWithFinalTarget(MemoryModuleType.HOME, speed, 1, 1200, (v) -> {
+                Pair.of(2, new ConditionalTask<>(ExtendedWalkTowardsTask.createWithFinalTarget(MemoryModuleType.HOME, speed, 1, 1200, (v) -> {
                     Optional<Boolean> memory = v.getBrain().getMemoryInternal(MemoryModuleTypeMCA.FORCED_HOME);
                     boolean forced = memory != null && memory.isPresent();
                     if (forced) {
@@ -501,10 +511,14 @@ public class VillagerTasksMCA {
                     }
                     return !forced;
                 }, v -> {
-                    v.getResidency().seekHome();
+                    v.getResidency().reconcileVillageMembership();
                 }, (world, villager, home) -> villager.isSleeping()
                         ? Optional.empty()
-                        : BedApproachTarget.create(world, home.pos()))),
+                        : BedApproachTarget.create(world, home.pos())),
+                        v -> !(v.level() instanceof ServerLevel world)
+                                || v.getBrain().getMemory(MemoryModuleType.HOME)
+                                .map(home -> !isForcedHomeOccupiedByOtherSleeper(world, v, home))
+                                .orElse(true))),
                 //verify the bed, occupancies state and similar
                 Pair.of(3, new ConditionalTask<>(ValidateNearbyPoi.create(
                         registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME), (v) -> {
@@ -520,7 +534,7 @@ public class VillagerTasksMCA {
                         MemoryModuleType.HOME, MemoryStatus.VALUE_ABSENT,
                         MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT
                 ), ImmutableList.of(
-                        Pair.of(SetClosestHomeAsWalkTarget.create(speed), 1),
+                        Pair.of(new SeekIndoorShelterTask(speed), 1),
                         Pair.of(LocalInsideBrownianWalk.create(speed), 4),
                         Pair.of(GoToClosestVillage.create(speed, 4), 2),
                         // Outside a village these waypoints form a home-seeking journey. Do not insert a
@@ -528,6 +542,21 @@ public class VillagerTasksMCA {
                         Pair.of(new ConditionalTask<>(new DoNothing(20, 40),
                                 v -> v.level() instanceof ServerLevel level && level.isVillage(v.blockPosition())), 2)))),
                 Pair.of(99, UpdateActivityFromSchedule.create()));
+    }
+
+    private static boolean isForcedHomeOccupiedByOtherSleeper(ServerLevel world, VillagerEntityMCA villager, net.minecraft.core.GlobalPos home) {
+        Optional<Boolean> forcedHome = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.FORCED_HOME);
+        if (forcedHome == null || forcedHome.isEmpty() || home.dimension() != world.dimension()) {
+            return false;
+        }
+
+        BlockState state = world.getBlockState(home.pos());
+        return BedPoiCompatibility.isHomePoiState(state)
+                && state.getValue(BedBlock.OCCUPIED)
+                && !world.getEntitiesOfClass(LivingEntity.class, new AABB(home.pos()),
+                sleeper -> sleeper != villager
+                        && sleeper.isSleeping()
+                        && sleeper.getSleepingPos().filter(home.pos()::equals).isPresent()).isEmpty();
     }
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getMeetPackage(float speedModifier) {

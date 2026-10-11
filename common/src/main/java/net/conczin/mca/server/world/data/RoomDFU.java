@@ -171,7 +171,7 @@ final class RoomDFU {
                         pos, Math.max(pos.getY() + 1, ceilingY)))
                 .toList();
         return new StructureFloor(
-                oldFloor.getInt("id"), oldFloor.getInt("floorNumber"),
+                oldFloor.getInt("id"), oldFloor.getInt("floorNumber"), region.anchorY(),
                 new FloorGeometry(cells, Map.of()));
     }
 
@@ -199,7 +199,7 @@ final class RoomDFU {
                 for (int x = minX; x <= maxX; x++) cells.add(new BlockPos(x, anchorY, z));
             }
         }
-        return new LegacyFloorRegion(Set.copyOf(cells));
+        return new LegacyFloorRegion(anchorY, Set.copyOf(cells));
     }
 
     private static void validateCurrentShape(CompoundTag villageTag) {
@@ -215,7 +215,11 @@ final class RoomDFU {
             require(structure, "buildingId", Tag.TAG_INT, "Structure");
             require(structure, "source", "Structure");
             require(structure, "floors", Tag.TAG_LIST, "Structure");
-            for (Tag floorValue : structure.getList("floors", Tag.TAG_COMPOUND)) {
+            ListTag floors = structure.getList("floors", Tag.TAG_COMPOUND);
+            if (floors.isEmpty()) {
+                throw new IllegalArgumentException("Structure requires at least one canonical floor");
+            }
+            for (Tag floorValue : floors) {
                 require((CompoundTag) floorValue, "id", Tag.TAG_INT, "StructureFloor");
             }
         }
@@ -342,7 +346,7 @@ final class RoomDFU {
             Map<Integer, LogicalBuilding> logicalBuildings) {
     }
 
-    private record LegacyFloorRegion(Set<BlockPos> cells) {
+    private record LegacyFloorRegion(int anchorY, Set<BlockPos> cells) {
         boolean containsHorizontally(int x, int z) {
             return cells.stream().anyMatch(pos -> pos.getX() == x && pos.getZ() == z);
         }

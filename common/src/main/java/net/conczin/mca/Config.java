@@ -144,9 +144,42 @@ public final class Config {
         } catch (IllegalStateException pathless) {
             return;
         }
-        if (migrateLegacy(spec, path)) {
+        boolean imported = migrateLegacy(spec, path);
+        if (imported || upgradeDefaultMaps(spec)) {
             spec.save();
         }
+    }
+
+    /**
+     * One-time upstream default-map additions for already existing native TOML files.
+     * The version field prevents subsequent user deletions from being re-added.
+     * Run only for a real loaded config file, never for a pathless SERVER snapshot.
+     */
+    static boolean upgradeDefaultMaps(ModConfigSpec spec) {
+        if (spec == SERVER_SPEC && SERVER.defaultMapsVersion.get() == 0) {
+            Map<String, String> merged = mergeDefaultMap(
+                    SERVER.professionConversionsMap.getDefault(), SERVER.professionConversionsMap.get(),
+                    "professionConversionsMap");
+            SERVER.professionConversionsMap.set(encodeMap(merged));
+            SERVER.defaultMapsVersion.set(1);
+            return true;
+        }
+        if (spec == CLIENT_SPEC && CLIENT.defaultMapsVersion.get() == 0) {
+            Map<String, String> merged = mergeDefaultMap(
+                    CLIENT.playerRendererBlacklist.getDefault(), CLIENT.playerRendererBlacklist.get(),
+                    "playerRendererBlacklist");
+            CLIENT.playerRendererBlacklist.set(encodeMap(merged));
+            CLIENT.defaultMapsVersion.set(1);
+            return true;
+        }
+        return false;
+    }
+
+    static Map<String, String> mergeDefaultMap(List<? extends String> defaults,
+                                                List<? extends String> current, String name) {
+        Map<String, String> merged = new LinkedHashMap<>(decodeMap(defaults, String.class, String.class, name));
+        merged.putAll(decodeMap(current, String.class, String.class, name));
+        return merged;
     }
 
     public static synchronized boolean migrateLegacy(ModConfigSpec spec, Path loadedConfigPath) {

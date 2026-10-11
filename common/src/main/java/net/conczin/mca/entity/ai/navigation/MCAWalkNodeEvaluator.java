@@ -11,6 +11,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.PathNavigationRegion;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.pathfinder.Node;
@@ -107,10 +108,10 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         double modeledFloor = this.getFloorLevel(mobPos);
         if (!selectedStart.asBlockPos().equals(mobPos)
             && startBox.minY > modeledFloor + RAISED_START_EPSILON
-            && !canSweepBoxTo(selectedStart, startBox)) {
-            // Vanilla can choose a raised bounding-box corner as the start node on partial blocks. If the mob's
-            // real raised box cannot physically sweep to that corner, start from the mob cell so A* can evaluate
-            // the real exits instead of accepting an impossible first transition.
+            && (getMobBoxAt(selectedStart).minY - startBox.minY > this.mob.maxUpStep()
+                || !canSweepBoxTo(selectedStart, startBox))) {
+            // A raised start must be reachable from the real box without assuming a jump already happened.
+            // Start from the mob cell so A* evaluates the actual exits from partial blocks.
             return this.getStartNode(mobPos);
         }
         return selectedStart;
@@ -360,6 +361,21 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         }
         if (climbable) {
             return PathType.WALKABLE;
+        }
+
+        if (state.getBlock() instanceof DoorBlock
+                && !state.getValue(BlockStateProperties.OPEN)) {
+            // Pathfinding and SmarterOpenDoorsTask must agree on the same door policy.
+            // Vanilla's evaluator otherwise accepts every hand-openable DoorBlock even
+            // when vanilla's door AI would refuse to operate it.
+            return PathingBlockInteraction.canInteractWithDoor(state)
+                    ? PathType.WALKABLE_DOOR
+                    : PathType.DOOR_IRON_CLOSED;
+        }
+
+        if (PathingBlockInteraction.isDramaticDoorOpenable(state)
+                && !state.getValue(BlockStateProperties.OPEN)) {
+            return PathType.WALKABLE_DOOR;
         }
 
         if (PathingBlockInteraction.canInteractWithFenceGate(state)

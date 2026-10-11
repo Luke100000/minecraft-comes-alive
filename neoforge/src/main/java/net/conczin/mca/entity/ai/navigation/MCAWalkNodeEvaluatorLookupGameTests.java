@@ -3,6 +3,7 @@ package net.conczin.mca.entity.ai.navigation;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
+import net.conczin.mca.entity.ai.PathingBlockInteraction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -17,13 +18,11 @@ import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.PathfindingContext;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
 
 /** Guards the path-type classifier from repeating expensive terrain reads per candidate. */
-@GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class MCAWalkNodeEvaluatorLookupGameTests {
     private MCAWalkNodeEvaluatorLookupGameTests() {
@@ -68,6 +67,45 @@ public final class MCAWalkNodeEvaluatorLookupGameTests {
             helper.succeed();
         } finally {
             Config.SERVER.villagersInteractWithFenceGates.set(oldGateConfig);
+            villager.discard();
+        }
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void doorPathingUsesSamePolicyAsDoorInteraction(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos woodenDoor = helper.absolutePos(new BlockPos(4, 2, 4));
+        BlockPos ironDoor = woodenDoor.east(2);
+        level.setBlock(woodenDoor, Blocks.OAK_DOOR.defaultBlockState(), 3);
+        level.setBlock(ironDoor, Blocks.IRON_DOOR.defaultBlockState(), 3);
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(level)
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(woodenDoor.west(2)))
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.setNoAi(true);
+        boolean oldAnyDoorConfig = Config.SERVER.villagersInteractWithAnyDoor.get();
+        try {
+            MCAWalkNodeEvaluator evaluator = new MCAWalkNodeEvaluator();
+            PathfindingContext context = new PathfindingContext(level, villager);
+
+            Config.SERVER.villagersInteractWithAnyDoor.set(false);
+            helper.assertTrue(PathingBlockInteraction.isOpenable(level.getBlockState(woodenDoor)),
+                    "vanilla mob-interactable door should remain operable by default");
+            helper.assertTrue(!PathingBlockInteraction.isOpenable(level.getBlockState(ironDoor)),
+                    "untagged iron door should remain protected by default");
+            helper.assertTrue(evaluator.getPathType(context, woodenDoor.getX(), woodenDoor.getY(), woodenDoor.getZ()) == PathType.WALKABLE_DOOR,
+                    "operable wooden door should be pathable");
+            helper.assertTrue(evaluator.getPathType(context, ironDoor.getX(), ironDoor.getY(), ironDoor.getZ()) == PathType.DOOR_IRON_CLOSED,
+                    "door the villager refuses to operate must not be pathable");
+
+            Config.SERVER.villagersInteractWithAnyDoor.set(true);
+            helper.assertTrue(PathingBlockInteraction.isOpenable(level.getBlockState(ironDoor)),
+                    "any-door config should make an iron DoorBlock operable");
+            helper.assertTrue(evaluator.getPathType(context, ironDoor.getX(), ironDoor.getY(), ironDoor.getZ()) == PathType.WALKABLE_DOOR,
+                    "any-door config should make the same iron DoorBlock pathable");
+            helper.succeed();
+        } finally {
+            Config.SERVER.villagersInteractWithAnyDoor.set(oldAnyDoorConfig);
             villager.discard();
         }
     }

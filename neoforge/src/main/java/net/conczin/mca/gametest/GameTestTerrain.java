@@ -68,10 +68,18 @@ public final class GameTestTerrain {
         for (ChunkPos chunk : chunks) {
             level.getChunk(chunk.x, chunk.z);
         }
-        level.getChunkSource().tick(() -> true, false);
+        // Only flush ticket updates here. An unlimited unload budget can repeatedly
+        // reschedule an unfinished chunk save and starve the next arena's futures.
+        level.getChunkSource().tick(() -> false, false);
 
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
-        level.getServer().managedBlock(() -> allEntityTicking(level, chunks) || System.nanoTime() >= deadline);
+        level.getServer().managedBlock(() -> {
+            if (allEntityTicking(level, chunks) || System.nanoTime() >= deadline) return true;
+            // MinecraftServer only polls chunk tasks while it has tick time left.
+            // A synchronous fixture wait must keep the chunk processor advancing.
+            level.getChunkSource().pollTask();
+            return false;
+        });
         helper.assertTrue(
                 allEntityTicking(level, chunks),
                 "GameTest arena chunks did not become entity-ticking after being forced: " + chunks
