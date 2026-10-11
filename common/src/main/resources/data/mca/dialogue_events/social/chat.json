@@ -50,7 +50,7 @@
           "actions": [
             { "type": "mca:hearts", "amount": 5 }
           ],
-          "next": "topic"
+          "next": "success"
         },
         {
           "requirements": [
@@ -60,7 +60,7 @@
           "actions": [
             { "type": "mca:hearts", "amount": 5 }
           ],
-          "next": "topic"
+          "next": "success"
         },
         {
           "requirements": [
@@ -70,7 +70,7 @@
           "actions": [
             { "type": "mca:hearts", "amount": 5 }
           ],
-          "next": "topic"
+          "next": "success"
         },
         {
           "weight": 1,
@@ -101,49 +101,6 @@
         }
       ]
     },
-    "topic": {
-      "outcomes": [
-        {
-          "weight": 4,
-          "next": "success"
-        },
-        {
-          "requirements": [
-            { "type": "mca:biome", "values": ["minecraft:plains"] }
-          ],
-          "weight": 1,
-          "next": "plains"
-        },
-        {
-          "requirements": [
-            { "type": "mca:biome", "values": ["minecraft:savanna"] }
-          ],
-          "weight": 1,
-          "next": "savanna"
-        },
-        {
-          "requirements": [
-            { "type": "mca:biome", "values": ["minecraft:taiga"] }
-          ],
-          "weight": 1,
-          "next": "taiga"
-        },
-        {
-          "requirements": [
-            { "type": "mca:biome", "values": ["minecraft:snowy_plains"] }
-          ],
-          "weight": 1,
-          "next": "snowy_plains"
-        },
-        {
-          "requirements": [
-            { "type": "mca:biome", "values": ["minecraft:desert"] }
-          ],
-          "weight": 1,
-          "next": "desert"
-        }
-      ]
-    },
     "success": {
       "line": "dialogue_event.mca.social.chat.village.success",
       "complete": true
@@ -166,26 +123,6 @@
     },
     "news_fail": {
       "line": "dialogue_event.mca.social.chat.news.fail",
-      "complete": true
-    },
-    "plains": {
-      "line": "dialogue.chat.plains",
-      "complete": true
-    },
-    "savanna": {
-      "line": "dialogue.chat.savanna",
-      "complete": true
-    },
-    "taiga": {
-      "line": "dialogue.chat.taiga",
-      "complete": true
-    },
-    "snowy_plains": {
-      "line": "dialogue.chat.snowy_plains",
-      "complete": true
-    },
-    "desert": {
-      "line": "dialogue.chat.desert",
       "complete": true
     }
   }

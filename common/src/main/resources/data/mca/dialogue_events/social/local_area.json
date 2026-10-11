@@ -1,0 +1,67 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue_event.mca.social.local_area.prompt",
+    "resume_prompt": "dialogue_event.mca.social.local_area.resume",
+    "topic": "location"
+  },
+  "priority": 0,
+  "weight": 1,
+  "repeat": { "type": "cooldown", "seconds": 5 },
+  "history": "scheduling",
+  "start": "prompt",
+  "nodes": {
+    "prompt": {
+      "line": "dialogue_event.mca.social.local_area.opening",
+      "choices": [
+        { "id": "here", "text": "dialogue_event.mca.social.local_area.choice.here", "next": "here" },
+        { "id": "home", "text": "dialogue_event.mca.social.local_area.choice.home", "next": "home" }
+      ]
+    },
+    "here": {
+      "outcomes": [
+        { "requirements": [{ "type": "mca:biome", "values": ["minecraft:plains"] }], "priority": 20, "next": "here_plains" },
+        { "requirements": [{ "type": "mca:biome", "values": ["minecraft:savanna"] }], "priority": 20, "next": "here_savanna" },
+        { "requirements": [{ "type": "mca:biome", "values": ["minecraft:taiga"] }], "priority": 20, "next": "here_taiga" },
+        { "requirements": [{ "type": "mca:biome", "values": ["minecraft:snowy_plains"] }], "priority": 20, "next": "here_snowy_plains" },
+        { "requirements": [{ "type": "mca:biome", "values": ["minecraft:desert"] }], "priority": 20, "next": "here_desert" },
+        { "requirements": [{ "type": "mca:biome", "values": ["#mca:snowy_biomes"] }], "priority": 10, "next": "here_snowy" },
+        { "requirements": [{ "type": "mca:biome", "values": ["#mca:forest_biomes"] }], "priority": 10, "next": "here_forest" },
+        { "requirements": [{ "type": "mca:biome", "values": ["#mca:dry_biomes"] }], "priority": 10, "next": "here_dry" },
+        { "priority": 0, "next": "here_generic" }
+      ]
+    },
+    "home": {
+      "outcomes": [
+        { "requirements": [{ "type": "mca:biome", "values": ["minecraft:plains"], "scope": "home" }], "priority": 20, "next": "home_plains" },
+        { "requirements": [{ "type": "mca:biome", "values": ["minecraft:savanna"], "scope": "home" }], "priority": 20, "next": "home_savanna" },
+        { "requirements": [{ "type": "mca:biome", "values": ["minecraft:taiga"], "scope": "home" }], "priority": 20, "next": "home_taiga" },
+        { "requirements": [{ "type": "mca:biome", "values": ["minecraft:snowy_plains"], "scope": "home" }], "priority": 20, "next": "home_snowy_plains" },
+        { "requirements": [{ "type": "mca:biome", "values": ["minecraft:desert"], "scope": "home" }], "priority": 20, "next": "home_desert" },
+        { "requirements": [{ "type": "mca:biome", "values": ["#mca:snowy_biomes"], "scope": "home" }], "priority": 10, "next": "home_snowy" },
+        { "requirements": [{ "type": "mca:biome", "values": ["#mca:forest_biomes"], "scope": "home" }], "priority": 10, "next": "home_forest" },
+        { "requirements": [{ "type": "mca:biome", "values": ["#mca:dry_biomes"], "scope": "home" }], "priority": 10, "next": "home_dry" },
+        { "priority": 0, "next": "home_generic" }
+      ]
+    },
+    "here_plains": { "line": "dialogue_event.mca.social.local_area.here.plains", "complete": true },
+    "here_savanna": { "line": "dialogue_event.mca.social.local_area.here.savanna", "complete": true },
+    "here_taiga": { "line": "dialogue_event.mca.social.local_area.here.taiga", "complete": true },
+    "here_snowy_plains": { "line": "dialogue_event.mca.social.local_area.here.snowy_plains", "complete": true },
+    "here_desert": { "line": "dialogue_event.mca.social.local_area.here.desert", "complete": true },
+    "here_snowy": { "line": "dialogue_event.mca.social.local_area.here.snowy", "complete": true },
+    "here_forest": { "line": "dialogue_event.mca.social.local_area.here.forest", "complete": true },
+    "here_dry": { "line": "dialogue_event.mca.social.local_area.here.dry", "complete": true },
+    "here_generic": { "line": "dialogue_event.mca.social.local_area.here.generic", "complete": true },
+    "home_plains": { "line": "dialogue_event.mca.social.local_area.home.plains", "complete": true },
+    "home_savanna": { "line": "dialogue_event.mca.social.local_area.home.savanna", "complete": true },
+    "home_taiga": { "line": "dialogue_event.mca.social.local_area.home.taiga", "complete": true },
+    "home_snowy_plains": { "line": "dialogue_event.mca.social.local_area.home.snowy_plains", "complete": true },
+    "home_desert": { "line": "dialogue_event.mca.social.local_area.home.desert", "complete": true },
+    "home_snowy": { "line": "dialogue_event.mca.social.local_area.home.snowy", "complete": true },
+    "home_forest": { "line": "dialogue_event.mca.social.local_area.home.forest", "complete": true },
+    "home_dry": { "line": "dialogue_event.mca.social.local_area.home.dry", "complete": true },
+    "home_generic": { "line": "dialogue_event.mca.social.local_area.home.generic", "complete": true }
+  }
+}

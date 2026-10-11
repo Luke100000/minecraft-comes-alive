@@ -177,6 +177,21 @@ class McaDialogueEventResourcesTest {
                 "baseline line must resolve through MCA's pooled dialogue translations");
 
         DialogueEvent chat = byId.get(id("social/chat"));
+        assertFalse(chat.nodes().containsKey("plains"), "Chat must not answer a village-life question with biome scenery");
+        assertFalse(chat.nodes().containsKey("topic"), "environmental routing belongs to local_area");
+        DialogueEvent localArea = byId.get(id("social/local_area"));
+        assertTrue(localArea != null, "the new local-area Ask topic must be shipped");
+        assertEquals(DialogueEvent.PresentationMode.ASK, localArea.presentation().mode());
+        assertEquals(Set.of("here", "home"), localArea.nodes().get(localArea.start()).choices().orElseThrow()
+                .stream().map(DialogueEvent.Choice::id).collect(java.util.stream.Collectors.toSet()));
+        for (String scope : List.of("here", "home")) {
+            List<DialogueEvent.Outcome> routes = localArea.nodes().get(scope).outcomes().orElseThrow();
+            assertTrue(routes.stream().anyMatch(outcome -> outcome.priority() == 20));
+            assertTrue(routes.stream().anyMatch(outcome -> outcome.priority() == 10));
+            assertTrue(routes.stream().anyMatch(outcome -> outcome.priority() == 0 && outcome.requirements().isEmpty()));
+        }
+        assertTrue(events.stream().anyMatch(event -> event.id().getPath().startsWith("ambient/biome_")),
+                "biome remarks must be eligible ambient events");
         DialogueEvent.Node chatStart = chat.nodes().get(chat.start());
         assertEquals(List.of("dialogue_event.mca.social.chat.opening"), chatStart.lines(),
                 "Chat must start with an actual conversational opening");

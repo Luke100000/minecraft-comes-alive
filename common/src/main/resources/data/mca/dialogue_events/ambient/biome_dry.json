@@ -1,0 +1,31 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ambient",
+    "resume_prompt": "dialogue_event.mca.ambient.biome_dry.resume",
+    "topic": "small_talk"
+  },
+  "priority": 0,
+  "weight": 2,
+  "requirements": [
+    {
+      "type": "mca:biome",
+      "values": [
+        "#mca:dry_biomes"
+      ]
+    }
+  ],
+  "repeat": {
+    "type": "cooldown",
+    "min_seconds": 90,
+    "max_seconds": 240
+  },
+  "history": "scheduling",
+  "start": "main",
+  "nodes": {
+    "main": {
+      "line": "dialogue_event.mca.ambient.biome_dry.line",
+      "complete": true
+    }
+  }
+}
