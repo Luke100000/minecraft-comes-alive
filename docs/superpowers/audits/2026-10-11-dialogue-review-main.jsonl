@@ -1,0 +1,68 @@
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.begin", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.choice.day", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.choice.news", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.choice.village", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.day.fail/1", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.day.fail/2", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.day.success/1", "decision": "rewrite", "reason": "Conversation-context editorial revision; removed repetition, mechanical phrasing, or unsupported invented facts.", "replacement": "Pretty good, thanks for asking. I found a little time to rest."}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.day.success/2", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.day.success/3", "decision": "rewrite", "reason": "Conversation-context editorial revision; removed repetition, mechanical phrasing, or unsupported invented facts.", "replacement": "A bit tiring, to be fair. I'd quite like to sit down for a while."}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.news.fail/1", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.news.fail/2", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.news.success/1", "decision": "rewrite", "reason": "Conversation-context editorial revision; removed repetition, mechanical phrasing, or unsupported invented facts.", "replacement": "Nothing big that I can confirm. People always find something to talk about, though."}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.news.success/2", "decision": "rewrite", "reason": "Conversation-context editorial revision; removed repetition, mechanical phrasing, or unsupported invented facts.", "replacement": "You know how rumors spread. I'd rather wait until we know what's actually happened."}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.news.success/3", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.opening", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.prompt", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.resume", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.village.fail/1", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.village.fail/2", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.village.success/1", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.village.success/2", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.chat.village.success/3", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.first.prompt", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.first.resume", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.joke.animal.fail/1", "decision": "rewrite", "reason": "Conversation-context editorial revision; removed repetition, mechanical phrasing, or unsupported invented facts.", "replacement": "You made that up on the spot, didn't you?"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.joke.animal.fail/2", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.joke.animal.success/1", "decision": "rewrite", "reason": "Conversation-context editorial revision; removed repetition, mechanical phrasing, or unsupported invented facts.", "replacement": "Ha! I wasn't expecting that one."}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.joke.animal.success/2", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.joke.choice.animal", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.joke.choice.creative", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.joke.choice.monster", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.joke.creative.fail/1", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.joke.creative.fail/2", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.joke.creative.success/1", "decision": "rewrite", "reason": "Conversation-context editorial revision; removed repetition, mechanical phrasing, or unsupported invented facts.", "replacement": "Ha! Don't tell the merchants; they might take you seriously."}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.joke.creative.success/2", "decision": "rewrite", "reason": "Conversation-context editorial revision; removed repetition, mechanical phrasing, or unsupported invented facts.", "replacement": "Oh, that's dreadful. Tell me another!"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.joke.monster.fail/1", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.joke.monster.fail/2", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.joke.monster.success/1", "decision": "rewrite", "reason": "Conversation-context editorial revision; removed repetition, mechanical phrasing, or unsupported invented facts.", "replacement": "Ha! I walked right into that one."}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.joke.monster.success/2", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.joke.opening", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.joke.resume", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.choice.enderdragon", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.choice.exploring", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.choice.generic", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.choice.nether", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.choice.wither", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.enderdragon.fail/1", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.enderdragon.fail/2", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.enderdragon.success/1", "decision": "rewrite", "reason": "Conversation-context editorial revision; removed repetition, mechanical phrasing, or unsupported invented facts.", "replacement": "How did you get away? I wouldn't have known where to run."}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.enderdragon.success/2", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.exploring.fail/1", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.exploring.fail/2", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.exploring.success/1", "decision": "rewrite", "reason": "Conversation-context editorial revision; removed repetition, mechanical phrasing, or unsupported invented facts.", "replacement": "I wish I could have seen the view from up there."}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.exploring.success/2", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.generic.fail/1", "decision": "rewrite", "reason": "Conversation-context editorial revision; removed repetition, mechanical phrasing, or unsupported invented facts.", "replacement": "You just happened to find a pond in time? That's quite a story."}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.generic.fail/2", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.generic.success/1", "decision": "rewrite", "reason": "Conversation-context editorial revision; removed repetition, mechanical phrasing, or unsupported invented facts.", "replacement": "I bet your heart was still racing when you climbed out."}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.generic.success/2", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.nether.fail/1", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.nether.fail/2", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.nether.success/1", "decision": "rewrite", "reason": "Conversation-context editorial revision; removed repetition, mechanical phrasing, or unsupported invented facts.", "replacement": "The ghasts didn't knock you off? I can barely imagine it."}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.nether.success/2", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.opening", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.resume", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.wither.fail/1", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.wither.fail/2", "decision": "keep"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.wither.success/1", "decision": "rewrite", "reason": "Conversation-context editorial revision; removed repetition, mechanical phrasing, or unsupported invented facts.", "replacement": "You chose to summon it? What made you think that was a good idea?"}
+{"pack": "mca_dialogue", "key": "dialogue_event.mca.social.story.wither.success/2", "decision": "keep"}
