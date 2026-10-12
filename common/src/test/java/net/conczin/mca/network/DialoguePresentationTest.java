@@ -498,7 +498,8 @@ class DialoguePresentationTest {
                 List.of(new InteractionDialogueOptionsResponse.EventOption(
                         InteractionDialogueOptionsResponse.Mode.ASK,
                         ResourceLocation.parse("mca:test"),
-                        Component.literal("Ask")
+                        Component.literal("Ask"),
+                        "other"
                 )),
                 true
         );

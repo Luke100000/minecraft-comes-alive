@@ -48,7 +48,7 @@ class DialogueSelectionTest {
                 UUID.fromString("00000000-0000-0000-0000-000000000010"),
                 7L,
                 Optional.empty(),
-                List.of(new DialogueEngine.EventOption(offered.id(), net.minecraft.network.chat.Component.literal("offered"))),
+                List.of(new DialogueEngine.EventOption(offered.id(), net.minecraft.network.chat.Component.literal("offered"), "other")),
                 false,
                 Optional.empty(),
                 101L,

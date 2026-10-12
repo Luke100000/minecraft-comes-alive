@@ -32,12 +32,16 @@ public record InteractionDialogueOptionsResponse(
             ByteBufCodecs.VAR_INT.map(InteractionDialogueOptionsResponse::modeById, Enum::ordinal);
     private static final StreamCodec<ByteBuf, Component> COMPONENT_CODEC =
             ComponentSerialization.TRUSTED_CONTEXT_FREE_STREAM_CODEC;
+    public static final int MAX_TOPIC_LENGTH = 64;
+    private static final StreamCodec<ByteBuf, String> TOPIC_CODEC =
+            ByteBufCodecs.stringUtf8(MAX_TOPIC_LENGTH);
     private static final StreamCodec<ByteBuf, Optional<Component>> OPTIONAL_COMPONENT_CODEC =
             COMPONENT_CODEC.apply(ByteBufCodecs::optional);
     private static final StreamCodec<ByteBuf, EventOption> EVENT_OPTION_CODEC = StreamCodec.composite(
             MODE_CODEC, EventOption::mode,
             ResourceLocation.STREAM_CODEC, EventOption::id,
             COMPONENT_CODEC, EventOption::prompt,
+            TOPIC_CODEC, EventOption::topic,
             EventOption::new
     );
     private static final StreamCodec<ByteBuf, List<EventOption>> EVENT_OPTIONS_CODEC =
@@ -72,8 +76,8 @@ public record InteractionDialogueOptionsResponse(
 
     public static InteractionDialogueOptionsResponse from(DialogueEngine.DialogueOptions options) {
         List<EventOption> entries = new ArrayList<>();
-        options.highlighted().ifPresent(option -> entries.add(new EventOption(Mode.HIGHLIGHTED, option.id(), option.prompt())));
-        options.ask().forEach(option -> entries.add(new EventOption(Mode.ASK, option.id(), option.prompt())));
+        options.highlighted().ifPresent(option -> entries.add(new EventOption(Mode.HIGHLIGHTED, option.id(), option.prompt(), option.topic())));
+        options.ask().forEach(option -> entries.add(new EventOption(Mode.ASK, option.id(), option.prompt(), option.topic())));
         return new InteractionDialogueOptionsResponse(
                 options.token(),
                 options.continuationPrompt(),
@@ -110,11 +114,15 @@ public record InteractionDialogueOptionsResponse(
         ASK
     }
 
-    public record EventOption(Mode mode, ResourceLocation id, Component prompt) {
+    public record EventOption(Mode mode, ResourceLocation id, Component prompt, String topic) {
         public EventOption {
             Objects.requireNonNull(mode, "mode");
             Objects.requireNonNull(id, "id");
             Objects.requireNonNull(prompt, "prompt");
+            Objects.requireNonNull(topic, "topic");
+            if (topic.isBlank() || topic.length() > MAX_TOPIC_LENGTH) {
+                throw new IllegalArgumentException("Invalid dialogue topic length");
+            }
         }
     }
 }

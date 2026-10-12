@@ -1107,7 +1107,10 @@ public final class DialogueEngine {
 
     private EventOption option(DialogueEvent event, VillagerEntityMCA villager) {
         String prompt = event.presentation().prompt().orElseThrow();
-        return new EventOption(event.id(), Component.translatable(prompt, villager.getDisplayName()));
+        String topic = event.presentation().topic()
+                .filter(value -> !value.isBlank() && value.length() <= 64)
+                .orElse("other");
+        return new EventOption(event.id(), Component.translatable(prompt, villager.getDisplayName()), topic);
     }
 
     private long nextToken() {
@@ -1126,10 +1129,11 @@ public final class DialogueEngine {
         }
     }
 
-    public record EventOption(ResourceLocation id, Component prompt) {
+    public record EventOption(ResourceLocation id, Component prompt, String topic) {
         public EventOption {
             Objects.requireNonNull(id, "id");
             Objects.requireNonNull(prompt, "prompt");
+            Objects.requireNonNull(topic, "topic");
         }
     }
 

@@ -142,12 +142,14 @@ class DialogueEventCodecTest {
                         new InteractionDialogueOptionsResponse.EventOption(
                                 InteractionDialogueOptionsResponse.Mode.HIGHLIGHTED,
                                 ResourceLocation.parse("mca:gloomy/mourning"),
-                                Component.literal("You look upset.").withStyle(ChatFormatting.YELLOW)
+                                Component.literal("You look upset.").withStyle(ChatFormatting.YELLOW),
+                                "personal"
                         ),
                         new InteractionDialogueOptionsResponse.EventOption(
                                 InteractionDialogueOptionsResponse.Mode.ASK,
                                 ResourceLocation.parse("addon:zombie/identity"),
-                                Component.translatable("dialogue.addon.zombie.prompt")
+                                Component.translatable("dialogue.addon.zombie.prompt"),
+                                "addon_custom"
                         )
                 ),
                 true
@@ -163,8 +165,12 @@ class DialogueEventCodecTest {
             InteractionDialogueOptionsResponse.EventOption actual = decoded.eventOptions().get(i);
             assertEquals(expected.mode(), actual.mode());
             assertEquals(expected.id(), actual.id());
+            assertEquals(expected.topic(), actual.topic());
             assertComponentEquivalent(expected.prompt(), actual.prompt());
         }
+        assertThrows(IllegalArgumentException.class, () -> new InteractionDialogueOptionsResponse.EventOption(
+                InteractionDialogueOptionsResponse.Mode.ASK, ResourceLocation.parse("mca:invalid"),
+                Component.literal("Invalid"), "x".repeat(65)));
     }
 
     @Test
@@ -215,7 +221,8 @@ class DialogueEventCodecTest {
             tooManyOptions.add(new InteractionDialogueOptionsResponse.EventOption(
                     InteractionDialogueOptionsResponse.Mode.ASK,
                     ResourceLocation.fromNamespaceAndPath("mca", "test/" + i),
-                    Component.literal("prompt")
+                    Component.literal("prompt"),
+                    "other"
             ));
         }
         assertThrows(IllegalArgumentException.class, () -> new InteractionDialogueOptionsResponse(
