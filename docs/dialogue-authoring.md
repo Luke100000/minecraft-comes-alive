@@ -26,10 +26,12 @@ conversation is offered separately as its authored continuation.
 Talk
   -> paused continuation, if one exists for this pair
   -> evaluate new DialogueEvents
-  -> highlighted contextual story
-  -> Ask about... topics
-  -> What's on your mind? ambient pool
-  -> Back
+  -> Conversations: small_talk, location, game, ambient
+  -> Relationships: relationship
+  -> Personal stories: personal, life_event, introduction
+  -> Practical matters: service
+  -> Other topics: missing or addon topic names
+  -> Back to interaction
 ```
 
 Requirements answer only "may this event/path happen?". `priority` decides which
@@ -75,8 +77,8 @@ Use the smallest mode that matches the importance of the conversation:
 
 - `highlighted` is for the most important currently relevant story. The highest
   priority highlighted event gets the highlighted slot; additional highlighted
-  events remain available under Ask rather than disappearing.
-- `ask` is a directly selectable contextual topic under `Ask about...`.
+  events remain selectable in their semantic section rather than disappearing.
+- `ask` is a directly selectable event under the section named by its `topic`.
 - `ambient` participates in the `What's on your mind?` pool. Only the highest
   eligible ambient priority tier is considered, then positive `weight` chooses
   within that tier.
@@ -86,8 +88,14 @@ new-topic prompt. Every event must provide `resume_prompt`, including ambient
 events, because a paused run needs a specific way back into that exact
 conversation.
 
-The optional `topic` is organizational metadata for authors/debugging. It does not
-create a submenu by itself.
+`presentation.mode` controls server scheduling, **not** the visible section.
+`presentation.topic` controls the section in the player's Talk menu. Known topics
+map to Conversations (`small_talk`, `location`, `game`), Relationships
+(`relationship`), Personal stories (`personal`, `life_event`, `introduction`),
+or Practical matters (`service`). Missing, blank, overlong, or unrecognized
+topics are safely offered in **Other topics**, rather than silently hidden.
+Sections can be expanded/collapsed without starting an event. Highlighted
+events are marked inside their corresponding section.
 
 ## Continuation labels and `%1$s`
 
@@ -230,14 +238,21 @@ direct `next`/`actions` pair:
 ```
 
 The server first discards outcomes whose hard requirements do not match, then
-weights only the remaining outcomes. A choice is not offered when none of its
-outcomes are eligible.
+retains only the eligible outcomes at the highest `priority` before the
+weighted draw. A choice is not offered when none of its outcomes are eligible.
+For player-invoked affection, show the villager's opening line and a real
+first-person player `choices[].text` **before** choosing a reaction. Established
+romantic partners use a highest-priority positive-only tier (the shipped
+Flirt/Hug/Kiss events use priority `100` and `romantic_partner`); nonpartner
+Flirt odds improve at `30` and `60` hearts using lower-priority tiers, while
+the normal age/family requirements still apply. Consequential gameplay requests
+may instead use concise confirmations and direct feedback.
 
 ## Completion, ending, and rewards
 
 `complete: true` means the conversation successfully completes. Its accepted
 choices, completion history, cooldown, and pending actions are committed only when
-the player acknowledges the terminal line with `Back to topics`.
+the player explicitly selects **Finish conversation** on the terminal line.
 
 ```json
 "good_end": {
@@ -257,7 +272,8 @@ a reachable non-completing end must explicitly opt into `retryable: true`:
 }
 ```
 
-Closing the screen is not completion. It pauses the active run. If the pause
+Choosing Topics/Q, backing out or closing the screen is **not** completion.
+It pauses the active run without awarding pending effects. If the pause
 expires or the run is otherwise invalidated, unfinished choices and pending effects
 are discarded.
 

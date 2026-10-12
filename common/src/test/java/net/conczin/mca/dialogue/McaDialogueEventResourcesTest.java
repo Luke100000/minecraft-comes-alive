@@ -325,6 +325,22 @@ class McaDialogueEventResourcesTest {
         }
     }
 
+    @Test
+    void apologyIsSpokenBeforeTheVillagerResponds() throws Exception {
+        DialogueEvent apology = loadShippedEvents().stream()
+                .filter(event -> event.id().equals(id("relationship/apologize")))
+                .findFirst().orElseThrow();
+        DialogueEvent.Node opening = apology.nodes().get(apology.start());
+        assertFalse(opening.lines().isEmpty());
+        DialogueEvent.Choice choice = opening.choices().orElseThrow().stream()
+                .filter(candidate -> candidate.id().equals("apologize"))
+                .findFirst().orElseThrow();
+        assertTrue(choice.outcomes().orElseThrow().stream()
+                .anyMatch(outcome -> outcome.next().equals("success") && outcome.actions().stream()
+                        .anyMatch(action -> action instanceof DialogueAction.Command command
+                                && command.command().equals("apologize"))));
+    }
+
     private static void assertTask11PresentationAndGraph(DialogueEvent event, JsonObject translations) {
         assertTrue(event.nodes().containsKey(event.start()),
                 () -> "Task 11 event start node must decode for " + event.id());

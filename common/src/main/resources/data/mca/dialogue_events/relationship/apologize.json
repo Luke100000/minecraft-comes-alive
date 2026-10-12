@@ -16,10 +16,15 @@
     "seconds": 5
   },
   "history": "scheduling",
-  "start": "reaction",
+  "start": "prompt",
   "nodes": {
-    "reaction": {
-      "outcomes": [
+    "prompt": {
+      "line": "dialogue_event.mca.relationship.apologize.opening",
+      "choices": [
+        {
+          "id": "apologize",
+          "text": "dialogue_event.mca.relationship.apologize.choice.apologize",
+          "outcomes": [
         {
           "weight": 5,
           "actions": [
@@ -55,6 +60,8 @@
             { "type": "mca:hearts", "amount": -1 }
           ],
           "next": "fail"
+        }
+          ]
         }
       ]
     },

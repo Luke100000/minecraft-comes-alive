@@ -1631,6 +1631,8 @@
   "dialogue_event.mca.gameplay.stay.resume": "%1$s, you were asking me to stay in the village...",
   "dialogue_event.mca.relationship.adopt.resume": "%1$s, we were talking about adoption...",
   "dialogue_event.mca.relationship.apologize.resume": "%1$s, about your apology...",
+  "dialogue_event.mca.relationship.apologize.opening": "You've come to speak to me?",
+  "dialogue_event.mca.relationship.apologize.choice.apologize": "I'm sorry I hurt you. I shouldn't have done that.",
   "dialogue_event.mca.relationship.divorce.resume": "%1$s, we were talking about ending this marriage...",
   "dialogue_event.mca.relationship.flirt.resume": "%1$s, about what you were saying to me...",
   "dialogue_event.mca.relationship.flirt.opening": "You look like you've got something to tell me.",
