@@ -54,7 +54,8 @@ public class InteractScreen extends AbstractDynamicScreen {
     private RelationshipState marriageState;
     private Component spouse;
     private boolean dialogueMode;
-    private boolean askExpanded;
+    private final EnumSet<DialogueTopicSection> expandedSections =
+            EnumSet.of(DialogueTopicSection.CONVERSATIONS, DialogueTopicSection.RELATIONSHIPS);
     private final List<DialogueHit> dialogueHits = new ArrayList<>();
     private int dialogueScroll;
     private int dialogueRowsHeight;
@@ -435,7 +436,9 @@ public class InteractScreen extends AbstractDynamicScreen {
     private void requestDialogueMenu(boolean showOpening) {
         dialogueMode = true;
         if (showOpening) {
-            askExpanded = false;
+            expandedSections.clear();
+            expandedSections.add(DialogueTopicSection.CONVERSATIONS);
+            expandedSections.add(DialogueTopicSection.RELATIONSHIPS);
         }
         dialogueHits.clear();
         dialogueScroll = 0;
@@ -524,28 +527,35 @@ public class InteractScreen extends AbstractDynamicScreen {
         boolean preview = presentation.hasPreview() && !presentation.nodeVisible();
         if (!presentation.nodeVisible()) {
             presentation.options().ifPresent(options -> {
-                options.continuation().ifPresent(prompt -> rows.add(new DialogueRow(prompt,
+                options.continuation().ifPresent(prompt -> rows.add(new DialogueRow(
+                        Component.translatable("gui.dialogue.resume_topic", prompt),
                         new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.RESUME, null, null))));
-                options.eventOptions().stream()
-                        .filter(option -> option.mode() == InteractionDialogueOptionsResponse.Mode.HIGHLIGHTED)
-                        .forEach(option -> rows.add(new DialogueRow(option.prompt(),
-                                new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.EVENT, option.id(), null))));
-                List<InteractionDialogueOptionsResponse.EventOption> ask = options.eventOptions().stream()
-                        .filter(option -> option.mode() == InteractionDialogueOptionsResponse.Mode.ASK).toList();
-                if (!ask.isEmpty()) {
-                    rows.add(new DialogueRow(Component.translatable("gui.dialogue.ask").copy()
-                            .append(askExpanded ? " ▾" : " ▸"),
-                            new DialogueClick(DialogueClickKind.TOGGLE_ASK, null, null, null)));
-                    if (askExpanded) {
-                        ask.forEach(option -> rows.add(new DialogueRow(
-                                Component.literal("  ").append(option.prompt()),
-                                new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.EVENT, option.id(), null))));
+                for (DialogueTopicSection section : DialogueTopicSection.values()) {
+                    List<InteractionDialogueOptionsResponse.EventOption> group = options.eventOptions().stream()
+                            .filter(option -> DialogueTopicSection.fromTopic(option.topic()) == section)
+                            .toList();
+                    boolean ambient = section == DialogueTopicSection.CONVERSATIONS && options.ambientAvailable();
+                    if (group.isEmpty() && !ambient) {
+                        continue;
                     }
-                }
-                if (options.ambientAvailable()) {
-                    rows.add(new DialogueRow(Component.translatable(options.preview().isPresent()
-                            ? "gui.dialogue.ambient_other" : "gui.dialogue.ambient"),
-                            new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.AMBIENT, null, null)));
+                    boolean expanded = expandedSections.contains(section);
+                    rows.add(new DialogueRow(Component.translatable(section.label).copy()
+                            .append(expanded ? " ▾" : " ▸"),
+                            new DialogueClick(DialogueClickKind.TOGGLE_SECTION, null, null, section.name())));
+                    if (!expanded) {
+                        continue;
+                    }
+                    for (InteractionDialogueOptionsResponse.EventOption option : group) {
+                        Component label = Component.literal(option.mode() == InteractionDialogueOptionsResponse.Mode.HIGHLIGHTED
+                                ? "  ★ " : "    ").append(option.prompt());
+                        rows.add(new DialogueRow(label,
+                                new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.EVENT, option.id(), null)));
+                    }
+                    if (ambient) {
+                        rows.add(new DialogueRow(Component.literal("    ").append(Component.translatable(options.preview().isPresent()
+                                ? "gui.dialogue.ambient_other" : "gui.dialogue.ambient")),
+                                new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.AMBIENT, null, null)));
+                    }
                 }
             });
         }
@@ -554,19 +564,22 @@ public class InteractScreen extends AbstractDynamicScreen {
                 rows.add(new DialogueRow(choice.text(),
                         new DialogueClick(DialogueClickKind.CHOICE, null, null, choice.id())));
             }
+            if (!preview && (presentation.canReviewPrevious() || presentation.reviewingHistory())) {
+                rows.add(new DialogueRow(Component.translatable("gui.dialogue.history"), null));
+            }
             if (!preview && presentation.canReviewPrevious()) {
-                rows.add(new DialogueRow(Component.translatable("gui.dialogue.previous"),
+                rows.add(new DialogueRow(Component.translatable("gui.dialogue.earlier_line"),
                         new DialogueClick(DialogueClickKind.PREVIOUS, null, null, null)));
             }
             if (presentation.canAdvance() || presentation.reviewingHistory()) {
-                Component label = presentation.reviewingHistory() ? Component.translatable("gui.dialogue.next")
+                Component label = presentation.reviewingHistory() ? Component.translatable("gui.dialogue.latest_line")
                         : switch (presentation.advanceKind().orElseThrow()) {
-                            case NEXT -> Component.translatable("gui.dialogue.next");
-                            case BACK_TO_TOPICS -> Component.translatable("gui.button.done");
+                            case NEXT -> Component.translatable("gui.dialogue.continue");
+                            case BACK_TO_TOPICS -> Component.translatable("gui.dialogue.finish");
                             case NONE -> throw new IllegalStateException("Non-advancing dialogue cannot render an advance action");
                         };
                 rows.add(new DialogueRow(label, new DialogueClick(
-                        presentation.reviewingHistory() ? DialogueClickKind.REVIEW_NEXT : DialogueClickKind.ADVANCE,
+                        presentation.reviewingHistory() ? DialogueClickKind.REVIEW_LATEST : DialogueClickKind.ADVANCE,
                         null, null, null)));
             }
         }
@@ -710,7 +723,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         context.fill(left, footerTop, left + panelWidth, footerTop + 1, FRAME);
         boolean active = presentation.nodeVisible();
         Component back = Component.literal("Q ").append(Component.translatable(
-                active ? "gui.dialogue.topics" : "gui.button.back"));
+                active ? "gui.dialogue.topics" : "gui.dialogue.back_interaction"));
         drawDialogueAction(context, new DialogueRow(back, new DialogueClick(
                 active ? DialogueClickKind.TOPICS : DialogueClickKind.BACK, null, null, null)),
                 left + 6, footerTop + 3, (panelWidth - 18) / 2, 20);
@@ -780,8 +793,13 @@ public class InteractScreen extends AbstractDynamicScreen {
             onClose();
             return true;
         }
-        if (click.kind() == DialogueClickKind.TOGGLE_ASK) {
-            askExpanded = !askExpanded;
+        if (click.kind() == DialogueClickKind.TOGGLE_SECTION) {
+            DialogueTopicSection section = DialogueTopicSection.valueOf(click.choiceId());
+            if (!expandedSections.remove(section)) {
+                expandedSections.add(section);
+            }
+            dialogueHits.clear();
+            dialogueKeyboardIndex = -1;
             return true;
         }
         if (click.kind() == DialogueClickKind.PREVIOUS) {
@@ -791,8 +809,8 @@ public class InteractScreen extends AbstractDynamicScreen {
             }
             return false;
         }
-        if (click.kind() == DialogueClickKind.REVIEW_NEXT) {
-            if (presentation.reviewNext()) {
+        if (click.kind() == DialogueClickKind.REVIEW_LATEST) {
+            if (presentation.reviewLatest()) {
                 dialoguePassageScroll = 0;
                 return true;
             }
@@ -857,8 +875,8 @@ public class InteractScreen extends AbstractDynamicScreen {
         CHOICE,
         ADVANCE,
         PREVIOUS,
-        REVIEW_NEXT,
-        TOGGLE_ASK,
+        REVIEW_LATEST,
+        TOGGLE_SECTION,
         TOPICS,
         BACK,
         CLOSE

@@ -684,6 +684,15 @@ public class ClientHandlerImpl implements ClientHandler {
             return true;
         }
 
+        /** Return directly to the current speech without progressing the server. */
+        public boolean reviewLatest() {
+            if (!reviewingHistory()) {
+                return false;
+            }
+            reviewIndex = -1;
+            return true;
+        }
+
         private void rememberSpeech(Component line) {
             if (line.getString().isEmpty()) {
                 return;

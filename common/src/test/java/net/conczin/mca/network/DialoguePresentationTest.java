@@ -82,6 +82,23 @@ class DialoguePresentationTest {
     }
 
     @Test
+    void latestLineExitsReviewWithoutAdvancingConversation() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        UUID session = UUID.randomUUID();
+        for (int i = 0; i < 3; i++) {
+            assertTrue(presentation.acceptNode(active(session, i + 1, Component.literal("Line " + i),
+                    DialogueEngine.AdvanceKind.BACK_TO_TOPICS, List.of()), i * 100L, Locale.ENGLISH));
+        }
+        assertTrue(presentation.reviewPrevious());
+        assertTrue(presentation.reviewPrevious());
+        assertFalse(presentation.canAdvance());
+        assertTrue(presentation.reviewLatest());
+        assertFalse(presentation.reviewingHistory());
+        assertEquals("Line 2", presentation.fullLine().getString());
+        assertFalse(presentation.reviewLatest(), "latest is a read-only review action, not an advance");
+    }
+
+    @Test
     void speechReviewHistoryHasBoundedCapacity() {
         ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
         UUID session = UUID.randomUUID();
