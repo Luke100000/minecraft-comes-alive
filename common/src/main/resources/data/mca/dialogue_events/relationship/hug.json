@@ -13,10 +13,22 @@
     "seconds": 5
   },
   "history": "scheduling",
-  "start": "reaction",
+  "start": "prompt",
   "nodes": {
-    "reaction": {
-      "outcomes": [
+    "prompt": {
+      "line": "dialogue_event.mca.relationship.hug.opening",
+      "choices": [
+        {
+          "id": "affection",
+          "text": "dialogue_event.mca.relationship.hug.choice.affection",
+          "outcomes": [
+        {
+          "requirements": [{ "type": "mca:relationship", "value": "romantic_partner" }],
+          "priority": 100,
+          "weight": 1,
+          "actions": [{ "type": "mca:hearts", "amount": 5 }],
+          "next": "success"
+        },
         {
           "weight": 5,
           "actions": [
@@ -90,6 +102,8 @@
             { "type": "mca:hearts", "amount": -3 }
           ],
           "next": "fail"
+        }
+          ]
         }
       ]
     },

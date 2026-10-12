@@ -24,10 +24,136 @@
     "seconds": 5
   },
   "history": "scheduling",
-  "start": "reaction",
+  "start": "prompt",
   "nodes": {
-    "reaction": {
-      "outcomes": [
+    "prompt": {
+      "line": "dialogue_event.mca.relationship.flirt.opening",
+      "choices": [
+        {
+          "id": "affection",
+          "text": "dialogue_event.mca.relationship.flirt.choice.affection",
+          "outcomes": [
+        {
+          "requirements": [{ "type": "mca:relationship", "value": "romantic_partner" }],
+          "priority": 100,
+          "weight": 1,
+          "actions": [{ "type": "mca:hearts", "amount": 5 }],
+          "next": "success"
+        },
+        {
+          "requirements": [{ "type": "mca:hearts", "min": 60 }],
+          "priority": 20,
+          "weight": 24,
+          "actions": [{ "type": "mca:hearts", "amount": 5 }],
+          "next": "success"
+        },
+        {
+          "requirements": [
+            { "type": "mca:hearts", "min": 60 },
+            { "type": "mca:personality", "value": "flirty" }
+          ],
+          "priority": 20,
+          "weight": 12,
+          "actions": [{ "type": "mca:hearts", "amount": 5 }],
+          "next": "success"
+        },
+        {
+          "requirements": [{ "type": "mca:hearts", "min": 60 }],
+          "priority": 20,
+          "weight": 3,
+          "actions": [{ "type": "mca:hearts", "amount": -3 }],
+          "next": "fail"
+        },
+        {
+          "requirements": [
+            { "type": "mca:hearts", "min": 60 },
+            { "type": "mca:personality", "value": "odd" }
+          ],
+          "priority": 20,
+          "weight": 5,
+          "actions": [{ "type": "mca:hearts", "amount": -3 }],
+          "next": "fail"
+        },
+        {
+          "requirements": [{ "type": "mca:hearts", "min": 60 }],
+          "priority": 20,
+          "weight": 1,
+          "actions": [
+            { "type": "mca:hearts", "amount": -5 },
+            { "type": "mca:command", "command": "slap" }
+          ],
+          "next": "slap"
+        },
+        {
+          "requirements": [
+            { "type": "mca:hearts", "min": 60 },
+            { "type": "mca:personality", "value": "odd" }
+          ],
+          "priority": 20,
+          "weight": 5,
+          "actions": [
+            { "type": "mca:hearts", "amount": -5 },
+            { "type": "mca:command", "command": "slap" }
+          ],
+          "next": "slap"
+        },
+        {
+          "requirements": [{ "type": "mca:hearts", "min": 30 }],
+          "priority": 10,
+          "weight": 12,
+          "actions": [{ "type": "mca:hearts", "amount": 5 }],
+          "next": "success"
+        },
+        {
+          "requirements": [
+            { "type": "mca:hearts", "min": 30 },
+            { "type": "mca:personality", "value": "flirty" }
+          ],
+          "priority": 10,
+          "weight": 12,
+          "actions": [{ "type": "mca:hearts", "amount": 5 }],
+          "next": "success"
+        },
+        {
+          "requirements": [{ "type": "mca:hearts", "min": 30 }],
+          "priority": 10,
+          "weight": 3,
+          "actions": [{ "type": "mca:hearts", "amount": -3 }],
+          "next": "fail"
+        },
+        {
+          "requirements": [
+            { "type": "mca:hearts", "min": 30 },
+            { "type": "mca:personality", "value": "odd" }
+          ],
+          "priority": 10,
+          "weight": 5,
+          "actions": [{ "type": "mca:hearts", "amount": -3 }],
+          "next": "fail"
+        },
+        {
+          "requirements": [{ "type": "mca:hearts", "min": 30 }],
+          "priority": 10,
+          "weight": 1,
+          "actions": [
+            { "type": "mca:hearts", "amount": -5 },
+            { "type": "mca:command", "command": "slap" }
+          ],
+          "next": "slap"
+        },
+        {
+          "requirements": [
+            { "type": "mca:hearts", "min": 30 },
+            { "type": "mca:personality", "value": "odd" }
+          ],
+          "priority": 10,
+          "weight": 5,
+          "actions": [
+            { "type": "mca:hearts", "amount": -5 },
+            { "type": "mca:command", "command": "slap" }
+          ],
+          "next": "slap"
+        },
         {
           "weight": 5,
           "actions": [
@@ -91,6 +217,8 @@
             { "type": "mca:command", "command": "slap" }
           ],
           "next": "slap"
+        }
+          ]
         }
       ]
     },

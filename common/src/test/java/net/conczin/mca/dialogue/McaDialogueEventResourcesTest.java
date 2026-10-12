@@ -276,6 +276,55 @@ class McaDialogueEventResourcesTest {
         assertTrue(exception.getMessage().contains("duplicate-fixture.json"));
     }
 
+    @Test
+    void affectionStartsWithPlayerChoiceAndPartnerCannotReject() throws Exception {
+        Map<ResourceLocation, DialogueEvent> events = new HashMap<>();
+        loadShippedEvents().forEach(event -> events.put(event.id(), event));
+
+        for (String action : List.of("flirt", "hug", "kiss")) {
+            DialogueEvent event = events.get(id("relationship/" + action));
+            DialogueEvent.Node opening = event.nodes().get(event.start());
+            assertFalse(opening.lines().isEmpty(), action + " must begin with spoken dialogue");
+            List<DialogueEvent.Choice> choices = opening.choices().orElseThrow();
+            DialogueEvent.Choice affectionate = choices.stream()
+                    .filter(choice -> choice.id().equals("affection"))
+                    .findFirst().orElseThrow();
+            List<DialogueEvent.Outcome> outcomes = affectionate.outcomes().orElseThrow();
+            List<DialogueEvent.Outcome> partner = outcomes.stream()
+                    .filter(outcome -> outcome.priority() == 100)
+                    .toList();
+            assertFalse(partner.isEmpty(), action + " needs a partner-only top priority outcome");
+            for (DialogueEvent.Outcome outcome : partner) {
+                assertTrue(outcome.requirements().stream().anyMatch(condition ->
+                                condition instanceof DialogueCondition.Defined defined
+                                        && defined.type().equals(DialogueCondition.RELATIONSHIP)
+                                        && "romantic_partner".equals(defined.definition().get("value").getAsString())),
+                        action + " positive top tier must require the player's romantic partnership");
+                assertEquals("success", outcome.next(), action + " must never reject existing partners");
+                assertTrue(outcome.actions().stream().noneMatch(effect ->
+                                effect instanceof DialogueAction.Hearts hearts && hearts.amount() < 0
+                                        || effect instanceof DialogueAction.Slap
+                                        || effect instanceof DialogueAction.Command),
+                        action + " partner must have no punitive effects");
+            }
+
+            if (action.equals("flirt")) {
+                for (int tier : List.of(10, 20)) {
+                    assertTrue(outcomes.stream().anyMatch(outcome ->
+                                    outcome.priority() == tier
+                                            && outcome.next().equals("success")
+                                            && outcome.requirements().stream().anyMatch(condition ->
+                                                    condition instanceof DialogueCondition.Defined defined
+                                                            && defined.type().equals(DialogueCondition.HEARTS)
+                                                            && defined.definition().get("min").getAsInt() == (tier == 10 ? 30 : 60))),
+                            "Flirt must improve success at " + (tier == 10 ? 30 : 60) + " hearts");
+                }
+                assertTrue(outcomes.stream().anyMatch(outcome -> outcome.priority() == 0 && outcome.next().equals("fail")),
+                        "A nonpartner must still be able to decline");
+            }
+        }
+    }
+
     private static void assertTask11PresentationAndGraph(DialogueEvent event, JsonObject translations) {
         assertTrue(event.nodes().containsKey(event.start()),
                 () -> "Task 11 event start node must decode for " + event.id());
