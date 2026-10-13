@@ -224,6 +224,64 @@ public final class EnterBuildingGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_enter_building_missing_retry", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 60)
+    public static void missingFavoredBuildingDoesNotRescanEveryIdleTick(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start))
+                .spawn(EntitySpawnReason.STRUCTURE);
+        villager.setNoAi(true);
+        villager.refreshBrain(helper.getLevel());
+        MissingFavoredBuildingProbe task = new MissingFavoredBuildingProbe(start);
+        long startTick = helper.getLevel().getGameTime();
+        helper.onEachTick(() -> {
+            long elapsed = helper.getLevel().getGameTime() - startTick;
+            if (elapsed >= 1 && elapsed <= 20) {
+                if (task.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime())) {
+                    task.doStop(helper.getLevel(), villager, helper.getLevel().getGameTime());
+                }
+            }
+            if (elapsed == 20) {
+                helper.assertTrue(task.scans >= 1, "fixture never attempted a favored building lookup");
+                helper.assertTrue(task.scans <= 3,
+                        "missing favored building was looked up too often across 20 idle ticks: " + task.scans);
+                villager.discard();
+                helper.succeed();
+            }
+        });
+    }
+
+    @GameTest(batch = "mca_enter_building_new_building", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 60)
+    public static void newlyAvailableFavoredBuildingIsRetriedPromptly(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start))
+                .spawn(EntitySpawnReason.STRUCTURE);
+        villager.setNoAi(true);
+        villager.refreshBrain(helper.getLevel());
+        MissingFavoredBuildingProbe task = new MissingFavoredBuildingProbe(start);
+        long startTick = helper.getLevel().getGameTime();
+        helper.onEachTick(() -> {
+            long elapsed = helper.getLevel().getGameTime() - startTick;
+            if (elapsed == 5) {
+                task.buildingAvailable = true;
+            }
+            if (elapsed >= 1 && elapsed <= 15) {
+                if (task.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime())) {
+                    task.doStop(helper.getLevel(), villager, helper.getLevel().getGameTime());
+                }
+            }
+            if (elapsed == 15) {
+                helper.assertTrue(task.foundBuilding,
+                        "newly available favored building was not found within ten ticks");
+                villager.discard();
+                helper.succeed();
+            }
+        });
+    }
+
     private static Building buildingWithFloorCells(BlockPos min, BlockPos max, Set<BlockPos> floorCells) {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", 1);
@@ -290,6 +348,30 @@ public final class EnterBuildingGameTests {
 
         private Optional<Building> select(VillagerEntityMCA villager, List<Building> candidates) {
             return getNearestBuilding(villager, candidates);
+        }
+    }
+
+    private static final class MissingFavoredBuildingProbe extends EnterFavoredBuildingTask {
+        private final Building building;
+        private int scans;
+        private boolean buildingAvailable;
+        private boolean foundBuilding;
+
+        private MissingFavoredBuildingProbe(BlockPos position) {
+            super(0.5F);
+            this.building = new Building(position);
+        }
+
+        @Override
+        protected Optional<Building> getNearestBuilding(VillagerEntityMCA villager) {
+            scans++;
+            return buildingAvailable ? Optional.of(building) : Optional.empty();
+        }
+
+        @Override
+        protected boolean isInsideBuilding(Building building, VillagerEntityMCA villager) {
+            foundBuilding = true;
+            return true;
         }
     }
 }

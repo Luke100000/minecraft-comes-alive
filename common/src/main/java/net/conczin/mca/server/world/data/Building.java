@@ -33,6 +33,8 @@ public class Building implements VillageBuilding {
 
     protected final Map<Identifier, List<BlockPos>> blocks = new HashMap<>();
     private Map<Identifier, List<BlockPos>> exposedBlocks;
+    /** Only populated during one Room scan, so datapack reloads cannot leave stale matches. */
+    private transient Map<Block, Boolean> activeScanMatches;
     /** Exact FloorGeometry cell keys owned by this Room. */
     private Set<BlockPos> floorCells = Set.of();
     private String type = "house";
@@ -116,8 +118,12 @@ public class Building implements VillageBuilding {
 
         blocks.clear();
         invalidateBlocksView();
-        for (BlockPos pos : scan.poiCells()) {
-            recordBuildingBlock(world, pos);
+        Map<Block, Boolean> previousMatches = activeScanMatches;
+        activeScanMatches = new IdentityHashMap<>();
+        try {
+            scan.visitPoiCells(pos -> recordBuildingBlock(world, pos));
+        } finally {
+            activeScanMatches = previousMatches;
         }
         BlockPos seed = scan.seed();
         posX = seed.getX();
@@ -258,16 +264,21 @@ public class Building implements VillageBuilding {
     protected void recordBuildingBlock(Level world, BlockPos pos) {
         BlockState state = world.getBlockState(pos);
         Block block = state.getBlock();
-        boolean relevant = false;
+        boolean relevant = activeScanMatches == null
+                ? matchesAnyBuildingType(state)
+                : activeScanMatches.computeIfAbsent(block, ignored -> matchesAnyBuildingType(state));
+        if (relevant && (!(block instanceof BedBlock) || state.getValue(BedBlock.PART) == BedPart.HEAD)) {
+            addBlock(block, pos.immutable());
+        }
+    }
+
+    private static boolean matchesAnyBuildingType(BlockState state) {
         for (BuildingType type : BuildingTypes.getInstance()) {
             if (type.matchesBlock(state)) {
-                relevant = true;
-                break;
+                return true;
             }
         }
-        if (relevant && (!(block instanceof BedBlock) || state.getValue(BedBlock.PART) == BedPart.HEAD)) {
-            addBlock(block, pos);
-        }
+        return false;
     }
 
     public Stream<BlockPos> getBlockPosStream() {

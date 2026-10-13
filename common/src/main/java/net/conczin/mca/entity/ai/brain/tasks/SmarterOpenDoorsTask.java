@@ -21,6 +21,7 @@ import net.minecraft.world.level.pathfinder.Path;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Iterator;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -94,13 +95,16 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
     }
 
     private static boolean hasOtherMobReachedToggleable(LivingEntity entity, BlockPos pos) {
-        Brain<?> brain = entity.getBrain();
-        return brain.getMemoryInternal(MemoryModuleType.NEAREST_LIVING_ENTITIES)
-                .map(nearbyEntities -> nearbyEntities.stream()
-                        .filter(other -> other.getType() == entity.getType())
-                        .filter(other -> pos.closerToCenterThan(other.position(), PATHING_DISTANCE))
-                        .anyMatch(other -> hasReached(other, pos)))
-                .orElse(false);
+        List<LivingEntity> nearbyEntities = entity.getBrain()
+                .getMemoryInternal(MemoryModuleType.NEAREST_LIVING_ENTITIES).orElse(List.of());
+        for (LivingEntity other : nearbyEntities) {
+            if (other.getType() == entity.getType()
+                    && pos.closerToCenterThan(other.position(), PATHING_DISTANCE)
+                    && hasReached(other, pos)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean hasReached(LivingEntity entity, BlockPos pos) {
@@ -154,7 +158,7 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
 
         BlockPos blockPos = pathNode.asBlockPos();
         BlockState blockState = world.getBlockState(blockPos);
-        this.openFenceGatesInBodyClearance(world, entity, blockPos, rememberIfAlreadyOpen);
+        this.openFenceGatesInBodyClearance(world, entity, blockPos, blockState, rememberIfAlreadyOpen);
         if (PathingBlockInteraction.canInteractWithFenceGate(blockState)) {
             return;
         }
@@ -255,11 +259,11 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
     }
 
     private void openFenceGatesInBodyClearance(ServerLevel world, LivingEntity entity, BlockPos pathPos,
-                                               boolean rememberIfAlreadyOpen) {
+                                               BlockState pathState, boolean rememberIfAlreadyOpen) {
         int bodyHeightBlocks = Mth.ceil(entity.getBbHeight());
         for (int offset = 0; offset < bodyHeightBlocks; offset++) {
-            BlockPos pos = pathPos.above(offset);
-            BlockState state = world.getBlockState(pos);
+            BlockPos pos = offset == 0 ? pathPos : pathPos.above(offset);
+            BlockState state = offset == 0 ? pathState : world.getBlockState(pos);
             if (!PathingBlockInteraction.canInteractWithFenceGate(state)) {
                 continue;
             }

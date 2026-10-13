@@ -5,11 +5,16 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.BedPoiCompatibilityGameTests;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
 import net.minecraft.core.Direction;
 import net.conczin.mca.neoforge.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.core.GlobalPos;
+import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.ai.behavior.BehaviorControl;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
@@ -31,6 +36,65 @@ import static net.minecraft.world.entity.ai.behavior.AcquirePoi.findPathToPois;
 @PrefixGameTestTemplate(false)
 public final class ExtendedFindPointOfInterestTaskGameTests {
     private ExtendedFindPointOfInterestTaskGameTests() {
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 260)
+    public static void lazyPoiAcquisitionRespectsCooldownAndBothMemoryGuards(GameTestHelper helper) {
+        BlockPos foot = helper.absolutePos(new BlockPos(3, 1, 3));
+        BlockPos head = foot.east();
+        BlockPos feet = head.south();
+        prepareFloor(helper, feet, head);
+        BlockState bed = BuiltInRegistries.BLOCK.getOptional(Identifier.withDefaultNamespace("red_bed"))
+                .orElseThrow().defaultBlockState()
+                .setValue(BedBlock.FACING, Direction.EAST)
+                .setValue(BedBlock.PART, BedPart.FOOT);
+        helper.getLevel().setBlock(foot, bed, 3);
+        helper.getLevel().setBlock(head, bed.setValue(BedBlock.PART, BedPart.HEAD), 3);
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(feet))
+                .withName("Lazy POI Acquisition Probe")
+                .spawn(EntitySpawnReason.STRUCTURE);
+        villager.setOnGround(true);
+        villager.setNoAi(true);
+        villager.refreshBrain(helper.getLevel());
+
+        BehaviorControl<PathfinderMob> task = LazyFindPointOfInterestTask.create(
+                poi -> poi.is(PoiTypes.HOME),
+                MemoryModuleType.JOB_SITE,
+                MemoryModuleType.POTENTIAL_JOB_SITE,
+                false,
+                Optional.empty());
+        helper.assertTrue(task.debugString().startsWith("OneShot["),
+                "lazy POI behavior lost its declarative brain-memory diagnostics");
+        GlobalPos fakeJob = GlobalPos.of(helper.getLevel().dimension(), feet);
+        villager.getBrain().setMemory(MemoryModuleType.JOB_SITE, fakeJob);
+        helper.assertTrue(!task.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime()),
+                "existing job memory did not prevent acquisition");
+        villager.getBrain().eraseMemory(MemoryModuleType.JOB_SITE);
+        helper.assertTrue(!task.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime()),
+                "initial cooldown did not defer acquisition");
+
+        helper.runAfterDelay(210, () -> {
+            try {
+                villager.getBrain().setMemory(MemoryModuleType.POTENTIAL_JOB_SITE, fakeJob);
+                helper.assertTrue(!task.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime()),
+                        "existing potential job memory did not prevent acquisition");
+                villager.getBrain().eraseMemory(MemoryModuleType.POTENTIAL_JOB_SITE);
+                helper.assertTrue(task.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime()),
+                        "ready POI acquisition was not attempted");
+                helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.POTENTIAL_JOB_SITE)
+                                .map(pos -> pos.pos().equals(head)).orElse(false),
+                        "ready acquisition did not claim the reachable POI");
+                task.tickOrStop(helper.getLevel(), villager, helper.getLevel().getGameTime());
+                villager.getBrain().eraseMemory(MemoryModuleType.POTENTIAL_JOB_SITE);
+                helper.assertTrue(!task.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime()),
+                        "acquisition retried without waiting for the next cooldown");
+                helper.succeed();
+            } finally {
+                villager.discard();
+            }
+        });
     }
 
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
