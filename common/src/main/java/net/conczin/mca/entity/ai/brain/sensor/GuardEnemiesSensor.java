@@ -22,9 +22,12 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -40,6 +43,10 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
     private static final double VANILLA_NEARBY_RANGE = 16.0;
     private static final double GUARD_ENEMY_RANGE = 48.0;
     private static final double GUARD_ENEMY_RANGE_SQR = GUARD_ENEMY_RANGE * GUARD_ENEMY_RANGE;
+    // LivingEntity.hasLineOfSight stops checking targets beyond 128 blocks.
+    private static final double MAX_FOLLOWED_PLAYER_SCAN_DISTANCE_SQR = (128.0 + GUARD_ENEMY_RANGE)
+            * (128.0 + GUARD_ENEMY_RANGE);
+    private static final double MAX_COMBINED_SCAN_VOLUME_FACTOR = 2.0;
     private static final TargetingConditions TARGET_CONDITIONS = TargetingConditions.forNonCombat()
             .range(GUARD_ENEMY_RANGE)
             .ignoreLineOfSight();
@@ -65,7 +72,8 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             return;
         }
 
-        Optional<Player> followedPlayer = getFollowedPlayer(villager);
+        Optional<Player> followedPlayer = getFollowedPlayer(villager)
+                .filter(player -> player.level() == world && player.isAlive());
         boolean shouldScan = villager.isGuard()
                 || followedPlayer.isPresent()
                 || villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isPresent();
@@ -77,6 +85,21 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
                 scanBounds,
                 target -> target != villager && target.isAlive()
         );
+        if (followedPlayer.isPresent()
+                && villager.distanceToSqr(followedPlayer.orElseThrow()) <= MAX_FOLLOWED_PLAYER_SCAN_DISTANCE_SQR) {
+            AABB playerBounds = followedPlayer.orElseThrow().getBoundingBox().inflate(GUARD_ENEMY_RANGE);
+            if (!scanBounds.minmax(playerBounds).equals(scanBounds)) {
+                // A distant player must not expand one world query across the empty
+                // space between them and the guard. Still scan their defense area
+                // independently, excluding the already scanned overlap.
+                candidates.addAll(world.getEntitiesOfClass(
+                        LivingEntity.class,
+                        playerBounds,
+                        target -> target != villager && target.isAlive()
+                                && !scanBounds.intersects(target.getBoundingBox())
+                ));
+            }
+        }
 
         List<LivingEntity> nearbyEntities = new ArrayList<>();
         for (LivingEntity candidate : candidates) {
@@ -98,11 +121,11 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
 
         villager.getBrain().setMemory(
                 MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY,
-                this.getNearestHostile(villager, candidates, followedPlayer)
+                this.selectBestGuardEnemy(villager, candidates, followedPlayer)
         );
     }
 
-    private Optional<LivingEntity> getNearestHostile(
+    private Optional<LivingEntity> selectBestGuardEnemy(
             VillagerEntityMCA entity,
             List<LivingEntity> candidates,
             Optional<Player> followedPlayer
@@ -176,7 +199,12 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
     private AABB getGuardScanBounds(VillagerEntityMCA guard, Optional<Player> followedPlayer) {
         AABB bounds = guard.getBoundingBox().inflate(GUARD_ENEMY_RANGE);
         if (followedPlayer.isPresent()) {
-            bounds = bounds.minmax(followedPlayer.get().getBoundingBox().inflate(GUARD_ENEMY_RANGE));
+            AABB combined = bounds.minmax(followedPlayer.get().getBoundingBox().inflate(GUARD_ENEMY_RANGE));
+            double maxVolume = bounds.getXsize() * bounds.getYsize() * bounds.getZsize()
+                    * MAX_COMBINED_SCAN_VOLUME_FACTOR;
+            if (combined.getXsize() * combined.getYsize() * combined.getZsize() <= maxVolume) {
+                return combined;
+            }
         }
         return bounds;
     }
@@ -213,23 +241,12 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
         return entity.isAlive()
                && !entity.isRemoved()
                && (guard == null || entity.level() == guard.level())
-               && getPriority(entity, guard) >= 0;
-    }
-
-    private static int getPriority(LivingEntity entity, LivingEntity guard) {
-        return getPriority(entity, guard, getFollowedPlayer(guard));
-    }
-
-    private static int getPriority(
-            LivingEntity entity,
-            LivingEntity guard,
-            Optional<Player> followedPlayer
-    ) {
-        return getPriority(entity, guard, followedPlayer, getConfiguredPriority(entity.getType()));
-    }
-
-    private static Optional<Integer> getConfiguredPriority(EntityType<?> type) {
-        return ConfiguredPriorityLookup.get().getPriority(type);
+               && getPriority(
+                       entity,
+                       guard,
+                       getFollowedPlayer(guard),
+                       ConfiguredPriorityLookup.get().getPriority(entity.getType())
+               ) >= 0;
     }
 
     private static Optional<Player> getFollowedPlayer(LivingEntity guard) {
@@ -255,15 +272,30 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
         private static ConfiguredPriorityLookup get() {
             Map<String, Integer> configuredPriorities = Config.getInstance().guardsTargetEntities;
             ConfiguredPriorityLookup lookup = Holder.INSTANCE;
-            if (!lookup.sourcePriorities.equals(configuredPriorities)) {
+            if (!lookup.matches(configuredPriorities)) {
                 lookup = compile(configuredPriorities);
                 Holder.INSTANCE = lookup;
             }
             return lookup;
         }
 
+        private boolean matches(Map<String, Integer> configuredPriorities) {
+            if (!sourcePriorities.equals(configuredPriorities)) {
+                return false;
+            }
+            Iterator<String> cachedKeys = sourcePriorities.keySet().iterator();
+            Iterator<String> configuredKeys = configuredPriorities.keySet().iterator();
+            while (cachedKeys.hasNext()) {
+                if (!cachedKeys.next().equals(configuredKeys.next())) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         private static ConfiguredPriorityLookup compile(Map<String, Integer> configuredPriorities) {
-            Map<String, Integer> sourcePriorities = Map.copyOf(configuredPriorities);
+            Map<String, Integer> sourcePriorities = Collections.unmodifiableMap(
+                    new LinkedHashMap<>(configuredPriorities));
             Map<EntityType<?>, Integer> entityPriorities = new HashMap<>();
             List<ConfiguredTagPriority> tagPriorities = new ArrayList<>();
             for (Map.Entry<String, Integer> entry : sourcePriorities.entrySet()) {

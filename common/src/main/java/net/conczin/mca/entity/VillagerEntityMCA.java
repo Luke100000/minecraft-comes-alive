@@ -1338,7 +1338,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     protected void doPush(Entity entity) {
-        if (isSleeping()) {
+        if (isSleeping() || (!Config.getServerConfig().enableVillagerCollisions && entity instanceof VillagerEntityMCA)) {
             return;
         }
         super.doPush(entity);

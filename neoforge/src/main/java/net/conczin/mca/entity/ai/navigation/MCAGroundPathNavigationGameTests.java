@@ -1847,6 +1847,97 @@ public final class MCAGroundPathNavigationGameTests {
         helper.succeed();
     }
 
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void blockedPersistentSearchBoundsExtendedNodeExpansions(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(32, 1, 32));
+        BlockPos target = start.east(2);
+        prepareFlatArea(helper, start, 27, 3);
+        for (int z = -23; z <= 23; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (dx == 0 && dz == 0) {
+                    continue;
+                }
+                for (int y = 0; y < 3; y++) {
+                    helper.getLevel().setBlock(target.offset(dx, y, dz), Blocks.STONE.defaultBlockState(), 3);
+                }
+            }
+        }
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start))
+                .spawn(EntitySpawnReason.STRUCTURE);
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+        try {
+            PathRequestDiagnostics.SearchSnapshot before = PathRequestDiagnostics.snapshot(villager);
+            Path path = ((MCAGroundPathNavigation) villager.getNavigation())
+                    .createPathForPersistentIntent(Set.of(target), 0);
+            PathRequestDiagnostics.SearchSnapshot after = PathRequestDiagnostics.snapshot(villager);
+            long expanded = after.expandedNodes() - before.expandedNodes();
+            helper.assertTrue(path != null && !path.canReach(), "sealed target was unexpectedly reachable");
+            helper.assertTrue(after.extendedSearches() == before.extendedSearches() + 1,
+                    "test did not exercise the extended search budget");
+            helper.assertTrue(expanded <= 1_024,
+                    "unreachable extended search expanded " + expanded + " nodes instead of staying bounded");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void extendedBudgetNeverShrinksOrdinarySearch(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(38, 1, 38));
+        BlockPos target = start.east(2);
+        prepareFlatArea(helper, start, 32, 3);
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (dx == 0 && dz == 0) continue;
+                for (int y = 0; y < 3; y++) {
+                    helper.getLevel().setBlock(target.offset(dx, y, dz), Blocks.STONE.defaultBlockState(), 3);
+                }
+            }
+        }
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start))
+                .spawn(EntitySpawnReason.STRUCTURE);
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+        Config config = Config.getInstance();
+        int originalPathfindingDistance = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 160;
+            villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(96.0D);
+            // Construct after updating the attribute: vanilla fixes its base node
+            // budget when PathNavigation creates its PathFinder.
+            MCAGroundPathNavigation navigation = new MCAGroundPathNavigation(villager, helper.getLevel());
+            PathRequestDiagnostics.SearchSnapshot before = PathRequestDiagnostics.snapshot(villager);
+            Path ordinary = navigation.createPath(target, 0);
+            PathRequestDiagnostics.SearchSnapshot afterOrdinary = PathRequestDiagnostics.snapshot(villager);
+            Path extended = navigation.createPathForPersistentIntent(Set.of(target), 0);
+            PathRequestDiagnostics.SearchSnapshot afterExtended = PathRequestDiagnostics.snapshot(villager);
+            long ordinaryNodes = afterOrdinary.expandedNodes() - before.expandedNodes();
+            long extendedNodes = afterExtended.expandedNodes() - afterOrdinary.expandedNodes();
+            helper.assertTrue(ordinary != null && !ordinary.canReach()
+                            && extended != null && !extended.canReach(),
+                    "sealed target was unexpectedly reachable");
+            helper.assertTrue(ordinaryNodes > 1_024,
+                    "fixture did not exceed the small extended search cap: " + ordinaryNodes);
+            helper.assertTrue(extendedNodes >= ordinaryNodes,
+                    "extended search expanded fewer nodes than ordinary: " + extendedNodes + " vs " + ordinaryNodes);
+        } finally {
+            config.villagerPathfindingDistance = originalPathfindingDistance;
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
     @AfterBatch(batch = "mca_navigation_progressive_walk")
     public static void releaseProgressiveNavigationChunks(ServerLevel level) {
         PROGRESSIVE_FORCED_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x(), chunk.z(), false));

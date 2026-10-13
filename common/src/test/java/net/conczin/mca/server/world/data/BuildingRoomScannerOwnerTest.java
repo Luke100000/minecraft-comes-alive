@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -40,6 +41,29 @@ class BuildingRoomScannerOwnerTest {
                 cell(1, 64, 0), cell(2, 64, 0)));
 
         assertEquals(first, RoomPartitioner.owner(List.of(second, first)));
+    }
+
+    @Test
+    void materializingSelectedRoomsKeepsSharedPerimeterEvidenceExclusive() {
+        var left = component(Set.of(cell(0, 64, 0), cell(0, 64, 1),
+                cell(0, 64, 2), cell(0, 64, 3)));
+        var right = component(Set.of(cell(2, 64, 0), cell(2, 64, 1),
+                cell(2, 64, 2), cell(2, 64, 3)));
+        List<RoomPartitioner.Component> components = List.of(left, right);
+        BlockPos source = new BlockPos(0, 64, 0);
+        List<BuildingRoomScanner.Result> rooms = List.of(
+                BuildingRoomScanner.materialize(source, 100, components, left),
+                BuildingRoomScanner.materialize(source, 100, components, right));
+
+        assertEquals(2, rooms.size());
+        assertEquals(Building.validationResult.SUCCESS, rooms.get(0).status());
+        assertEquals(Building.validationResult.SUCCESS, rooms.get(1).status());
+        Set<BlockPos> leftPoi = visitedPoiCells(rooms.get(0));
+        Set<BlockPos> rightPoi = visitedPoiCells(rooms.get(1));
+        assertTrue(leftPoi.contains(new BlockPos(1, 65, 0)));
+        assertFalse(rightPoi.contains(new BlockPos(1, 65, 0)));
+        assertEquals(RoomPoiEvidence.candidates(List.of(left, right), left), leftPoi);
+        assertEquals(RoomPoiEvidence.candidates(List.of(left, right), right), rightPoi);
     }
 
     @Test
@@ -114,6 +138,12 @@ class BuildingRoomScannerOwnerTest {
 
     private static FloorGeometry.Cell cell(int x, int y, int z) {
         return new FloorGeometry.Cell(new BlockPos(x, y, z), y + 4);
+    }
+
+    private static Set<BlockPos> visitedPoiCells(BuildingRoomScanner.Result result) {
+        Set<BlockPos> cells = new HashSet<>();
+        result.visitPoiCells(pos -> cells.add(pos.immutable()));
+        return cells;
     }
 
     private static RoomPartitioner.Component component(Set<FloorGeometry.Cell> cells) {
