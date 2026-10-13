@@ -6,6 +6,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.MCAMoveControl;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.RangedWeaponHelper;
+import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
@@ -17,6 +18,7 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.schedule.Activity;
+import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
@@ -123,6 +125,8 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
     private int seeTime;
     private int walkTargetRetryCooldown;
     private WalkTarget combatWalkTarget;
+    private List<LivingEntity> lastRouteThreats = List.of();
+    private long lastEscapeRouteCheck = Long.MIN_VALUE;
 
     private int holdTicks;
     private int strafeCooldown;
@@ -188,6 +192,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
 
         RangedCombatPositioning.ThreatContext threatContext =
                 RangedCombatPositioning.collectThreatContext(entity, target);
+        revalidateOwnedEscape(entity, gameTime, threatContext);
         LivingEntity movementThreat = threatContext.nearestEscapeThreat();
         if (movementThreat == null) {
             movementThreat = target;
@@ -570,7 +575,46 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
     private void setCombatWalkTarget(E entity, WalkTarget walkTarget) {
         entity.getBrain().setMemory(MemoryModuleType.WALK_TARGET, walkTarget);
         this.combatWalkTarget = walkTarget;
+        this.lastRouteThreats = List.of();
+        this.lastEscapeRouteCheck = Long.MIN_VALUE;
         scheduleWalkTargetRetry(entity);
+    }
+
+    private void revalidateOwnedEscape(E entity, long gameTime, RangedCombatPositioning.ThreatContext threats) {
+        if (!ownsCombatWalkTarget(entity)
+                || !(this.combatWalkTarget.getTarget() instanceof CombatEscapePositionTracker escape)) {
+            return;
+        }
+
+        Path path = entity.getNavigation().getPath();
+        if (path == null || entity.getNavigation().isDone()
+                || entity.getBrain().getMemory(MemoryModuleType.PATH).orElse(null) != path) {
+            return;
+        }
+
+        boolean newThreats = !this.lastRouteThreats.equals(threats.escapeThreats());
+        if (!newThreats && gameTime - this.lastEscapeRouteCheck < 5) {
+            return;
+        }
+        this.lastRouteThreats = List.copyOf(threats.escapeThreats());
+        this.lastEscapeRouteCheck = gameTime;
+        if (escape.isPathSafe(entity, path)) {
+            return;
+        }
+
+        // Both the published walk intent and the native path still belong to this
+        // behavior. Never stop an unrelated PATH or erase a foreign WALK_TARGET.
+        if (ownsCombatWalkTarget(entity)
+                && entity.getNavigation().getPath() == path
+                && entity.getBrain().getMemory(MemoryModuleType.PATH).orElse(null) == path) {
+            entity.getNavigation().stop();
+            entity.getBrain().eraseMemory(MemoryModuleType.PATH);
+            clearCombatWalkTarget(entity);
+            // Leave one tick for MoveToTargetSink.stop to release its own stale path
+            // before the next tactical intent is published.
+            this.walkTargetRetryCooldown = 2;
+            logMovementIntent(entity, "cancel_walk", "escape_route_became_unsafe", null);
+        }
     }
 
     private void scheduleWalkTargetRetry(E entity) {
@@ -587,6 +631,8 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
         }
         this.combatWalkTarget = null;
+        this.lastRouteThreats = List.of();
+        this.lastEscapeRouteCheck = Long.MIN_VALUE;
         this.walkTargetRetryCooldown = 0;
     }
 
@@ -598,6 +644,8 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         WalkTarget current = entity.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
         if (current != this.combatWalkTarget) {
             this.combatWalkTarget = null;
+            this.lastRouteThreats = List.of();
+            this.lastEscapeRouteCheck = Long.MIN_VALUE;
         }
     }
 
@@ -625,6 +673,8 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         this.lastTarget = null;
         this.walkTargetRetryCooldown = 0;
         this.combatWalkTarget = null;
+        this.lastRouteThreats = List.of();
+        this.lastEscapeRouteCheck = Long.MIN_VALUE;
         resetTacticalTimers();
         this.lastDebugState = "";
         this.lastDebugLogTime = Long.MIN_VALUE;
