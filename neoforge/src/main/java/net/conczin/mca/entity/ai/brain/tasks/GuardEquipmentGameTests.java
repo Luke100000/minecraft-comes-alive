@@ -6,6 +6,7 @@ import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.MoveState;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.gametest.GameTestBrain;
+import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
 import net.conczin.mca.registry.ProfessionsMCA;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -26,6 +27,43 @@ import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
 @PrefixGameTestTemplate(false)
 public final class GuardEquipmentGameTests {
     private GuardEquipmentGameTests() {
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void guardsFollowLiveActivityChangesOnTheNewBrainSchedule(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
+        prepareFlatArea(helper, start, 6);
+        VillagerEntityMCA first = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start))
+                .spawn(EntitySpawnReason.STRUCTURE);
+        VillagerEntityMCA second = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start.east(2)))
+                .spawn(EntitySpawnReason.STRUCTURE);
+        first.setNoAi(true);
+        second.setNoAi(true);
+
+        first.getBrain().setSchedule(GameTestBrain.fixedSchedule(Activity.WORK));
+        second.getBrain().setSchedule(GameTestBrain.fixedSchedule(Activity.WORK));
+        first.getBrain().setActiveActivityIfPossible(Activity.WORK);
+        second.getBrain().setActiveActivityIfPossible(Activity.WORK);
+
+        helper.assertTrue(VillagerTasksMCA.isOnDuty(first) && VillagerTasksMCA.isOnDuty(second),
+                "shared WORK schedule did not keep both guards on duty");
+        second.getBrain().setSchedule(GameTestBrain.fixedSchedule(Activity.REST));
+        second.getBrain().setActiveActivityIfPossible(Activity.REST);
+        helper.assertTrue(!VillagerTasksMCA.isOnDuty(second),
+                "switching to REST retained the other guard's active WORK activity");
+
+        helper.runAfterDelay(2, () -> {
+            try {
+                helper.assertTrue(VillagerTasksMCA.isOnDuty(first), "WORK was lost on the next tick");
+                helper.assertTrue(!VillagerTasksMCA.isOnDuty(second), "REST was lost on the next tick");
+            } finally {
+                first.discard();
+                second.discard();
+            }
+            helper.succeed();
+        });
     }
 
     @GameTest(batch = "mca_guard_follow_equipment", templateNamespace = "minecraft",

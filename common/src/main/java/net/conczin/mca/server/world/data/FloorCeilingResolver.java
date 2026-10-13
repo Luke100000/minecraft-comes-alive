@@ -23,8 +23,9 @@ final class FloorCeilingResolver {
     }
 
     private OptionalInt resolve(BlockPos feet) {
+        BlockPos.MutableBlockPos probe = new BlockPos.MutableBlockPos();
         for (int y = feet.getY() + 1; y <= world.getMaxY(); y++) {
-            BlockPos probe = new BlockPos(feet.getX(), y, feet.getZ());
+            probe.set(feet.getX(), y, feet.getZ());
             BlockState state = world.getBlockState(probe);
             if (isRoofBlock(probe, state)) return OptionalInt.of(y);
         }

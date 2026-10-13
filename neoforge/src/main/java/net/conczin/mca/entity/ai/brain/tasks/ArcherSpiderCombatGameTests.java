@@ -73,6 +73,10 @@ public final class ArcherSpiderCombatGameTests {
         Spider spider = spawnSpider(helper, EntityType.SPIDER, archerPos.east(2), false);
         // Movement is the subject of this integration test. Real bow spread is intentionally
         // stochastic, so require one post-escape hit rather than a random number of hits.
+        // Keep combat target retention out of the guard's unrelated critical-health
+        // shutdown while the real pursuing spider and native movement still tick.
+        archer.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH).setBaseValue(100.0D);
+        archer.setHealth(100.0F);
         spider.setHealth(1.0F);
         spider.setTarget(archer);
         startCombat(archer, spider);
@@ -116,6 +120,7 @@ public final class ArcherSpiderCombatGameTests {
                         + RangedCombatState.current(archer).orElse(null)
                         + ", bestDistanceSqr=" + bestDistanceSquared[0]
                         + ", progressSqr=" + furthestProgressSquared[0]
+                        + ", archerHealth=" + archer.getHealth()
                         + ", spiderHealth=" + spider.getHealth());
             }
         });
@@ -195,6 +200,22 @@ public final class ArcherSpiderCombatGameTests {
                 "vanilla path stayed in the cave corner instead of using the open north exit; target="
                         + path.getTarget() + ", candidates=" + escapeTarget.getPathTargets(archer)
         );
+        if (escapeTarget instanceof net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker tactical) {
+            int acceptable = 0;
+            int nativeReachable = 0;
+            for (var tier : tactical.getRankedPathTargets(archer)) {
+                var candidatePath = archer.getNavigation().createPath(tier, 0);
+                if (candidatePath != null && candidatePath.canReach()) {
+                    nativeReachable++;
+                    if (tactical.isPathSafe(archer, candidatePath)) {
+                        acceptable++;
+                    }
+                }
+            }
+            helper.assertTrue(acceptable > 0,
+                    "native escape route safety rejected every cave exit: reachable=" + nativeReachable
+                            + ", ranked=" + tactical.getRankedPathTargets(archer));
+        }
         helper.succeed();
     }
 

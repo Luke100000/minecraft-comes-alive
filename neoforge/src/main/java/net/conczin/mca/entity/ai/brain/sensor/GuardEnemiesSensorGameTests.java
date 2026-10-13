@@ -16,12 +16,17 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.zombie.Zombie;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
@@ -29,6 +34,102 @@ public final class GuardEnemiesSensorGameTests {
     private static final List<Entity> TEST_ENTITIES = new ArrayList<>();
 
     private GuardEnemiesSensorGameTests() {
+    }
+
+    @GameTest(batch = "mca_guard_scan_bounds", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void distantFollowedPlayerDoesNotCreateUnboundedGuardScan(GameTestHelper helper)
+            throws ReflectiveOperationException {
+        BlockPos guardPos = helper.absolutePos(new BlockPos(3, 2, 3));
+        VillagerEntityMCA guard = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0)
+                .withProfession(ProfessionsMCA.GUARD)
+                .withPosition(Vec3.atBottomCenterOf(guardPos))
+                .withName("Guard Scan Bounds Probe")
+                .spawn(EntitySpawnReason.STRUCTURE);
+        Player followedPlayer = helper.makeMockPlayer(GameType.SURVIVAL);
+        Method getBounds = GuardEnemiesSensor.class.getDeclaredMethod(
+                "getGuardScanBounds", VillagerEntityMCA.class, Optional.class);
+        getBounds.setAccessible(true);
+        try {
+            AABB guardOnly = guard.getBoundingBox().inflate(48.0D);
+
+            followedPlayer.snapTo(guard.getX() + 24.0D, guard.getY(), guard.getZ());
+            AABB nearbyFollowBounds = (AABB) getBounds.invoke(new GuardEnemiesSensor(),
+                    guard, Optional.of(followedPlayer));
+            helper.assertTrue(nearbyFollowBounds.equals(
+                            guardOnly.minmax(followedPlayer.getBoundingBox().inflate(48.0D))),
+                    "nearby followed players should retain both 48-block defense areas");
+
+            followedPlayer.snapTo(guard.getX() + 320.0D, guard.getY(), guard.getZ());
+            AABB distantFollowBounds = (AABB) getBounds.invoke(new GuardEnemiesSensor(),
+                    guard, Optional.of(followedPlayer));
+            helper.assertTrue(distantFollowBounds.equals(guardOnly),
+                    "a distant followed player must not expand the guard scan across unloaded space; bounds="
+                            + distantFollowBounds);
+            helper.succeed();
+        } finally {
+            guard.discard();
+            followedPlayer.discard();
+        }
+    }
+
+    @GameTest(batch = "mca_guard_followed_player_defense", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void distantFollowedPlayerEnemiesAreScannedWithoutHugeBoundingBox(GameTestHelper helper) {
+        // Keep the attacker in the test's ticking chunk and the sightline
+        // above other templates, without changing terrain outside this fixture.
+        BlockPos enemyPos = helper.absolutePos(new BlockPos(3, 140, 3));
+        BlockPos guardPos = enemyPos.east(116);
+
+        VillagerEntityMCA guard = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0)
+                .withProfession(ProfessionsMCA.GUARD)
+                .withPosition(Vec3.atBottomCenterOf(enemyPos))
+                .withName("Distant Followed Player Defense Probe")
+                .spawn(EntitySpawnReason.STRUCTURE);
+        Player followedPlayer = helper.makeMockPlayer(GameType.SURVIVAL);
+        Zombie enemy = EntityType.ZOMBIE.create(helper.getLevel(), EntitySpawnReason.STRUCTURE);
+        if (enemy == null) {
+            throw new IllegalStateException("failed to create followed player attacker");
+        }
+        try {
+            guard.setNoAi(true);
+            guard.refreshBrain(helper.getLevel());
+            guard.snapTo(Vec3.atBottomCenterOf(guardPos).x, guardPos.getY(),
+                    Vec3.atBottomCenterOf(guardPos).z);
+            followedPlayer.snapTo(enemyPos.getX() - 3.5D, enemyPos.getY(), enemyPos.getZ() + 0.5D);
+            enemy.snapTo(enemyPos.getX() + 0.5D, enemyPos.getY(), enemyPos.getZ() + 0.5D);
+            enemy.setNoAi(true);
+            enemy.setTarget(followedPlayer);
+            helper.getLevel().addFreshEntity(enemy);
+            guard.getBrain().setMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING, followedPlayer);
+
+            helper.assertTrue(guard.distanceToSqr(enemy) > 48.0D * 48.0D,
+                    "fixture enemy must be outside guard's own 48-block scan");
+            helper.assertTrue(followedPlayer.distanceToSqr(enemy) < 48.0D * 48.0D,
+                    "fixture enemy must be in followed player's defense range");
+            helper.assertTrue(helper.getLevel().getEntitiesOfClass(
+                            LivingEntity.class,
+                            followedPlayer.getBoundingBox().inflate(48.0D),
+                            candidate -> candidate == enemy).contains(enemy),
+                    "fixture enemy must be queryable in the test's loaded area");
+            helper.assertTrue(guard.getSensing().hasLineOfSight(enemy),
+                    "fixture guard must have line of sight to distant enemy");
+            helper.assertTrue(guard.getBrain().getMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING)
+                            .orElse(null) == followedPlayer && enemy.getTarget() == followedPlayer,
+                    "fixture must preserve the followed-player memory and attacker target");
+
+            new GuardEnemiesSensor().doTick(helper.getLevel(), guard);
+            helper.assertTrue(guard.getBrain().getMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY)
+                            .orElse(null) == enemy,
+                    "sensor failed to defend the distant followed player despite clear line of sight");
+            helper.succeed();
+        } finally {
+            enemy.discard();
+            guard.discard();
+            followedPlayer.discard();
+        }
     }
 
     @GameTest(batch = "mca_guard_enemy_range", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
