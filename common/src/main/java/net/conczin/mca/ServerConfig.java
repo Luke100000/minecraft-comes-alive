@@ -433,7 +433,7 @@ public final class ServerConfig {
                 .defineInRange("villagerMaxHealth", 20, 1, 10000);
         enableVillagerCollisions = builder
 
-                .comment("If true, MCA villagers physically push each other while colliding. Climbing MCA villagers never receive entity collision pushes.")
+                .comment("If true, MCA villagers push each other while crowding. Disable to let MCA villagers overlap more freely in narrow spaces. Other entities are unaffected.")
                 .translation("mca.configuration.enableVillagerCollisions")
                 .define("enableVillagerCollisions", true);
         allowVillagerTeleporting = builder
