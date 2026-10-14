@@ -25,6 +25,7 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.resources.ResourceLocation;
 
 public class ClientHandlerImpl implements ClientHandler {
     private final Minecraft client = Minecraft.getInstance();
@@ -239,6 +240,27 @@ public class ClientHandlerImpl implements ClientHandler {
         DynamicSkinCache.clear();
         if (screen instanceof AppearanceCatalogUpdateListener gui) {
             gui.appearanceCatalogUpdated();
+        }
+    }
+
+    @Override
+    public void handleAppearanceClothingUpdate(AppearanceClothingUpdate message) {
+        if (ClientAppearanceCatalog.applyClothingUpdate(message.identifier(), message.effectiveClothing())) {
+            appearanceEntryUpdated(message.identifier());
+        }
+    }
+
+    @Override
+    public void handleAppearanceHairUpdate(AppearanceHairUpdate message) {
+        if (ClientAppearanceCatalog.applyHairUpdate(message.identifier(), message.customHair(), message.effectiveStyle())) {
+            appearanceEntryUpdated(message.identifier());
+        }
+    }
+
+    private void appearanceEntryUpdated(String identifier) {
+        DynamicSkinCache.invalidateSourceTexture(ResourceLocation.tryParse(identifier));
+        if (client.screen instanceof AppearanceCatalogUpdateListener listener) {
+            listener.appearanceCatalogUpdated();
         }
     }
 

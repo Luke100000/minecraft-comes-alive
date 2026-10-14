@@ -2,17 +2,13 @@ package net.conczin.mca.resources;
 
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
-import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.data.skin.SkinListEntry;
 import net.minecraft.ResourceLocationException;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
 import net.minecraft.util.profiling.ProfilerFiller;
-import net.minecraft.world.entity.Entity;
 
 import java.util.*;
 
@@ -110,26 +106,6 @@ public class EyeCatalog extends SimplePreparableReloadListener<Map<ResourceLocat
 
     public Map<ResourceLocation, EyeDefinition> effectiveDefinitions() {
         return definitions;
-    }
-
-    public void repair(VillagerLike<?> villager) {
-        ResourceLocation stored = villager.getEyeTexture();
-        ResourceLocation resolved = resolve(stored, villager.getGenetics().getGender());
-        if (!stored.equals(resolved)) {
-            MCA.LOGGER.info("Villager eye texture {} is not valid for {}; replacing it with {}",
-                    stored, villager.getGenetics().getGender(), resolved);
-            villager.setEyeTexture(resolved);
-        }
-    }
-
-    public void repairLoaded(MinecraftServer server) {
-        for (ServerLevel level : server.getAllLevels()) {
-            for (Entity entity : level.getAllEntities()) {
-                if (entity instanceof VillagerLike<?> villager) {
-                    repair(villager);
-                }
-            }
-        }
     }
 
 }

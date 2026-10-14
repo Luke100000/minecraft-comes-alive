@@ -45,8 +45,13 @@ public final class SkinVisualIds {
     public static boolean isClothing(String identifier, Gender gender) {
         ClothingList list = ClothingList.getInstance();
         Clothing clothing = getKnownClothing(identifier, list);
-        return isImmersiveLibraryId(identifier)
-                || clothing != null && SkinSelection.matchesGender(clothing, gender);
+        return matchesKnownClothing(identifier, gender, clothing);
+    }
+
+    static boolean matchesKnownClothing(String identifier, Gender gender, Clothing clothing) {
+        return clothing == null
+                ? isImmersiveLibraryId(identifier)
+                : SkinSelection.matchesGender(clothing, gender);
     }
 
     public static boolean isHairStyle(String identifier) {
@@ -95,8 +100,9 @@ public final class SkinVisualIds {
     }
 
     private static Clothing getKnownClothing(String identifier, ClothingList list) {
-        Clothing clothing = list == null ? null : list.clothing.get(identifier);
-        return clothing == null ? CustomClothingManager.getClothing().getEntries().get(identifier) : clothing;
+        return list == null
+                ? CustomClothingManager.getClothing().getEntries().get(identifier)
+                : list.getEffective(identifier);
     }
 
     private static boolean isKnownLayeredHair(String identifier, LayeredHair.Category category, LayeredHairList list) {

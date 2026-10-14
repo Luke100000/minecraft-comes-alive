@@ -53,6 +53,8 @@ public interface MessagesMCA {
         c.register(PlayerDataMessage.TYPE, PlayerDataMessage.STREAM_CODEC, false);
         c.register(ShowToastRequest.TYPE, ShowToastRequest.STREAM_CODEC, false);
         c.register(AppearanceCatalogSync.TYPE, AppearanceCatalogSync.STREAM_CODEC, false);
+        c.register(AppearanceClothingUpdate.TYPE, AppearanceClothingUpdate.STREAM_CODEC, false);
+        c.register(AppearanceHairUpdate.TYPE, AppearanceHairUpdate.STREAM_CODEC, false);
         c.register(VillagerMessage.TYPE, VillagerMessage.STREAM_CODEC, false);
         c.register(VillagerNameResponse.TYPE, VillagerNameResponse.STREAM_CODEC, false);
         c.register(BuildingPolymorphMessage.TYPE, BuildingPolymorphMessage.STREAM_CODEC, false);

@@ -19,7 +19,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Stream;
 
 public class ClothingList extends SimpleJsonResourceReloadListener {
     public static final ResourceLocation ID = MCA.locate("skins/clothing");
@@ -80,7 +79,19 @@ public class ClothingList extends SimpleJsonResourceReloadListener {
     }
 
     private List<Clothing> allClothing() {
-        return Stream.concat(clothing.values().stream(), CustomClothingManager.getClothing().getEntries().values().stream()).toList();
+        return List.copyOf(effectiveClothing(clothing, CustomClothingManager.getClothing().getEntries()).values());
+    }
+
+    /** The same custom-over-datapack precedence as the authoritative appearance snapshot. */
+    public static Map<String, Clothing> effectiveClothing(Map<String, Clothing> datapack, Map<String, Clothing> custom) {
+        Map<String, Clothing> effective = new HashMap<>(datapack);
+        effective.putAll(custom);
+        return effective;
+    }
+
+    public Clothing getEffective(String identifier) {
+        Clothing custom = CustomClothingManager.getClothing().getEntries().get(identifier);
+        return custom == null ? clothing.get(identifier) : custom;
     }
 
     private WeightedPool<String> toPool(List<Clothing> options) {

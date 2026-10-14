@@ -6,6 +6,8 @@ import com.mojang.datafixers.DataFixerBuilder;
 import com.mojang.datafixers.schemas.Schema;
 import com.mojang.serialization.Dynamic;
 import net.conczin.mca.datafix.fixes.EyeGeneticsFix;
+import net.conczin.mca.datafix.fixes.FamilyEyeGeneticsFix;
+import net.conczin.mca.entity.ai.EyeGenetics;
 import net.conczin.mca.datafix.fixes.MourningSiteMemoryFix;
 import net.conczin.mca.datafix.fixes.PersonalityAndTraitsFix;
 import net.minecraft.nbt.CompoundTag;
@@ -23,7 +25,7 @@ import java.util.Objects;
  */
 public final class McaDataFixers {
     public static final String DATA_VERSION_KEY = "MCADataVersion";
-    public static final int CURRENT_VERSION = 3;
+    public static final int CURRENT_VERSION = 4;
     public static final DSL.TypeReference MCA_DATA = () -> "mca:data";
 
     private static final String LEGACY_MCA_DATA_KEY = "MCAData";
@@ -83,6 +85,15 @@ public final class McaDataFixers {
         }
 
         CompoundTag copy = input.copy();
+        if (!copy.contains(EyeGenetics.KEY, Tag.TAG_COMPOUND)
+                || copy.getCompound(EyeGenetics.KEY).isEmpty()) {
+            copy.remove(EyeGenetics.KEY);
+            CompoundTag captured = new CompoundTag();
+            captured.putInt("Format", EyeGenetics.FORMAT);
+            CompoundTag legacy = EyeGenetics.captureLegacyNatural(input);
+            if (!legacy.isEmpty()) captured.put("LegacyNatural", legacy);
+            copy.put(FamilyEyeGeneticsFix.CAPTURE_KEY, captured);
+        }
         Dynamic<Tag> result = FIXER.update(
                 MCA_DATA,
                 new Dynamic<>(NbtOps.INSTANCE, copy),
@@ -117,6 +128,8 @@ public final class McaDataFixers {
         Schema versionThree = builder.addSchema(3, Schema::new);
         builder.addFixer(new MourningSiteMemoryFix(versionThree));
         builder.addFixer(new EyeGeneticsFix(versionThree));
+        Schema versionFour = builder.addSchema(4, Schema::new);
+        builder.addFixer(new FamilyEyeGeneticsFix(versionFour));
         return builder.build().fixer();
     }
 }

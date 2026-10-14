@@ -79,6 +79,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     }
 
     public static boolean isAllowedMcaKey(String key) {
+        if (key.equals("EyeGenetics") || key.equals("GeneEyeColor")) return false;
         if (key.startsWith("Gene")) {
             return true;
         }
@@ -153,8 +154,9 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             data.setEntityData(merged);
             data.setEntityDataSet(true);
             syncFamilyTree(player, entity, merged);
-            serverPlayer.serverLevel().players().forEach(p -> Network.sendToPlayer(new PlayerDataMessage(serverPlayer.getUUID(), merged), p));
-            Network.sendToPlayer(new GetVillagerResponse(merged), player);
+            CompoundTag saved = data.getEntityData();
+            serverPlayer.serverLevel().players().forEach(p -> Network.sendToPlayer(new PlayerDataMessage(serverPlayer.getUUID(), saved), p));
+            Network.sendToPlayer(new GetVillagerResponse(saved), player);
             return;
         }
 
@@ -194,7 +196,11 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         CompoundTag fallbackData = GetVillagerRequest.getVillagerData(entity);
         CompoundTag fallback = fallbackData == null ? new CompoundTag() : fallbackData;
         Gender gender = getGender(villagerData);
-        clearInvalidIdentifier(villagerData, fallback, "EyeTexture", identifier -> SkinVisualIds.isEyeTexture(identifier, gender));
+        // An existing datapack selection can be temporarily unavailable. Reject new invalid
+        // selections, but do not erase the saved ID when an unrelated editor field changes.
+        if (!villagerData.getString("EyeTexture").equals(fallback.getString("EyeTexture"))) {
+            clearInvalidIdentifier(villagerData, fallback, "EyeTexture", identifier -> SkinVisualIds.isEyeTexture(identifier, gender));
+        }
         clearInvalidIdentifier(villagerData, fallback, "Skin", identifier -> SkinVisualIds.isBodySkin(identifier, gender));
         clearInvalidIdentifier(villagerData, fallback, "Clothes", identifier -> SkinVisualIds.isClothing(identifier, gender));
         clearInvalidIdentifier(villagerData, fallback, "Hair", identifier -> SkinVisualIds.isHairStyle(identifier, gender));

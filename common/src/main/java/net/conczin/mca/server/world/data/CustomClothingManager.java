@@ -4,7 +4,6 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
-import net.conczin.mca.network.s2c.AppearanceCatalogSync;
 import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.Hair;
 import net.conczin.mca.resources.data.skin.SkinListEntry;
@@ -74,20 +73,22 @@ public class CustomClothingManager {
             return entries;
         }
 
-        public void addEntry(String id, T entry) {
+        public boolean addEntry(String id, T entry) {
+            T previous = entries.get(id);
+            if (previous != null && previous.toJson().equals(entry.toJson())) {
+                return false;
+            }
             entries.put(id, entry);
-            setDirty();
-        }
-
-        public void removeEntry(String id) {
-            entries.remove(id);
-            setDirty();
-        }
-
-        @Override
-        public void setDirty() {
             super.setDirty();
-            MCA.getServer().ifPresent(AppearanceCatalogSync::sendToAll);
+            return true;
+        }
+
+        public boolean removeEntry(String id) {
+            if (entries.remove(id) == null) {
+                return false;
+            }
+            super.setDirty();
+            return true;
         }
     }
 }

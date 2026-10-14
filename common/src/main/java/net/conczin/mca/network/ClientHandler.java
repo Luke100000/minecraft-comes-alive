@@ -35,6 +35,10 @@ public interface ClientHandler {
 
     void handleAppearanceCatalogSync(AppearanceCatalogSync response);
 
+    void handleAppearanceClothingUpdate(AppearanceClothingUpdate response);
+
+    void handleAppearanceHairUpdate(AppearanceHairUpdate response);
+
     void handleDestinyGuiRequest(OpenDestinyGuiRequest request);
 
     void handleDialogueQuestionResponse(InteractionDialogueQuestionResponse response);

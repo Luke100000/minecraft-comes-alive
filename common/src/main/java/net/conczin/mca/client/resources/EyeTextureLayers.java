@@ -15,11 +15,6 @@ public final class EyeTextureLayers {
     private static final int NATURAL_DYE = 0xFFFFFFFF;
     private static final int IRIS_MARKER_ALPHA = 254;
 
-    private static final int ALBINISM_EYE_COLOR = 0xFFE8A0A0;
-    private static final int BLUE_EYE_COLOR = 0xFF3A98E8;
-    private static final int GREEN_EYE_COLOR = 0xFF4CB346;
-    private static final int HAZEL_EYE_COLOR = 0xFFC29B35;
-    private static final int BROWN_EYE_COLOR = 0xFF7C4825;
     private EyeTextureLayers() {
     }
 
@@ -50,18 +45,7 @@ public final class EyeTextureLayers {
     }
 
     private static int getGeneticEyeColor(VillagerLike<?> villager, boolean shifted) {
-        if (villager.getTraits().hasTrait(Traits.ALBINISM)) {
-            return ALBINISM_EYE_COLOR;
-        }
-
-        float eyeColor = Mth.frac(villager.getGenetics().getGene(Genetics.EYE_COLOR) + (shifted ? 0.43F : 0.0F));
-        if (eyeColor < 0.35F) {
-            return FastColor.ARGB32.lerp(eyeColor / 0.35F, BLUE_EYE_COLOR, GREEN_EYE_COLOR);
-        }
-        if (eyeColor < 0.70F) {
-            return FastColor.ARGB32.lerp((eyeColor - 0.35F) / 0.35F, GREEN_EYE_COLOR, HAZEL_EYE_COLOR);
-        }
-        return FastColor.ARGB32.lerp((eyeColor - 0.70F) / 0.30F, HAZEL_EYE_COLOR, BROWN_EYE_COLOR);
+        return villager.getGenetics().getNaturalEyeColor(shifted);
     }
 
     public static DecodedPixel decodePixel(int pixel) {

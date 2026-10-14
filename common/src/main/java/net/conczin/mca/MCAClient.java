@@ -28,6 +28,7 @@ public class MCAClient {
     public static void onLogin() {
         playerData.clear();
         playerDataRequests.clear();
+        ClientAppearanceCatalog.clear();
         Network.sendToServer(new ConfigRequest());
     }
 

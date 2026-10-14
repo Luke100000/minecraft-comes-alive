@@ -200,11 +200,15 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
     }
 
     private static ResourceLocation register(ResourceLocation original, String material, EyeTextureLayers.Side side, NativeImage image, List<NativeImage> pending, List<ResourceLocation> registered) {
-        ResourceLocation id = ResourceLocation.fromNamespaceAndPath(MCA.MOD_ID, "dynamic/eye/" + side.name().toLowerCase(Locale.ROOT) + "/" + material + "/" + original.getNamespace() + "_" + original.getPath().replace("/", "_"));
+        ResourceLocation id = eyeTextureId(original, material, side);
         Minecraft.getInstance().getTextureManager().register(id, new DynamicTexture(image));
         pending.remove(image);
         registered.add(id);
         return id;
+    }
+
+    static ResourceLocation eyeTextureId(ResourceLocation original, String material, EyeTextureLayers.Side side) {
+        return ResourceLocation.fromNamespaceAndPath(MCA.MOD_ID, "dynamic/eye/" + side.name().toLowerCase(Locale.ROOT) + "/" + material + "/" + original.getNamespace() + "/" + original.getPath());
     }
 
     private EyeDefinition.Tones tones(T villager, float tickDelta, boolean left, EyeDefinition definition) {

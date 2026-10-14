@@ -23,14 +23,6 @@ public final class VillagerEditorGalleryRegressionTest {
         assertTrue((boolean)usesUnifiedGallery.invoke(null, "clothing"), "clothing must use the unified gallery");
         assertTrue((boolean)usesUnifiedGallery.invoke(null, "eyes_catalog"), "eyes must use the unified gallery");
 
-        Method showPreviewControls = policy.getDeclaredMethod("showPreviewControls", String.class);
-        showPreviewControls.setAccessible(true);
-        assertTrue((boolean)showPreviewControls.invoke(null, "skin"), "skin gallery restores preview controls");
-        assertTrue((boolean)showPreviewControls.invoke(null, "hair"), "hair gallery restores preview controls");
-        assertTrue((boolean)showPreviewControls.invoke(null, "clothing"), "clothing gallery restores preview controls and lock access");
-        assertTrue((boolean)showPreviewControls.invoke(null, "eyes_catalog"), "eyes gallery restores preview controls");
-        assertTrue((boolean)showPreviewControls.invoke(null, "hair_back"), "layered-hair selection keeps its dedicated preview controls");
-
         Method filterOptions = policy.getDeclaredMethod("filterOptions", List.class, Predicate.class, Object.class);
         filterOptions.setAccessible(true);
         List<String> filters = List.of("all", "neutral", "female", "male");

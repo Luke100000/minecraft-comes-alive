@@ -15,10 +15,6 @@ final class VillagerEditorGalleryPolicy {
                 || page.equals("eyes_catalog");
     }
 
-    static boolean showPreviewControls(String page) {
-        return true;
-    }
-
     static GalleryLayout layout(int width, int height) {
         int searchY = Math.max(8, (height - 450) / 2 + 8);
         int filterY = searchY + 26;

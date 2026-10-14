@@ -8,7 +8,9 @@ import net.conczin.mca.resources.data.skin.*;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 public final class ClientAppearanceCatalog {
     private static final BuiltInAppearanceCatalog.Catalog BUILT_IN = BuiltInAppearanceCatalog.get();
@@ -19,6 +21,7 @@ public final class ClientAppearanceCatalog {
     private static Map<String, HairStyle> hairStyles = BUILT_IN.hairStyles();
     private static Map<String, Hair> hair = Map.of();
     private static Map<ResourceLocation, EyeDefinition> eyes = Map.of();
+    private static boolean serverSnapshotReady;
 
     private ClientAppearanceCatalog() {
     }
@@ -37,6 +40,7 @@ public final class ClientAppearanceCatalog {
         hairStyles = Map.copyOf(serverHairStyles);
         hair = Map.copyOf(serverHair);
         eyes = Map.copyOf(serverEyes);
+        serverSnapshotReady = true;
     }
 
     public static void clear() {
@@ -46,6 +50,49 @@ public final class ClientAppearanceCatalog {
         hairStyles = BUILT_IN.hairStyles();
         hair = Map.of();
         eyes = Map.of();
+        serverSnapshotReady = false;
+    }
+
+    public static boolean applyClothingUpdate(String identifier, Optional<Clothing> value) {
+        if (!serverSnapshotReady || !validEntry(identifier, value)) {
+            return false;
+        }
+        Map<String, Clothing> changed = new HashMap<>(clothing);
+        if (value.isPresent()) {
+            changed.put(identifier, value.get());
+        } else {
+            changed.remove(identifier);
+        }
+        clothing = Map.copyOf(changed);
+        return true;
+    }
+
+    public static boolean applyHairUpdate(String identifier, Optional<Hair> newHair, Optional<HairStyle> newStyle) {
+        if (!serverSnapshotReady || !validEntry(identifier, newHair) || !validEntry(identifier, newStyle)) {
+            return false;
+        }
+        Map<String, Hair> changedHair = new HashMap<>(hair);
+        Map<String, HairStyle> changedStyles = new HashMap<>(hairStyles);
+        if (newHair.isPresent()) {
+            changedHair.put(identifier, newHair.get());
+        } else {
+            changedHair.remove(identifier);
+        }
+        if (newStyle.isPresent()) {
+            changedStyles.put(identifier, newStyle.get());
+        } else {
+            changedStyles.remove(identifier);
+        }
+        hair = Map.copyOf(changedHair);
+        hairStyles = Map.copyOf(changedStyles);
+        return true;
+    }
+
+    private static boolean validEntry(String identifier, Optional<? extends SkinListEntry> value) {
+        if (identifier == null || ResourceLocation.tryParse(identifier) == null || value == null) {
+            return false;
+        }
+        return value.isEmpty() || identifier.equals(value.get().getIdentifier());
     }
 
     public static Map<String, Clothing> clothing() {

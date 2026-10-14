@@ -49,8 +49,10 @@ public record AppearanceCatalogSync(
         LayeredHairList layeredHairList = LayeredHairList.getInstance();
         EyeCatalog eyeCatalog = EyeCatalog.getInstance();
 
-        HashMap<String, Clothing> clothing = copy(clothingList == null ? Map.of() : clothingList.clothing);
-        clothing.putAll(CustomClothingManager.getClothing(server).getEntries());
+        HashMap<String, Clothing> clothing = copy(ClothingList.effectiveClothing(
+                clothingList == null ? Map.of() : clothingList.clothing,
+                CustomClothingManager.getClothing(server).getEntries()
+        ));
 
         HashMap<String, Hair> hair = copy(CustomClothingManager.getHair(server).getEntries());
         HairStyleList hairStyleList = HairStyleList.getInstance();

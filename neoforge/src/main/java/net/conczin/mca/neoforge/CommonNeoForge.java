@@ -155,12 +155,8 @@ public final class CommonNeoForge {
 
     @SubscribeEvent
     public static void onDatapackSync(OnDatapackSyncEvent event) {
-        EyeCatalog eyeCatalog = EyeCatalog.getInstance();
         if (event.getPlayer() == null) {
             DestinyLocationResolver.refreshCachedDestinations(event.getPlayerList().getServer(), Config.getInstance());
-            if (eyeCatalog != null) {
-                eyeCatalog.repairLoaded(event.getPlayerList().getServer());
-            }
         }
         event.getRelevantPlayers().forEach(AppearanceCatalogSync::send);
     }

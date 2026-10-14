@@ -4,6 +4,7 @@ import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.DialogueType;
 import net.conczin.mca.entity.ai.Genetics;
+import net.conczin.mca.entity.ai.EyeGenetics;
 import net.conczin.mca.entity.ai.Messenger;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
@@ -91,6 +92,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         if (villager == null) {
             return null;
         }
+        villager.setUUID(player.getUUID());
         villager.readAdditionalSaveDataForEditor(villagerData);
         return villager;
     }
@@ -132,6 +134,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             asEntity().setCustomName(Component.literal(Names.pickCitizenName(getGenetics().getGender(), asEntity())));
         }
 
+        getGenetics().finishEyeExpression(EyeGenetics.seed(asEntity().getUUID(), 0));
         validateAppearance();
 
         asEntity().refreshDimensions();
@@ -581,10 +584,6 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         if (!asEntity().level().isClientSide) {
             migrateLegacyHairStyle();
 
-            EyeCatalog eyeCatalog = EyeCatalog.getInstance();
-            if (eyeCatalog != null) {
-                eyeCatalog.repair(this);
-            }
 
             if (!MCA.isBlankString(getSkin()) && !SkinVisualIds.isBodySkin(getSkin())) {
                 MCA.LOGGER.info("Villagers skin {} does not exist!", getSkin());
@@ -701,6 +700,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     default void readNbtForConversion(CompoundTag input) {
         this.getTypeDataManager().load((E) asEntity(), input);
         readAdditionalConversionData(input);
+        getGenetics().finishEyeExpression(EyeGenetics.seed(asEntity().getUUID(), 0));
     }
 
     default void writeAdditionalConversionData(CompoundTag output) {

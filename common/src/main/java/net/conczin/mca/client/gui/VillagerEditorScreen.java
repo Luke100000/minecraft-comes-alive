@@ -941,10 +941,6 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
     }
 
     private void addPreviewRotationWidgets() {
-        if (!VillagerEditorGalleryPolicy.showPreviewControls(page)) {
-            return;
-        }
-
         if (isAppearanceGallery()) {
             VillagerEditorGalleryPolicy.GalleryLayout galleryLayout = VillagerEditorGalleryPolicy.layout(width, height);
             // Include the clothing lock when centering the complete control group.
@@ -2388,10 +2384,6 @@ public class VillagerEditorScreen extends Screen implements AppearanceCatalogUpd
 
     @Override
     public void appearanceCatalogUpdated() {
-        villager.setEyeTexture(ClientAppearanceCatalog.resolveEye(
-                villager.getEyeTexture(),
-                villager.getGenetics().getGender()
-        ));
         filter();
         rebuildCurrentPageFromData();
     }

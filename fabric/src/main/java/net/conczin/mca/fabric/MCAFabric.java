@@ -164,12 +164,6 @@ public final class MCAFabric implements ModInitializer {
         ServerLifecycleEvents.SERVER_STOPPED.register(MCA::finishServerStop);
         ServerTickEvents.END_WORLD_TICK.register(w -> VillageManager.get(w).tick());
         ServerTickEvents.END_SERVER_TICK.register(s -> ServerInteractionManager.getInstance().tick());
-        ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((server, manager, success) -> {
-            EyeCatalog eyeCatalog = EyeCatalog.getInstance();
-            if (success && eyeCatalog != null) {
-                eyeCatalog.repairLoaded(server);
-            }
-        });
         ServerLifecycleEvents.SYNC_DATA_PACK_CONTENTS.register((player, joined) -> AppearanceCatalogSync.send(player));
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
