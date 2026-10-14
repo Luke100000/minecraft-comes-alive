@@ -769,6 +769,18 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
         Vec3 position = this.getTempMobPos();
         if (!this.climbTraversal.followPath(this.path)) {
+            WalkTarget walkTarget = this.mob.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                    .orElse(null);
+            if (this.path.canReach() && this.path.getNextNodeIndex() == this.path.getNodeCount() - 1
+                    && walkTarget != null && walkTarget.getTarget() instanceof BedApproachTarget bedTarget
+                    && bedTarget.getPathTargets(this.mob).contains(this.path.getTarget())
+                    && !bedTarget.isReached(this.mob, 0)) {
+                // Vanilla's width-based waypoint tolerance can finish a small mob's route
+                // outside sleep reach. Retain the final node so native move control finishes
+                // the safe approach; never hold partial or intermediate physical spans here.
+                this.doStuckDetection(position);
+                return;
+            }
             super.followThePath();
             return;
         }
