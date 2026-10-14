@@ -28,20 +28,44 @@ class EyeGeneticsTest {
     @Test void darkestPhenotypeDoesNotWrapToBlue() {
         assertEquals(0xFF7B4E35, EyeGenetics.resolveNatural(genes(2, 2, 0, 0), null, false));
     }
-    @Test void productionFoundersFavorVarietyOverBrown() {
-        int[] counts = new int[6];
+    @Test void heterochromiaCanBeLighterOrDarkerAndSubtleOrPronounced() {
+        var light = genes(0, 0, 1, 1);
+        var dark = genes(2, 2, 1, 1);
+        int lighter = 0, darker = 0, subtle = 0, pronounced = 0;
+        RandomSource random = RandomSource.create(263);
+        for (int i = 0; i < 1024; i++) {
+            var local = EyeGenetics.localExpression(light, random);
+            float offset = local.pigmentationOffset();
+            assertTrue(Math.abs(offset) >= 0.05F && Math.abs(offset) <= 0.4F);
+            assertTrue(Math.abs(local.appearanceOffset()) <= 0.25F);
+            if (offset < 0) lighter++; else darker++;
+            if (Math.abs(offset) < 0.15F) subtle++;
+            if (Math.abs(offset) > 0.3F) pronounced++;
+        }
+        assertTrue(lighter > 0 && darker > 0, "Local pigment differences must allow both directions");
+        assertTrue(subtle > 0 && pronounced > 0, "Local expression must include weak and strong differences");
+        assertEquals(EyeGenetics.localExpression(light, RandomSource.create(11)),
+                EyeGenetics.localExpression(dark, RandomSource.create(11)),
+                "The same local draw must not force opposite directions based on inherited pigment");
+    }
+    @Test void productionFoundersKeepDiverseAlleleWeightsAndNaturalShadeVariety() {
+        int[] pigmentCounts = new int[3], modifierCounts = new int[3];
+        var colours = new java.util.HashSet<Integer>();
         RandomSource random = RandomSource.create(557);
         for (int i = 0; i < 100_000; i++) {
             var genotype = EyeGenetics.founder(EyeGenetics.PopulationPreset.DIVERSE, random);
-            float pigment = (0.75F * Math.max(genotype.pigmentation().first(), genotype.pigmentation().second())
-                    + 0.25F * Math.min(genotype.pigmentation().first(), genotype.pigmentation().second())) / 2;
-            float shade = (genotype.modifier().first() + genotype.modifier().second()) / 4.0F;
-            int family = pigment < 0.30F ? (shade < 0.125F ? 4 : 1)
-                    : pigment < 0.65F ? (shade < 0.375F ? 3 : 2) : pigment < 0.90F && shade >= 0.90F ? 5 : 0;
-            counts[family]++;
+            pigmentCounts[genotype.pigmentation().first()]++;
+            pigmentCounts[genotype.pigmentation().second()]++;
+            modifierCounts[genotype.modifier().first()]++;
+            modifierCounts[genotype.modifier().second()]++;
+            colours.add(EyeGenetics.resolveNatural(genotype, null, false));
         }
-        // Brown, blue, hazel, green, grey, amber. These are founder weights, not offspring quotas.
-        double[] expected = {35.163, 24.124, 18.946, 10.866, 6.126, 4.774};
-        for (int i = 0; i < counts.length; i++) assertEquals(expected[i], counts[i] / 1000.0, 1.0);
+        double[] pigmentWeights = {0.55, 0.225, 0.225}, modifierWeights = {0.45, 0.18, 0.37};
+        for (int i = 0; i < 3; i++) {
+            assertEquals(pigmentWeights[i], pigmentCounts[i] / 200_000.0, 0.01);
+            assertEquals(modifierWeights[i], modifierCounts[i] / 200_000.0, 0.01);
+        }
+        assertTrue(colours.size() >= 20, "Founder DNA must resolve to more than a small set of repeated base shades");
+        System.out.printf("Diverse production sampler: 100000 founders, %d distinct ordinary RGB shades%n", colours.size());
     }
 }

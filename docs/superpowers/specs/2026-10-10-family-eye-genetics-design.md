@@ -14,9 +14,10 @@ for numerical evidence. The implementation contract is documented below.
 - `EyeGenetics` owns two pairs of integer alleles in [0,2], stored as
   `PigmentA`, `PigmentB`, `ModifierA`, `ModifierB` in a compound with integer
   `Format=1`. MCA migration version is independently `MCADataVersion=4`.
-- The phenotype equations and palette follow the calibrated functions in the
-  linked report. The founder sampler was subsequently rebalanced, as specified
-  below. Only `eyePopulationPreset="DIVERSE"` ships.
+- The inherited coordinates follow the calibrated functions in the linked
+  report; the palette and local-expression sampler now follow the approved
+  2026-10-14 amendment below. The founder sampler was previously rebalanced.
+  Only `eyePopulationPreset="DIVERSE"` ships.
   This is a gameplay distribution, not human demographic data or offspring quotas.
 - Inheritance copies one allele from each available parent at each locus. Only a
   missing contribution is synthesized from the joint founder sampler. A saved
@@ -56,7 +57,51 @@ for numerical evidence. The implementation contract is documented below.
 
 Downgrading the new saves is unsupported. Back up worlds before adoption.
 
-### Founder rebalance (2026-10-10)
+## Smooth natural shades and local heterochromia (2026-10-14)
+
+The user approved the before/after preview for ordinary eyes and complete
+heterochromia. Keep the existing allele pairs, inheritance, no-mutation policy,
+founder weights, UUID/domain seeding and `Format=1`/MCA version 4 save shape.
+This is an artistic gameplay approximation, not a human pigmentation simulator.
+
+For inherited coordinates `P` and `S`, use the existing six RGB anchors. Define
+`smooth(a,b,x)` as `t*t*(3-2*t)` where `t=clamp((x-a)/(b-a),0,1)`. Blend channels
+without intermediate rounding:
+
+- Cool anchor: grey to blue with `smooth(0,0.5,S)`.
+- Middle anchor: green to hazel with `smooth(0,0.75,S)`.
+- Warm anchor: brown to amber with `smooth(0.65,1,S)`.
+- Below `P=0.5`, blend cool to middle with `smooth(0,0.5,P)`.
+- From `P=0.5` to `0.8`, blend middle to warm with `smooth(0.5,0.8,P)`.
+- Above `P=0.8`, blend warm to brown with `smooth(0.8,1,P)`.
+- Multiply channels by `0.85+0.30*P`, round once, cap at 255, and use opaque alpha.
+
+Children still copy alleles; parental RGB is never averaged. The finite allele
+model yields 20 distinct ordinary undyed RGB shades before brightness, texture
+tone overrides and lighting. This is not an unlimited continuous genetic range.
+
+For newly initialized local heterochromia, choose either pigment direction with
+equal probability, independently of inherited pigmentation. Its magnitude is
+uniform in `[0.05,0.4)`; the secondary offset remains uniform in `[-0.25,0.25)`.
+These are gameplay choices, not clinical frequencies. Apply the saved offsets to
+the left eye only while the existing trait is active, clamp coordinates, and use
+the same blended resolver. A clamped effect may be subtle or visually unchanged;
+do not reroll until different. Keep trait inheritance and the affected side as-is.
+
+Existing valid DNA and `Local` values are retained. New-model villagers change
+shade under the new resolver, including those already saved. `LegacyNatural`
+continues to use its prior gradient/baked resolver, preserving recoverable old
+appearance. Dye, albinism, rainbow, texture selection, exporter and cache ownership
+remain in their established paths; there is no new genetics editor or packet.
+Missing alleles use constrained legacy inference only when natural legacy colour
+exists; otherwise fill invalid/missing slots from a stable Diverse founder sample.
+
+The former six-family frequency figures below describe the threshold palette.
+They do not forecast perceived colour categories under the blended palette. The
+new validation checks founder allele weights and shade variety directly; exact
+RGB swatches are distinct from perceptual classification and client evidence.
+
+### Historical founder rebalance (2026-10-10)
 
 The user requested fewer brown eyes and more variety. `DIVERSE` retains the
 same independent-allele founder model, with pigmentation allele weights

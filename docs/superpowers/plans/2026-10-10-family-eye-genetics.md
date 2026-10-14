@@ -272,3 +272,48 @@ The current weights and analytical expectations are in the design's founder
 rebalance section. The earlier million-founder/descendant calibration figures
 remain evidence for the *previous* sampler, not predictions for the rebalanced
 population. Rebalanced founder frequencies have a focused reproducible test.
+
+## Approved shade and heterochromia amendment (2026-10-14)
+
+The user approved implementing the before/after visual for ordinary eyes and
+complete heterochromia. This bounded follow-up changes `EyeGenetics` expression:
+smooth blends through the existing palette, and genotype-independent positive/
+negative local pigment offsets ranging from weak to strong. The exact functions
+and compatibility behavior are in the design's 2026-10-14 amendment. Founder
+weights, copied alleles, save shape, cosmetics and trait inheritance stay in their
+existing owners. Existing new-model DNA/local values are retained but render
+through the new palette; the legacy natural resolver is unchanged.
+
+Three focused tests failed on the intended old behavior before the change:
+repeated modifier swatches, abrupt colour jumps at old family cutoffs, and
+heterochromia constrained to one direction/no subtle pigment differences. All
+passed after implementation. The founder regression now checks actual allele
+weights and production RGB shade variety, rather than duplicating historical
+six-family thresholds. A reproducible sample of 100,000 Diverse founders produces
+20 ordinary RGB shades before brightness and texture/lighting.
+
+Validation:
+
+- `:common:test :fabric:build :neoforge:build` passed; 619 common tests with no
+  failures, errors or skips. Existing compiler/Javadoc warnings remain.
+- `:neoforge:runGameTestServer -PmcaGameTest=EyeGeneticsGameTests` passed all 12
+  required tests. Log: `.superpowers/sdd/2026-10-14-eye-shades/eye-runtime.log`.
+- A disposable NeoForge client harness passed all 18 authoritative DNA/static
+  colour snapshots, actual rendering, resource reload and pixel-identical static
+  exports (17 fixtures; animated rainbow excluded). Actual editor packet
+  dye/trait edits, world save/restart and reconnect retained DNA/local effects.
+  Log: `.superpowers/sdd/2026-10-14-eye-shades/client-runtime.log`; screenshots
+  and exports are in that directory's `client-artifacts`.
+- The temporary harness uses an ignored Gradle init script and ignored source/
+  world directories. Production build files were not changed. Normal packaging
+  was rerun without the init script; no harness is included in the jar.
+- Final `:common:test :neoforge:jar` passed after removing temporary harness
+  sources from the build inputs. Log: `final-common-packaging.log` in the same
+  evidence directory. All 619 common tests passed again.
+
+The original implementation was committed externally during this follow-up as
+`c70c0c937`; this amendment remains local and uncommitted. No commit/push was
+performed by this task. Fabric runtime and remote multiplayer were not rerun;
+the client evidence above is NeoForge integrated-server evidence. Historical
+colour-family percentages and simulation fixtures remain historical evidence,
+not population predictions for the blended palette.

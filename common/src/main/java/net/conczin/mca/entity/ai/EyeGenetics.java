@@ -18,6 +18,9 @@ public final class EyeGenetics {
     private static final long INFERENCE_SALT = 0x455945494E464552L;
     public static final long FOUNDER_SALT = 0x455945464F554E44L;
     public static final long LOCAL_SALT = 0x4559454C4F43414CL;
+    private static final int GREY = 0xFF81909C, BLUE = 0xFF6699BE;
+    private static final int GREEN = 0xFF70975D, HAZEL = 0xFF8E9D4C;
+    private static final int AMBER = 0xFFC98A30, BROWN = 0xFF6B442E;
     // Representative iris pixels from the bundled 22-entry textures at f756d7bd20fb26ebbf371f93f9815349e6b1467a.
     // These retain recoverable colour, not pixel-identical shading/custom resource-pack artwork.
     private static final int[][] BAKED = {
@@ -82,8 +85,9 @@ public final class EyeGenetics {
         return (genotype.modifier.first + genotype.modifier.second) / 4.0F;
     }
     public static LocalExpression localExpression(Genotype genotype, RandomSource random) {
-        float direction = pigmentation(genotype) < 0.5F ? 1 : -1;
-        return new LocalExpression(direction * (0.2F + 0.2F * random.nextFloat()), (random.nextFloat() - 0.5F) * 0.5F);
+        Objects.requireNonNull(genotype);
+        float direction = random.nextBoolean() ? 1 : -1;
+        return new LocalExpression(direction * (0.05F + 0.35F * random.nextFloat()), (random.nextFloat() - 0.5F) * 0.5F);
     }
     public static int resolveNatural(Genotype genotype, LocalExpression local, boolean left) {
         float p = pigmentation(genotype), s = modifier(genotype);
@@ -91,14 +95,26 @@ public final class EyeGenetics {
             p = Mth.clamp(p + local.pigmentationOffset, 0, 1);
             s = Mth.clamp(s + local.appearanceOffset, 0, 1);
         }
-        int base = p < 0.30F ? (s < 0.125F ? 0xFF81909C : 0xFF6699BE)
-                : p < 0.65F ? (s < 0.375F ? 0xFF70975D : 0xFF8E9D4C)
-                : (p < 0.90F && s >= 0.90F ? 0xFFC98A30 : 0xFF6B442E);
-        float brightness = 0.85F + 0.30F * p;
-        return 0xFF000000 | (scale(base >>> 16 & 255, brightness) << 16)
-                | (scale(base >>> 8 & 255, brightness) << 8) | scale(base & 255, brightness);
+        return 0xFF000000 | (naturalChannel(p, s, 16) << 16)
+                | (naturalChannel(p, s, 8) << 8) | naturalChannel(p, s, 0);
     }
-    private static int scale(int value, float factor) { return Math.min(255, Math.round(value * factor)); }
+    /** Blend expression coordinates, never parental RGB. Round once after blending and brightness. */
+    private static int naturalChannel(double p, double s, int shift) {
+        double cool = blend(GREY >>> shift & 255, BLUE >>> shift & 255, smooth(0, 0.5, s));
+        double middle = blend(GREEN >>> shift & 255, HAZEL >>> shift & 255, smooth(0, 0.75, s));
+        double warm = blend(BROWN >>> shift & 255, AMBER >>> shift & 255, smooth(0.65, 1, s));
+        double channel = p < 0.5 ? blend(cool, middle, smooth(0, 0.5, p))
+                : p < 0.8 ? blend(middle, warm, smooth(0.5, 0.8, p))
+                : blend(warm, BROWN >>> shift & 255, smooth(0.8, 1, p));
+        return Math.min(255, (int) Math.round(channel * (0.85 + 0.30 * p)));
+    }
+    private static double blend(double first, double second, double weight) {
+        return first + (second - first) * weight;
+    }
+    private static double smooth(double lower, double upper, double value) {
+        double t = Mth.clamp((value - lower) / (upper - lower), 0, 1);
+        return t * t * (3 - 2 * t);
+    }
     public static Genotype inferLegacy(CompoundTag legacy, UUID identity) {
         return infer(legacy, new CompoundTag(), identity);
     }

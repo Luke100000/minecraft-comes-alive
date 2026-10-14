@@ -7,6 +7,12 @@ two-pair model, DIVERSE-only sampler and no mutation. Production integration and
 migration are implemented locally; final verification is recorded in the plan.
 The measurements below remain numerical experiments, not in-game population counts.
 
+The 2026-10-14 user-approved smooth-palette amendment supersedes the threshold
+colour resolver and local-offset sampler measured here. Allele inheritance and
+founder weights are unchanged. See the [current expression contract](2026-10-10-family-eye-genetics-design.md#smooth-natural-shades-and-local-heterochromia-2026-10-14).
+This report is historical model-selection evidence; its colour-family counts and
+identical-parent swatches do not describe the current blended palette.
+
 The founder sampler was later rebalanced to reduce brown eyes; see the
 [implemented contract](2026-10-10-family-eye-genetics-design.md#founder-rebalance-2026-10-10).
 Founder frequencies and descendant measurements below describe the *original*
