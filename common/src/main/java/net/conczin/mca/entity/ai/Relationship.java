@@ -151,8 +151,9 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
             // fill it and yeet the villager into depression
             nearest.ifPresentOrElse(pos -> {
                 if (entity.level().getBlockState(pos).is(TagsMCA.Blocks.TOMBSTONES) && entity.level().getBlockEntity(pos) instanceof TombstoneBlock.Data tombstone) {
-                    onTragedy(cause, pos);
+                    // Save the tombstone before onTragedy, so it keeps the pre-death mood.
                     tombstone.setEntity(entity);
+                    onTragedy(cause, pos);
                 } else {
                     onTragedy(cause, null);
                 }

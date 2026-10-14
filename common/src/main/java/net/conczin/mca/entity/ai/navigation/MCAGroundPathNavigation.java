@@ -22,12 +22,14 @@ import net.minecraft.world.level.pathfinder.PathFinder;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.AABB;
 
 import java.util.Set;
 
 public class MCAGroundPathNavigation extends GroundPathNavigation {
     private static final float REQUIRED_PATH_LENGTH = 48.0F;
     private static final int VISITED_NODES_PER_BLOCK = 16;
+    private static final int MAX_EXTENDED_VISITED_NODES = 1_024;
     private static final int FALL_RESYNC_LOOKAHEAD = 2;
     private static final int FALL_RESYNC_HORIZONTAL_DISTANCE = 2;
     private static final int FALL_RESYNC_MIN_VERTICAL_DROP = 2;
@@ -148,6 +150,13 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                         1.0F,
                         maxPathLength * VISITED_NODES_PER_BLOCK / ordinaryBudget
                 );
+                if (maxPathLength > getOrdinaryPathLength(mob)) {
+                    // An unreachable distant target can consume thousands of node
+                    // expansions in one server tick. Retain the ordinary budget and
+                    // let persistent targets progress through bounded partial paths.
+                    rangeMultiplier = Math.min(rangeMultiplier,
+                            Math.max(1.0F, (float) MAX_EXTENDED_VISITED_NODES / ordinaryBudget));
+                }
                 if (!PathRequestDiagnostics.enabled()) {
                     return super.findPath(region, mob, targets, maxPathLength, reachRange,
                             visitedNodesMultiplier * rangeMultiplier);
@@ -333,7 +342,25 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
     @Override
     public boolean canCutCorner(PathType type) {
-        return type != PathType.DOOR_OPEN && super.canCutCorner(type);
+        if (type == PathType.DOOR_OPEN || !super.canCutCorner(type)) {
+            return false;
+        }
+        if (this.path == null || this.path.isDone()
+                || this.path.getNextNodeIndex() + 1 >= this.path.getNodeCount()) {
+            return true;
+        }
+
+        int index = this.path.getNextNodeIndex();
+        int currentY = this.path.getNode(index).y;
+        int followingY = this.path.getNode(index + 1).y;
+        if (followingY <= currentY) {
+            return true;
+        }
+
+        AABB body = this.mob.getBoundingBox();
+        double rise = followingY - body.minY;
+        return rise <= 1.0E-4D
+                || this.level.noBlockCollision(this.mob, body.expandTowards(0.0D, rise, 0.0D));
     }
 
     @Override
@@ -742,6 +769,18 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
         Vec3 position = this.getTempMobPos();
         if (!this.climbTraversal.followPath(this.path)) {
+            WalkTarget walkTarget = this.mob.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                    .orElse(null);
+            if (this.path.canReach() && this.path.getNextNodeIndex() == this.path.getNodeCount() - 1
+                    && walkTarget != null && walkTarget.getTarget() instanceof BedApproachTarget bedTarget
+                    && bedTarget.getPathTargets(this.mob).contains(this.path.getTarget())
+                    && !bedTarget.isReached(this.mob, 0)) {
+                // Vanilla's width-based waypoint tolerance can finish a small mob's route
+                // outside sleep reach. Retain the final node so native move control finishes
+                // the safe approach; never hold partial or intermediate physical spans here.
+                this.doStuckDetection(position);
+                return;
+            }
             super.followThePath();
             return;
         }
@@ -776,6 +815,13 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         int currentIndex = path.getNextNodeIndex();
         int feetY = this.mob.blockPosition().getY();
         if (path.getNodePos(currentIndex).getY() - feetY < FALL_RESYNC_MIN_VERTICAL_DROP) {
+            return;
+        }
+
+        // Partial-height floors quantize blockPosition downward although the physical body
+        // has not fallen two blocks. Preserve the unreached raised waypoint in that case.
+        if (path.getNodePos(currentIndex).getY() - this.mob.getBoundingBox().minY
+                < FALL_RESYNC_MIN_VERTICAL_DROP) {
             return;
         }
 

@@ -109,6 +109,28 @@ public interface EntityRelationship {
         }
     }
 
+    /**
+     * Undoes death for a villager revived from a tombstone. Death marks the marriage WIDOW but
+     * keeps the partner uuid, so re-marry when that partner still points back. Otherwise the
+     * villager stays a widow and can remarry.
+     */
+    default void onResurrection() {
+        FamilyTreeNode entry = getFamilyEntry();
+        entry.setDeceased(false);
+
+        UUID partnerId = entry.partner();
+        if (entry.getRelationshipState() != RelationshipState.WIDOW || !FamilyTreeNode.isValid(partnerId)) {
+            return;
+        }
+
+        getFamilyTree().getOrEmpty(partnerId)
+                .filter(partner -> entry.id().equals(partner.partner()))
+                .ifPresent(partner -> {
+                    entry.updatePartner(partner);
+                    partner.updatePartner(entry);
+                });
+    }
+
     default void marry(Entity spouse) {
         RelationshipState state = spouse instanceof Player ? RelationshipState.MARRIED_TO_PLAYER : RelationshipState.MARRIED_TO_VILLAGER;
         if (spouse instanceof ServerPlayer spouseEntity) {

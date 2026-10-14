@@ -7,10 +7,12 @@ import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
+import java.util.IdentityHashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /** Produces geometry candidates for configured Room POIs after topology has been decided. */
 final class RoomPoiEvidence {
@@ -19,21 +21,13 @@ final class RoomPoiEvidence {
 
     static Set<BlockPos> candidates(Collection<RoomPartitioner.Component> components,
                                     RoomPartitioner.Component component) {
-        LinkedHashSet<BlockPos> result = new LinkedHashSet<>();
-        OccupancyIndex occupancy = OccupancyIndex.create(components);
-
-        for (FloorGeometry.Cell cell : component.cells()) {
-            addColumn(result, cell.feet().getX(), cell.feet().getZ(),
-                    cell.feet().getY() - 1, cell.ceilingY());
-            for (Direction direction : Direction.Plane.HORIZONTAL) {
-                int x = cell.feet().getX() + direction.getStepX();
-                int z = cell.feet().getZ() + direction.getStepZ();
-                if (occupancy.ownsPerimeterColumn(component, cell, x, z)) {
-                    addColumn(result, x, z, cell.feet().getY() - 1, cell.ceilingY());
-                }
-            }
-        }
+        Set<BlockPos> result = new HashSet<>();
+        index(components).forEachCandidate(component, pos -> result.add(pos.immutable()));
         return Set.copyOf(result);
+    }
+
+    static Index index(Collection<RoomPartitioner.Component> components) {
+        return Index.create(components);
     }
 
     private static boolean overlapsPoiInterval(FloorGeometry.Cell sourceCell,
@@ -44,38 +38,82 @@ final class RoomPoiEvidence {
                 && sourceMinY < candidate.ceilingY();
     }
 
-    private static void addColumn(Set<BlockPos> result, int x, int z, int minY, int ceilingY) {
-        for (int y = minY; y < ceilingY; y++) {
-            result.add(new BlockPos(x, y, z));
-        }
-    }
-
     private record Column(int x, int z) {
     }
 
     private record IndexedCell(int componentIndex, FloorGeometry.Cell cell) {
     }
 
-    private record OccupancyIndex(
+    /** Index the complete partition for perimeter ownership; bulk callers can reuse it. */
+    static record Index(
             List<RoomPartitioner.Component> components,
-            Map<Column, List<IndexedCell>> cellsByColumn) {
+            Map<Column, List<IndexedCell>> cellsByColumn,
+            int[] ownerRanks,
+            Map<RoomPartitioner.Component, Integer> componentIndices) {
 
-        private static OccupancyIndex create(Collection<RoomPartitioner.Component> components) {
+        private static Index create(Collection<RoomPartitioner.Component> components) {
             List<RoomPartitioner.Component> orderedComponents = new ArrayList<>(components.size());
             Map<Column, List<IndexedCell>> cellsByColumn = new HashMap<>();
+            Map<RoomPartitioner.Component, Integer> componentIndices = new IdentityHashMap<>();
             int componentIndex = 0;
             for (RoomPartitioner.Component candidate : components) {
                 orderedComponents.add(candidate);
+                componentIndices.put(candidate, componentIndex);
                 for (FloorGeometry.Cell cell : candidate.cells()) {
                     cellsByColumn.computeIfAbsent(column(cell), ignored -> new ArrayList<>())
                             .add(new IndexedCell(componentIndex, cell));
                 }
                 componentIndex++;
             }
-            return new OccupancyIndex(List.copyOf(orderedComponents), immutableLists(cellsByColumn));
+            List<Integer> indices = new ArrayList<>(orderedComponents.size());
+            for (int i = 0; i < orderedComponents.size(); i++) indices.add(i);
+            indices.sort((left, right) -> RoomPartitioner.OWNER_ORDER.compare(
+                    orderedComponents.get(left), orderedComponents.get(right)));
+            int[] ownerRanks = new int[indices.size()];
+            for (int rank = 0; rank < indices.size(); rank++) ownerRanks[indices.get(rank)] = rank;
+
+            return new Index(List.copyOf(orderedComponents), cellsByColumn, ownerRanks, componentIndices);
         }
 
-        private boolean ownsPerimeterColumn(RoomPartitioner.Component component,
+        /** The visitor sees a reused mutable cursor and must copy positions it retains. */
+        void forEachCandidate(RoomPartitioner.Component component, Consumer<BlockPos> visit) {
+            Integer knownIndex = componentIndices.get(component);
+            int componentIndex = knownIndex == null ? components.indexOf(component) : knownIndex;
+            int baseY = component.cells().stream().mapToInt(cell -> cell.feet().getY() - 1)
+                    .min().orElse(0);
+            Map<Column, BitSet> occupiedHeights = new HashMap<>();
+            for (FloorGeometry.Cell cell : component.cells()) {
+                int from = cell.feet().getY() - 1;
+                int to = cell.ceilingY();
+                addInterval(occupiedHeights, cell.feet().getX(), cell.feet().getZ(), from, to, baseY);
+                for (Direction direction : Direction.Plane.HORIZONTAL) {
+                    int x = cell.feet().getX() + direction.getStepX();
+                    int z = cell.feet().getZ() + direction.getStepZ();
+                    if (ownsPerimeterColumn(componentIndex, cell, x, z)) {
+                        addInterval(occupiedHeights, x, z, from, to, baseY);
+                    }
+                }
+            }
+
+            BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+            for (Map.Entry<Column, BitSet> entry : occupiedHeights.entrySet()) {
+                Column column = entry.getKey();
+                BitSet heights = entry.getValue();
+                for (int bit = heights.nextSetBit(0); bit >= 0; bit = heights.nextSetBit(bit + 1)) {
+                    cursor.set(column.x(), baseY + bit, column.z());
+                    visit.accept(cursor);
+                }
+            }
+        }
+
+        private static void addInterval(Map<Column, BitSet> heights, int x, int z,
+                                        int from, int to, int baseY) {
+            if (from >= to) return;
+            heights.computeIfAbsent(new Column(x, z), ignored -> new BitSet())
+                    .set(from - baseY, to - baseY);
+        }
+
+        private boolean ownsPerimeterColumn(int componentIndex,
                                             FloorGeometry.Cell sourceCell,
                                             int x,
                                             int z) {
@@ -83,35 +121,26 @@ final class RoomPoiEvidence {
             if (occupants.stream().anyMatch(candidate -> overlapsPoiInterval(sourceCell, candidate.cell()))) {
                 return false;
             }
-            return component.equals(adjacentOwner(sourceCell, x, z));
+            return componentIndex >= 0 && componentIndex == adjacentOwner(sourceCell, x, z);
         }
 
-        private RoomPartitioner.Component adjacentOwner(FloorGeometry.Cell sourceCell, int x, int z) {
-            BitSet adjacent = new BitSet(components.size());
+        private int adjacentOwner(FloorGeometry.Cell sourceCell, int x, int z) {
+            int owner = -1;
             for (Direction direction : Direction.Plane.HORIZONTAL) {
                 Column neighbor = new Column(x + direction.getStepX(), z + direction.getStepZ());
                 for (IndexedCell candidate : cellsByColumn.getOrDefault(neighbor, List.of())) {
                     if (Math.abs(candidate.cell().feet().getY() - sourceCell.feet().getY()) <= 1) {
-                        adjacent.set(candidate.componentIndex());
+                        int index = candidate.componentIndex();
+                        if (owner < 0 || ownerRanks[index] < ownerRanks[owner]) owner = index;
                     }
                 }
             }
-
-            List<RoomPartitioner.Component> adjacentComponents = new ArrayList<>(adjacent.cardinality());
-            for (int index = adjacent.nextSetBit(0); index >= 0; index = adjacent.nextSetBit(index + 1)) {
-                adjacentComponents.add(components.get(index));
-            }
-            return RoomPartitioner.owner(adjacentComponents);
+            return owner;
         }
 
         private static Column column(FloorGeometry.Cell cell) {
             return new Column(cell.feet().getX(), cell.feet().getZ());
         }
 
-        private static <T> Map<Column, List<T>> immutableLists(Map<Column, List<T>> source) {
-            Map<Column, List<T>> copy = new HashMap<>();
-            source.forEach((column, values) -> copy.put(column, List.copyOf(values)));
-            return Map.copyOf(copy);
-        }
     }
 }

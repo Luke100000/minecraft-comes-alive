@@ -67,15 +67,12 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
             return false;
         }
 
-        boolean preserveMourningHands = isPeacefullyGrieving(villager);
         if (wear) {
             lastEquipTime = villager.tickCount;
-            return !present || set != null && !preserveMourningHands && isMissingRequestedHandItem(villager, set);
-        } else if (villager.tickCount - lastEquipTime > COOLDOWN) {
-            return present;
-        } else {
-            return false;
+            return !present || set != null && !isPeacefullyGrieving(villager)
+                    && isMissingRequestedHandItem(villager, set);
         }
+        return villager.tickCount - lastEquipTime > COOLDOWN && present;
     }
 
     private void equipBestArmor(VillagerEntityMCA villager, EquipmentSlot slot, Item fallback) {

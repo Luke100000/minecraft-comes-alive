@@ -4,6 +4,7 @@ import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 
 import java.util.AbstractCollection;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -116,6 +117,23 @@ class RoomPoiEvidenceTest {
     }
 
     @Test
+    void largeSharedPerimeterHasOneOwner() {
+        Set<FloorGeometry.Cell> leftCells = new HashSet<>();
+        Set<FloorGeometry.Cell> rightCells = new HashSet<>();
+        for (int z = 0; z < 2_000; z++) {
+            leftCells.add(new FloorGeometry.Cell(new BlockPos(0, 64, z), 68));
+            rightCells.add(new FloorGeometry.Cell(new BlockPos(2, 64, z), 68));
+        }
+        var left = new RoomPartitioner.Component(leftCells);
+        var right = new RoomPartitioner.Component(rightCells);
+        List<RoomPartitioner.Component> rooms = List.of(left, right);
+        BlockPos sharedWall = new BlockPos(1, 65, 1_000);
+
+        assertTrue(RoomPoiEvidence.candidates(rooms, left).contains(sharedWall));
+        assertFalse(RoomPoiEvidence.candidates(rooms, right).contains(sharedWall));
+    }
+
+    @Test
     void stackedRoomDoesNotHideLowerPerimeterPoiEvidence() {
         FloorGeometry.Cell lowerCell = new FloorGeometry.Cell(new BlockPos(0, 64, 0), 68);
         FloorGeometry.Cell upperCell = new FloorGeometry.Cell(new BlockPos(1, 70, 0), 74);
@@ -154,6 +172,57 @@ class RoomPoiEvidenceTest {
         assertTrue(candidates.contains(new BlockPos(0, 65, 1)));
         assertEquals(1, components.iteratorCalls,
                 "Room POI materialization should build one operation-local component index");
+    }
+
+    @Test
+    void sharedEvidenceIndexDoesNotRevisitComponentsForEachRoom() {
+        var left = new RoomPartitioner.Component(Set.of(
+                new FloorGeometry.Cell(new BlockPos(0, 64, 0), 68)));
+        var right = new RoomPartitioner.Component(Set.of(
+                new FloorGeometry.Cell(new BlockPos(2, 64, 0), 68)));
+        var components = new CountingComponents(List.of(left, right));
+
+        var index = RoomPoiEvidence.index(components);
+        Set<BlockPos> leftCandidates = new HashSet<>();
+        Set<BlockPos> rightCandidates = new HashSet<>();
+        index.forEachCandidate(left, pos -> leftCandidates.add(pos.immutable()));
+        index.forEachCandidate(right, pos -> rightCandidates.add(pos.immutable()));
+        assertTrue(leftCandidates.contains(new BlockPos(1, 65, 0)));
+        assertFalse(rightCandidates.contains(new BlockPos(1, 65, 0)));
+        assertEquals(1, components.iteratorCalls);
+    }
+
+    @Test
+    void visitingCandidatesUsesOneCursorWithoutChangingPoiGeometry() {
+        var room = new RoomPartitioner.Component(Set.of(
+                new FloorGeometry.Cell(new BlockPos(0, -58, 0), -20),
+                new FloorGeometry.Cell(new BlockPos(1, -57, 0), -18)));
+        var neighbor = new RoomPartitioner.Component(Set.of(
+                new FloorGeometry.Cell(new BlockPos(3, -58, 0), -20)));
+        List<RoomPartitioner.Component> rooms = List.of(room, neighbor);
+        Set<BlockPos> expected = new HashSet<>();
+        for (int y = -59; y < -20; y++) {
+            expected.add(new BlockPos(-1, y, 0));
+            expected.add(new BlockPos(0, y, -1));
+            expected.add(new BlockPos(0, y, 0));
+            expected.add(new BlockPos(0, y, 1));
+        }
+        for (int y = -58; y < -18; y++) {
+            expected.add(new BlockPos(1, y, -1));
+            expected.add(new BlockPos(1, y, 0));
+            expected.add(new BlockPos(1, y, 1));
+            expected.add(new BlockPos(2, y, 0));
+        }
+        Set<BlockPos> visited = new HashSet<>();
+        BlockPos[] cursor = {null};
+
+        RoomPoiEvidence.index(rooms).forEachCandidate(room, pos -> {
+            if (cursor[0] == null) cursor[0] = pos;
+            else assertTrue(cursor[0] == pos, "POI traversal should reuse one mutable cursor");
+            assertTrue(visited.add(pos.immutable()), "each POI must be visited exactly once");
+        });
+
+        assertEquals(expected, visited);
     }
 
     private static final class CountingComponents
