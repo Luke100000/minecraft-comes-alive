@@ -124,13 +124,14 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         BlockPos mobPos = this.mob.blockPosition();
         AABB startBox = this.mob.getBoundingBox();
         double modeledFloor = this.getFloorLevel(mobPos);
-        boolean raisedSameColumn = selectedStart.x == mobPos.getX()
+        boolean unreachedClimbableStart = selectedStart.x == mobPos.getX()
             && selectedStart.z == mobPos.getZ()
             && selectedStart.y > mobPos.getY()
-            && startBox.minY < selectedStart.y - RAISED_START_EPSILON;
+            && startBox.minY < selectedStart.y - RAISED_START_EPSILON
+            && isClimbable(selectedStart.asBlockPos());
         if (!selectedStart.asBlockPos().equals(mobPos)
             && startBox.minY > modeledFloor + RAISED_START_EPSILON
-            && (raisedSameColumn
+            && (unreachedClimbableStart
                 || getMobBoxAt(selectedStart).minY - startBox.minY > this.mob.maxUpStep()
                 || !canSweepBoxTo(selectedStart, startBox))) {
             // A raised start must be reachable from the real box without assuming a jump already happened.

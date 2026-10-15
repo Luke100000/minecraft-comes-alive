@@ -30,6 +30,43 @@ public final class NavigationPhysicalSafetyGameTests {
     private NavigationPhysicalSafetyGameTests() {
     }
 
+    @GameTest(batch = "mca_stair_start", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void lowerStairSurfaceKeepsSupportedNativeStart(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos stair = helper.absolutePos(new BlockPos(8, 4, 8));
+        prepareGround(level, stair.below(2));
+        for (int step = 0; step < 3; step++) {
+            level.setBlock(stair.west(step).below(step), Blocks.SPRUCE_STAIRS.defaultBlockState()
+                    .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST), 3);
+        }
+        VillagerEntityMCA villager = spawn(level,
+                new Vec3(stair.getX(), stair.getY() + 0.5D, stair.getZ() + 0.5D));
+        villager.refreshBrain(level);
+        villager.getBrain().removeAllBehaviors();
+        villager.setNoAi(false);
+        villager.setYRot(90.0F);
+        helper.assertTrue(level.noCollision(villager), "The worker must stand on the real lower stair surface");
+        var vanilla = new net.minecraft.world.level.pathfinder.WalkNodeEvaluator();
+        try {
+            vanilla.prepare(new PathNavigationRegion(level, stair.offset(-6, -4, -6), stair.offset(6, 6, 6)), villager);
+            helper.assertTrue(vanilla.getStart().asBlockPos().equals(stair.above()),
+                    "The fixture must offer vanilla's supported start above the stair");
+        } finally {
+            vanilla.done();
+        }
+        Path path = villager.getNavigation().createPath(stair.west(3).below(2), 0);
+        helper.assertTrue(path != null && path.canReach(), "The stair flight must have a real native exit route");
+        helper.assertTrue(path.getNodePos(0).equals(stair.above()) && path.getNode(0).type != PathType.BLOCKED,
+                "MCA replaced a supported native start with a node inside the stair: "
+                        + path.getNodePos(0) + '/' + path.getNode(0).type);
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "Native stair departure must start");
+        helper.succeedWhen(() -> {
+            helper.assertTrue(villager.getX() < stair.getX() - 1.0D && villager.getY() < stair.getY(),
+                    "The native worker must descend from the stair flight: " + villager.position());
+            villager.discard();
+        });
+    }
+
     @GameTest(batch = "mca_trapdoor_diagonal", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
     public static void openTrapdoorsRejectBlockedDiagonalButKeepClearDiagonal(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
