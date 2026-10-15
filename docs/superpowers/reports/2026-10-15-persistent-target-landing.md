@@ -46,7 +46,12 @@ eligibility query before a fresh persistent attempt, with no search or cache.
 The refined candidate passes589commonJUnit, both loader builds,11physical
 safety,12movement-sink,49navigation and17destination-producer GameTests.
 The ordinary failed-path retry regression passes unchanged. Rebuilt Builder
-integration remains pending.
+integration20261015-223558454-3a04458b is24/26GREEN, including the genuine
+outgoing-jump regression that failed before correction. Both longer Snowy407
+repair controls still reach800ticks cycling roof work; neither is counted as
+fixed. All973NeoForge ordinary(1skip),17Minecraft-aware,995Fabric ordinary(1skip)
+and both Builder packages pass on these frozen artifacts. Full-house checks
+and repeated acceptance remain separate.
 
 Frozen mca-persistent-landing/ artifacts change exactly the sink and navigator
 classes relative to the prior layered-snow pins, with no resource/entry changes.
