@@ -2,6 +2,10 @@ package net.conczin.mca.entity.ai.navigation;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
+import net.conczin.mca.entity.ai.Genetics;
+import net.conczin.mca.entity.ai.Traits;
+import net.conczin.mca.entity.ai.relationship.Gender;
+import net.conczin.mca.gametest.GameTestTerrain;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTest;
@@ -14,6 +18,8 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FenceBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathType;
@@ -30,11 +36,57 @@ public final class NavigationPhysicalSafetyGameTests {
     private NavigationPhysicalSafetyGameTests() {
     }
 
+    @GameTest(batch = "mca_partial_floor_start", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void bedUnderLowCeilingKeepsPhysicalDeparture(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos bed = helper.absolutePos(new BlockPos(8, 2, 8));
+        GameTestTerrain.prepareFlatArea(helper, bed, 4, 4);
+        for (int x = -3; x <= 3; x++) {
+            for (int z = -2; z <= 2; z++) {
+                level.setBlock(bed.offset(x, 2, z), Blocks.SPRUCE_SLAB.defaultBlockState()
+                        .setValue(BlockStateProperties.SLAB_TYPE, SlabType.TOP), 3);
+            }
+        }
+        var bedState = Blocks.BLUE_BED.defaultBlockState()
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.SOUTH);
+        level.setBlock(bed, bedState, 3);
+        level.setBlock(bed.south(), bedState.setValue(BlockStateProperties.BED_PART,
+                BedPart.HEAD), 3);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(level)
+                .withGender(Gender.FEMALE).withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(bed).add(0, 0.5625D, 0)).spawn(MobSpawnType.STRUCTURE);
+        villager.getTraits().removeTrait(Traits.DWARFISM);
+        villager.getTraits().removeTrait(Traits.TOUGH);
+        villager.getTraits().removeTrait(Traits.WEAK);
+        villager.getGenetics().setGene(Genetics.SIZE, 0.5F);
+        villager.getGenetics().setGene(Genetics.WIDTH, 0.5F);
+        villager.refreshDimensions();
+        villager.refreshBrain(level);
+        villager.getBrain().removeAllBehaviors();
+        villager.setNoAi(false);
+        villager.setOnGround(true);
+        helper.assertTrue(level.isPositionEntityTicking(villager.blockPosition()),
+                "The bed departure must run in an entity-ticking fixture chunk");
+        helper.assertTrue(level.noCollision(villager), "The supported villager must fit below the real slab ceiling");
+        helper.assertTrue(!level.noBlockCollision(villager, villager.getBoundingBox().move(0, -0.01D, 0)),
+                "The departure must have actual bed contact");
+        Path path = villager.getNavigation().createPath(bed.west(2), 0);
+        helper.assertTrue(path != null && path.canReach(),
+                "A supported bed pose under a clear ceiling must retain its native departure: "
+                        + (path == null ? "none" : path.getNodePos(0) + "/" + path.getNode(0).type));
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "The native bed departure must start");
+        helper.succeedWhen(() -> {
+            helper.assertTrue(villager.getX() < bed.getX() - 0.5D && villager.getY() < bed.getY() + 0.5625D,
+                    "The villager must physically step off the bed under the ceiling");
+            villager.discard();
+        });
+    }
+
     @GameTest(batch = "mca_stair_start", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
     public static void lowerStairSurfaceKeepsSupportedNativeStart(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos stair = helper.absolutePos(new BlockPos(8, 4, 8));
-        prepareGround(level, stair.below(2));
+        GameTestTerrain.prepareFlatArea(helper, stair.below(2), 4, 4);
         for (int step = 0; step < 3; step++) {
             level.setBlock(stair.west(step).below(step), Blocks.SPRUCE_STAIRS.defaultBlockState()
                     .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST), 3);

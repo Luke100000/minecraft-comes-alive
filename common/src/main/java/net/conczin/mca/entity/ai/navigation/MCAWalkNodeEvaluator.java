@@ -131,10 +131,12 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             && isClimbable(selectedStart.asBlockPos());
         if (!selectedStart.asBlockPos().equals(mobPos)
             && startBox.minY > modeledFloor + RAISED_START_EPSILON
-            && (unreachedClimbableStart
+            && (selectedStart.type == PathType.BLOCKED
+                || unreachedClimbableStart
                 || getMobBoxAt(selectedStart).minY - startBox.minY > this.mob.maxUpStep()
                 || !canSweepBoxTo(selectedStart, startBox))) {
             // A raised start must be reachable from the real box without assuming a jump already happened.
+            // A rounded BLOCKED start can also overstate the occupied height above a partial floor.
             // Start from the mob cell so A* evaluates the actual exits from partial blocks.
             return this.getStartNode(mobPos);
         }
