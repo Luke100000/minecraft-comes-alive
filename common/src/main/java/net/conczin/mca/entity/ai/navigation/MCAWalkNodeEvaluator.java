@@ -27,6 +27,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.BooleanOp;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
@@ -77,7 +78,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     }
 
     @Override
-    public Node getStart() {
+    public @NotNull Node getStart() {
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         int y = this.mob.getBlockY();
         BlockState state = this.currentContext.getBlockState(pos.set(this.mob.getX(), y, this.mob.getZ()));
@@ -313,6 +314,13 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         // Entity collision can step over low edges; one tall edge also permits sliding into
         // MoveControl's jump range. Only tall edging on both sides blocks the diagonal approach.
         AABB approachBox = originBox.move(dx * approachFraction, this.mob.maxUpStep(), dz * approachFraction);
+        // Sliding past a low corner cannot clear an overhead block before the jump begins.
+        for (int y = origin.y + 1; y < Mth.ceil(approachBox.maxY); y++) {
+            if (blocksJumpApproach(candidate.x, y, origin.z, approachBox)
+                    || blocksJumpApproach(origin.x, y, candidate.z, approachBox)) {
+                return false;
+            }
+        }
         return !blocksJumpApproach(candidate.x, origin.y, origin.z, approachBox)
                 || !blocksJumpApproach(origin.x, origin.y, candidate.z, approachBox);
     }

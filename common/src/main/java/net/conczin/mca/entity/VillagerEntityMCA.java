@@ -209,6 +209,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     public static AttributeSupplier.Builder createAttributes() {
         return Villager.createAttributes()
+                .add(Attributes.WATER_MOVEMENT_EFFICIENCY, 1.0D)
                 .add(Attributes.ATTACK_DAMAGE, 3.0f)
                 .add(Attributes.ATTACK_KNOCKBACK, 1.0f)
                 .add(Attributes.MAX_HEALTH, Config.getInstance().villagerMaxHealth)

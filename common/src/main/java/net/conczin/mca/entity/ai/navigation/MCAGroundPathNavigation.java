@@ -151,11 +151,20 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                         maxPathLength * VISITED_NODES_PER_BLOCK / ordinaryBudget
                 );
                 if (maxPathLength > getOrdinaryPathLength(mob)) {
-                    // An unreachable distant target can consume thousands of node
-                    // expansions in one server tick. Retain the ordinary budget and
-                    // let persistent targets progress through bounded partial paths.
-                    rangeMultiplier = Math.min(rangeMultiplier,
-                            Math.max(1.0F, (float) MAX_EXTENDED_VISITED_NODES / ordinaryBudget));
+                    boolean nearbyApproach = false;
+                    for (BlockPos target : targets) {
+                        if (!requiresExtendedPath(mob, target) && hasWalkableApproach(target)) {
+                            nearbyApproach = true;
+                            break;
+                        }
+                    }
+                    // Nearby walkable destinations can require a route that first
+                    // moves away from them. Preserve their configured detour search;
+                    // distant or sealed goals retain the smaller progressive budget.
+                    if (!nearbyApproach) {
+                        rangeMultiplier = Math.min(rangeMultiplier,
+                                Math.max(1.0F, (float) MAX_EXTENDED_VISITED_NODES / ordinaryBudget));
+                    }
                 }
                 if (!PathRequestDiagnostics.enabled()) {
                     return super.findPath(region, mob, targets, maxPathLength, reachRange,
@@ -733,16 +742,19 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         // An endpoint closer to the goal is not proof that the villager moved.
         // Hand an unproductive continuation back to the destination's Brain
         // failure clock; its producer owns the next retry and eventual give-up.
-        if (this.mob.blockPosition().distSqr(completedPath.getNodePos(0)) < 4.0D) {
+        if (this.mob.blockPosition().equals(completedPath.getNodePos(0))) {
             recordTerminalPartialFailure(destination);
             return;
         }
         Path nextPath = this.createPath(destination, 0);
         if (nextPath == null
                 || (!nextPath.canReach() && !isUsefulPartialPath(nextPath, destination))) {
-            // A completed partial remains installed after a failed continuation.
-            // Without failure evidence, this same search runs every tick.
-            recordTerminalPartialFailure(destination);
+            // A useful short segment can finish at the edge of an obstacle.
+            // Let the existing navigation recovery try a flank before the
+            // producer receives terminal failure for this destination.
+            if (!beginDetour(walkTarget, destination)) {
+                recordTerminalPartialFailure(destination);
+            }
             return;
         }
         this.moveTo(nextPath, walkTarget.getSpeedModifier());

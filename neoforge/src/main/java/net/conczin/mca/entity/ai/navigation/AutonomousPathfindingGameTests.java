@@ -51,6 +51,7 @@ public final class AutonomousPathfindingGameTests {
     private static final String SEGMENT_BATCH = "mca_autonomous_progressive_segments";
     private static final String BOUNDED_DETOUR_BATCH = "mca_autonomous_bounded_detour";
     private static final String LONG_CORRIDOR_BATCH = "mca_autonomous_long_corridor";
+    private static final String FLOWING_WATER_BATCH = "mca_autonomous_flowing_water";
     private static final Set<VillagerEntityMCA> VILLAGERS = new HashSet<>();
     private static final Map<BlockPos, BlockState> ORIGINAL_BLOCKS = new LinkedHashMap<>();
     private static final Set<ChunkPos> FORCED_CHUNKS = new HashSet<>();
@@ -112,6 +113,49 @@ public final class AutonomousPathfindingGameTests {
     }
 
     private AutonomousPathfindingGameTests() {
+    }
+
+    @GameTest(batch = FLOWING_WATER_BATCH, templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void brainTraversesFlowingWaterInsteadOfStayingAgainstBank(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 1, 8));
+        BlockPos target = start.south();
+        rememberArea(level, start, 8);
+        prepareFlatArea(helper, start, 8, 3);
+        for (int distance = -1; distance <= 5; distance++) {
+            BlockPos cell = start.south(distance);
+            level.setBlock(cell.west(), Blocks.DIRT.defaultBlockState(), 3);
+            level.setBlock(cell.east(), Blocks.DIRT.defaultBlockState(), 3);
+            level.setBlock(cell, distance < 0 || distance > 4
+                    ? Blocks.DIRT.defaultBlockState()
+                    : Blocks.WATER.defaultBlockState().setValue(BlockStateProperties.LEVEL, 4 - distance), 3);
+        }
+        VillagerEntityMCA villager = spawnAutonomousVillager(helper, start, target, 0.55F, false);
+        villager.getBrain().eraseMemory(MemoryModuleType.HOME);
+        villager.getBrain().addActivity(Activity.CORE, 0,
+                ImmutableList.of(new net.minecraft.world.entity.ai.behavior.Swim(0.8F)));
+        helper.runAfterDelay(20L, () -> {
+            helper.assertTrue(villager.isInWater() && !villager.onGround()
+                            && level.getBlockState(start).getValue(BlockStateProperties.LEVEL) == 4
+                            && level.getFluidState(start).getFlow(level, start).z < -0.9D,
+                    "The shallow LEVEL4 current and airborne bank pose must precede the movement request");
+            villager.getBrain().setMemory(MemoryModuleType.HOME,
+                    GlobalPos.of(level.dimension(), target));
+        });
+        Vec3[] previous = {villager.position()};
+        helper.onEachTick(() -> {
+            helper.assertTrue(villager.position().distanceTo(previous[0]) < 1.0D,
+                    "The flowing-water journey must use native locomotion instead of teleporting");
+            previous[0] = villager.position();
+            if (helper.getTick() > 20 && villager.blockPosition().equals(target)) {
+                helper.succeed();
+            } else if (helper.getTick() >= 100) {
+                helper.fail("Native movement could not cross one shallow-water cell against its current: pos="
+                        + villager.position() + ",collision=" + villager.horizontalCollision
+                        + ",path=" + villager.getNavigation().getPath());
+            }
+        });
     }
 
     @GameTest(batch = DETOUR_BATCH, templateNamespace = "minecraft",
@@ -415,6 +459,11 @@ public final class AutonomousPathfindingGameTests {
 
     @AfterBatch(batch = LONG_CORRIDOR_BATCH)
     public static void cleanupLongCorridor(ServerLevel level) {
+        cleanup(level);
+    }
+
+    @AfterBatch(batch = FLOWING_WATER_BATCH)
+    public static void cleanupFlowingWater(ServerLevel level) {
         cleanup(level);
     }
 
