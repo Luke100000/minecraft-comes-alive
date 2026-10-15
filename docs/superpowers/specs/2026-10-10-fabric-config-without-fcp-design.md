@@ -1,7 +1,7 @@
 # MCA 1.21.1 Fabric File-Only Configuration Without FCP — Design
 
-Date: 2026-10-11
-Status: design prepared for review; implementation not approved or started.
+Date: 2026-10-11 (revised 2026-10-15)
+Status: revised after dev/1.21.1 comparison; merge and implementation not approved or started.
 
 ## Decision and intent
 
@@ -26,20 +26,61 @@ Neither documentation branch is an implementation base.
 ## Target, evidence, and scope
 
 - Implementation checkout: existing worktree
-  C:/Users/mikol/IdeaProjects/minecraft-comes-alive-1.21.1-config-system,
-  branch dev/feature/1.21.1-config-system, observed HEAD 190e0fcef788484ec2a996e8fcb4dea79c3afce9.
+  C:/Users/Mik/Downloads/MCA/minecraft-comes-alive-1.21.1-config-system-port,
+  branch dev/feature/1.21.1-config-system, observed HEAD d198d6ac50019fcd9f4fabaaed251b6fad9504d1
+  on 2026-10-15. Check status and HEAD again before execution.
 - Observed checkout metadata: Minecraft 1.21.1; Java 21; Fabric Loader 0.19.5;
-  Fabric API 0.116.17+1.21.1; NeoForge 21.1.252; current FCP 21.1.6
-  (to remove). Recheck versions when implementation starts.
-- The checkout has unrelated dirty work in ServerConfig.java, VillagerEntityMCA.java,
-  and MixinLivingEntity.java. Preserve those edits; do not overwrite, reset, or
-  assume the committed HEAD contains their behavior. The setting manifest must
-  be recorded from the chosen reviewed source state before transformation.
+  Fabric API 0.116.17+1.21.1; Loom 1.18.2; NeoForge 21.1.256; current FCP
+  21.1.6 (to remove). Recheck versions when implementation starts.
+- Worktree was clean at review time, unlike the earlier dirty-worktree snapshot.
+  Preserve any new edits if its status changes. Freeze the setting manifest from
+  the reviewed, post-merge source before transforming config declarations.
 - Existing holders expose 160 typed setting fields across CommonConfig,
   ServerConfig, and ClientConfig. Config.java constructs three native specs.
   Fabric uses FCP registry/events and its screen factory; ConfigScreenSearch
   directly uses NeoForge UI types. Removing the Fabric dependency declaration
   alone cannot work.
+
+## Upstream dev/1.21.1 comparison and merge decision
+
+Use `origin/dev/1.21.1` as the behavioral authority for upstream gameplay
+changes, and the current feature branch as the authority for the already-ported
+native configuration design. The reviewed refs (2026-10-15) are feature
+`d198d6ac5`, upstream `735babac0`, merge base `706c0090b`; branches diverge by
+14 feature-side and six upstream commits. Refresh refs and repeat the comparison
+immediately before the actual merge; these are evidence snapshots, not a claim
+about future HEADs.
+
+The upstream `dev/1.21.1` implementation stores a version-2 JSON object in
+`config/mca.json`: `Config extends CommonConfig`, `loadOrCreate()` reads and
+rewrites JSON, `configDefaultsVersion` migrates map defaults, and
+`getServerConfig()` selects an in-memory server overlay. Its old
+`ConfigRequest` C2S / `ConfigResponse` S2C pair serializes `CommonConfig` with
+Gson. This is **migration and behavior evidence**, not the replacement backend:
+do not restore those old packets, whole-object server sync, mutable config
+model, or unconditional JSON rewrite. Map legacy keys into the appropriate
+COMMON/SERVER/CLIENT schema scopes instead.
+
+**Merge upstream before shared-schema implementation**, as a separate,
+explicitly authorized integration step. Nonmutating `git merge-tree` preview
+found four content conflicts: `CommonConfig.java`, `VillagerEntityMCA.java`,
+`GuardEnemiesSensor.java`, and `GuardEnemiesSensorGameTests.java`. In particular,
+upstream adds `enableVillagerCollisions = true` to legacy `CommonConfig`;
+the feature branch already defines `Config.SERVER.enableVillagerCollisions`
+with default `true`, and its collision check reads that SERVER value. Keep
+the native SERVER owner and port any upstream collision behavior against it;
+do **not** introduce a duplicate legacy COMMON setting.
+
+The six new upstream commits principally change navigation, guard/archer AI,
+building scans, and their tests. Audit **every source-side changed hunk** into
+`ported`, `adapted`, `already present`, or `not portable`, with exact files,
+methods, and verification. Any proposed omission marked `not portable` needs
+the user's explicit approval. Never treat `ours`/`theirs`, conflict-free merge,
+or a successful compile as gameplay parity evidence. Preserve the existing
+native config API, UI, migrations, scopes, and updated documentation through
+the merge; verify no old JSON/config networking or FCP assumptions return.
+
+No actual merge or implementation is authorized by this design review.
 
 ## Architecture choice
 
@@ -86,6 +127,9 @@ Build a manifest of **all** settings from the current reviewed worktree:
 scope, path, type, actual default, range/list validator cases, translation,
 comment, restart metadata. Compare every shared entry to this frozen manifest.
 Do not silently reuse the older document's counts, values, or versions.
+The post-merge manifest must also reconcile new upstream config fields, even
+if they already exist in a different native scope; compare behavior and owner,
+not just matching field names or values.
 
 ## NeoForge remains native
 
@@ -153,6 +197,10 @@ reject invalid values using the same schema validation, and record success
 only after saving a valid destination. Malformed/unsupported JSON leaves
 the original file intact and falls back to defaults. Per-villager Inworld
 character assignments remain per-world SavedData, not shared config.
+Preserve its `configDefaultsVersion` map-default upgrade intent, including user
+overrides and deletions, without treating upgrade metadata or migrated values
+as product defaults. Use the actual reviewed v2 JSON field names and types,
+including upstream additions, in migration fixture tests.
 
 ## Fabric multiplayer authority
 
@@ -216,6 +264,10 @@ paths are initial file creation and one-time legacy migration.
   types; compile-classpath success alone does not satisfy this test.
 - Verify packaged Fabric client/server, multiplayer clients, and NeoForge
   config/native screen at runtime. JVM/build success is separate evidence.
+- Before config refactoring, merge/reconcile upstream `dev/1.21.1` with a
+  source-hunk parity record, retain SERVER `enableVillagerCollisions`, and
+  validate upstream gameplay paths on both loaders without restoring JSON
+  as the live backend.
 
 This document is design-only. No code, packaged jars, or runtime checks are
 claimed complete. The implementation plan is

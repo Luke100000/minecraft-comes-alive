@@ -4,16 +4,17 @@
 > or superpowers:executing-plans to implement this plan task by task. Each step uses
 > a checkbox for tracking. Do not implement before the user reviews this plan.
 
-**Goal:** Run MCA on Fabric without FCP using only on-disk TOML config files;
-retain native NeoForge configs and its searchable UI.
+**Goal:** First reconcile upstream dev/1.21.1 gameplay with the native-config
+feature branch, then run MCA on Fabric without FCP using only on-disk TOML
+config files while retaining NeoForge native configs and searchable UI.
 
 **Architecture:** One shared typed schema feeds a native NeoForge adapter and
 a standalone Fabric TOML backend. Fabric sends validated SERVER snapshots at
 join and exposes no in-game config screen, Mod Menu config integration,
 config-editing commands, or config-editing client packets.
 
-**Tech Stack:** Minecraft 1.21.1, Java 21, Fabric Loader 0.19.5,
-Fabric API 0.116.17+1.21.1, NeoForge 21.1.252, JUnit, and a pinned,
+**Tech Stack:** Minecraft 1.21.1, Java 21, Fabric Loader 0.19.5, Loom 1.18.2,
+Fabric API 0.116.17+1.21.1, NeoForge 21.1.256, JUnit, and a pinned,
 packaged NightConfig TOML/core version selected after dependency inspection.
 FCP 21.1.6 is an existing dependency to remove, **not** a target runtime.
 
@@ -21,10 +22,15 @@ FCP 21.1.6 is an existing dependency to remove, **not** a target runtime.
 
 ## Global constraints
 
-- Existing worktree only: C:/Users/mikol/IdeaProjects/minecraft-comes-alive-1.21.1-config-system,
-  branch dev/feature/1.21.1-config-system, observed HEAD 190e0fcef. No new
-  checkout or worktree. Review Git status before each change; preserve dirty
-  ServerConfig.java, VillagerEntityMCA.java, and MixinLivingEntity.java.
+- Existing worktree only: C:/Users/Mik/Downloads/MCA/minecraft-comes-alive-1.21.1-config-system-port,
+  branch dev/feature/1.21.1-config-system; observed HEAD d198d6ac5 and clean
+  status on 2026-10-15. No new checkout or worktree. Review status before
+  each change and protect any subsequently introduced edits.
+- First perform an **authorized, audited merge** from origin/dev/1.21.1;
+  reviewed origin ref 735babac0, merge base 706c0090b (refresh first).
+  Port every upstream changed hunk or justify its adaptation/already-present
+  status; obtain explicit approval for any not-portable omission. Preserve
+  native TOML/NeoForge behavior rather than reverting to old JSON config.
 - File-only on Fabric means **no configuration UI of any kind, Mod Menu
   config entrypoint, config editing via commands/C2S, watcher, or runtime reload
   command**. Preserve unrelated gameplay UI and persisted world/player data.
@@ -48,6 +54,8 @@ FCP 21.1.6 is an existing dependency to remove, **not** a target runtime.
   no live TOML monitoring or interactive save/broadcast is required.
 - Use .\gradlew.bat from the repository root. Pass --console=plain and inspect
   real test execution and exit codes. A build is not runtime proof.
+- Freeze the config schema **after** the reviewed upstream merge, never from
+  an older ref while upstream gameplay/config ownership is still changing.
 
 ## Review focus
 
@@ -62,6 +70,87 @@ FCP 21.1.6 is an existing dependency to remove, **not** a target runtime.
    world's values leak; no override created when absent (Task 2 test).
 5. Packaged Fabric jar without FCP/NeoForge/Mod Menu: no native classloading,
    config screen, metadata dependency, or missing TOML library (Task 5 test).
+6. Upstream collision, pathfinding and guard/archer AI hunks after merge:
+   same runtime behavior with no duplicate `enableVillagerCollisions` config
+   entry or lost native SERVER owner (Task 0 audit and regression runs).
+
+---
+
+## Task 0 — Merge upstream dev/1.21.1 with behavioral parity audit
+
+**Gate:** This is **proposed** and requires explicit user authorization to
+execute. It is not included in documentation-only approval. Finish and
+preserve reviewed plan/spec edits first; do not merge on a dirty worktree.
+
+**Reference inputs:**
+
+- Feature `dev/feature/1.21.1-config-system`, observed `d198d6ac5`.
+- Upstream `origin/dev/1.21.1`, observed `735babac0`, merge base `706c0090b`;
+  14 feature-only / 6 upstream-only commits at review time.
+- Nonmutating merge preview yielded content conflicts in
+  `common/src/main/java/net/conczin/mca/CommonConfig.java`,
+  `common/src/main/java/net/conczin/mca/entity/VillagerEntityMCA.java`,
+  `common/src/main/java/net/conczin/mca/entity/ai/brain/sensor/GuardEnemiesSensor.java`,
+  and `neoforge/src/main/java/net/conczin/mca/entity/ai/brain/sensor/GuardEnemiesSensorGameTests.java`.
+  Re-run preview after fetching; the conflict list may change.
+
+**Files:**
+
+- Merge: files shown by updated `git diff --name-status` and `git merge-tree`
+  (particularly collision, pathfinding, AI, building scanning and GameTests).
+- Audit: `docs/superpowers/reports/2026-10-15-dev-1.21.1-merge-parity.md`
+  (record refreshed refs and file/method outcome for each upstream hunk).
+- Retain and adapt: `common/src/main/java/net/conczin/mca/ServerConfig.java`,
+  `common/src/main/java/net/conczin/mca/entity/VillagerEntityMCA.java`,
+  and relevant existing config/collision tests.
+
+**Interfaces/ownership:**
+
+- Source upstream gameplay behavior remains authoritative; preserve target
+  version/loader APIs and feature-branch native-config architecture.
+- In upstream, `CommonConfig.enableVillagerCollisions = true`; the feature
+  branch already has `Config.SERVER.enableVillagerCollisions` default `true`.
+  Keep a **single SERVER-owned** entry and its existing native `.get()`
+  gameplay access while adapting the upstream change.
+- Upstream `Config` uses `config/mca.json` v2, `loadOrCreate()`,
+  `configDefaultsVersion`, `serverConfig`, and the old
+  `ConfigRequest`/`ConfigResponse`. Use these as migration/sync behavior
+  references; do not reintroduce a live JSON backend or old whole-object
+  client sync. Native NeoForge config and the feature's migrations/UI stay.
+
+- [ ] Verify branch, status, `gradle.properties`, and root repository guidance;
+      preserve existing changes and ensure reviewed documents are safely
+      committed or otherwise protected before the merge.
+- [ ] Refresh `origin/dev/1.21.1`, record exact heads/merge-base, and inspect
+      `git rev-list --left-right --count HEAD...origin/dev/1.21.1`,
+      `git log --reverse HEAD..origin/dev/1.21.1`,
+      `git diff --name-status HEAD...origin/dev/1.21.1`, and focused
+      `git diff --histogram` by affected subsystem. Run nonmutating
+      `git merge-tree --write-tree --name-only HEAD origin/dev/1.21.1`.
+- [ ] Establish baseline focused config/collision/AI/navigation JVM tests and
+      available GameTest lanes, recording executed counts and any pre-existing
+      failures before merge. Do not claim a test executed if it did not.
+- [ ] Perform the approved merge **without `ours`/`theirs` as a final
+      resolution**. Reconcile every source-side hunk into `ported`, `adapted`,
+      `already present`, or `not portable`, recording file/method evidence in
+      the parity report. Stop for explicit approval before omitting any
+      `not portable` hunk.
+- [ ] Resolve `CommonConfig` without duplicating the native SERVER collision
+      setting; preserve the latest villager crowding check alongside upstream
+      AI/navigation, collision, and guard changes. Inspect all automatic
+      resolutions as well as named conflicts for silent behavioral loss.
+- [ ] Write/update focused regression tests for upstream collision setting
+      parity (default `true`, `false` affects only MCA-villager crowding),
+      guard target selection, archer movement, navigation recovery, and floor
+      scans; retain upstream GameTests with version-appropriate assertions.
+- [ ] Run focused JVM suites and relevant NeoForge GameTests/runtime smokes;
+      inspect real outcomes, `git diff --check`, and full hunk-audit coverage.
+      Commit only a reviewed and passing merge, or report blockers and leave
+      the integration explicitly incomplete. Never mistake compilation for
+      gameplay parity.
+- [ ] With the **post-merge** branch stable, inventory native config scope,
+      paths, defaults, validators, map-upgrade markers, and multiplayer policy;
+      hand this source state to Task 1 for the frozen setting manifest.
 
 ---
 
@@ -91,8 +180,8 @@ FCP 21.1.6 is an existing dependency to remove, **not** a target runtime.
 - NeoForgeConfigBackend exposes ModConfigSpec spec(ConfigScope), never to
   Fabric or public shared code.
 
-- [ ] Verify Git status and reconcile current unstaged ServerConfig.java
-      comment before capturing metadata; do not reset or stage unrelated edits.
+- [ ] Verify Git status and Task 0 hunk-audit sign-off before capturing
+      post-merge metadata; do not reset or stage unrelated edits.
 - [ ] Capture **all** current entries from native specs, including scope,
       full path, type/default, validator examples, comment, translation,
       gameRestart/worldRestart. Derive the count from the fixture; check at
