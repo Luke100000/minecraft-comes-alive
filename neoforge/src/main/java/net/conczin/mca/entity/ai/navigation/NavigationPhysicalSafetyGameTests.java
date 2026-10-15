@@ -4,6 +4,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
+import net.conczin.mca.entity.ai.brain.tasks.WanderOrTeleportToTargetTask;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.gametest.GameTestTerrain;
 import net.minecraft.core.BlockPos;
@@ -12,6 +13,9 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.level.PathNavigationRegion;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -34,6 +38,39 @@ import java.util.List;
 @PrefixGameTestTemplate(false)
 public final class NavigationPhysicalSafetyGameTests {
     private NavigationPhysicalSafetyGameTests() {
+    }
+
+    /** An unavailable airborne search is not evidence that a fresh destination is unreachable. */
+    @GameTest(batch = "mca_landing_target", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void airborneWalkTargetWaitsForNativeSearch(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        GameTestTerrain.prepareFlatArea(helper, start, 4, 4);
+        VillagerEntityMCA villager = spawn(level, Vec3.atBottomCenterOf(start).add(0, 0.5D, 0));
+        villager.refreshBrain(level);
+        villager.getBrain().removeAllBehaviors();
+        villager.setNoAi(false);
+        villager.setOnGround(false);
+        var target = new WalkTarget(new PersistentPathTarget(start.east(2)), 0.5F, 0);
+        villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET, target);
+        var sink = new WanderOrTeleportToTargetTask();
+        sink.tryStart(level, villager, level.getGameTime());
+        helper.assertTrue(villager.getBrain().getMemory(
+                        MemoryModuleType.WALK_TARGET).orElse(null) == target
+                        && !villager.getBrain().hasMemoryValue(
+                        MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
+                "An unavailable native search during landing must preserve fresh intent without reporting failure");
+        helper.onEachTick(() -> {
+            if (sink.getStatus() == Behavior.Status.RUNNING) {
+                sink.tickOrStop(level, villager, level.getGameTime());
+            } else {
+                sink.tryStart(level, villager, level.getGameTime());
+            }
+            if (villager.getX() > start.getX() + 1.5D && villager.onGround()) {
+                villager.discard();
+                helper.succeed();
+            }
+        });
     }
 
     @GameTest(batch = "mca_partial_floor_start", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)

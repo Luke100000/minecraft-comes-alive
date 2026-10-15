@@ -393,7 +393,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     }
 
     @Override
-    protected boolean canUpdatePath() {
+    public boolean canUpdatePath() {
         if (super.canUpdatePath() || this.mob.onClimbable()) {
             return true;
         }
