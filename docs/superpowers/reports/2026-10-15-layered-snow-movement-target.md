@@ -58,7 +58,14 @@ pins in exactly MCAWalkNodeEvaluator.class and MCAGroundPathNavigation.class. Re
 and archive entry sets match. NeoForgeSHA256
 f9fdeb9f4abe462d043e872b1ad68b0b41bc8cee2ebae0a24ea0a2e1b0a9ffa3;
 FabricSHA256 087c719fcbf05833a320740f0548aa2a1bd86f827061018368df7a501d8180f4.
-Builder integration remains pending. Logs/patches live
+Builder integration proves capturedSnowyLayeredSnowCrewFinishesClearance RED on the
+old pin and physical GREEN on these exact rebuilt jars. Applicable Builder973Neo/
+17Minecraft-aware/995Fabric tests and both packages pass. Native25case gate has23GREEN
+and two distinct saved Snowy407repair failures; preserve that integration limit.
+Fresh unchanged-state run20261015-215118677-64be0c3c passes Snowy408/14584ticks,
+Butcher382/40174 and Plains334/28039 through evacuation, repair, complete teardown,
+registration and final-world checks. These are single fresh passes, not repeated
+matrix or compact-scaffold acceptance. Builder checkpointa75fd60e records the scope. Logs/patches live
 under Builder .superpowers/sdd/2026-10-15-access-execution/postrepair-live/. Preserve unrelated
 staged/dirty MCA files. Review covers only evaluator, navigator, new regression and this
 report; use explicit-path commits. No production-readiness claim from isolated tests.
