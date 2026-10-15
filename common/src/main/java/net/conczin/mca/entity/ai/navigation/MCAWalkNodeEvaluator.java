@@ -11,6 +11,7 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.PathNavigationRegion;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
@@ -25,6 +26,7 @@ import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.BooleanOp;
+import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.NotNull;
@@ -592,7 +594,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
 
     private AABB getMobBoxAt(Node node) {
         AABB box = this.mob.getBoundingBox();
-        double floorY = getStandingFloorY(node, box);
+        double floorY = getStandingFloorY(node);
         double centerX = (box.minX + box.maxX) * 0.5D;
         double centerZ = (box.minZ + box.maxZ) * 0.5D;
         return box.move(
@@ -602,15 +604,18 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         );
     }
 
-    private double getStandingFloorY(Node node, AABB mobBox) {
+    private double getStandingFloorY(Node node) {
         BlockPos pos = this.collisionPos.set(node.x, node.y, node.z);
-        double floorY = this.getFloorLevel(pos);
-        BlockState state = this.currentContext.getBlockState(pos);
+        return getStandingFloorY(this.currentContext.level(), pos, this.mob, this.getFloorLevel(pos));
+    }
+
+    static double getStandingFloorY(BlockGetter level, BlockPos pos, Mob mob, double floorY) {
+        BlockState state = level.getBlockState(pos);
         if (state.isAir() || !state.isPathfindable(PathComputationType.LAND)) {
             return floorY;
         }
 
-        VoxelShape collisionShape = state.getCollisionShape(this.currentContext.level(), pos);
+        VoxelShape collisionShape = state.getCollisionShape(level, pos, CollisionContext.of(mob));
         if (collisionShape.isEmpty()) {
             return floorY;
         }
@@ -620,6 +625,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             return floorY;
         }
 
+        AABB mobBox = mob.getBoundingBox();
         double halfWidth = mobBox.getXsize() * 0.5D;
         double halfDepth = mobBox.getZsize() * 0.5D;
         VoxelShape footprint = Shapes.box(
@@ -634,7 +640,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             return floorY;
         }
 
-        return Math.max(floorY, node.y + surfaceY);
+        return Math.max(floorY, pos.getY() + surfaceY);
     }
 
     private boolean canSweepBoxTo(Node candidate, AABB startBox) {

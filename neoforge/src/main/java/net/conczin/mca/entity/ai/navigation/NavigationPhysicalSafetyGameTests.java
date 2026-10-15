@@ -82,6 +82,40 @@ public final class NavigationPhysicalSafetyGameTests {
         });
     }
 
+    @GameTest(batch = "mca_snow_step", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void layeredSnowStepUsesItsPhysicalSurface(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        GameTestTerrain.prepareFlatArea(helper, start, 4, 4);
+        for (int z = -3; z <= 2; z++) {
+            for (int y = 0; y <= 3; y++) {
+                level.setBlock(start.offset(-1, y, z), Blocks.STONE.defaultBlockState(), 3);
+                level.setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        level.setBlock(start, Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 5), 3);
+        level.setBlock(start.north(), Blocks.SNOW_BLOCK.defaultBlockState(), 3);
+        level.setBlock(start.north().above(), Blocks.SNOW.defaultBlockState()
+                .setValue(BlockStateProperties.LAYERS, 4), 3);
+        level.setBlock(start.north(2), Blocks.SNOW_BLOCK.defaultBlockState(), 3);
+        VillagerEntityMCA villager = spawn(level, Vec3.atBottomCenterOf(start).add(0, 0.5D, 0));
+        villager.refreshBrain(level);
+        villager.getBrain().removeAllBehaviors();
+        villager.setNoAi(false);
+        villager.setOnGround(true);
+        helper.assertTrue(level.isPositionEntityTicking(start) && level.noCollision(villager),
+                "The snow step must start supported and collision-free in a ticking chunk");
+        Path path = villager.getNavigation().createPath(start.north(2).above(), 0);
+        helper.assertTrue(path != null && path.canReach(), "Native search must admit the layered-snow step");
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "Native snow traversal must start");
+        helper.succeedWhen(() -> {
+            helper.assertTrue(villager.getZ() < start.getZ() - 0.5D && villager.getY() > start.getY() + 1.0D,
+                    "The villager must physically climb the snow surface: pos=" + villager.position()
+                            + ", wantedY=" + villager.getMoveControl().getWantedY());
+            villager.discard();
+        });
+    }
+
     @GameTest(batch = "mca_stair_start", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
     public static void lowerStairSurfaceKeepsSupportedNativeStart(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();

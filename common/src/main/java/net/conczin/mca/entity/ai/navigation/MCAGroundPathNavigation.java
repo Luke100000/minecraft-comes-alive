@@ -862,6 +862,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (this.climbTraversal.isClimbable(targetPos) && this.mob.onClimbable()) {
             return this.mob.getY();
         }
-        return super.getGroundY(position);
+        return MCAWalkNodeEvaluator.getStandingFloorY(
+                this.level, targetPos, this.mob, super.getGroundY(position));
     }
 }
