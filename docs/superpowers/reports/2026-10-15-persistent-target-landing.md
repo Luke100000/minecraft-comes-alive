@@ -51,7 +51,11 @@ outgoing-jump regression that failed before correction. Both longer Snowy407
 repair controls still reach800ticks cycling roof work; neither is counted as
 fixed. All973NeoForge ordinary(1skip),17Minecraft-aware,995Fabric ordinary(1skip)
 and both Builder packages pass on these frozen artifacts. Full-house checks
-and repeated acceptance remain separate.
+and repeated acceptance remain separate. Full Builder223802421-bf95289d passes
+Snowy408/18839ticks/maxgap80 and Butcher382/16984/maxgap17 through all final
+lifecycle/world assertions. Plains builds334 then fails82actionable idle ticks
+at EXITING/RESTORING11of15, with70supports. Its saved scene and first incorrect
+transition need separate investigation. No production-readiness claim.
 
 Frozen mca-persistent-landing/ artifacts change exactly the sink and navigator
 classes relative to the prior layered-snow pins, with no resource/entry changes.
