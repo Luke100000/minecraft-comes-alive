@@ -18,6 +18,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.phys.AABB;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Iterator;
@@ -97,10 +98,11 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
     private static boolean hasOtherMobReachedToggleable(LivingEntity entity, BlockPos pos) {
         List<LivingEntity> nearbyEntities = entity.getBrain()
                 .getMemoryInternal(MemoryModuleType.NEAREST_LIVING_ENTITIES).orElse(List.of());
+        AABB toggleableBounds = new AABB(pos);
         for (LivingEntity other : nearbyEntities) {
             if (other.getType() == entity.getType()
-                    && pos.closerToCenterThan(other.position(), PATHING_DISTANCE)
-                    && hasReached(other, pos)) {
+                    && (other.getBoundingBox().intersects(toggleableBounds)
+                    || pos.closerToCenterThan(other.position(), PATHING_DISTANCE) && hasReached(other, pos))) {
                 return true;
             }
         }
