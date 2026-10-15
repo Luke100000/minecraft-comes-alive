@@ -3,8 +3,10 @@ package net.conczin.mca.server.world.data;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.BlockGetter;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /** Materializes Room geometry from one exact selected FloorGeometry. */
 final class BuildingRoomScanner {
@@ -20,10 +22,12 @@ final class BuildingRoomScanner {
         FloorGeometry floor = scan.floor();
         if (floor == null || floor.cells().isEmpty()) return List.of();
         List<RoomPartitioner.Component> components = components(world, scan);
-        return components.stream()
-                .map(component -> materialize(
-                        source, maxSize, components, component))
-                .toList();
+        RoomPoiEvidence.Index evidence = RoomPoiEvidence.index(components);
+        List<Result> results = new ArrayList<>(components.size());
+        for (RoomPartitioner.Component component : components) {
+            results.add(materialize(source, maxSize, evidence, component));
+        }
+        return List.copyOf(results);
     }
 
     /** One world-aware Room partition entry point so door ownership cannot drift between callers. */
@@ -40,6 +44,19 @@ final class BuildingRoomScanner {
             int maxSize,
             List<RoomPartitioner.Component> components,
             RoomPartitioner.Component component) {
+        int area = component.area();
+        if (area > maxSize) return Result.failure(Building.validationResult.BLOCK_LIMIT, source);
+        if (area < RoomPartitioner.MIN_ROOM_AREA) {
+            return Result.failure(Building.validationResult.TOO_SMALL, source);
+        }
+        return materialize(source, maxSize, RoomPoiEvidence.index(components), component);
+    }
+
+    private static Result materialize(
+            BlockPos source,
+            int maxSize,
+            RoomPoiEvidence.Index evidence,
+            RoomPartitioner.Component component) {
         Set<BlockPos> floorCells = component.floorCells();
         if (floorCells.size() > maxSize) return Result.failure(Building.validationResult.BLOCK_LIMIT, source);
         if (floorCells.size() < RoomPartitioner.MIN_ROOM_AREA) {
@@ -47,9 +64,8 @@ final class BuildingRoomScanner {
         }
 
         BlockPos seed = component.nearestCell(source);
-        Set<BlockPos> poi = RoomPoiEvidence.candidates(components, component);
         FloorGeometry.Bounds bounds = FloorGeometry.bounds(component.cells(), 0);
-        return new Result(Building.validationResult.SUCCESS, seed, floorCells, poi,
+        return new Result(Building.validationResult.SUCCESS, seed, floorCells, evidence, component,
                 bounds.min(), bounds.max());
     }
 
@@ -67,16 +83,20 @@ final class BuildingRoomScanner {
     record Result(Building.validationResult status,
                   BlockPos seed,
                   Set<BlockPos> floorCells,
-                  Set<BlockPos> poiCells,
+                  RoomPoiEvidence.Index evidence,
+                  RoomPartitioner.Component component,
                   BlockPos min,
                   BlockPos max) {
         Result {
             floorCells = Set.copyOf(floorCells);
-            poiCells = Set.copyOf(poiCells);
+        }
+
+        void visitPoiCells(Consumer<BlockPos> visitor) {
+            if (evidence != null && component != null) evidence.forEachCandidate(component, visitor);
         }
 
         static Result failure(Building.validationResult status, BlockPos seed) {
-            return new Result(status, seed, Set.of(), Set.of(), seed, seed);
+            return new Result(status, seed, Set.of(), null, null, seed, seed);
         }
     }
 }

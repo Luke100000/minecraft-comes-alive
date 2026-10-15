@@ -392,6 +392,26 @@ public final class ExtendedWalkTowardsTaskGameTests {
         helper.succeed();
     }
 
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void missingDestinationDoesNotRetractForeignWalkTarget(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        OneShot<VillagerEntityMCA> task = createTask(ignored -> false);
+        WalkTarget unrelatedTarget = new WalkTarget(villager.blockPosition().north(5), 0.5F, 1);
+        villager.getBrain().eraseMemory(MemoryModuleType.HOME);
+        villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET, unrelatedTarget);
+
+        helper.assertTrue(task.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime()),
+                "registered but missing HOME prevented the producer's cleanup check");
+        helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                        .filter(target -> target == unrelatedTarget).isPresent(),
+                "missing HOME erased a walk target belonging to another behavior");
+        helper.assertTrue(task.debugString().startsWith("OneShot["),
+                "walk producer lost its declarative brain-memory diagnostics");
+
+        villager.discard();
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_persistent_final_handoff", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 80)
     public static void erasedDestinationClearsOwnedSemanticFinalTargetFailure(GameTestHelper helper) {

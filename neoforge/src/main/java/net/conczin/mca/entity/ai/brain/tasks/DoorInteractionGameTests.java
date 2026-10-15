@@ -4,6 +4,7 @@ import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.PathingBlockInteraction;
+import net.conczin.mca.entity.ai.relationship.Gender;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
@@ -447,6 +448,112 @@ public final class DoorInteractionGameTests {
                 "stale remembered toggleable forced a distant chunk load");
         villager.discard();
         helper.succeed();
+    }
+
+    @GameTest(batch = "mca_shared_gate_closing", templateNamespace = "minecraft",
+            template = "bastion/blocks/air")
+    public static void gateRemainsOpenWhileAnotherVillagerUsesItsPath(GameTestHelper helper) {
+        BlockPos gate = helper.absolutePos(new BlockPos(5, 2, 4));
+        BlockPos ownerPos = helper.absolutePos(new BlockPos(2, 2, 4));
+        BlockPos otherPos = gate.west();
+        helper.getLevel().setBlock(gate, Blocks.OAK_FENCE_GATE.defaultBlockState()
+                .setValue(BlockStateProperties.OPEN, true), 3);
+
+        VillagerEntityMCA owner = VillagerFactory.newVillager(helper.getLevel())
+                .withGender(Gender.MALE).withAge(0).withPosition(Vec3.atBottomCenterOf(ownerPos))
+                .spawn(MobSpawnType.STRUCTURE);
+        VillagerEntityMCA other = VillagerFactory.newVillager(helper.getLevel())
+                .withGender(Gender.MALE).withAge(0).withPosition(Vec3.atBottomCenterOf(otherPos))
+                .spawn(MobSpawnType.STRUCTURE);
+        owner.setNoAi(true);
+        other.setNoAi(true);
+        owner.refreshBrain(helper.getLevel());
+        other.refreshBrain(helper.getLevel());
+        try {
+            GlobalPos rememberedGate = GlobalPos.of(helper.getLevel().dimension(), gate);
+            owner.getBrain().setMemory(MemoryModuleType.DOORS_TO_CLOSE,
+                    new HashSet<>(Set.of(rememberedGate)));
+            owner.getBrain().setMemory(MemoryModuleType.NEAREST_LIVING_ENTITIES, List.of(other));
+            Path otherPath = new Path(List.of(node(otherPos), node(gate), node(gate.east())), gate.east(), true);
+            otherPath.setNextNodeIndex(1);
+            other.getBrain().setMemory(MemoryModuleType.PATH, otherPath);
+
+            SmarterOpenDoorsTask.closeDoors(helper.getLevel(), owner, null, null);
+            helper.assertTrue(helper.getLevel().getBlockState(gate).getValue(BlockStateProperties.OPEN),
+                    "the gate closed while another villager was following its path");
+            helper.assertTrue(owner.getBrain().getMemory(MemoryModuleType.DOORS_TO_CLOSE)
+                            .orElse(Set.of()).contains(rememberedGate),
+                    "gate ownership was dropped while another villager still needed it");
+
+            other.getBrain().eraseMemory(MemoryModuleType.PATH);
+            SmarterOpenDoorsTask.closeDoors(helper.getLevel(), owner, null, null);
+            helper.assertTrue(!helper.getLevel().getBlockState(gate).getValue(BlockStateProperties.OPEN),
+                    "gate was not closed after the other villager abandoned its path");
+            helper.assertTrue(!owner.getBrain().getMemory(MemoryModuleType.DOORS_TO_CLOSE)
+                            .orElse(Set.of()).contains(rememberedGate),
+                    "gate ownership was not released after closing");
+            helper.succeed();
+        } finally {
+            owner.discard();
+            other.discard();
+        }
+    }
+
+    @GameTest(batch = "mca_stationary_door_peer", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 40)
+    public static void doorRemainsOpenUntilStationaryPeerClearsItsBody(GameTestHelper helper) {
+        var level = helper.getLevel();
+        BlockPos door = helper.absolutePos(new BlockPos(5, 2, 4));
+        BlockState originalSupport = level.getBlockState(door.below());
+        BlockState originalLower = level.getBlockState(door);
+        BlockState originalUpper = level.getBlockState(door.above());
+        level.setBlock(door.below(), Blocks.STONE.defaultBlockState(), 3);
+        BlockState openDoor = Blocks.SPRUCE_DOOR.defaultBlockState()
+                .setValue(DoorBlock.FACING, Direction.SOUTH)
+                .setValue(DoorBlock.OPEN, true);
+        level.setBlock(door, openDoor, 3);
+        level.setBlock(door.above(), openDoor.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER), 3);
+        VillagerEntityMCA owner = VillagerFactory.newVillager(level)
+                .withGender(Gender.MALE).withAge(0).withPosition(Vec3.atBottomCenterOf(door.west(3)))
+                .spawn(MobSpawnType.STRUCTURE);
+        VillagerEntityMCA peer = VillagerFactory.newVillager(level)
+                .withGender(Gender.MALE).withAge(0)
+                .withPosition(new Vec3(door.getX() + 0.5D, door.getY(), door.getZ() - 0.1D))
+                .spawn(MobSpawnType.STRUCTURE);
+        owner.setNoAi(true);
+        peer.setNoAi(true);
+        try {
+            peer.getBrain().eraseMemory(MemoryModuleType.PATH);
+            helper.assertTrue(level.noCollision(peer, peer.getBoundingBox())
+                            && openDoor.setValue(DoorBlock.OPEN, false).getCollisionShape(level, door).toAabbs()
+                            .stream().anyMatch(box -> box.move(door).intersects(peer.getBoundingBox())),
+                    "The stationary peer must fit the open door but intersect its closed panel");
+            GlobalPos remembered = GlobalPos.of(level.dimension(), door);
+            owner.getBrain().setMemory(MemoryModuleType.DOORS_TO_CLOSE, new HashSet<>(Set.of(remembered)));
+            owner.getBrain().setMemory(MemoryModuleType.NEAREST_LIVING_ENTITIES, List.of(peer));
+
+            SmarterOpenDoorsTask.closeDoors(level, owner, null, null);
+            helper.assertTrue(level.getBlockState(door).getValue(DoorBlock.OPEN)
+                            && level.noCollision(peer, peer.getBoundingBox()),
+                    "A remembered door must not close across a stationary peer without a PATH");
+            helper.assertTrue(owner.getBrain().getMemory(MemoryModuleType.DOORS_TO_CLOSE)
+                            .orElse(Set.of()).contains(remembered),
+                    "Door cleanup must remain owned until the stationary peer clears it");
+
+            peer.setPos(door.getX() + 0.5D, door.getY(), door.getZ() - 3.0D);
+            SmarterOpenDoorsTask.closeDoors(level, owner, null, null);
+            helper.assertTrue(!level.getBlockState(door).getValue(DoorBlock.OPEN)
+                            && !owner.getBrain().getMemory(MemoryModuleType.DOORS_TO_CLOSE)
+                            .orElse(Set.of()).contains(remembered),
+                    "The remembered door must close and release ownership after the peer clears it");
+            helper.succeed();
+        } finally {
+            owner.discard();
+            peer.discard();
+            level.setBlock(door.below(), originalSupport, 3);
+            level.setBlock(door, originalLower, 3);
+            level.setBlock(door.above(), originalUpper, 3);
+        }
     }
 
     @GameTest(batch = "mca_trapdoor_interaction", templateNamespace = "minecraft",

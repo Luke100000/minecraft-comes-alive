@@ -92,6 +92,45 @@ class FamilyTreeViewBuilderTest {
     }
 
     @Test
+    void generatedParentsAreLoadedTogetherFromEitherParent() {
+        FamilyTree tree = tree();
+        FamilyTreeNode father = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode mother = node(tree, MOTHER, Gender.FEMALE);
+        FamilyTreeNode child = node(tree, CHILD, Gender.FEMALE);
+        child.setFather(father);
+        child.setMother(mother);
+        father.setDeceased(true);
+        mother.setDeceased(true);
+
+        FamilyTreeView fromFather = FamilyTreeViewBuilder.build(tree, ROOT, 0, 1).orElseThrow();
+        FamilyTreeView fromMother = FamilyTreeViewBuilder.build(tree, MOTHER, 0, 1).orElseThrow();
+        Set<UUID> expected = Set.of(ROOT, MOTHER, CHILD);
+
+        assertEquals(expected, fromFather.nodes().keySet());
+        assertEquals(expected, fromMother.nodes().keySet());
+        assertEquals(Set.of(), fromFather.continuations());
+        assertEquals(Set.of(), fromMother.continuations());
+        assertEquals(Set.of(CHILD), FamilyTreeViewBuilder.build(tree, CHILD, 0, 0).orElseThrow().nodes().keySet());
+        assertEquals(Util.NIL_UUID, father.partner());
+        assertEquals(Util.NIL_UUID, mother.partner());
+    }
+
+    @Test
+    void livingCoParentIsNotTreatedAsGenerated() {
+        FamilyTree tree = tree();
+        FamilyTreeNode father = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode mother = node(tree, MOTHER, Gender.FEMALE);
+        FamilyTreeNode child = node(tree, CHILD, Gender.FEMALE);
+        child.setFather(father);
+        child.setMother(mother);
+        father.setDeceased(true);
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, 0, 1).orElseThrow();
+
+        assertEquals(Set.of(ROOT, CHILD), view.nodes().keySet());
+    }
+
+    @Test
     void partnerAncestorsExpandWithoutRefocusingOnThePartner() {
         FamilyTree tree = tree();
         FamilyTreeNode root = node(tree, ROOT, Gender.MALE);

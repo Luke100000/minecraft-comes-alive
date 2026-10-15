@@ -548,6 +548,13 @@ public final class FamilyTreeNode {
         return mother.equals(Util.NIL_UUID) && father.equals(Util.NIL_UUID) && children.size() == 1 && deceased && !isPlayer();
     }
 
+    public boolean isUnpairedGeneratedParentOf(UUID childId) {
+        return probablyGenerated()
+                && children.contains(childId)
+                && !isValid(partner)
+                && relationshipState == RelationshipState.SINGLE;
+    }
+
     // true if there is at least one non-generated relative
     public boolean willBeRemembered() {
         if (!children.isEmpty()) {

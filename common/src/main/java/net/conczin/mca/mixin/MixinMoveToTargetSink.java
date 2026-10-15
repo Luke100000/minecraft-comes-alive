@@ -87,6 +87,36 @@ abstract class MixinMoveToTargetSink {
                 return original.call(navigation, target, reachRange);
             }
 
+            if (multiTarget instanceof CombatEscapePositionTracker combatEscape) {
+                Path partial = null;
+                Path emergency = null;
+                int attempts = 0;
+                for (Set<BlockPos> tier : combatEscape.getRankedPathTargets(mob)) {
+                    if (tier.isEmpty() || attempts >= 12) {
+                        continue;
+                    }
+                    attempts++;
+                    Path candidate = navigation.createPath(tier, reachRange);
+                    if (candidate == null) {
+                        continue;
+                    }
+                    if (!combatEscape.isPathSafe(mob, candidate)) {
+                        if (emergency == null && candidate.canReach()
+                                && combatEscape.isDegradedEmergencyPathSafe(mob, candidate)) {
+                            emergency = candidate;
+                        }
+                        continue;
+                    }
+                    if (candidate.canReach()) {
+                        return candidate;
+                    }
+                    if (partial == null) {
+                        partial = candidate;
+                    }
+                }
+                return emergency != null ? emergency : partial;
+            }
+
             Set<BlockPos> pathTargets = multiTarget.getPathTargets(mob);
             if (pathTargets.isEmpty()) {
                 return null;

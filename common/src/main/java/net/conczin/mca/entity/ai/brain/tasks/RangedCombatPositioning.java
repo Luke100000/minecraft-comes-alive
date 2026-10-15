@@ -1,7 +1,6 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.ai.RangedWeaponHelper;
-import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.minecraft.core.BlockPos;
@@ -13,6 +12,7 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.util.LandRandomPos;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.pathfinder.NodeEvaluator;
+import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
@@ -20,6 +20,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -63,15 +64,14 @@ final class RangedCombatPositioning {
         List<LivingEntity> escapeThreats = new ArrayList<>();
         entity.getBrain().getMemory(MemoryModuleType.NEAREST_LIVING_ENTITIES).ifPresent(nearby -> {
             for (LivingEntity candidate : nearby) {
-                if (!isNearbyMovementThreat(entity, candidate)) {
+                if (!isNearbyMovementThreat(entity, candidate)
+                        || !isEscapeDriver(entity, candidate, attackTarget)) {
                     continue;
                 }
                 if (entity.getSensing().hasLineOfSight(candidate)) {
                     addEscapeThreat(hazards, candidate);
                 }
-                if (isEscapeDriver(entity, candidate, attackTarget)) {
-                    addEscapeThreat(escapeThreats, candidate);
-                }
+                addEscapeThreat(escapeThreats, candidate);
             }
         });
 
@@ -81,7 +81,12 @@ final class RangedCombatPositioning {
             addEscapeThreat(hazards, attackTarget);
             addEscapeThreat(escapeThreats, attackTarget);
         }
-        addEscapeThreatIfNearby(entity, escapeThreats, entity.getLastHurtByMob(), attackTarget);
+        LivingEntity lastAttacker = entity.getLastHurtByMob();
+        addEscapeThreatIfNearby(entity, escapeThreats, lastAttacker, attackTarget);
+        if (lastAttacker != null && entity.distanceToSqr(lastAttacker) <= NEARBY_THREAT_RANGE_SQUARED
+                && isNearbyMovementThreat(entity, lastAttacker)) {
+            addEscapeThreat(hazards, lastAttacker);
+        }
 
         LivingEntity nearestEscapeThreat = null;
         double nearestDistanceSquared = Double.POSITIVE_INFINITY;
@@ -151,8 +156,8 @@ final class RangedCombatPositioning {
         List<EscapeCandidate> safeCandidates = new ArrayList<>();
         List<EscapeCandidate> nonClosingCandidates = new ArrayList<>();
         List<EscapeCandidate> emergencyFallbackCandidates = new ArrayList<>();
-        Map<BlockPos, Integer> reachablePositions = collectReachableEscapePositions(entity, originBlock);
-        Set<BlockPos> reachablePositionSet = reachablePositions.keySet();
+        EscapeGraph graph = collectReachableEscapePositions(entity, originBlock);
+        Map<BlockPos, Integer> reachablePositions = graph.travelSteps();
 
         for (Map.Entry<BlockPos, Integer> entry : reachablePositions.entrySet()) {
             BlockPos position = entry.getKey();
@@ -174,7 +179,7 @@ final class RangedCombatPositioning {
             }
 
             boolean opensEveryThreat = opensDistanceFromEveryThreat(origin, candidatePosition, escapeThreats);
-            OnwardReachability onward = measureOnwardReachability(originBlock, position, reachablePositionSet);
+            OnwardReachability onward = measureOnwardReachability(originBlock, position, graph.edges());
             EscapeCandidate candidate = new EscapeCandidate(
                     candidatePosition,
                     candidateMinimumDistanceSquared,
@@ -182,6 +187,7 @@ final class RangedCombatPositioning {
                     entry.getValue(),
                     onward.progress(),
                     onward.space(),
+                    onward.demonstratedContinuation(),
                     position.getY() - originBlock.getY()
             );
             boolean preservesHazards = preservesHazardClearance(origin, candidatePosition, hazards)
@@ -197,19 +203,24 @@ final class RangedCombatPositioning {
         }
 
         Comparator<EscapeCandidate> safeComparator = Comparator
-                .comparingInt(EscapeCandidate::onwardProgress).reversed()
+                .comparing(EscapeCandidate::demonstratedContinuation).reversed()
+                .thenComparing(Comparator.comparingInt(EscapeCandidate::onwardProgress).reversed())
+                .thenComparing(Comparator.comparingInt(EscapeCandidate::elevationGain).reversed())
                 .thenComparing(Comparator.comparingInt(EscapeCandidate::onwardSpace).reversed())
                 .thenComparing(Comparator.comparingDouble(EscapeCandidate::minimumDistanceSquared).reversed())
                 .thenComparing(Comparator.comparingDouble(EscapeCandidate::minimumHazardDistanceSquared).reversed())
                 .thenComparingInt(EscapeCandidate::travelSteps)
-                .thenComparing(Comparator.comparingInt(EscapeCandidate::elevationGain).reversed());
+                .thenComparingInt(candidate -> BlockPos.containing(candidate.position()).getX())
+                .thenComparingInt(candidate -> BlockPos.containing(candidate.position()).getY())
+                .thenComparingInt(candidate -> BlockPos.containing(candidate.position()).getZ());
         Comparator<EscapeCandidate> emergencyComparator = Comparator
-                .comparingDouble(EscapeCandidate::minimumDistanceSquared).reversed()
-                .thenComparing(Comparator.comparingDouble(EscapeCandidate::minimumHazardDistanceSquared).reversed())
+                .comparing(EscapeCandidate::demonstratedContinuation).reversed()
                 .thenComparing(Comparator.comparingInt(EscapeCandidate::onwardProgress).reversed())
+                .thenComparing(Comparator.comparingInt(EscapeCandidate::elevationGain).reversed())
                 .thenComparing(Comparator.comparingInt(EscapeCandidate::onwardSpace).reversed())
-                .thenComparingInt(EscapeCandidate::travelSteps)
-                .thenComparing(Comparator.comparingInt(EscapeCandidate::elevationGain).reversed());
+                .thenComparing(Comparator.comparingDouble(EscapeCandidate::minimumDistanceSquared).reversed())
+                .thenComparing(Comparator.comparingDouble(EscapeCandidate::minimumHazardDistanceSquared).reversed())
+                .thenComparingInt(EscapeCandidate::travelSteps);
         safeCandidates.sort(safeComparator);
         nonClosingCandidates.sort(safeComparator);
         emergencyFallbackCandidates.sort(emergencyComparator);
@@ -218,11 +229,16 @@ final class RangedCombatPositioning {
                 : !nonClosingCandidates.isEmpty()
                 ? nonClosingCandidates
                 : emergencyFallbackCandidates;
-        return createEscapeTarget(origin, selected);
+        return createEscapeTarget(origin, selected, emergency && safeCandidates.isEmpty()
+                && nonClosingCandidates.isEmpty(), emergency, escapeThreats, hazards);
     }
 
-    private static Map<BlockPos, Integer> collectReachableEscapePositions(PathfinderMob entity, BlockPos origin) {
+    private static EscapeGraph collectReachableEscapePositions(PathfinderMob entity, BlockPos origin) {
         Map<BlockPos, Integer> travelSteps = new LinkedHashMap<>();
+        Map<BlockPos, List<BlockPos>> edges = new LinkedHashMap<>();
+        // Each node is inspected from several adjacent graph cells. Terrain and
+        // entity collision cannot change during this synchronous planning call.
+        Map<BlockPos, Boolean> safePositions = new HashMap<>();
         ArrayDeque<BlockPos> frontier = new ArrayDeque<>();
         travelSteps.put(origin, 0);
         frontier.add(origin);
@@ -230,81 +246,88 @@ final class RangedCombatPositioning {
         while (!frontier.isEmpty()) {
             BlockPos current = frontier.removeFirst();
             int nextTravelSteps = travelSteps.get(current) + 1;
+            List<BlockPos> neighbors = new ArrayList<>(4);
             for (Direction direction : HORIZONTAL_DIRECTIONS) {
-                BlockPos next = resolveAdjacentEscapePosition(entity, current, direction);
+                BlockPos next = resolveAdjacentEscapePosition(entity, current, direction, safePositions);
                 if (next == null
                         || Math.abs(next.getY() - origin.getY()) > ESCAPE_VERTICAL_RANGE
-                        || horizontalDistanceSquared(origin, next) > ESCAPE_GRAPH_RADIUS * ESCAPE_GRAPH_RADIUS
-                        || travelSteps.containsKey(next)) {
+                        || horizontalDistanceSquared(origin, next) > ESCAPE_GRAPH_RADIUS * ESCAPE_GRAPH_RADIUS) {
+                    continue;
+                }
+                neighbors.add(next);
+                if (travelSteps.containsKey(next)) {
                     continue;
                 }
                 travelSteps.put(next, nextTravelSteps);
                 frontier.addLast(next);
             }
+            edges.put(current, List.copyOf(neighbors));
         }
-        return travelSteps;
+        return new EscapeGraph(travelSteps, edges);
     }
 
-    private static BlockPos resolveAdjacentEscapePosition(PathfinderMob entity, BlockPos current, Direction direction) {
+    private static BlockPos resolveAdjacentEscapePosition(PathfinderMob entity, BlockPos current,
+                                                         Direction direction, Map<BlockPos, Boolean> safePositions) {
         BlockPos adjacent = current.relative(direction);
-        if (isSafeEscapePosition(entity, adjacent)) {
+        if (isSafeEscapePosition(entity, adjacent, safePositions)) {
             return adjacent;
         }
         BlockPos above = adjacent.above();
-        if (isSafeEscapePosition(entity, above)) {
+        if (isSafeEscapePosition(entity, above, safePositions)) {
             return above;
         }
         BlockPos below = adjacent.below();
-        return isSafeEscapePosition(entity, below) ? below : null;
+        return isSafeEscapePosition(entity, below, safePositions) ? below : null;
     }
 
-    private static boolean isSafeEscapePosition(PathfinderMob entity, BlockPos position) {
+    private static boolean isSafeEscapePosition(PathfinderMob entity, BlockPos position,
+                                                Map<BlockPos, Boolean> safePositions) {
+        Boolean cached = safePositions.get(position);
+        if (cached != null) {
+            return cached;
+        }
         Vec3 candidate = Vec3.atBottomCenterOf(position);
         PathType pathType = pathTypeAt(entity, position);
-        return entity.getNavigation().isStableDestination(position)
+        boolean safe = entity.getNavigation().isStableDestination(position)
                 && isTraversablePathType(pathType)
                 && (pathType == PathType.WALKABLE_DOOR || hasStandingSpace(entity, candidate));
+        safePositions.put(position, safe);
+        return safe;
     }
 
     private static OnwardReachability measureOnwardReachability(
             BlockPos origin,
             BlockPos start,
-            Set<BlockPos> reachablePositions
+            Map<BlockPos, List<BlockPos>> edges
     ) {
         int minimumHorizontalDistanceSquared = horizontalDistanceSquared(origin, start);
         int maximumHorizontalDistanceSquared = minimumHorizontalDistanceSquared;
         Set<BlockPos> visited = new HashSet<>();
         ArrayDeque<OnwardSearchNode> frontier = new ArrayDeque<>();
+        boolean demonstratedContinuation = false;
         visited.add(start);
         frontier.add(new OnwardSearchNode(start, 0));
 
         while (!frontier.isEmpty()) {
             OnwardSearchNode node = frontier.removeFirst();
             if (node.steps() >= ESCAPE_ONWARD_LOOKAHEAD) {
+                demonstratedContinuation |= horizontalDistanceSquared(origin, node.position()) > minimumHorizontalDistanceSquared;
                 continue;
             }
 
-            for (Direction direction : HORIZONTAL_DIRECTIONS) {
-                BlockPos adjacent = node.position().relative(direction);
-                for (int yOffset = -1; yOffset <= 1; yOffset++) {
-                    BlockPos neighbor = adjacent.offset(0, yOffset, 0);
-                    if (!reachablePositions.contains(neighbor)) {
-                        continue;
-                    }
-                    if (horizontalDistanceSquared(origin, neighbor) >= minimumHorizontalDistanceSquared
-                            && visited.add(neighbor)) {
-                        maximumHorizontalDistanceSquared = Math.max(
-                                maximumHorizontalDistanceSquared,
-                                horizontalDistanceSquared(origin, neighbor));
-                        frontier.addLast(new OnwardSearchNode(neighbor, node.steps() + 1));
-                    }
-                    break;
+            for (BlockPos neighbor : edges.getOrDefault(node.position(), List.of())) {
+                if (horizontalDistanceSquared(origin, neighbor) >= minimumHorizontalDistanceSquared
+                        && visited.add(neighbor)) {
+                    maximumHorizontalDistanceSquared = Math.max(
+                            maximumHorizontalDistanceSquared,
+                            horizontalDistanceSquared(origin, neighbor));
+                    frontier.addLast(new OnwardSearchNode(neighbor, node.steps() + 1));
                 }
             }
         }
         return new OnwardReachability(
                 maximumHorizontalDistanceSquared - minimumHorizontalDistanceSquared,
-                visited.size() - 1);
+                visited.size() - 1, demonstratedContinuation);
     }
 
     private static int horizontalDistanceSquared(BlockPos first, BlockPos second) {
@@ -315,37 +338,21 @@ final class RangedCombatPositioning {
 
     private static Optional<MultiTargetPositionTracker> createEscapeTarget(
             Vec3 origin,
-            List<EscapeCandidate> candidates
+            List<EscapeCandidate> candidates,
+            boolean degraded,
+            boolean emergency,
+            List<? extends LivingEntity> escapeThreats,
+            List<? extends LivingEntity> hazards
     ) {
         if (candidates.isEmpty()) {
             return Optional.empty();
-        }
-
-        int bestOnwardProgress = candidates.stream()
-                .mapToInt(EscapeCandidate::onwardProgress)
-                .max()
-                .orElse(0);
-        int bestOnwardSpace = candidates.stream()
-                .filter(candidate -> candidate.onwardProgress() == bestOnwardProgress)
-                .mapToInt(EscapeCandidate::onwardSpace)
-                .max()
-                .orElse(0);
-        boolean[] competitiveSectors = new boolean[8];
-        for (EscapeCandidate candidate : candidates) {
-            if (candidate.onwardProgress() == bestOnwardProgress
-                    && candidate.onwardSpace() == bestOnwardSpace) {
-                competitiveSectors[escapeSector(origin, candidate.position())] = true;
-            }
         }
 
         List<EscapeCandidate> selected = new ArrayList<>();
         int[] perSector = new int[8];
         for (EscapeCandidate candidate : candidates) {
             int sector = escapeSector(origin, candidate.position());
-            if (!competitiveSectors[sector]
-                    || candidate.onwardProgress() != bestOnwardProgress
-                    || candidate.onwardSpace() != bestOnwardSpace
-                    || perSector[sector] >= ESCAPE_TARGETS_PER_SECTOR) {
+            if (perSector[sector] >= ESCAPE_TARGETS_PER_SECTOR) {
                 continue;
             }
             selected.add(candidate);
@@ -359,11 +366,15 @@ final class RangedCombatPositioning {
         }
 
         LinkedHashSet<BlockPos> targets = new LinkedHashSet<>();
+        List<Set<BlockPos>> ranked = new ArrayList<>(selected.size());
         for (EscapeCandidate candidate : selected) {
-            targets.add(BlockPos.containing(candidate.position()));
+            BlockPos block = BlockPos.containing(candidate.position());
+            targets.add(block);
+            ranked.add(Set.of(block));
         }
         BlockPos preferred = BlockPos.containing(selected.getFirst().position());
-        return Optional.of(new EscapePositionTarget(preferred, Set.copyOf(targets)));
+        return Optional.of(new EscapePositionTarget(preferred, Set.copyOf(targets), List.copyOf(ranked),
+                degraded, emergency, List.copyOf(escapeThreats), List.copyOf(hazards)));
     }
 
     private static int escapeSector(Vec3 origin, Vec3 candidate) {
@@ -413,9 +424,73 @@ final class RangedCombatPositioning {
     }
 
     private static final class EscapePositionTarget extends CandidatePositionTarget implements CombatEscapePositionTracker {
-        private EscapePositionTarget(BlockPos preferred, Set<BlockPos> targets) {
+        private final List<Set<BlockPos>> ranked;
+        private final boolean degraded;
+        private final boolean emergency;
+        private final List<LivingEntity> originalDrivers;
+        private final List<LivingEntity> originalHazards;
+
+        private EscapePositionTarget(BlockPos preferred, Set<BlockPos> targets,
+                                     List<Set<BlockPos>> ranked, boolean degraded, boolean emergency,
+                                     List<? extends LivingEntity> drivers,
+                                     List<? extends LivingEntity> hazards) {
             super(preferred, targets);
+            this.ranked = ranked;
+            this.degraded = degraded;
+            this.emergency = emergency;
+            this.originalDrivers = new ArrayList<>(drivers);
+            this.originalHazards = new ArrayList<>(hazards);
         }
+
+        @Override
+        public List<Set<BlockPos>> getRankedPathTargets(Mob mob) {
+            return ranked;
+        }
+
+        @Override
+        public boolean isPathSafe(Mob mob, Path path) {
+            return evaluatePathSafety(mob, path, degraded);
+        }
+
+        @Override
+        public boolean isDegradedEmergencyPathSafe(Mob mob, Path path) {
+            return emergency && evaluatePathSafety(mob, path, true);
+        }
+
+        private boolean evaluatePathSafety(Mob mob, Path path, boolean degradedSafety) {
+            LivingEntity currentTarget = mob.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).orElse(null);
+            ThreatContext current = collectThreatContext(mob, currentTarget);
+            // Direct tactical callers without brain target memory still supply their
+            // own living, moving threat references; don't lose those in validation.
+            if (current.escapeThreats().isEmpty()) {
+                current = new ThreatContext(originalHazards, originalDrivers, null);
+            }
+            return isEscapePathSafe(mob, path, current, degradedSafety);
+        }
+    }
+
+    static boolean isEscapePathSafe(Mob mob, Path path, ThreatContext threats, boolean degraded) {
+        if (path.getNodeCount() == 0 || path.getNextNodeIndex() >= path.getNodeCount()) {
+            return false;
+        }
+        Vec3 origin = mob.position();
+        Vec3 previous = origin;
+        for (int index = path.getNextNodeIndex(); index < path.getNodeCount(); index++) {
+            Vec3 next = path.getEntityPosAtNode(mob, index);
+            // Navigation may retain the center of the block already occupied as its
+            // first node. Off-center mobs must not invalidate an outward escape just
+            // because that stale starting-center point is marginally closer to a threat.
+            if (index == path.getNextNodeIndex() && BlockPos.containing(next).equals(mob.blockPosition())) {
+                continue;
+            }
+            if (!degraded && (!preservesHazardClearance(origin, next, threats.hazards())
+                    || !preservesHazardClearanceAlongSegment(previous, next, threats.hazards()))) {
+                return false;
+            }
+            previous = next;
+        }
+        return !degraded || minimumDistanceSquared(previous, threats.escapeThreats())
+                > minimumDistanceSquared(origin, threats.escapeThreats()) + MIN_USEFUL_DISTANCE_GAIN;
     }
 
     static Optional<MultiTargetPositionTracker> findFiringTarget(
@@ -709,14 +784,13 @@ final class RangedCombatPositioning {
         return candidate != entity
                 && RangedWeaponHelper.isValidAttackTarget(entity, candidate)
                 && Math.abs(entity.getY() - candidate.getY()) <= ArcherMovementTask.CLOSE_RANGE_VERTICAL_THREAT_DISTANCE
-                && GuardEnemiesSensor.isGuardEnemy(candidate, entity);
+                && !candidate.isRemoved();
     }
 
     private static boolean isEscapeDriver(Mob entity, LivingEntity candidate, LivingEntity attackTarget) {
         return candidate == attackTarget
                 || entity.getLastHurtByMob() == candidate
-                || candidate instanceof Mob mob && mob.getTarget() == entity
-                || entity.distanceToSqr(candidate) < ArcherMovementTask.EMERGENCY_ENTER_DISTANCE_SQUARED;
+                || candidate instanceof Mob mob && mob.getTarget() == entity;
     }
 
     private static double minimumDistanceSquared(Vec3 candidate, List<? extends LivingEntity> threats) {
@@ -817,11 +891,15 @@ final class RangedCombatPositioning {
             int travelSteps,
             int onwardProgress,
             int onwardSpace,
+            boolean demonstratedContinuation,
             int elevationGain
     ) {
     }
 
-    private record OnwardReachability(int progress, int space) {
+    private record OnwardReachability(int progress, int space, boolean demonstratedContinuation) {
+    }
+
+    private record EscapeGraph(Map<BlockPos, Integer> travelSteps, Map<BlockPos, List<BlockPos>> edges) {
     }
 
     private record OnwardSearchNode(BlockPos position, int steps) {

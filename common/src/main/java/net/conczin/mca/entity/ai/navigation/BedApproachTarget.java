@@ -91,21 +91,16 @@ public final class BedApproachTarget implements MultiTargetPositionTracker {
         }
 
         BlockPos navigationPos = navigationPosition(mob);
+        BlockPos behindFoot = getBehindFootPosition(bedState);
         for (BlockPos approach : getApproachPositions(bedState)) {
-            if (isAtApproach(mob, navigationPos, approach, closeEnoughDistance)) {
+            if (isAtApproach(mob, navigationPos, approach, closeEnoughDistance)
+                    && (approach.equals(behindFoot)
+                    || bedHead.closerToCenterThan(mob.position(), 2.0D))
+                    && mob.level().noCollision(mob, mob.getBoundingBox())) {
                 return true;
             }
         }
         return false;
-    }
-
-    public boolean isAtBehindFootApproach(Mob mob) {
-        BlockState bedState = getBedHeadState(mob);
-        if (bedState == null) {
-            return false;
-        }
-
-        return isAtApproach(mob, navigationPosition(mob), getBehindFootPosition(bedState), 0);
     }
 
     @Nullable

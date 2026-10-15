@@ -37,6 +37,7 @@ import net.conczin.mca.entity.ai.navigation.MCAWalkNodeEvaluatorLookupGameTests;
 import net.conczin.mca.entity.ai.navigation.McaSparkFullBrainProfileGameTests;
 import net.conczin.mca.entity.ai.navigation.McaSparkPathProfileGameTests;
 import net.conczin.mca.entity.ai.navigation.NavigationRecoveryGameTests;
+import net.conczin.mca.entity.ai.navigation.NavigationPhysicalSafetyGameTests;
 import net.conczin.mca.entity.ai.navigation.PathRetryLifecycleGameTests;
 import net.conczin.mca.entity.ai.navigation.StairWallPathfindingGameTests;
 import net.conczin.mca.server.DestinyLocationResolverGameTests;
@@ -44,6 +45,7 @@ import net.conczin.mca.server.world.data.CopiedOpenHouseGameTests;
 import net.conczin.mca.server.world.data.FloorScannerGameTests;
 import net.conczin.mca.server.world.data.ReportedFloorInteractionGameTests;
 import net.conczin.mca.server.world.data.ReportedStairHouseGameTests;
+import net.conczin.mca.server.world.data.TaigaFloorPerformanceGameTests;
 import net.conczin.mca.server.world.data.VillageMourningGameTests;
 import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.BeforeBatch;
@@ -97,6 +99,7 @@ public final class McaGameTestsRegistration {
             McaSparkFullBrainProfileGameTests.class,
             McaSparkPathProfileGameTests.class,
             NavigationRecoveryGameTests.class,
+            NavigationPhysicalSafetyGameTests.class,
             PathRetryLifecycleGameTests.class,
             StairWallPathfindingGameTests.class,
             DestinyLocationResolverGameTests.class,
@@ -104,6 +107,7 @@ public final class McaGameTestsRegistration {
             FloorScannerGameTests.class,
             ReportedFloorInteractionGameTests.class,
             ReportedStairHouseGameTests.class,
+            TaigaFloorPerformanceGameTests.class,
             VillageMourningGameTests.class
     );
 

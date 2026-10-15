@@ -47,7 +47,7 @@ public final class FamilyTreeViewBuilder {
 
         FamilyTreeNode rootEntry = rootNode.orElseThrow();
         nodes.put(root, rootEntry);
-        includePartners(tree, nodes, unavailable);
+        includePartners(tree, nodes, unavailable, continuations);
 
         walkLineage(
                 ancestors,
@@ -74,7 +74,7 @@ public final class FamilyTreeViewBuilder {
                 descendants
         );
         includeRootSiblings(tree, rootEntry, nodes, continuations, unavailable);
-        includePartners(tree, nodes, unavailable);
+        includePartners(tree, nodes, unavailable, continuations);
 
         unavailable.removeAll(nodes.keySet());
         Map<UUID, FamilyTreeNode> snapshots = snapshotNodes(tree, nodes, continuations);
@@ -216,11 +216,27 @@ public final class FamilyTreeViewBuilder {
     private static void includePartners(
             FamilyTree tree,
             Map<UUID, FamilyTreeNode> nodes,
-            Set<UUID> unavailable
+            Set<UUID> unavailable,
+            Set<FamilyTreeView.Continuation> continuations
     ) {
         for (FamilyTreeNode node : List.copyOf(nodes.values())) {
             UUID partnerId = node.partner();
             if (!FamilyTreeNode.isValid(partnerId)) {
+                // Generated deceased parents have no recorded partner. Pair them only
+                // when their shared child and one parent are already in this view.
+                if (node.probablyGenerated()) {
+                    UUID childId = node.streamChildren().findFirst().orElse(null);
+                    FamilyTreeNode child = nodes.get(childId);
+                    if (child != null && node.isUnpairedGeneratedParentOf(childId)) {
+                        UUID otherId = node.id().equals(child.father()) ? child.mother()
+                                : node.id().equals(child.mother()) ? child.father() : null;
+                        FamilyTreeNode other = tree.getOrEmpty(otherId).orElse(null);
+                        if (other != null && other.isUnpairedGeneratedParentOf(childId)
+                                && !tryAddNode(nodes, otherId, other)) {
+                            addContinuation(continuations, childId, FamilyTreeView.Direction.ANCESTORS);
+                        }
+                    }
+                }
                 continue;
             }
             Optional<FamilyTreeNode> partner = tree.getOrEmpty(partnerId);

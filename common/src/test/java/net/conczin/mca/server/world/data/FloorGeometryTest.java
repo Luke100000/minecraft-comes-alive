@@ -3,7 +3,10 @@ package net.conczin.mca.server.world.data;
 import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -11,6 +14,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeout;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FloorGeometryTest {
@@ -146,5 +150,46 @@ class FloorGeometryTest {
 
     private static FloorGeometry.Cell cell(int x, int y, int z) {
         return new FloorGeometry.Cell(new BlockPos(x, y, z), y + 4);
+    }
+
+    @Test
+    void rectangularFloorColumnIndexDoesNotDegenerateOnCoordinateHashes() {
+        List<FloorGeometry.Cell> cells = new ArrayList<>();
+        for (int x = 0; x < 192; x++) {
+            for (int z = 0; z < 192; z++) {
+                cells.add(cell(x, 64, z));
+            }
+        }
+
+        // Packed X/Z keys have very few distinct Long hashes in a square footprint.
+        // This generous bound catches quadratic probing, not ordinary scan latency.
+        assertTimeout(Duration.ofSeconds(2), () -> {
+            FloorGeometry geometry = new FloorGeometry(cells, Map.of());
+            assertEquals(36_864, geometry.footprintArea());
+            for (int pass = 0; pass < 3; pass++) {
+                for (FloorGeometry.Cell expected : cells) {
+                    assertEquals(List.of(expected), geometry.cellsAtColumn(
+                            expected.feet().getX(), expected.feet().getZ()));
+                }
+            }
+        });
+    }
+
+    @Test
+    void geometryOwnsReadOnlySnapshotsOfSuppliedCellsAndConnectors() {
+        List<FloorGeometry.Cell> cells = new ArrayList<>(List.of(cell(0, 64, 0), cell(1, 64, 0)));
+        Map<BlockPos, FloorConnector.Type> connectors = new HashMap<>();
+        connectors.put(new BlockPos(1, 64, 0), FloorConnector.Type.DOOR);
+        FloorGeometry geometry = new FloorGeometry(cells, connectors);
+
+        cells.clear();
+        connectors.clear();
+
+        assertEquals(2, geometry.footprintArea());
+        assertEquals(cell(0, 64, 0), geometry.cellAt(new BlockPos(0, 64, 0)).orElseThrow());
+        assertTrue(geometry.isRoomBoundaryCell(new BlockPos(1, 64, 0)));
+        assertThrows(UnsupportedOperationException.class, () -> geometry.cells().clear());
+        assertThrows(UnsupportedOperationException.class, () -> geometry.connectorTypesByCell().clear());
+        assertThrows(UnsupportedOperationException.class, () -> geometry.cellsAtColumn(0, 0).clear());
     }
 }

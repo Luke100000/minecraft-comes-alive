@@ -2931,7 +2931,11 @@ public final class FloorScannerGameTests {
                 roomSeed, 128, components, selected);
         helper.assertTrue(room.status() == Building.validationResult.SUCCESS,
                 "bedroom did not materialize after pruning exterior canopy: " + room.status());
-        helper.assertTrue(room.poiCells().contains(bedFoot),
+        boolean[] hasBedPoi = {false};
+        room.visitPoiCells(pos -> {
+            if (pos.equals(bedFoot)) hasBedPoi[0] = true;
+        });
+        helper.assertTrue(hasBedPoi[0],
                 "bed POI was lost after pruning exterior canopy");
         Building building = new Building(roomSeed);
         helper.assertTrue(building.applyRoomScan(level, room) == Building.validationResult.SUCCESS,
