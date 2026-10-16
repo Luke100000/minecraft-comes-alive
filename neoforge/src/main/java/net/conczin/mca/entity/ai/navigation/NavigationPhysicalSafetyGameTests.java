@@ -185,6 +185,40 @@ public final class NavigationPhysicalSafetyGameTests {
         });
     }
 
+    @GameTest(batch = "mca_partial_floor_lintel", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void plannedSnowDepartureRejectsLowLintelAndKeepsDetour(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos snow = helper.absolutePos(new BlockPos(8, 2, 8));
+        GameTestTerrain.prepareFlatArea(helper, snow, 4, 4);
+        level.setBlock(snow, Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 3), 3);
+        level.setBlock(snow.north().above(2), Blocks.STONE.defaultBlockState(), 3);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(level)
+                .withAge(0).withGender(Gender.MALE)
+                .withPosition(Vec3.atBottomCenterOf(snow.south(2))).spawn(MobSpawnType.STRUCTURE);
+        villager.getTraits().removeTrait(Traits.DWARFISM);
+        villager.getGenetics().setGene(Genetics.SIZE, 0.5F);
+        villager.getGenetics().setGene(Genetics.WIDTH, 0.5F);
+        villager.refreshDimensions();
+        villager.refreshBrain(level);
+        villager.getBrain().removeAllBehaviors();
+        villager.setOnGround(true);
+        helper.assertTrue(villager.getBbHeight() > 1.75F && villager.getBbHeight() < 2.0F,
+                "The supported snow pose must exceed lintel clearance while fitting on the lower floor");
+        helper.assertTrue(!neighborsAtPlannedNode(level, villager, snow).contains(snow.north()),
+                "A future route edge must not lower the body before it has physically left the snow support");
+        helper.assertTrue(neighborsAtPlannedNode(level, villager, snow).contains(snow.east()),
+                "A clear departure from the same partial surface must remain available");
+        BlockPos target = snow.north(2);
+        Path path = villager.getNavigation().createPath(target, 0);
+        helper.assertTrue(path != null && path.canReach() && villager.getNavigation().moveTo(path, 0.5D),
+                "Native navigation must retain a route around the obstructed lintel approach");
+        helper.succeedWhen(() -> {
+            helper.assertTrue(villager.distanceToSqr(Vec3.atBottomCenterOf(target)) < 0.75D && villager.onGround(),
+                    "The villager must physically complete the native detour");
+            villager.discard();
+        });
+    }
+
     @GameTest(batch = "mca_stair_start", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
     public static void lowerStairSurfaceKeepsSupportedNativeStart(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
