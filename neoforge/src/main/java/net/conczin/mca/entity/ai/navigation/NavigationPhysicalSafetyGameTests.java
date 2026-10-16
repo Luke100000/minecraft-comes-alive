@@ -73,6 +73,38 @@ public final class NavigationPhysicalSafetyGameTests {
         });
     }
 
+    /** Rounded fence starts must not test departure from a hypothetical body embedded in the support. */
+    @GameTest(batch = "mca_fence_departure", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void roundedFenceStartKeepsSupportedDeparture(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos fence = helper.absolutePos(new BlockPos(8, 2, 8));
+        // The neighboring ground is outside the start node's permitted fall; the first exit must follow the fence.
+        GameTestTerrain.prepareFlatArea(helper, fence.below(2), 4, 6);
+        for (int x = 0; x < 3; x++) {
+            level.setBlock(fence.east(x), Blocks.OAK_FENCE.defaultBlockState(), 3);
+        }
+        VillagerEntityMCA villager = spawn(level, Vec3.atBottomCenterOf(fence).add(0, 1.5D, 0));
+        villager.refreshBrain(level);
+        villager.getBrain().removeAllBehaviors();
+        villager.setNoAi(false);
+        helper.assertTrue(level.isPositionEntityTicking(villager.blockPosition()) && level.noCollision(villager)
+                        && !level.noBlockCollision(villager, villager.getBoundingBox().move(0, -0.01D, 0)),
+                "The villager must start ticking in actual contact with the clear fence surface");
+        BlockPos target = fence.east(3).below(2);
+        Path path = villager.getNavigation().createPath(target, 0);
+        helper.assertTrue(path != null && path.canReach(),
+                "A grounded villager must retain the supported exit along the fence: "
+                        + (path == null ? "none" : path.getNodePos(0) + "/" + path.getNode(0).type
+                        + " nodes=" + path.getNodeCount()));
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "The fence departure must start");
+        helper.succeedWhen(() -> {
+            helper.assertTrue(villager.distanceToSqr(Vec3.atBottomCenterOf(target)) < 0.75D
+                            && villager.getY() < fence.getY() + 0.5D && villager.onGround(),
+                    "The villager must physically leave the fence and reach the ground destination");
+            villager.discard();
+        });
+    }
+
     @GameTest(batch = "mca_partial_floor_start", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
     public static void bedUnderLowCeilingKeepsPhysicalDeparture(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
