@@ -214,7 +214,45 @@ public final class NavigationPhysicalSafetyGameTests {
                 "Native navigation must retain a route around the obstructed lintel approach");
         helper.succeedWhen(() -> {
             helper.assertTrue(villager.distanceToSqr(Vec3.atBottomCenterOf(target)) < 0.75D && villager.onGround(),
-                    "The villager must physically complete the native detour");
+                    "The villager must physically complete the native detour: pos=" + villager.position()
+                            + ", age=" + villager.tickCount + ", noAi=" + villager.isNoAi()
+                            + ", grounded=" + villager.onGround() + ", collision=" + villager.horizontalCollision
+                            + ", path=" + villager.getNavigation().getPath()
+                            + ", wanted=" + villager.getMoveControl().getWantedX() + ","
+                            + villager.getMoveControl().getWantedY() + "," + villager.getMoveControl().getWantedZ());
+            villager.discard();
+        });
+    }
+
+    /** Replays the admitted detour's waypoints; search is outside this route-following regression. */
+    @GameTest(batch = "mca_partial_floor_lintel_following", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void lowerDetourWaypointRetainsItsRequiredSurface(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos snow = helper.absolutePos(new BlockPos(8, 2, 8));
+        GameTestTerrain.prepareFlatArea(helper, snow, 4, 4);
+        level.setBlock(snow, Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 3), 3);
+        level.setBlock(snow.north().above(2), Blocks.STONE.defaultBlockState(), 3);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(level)
+                .withAge(0).withGender(Gender.MALE)
+                .withPosition(Vec3.atBottomCenterOf(snow.south(2))).spawn(MobSpawnType.STRUCTURE);
+        villager.getTraits().removeTrait(Traits.DWARFISM);
+        villager.getGenetics().setGene(Genetics.SIZE, 0.5F);
+        villager.getGenetics().setGene(Genetics.WIDTH, 0.5F);
+        villager.refreshDimensions();
+        villager.refreshBrain(level);
+        villager.getBrain().removeAllBehaviors();
+        villager.setOnGround(true);
+        helper.assertTrue(level.isPositionEntityTicking(villager.blockPosition()) && level.noCollision(villager)
+                        && villager.getBbHeight() > 1.75F && villager.getBbHeight() < 2.0F,
+                "The native detour must start with a ticking, clear adult body");
+        BlockPos target = snow.north(2);
+        Path path = new Path(List.of(walkable(snow.south(2)), walkable(snow.south()), walkable(snow.east()),
+                walkable(snow.north()), walkable(target)), target, true);
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "The observed native detour must start");
+        helper.succeedWhen(() -> {
+            helper.assertTrue(villager.distanceToSqr(Vec3.atBottomCenterOf(target)) < 0.75D && villager.onGround(),
+                    "Native following skipped the lower surface needed to clear the lintel: pos=" + villager.position()
+                            + ", node=" + path.getNextNodeIndex() + ", collision=" + villager.horizontalCollision);
             villager.discard();
         });
     }

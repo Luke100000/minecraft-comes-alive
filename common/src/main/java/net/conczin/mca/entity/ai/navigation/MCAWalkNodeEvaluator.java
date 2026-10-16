@@ -171,7 +171,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             this.expandedNodes++;
         }
         int nodeCount = super.getNeighbors(nodes, origin);
-        nodeCount = rejectBlockedRaisedStartTransitions(nodes, nodeCount, origin);
+        nodeCount = rejectBlockedRaisedSurfaceTransitions(nodes, nodeCount, origin);
         nodeCount = rejectBlockedRaisedTransitions(nodes, nodeCount, origin);
         if (!isClimbable(origin.x, origin.y, origin.z)) {
             return addDescendingClimbableEntries(nodes, nodeCount, origin.asBlockPos());
@@ -232,17 +232,21 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         return nodeCount;
     }
 
-    private int rejectBlockedRaisedStartTransitions(Node[] nodes, int nodeCount, Node origin) {
-        if (origin != this.startNode || !this.mob.onGround() || this.mob.onClimbable()) {
+    private int rejectBlockedRaisedSurfaceTransitions(Node[] nodes, int nodeCount, Node origin) {
+        if (origin == this.startNode && (!this.mob.onGround() || this.mob.onClimbable())) {
             return nodeCount;
         }
 
-        AABB startBox = this.mob.getBoundingBox();
-        double modeledFloor = this.getFloorLevel(origin.asBlockPos());
-        if (startBox.minY <= modeledFloor + RAISED_START_EPSILON) {
+        BlockPos originPos = origin.asBlockPos();
+        double modeledFloor = this.getFloorLevel(originPos);
+        double standingFloor = origin == this.startNode ? this.mob.getBoundingBox().minY
+                : getStandingFloorY(this.currentContext.level(), originPos, this.mob, modeledFloor);
+        if (standingFloor <= modeledFloor + RAISED_START_EPSILON) {
             return nodeCount;
         }
 
+        // Planned partial surfaces also need headroom until the body has left their support.
+        AABB startBox = origin == this.startNode ? this.mob.getBoundingBox() : getMobBoxAt(origin);
         int writeIndex = 0;
         for (int readIndex = 0; readIndex < nodeCount; readIndex++) {
             Node candidate = nodes[readIndex];

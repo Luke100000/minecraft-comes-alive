@@ -781,6 +781,21 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
         Vec3 position = this.getTempMobPos();
         if (!this.climbTraversal.followPath(this.path)) {
+            int nextIndex = this.path.getNextNodeIndex();
+            if (this.mob.onGround() && nextIndex + 1 < this.path.getNodeCount()) {
+                double nextFloor = getGroundY(this.path.getNextEntityPos(this.mob));
+                if (this.mob.getY() > nextFloor + 1.0E-3D) {
+                    Vec3 following = this.path.getEntityPosAtNode(this.mob, nextIndex + 1);
+                    if (getGroundY(following) <= nextFloor + 1.0E-3D
+                            && !this.level.noBlockCollision(this.mob, this.mob.getBoundingBox().move(
+                            following.x - this.mob.getX(), 0.0D, following.z - this.mob.getZ()))) {
+                        // Width tolerance can reach a lower waypoint while the body still overlaps
+                        // its previous support. Finish that descent before turning under a low ceiling.
+                        this.doStuckDetection(position);
+                        return;
+                    }
+                }
+            }
             WalkTarget walkTarget = this.mob.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
                     .orElse(null);
             if (this.path.canReach() && this.path.getNextNodeIndex() == this.path.getNodeCount() - 1
