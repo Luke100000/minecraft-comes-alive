@@ -786,7 +786,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 double nextFloor = getGroundY(this.path.getNextEntityPos(this.mob));
                 if (this.mob.getY() > nextFloor + 1.0E-3D) {
                     Vec3 following = this.path.getEntityPosAtNode(this.mob, nextIndex + 1);
-                    if (getGroundY(following) <= nextFloor + 1.0E-3D
+                    if (getGroundY(following) <= this.mob.getY() + 1.0E-3D
                             && !this.level.noBlockCollision(this.mob, this.mob.getBoundingBox().move(
                             following.x - this.mob.getX(), 0.0D, following.z - this.mob.getZ()))) {
                         // Width tolerance can reach a lower waypoint while the body still overlaps
