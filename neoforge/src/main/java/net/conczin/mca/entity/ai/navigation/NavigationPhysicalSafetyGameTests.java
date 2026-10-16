@@ -227,10 +227,22 @@ public final class NavigationPhysicalSafetyGameTests {
     /** Replays the admitted detour's waypoints; search is outside this route-following regression. */
     @GameTest(batch = "mca_partial_floor_lintel_following", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
     public static void lowerDetourWaypointRetainsItsRequiredSurface(GameTestHelper helper) {
+        assertLowerDetourReachesOpening(helper, Blocks.AIR.defaultBlockState());
+    }
+
+    @GameTest(batch = "mca_partial_floor_raised_opening", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void slightlyRaisedOpeningStillNeedsTheLowerDetourSurface(GameTestHelper helper) {
+        assertLowerDetourReachesOpening(helper,
+                Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 2));
+    }
+
+    private static void assertLowerDetourReachesOpening(GameTestHelper helper,
+                                                       net.minecraft.world.level.block.state.BlockState openingFloor) {
         ServerLevel level = helper.getLevel();
         BlockPos snow = helper.absolutePos(new BlockPos(8, 2, 8));
         GameTestTerrain.prepareFlatArea(helper, snow, 4, 4);
         level.setBlock(snow, Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 3), 3);
+        level.setBlock(snow.north(), openingFloor, 3);
         level.setBlock(snow.north().above(2), Blocks.STONE.defaultBlockState(), 3);
         VillagerEntityMCA villager = VillagerFactory.newVillager(level)
                 .withAge(0).withGender(Gender.MALE)
@@ -255,6 +267,26 @@ public final class NavigationPhysicalSafetyGameTests {
                             + ", node=" + path.getNextNodeIndex() + ", collision=" + villager.horizontalCollision);
             villager.discard();
         });
+    }
+
+    @GameTest(batch = "mca_partial_floor_upward_following", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 40)
+    public static void followingStepAboveActualSupportDoesNotRequireADescent(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos snow = helper.absolutePos(new BlockPos(8, 2, 8));
+        GameTestTerrain.prepareFlatArea(helper, snow, 4, 4);
+        level.setBlock(snow, Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 3), 3);
+        level.setBlock(snow.north(), Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 4), 3);
+        VillagerEntityMCA villager = spawn(level, Vec3.atBottomCenterOf(snow).add(0.67D, 0.25D, 0.277D));
+        helper.assertTrue(level.noCollision(villager)
+                        && !level.noBlockCollision(villager, villager.getBoundingBox().move(0, -0.01D, 0)),
+                "The positive must retain actual snow contact before a genuinely higher step");
+        Path path = new Path(List.of(walkable(snow.east()), walkable(snow.north())), snow.north(), true);
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "The clear higher-step route must start");
+        villager.getNavigation().tick();
+        helper.assertTrue(path.getNextNodeIndex() == 1,
+                "An upward step from the actual support must retain native waypoint tolerance");
+        villager.discard();
+        helper.succeed();
     }
 
     @GameTest(batch = "mca_stair_start", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
