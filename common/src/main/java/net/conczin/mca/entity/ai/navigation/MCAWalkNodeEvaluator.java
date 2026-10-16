@@ -258,7 +258,8 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     }
 
     private int rejectBlockedRaisedTransitions(Node[] nodes, int nodeCount, Node origin) {
-        AABB originBox = null;
+        // The rounded start's modeled floor can be below the real supporting surface.
+        AABB originBox = origin == this.startNode && this.mob.onGround() ? this.mob.getBoundingBox() : null;
         int writeIndex = 0;
         for (int readIndex = 0; readIndex < nodeCount; readIndex++) {
             Node candidate = nodes[readIndex];
