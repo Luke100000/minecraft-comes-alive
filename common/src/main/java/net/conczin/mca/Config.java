@@ -4,7 +4,10 @@ import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.electronwill.nightconfig.core.UnmodifiableConfig;
+import net.conczin.mca.config.ConfigBackend;
+import net.conczin.mca.config.ConfigSchema;
+import net.conczin.mca.config.ConfigScope;
+import net.conczin.mca.config.ConfigValue;
 import net.conczin.mca.entity.EquipmentSet;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -13,9 +16,6 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.entity.MobSpawnType;
-import net.neoforged.fml.config.ModConfig;
-import net.neoforged.neoforge.common.ModConfigSpec;
-import org.apache.commons.lang3.tuple.Pair;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -49,39 +49,57 @@ public final class Config {
     private static boolean legacyClientImported;
 
     public static final CommonConfig COMMON;
-    public static final ModConfigSpec COMMON_SPEC;
+    public static final ConfigSchema COMMON_SPEC;
     public static final ServerConfig SERVER;
-    public static final ModConfigSpec SERVER_SPEC;
+    public static final ConfigSchema SERVER_SPEC;
     public static final ClientConfig CLIENT;
-    public static final ModConfigSpec CLIENT_SPEC;
+    public static final ConfigSchema CLIENT_SPEC;
+    private static volatile ConfigBackend backend;
 
     static {
-        Pair<CommonConfig, ModConfigSpec> common = new ModConfigSpec.Builder().configure(CommonConfig::new);
-        COMMON = common.getLeft();
-        COMMON_SPEC = common.getRight();
+        ConfigSchema.Builder common = ConfigSchema.builder(ConfigScope.COMMON);
+        COMMON = new CommonConfig(common);
+        COMMON_SPEC = common.build();
 
-        Pair<ServerConfig, ModConfigSpec> server = new ModConfigSpec.Builder().configure(ServerConfig::new);
-        SERVER = server.getLeft();
-        SERVER_SPEC = server.getRight();
+        ConfigSchema.Builder server = ConfigSchema.builder(ConfigScope.SERVER);
+        SERVER = new ServerConfig(server);
+        SERVER_SPEC = server.build();
 
-        Pair<ClientConfig, ModConfigSpec> client = new ModConfigSpec.Builder().configure(ClientConfig::new);
-        CLIENT = client.getLeft();
-        CLIENT_SPEC = client.getRight();
+        ConfigSchema.Builder client = ConfigSchema.builder(ConfigScope.CLIENT);
+        CLIENT = new ClientConfig(client);
+        CLIENT_SPEC = client.build();
     }
 
     private Config() {
     }
 
     public static void saveCommon() {
-        COMMON_SPEC.save();
+        save(ConfigScope.COMMON);
     }
 
     public static void saveServer() {
-        SERVER_SPEC.save();
+        save(ConfigScope.SERVER);
     }
 
     public static void saveClient() {
-        CLIENT_SPEC.save();
+        save(ConfigScope.CLIENT);
+    }
+
+    public static void setBackend(ConfigBackend activeBackend) {
+        backend = Objects.requireNonNull(activeBackend);
+    }
+
+    private static void save(ConfigScope scope) {
+        ConfigBackend activeBackend = backend;
+        if (activeBackend != null) activeBackend.save(scope);
+    }
+
+    public static ConfigSchema schema(ConfigScope scope) {
+        return switch (scope) {
+            case COMMON -> COMMON_SPEC;
+            case SERVER -> SERVER_SPEC;
+            case CLIENT -> CLIENT_SPEC;
+        };
     }
 
     public static Map<UUID, String> legacyInworldAIResourceNames() {
@@ -95,26 +113,13 @@ public final class Config {
                 "inworldAIResourceNames");
     }
 
-    private static boolean applyLegacyValues(ModConfigSpec spec) {
+    private static boolean applyLegacyValues(ConfigSchema spec) {
         if (!LEGACY.present()) {
             return false;
         }
-
-        return applyLegacyValues(spec.getValues());
-    }
-
-    private static boolean applyLegacyValues(UnmodifiableConfig config) {
         boolean changed = false;
-        for (UnmodifiableConfig.Entry entry : config.entrySet()) {
-            Object value = entry.getRawValue();
-            if (value instanceof UnmodifiableConfig nestedConfig) {
-                changed |= applyLegacyValues(nestedConfig);
-                continue;
-            }
-            if (!(value instanceof ModConfigSpec.ConfigValue<?> configValue)) {
-                continue;
-            }
-
+        for (ConfigSchema.Entry<?> entry : spec.entries()) {
+            ConfigValue<?> configValue = entry.value();
             List<String> path = configValue.getPath();
             String name = path.get(path.size() - 1);
             if (!LEGACY.has(name)) {
@@ -122,8 +127,8 @@ public final class Config {
             }
 
             Object migratedValue = LEGACY.value(name, configValue.getDefault());
-            if (!configValue.getSpec().test(migratedValue)) {
-                MCA.LOGGER.warn("Ignoring invalid legacy MCA config value for '{}': {}", name, migratedValue);
+            if (!configValue.accepts(migratedValue)) {
+                MCA.LOGGER.warn("Ignoring invalid legacy MCA config field '{}'", name);
                 continue;
             }
 
@@ -133,29 +138,12 @@ public final class Config {
         return changed;
     }
 
-    /** Config loading events may carry in-memory SERVER defaults with no backing file. */
-    public static void migrateLegacy(ModConfig config) {
-        if (!(config.getSpec() instanceof ModConfigSpec spec)) {
-            return;
-        }
-        Path path;
-        try {
-            path = config.getFullPath();
-        } catch (IllegalStateException pathless) {
-            return;
-        }
-        boolean imported = migrateLegacy(spec, path);
-        if (imported || upgradeDefaultMaps(spec)) {
-            spec.save();
-        }
-    }
-
     /**
      * One-time upstream default-map additions for already existing native TOML files.
      * The version field prevents subsequent user deletions from being re-added.
      * Run only for a real loaded config file, never for a pathless SERVER snapshot.
      */
-    static boolean upgradeDefaultMaps(ModConfigSpec spec) {
+    public static boolean upgradeDefaultMaps(ConfigSchema spec) {
         if (spec == SERVER_SPEC && SERVER.defaultMapsVersion.get() == 0) {
             Map<String, String> merged = mergeDefaultMap(
                     SERVER.professionConversionsMap.getDefault(), SERVER.professionConversionsMap.get(),
@@ -182,23 +170,23 @@ public final class Config {
         return merged;
     }
 
-    public static synchronized boolean migrateLegacy(ModConfigSpec spec, Path loadedConfigPath) {
+    public static synchronized boolean migrateLegacy(ConfigSchema spec, Path loadedConfigPath) {
         if (!shouldImportLegacy(spec, loadedConfigPath)) {
             return false;
         }
 
         boolean changed = applyLegacyValues(spec);
-        if (spec == COMMON_SPEC) {
-            legacyCommonImported = true;
-        } else if (spec == SERVER_SPEC) {
-            legacyServerImported = true;
-        } else if (spec == CLIENT_SPEC) {
-            legacyClientImported = true;
-        }
         return changed;
     }
 
-    private static boolean shouldImportLegacy(ModConfigSpec spec, Path loadedConfigPath) {
+    /** Called only after the backend has durably saved a successfully imported config. */
+    public static synchronized void markLegacyImported(ConfigSchema spec) {
+        if (spec == COMMON_SPEC) legacyCommonImported = true;
+        if (spec == SERVER_SPEC) legacyServerImported = true;
+        if (spec == CLIENT_SPEC) legacyClientImported = true;
+    }
+
+    private static boolean shouldImportLegacy(ConfigSchema spec, Path loadedConfigPath) {
         if (!LEGACY.present()) {
             return false;
         }
@@ -212,8 +200,7 @@ public final class Config {
             if (!LEGACY_SERVER_IMPORT_ELIGIBLE || legacyServerImported) {
                 return false;
             }
-            // NeoForge and Forge Config API Port use the global config as the SERVER default and
-            // select an existing world/serverconfig file only as an override. Migrate only that
+            // The global config is the SERVER fallback; an existing world config overrides it. Migrate only the
             // global default; an explicit world override must remain authoritative.
             Path globalServerConfig = CONFIG_DIRECTORY.resolve(SERVER_FILE_NAME).toAbsolutePath().normalize();
             return loadedConfigPath.toAbsolutePath().normalize().equals(globalServerConfig);
@@ -222,7 +209,7 @@ public final class Config {
     }
 
     @SuppressWarnings({"rawtypes", "unchecked"})
-    private static void setConfigValue(ModConfigSpec.ConfigValue configValue, Object value) {
+    private static void setConfigValue(ConfigValue configValue, Object value) {
         configValue.set(value);
     }
 

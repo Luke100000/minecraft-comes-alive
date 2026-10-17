@@ -58,8 +58,10 @@ public record ChatAIContextUpdateRequest(Target target, ResourceKey<Level> dimen
                 }
             }
             case WORLD -> {
-                Config.COMMON.villagerChatAISystemPrompt.set(prompt);
-                Config.saveCommon();
+                if (MCA.platformHelper.allowsConfigCommands()) {
+                    Config.COMMON.villagerChatAISystemPrompt.set(prompt);
+                    Config.saveCommon();
+                }
             }
         }
     }

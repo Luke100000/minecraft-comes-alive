@@ -19,6 +19,11 @@ public class PlatformHelper {
         return false;
     }
 
+    /** Config commands are native-NeoForge-only; Fabric editing uses the optional FCP GUI. */
+    public boolean allowsConfigCommands() {
+        return true;
+    }
+
     public Path getConfigDirectory() {
         return Path.of("config");
     }

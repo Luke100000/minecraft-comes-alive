@@ -1,6 +1,8 @@
 package net.conczin.mca.fabric;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.fabric.config.FabricConfigBootstrap;
+import net.conczin.mca.fabric.config.FabricConfigSync;
 import net.conczin.mca.MCA;
 import net.conczin.mca.block.BlockEntityTypesMCA;
 import net.conczin.mca.entity.ai.ActivitiesMCA;
@@ -36,8 +38,6 @@ import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.fabric.api.object.builder.v1.entity.FabricDefaultAttributeRegistry;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.fabricmc.loader.api.FabricLoader;
-import fuzs.forgeconfigapiport.fabric.api.neoforge.v4.NeoForgeConfigRegistry;
-import fuzs.forgeconfigapiport.fabric.api.neoforge.v4.NeoForgeModConfigEvents;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
@@ -53,8 +53,6 @@ import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntityType;
-import net.neoforged.fml.config.ModConfig;
-import net.neoforged.neoforge.common.ModConfigSpec;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -91,15 +89,8 @@ public final class MCAFabric implements ModInitializer {
 
     @Override
     public void onInitialize() {
-        NeoForgeModConfigEvents.loading(MCA.MOD_ID).register(Config::migrateLegacy);
-        NeoForgeModConfigEvents.reloading(MCA.MOD_ID).register(config -> {
-            if (config.getSpec() == Config.SERVER_SPEC) {
-                MCA.getServer().ifPresent(server -> server.execute(() ->
-                        DestinyLocationResolver.refreshCachedDestinations(server, Config.SERVER)));
-            }
-        });
-        NeoForgeConfigRegistry.INSTANCE.register(MCA.MOD_ID, ModConfig.Type.COMMON, Config.COMMON_SPEC, Config.COMMON_FILE_NAME);
-        NeoForgeConfigRegistry.INSTANCE.register(MCA.MOD_ID, ModConfig.Type.SERVER, Config.SERVER_SPEC, Config.SERVER_FILE_NAME);
+        FabricConfigBootstrap.initialize();
+        FabricConfigSync.initializeCommon();
 
         ServerEntityEvents.ENTITY_LOAD.register((entity, level) -> {
             if (entity instanceof Villager villager) VillageManager.get(level).trackVillager(villager);
@@ -159,7 +150,10 @@ public final class MCAFabric implements ModInitializer {
         });
 
         // Register events
-        ServerLifecycleEvents.SERVER_STARTING.register(MCA::startServer);
+        ServerLifecycleEvents.SERVER_STARTING.register(server -> {
+            FabricConfigBootstrap.startWorld(server);
+            MCA.startServer(server);
+        });
         ServerLifecycleEvents.SERVER_STARTED.register(server ->
                 DestinyLocationResolver.refreshCachedDestinations(server, Config.SERVER)
         );
@@ -172,13 +166,17 @@ public final class MCAFabric implements ModInitializer {
             DestinyLocationResolver.clearCachedDestinations(server);
             MCA.stopServer(server);
         });
-        ServerLifecycleEvents.SERVER_STOPPED.register(MCA::finishServerStop);
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+            MCA.finishServerStop(server);
+            FabricConfigBootstrap.stopWorld();
+        });
         ServerTickEvents.END_WORLD_TICK.register(w -> VillageManager.get(w).tick());
         ServerTickEvents.END_SERVER_TICK.register(s -> ServerInteractionManager.getInstance().tick());
 
-        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) ->
-                ServerInteractionManager.getInstance().onPlayerJoin(handler.player)
-        );
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+            FabricConfigSync.send(handler.player);
+            ServerInteractionManager.getInstance().onPlayerJoin(handler.player);
+        });
 
         ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) ->
                 ServerInteractionManager.getInstance().onPlayerRespawn(newPlayer)

@@ -1,6 +1,7 @@
 package net.conczin.mca;
 
-import net.neoforged.neoforge.common.ModConfigSpec;
+import net.conczin.mca.config.ConfigSchema;
+import net.conczin.mca.config.ConfigValue;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -136,8 +137,7 @@ class ConfigLayoutTest {
 
     @Test
     void villagerCollisionsAreServerConfigAndEnabledByDefault() {
-        ModConfigSpec.ConfigValue<?> value = Config.SERVER_SPEC.getValues()
-                .get(List.of("villager_behavior", "enableVillagerCollisions"));
+        ConfigValue<?> value = Config.SERVER_SPEC.entry("villager_behavior.enableVillagerCollisions").value();
 
         assertTrue(value != null);
         assertEquals(true, value.getDefault());
@@ -145,17 +145,17 @@ class ConfigLayoutTest {
 
     @Test
     void restartMetadataMatchesActualLifecycleBoundaries() {
-        for (ModConfigSpec.ConfigValue<?> value : List.of(
+        for (ConfigValue<?> value : List.of(
                 Config.COMMON.useSquidwardModels,
                 Config.CLIENT.enableBoobs,
                 Config.CLIENT.onlineTTSServer,
                 Config.CLIENT.player2Url,
                 Config.CLIENT.enableVillagerPlayerModel,
                 Config.CLIENT.playerRendererBlacklist)) {
-            assertEquals(ModConfigSpec.RestartType.GAME, value.getSpec().restartType());
+            assertEquals(ConfigSchema.Restart.GAME, Config.schema(scope(value)).entry(String.join(".", value.getPath())).restart());
         }
 
-        for (ModConfigSpec.ConfigValue<?> value : List.of(
+        for (ConfigValue<?> value : List.of(
                 Config.SERVER.nightOwlChance,
                 Config.SERVER.allowAnyNightOwl,
                 Config.SERVER.maleVillagerHeightFactor,
@@ -163,13 +163,21 @@ class ConfigLayoutTest {
                 Config.SERVER.maleVillagerWidthFactor,
                 Config.SERVER.femaleVillagerWidthFactor,
                 Config.SERVER.scalePlayerHitboxWithSizeAndWidth)) {
-            assertEquals(ModConfigSpec.RestartType.WORLD, value.getSpec().restartType());
+            assertEquals(ConfigSchema.Restart.WORLD, Config.schema(scope(value)).entry(String.join(".", value.getPath())).restart());
         }
 
-        for (ModConfigSpec.ConfigValue<?> value : List.of(
+        for (ConfigValue<?> value : List.of(
                 Config.SERVER.guardEquipment,
                 Config.SERVER.archerEquipment)) {
-            assertEquals(ModConfigSpec.RestartType.NONE, value.getSpec().restartType());
+            assertEquals(ConfigSchema.Restart.NONE, Config.schema(scope(value)).entry(String.join(".", value.getPath())).restart());
         }
+    }
+
+    private static net.conczin.mca.config.ConfigScope scope(ConfigValue<?> value) {
+        for (net.conczin.mca.config.ConfigScope scope : net.conczin.mca.config.ConfigScope.values()) {
+            if (Config.schema(scope).entry(String.join(".", value.getPath())) != null
+                    && Config.schema(scope).entry(String.join(".", value.getPath())).value() == value) return scope;
+        }
+        throw new IllegalArgumentException("Missing schema for " + value.getPath());
     }
 }

@@ -10,6 +10,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.neoforged.fml.config.NeoForgeTestConfigLoader;
 import net.neoforged.neoforge.common.ModConfigSpec;
+import net.conczin.mca.config.ConfigScope;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -33,10 +34,11 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 class ConfigLegacyMigrationTest {
     @Test
     void pathlessServerDefaultsDoNotAttemptLegacyMigration() {
-        var config = NeoForgeTestConfigLoader.pathlessServerConfig(Config.SERVER_SPEC);
+        var config = NeoForgeTestConfigLoader.pathlessServerConfig(NativeConfigDefaultsExtension.spec(ConfigScope.SERVER));
         assertThrows(IllegalStateException.class, config::getFullPath,
                 "The native loader's in-memory SERVER defaults have no filesystem path");
-        assertDoesNotThrow(() -> Config.migrateLegacy(config));
+        assertDoesNotThrow(() -> Config.migrateLegacy(Config.SERVER_SPEC,
+                Path.of("world", "serverconfig", Config.SERVER_FILE_NAME)));
     }
 
     @TempDir
@@ -156,9 +158,9 @@ class ConfigLegacyMigrationTest {
         }
 
         public static void main(String[] args) throws Exception {
-            NeoForgeTestConfigLoader.loadDefaults(Config.COMMON_SPEC);
-            NeoForgeTestConfigLoader.loadDefaults(Config.SERVER_SPEC);
-            NeoForgeTestConfigLoader.loadDefaults(Config.CLIENT_SPEC);
+            NeoForgeTestConfigLoader.loadDefaults(NativeConfigDefaultsExtension.spec(ConfigScope.COMMON));
+            NeoForgeTestConfigLoader.loadDefaults(NativeConfigDefaultsExtension.spec(ConfigScope.SERVER));
+            NeoForgeTestConfigLoader.loadDefaults(NativeConfigDefaultsExtension.spec(ConfigScope.CLIENT));
 
             requireEquals(false, Config.SERVER.enableVillagerChatAI.getDefault(), "SERVER AI default changed by legacy JSON");
             requireEquals(true, Config.SERVER.allowGrimReaper.getDefault(), "SERVER gameplay default changed by legacy JSON");
@@ -201,6 +203,8 @@ class ConfigLegacyMigrationTest {
             requireEquals("default", Config.CLIENT.onlineTTSModel.getDefault(), "CLIENT TTS model default changed after migration");
             requireEquals(false, Config.COMMON.useSquidwardModels.getDefault(), "COMMON model default changed after migration");
             requireEquals(true, Config.CLIENT.showNameTags.getDefault(), "CLIENT default changed after migration");
+            // The new migration contract marks an import complete only after a durable save.
+            Config.markLegacyImported(Config.COMMON_SPEC);
             requireEquals(false, Config.migrateLegacy(Config.COMMON_SPEC, commonPath), "COMMON legacy migration was applied twice");
         }
 
@@ -216,7 +220,7 @@ class ConfigLegacyMigrationTest {
         }
 
         public static void main(String[] args) {
-            NeoForgeTestConfigLoader.loadDefaults(Config.CLIENT_SPEC);
+            NeoForgeTestConfigLoader.loadDefaults(NativeConfigDefaultsExtension.spec(ConfigScope.CLIENT));
 
             Path clientPath = Path.of("config", Config.CLIENT_FILE_NAME).toAbsolutePath().normalize();
             MigrationProbe.requireEquals(false, Config.migrateLegacy(Config.CLIENT_SPEC, clientPath), "existing CLIENT TOML did not suppress legacy import");
@@ -229,7 +233,7 @@ class ConfigLegacyMigrationTest {
         }
 
         public static void main(String[] args) {
-            NeoForgeTestConfigLoader.loadDefaults(Config.CLIENT_SPEC);
+            NeoForgeTestConfigLoader.loadDefaults(NativeConfigDefaultsExtension.spec(ConfigScope.CLIENT));
 
             Path clientPath = Path.of("config", Config.CLIENT_FILE_NAME).toAbsolutePath().normalize();
             MigrationProbe.requireEquals(false, Config.migrateLegacy(Config.CLIENT_SPEC, clientPath), "non-dev/1.21.1 legacy schema was imported");
@@ -250,7 +254,7 @@ class ConfigLegacyMigrationTest {
                 }
             };
 
-            NeoForgeTestConfigLoader.loadDefaults(Config.CLIENT_SPEC);
+            NeoForgeTestConfigLoader.loadDefaults(NativeConfigDefaultsExtension.spec(ConfigScope.CLIENT));
 
             Path clientPath = configDirectory.resolve(Config.CLIENT_FILE_NAME);
             MigrationProbe.requireEquals(true, Config.migrateLegacy(Config.CLIENT_SPEC, clientPath), "legacy JSON was not read from the loader config directory");
@@ -278,9 +282,9 @@ class ConfigLegacyMigrationTest {
             CommentedConfig common = CommentedConfig.inMemory();
             CommentedConfig server = CommentedConfig.inMemory();
             CommentedConfig client = CommentedConfig.inMemory();
-            NeoForgeTestConfigLoader.loadConfig(Config.COMMON_SPEC, common);
-            NeoForgeTestConfigLoader.loadConfig(Config.SERVER_SPEC, server);
-            NeoForgeTestConfigLoader.loadConfig(Config.CLIENT_SPEC, client);
+            NeoForgeTestConfigLoader.loadConfig(NativeConfigDefaultsExtension.spec(ConfigScope.COMMON), common);
+            NeoForgeTestConfigLoader.loadConfig(NativeConfigDefaultsExtension.spec(ConfigScope.SERVER), server);
+            NeoForgeTestConfigLoader.loadConfig(NativeConfigDefaultsExtension.spec(ConfigScope.CLIENT), client);
             Path serverPath = configDir.resolve(Config.SERVER_FILE_NAME);
             if (Config.migrateLegacy(Config.SERVER_SPEC, configDir.resolve("world/serverconfig/mca-server.toml"))) {
                 throw new AssertionError("A world SERVER override imported the legacy global config");
@@ -291,18 +295,21 @@ class ConfigLegacyMigrationTest {
                 throw new AssertionError("One or more first-launch native configs did not import");
             }
 
-            int covered = countPreservedValues(Config.COMMON_SPEC.getValues(), legacy)
-                    + countPreservedValues(Config.SERVER_SPEC.getValues(), legacy)
-                    + countPreservedValues(Config.CLIENT_SPEC.getValues(), legacy);
+            int covered = countPreservedValues(NativeConfigDefaultsExtension.spec(ConfigScope.COMMON).getValues(), legacy)
+                    + countPreservedValues(NativeConfigDefaultsExtension.spec(ConfigScope.SERVER).getValues(), legacy)
+                    + countPreservedValues(NativeConfigDefaultsExtension.spec(ConfigScope.CLIENT).getValues(), legacy);
             if (covered < 100) {
                 throw new AssertionError("Only " + covered + " real legacy fields were checked");
-            }
-            if (Config.migrateLegacy(Config.SERVER_SPEC, serverPath)) {
-                throw new AssertionError("SERVER legacy import ran twice");
             }
             saveToml(common, configDir.resolve(Config.COMMON_FILE_NAME));
             saveToml(server, serverPath);
             saveToml(client, configDir.resolve(Config.CLIENT_FILE_NAME));
+            Config.markLegacyImported(Config.COMMON_SPEC);
+            Config.markLegacyImported(Config.SERVER_SPEC);
+            Config.markLegacyImported(Config.CLIENT_SPEC);
+            if (Config.migrateLegacy(Config.SERVER_SPEC, serverPath)) {
+                throw new AssertionError("SERVER legacy import ran twice after durable saving");
+            }
             System.out.println("Verified " + covered + " real dev/1.21.1 legacy fields");
         }
 
@@ -367,17 +374,17 @@ class ConfigLegacyMigrationTest {
             try (var reader = Files.newBufferedReader(configDir.resolve(Config.LEGACY_FILE_NAME))) {
                 legacy = JsonParser.parseReader(reader).getAsJsonObject();
             }
-            loadToml(Config.COMMON_SPEC, configDir.resolve(Config.COMMON_FILE_NAME));
-            loadToml(Config.SERVER_SPEC, configDir.resolve(Config.SERVER_FILE_NAME));
-            loadToml(Config.CLIENT_SPEC, configDir.resolve(Config.CLIENT_FILE_NAME));
+            loadToml(NativeConfigDefaultsExtension.spec(ConfigScope.COMMON), configDir.resolve(Config.COMMON_FILE_NAME));
+            loadToml(NativeConfigDefaultsExtension.spec(ConfigScope.SERVER), configDir.resolve(Config.SERVER_FILE_NAME));
+            loadToml(NativeConfigDefaultsExtension.spec(ConfigScope.CLIENT), configDir.resolve(Config.CLIENT_FILE_NAME));
             if (Config.migrateLegacy(Config.COMMON_SPEC, configDir.resolve(Config.COMMON_FILE_NAME))
                     || Config.migrateLegacy(Config.SERVER_SPEC, configDir.resolve(Config.SERVER_FILE_NAME))
                     || Config.migrateLegacy(Config.CLIENT_SPEC, configDir.resolve(Config.CLIENT_FILE_NAME))) {
                 throw new AssertionError("Second launch imported legacy JSON over existing native TOML");
             }
-            int covered = RealDev1211Probe.countPreservedValues(Config.COMMON_SPEC.getValues(), legacy)
-                    + RealDev1211Probe.countPreservedValues(Config.SERVER_SPEC.getValues(), legacy)
-                    + RealDev1211Probe.countPreservedValues(Config.CLIENT_SPEC.getValues(), legacy);
+            int covered = RealDev1211Probe.countPreservedValues(NativeConfigDefaultsExtension.spec(ConfigScope.COMMON).getValues(), legacy)
+                    + RealDev1211Probe.countPreservedValues(NativeConfigDefaultsExtension.spec(ConfigScope.SERVER).getValues(), legacy)
+                    + RealDev1211Probe.countPreservedValues(NativeConfigDefaultsExtension.spec(ConfigScope.CLIENT).getValues(), legacy);
             if (covered < 100) {
                 throw new AssertionError("Second launch lost real legacy values");
             }

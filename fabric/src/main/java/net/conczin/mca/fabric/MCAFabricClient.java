@@ -9,6 +9,7 @@ import net.conczin.mca.client.particle.InteractionParticle;
 import net.conczin.mca.client.render.*;
 import net.conczin.mca.client.resources.GeneratedEyeTextureReloadListener;
 import net.conczin.mca.fabric.client.gui.FabricMCAScreens;
+import net.conczin.mca.fabric.config.FabricConfigSync;
 import net.conczin.mca.fabric.resources.ApiIdentifiableReloadListener;
 import net.conczin.mca.fabric.resources.FabricColorPaletteLoader;
 import net.conczin.mca.fabric.resources.FabricReloadListener;
@@ -43,6 +44,7 @@ public final class MCAFabricClient extends ClientProxyAbstractImpl implements Cl
     @Override
     public void onInitializeClient() {
         ClientConfigHelper.register();
+        FabricConfigSync.initializeClient();
 
         Network.registerClientSender(ClientPlayNetworking::send);
 

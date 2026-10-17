@@ -56,17 +56,18 @@ public class Command {
                                 .requires(ChatAIContext::canEdit)
                                 .executes(Command::openChatAIContext))
                         .then(Commands.literal("disable")
-                                .requires(Command::hasChatAIAdminPermission)
+                                .requires(source -> MCA.platformHelper.allowsConfigCommands() && hasChatAIAdminPermission(source))
                                 .executes(Command::disableChatAI))
                         .then(Commands.literal("default")
-                                .requires(Command::hasChatAIAdminPermission)
+                                .requires(source -> MCA.platformHelper.allowsConfigCommands() && hasChatAIAdminPermission(source))
                                 .executes(c -> Command.enableChatAI(c, "default", Config.COMMON.villagerChatAIEndpoint.getDefault(), "")))
                         .then(Commands.literal("player2")
-                                .requires(Command::hasChatAIAdminPermission)
+                                .requires(source -> MCA.platformHelper.allowsConfigCommands() && hasChatAIAdminPermission(source))
                                 .executes(Command::setupPlayer2))
                         .then(register("inworldAI")
                                 .requires(Command::hasChatAIAdminPermission)
                                 .then(register("keys")
+                                        .requires(source -> MCA.platformHelper.allowsConfigCommands())
                                         .then(Commands.argument("api_key", StringArgumentType.string())
                                                 .executes(c -> Command.inworldAIKey(c.getArgument("api_key", String.class)))))
                                 .then(register("addCharacter")
@@ -78,14 +79,14 @@ public class Command {
                                 )
                         )
                         .then(Commands.argument("model", StringArgumentType.string())
-                                .requires(Command::hasChatAIAdminPermission)
+                                .requires(source -> MCA.platformHelper.allowsConfigCommands() && hasChatAIAdminPermission(source))
                                 .executes(c -> Command.enableChatAI(c, c.getArgument("model", String.class), Config.COMMON.villagerChatAIEndpoint.getDefault(), ""))
                                 .then(Commands.argument("endpoint", StringArgumentType.string())
                                         .executes(c -> Command.enableChatAI(c, c.getArgument("model", String.class), c.getArgument("endpoint", String.class), ""))
                                         .then(Commands.argument("token", StringArgumentType.string())
                                                 .executes(c -> Command.enableChatAI(c, c.getArgument("model", String.class), c.getArgument("endpoint", String.class), c.getArgument("token", String.class)))))))
                 .then(register("tts")
-                        .requires(p -> p.getServer().isSingleplayer())
+                        .requires(p -> MCA.platformHelper.allowsConfigCommands() && p.getServer().isSingleplayer())
                         .then(Commands.literal("default").executes(ctx -> ttsEnable(ctx, "default")))
                         .then(Commands.literal("elevenlabs").executes(ctx -> ttsEnable(ctx, "elevenlabs")))
                         .then(Commands.literal("realtime").executes(ctx -> ttsEnable(ctx, "realtime")))
@@ -124,6 +125,10 @@ public class Command {
     }
 
     private static int chatAIHelp(CommandContext<CommandSourceStack> ctx) {
+        if (!MCA.platformHelper.allowsConfigCommands()) {
+            sendMessage(ctx, Component.literal("Edit MCA TOML configuration files and restart to apply changes.").withStyle(ChatFormatting.YELLOW));
+            return 0;
+        }
         if (!hasChatAIAdminPermission(ctx.getSource())) {
             sendMessage(ctx, Component.translatable("command.no_permission").withStyle(ChatFormatting.RED));
             return 0;

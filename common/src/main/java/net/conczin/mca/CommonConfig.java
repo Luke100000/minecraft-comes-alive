@@ -1,20 +1,21 @@
 package net.conczin.mca;
 
-import net.neoforged.neoforge.common.ModConfigSpec;
+import net.conczin.mca.config.ConfigSchema;
+import net.conczin.mca.config.ConfigValue;
 
 public final class CommonConfig {
-    public final ModConfigSpec.ConfigValue<Boolean> useSquidwardModels;
-    public final ModConfigSpec.ConfigValue<String> _read_this_before_using_villager_ai;
-    public final ModConfigSpec.ConfigValue<String> villagerChatAIEndpoint;
-    public final ModConfigSpec.ConfigValue<String> villagerChatAIToken;
-    public final ModConfigSpec.ConfigValue<String> villagerChatAISystemPrompt;
-    public final ModConfigSpec.ConfigValue<Boolean> villagerChatAIFuseSystemPrompt;
-    public final ModConfigSpec.ConfigValue<Boolean> villagerChatAIUseLongTermMemory;
-    public final ModConfigSpec.ConfigValue<Boolean> villagerChatAIUseSharedLongTermMemory;
-    public final ModConfigSpec.ConfigValue<Boolean> villagerChatAIIncludeSessionInformation;
-    public final ModConfigSpec.ConfigValue<String> inworldAIToken;
+    public final ConfigValue<Boolean> useSquidwardModels;
+    public final ConfigValue<String> _read_this_before_using_villager_ai;
+    public final ConfigValue<String> villagerChatAIEndpoint;
+    public final ConfigValue<String> villagerChatAIToken;
+    public final ConfigValue<String> villagerChatAISystemPrompt;
+    public final ConfigValue<Boolean> villagerChatAIFuseSystemPrompt;
+    public final ConfigValue<Boolean> villagerChatAIUseLongTermMemory;
+    public final ConfigValue<Boolean> villagerChatAIUseSharedLongTermMemory;
+    public final ConfigValue<Boolean> villagerChatAIIncludeSessionInformation;
+    public final ConfigValue<String> inworldAIToken;
 
-    CommonConfig(ModConfigSpec.Builder builder) {
+    CommonConfig(ConfigSchema.Builder builder) {
         builder.translation("mca.configuration.section.villager_behavior").push("villager_behavior");
         useSquidwardModels = builder
 

@@ -2,34 +2,35 @@ package net.conczin.mca;
 
 import java.util.List;
 import java.util.Map;
-import net.neoforged.neoforge.common.ModConfigSpec;
+import net.conczin.mca.config.ConfigSchema;
+import net.conczin.mca.config.ConfigValue;
 
 public final class ClientConfig {
-    public final ModConfigSpec.ConfigValue<Boolean> showNameTags;
-    public final ModConfigSpec.ConfigValue<Double> nameTagDistance;
-    public final ModConfigSpec.ConfigValue<Boolean> enableBoobs;
-    public final ModConfigSpec.ConfigValue<Boolean> enableOnlineTTS;
-    public final ModConfigSpec.ConfigValue<String> onlineTTSModel;
-    public final ModConfigSpec.ConfigValue<String> onlineTTSServer;
-    public final ModConfigSpec.ConfigValue<String> player2Url;
-    public final ModConfigSpec.ConfigValue<String> elevenlabsPrivateAPIkey;
-    public final ModConfigSpec.ConfigValue<String> elevenlabsModel;
-    public final ModConfigSpec.ConfigValue<List<? extends String>> elevenlabsMaleVoices;
-    public final ModConfigSpec.ConfigValue<List<? extends String>> elevenlabsFemaleVoices;
-    public final ModConfigSpec.ConfigValue<String> immersiveLibraryUrl;
-    public final ModConfigSpec.ConfigValue<Boolean> enablePlayerShaders;
-    public final ModConfigSpec.ConfigValue<Boolean> enableVillagerPlayerModel;
-    public final ModConfigSpec.ConfigValue<Boolean> forceVillagerPlayerModel;
-    public final ModConfigSpec.ConfigValue<List<? extends String>> shaderLocationsMap;
-    public final ModConfigSpec.ConfigValue<List<? extends String>> playerRendererBlacklist;
-    public final ModConfigSpec.ConfigValue<Integer> defaultMapsVersion;
-    public final ModConfigSpec.ConfigValue<Boolean> scaleEyeHeightWithPlayerHeight;
+    public final ConfigValue<Boolean> showNameTags;
+    public final ConfigValue<Double> nameTagDistance;
+    public final ConfigValue<Boolean> enableBoobs;
+    public final ConfigValue<Boolean> enableOnlineTTS;
+    public final ConfigValue<String> onlineTTSModel;
+    public final ConfigValue<String> onlineTTSServer;
+    public final ConfigValue<String> player2Url;
+    public final ConfigValue<String> elevenlabsPrivateAPIkey;
+    public final ConfigValue<String> elevenlabsModel;
+    public final ConfigValue<List<? extends String>> elevenlabsMaleVoices;
+    public final ConfigValue<List<? extends String>> elevenlabsFemaleVoices;
+    public final ConfigValue<String> immersiveLibraryUrl;
+    public final ConfigValue<Boolean> enablePlayerShaders;
+    public final ConfigValue<Boolean> enableVillagerPlayerModel;
+    public final ConfigValue<Boolean> forceVillagerPlayerModel;
+    public final ConfigValue<List<? extends String>> shaderLocationsMap;
+    public final ConfigValue<List<? extends String>> playerRendererBlacklist;
+    public final ConfigValue<Integer> defaultMapsVersion;
+    public final ConfigValue<Boolean> scaleEyeHeightWithPlayerHeight;
     private final Config.DecodedMapCache<String, String> shaderLocationsCache =
             new Config.DecodedMapCache<>(String.class, String.class, "shaderLocationsMap");
     private final Config.DecodedMapCache<String, String> playerRendererBlacklistCache =
             new Config.DecodedMapCache<>(String.class, String.class, "playerRendererBlacklist");
 
-    ClientConfig(ModConfigSpec.Builder builder) {
+    ClientConfig(ConfigSchema.Builder builder) {
         builder.translation("mca.configuration.section.villager_behavior").push("villager_behavior");
         showNameTags = builder
 

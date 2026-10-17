@@ -30,6 +30,7 @@ import net.neoforged.fml.config.ModConfig;
 import net.neoforged.fml.config.ModConfigs;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.neoforge.common.ModConfigSpec;
+import net.conczin.mca.config.ConfigValue;
 import net.neoforged.neoforge.common.TranslatableEnum;
 
 import java.net.URI;
@@ -965,6 +966,9 @@ public final class ConfigScreenSearch {
         }
         if (value instanceof ModConfigSpec.ConfigValue<?> configValue) {
             return searchableValue(configValue.getRaw());
+        }
+        if (value instanceof ConfigValue<?> configValue) {
+            return searchableValue(configValue.get());
         }
         if (value instanceof Component component) {
             return component.getString();

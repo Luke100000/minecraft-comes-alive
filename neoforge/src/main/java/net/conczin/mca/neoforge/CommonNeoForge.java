@@ -2,6 +2,8 @@ package net.conczin.mca.neoforge;
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectMap;
 import net.conczin.mca.Config;
+import net.conczin.mca.config.ConfigScope;
+import net.conczin.mca.config.nativeapi.NeoForgeConfigBackend;
 import net.conczin.mca.MCA;
 import net.conczin.mca.block.BlockEntityTypesMCA;
 import net.conczin.mca.entity.ai.ActivitiesMCA;
@@ -66,22 +68,41 @@ import java.util.function.Consumer;
 @Mod(MCA.MOD_ID)
 @EventBusSubscriber(modid = MCA.MOD_ID)
 public final class CommonNeoForge {
+    private static NeoForgeConfigBackend configBackend;
+
     public CommonNeoForge(IEventBus modEventBus, ModContainer modContainer) {
         MCA.platformHelper = new NeoforgePlatformHelper();
+        configBackend = new NeoForgeConfigBackend();
+        Config.setBackend(configBackend);
 
         modEventBus.addListener(CommonNeoForge::onConfigLoad);
         modEventBus.addListener(CommonNeoForge::onConfigReload);
-        modContainer.registerConfig(ModConfig.Type.COMMON, Config.COMMON_SPEC, Config.COMMON_FILE_NAME);
-        modContainer.registerConfig(ModConfig.Type.SERVER, Config.SERVER_SPEC, Config.SERVER_FILE_NAME);
-        modContainer.registerConfig(ModConfig.Type.CLIENT, Config.CLIENT_SPEC, Config.CLIENT_FILE_NAME);
+        modContainer.registerConfig(ModConfig.Type.COMMON, configBackend.spec(ConfigScope.COMMON), Config.COMMON_FILE_NAME);
+        modContainer.registerConfig(ModConfig.Type.SERVER, configBackend.spec(ConfigScope.SERVER), Config.SERVER_FILE_NAME);
+        modContainer.registerConfig(ModConfig.Type.CLIENT, configBackend.spec(ConfigScope.CLIENT), Config.CLIENT_FILE_NAME);
     }
 
     private static void onConfigLoad(ModConfigEvent.Loading event) {
-        Config.migrateLegacy(event.getConfig());
+        ModConfig config = event.getConfig();
+        for (ConfigScope scope : ConfigScope.values()) {
+            if (config.getSpec() != configBackend.spec(scope)) continue;
+            try {
+                var path = config.getFullPath();
+                boolean migrated = Config.migrateLegacy(Config.schema(scope), path);
+                boolean upgraded = Config.upgradeDefaultMaps(Config.schema(scope));
+                if (migrated || upgraded) {
+                    configBackend.save(scope);
+                    if (migrated) Config.markLegacyImported(Config.schema(scope));
+                }
+                Config.schema(scope).markLoaded();
+            } catch (IllegalStateException pathless) {
+                // SERVER defaults can be an in-memory network/server snapshot.
+            }
+        }
     }
 
     private static void onConfigReload(ModConfigEvent.Reloading event) {
-        if (event.getConfig().getSpec() == Config.SERVER_SPEC) {
+        if (event.getConfig().getSpec() == configBackend.spec(ConfigScope.SERVER)) {
             MCA.getServer().ifPresent(server -> server.execute(() ->
                     DestinyLocationResolver.refreshCachedDestinations(server, Config.SERVER)));
         }

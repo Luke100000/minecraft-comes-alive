@@ -1,23 +1,41 @@
-# MCA 1.21.1 Fabric File-Only Configuration Without FCP — Design
+# MCA 1.21.1 Optional-FCP Configuration — Design
 
-Date: 2026-10-11 (revised 2026-10-15)
-Status: revised after dev/1.21.1 comparison; merge and implementation not approved or started.
+Date: 2026-10-11 (revised 2026-10-17)
+Status: gameplay merge committed as `de1a9e6d7`; optional-FCP configuration
+implementation is in progress. JVM/build and both Fabric startup modes have
+been exercised; interactive GUI, canonical TOML compatibility, and mixed
+multiplayer validation remain open. The 2026-10-17 revision records the
+agreed **FCP-as-authority** design; it is not a claim that the current code
+already implements that design.
+See `../reports/2026-10-15-optional-fcp-implementation-status.md`.
 
 ## Decision and intent
 
-MCA must launch and run on Fabric without Forge Config API Port (FCP) installed.
-**Fabric configuration is files only.** Users edit TOML outside Minecraft and
-restart the relevant client/server to apply changes. There is **no Fabric
-configuration screen, Mod Menu configuration entrypoint, in-game settings
-editor, configuration command, config-changing C2S packet, runtime reload
-command, or file watcher**. Ordinary MCA gameplay screens and world/player data
-editors are not configuration editors and remain out of scope.
+MCA must launch and run on Fabric **with or without** Forge Config API Port
+(FCP) installed. FCP is an **optional, opt-in integration**, not a requirement:
+
+- **FCP absent:** no MCA configuration integration or GUI of any kind. Users
+  edit TOML files manually outside Minecraft and restart the relevant
+  client/server to apply changes. No Mod Menu config entrypoint or alternative
+  built-in editor is supplied.
+- **FCP installed:** expose the **same existing searchable MCA configuration GUI**
+  through FCP, with its existing sections, search, validation, reset, restart
+  indications and remote SERVER read-only behavior. GUI changes must persist
+  to the canonical configuration, not a second disconnected copy. Do not
+  replace the existing GUI with a newly designed screen.
+
+In both modes, Fabric has no MCA config-editing command, config-changing C2S
+packet, or MCA-specific runtime reload command. **Without FCP** there is no
+file watcher and manual edits need a restart. **With FCP**, use FCP's own
+native loading, saving, correction, reload events, and normal file watcher;
+do not suppress these native behaviors or add a second MCA watcher. Ordinary
+MCA gameplay screens and world/player data editors remain out of scope.
 
 NeoForge keeps native configuration, its searchable native configuration screen,
 and its native server synchronization. Preserve the existing settings, defaults,
 ownership, migration, validation, and multiplayer authority on both loaders.
 
-This replaces the Fabric dependency, UI, and synchronization parts of
+This makes the Fabric dependency optional and adapts its UI and synchronization parts of
 [the previous native config design](2026-09-26-1.21.1-config-system-port-design.md).
 It incorporates and narrows the documentation proposal from
 https://github.com/tuxedomik/minecraft-comes-alive-backup/tree/docs/fabric-config-without-fcp-2026-10-10.
@@ -31,12 +49,13 @@ Neither documentation branch is an implementation base.
   on 2026-10-15. Check status and HEAD again before execution.
 - Observed checkout metadata: Minecraft 1.21.1; Java 21; Fabric Loader 0.19.5;
   Fabric API 0.116.17+1.21.1; Loom 1.18.2; NeoForge 21.1.256; current FCP
-  21.1.6 (to remove). Recheck versions when implementation starts.
-- Worktree was clean at review time, unlike the earlier dirty-worktree snapshot.
-  Preserve any new edits if its status changes. Freeze the setting manifest from
+  21.1.6 (to make optional). Recheck versions when implementation starts.
+- Worktree was clean at the earlier review time, but the optional-FCP work
+  is now uncommitted and the worktree is dirty. Preserve those edits. Freeze
+  the setting manifest from
   the reviewed, post-merge source before transforming config declarations.
-- Existing holders expose 160 typed setting fields across CommonConfig,
-  ServerConfig, and ClientConfig. Config.java constructs three native specs.
+- The post-merge holders expose 166 typed setting definitions (COMMON 10,
+  SERVER 137, CLIENT 19). The earlier architecture used three native specs.
   Fabric uses FCP registry/events and its screen factory; ConfigScreenSearch
   directly uses NeoForge UI types. Removing the Fabric dependency declaration
   alone cannot work.
@@ -80,26 +99,48 @@ or a successful compile as gameplay parity evidence. Preserve the existing
 native config API, UI, migrations, scopes, and updated documentation through
 the merge; verify no old JSON/config networking or FCP assumptions return.
 
-No actual merge or implementation is authorized by this design review.
+The gameplay merge described here was subsequently completed in commit
+`de1a9e6d7`. This document does not claim that the optional-FCP configuration
+implementation has been completed or verified.
 
 ## Architecture choice
 
-Use **one explicit shared schema**, a native NeoForge adapter, and a **single
-standalone Fabric TOML backend**. This is necessary because shared holders
-currently expose native ConfigValue types and the Fabric jar must have no
-runtime reference to NeoForge/FCP types.
+Use **one explicit shared schema** with two mutually exclusive Fabric runtime
+implementations: FCP's native `ModConfigSpec`/registry when FCP is installed,
+and a standalone FCP-compatible TOML backend otherwise. NeoForge continues
+using its own native implementation. **FCP is the source of truth when
+installed**, for values, validation, correction, persistence, GUI saves,
+reloads, and native SERVER sync wherever both peers support it. MCA must not
+maintain a competing in-memory/file authority in that mode. The standalone
+backend reproduces the same canonical paths, types, constraints, defaults,
+section metadata, comments, and TOML representation without loading FCP.
+Shared holders remain loader-independent so the no-FCP startup path cannot
+require NeoForge/FCP classes.
+
+Fabric should declare FCP in `suggests`, not `depends`; compile-time access
+may be provided via `modCompileOnly` or an isolated optional source set, but
+FCP must not be bundled. Detect it with `FabricLoader.isModLoaded` before
+loading or initializing any FCP-specific integration class. Reuse the
+existing `ConfigScreenSearch` implementation with the FCP screen factory,
+not a different Fabric UI. Verify the actual FCP screen/registry API and
+its save semantics before committing to an adapter: GUI edits must save via
+FCP's registered spec to the same canonical files, and the no-FCP path must
+never load native GUI classes.
 
 Alternatives rejected:
 
-1. Optional FCP backend or optional FCP screen: retains two Fabric lifecycle
-   paths and conflicts with the file-only requirement.
+1. Requiring FCP or offering a replacement GUI when it is absent: defeats
+   optional installation and manual-file-only fallback.
 2. Bundling the FCP mod: avoids manual installation but still carries an FCP
    runtime, contrary to the selected goal.
 3. Duplicate Fabric setting declarations or homemade TOML parser: creates
    schema drift and avoidable parser correctness/security problems.
+4. Two active Fabric config backends writing the same TOML independently:
+   risks overwrites, stale UI values and conflicting multiplayer authority.
 
-No reflection-based schema extraction, copied NeoForge packages, auxiliary
-live config object, or optional native classloading path on Fabric.
+No reflection-based schema extraction, copied NeoForge packages or auxiliary
+live config object. An optional native/FCP classloading path is permitted
+**only** behind the FCP-present integration boundary.
 
 ## Shared configuration contract
 
@@ -113,7 +154,9 @@ Create package net.conczin.mca.config with:
   Early get() yields a defensive copy of the original default; collection
   data must not expose mutable backing state.
 - ConfigSchema: ordered sections/entries containing scope, full path,
-  default, type, constraints, comments, translation, and restart flags.
+  default, type, constraints, **section-level** as well as entry comments
+  and translations, and restart flags. Native builder metadata applied
+  *before* `push(section)` must survive the shared-schema adaptation.
   One builder definition per setting; support the actual holder declarations
   (push/pop, comment, translation, gameRestart/worldRestart, define,
   defineInRange, defineListAllowEmpty, etc.) after source inspection.
@@ -123,6 +166,10 @@ Create package net.conczin.mca.config with:
   shared public signatures.
 
 Preserve map/list encoding, registry-aware validators, and decoded-map caches.
+The native and standalone adapters must agree on generated range/default
+comments and section nesting. A FCP-valid standalone file should pass FCP's
+`ModConfigSpec.isCorrect` without a corrective write; metadata differences
+are not an excuse for rewriting an otherwise canonical new file.
 Build a manifest of **all** settings from the current reviewed worktree:
 scope, path, type, actual default, range/list validator cases, translation,
 comment, restart metadata. Compare every shared entry to this frozen manifest.
@@ -138,8 +185,11 @@ registers COMMON/SERVER/CLIENT using the existing ModContainer lifecycle,
 and continues native correction, save, reload, and SERVER sync. Retain
 NeoForgeClientConfigHelper and searchable ConfigScreenSearch behavior,
 including search, list validation, reset defaults, and remote SERVER read-only
-rules. Move native GUI classes and native-only tests out of the sources
-packaged for Fabric; keep pure shared helpers only when demonstrably reused.
+rules. Preserve the existing searchable GUI for **both NeoForge and Fabric
+with FCP installed**. Isolate its native-dependent classes/tests so they are
+never loaded on Fabric without FCP; do not move them exclusively into a
+NeoForge-only source set if doing so breaks reuse by the optional Fabric path.
+Keep pure shared helpers only when demonstrably reused.
 
 Native-config-specific migrations observe real loaded config paths and skip
 pathless default events. This migration never changes ModConfigSpec defaults.
@@ -147,7 +197,7 @@ The old MCA ConfigRequest/ConfigResponse packets remain removed.
 
 ## Fabric files and lifecycle
 
-Use a small TOML library rather than FCP; the preferred candidate is the
+Use a small TOML library for the no-FCP path; the preferred candidate is the
 NightConfig core/TOML version resolved against this checkout's current
 NeoForge dependency. Verify exact version, license, Loom packaging, and
 runtime relocation before choosing it. Bundle ordinary library classes
@@ -166,26 +216,73 @@ An existing world override wins. Otherwise use the global SERVER defaults:
 do not create a world override merely because a world starts. Restore the
 appropriate global SERVER state after a world stops; test consecutive worlds
 and integrated-server lifecycle in one JVM. A remote multiplayer client must
-use the server snapshot, not its own SERVER file, while connected. No client
+use the negotiated authoritative SERVER state (FCP native or MCA bridge),
+not its own SERVER file, while connected. No client
 config file I/O or client-only classloading occurs on a dedicated server.
 
 If a global TOML is missing, create it with the original product defaults
-or migrated values. Read each existing file into a validated temporary
-snapshot and publish the completed state atomically. For a valid TOML with
-individual invalid entries, report affected paths and use validated defaults
-for those entries without silently replacing the user's file. Preserve
-unrelated valid values, unknown keys, comments, Unicode, and map/list text.
-For malformed TOML, leave the bytes unchanged, log the file path (never a
-secret value), use the last valid snapshot on reload or defaults at startup,
-and do not write over the broken file. A write uses a sibling temporary file,
-then a safe replacement; failures must not falsely mark migration complete.
+or migrated values. **Without FCP**, read each existing file into a validated
+temporary snapshot and publish the completed state atomically. For a valid
+TOML with individual invalid entries, report affected paths and use validated
+defaults without silently replacing the file. Preserve unrelated valid
+values, unknown keys, comments, Unicode, and map/list text on standalone
+saves. For malformed TOML, leave bytes unchanged, log the file path (never a
+secret value), use defaults at process startup or the global validated SERVER
+state when a *different world's* override fails (never inherit the previous
+world's values), and do not overwrite the broken file. Writes use a sibling
+temporary file and safe replacement; failures must not mark migration complete.
 
-**No in-game edit or reload path on Fabric.** Normal file edits require
-restarting the relevant game/server (or beginning the next world/server
-session for a world override). Restart-only settings are never applied early
-through an editor, and no post-join update packet is required for file edits.
-Backend-internal set() remains for controlled tests and loader-owned state,
-not as an exposed interactive config API.
+**With FCP**, defer to FCP's actual native correction rules, including
+its treatment of unknown keys and comments; do not promise byte-identical
+preservation when the input is not native-canonical. Back up any legacy
+file before a one-time path/ownership migration or other potentially lossy
+normalization. Never silently discard a valid, recognizable user value.
+An already canonical file must not be rewritten merely because it was
+created without FCP.
+
+**Without FCP there is no in-game edit or reload path on Fabric.** Manual
+file edits require restarting the relevant game/server (or beginning the next
+world/server session for a world override). **With FCP**, the existing
+searchable GUI is the sole *in-game* config editor; FCP controls native validation,
+save/restart semantics, watcher and reload events. The GUI may not bypass
+SERVER authority or create a second persistent config copy. Do not expose
+a separate generic interactive config API or MCA reload command.
+
+## Canonical format and observed rewrites (2026-10-15)
+
+FCP 21.1.6 logged `Configuration file ... is not correct. Correcting` for
+`mca-common.toml` and `mca-server.toml` during the FCP-present smoke. Its
+`ConfigTracker` calls native `ModConfigSpec.isCorrect`/`correct`, which checks
+paths, values, expected comments, and extra/missing keys. It may rewrite a
+parseable TOML file; this is not evidence that both MCA backends wrote it at
+the same time. FCP's file watcher is enabled by default.
+
+Comparing *older September backups* to the resulting October files showed
+25 SERVER keys at different section paths and seven old COMMON keys absent
+from the new COMMON scope; FCP generated native default/range comments and
+reported several list corrections. Those older backups are **not** a direct
+before/after diff of the October rewrite. The next FCP client startup did
+not show repeated correction warnings. Verify exact changed values using
+controlled fixtures, not the historical backup alone.
+
+The shared schema/native adapter must reproduce section translations and
+comments, range/default comment formatting, list validators, and complete
+key layout. The standalone writer must emit FCP-acceptable TOML; test both
+directions of mode switching (absent -> installed -> absent), with no
+unnecessary correction or drift for canonical known entries. For genuinely
+legacy, flat, or relocated keys, provide an explicit, idempotent migration
+**before FCP registers/loads that scope**; FCP loads COMMON/CLIENT during
+registration and SERVER later in its server lifecycle. Move known values to
+the canonical scope/path, prefer an already-present canonical value in a
+conflict, never transfer secrets into SERVER, preserve backups and report
+collisions. Use no second live writer after FCP takes ownership. FCP may
+subsequently normalize metadata/unknown keys according to its contract.
+
+Apply the existing `defaultMapsVersion` upgrades to *valid existing TOML*
+as well as new files. Preserve explicit user overrides and intentional
+deletions; mark the version and imported legacy state only after a durable
+save. Validate the global SERVER fallback and existing world overrides with
+both backends before claiming parity.
 
 ## Legacy mca.json migration
 
@@ -204,71 +301,111 @@ including upstream additions, in migration fixture tests.
 
 ## Fabric multiplayer authority
 
-Fabric owns one S2C payload mca:server_config_snapshot using existing
-network registration. The payload contains protocolVersion=1 and a UTF-8
-JSON object keyed by full SERVER schema paths, limited to 1,048,576 UTF-8
-bytes. Bound the raw length before decoding or allocating the body. Send
-one complete validated snapshot on join; no Fabric GUI or external live
-reload means there is no interactive setting-change broadcast.
+The **server's selected backend is authoritative**. When FCP is present on
+both peers, prefer FCP's own SERVER sync and its native client spec; do not
+also apply an MCA snapshot as a competing second source. When FCP is absent
+on either peer, an MCA S2C compatibility bridge must convey the same
+server-owned values. The bridge is a transport/remote overlay, **not** an
+independent server configuration store:
+
+| Fabric server | Fabric client | SERVER configuration transport |
+| --- | --- | --- |
+| FCP installed | FCP installed | FCP native sync; one applied authority |
+| FCP installed | FCP absent | MCA snapshot from the server's FCP values |
+| FCP absent | FCP installed | MCA snapshot from standalone values; override any FCP-local SERVER defaults |
+| FCP absent | FCP absent | MCA snapshot from standalone values |
+
+Confirm from FCP 21.1.6 sources and live sessions when/how its packet is
+registered, sent, applied, and cleared. Select the path using a reliable
+peer-capability/handshake signal at the appropriate Fabric networking phase,
+not only the server's local `isModLoaded` result or a race with the join
+event. If the native path cannot be selected safely, stop and document the
+blocker rather than sending two active remote overlays. A capability signal
+is not permission to modify config via C2S.
+
+The MCA bridge retains `mca:server_config_snapshot`, protocolVersion=1,
+full SERVER paths only, and a 1,048,576-byte UTF-8 limit. Bound length
+before decoding or allocating. A connected peer must not silently fall back
+to local/server-default values while its authoritative sync is pending.
+When FCP reloads a live SERVER setting, verify whether FCP propagates it to
+already-connected peers. Use supported native synchronization where possible;
+if it does not support updates, explicitly define/document the required
+rejoin/restart behavior before shipping, and ensure mixed peers cannot remain
+silently out of sync. The standalone backend still has restart-only edits.
 
 Reject incompatible protocol versions, malformed JSON, duplicate/unknown/
 missing keys, wrong-scope keys, invalid values, and oversized payloads as a
 whole; disconnect incompatible peers with a clear message. Apply only on
 the client game thread as an atomic, memory-only overlay. Never persist
-remote settings. While awaiting the first snapshot, prevent client-side
-policy-dependent features from using stale previous-server values. On
-disconnect clear remote state, restoring local defaults/source without
-overwriting an active integrated server's authoritative state. Test sequential
-joins to different servers and integrated-server disconnection.
+remote settings. While awaiting whichever first authoritative sync path was
+negotiated, prevent client-side policy-dependent features from using stale
+previous-server values. On disconnect clear MCA overlays and FCP's remote
+SERVER state as appropriate, restoring the correct local/default state
+without overwriting an active integrated server's authoritative state. Test
+sequential joins to different servers and integrated-server disconnection.
 
 Only SERVER entries may be transmitted. Private COMMON AI tokens, endpoints,
 prompts, and CLIENT TTS credentials/keys stay local. No C2S config writes,
-no NeoForge registration of this Fabric payload. Fabric behavior is identical
-whether FCP is absent, installed on one peer, or installed on both peers.
+no NeoForge registration of this Fabric payload. The effective SERVER values
+must be identical for equivalent settings regardless of each peer's FCP mode.
 Cross-loader peer compatibility and older native-port clients are not
 guaranteed; incompatible peers fail explicitly.
 
-## No Fabric interactive config editing
+## Optional Fabric GUI; no fallback GUI
 
-Remove the Fabric ClientConfigHelper config-screen registration; do not
-introduce FabricConfigScreen, FabricConfigListScreen, Mod Menu integration,
-or any replacement GUI. Existing generic MCA gameplay screens remain.
+Preserve the existing `ConfigScreenSearch` and `ConfigurationScreen`
+integration behind an **FCP-installed-only** registration in Fabric's
+`ClientConfigHelper` (or a dedicated optional equivalent). No FCP means
+no `ConfigScreenFactoryRegistry` calls, no GUI entrypoint, no screen
+classloading and no replacement `FabricConfigScreen`/`FabricConfigListScreen`.
+With FCP installed the original config screen must be accessible and behave
+as before. Existing generic MCA gameplay screens remain in both modes.
 
 The current shared Command.java contains AI/TTS commands that call
 ConfigValue.set() and Config.save*(). ChatAIContextUpdateRequest also
 persists a global AI system prompt. On Fabric, config-mutating commands,
 their completion/help entries where appropriate, and the global-prompt
 packet branch must be unavailable or return a clear file-edit/restart
-message without changing state. NeoForge retains current functionality.
+message without changing state; this restriction applies even when the FCP
+GUI is available. NeoForge retains current functionality.
 Commands and packets that edit per-player/per-villager/world SavedData
 rather than configuration remain functional; classify each call site
-instead of disabling unrelated gameplay. The only Fabric config write
-paths are initial file creation and one-time legacy migration.
+instead of disabling unrelated gameplay. Without FCP, Fabric config writes
+are limited to initial file creation and one-time legacy migration; with FCP,
+the existing GUI may also save validated local configuration.
 
 ## Acceptance and remaining decisions
 
 - Fabric packaged client and dedicated server start and play with no FCP,
   no NeoForge classes, and no Mod Menu installed; config loads before
-  attributes/registries need it. Running with FCP installed does not
-  change the backend or behavior.
-- Fabric users have TOML files only: no config GUI/entrypoint, command
-  editing, C2S global config editing, automatic watcher, or hot reload.
-  Restart/rejoin semantics are documented.
+  attributes/registries need it. With FCP installed, the **original** Fabric
+  searchable config GUI is available and functional, including persistence.
+- Fabric without FCP has TOML files only: no config GUI/entrypoint, command
+  editing, C2S global config editing, watcher or hot reload. Fabric with FCP
+  uses FCP's native watcher/reload and only the existing GUI, not an added or
+  replacement editor. Restart/rejoin and GUI-save semantics are documented.
 - All settings match the frozen manifest; existing defaults, migration,
   world overrides, map/list validation/caching, and NeoForge native GUI
   behavior remain correct.
-- S2C SERVER snapshot is complete and validated, never leaks COMMON/CLIENT
-  secrets, and survives reconnects and integrated-server lifecycle.
-- Damaged/unwritable configs never get silently overwritten. The produced
-  Fabric jar and metadata contain no FCP requirement or native-runtime
-  types; compile-classpath success alone does not satisfy this test.
-- Verify packaged Fabric client/server, multiplayer clients, and NeoForge
-  config/native screen at runtime. JVM/build success is separate evidence.
-- Before config refactoring, merge/reconcile upstream `dev/1.21.1` with a
-  source-hunk parity record, retain SERVER `enableVillagerCollisions`, and
-  validate upstream gameplay paths on both loaders without restoring JSON
-  as the live backend.
+- FCP-generated and standalone-generated files are native-spec compatible;
+  canonical files do not incur gratuitous correction on mode switches, and
+  changed legacy paths are explicitly migrated without losing user overrides.
+- Each of the four Fabric FCP-presence combinations uses exactly one
+  authoritative SERVER sync path, never leaks COMMON/CLIENT secrets, and
+  survives reconnects and integrated-server lifecycle.
+- Standalone mode never silently overwrites malformed/unwritable configs;
+  FCP mode follows documented native backup/correction rules. The produced
+  Fabric jar and metadata contain no **required** FCP dependency and no
+  unconditional FCP/native-runtime classloading; compile-classpath success
+  alone does not satisfy this test.
+- Verify packaged Fabric client/server and multiplayer with FCP absent and
+  present, plus Fabric's original FCP-backed GUI and NeoForge native screen
+  at runtime. JVM/build success is separate evidence.
+- Preserve the already-audited `dev/1.21.1` gameplay merge, single SERVER
+  `enableVillagerCollisions` owner, and both loaders' gameplay behavior;
+  never restore legacy JSON as the live backend.
 
-This document is design-only. No code, packaged jars, or runtime checks are
-claimed complete. The implementation plan is
+This revision changes requirements only; prior code and smoke-test evidence
+remain as recorded in the status report, not as proof of new acceptance.
+The implementation plan is
 [2026-10-10-fabric-config-without-fcp.md](../plans/2026-10-10-fabric-config-without-fcp.md).

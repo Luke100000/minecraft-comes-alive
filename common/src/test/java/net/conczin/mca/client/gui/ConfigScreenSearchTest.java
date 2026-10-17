@@ -18,6 +18,8 @@ import net.minecraft.ChatFormatting;
 import net.neoforged.neoforge.client.gui.ConfigurationScreen;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.common.ModConfigSpec;
+import net.conczin.mca.NativeConfigDefaultsExtension;
+import net.conczin.mca.config.ConfigScope;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Constructor;
@@ -147,9 +149,10 @@ class ConfigScreenSearchTest {
                 new ConfigurationScreen.ConfigurationSectionScreen.Element(
                         Component.literal("Guard attack priorities"), Component.empty(), listButton, false);
 
-        UnmodifiableConfig section = Config.SERVER_SPEC.getValues().get("village_behavior");
+        ModConfigSpec spec = NativeConfigDefaultsExtension.spec(ConfigScope.SERVER);
+        UnmodifiableConfig section = spec.getValues().get("village_behavior");
         ConfigurationScreen.ConfigurationSectionScreen.Context context =
-                new ConfigurationScreen.ConfigurationSectionScreen.Context("mca", null, null, Config.SERVER_SPEC,
+                new ConfigurationScreen.ConfigurationSectionScreen.Context("mca", null, null, spec,
                         section.entrySet(), Map.of(), List.of("village_behavior"), filter);
         assertSame(listElement, filter.filterEntry(context, "guardsTargetEntities", listElement));
     }
@@ -325,7 +328,7 @@ class ConfigScreenSearchTest {
             ConfigurationScreen.ConfigurationSectionScreen.Filter filter,
             List<String> keyList
     ) {
-        return searchContext(filter, keyList, Config.SERVER_SPEC);
+        return searchContext(filter, keyList, NativeConfigDefaultsExtension.spec(ConfigScope.SERVER));
     }
 
     private static ConfigurationScreen.ConfigurationSectionScreen.Context searchContext(

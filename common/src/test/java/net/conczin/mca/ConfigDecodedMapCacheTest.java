@@ -1,9 +1,7 @@
 package net.conczin.mca;
 
-import com.electronwill.nightconfig.core.CommentedConfig;
-import net.neoforged.fml.config.NeoForgeTestConfigLoader;
-import net.neoforged.neoforge.common.ModConfigSpec;
-import org.apache.commons.lang3.tuple.Pair;
+import net.conczin.mca.config.ConfigSchema;
+import net.conczin.mca.config.ConfigScope;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -17,38 +15,30 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 class ConfigDecodedMapCacheTest {
     @Test
     void reloadingServerConfigReplacesPriorServerMapWithoutRetainingStaleValues() {
-        Pair<ServerConfig, ModConfigSpec> pair = new ModConfigSpec.Builder().configure(ServerConfig::new);
-        ServerConfig server = pair.getLeft();
-        ModConfigSpec spec = pair.getRight();
-
-        CommentedConfig initial = CommentedConfig.inMemory();
-        NeoForgeTestConfigLoader.loadConfig(spec, initial);
+        ServerConfig server = new ServerConfig(ConfigSchema.builder(ConfigScope.SERVER));
         Map<String, Integer> original = server.guardsTargetEntities();
 
-        reloadGuards(spec, server, "minecraft:zombie=4");
+        reloadGuards(server, "minecraft:zombie=4");
         Map<String, Integer> firstServer = server.guardsTargetEntities();
         assertEquals(Map.of("minecraft:zombie", 4), firstServer);
         assertNotSame(original, firstServer);
 
-        reloadGuards(spec, server, "minecraft:zombie=9");
+        reloadGuards(server, "minecraft:zombie=9");
         Map<String, Integer> secondServer = server.guardsTargetEntities();
         assertEquals(Map.of("minecraft:zombie", 9), secondServer);
         assertNotSame(firstServer, secondServer);
 
-        reloadGuards(spec, server, "minecraft:zombie=9");
+        reloadGuards(server, "minecraft:zombie=9");
         assertSame(secondServer, server.guardsTargetEntities(),
                 "identical server values need not be decoded again");
 
-        NeoForgeTestConfigLoader.loadConfig(spec, initial);
+        server.guardsTargetEntities.set(server.guardsTargetEntities.getDefault());
         assertEquals(original, server.guardsTargetEntities(),
                 "returning to the initial server must restore its values");
     }
 
-    private static void reloadGuards(ModConfigSpec spec, ServerConfig server, String entry) {
-        CommentedConfig config = CommentedConfig.inMemory();
-        spec.correct(config);
-        config.set(server.guardsTargetEntities.getPath(), List.of(entry));
-        NeoForgeTestConfigLoader.loadConfig(spec, config);
+    private static void reloadGuards(ServerConfig server, String entry) {
+        server.guardsTargetEntities.set(List.of(entry));
     }
 
     @Test

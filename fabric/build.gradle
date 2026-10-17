@@ -21,7 +21,12 @@ dependencies {
     }
     modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
-    modImplementation "fuzs.forgeconfigapiport:forgeconfigapiport-fabric:${forge_config_api_port_version}"
+    // The unchanged native config GUI is available only when users install FCP.
+    modCompileOnly "fuzs.forgeconfigapiport:forgeconfigapiport-fabric:${forge_config_api_port_version}"
+    implementation 'com.electronwill.night-config:core:3.8.0'
+    implementation 'com.electronwill.night-config:toml:3.8.0'
+    include 'com.electronwill.night-config:core:3.8.0'
+    include 'com.electronwill.night-config:toml:3.8.0'
 
     testImplementation "net.fabricmc:fabric-loader-junit:${fabric_loader_version}"
     testImplementation platform('org.junit:junit-bom:6.1.3')

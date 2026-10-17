@@ -7,6 +7,10 @@ import java.nio.file.Path;
 
 public class FabricPlatformHelper extends PlatformHelper {
     @Override
+    public boolean allowsConfigCommands() {
+        return false;
+    }
+    @Override
     protected boolean isModLoadedUncached(String namespace) {
         return FabricLoader.getInstance().isModLoaded(namespace);
     }

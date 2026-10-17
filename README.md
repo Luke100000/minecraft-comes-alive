@@ -22,6 +22,26 @@ repeat indefinitely!
 MCA Reborn is a rewrite of MCA for Minecraft 1.16.5 and upwards, featuring extended village management, villager
 genetics, and various enhancements.
 
+## Configuration (Minecraft 1.21.1)
+
+**Fabric:** Forge Config API Port (FCP) is **optional**. Without it, MCA runs with
+no in-game configuration editor: edit `config/mca-common.toml`,
+`config/mca-server.toml` (and `config/mca-client.toml` on clients) manually.
+Restart Minecraft or the dedicated server to apply file changes. An existing
+`<world>/serverconfig/mca-server.toml` overrides the global SERVER settings
+for that world. The client receives authoritative SERVER settings when joining
+a Fabric server; private COMMON and CLIENT settings stay local.
+
+When **FCP is installed on Fabric**, MCA registers its **existing searchable
+configuration screen** instead of supplying a different editor. Mod Menu can
+provide a convenient way to open a mod's configuration screen. FCP is not
+bundled or required by MCA. NeoForge uses its built-in native configuration
+system and existing searchable screen; it does not require FCP.
+
+Manual Fabric edits are not hot-reloaded. If TOML is malformed, MCA leaves the
+file intact so you can fix it; if individual entries are invalid, MCA uses
+validated defaults rather than silently overwriting your file.
+
 ## Compatibilities
 
 MCA is usually compatible with every mod, except when it comes to recognising items (e.g. gifting).
