@@ -5,6 +5,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -14,6 +15,8 @@ import net.minecraft.world.level.material.FluidState;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Proxy;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -34,7 +37,7 @@ class SelectedFloorScannerBoundaryTest {
         ChunkBlocks world = houseWithPorch(16, 4, 7);
         BlockPos inside = new BlockPos(3, 64, 6);
 
-        var scan = SelectedFloorScanner.scan(world, inside, 512, 16);
+        var scan = SelectedFloorScanner.scan(world.loadedView(), inside, 512, 16);
 
         assertEquals(Building.validationResult.SUCCESS, scan.result());
         assertTrue(scan.floor().cellAt(inside).isPresent());
@@ -47,7 +50,7 @@ class SelectedFloorScannerBoundaryTest {
         ChunkBlocks world = houseWithPorch(16, 5, 6);
         BlockPos inside = new BlockPos(3, 64, 6);
 
-        var scan = SelectedFloorScanner.scan(world, inside, 512, 16);
+        var scan = SelectedFloorScanner.scan(world.loadedView(), inside, 512, 16);
 
         assertEquals(Building.validationResult.SUCCESS, scan.result());
         assertTrue(scan.floor().cellAt(inside).isPresent());
@@ -56,13 +59,37 @@ class SelectedFloorScannerBoundaryTest {
     }
 
     @Test
+    void unknownExteriorChunkIsNotAProvenFiniteEdge() {
+        ChunkBlocks unknown = new ChunkBlocks(16);
+        for (BlockPos pos : BlockPos.betweenClosed(10, 63, 4, 15, 67, 9)) {
+            if (pos.getY() == 63 || pos.getY() == 67 || pos.getX() == 10 || pos.getX() == 15
+                    || pos.getZ() == 4 || pos.getZ() == 9) {
+                unknown.put(pos, Blocks.STONE.defaultBlockState());
+            }
+        }
+        unknown.put(new BlockPos(15, 64, 6), Blocks.AIR.defaultBlockState());
+        unknown.put(new BlockPos(15, 65, 6), Blocks.AIR.defaultBlockState());
+        BlockPos source = new BlockPos(13, 64, 6);
+        assertEquals(Building.validationResult.NOT_IN_BUILDING,
+                SelectedFloorScanner.scan(unknown.loadedView(), source, 512, 16).result());
+        assertNull(unknown.firstMissingBlock, "finite proof loaded an unknown exterior chunk");
+
+        ChunkBlocks loaded = new ChunkBlocks(32);
+        loaded.blocks.putAll(unknown.blocks);
+        loaded.put(new BlockPos(16, 63, 6), Blocks.STONE.defaultBlockState());
+        assertEquals(Building.validationResult.SUCCESS,
+                SelectedFloorScanner.scan(loaded.loadedView(), source, 512, 16).result());
+        assertNull(loaded.firstMissingBlock, "loaded finite balcony needed a missing chunk");
+    }
+
+    @Test
     void extendingNarrowPorchDoesNotExpandHouseDiscoveryBeyondItsRadius() {
         BlockPos inside = new BlockPos(3, 64, 6);
         ChunkBlocks nearby = houseWithPorch(16, 5, 6);
         ChunkBlocks extended = houseWithPorch(256, 5, 6);
 
-        var local = SelectedFloorScanner.scan(nearby, inside, 512, 16);
-        var distant = SelectedFloorScanner.scan(extended, inside, 512, 16);
+        var local = SelectedFloorScanner.scan(nearby.loadedView(), inside, 512, 16);
+        var distant = SelectedFloorScanner.scan(extended.loadedView(), inside, 512, 16);
 
         assertEquals(Building.validationResult.SUCCESS, local.result());
         assertEquals(Building.validationResult.SUCCESS, distant.result());
@@ -101,6 +128,25 @@ class SelectedFloorScannerBoundaryTest {
         private ChunkBlocks(int loadedWidth) { this.loadedWidth = loadedWidth; }
 
         private void put(BlockPos pos, BlockState state) { blocks.put(pos.immutable(), state); }
+
+        // Expose the real LevelReader availability contract as well as block reads.
+        // Missing columns must reject the finite proof without being treated as air.
+        private LevelReader loadedView() {
+            return (LevelReader) Proxy.newProxyInstance(LevelReader.class.getClassLoader(),
+                    new Class<?>[]{LevelReader.class}, (proxy, method, args) -> switch (method.getName()) {
+                        case "hasChunk" -> (int) args[0] >= 0
+                                && ((int) args[0] << 4) < loadedWidth && (int) args[1] == 0;
+                        case "getBlockState" -> getBlockState((BlockPos) args[0]);
+                        case "getFluidState" -> getFluidState((BlockPos) args[0]);
+                        case "getBlockEntity" -> null;
+                        case "getHeight" -> 128;
+                        case "getMinBuildHeight" -> 0;
+                        default -> {
+                            if (method.isDefault()) yield InvocationHandler.invokeDefault(proxy, method, args);
+                            throw new UnsupportedOperationException(method.toString());
+                        }
+                    });
+        }
 
         @Override
         public BlockState getBlockState(BlockPos pos) {
