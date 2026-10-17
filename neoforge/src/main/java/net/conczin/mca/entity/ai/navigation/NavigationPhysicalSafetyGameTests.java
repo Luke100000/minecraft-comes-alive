@@ -2,19 +2,31 @@ package net.conczin.mca.entity.ai.navigation;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
+import net.conczin.mca.entity.ai.Genetics;
+import net.conczin.mca.entity.ai.Traits;
+import net.conczin.mca.entity.ai.brain.tasks.WanderOrTeleportToTargetTask;
+import net.conczin.mca.entity.ai.relationship.Gender;
+import net.conczin.mca.gametest.GameTestTerrain;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.Identifier;
 import net.conczin.mca.neoforge.gametest.GameTest;
 import net.conczin.mca.neoforge.gametest.GameTestHolder;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.level.PathNavigationRegion;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FenceBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathType;
@@ -30,6 +42,293 @@ import java.util.List;
 @PrefixGameTestTemplate(false)
 public final class NavigationPhysicalSafetyGameTests {
     private NavigationPhysicalSafetyGameTests() {
+    }
+
+    /** An unavailable airborne search is not evidence that a fresh destination is unreachable. */
+    @GameTest(batch = "mca_landing_target", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void airborneWalkTargetWaitsForNativeSearch(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        GameTestTerrain.prepareFlatArea(helper, start, 4, 4);
+        VillagerEntityMCA villager = spawn(level, Vec3.atBottomCenterOf(start).add(0, 0.5D, 0));
+        villager.refreshBrain(level);
+        villager.getBrain().removeAllBehaviors();
+        villager.setNoAi(false);
+        villager.setOnGround(false);
+        var target = new WalkTarget(new PersistentPathTarget(start.east(2)), 0.5F, 0);
+        villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET, target);
+        var sink = new WanderOrTeleportToTargetTask();
+        sink.tryStart(level, villager, level.getGameTime());
+        helper.assertTrue(villager.getBrain().getMemory(
+                        MemoryModuleType.WALK_TARGET).orElse(null) == target
+                        && !villager.getBrain().hasMemoryValue(
+                        MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
+                "An unavailable native search during landing must preserve fresh intent without reporting failure");
+        helper.onEachTick(() -> {
+            if (sink.getStatus() == Behavior.Status.RUNNING) {
+                sink.tickOrStop(level, villager, level.getGameTime());
+            } else {
+                sink.tryStart(level, villager, level.getGameTime());
+            }
+            if (villager.getX() > start.getX() + 1.5D && villager.onGround()) {
+                villager.discard();
+                helper.succeed();
+            }
+        });
+    }
+
+    /** Rounded fence starts must not test departure from a hypothetical body embedded in the support. */
+    @GameTest(batch = "mca_fence_departure", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void roundedFenceStartKeepsSupportedDeparture(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos fence = helper.absolutePos(new BlockPos(8, 2, 8));
+        // The neighboring ground is outside the start node's permitted fall; the first exit must follow the fence.
+        GameTestTerrain.prepareFlatArea(helper, fence.below(2), 4, 6);
+        for (int x = 0; x < 3; x++) {
+            level.setBlock(fence.east(x), Blocks.OAK_FENCE.defaultBlockState(), 3);
+        }
+        VillagerEntityMCA villager = spawn(level, Vec3.atBottomCenterOf(fence).add(0, 1.5D, 0));
+        villager.refreshBrain(level);
+        villager.getBrain().removeAllBehaviors();
+        villager.setNoAi(false);
+        helper.assertTrue(level.isPositionEntityTicking(villager.blockPosition()) && level.noCollision(villager)
+                        && !level.noBlockCollision(villager, villager.getBoundingBox().move(0, -0.01D, 0)),
+                "The villager must start ticking in actual contact with the clear fence surface");
+        BlockPos target = fence.east(3).below(2);
+        Path path = villager.getNavigation().createPath(target, 0);
+        helper.assertTrue(path != null && path.canReach(),
+                "A grounded villager must retain the supported exit along the fence: "
+                        + (path == null ? "none" : path.getNodePos(0) + "/" + path.getNode(0).type
+                        + " nodes=" + path.getNodeCount()));
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "The fence departure must start");
+        helper.succeedWhen(() -> {
+            helper.assertTrue(villager.distanceToSqr(Vec3.atBottomCenterOf(target)) < 0.75D
+                            && villager.getY() < fence.getY() + 0.5D && villager.onGround(),
+                    "The villager must physically leave the fence and reach the ground destination");
+            villager.discard();
+        });
+    }
+
+    @GameTest(batch = "mca_partial_floor_start", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void bedUnderLowCeilingKeepsPhysicalDeparture(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos bed = helper.absolutePos(new BlockPos(8, 2, 8));
+        GameTestTerrain.prepareFlatArea(helper, bed, 4, 4);
+        for (int x = -3; x <= 3; x++) {
+            for (int z = -2; z <= 2; z++) {
+                level.setBlock(bed.offset(x, 2, z), Blocks.SPRUCE_SLAB.defaultBlockState()
+                        .setValue(BlockStateProperties.SLAB_TYPE, SlabType.TOP), 3);
+            }
+        }
+        var bedState = BuiltInRegistries.BLOCK.getOptional(Identifier.withDefaultNamespace("blue_bed"))
+                .orElseThrow().defaultBlockState()
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.SOUTH);
+        level.setBlock(bed, bedState, 3);
+        level.setBlock(bed.south(), bedState.setValue(BlockStateProperties.BED_PART,
+                BedPart.HEAD), 3);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(level)
+                .withGender(Gender.FEMALE).withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(bed).add(0, 0.5625D, 0)).spawn(EntitySpawnReason.STRUCTURE);
+        villager.getTraits().removeTrait(Traits.DWARFISM);
+        villager.getTraits().removeTrait(Traits.TOUGH);
+        villager.getTraits().removeTrait(Traits.WEAK);
+        villager.getGenetics().setGene(Genetics.SIZE, 0.5F);
+        villager.getGenetics().setGene(Genetics.WIDTH, 0.5F);
+        villager.refreshDimensions();
+        villager.refreshBrain(level);
+        villager.getBrain().removeAllBehaviors();
+        villager.setNoAi(false);
+        villager.setOnGround(true);
+        helper.assertTrue(level.isPositionEntityTicking(villager.blockPosition()),
+                "The bed departure must run in an entity-ticking fixture chunk");
+        helper.assertTrue(level.noCollision(villager), "The supported villager must fit below the real slab ceiling");
+        helper.assertTrue(!level.noBlockCollision(villager, villager.getBoundingBox().move(0, -0.01D, 0)),
+                "The departure must have actual bed contact");
+        Path path = villager.getNavigation().createPath(bed.west(2), 0);
+        helper.assertTrue(path != null && path.canReach(),
+                "A supported bed pose under a clear ceiling must retain its native departure: "
+                        + (path == null ? "none" : path.getNodePos(0) + "/" + path.getNode(0).type));
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "The native bed departure must start");
+        helper.succeedWhen(() -> {
+            helper.assertTrue(villager.getX() < bed.getX() - 0.5D && villager.getY() < bed.getY() + 0.5625D,
+                    "The villager must physically step off the bed under the ceiling");
+            villager.discard();
+        });
+    }
+
+    @GameTest(batch = "mca_snow_step", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void layeredSnowStepUsesItsPhysicalSurface(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        GameTestTerrain.prepareFlatArea(helper, start, 4, 4);
+        for (int z = -3; z <= 2; z++) {
+            for (int y = 0; y <= 3; y++) {
+                level.setBlock(start.offset(-1, y, z), Blocks.STONE.defaultBlockState(), 3);
+                level.setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        level.setBlock(start, Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 5), 3);
+        level.setBlock(start.north(), Blocks.SNOW_BLOCK.defaultBlockState(), 3);
+        level.setBlock(start.north().above(), Blocks.SNOW.defaultBlockState()
+                .setValue(BlockStateProperties.LAYERS, 4), 3);
+        level.setBlock(start.north(2), Blocks.SNOW_BLOCK.defaultBlockState(), 3);
+        VillagerEntityMCA villager = spawn(level, Vec3.atBottomCenterOf(start).add(0, 0.5D, 0));
+        villager.refreshBrain(level);
+        villager.getBrain().removeAllBehaviors();
+        villager.setNoAi(false);
+        villager.setOnGround(true);
+        helper.assertTrue(level.isPositionEntityTicking(start) && level.noCollision(villager),
+                "The snow step must start supported and collision-free in a ticking chunk");
+        Path path = villager.getNavigation().createPath(start.north(2).above(), 0);
+        helper.assertTrue(path != null && path.canReach(), "Native search must admit the layered-snow step");
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "Native snow traversal must start");
+        helper.succeedWhen(() -> {
+            helper.assertTrue(villager.getZ() < start.getZ() - 0.5D && villager.getY() > start.getY() + 1.0D,
+                    "The villager must physically climb the snow surface: pos=" + villager.position()
+                            + ", wantedY=" + villager.getMoveControl().getWantedY());
+            villager.discard();
+        });
+    }
+
+    @GameTest(batch = "mca_partial_floor_lintel", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void plannedSnowDepartureRejectsLowLintelAndKeepsDetour(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos snow = helper.absolutePos(new BlockPos(8, 2, 8));
+        GameTestTerrain.prepareFlatArea(helper, snow, 4, 4);
+        level.setBlock(snow, Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 3), 3);
+        level.setBlock(snow.north().above(2), Blocks.STONE.defaultBlockState(), 3);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(level)
+                .withAge(0).withGender(Gender.MALE)
+                .withPosition(Vec3.atBottomCenterOf(snow.south(2))).spawn(EntitySpawnReason.STRUCTURE);
+        villager.getTraits().removeTrait(Traits.DWARFISM);
+        villager.getGenetics().setGene(Genetics.SIZE, 0.5F);
+        villager.getGenetics().setGene(Genetics.WIDTH, 0.5F);
+        villager.refreshDimensions();
+        villager.refreshBrain(level);
+        villager.getBrain().removeAllBehaviors();
+        villager.setOnGround(true);
+        helper.assertTrue(villager.getBbHeight() > 1.75F && villager.getBbHeight() < 2.0F,
+                "The supported snow pose must exceed lintel clearance while fitting on the lower floor");
+        helper.assertTrue(!neighborsAtPlannedNode(level, villager, snow).contains(snow.north()),
+                "A future route edge must not lower the body before it has physically left the snow support");
+        helper.assertTrue(neighborsAtPlannedNode(level, villager, snow).contains(snow.east()),
+                "A clear departure from the same partial surface must remain available");
+        BlockPos target = snow.north(2);
+        Path path = villager.getNavigation().createPath(target, 0);
+        helper.assertTrue(path != null && path.canReach() && villager.getNavigation().moveTo(path, 0.5D),
+                "Native navigation must retain a route around the obstructed lintel approach");
+        helper.succeedWhen(() -> {
+            helper.assertTrue(villager.distanceToSqr(Vec3.atBottomCenterOf(target)) < 0.75D && villager.onGround(),
+                    "The villager must physically complete the native detour: pos=" + villager.position()
+                            + ", age=" + villager.tickCount + ", noAi=" + villager.isNoAi()
+                            + ", grounded=" + villager.onGround() + ", collision=" + villager.horizontalCollision
+                            + ", path=" + villager.getNavigation().getPath()
+                            + ", wanted=" + villager.getMoveControl().getWantedX() + ","
+                            + villager.getMoveControl().getWantedY() + "," + villager.getMoveControl().getWantedZ());
+            villager.discard();
+        });
+    }
+
+    /** Replays the admitted detour's waypoints; search is outside this route-following regression. */
+    @GameTest(batch = "mca_partial_floor_lintel_following", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void lowerDetourWaypointRetainsItsRequiredSurface(GameTestHelper helper) {
+        assertLowerDetourReachesOpening(helper, Blocks.AIR.defaultBlockState());
+    }
+
+    @GameTest(batch = "mca_partial_floor_raised_opening", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void slightlyRaisedOpeningStillNeedsTheLowerDetourSurface(GameTestHelper helper) {
+        assertLowerDetourReachesOpening(helper,
+                Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 2));
+    }
+
+    private static void assertLowerDetourReachesOpening(GameTestHelper helper,
+                                                       net.minecraft.world.level.block.state.BlockState openingFloor) {
+        ServerLevel level = helper.getLevel();
+        BlockPos snow = helper.absolutePos(new BlockPos(8, 2, 8));
+        GameTestTerrain.prepareFlatArea(helper, snow, 4, 4);
+        level.setBlock(snow, Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 3), 3);
+        level.setBlock(snow.north(), openingFloor, 3);
+        level.setBlock(snow.north().above(2), Blocks.STONE.defaultBlockState(), 3);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(level)
+                .withAge(0).withGender(Gender.MALE)
+                .withPosition(Vec3.atBottomCenterOf(snow.south(2))).spawn(EntitySpawnReason.STRUCTURE);
+        villager.getTraits().removeTrait(Traits.DWARFISM);
+        villager.getGenetics().setGene(Genetics.SIZE, 0.5F);
+        villager.getGenetics().setGene(Genetics.WIDTH, 0.5F);
+        villager.refreshDimensions();
+        villager.refreshBrain(level);
+        villager.getBrain().removeAllBehaviors();
+        villager.setOnGround(true);
+        helper.assertTrue(level.isPositionEntityTicking(villager.blockPosition()) && level.noCollision(villager)
+                        && villager.getBbHeight() > 1.75F && villager.getBbHeight() < 2.0F,
+                "The native detour must start with a ticking, clear adult body");
+        BlockPos target = snow.north(2);
+        Path path = new Path(List.of(walkable(snow.south(2)), walkable(snow.south()), walkable(snow.east()),
+                walkable(snow.north()), walkable(target)), target, true);
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "The observed native detour must start");
+        helper.succeedWhen(() -> {
+            helper.assertTrue(villager.distanceToSqr(Vec3.atBottomCenterOf(target)) < 0.75D && villager.onGround(),
+                    "Native following skipped the lower surface needed to clear the lintel: pos=" + villager.position()
+                            + ", node=" + path.getNextNodeIndex() + ", collision=" + villager.horizontalCollision);
+            villager.discard();
+        });
+    }
+
+    @GameTest(batch = "mca_partial_floor_upward_following", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 40)
+    public static void followingStepAboveActualSupportDoesNotRequireADescent(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos snow = helper.absolutePos(new BlockPos(8, 2, 8));
+        GameTestTerrain.prepareFlatArea(helper, snow, 4, 4);
+        level.setBlock(snow, Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 3), 3);
+        level.setBlock(snow.north(), Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 4), 3);
+        VillagerEntityMCA villager = spawn(level, Vec3.atBottomCenterOf(snow).add(0.67D, 0.25D, 0.277D));
+        helper.assertTrue(level.noCollision(villager)
+                        && !level.noBlockCollision(villager, villager.getBoundingBox().move(0, -0.01D, 0)),
+                "The positive must retain actual snow contact before a genuinely higher step");
+        Path path = new Path(List.of(walkable(snow.east()), walkable(snow.north())), snow.north(), true);
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "The clear higher-step route must start");
+        villager.getNavigation().tick();
+        helper.assertTrue(path.getNextNodeIndex() == 1,
+                "An upward step from the actual support must retain native waypoint tolerance");
+        villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_stair_start", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void lowerStairSurfaceKeepsSupportedNativeStart(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos stair = helper.absolutePos(new BlockPos(8, 4, 8));
+        GameTestTerrain.prepareFlatArea(helper, stair.below(2), 4, 4);
+        for (int step = 0; step < 3; step++) {
+            level.setBlock(stair.west(step).below(step), Blocks.SPRUCE_STAIRS.defaultBlockState()
+                    .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST), 3);
+        }
+        VillagerEntityMCA villager = spawn(level,
+                new Vec3(stair.getX(), stair.getY() + 0.5D, stair.getZ() + 0.5D));
+        villager.refreshBrain(level);
+        villager.getBrain().removeAllBehaviors();
+        villager.setNoAi(false);
+        villager.setYRot(90.0F);
+        helper.assertTrue(level.noCollision(villager), "The worker must stand on the real lower stair surface");
+        var vanilla = new net.minecraft.world.level.pathfinder.WalkNodeEvaluator();
+        try {
+            vanilla.prepare(new PathNavigationRegion(level, stair.offset(-6, -4, -6), stair.offset(6, 6, 6)), villager);
+            helper.assertTrue(vanilla.getStart().asBlockPos().equals(stair.above()),
+                    "The fixture must offer vanilla's supported start above the stair");
+        } finally {
+            vanilla.done();
+        }
+        Path path = villager.getNavigation().createPath(stair.west(3).below(2), 0);
+        helper.assertTrue(path != null && path.canReach(), "The stair flight must have a real native exit route");
+        helper.assertTrue(path.getNodePos(0).equals(stair.above()) && path.getNode(0).type != PathType.BLOCKED,
+                "MCA replaced a supported native start with a node inside the stair: "
+                        + path.getNodePos(0) + '/' + path.getNode(0).type);
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "Native stair departure must start");
+        helper.succeedWhen(() -> {
+            helper.assertTrue(villager.getX() < stair.getX() - 1.0D && villager.getY() < stair.getY(),
+                    "The native worker must descend from the stair flight: " + villager.position());
+            villager.discard();
+        });
     }
 
     @GameTest(batch = "mca_trapdoor_diagonal", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)

@@ -18,6 +18,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.phys.AABB;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Iterator;
@@ -76,6 +77,14 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
                 continue;
             }
 
+            // A gate above a path node was opened to clear the villager's head.
+            // Keep it open while that node is active, just like a gate at foot level.
+            if (PathingBlockInteraction.canInteractWithFenceGate(blockState)
+                    && (isInPathBodyClearance(lastNode, blockPos, entity)
+                    || isInPathBodyClearance(currentNode, blockPos, entity))) {
+                continue;
+            }
+
             // Path nodes can advance before the entity's full body has cleared a
             // toggleable. Never close one around this villager.
             if (entity.getBoundingBox().intersects(
@@ -94,13 +103,21 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
         }
     }
 
+    private static boolean isInPathBodyClearance(@Nullable Node node, BlockPos gate, LivingEntity entity) {
+        return node != null
+                && node.x == gate.getX() && node.z == gate.getZ()
+                && gate.getY() > node.y
+                && gate.getY() - node.y < Mth.ceil(entity.getBbHeight());
+    }
+
     private static boolean hasOtherMobReachedToggleable(LivingEntity entity, BlockPos pos) {
         List<LivingEntity> nearbyEntities = entity.getBrain()
                 .getMemoryInternal(MemoryModuleType.NEAREST_LIVING_ENTITIES).orElse(List.of());
+        AABB toggleableBounds = new AABB(pos);
         for (LivingEntity other : nearbyEntities) {
             if (other.getType() == entity.getType()
-                    && pos.closerToCenterThan(other.position(), PATHING_DISTANCE)
-                    && hasReached(other, pos)) {
+                    && (other.getBoundingBox().intersects(toggleableBounds)
+                    || pos.closerToCenterThan(other.position(), PATHING_DISTANCE) && hasReached(other, pos))) {
                 return true;
             }
         }

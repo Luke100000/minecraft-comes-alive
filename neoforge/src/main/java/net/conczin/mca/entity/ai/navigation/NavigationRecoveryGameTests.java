@@ -33,6 +33,108 @@ public final class NavigationRecoveryGameTests {
     private NavigationRecoveryGameTests() {
     }
 
+    @GameTest(batch = "mca_nearby_persistent_detour", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void nearbyPersistentIntentFindsItsWalkableDetour(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(40, 1, 40));
+        BlockPos target = start.east(2);
+        prepareFlatArea(helper, start, 35, 3);
+        for (int z = -31; z <= 31; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        Config config = Config.getInstance();
+        int previousDistance = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 160;
+            Path route = ((MCAGroundPathNavigation) villager.getNavigation())
+                    .createPathForPersistentIntent(Set.of(target), 0);
+            helper.assertTrue(route != null && route.canReach() && route.getEndNode().asBlockPos().equals(target),
+                    "A nearby walkable destination was denied its native detour search");
+        } finally {
+            config.villagerPathfindingDistance = previousDistance;
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_short_partial_continuation", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void completedOneBlockClimbContinuesPersistentJourney(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(8, 1, 8));
+        BlockPos endpoint = start.east().above();
+        BlockPos target = start.east(100).above();
+        net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath(helper, start, target);
+        helper.getLevel().setBlock(endpoint.below(), Blocks.STONE.defaultBlockState(), 3);
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        try {
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+            Path completed = new Path(List.of(node(start), node(endpoint)), target, false);
+            helper.assertTrue(MCAGroundPathNavigation.isUsefulPartialPath(completed, target),
+                    "Fixture must exercise a useful short partial route");
+            villager.getNavigation().moveTo(completed, 0.5D);
+            villager.setPos(Vec3.atBottomCenterOf(endpoint));
+            while (!completed.isDone()) completed.advance();
+            villager.getNavigation().tick();
+            Path continuation = villager.getNavigation().getPath();
+            helper.assertTrue(continuation != null && continuation != completed && !continuation.isDone(),
+                    "A physically completed one-block climb was rejected as stationary instead of continuing");
+            helper.assertTrue(continuation.getTarget().equals(target)
+                            && continuation.getEndNode().asBlockPos().distManhattan(target) < endpoint.distManhattan(target),
+                    "The short climb's continuation lost forward progress toward its logical destination");
+            helper.assertTrue(!WalkTargetFailureMemory.hasFailureFor(villager, target),
+                    "A usable short-climb continuation was marked terminally unreachable");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_short_partial_detour", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void completedShortPartialUsesNativeDetourWhenContinuationIsBlocked(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(65, 1, 65));
+        BlockPos endpoint = start.east();
+        BlockPos target = start.east(3);
+        prepareFlatArea(helper, start, 61, 3);
+        for (int z = -55; z <= 55; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(2, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        Config config = Config.getInstance();
+        int previousDistance = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 160;
+            villager.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+            Path completed = new Path(List.of(node(start), node(endpoint)), target, false);
+            helper.assertTrue(MCAGroundPathNavigation.isUsefulPartialPath(completed, target),
+                    "Fixture must exercise a useful short partial route");
+            villager.getNavigation().moveTo(completed, 0.5D);
+            villager.setPos(Vec3.atBottomCenterOf(endpoint));
+            while (!completed.isDone()) completed.advance();
+            villager.getNavigation().tick();
+            Path flank = villager.getNavigation().getPath();
+            helper.assertTrue(flank != null && !flank.isDone() && flank.canReach()
+                            && !flank.getTarget().equals(target)
+                            && ((MCAGroundPathNavigation) villager.getNavigation()).isTakingDetourTo(target),
+                    "A short completed partial route skipped navigation's existing detour recovery");
+            helper.assertTrue(villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElseThrow()
+                            .getTarget().currentBlockPosition().equals(target),
+                    "Recovery replaced the logical destination with its temporary flank waypoint");
+        } finally {
+            config.villagerPathfindingDistance = previousDistance;
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_detour_failure_age", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 80)
     public static void sidewaysDetourDoesNotEraseDestinationFailure(GameTestHelper helper) {

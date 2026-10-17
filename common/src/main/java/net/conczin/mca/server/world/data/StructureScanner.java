@@ -132,11 +132,15 @@ final class StructureScanner {
             }
         }
 
-        if (isSubFullInteraction(world, source)) {
+        boolean subFullInteraction = isSubFullInteraction(world, source);
+        if (subFullInteraction || hasInterruptedLandingSupport(world, source)) {
             Optional<SelectedFloorScanner.Result> adjacent = resolveFloorHandoff(
                     world,
                     source,
-                    java.util.Arrays.stream(HORIZONTAL).map(source::relative).toList(),
+                    java.util.Arrays.stream(HORIZONTAL).map(source::relative)
+                            .filter(candidate -> subFullInteraction || world.getBlockState(candidate)
+                                    .getCollisionShape(world, candidate).isEmpty())
+                            .toList(),
                     observation::selected);
             if (adjacent.isPresent()) return adjacent;
         }
@@ -291,6 +295,21 @@ final class StructureScanner {
         return !shape.isEmpty()
                 && shape.max(Direction.Axis.Y) <= 1.0D
                 && !state.isCollisionShapeFullBlock(world, source);
+    }
+
+    /** Nonstandard platforms and a ladder just above a landing can defeat a direct Floor seed. */
+    private static boolean hasInterruptedLandingSupport(Level world, BlockPos source) {
+        BlockState state = world.getBlockState(source);
+        BlockPos above = source.above();
+        BlockState aboveState = world.getBlockState(above);
+        boolean ladderAbove = FloorConnector.Type.fromBlockState(aboveState) == FloorConnector.Type.LADDER;
+        if (!state.getFluidState().isEmpty() || !state.getCollisionShape(world, source).isEmpty()
+                || (!ladderAbove && !aboveState.getCollisionShape(world, above).isEmpty())) return false;
+        BlockPos support = source.below();
+        BlockState supportState = world.getBlockState(support);
+        return supportState.getFluidState().isEmpty()
+                && !supportState.getCollisionShape(world, support).isEmpty()
+                && (ladderAbove || !supportState.isCollisionShapeFullBlock(world, support));
     }
 
     private static int manhattanDistance(BlockPos first, BlockPos second) {
