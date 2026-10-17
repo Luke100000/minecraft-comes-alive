@@ -639,19 +639,21 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
 
     private AABB getMobBoxAt(Node node) {
         AABB box = this.mob.getBoundingBox();
-        double floorY = getStandingFloorY(node);
+        BlockPos pos = this.collisionPos.set(node.x, node.y, node.z);
+        Vec3 standing = getStandingPosition(this.currentContext.level(), pos, this.mob, this.getFloorLevel(pos));
         double centerX = (box.minX + box.maxX) * 0.5D;
         double centerZ = (box.minZ + box.maxZ) * 0.5D;
         return box.move(
-                node.x + 0.5D - centerX,
-                floorY + FLOOR_EPSILON - box.minY,
-                node.z + 0.5D - centerZ
+                standing.x - centerX,
+                standing.y + FLOOR_EPSILON - box.minY,
+                standing.z - centerZ
         );
     }
 
-    private double getStandingFloorY(Node node) {
-        BlockPos pos = this.collisionPos.set(node.x, node.y, node.z);
-        return getStandingFloorY(this.currentContext.level(), pos, this.mob, this.getFloorLevel(pos));
+    /** Physical feet position for a walking node, shared by search clearance and navigation. */
+    static Vec3 getStandingPosition(BlockGetter level, BlockPos node, Mob mob, double fallbackFloorY) {
+        return new Vec3(node.getX() + 0.5D,
+                getStandingFloorY(level, node, mob, fallbackFloorY), node.getZ() + 0.5D);
     }
 
     static double getStandingFloorY(BlockGetter level, BlockPos pos, Mob mob, double floorY) {

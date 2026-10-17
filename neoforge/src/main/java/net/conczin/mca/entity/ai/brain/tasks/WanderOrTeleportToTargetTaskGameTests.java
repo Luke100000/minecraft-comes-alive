@@ -31,6 +31,8 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.level.pathfinder.PathType;
+import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -39,6 +41,62 @@ import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath;
 @PrefixGameTestTemplate(false)
 public final class WanderOrTeleportToTargetTaskGameTests {
     private WanderOrTeleportToTargetTaskGameTests() {
+    }
+
+    @GameTest(batch = "mca_teleport_unloaded_chunk", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void teleportProbeDoesNotLoadDistantChunk(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(5, 2, 5));
+        prepareFlatArea(helper, start, 4, 2);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start))
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.setNoAi(true);
+        BlockPos distant = start.offset(512, 0, 512);
+        ChunkPos chunk = new ChunkPos(distant);
+        try {
+            helper.assertTrue(helper.getLevel().getChunkSource().getChunkNow(chunk.x, chunk.z) == null,
+                    "test destination must begin in an unloaded chunk");
+            helper.assertTrue(!WanderOrTeleportToTargetTask.canTeleportTo(helper.getLevel(), villager, distant),
+                    "teleport may not accept an unloaded destination");
+            helper.assertTrue(helper.getLevel().getChunkSource().getChunkNow(chunk.x, chunk.z) == null,
+                    "teleport probe synchronously loaded the distant target chunk");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_teleport_exact_collision", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void teleportProbeChecksActualCenteredLandingBox(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(6, 2, 6));
+        BlockPos target = start.east(3);
+        prepareFlatArea(helper, start, 8, 3);
+        helper.getLevel().setBlock(target.above(), Blocks.IRON_BARS.defaultBlockState(), 3);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(new Vec3(start.getX() + 0.05D, start.getY(), start.getZ() + 0.05D))
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.setNoAi(true);
+        try {
+            helper.assertTrue(WalkNodeEvaluator.getPathTypeStatic(villager, target) == PathType.WALKABLE,
+                    "the candidate must have a walkable floor");
+            helper.assertTrue(helper.getLevel().noCollision(villager,
+                            villager.getBoundingBox().move(target.subtract(villager.blockPosition()))),
+                    "the original fractional-offset check must miss the central obstacle");
+            helper.assertTrue(!helper.getLevel().noCollision(villager, villager.getBoundingBox().move(
+                            target.getX() + 0.5D - villager.getX(), target.getY() - villager.getY(),
+                            target.getZ() + 0.5D - villager.getZ())),
+                    "the actual centered landing must collide with the obstacle");
+            helper.assertTrue(!WanderOrTeleportToTargetTask.canTeleportTo(helper.getLevel(), villager, target),
+                    "teleport probe accepted a colliding centered landing");
+            helper.getLevel().setBlock(target.above(), Blocks.AIR.defaultBlockState(), 3);
+            helper.assertTrue(WanderOrTeleportToTargetTask.canTeleportTo(helper.getLevel(), villager, target),
+                    "teleport probe rejected a clear loaded landing");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
     }
 
     @GameTest(batch = "mca_walk_target_failure_owner", templateNamespace = "minecraft",

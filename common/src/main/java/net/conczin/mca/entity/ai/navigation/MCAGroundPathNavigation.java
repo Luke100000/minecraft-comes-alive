@@ -783,7 +783,8 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (!this.climbTraversal.followPath(this.path)) {
             int nextIndex = this.path.getNextNodeIndex();
             if (this.mob.onGround() && nextIndex + 1 < this.path.getNodeCount()) {
-                double nextFloor = getGroundY(this.path.getNextEntityPos(this.mob));
+                double nextFloor = getStandingPosition(this.path.getNextNodePos(),
+                        this.path.getNextEntityPos(this.mob)).y;
                 if (this.mob.getY() > nextFloor + 1.0E-3D) {
                     Vec3 following = this.path.getEntityPosAtNode(this.mob, nextIndex + 1);
                     if (getGroundY(following) <= this.mob.getY() + 1.0E-3D
@@ -808,7 +809,25 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 this.doStuckDetection(position);
                 return;
             }
+            int currentIndex = this.path.getNextNodeIndex();
+            Path currentPath = this.path;
             super.followThePath();
+            if (this.path == currentPath && !currentPath.isDone()
+                    && currentPath.getNextNodeIndex() == currentIndex && this.mob.onGround()) {
+                // A path node may occupy a passable partial-collision block while the
+                // mob actually stands on its top surface. Vanilla requires the feet
+                // to be strictly less than one block above the node before advancing,
+                // so an exact one-block surface leaves this waypoint permanently stuck.
+                // Advance only after reaching both the node center and the physical floor.
+                BlockPos next = currentPath.getNextNodePos();
+                Vec3 standing = getStandingPosition(next, currentPath.getNextEntityPos(this.mob));
+                if (standing.y > next.getY() + 1.0E-3D
+                        && Math.abs(this.mob.getY() - standing.y) < 0.125D
+                        && Math.abs(this.mob.getX() - standing.x) < this.maxDistanceToWaypoint
+                        && Math.abs(this.mob.getZ() - standing.z) < this.maxDistanceToWaypoint) {
+                    currentPath.advance();
+                }
+            }
             return;
         }
         this.doStuckDetection(position);
@@ -874,10 +893,14 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     @Override
     protected double getGroundY(Vec3 position) {
         BlockPos targetPos = BlockPos.containing(position);
-        if (this.climbTraversal.isClimbable(targetPos) && this.mob.onClimbable()) {
-            return this.mob.getY();
+        return getStandingPosition(targetPos, position).y;
+    }
+
+    private Vec3 getStandingPosition(BlockPos node, Vec3 pathPosition) {
+        if (this.climbTraversal.isClimbable(node) && this.mob.onClimbable()) {
+            return new Vec3(node.getX() + 0.5D, this.mob.getY(), node.getZ() + 0.5D);
         }
-        return MCAWalkNodeEvaluator.getStandingFloorY(
-                this.level, targetPos, this.mob, super.getGroundY(position));
+        return MCAWalkNodeEvaluator.getStandingPosition(
+                this.level, node, this.mob, super.getGroundY(pathPosition));
     }
 }

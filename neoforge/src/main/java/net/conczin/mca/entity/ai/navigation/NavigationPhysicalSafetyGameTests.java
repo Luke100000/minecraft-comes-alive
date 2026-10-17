@@ -1,5 +1,6 @@
 package net.conczin.mca.entity.ai.navigation;
 
+import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.Genetics;
@@ -9,6 +10,7 @@ import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.gametest.GameTestTerrain;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
@@ -16,28 +18,183 @@ import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.PathNavigationRegion;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FenceBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
+import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathType;
+import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+import net.neoforged.neoforge.registries.RegisterEvent;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /** Physical-navigation regressions for ordinary MCA villagers, without Builder-specific behavior. */
 @PrefixGameTestTemplate(false)
+@EventBusSubscriber(modid = MCA.MOD_ID)
 public final class NavigationPhysicalSafetyGameTests {
+    private static Block halfDepthShelf;
+
     private NavigationPhysicalSafetyGameTests() {
+    }
+
+    @SubscribeEvent
+    public static void registerShelfProxy(RegisterEvent event) {
+        if (event.getRegistryKey() != Registries.BLOCK || !Boolean.getBoolean("mca.gametest.enabled")) {
+            return;
+        }
+        event.register(Registries.BLOCK, MCA.locate("gametest_half_depth_shelf"), () -> {
+            halfDepthShelf = new Block(BlockBehaviour.Properties.of().strength(1.0F).noOcclusion()) {
+                @Override
+                public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+                    // BiblioCraft Legacy Expanded ShelfBlock NORTH_SHAPE (Fabric-1.21.1).
+                    return Shapes.box(0.0D, 0.0D, 0.5D, 1.0D, 1.0D, 1.0D);
+                }
+            };
+            return halfDepthShelf;
+        });
+    }
+
+    /** A full-height, half-depth shelf is not a full cube: the villager must still reach the far side. */
+    @GameTest(batch = "mca_half_depth_shelf_crossing", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 200)
+    public static void narrowShelvesDoNotTrapNavigationAtTheirFrontFace(GameTestHelper helper) {
+        assertShelvesCanBeCrossed(helper, shelfState());
+    }
+
+    @GameTest(batch = "mca_full_depth_shelf_control", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 200)
+    public static void fullBlocksAllowEquivalentNavigation(GameTestHelper helper) {
+        assertShelvesCanBeCrossed(helper, Blocks.STONE.defaultBlockState());
+    }
+
+    private static void assertShelvesCanBeCrossed(GameTestHelper helper, BlockState obstacle) {
+        ServerLevel level = helper.getLevel();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        BlockPos shelf = start.north(2);
+        BlockPos target = shelf.north(3);
+        GameTestTerrain.prepareFlatArea(helper, start, 6, 4);
+        for (int dx = -1; dx <= 1; dx++) {
+            level.setBlock(shelf.offset(dx, 0, 0), obstacle, 3);
+        }
+
+        VillagerEntityMCA villager = spawnForShelfNavigation(level, Vec3.atBottomCenterOf(start));
+        Path path = villager.getNavigation().createPath(target, 0);
+        helper.assertTrue(path != null && path.canReach(), "The obstacle must have a reachable route");
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.65D), "The obstacle route must start");
+        int[] ticks = {0};
+        float[] previousYaw = {villager.getYRot()};
+        double[] totalRotation = {0.0D};
+        helper.onEachTick(() -> {
+            totalRotation[0] += Math.abs(net.minecraft.util.Mth.wrapDegrees(villager.getYRot() - previousYaw[0]));
+            previousYaw[0] = villager.getYRot();
+            if (villager.distanceToSqr(Vec3.atBottomCenterOf(target)) < 1.0D && villager.onGround()) {
+                villager.discard();
+                helper.succeed();
+            } else if (++ticks[0] >= 170) {
+                String error = "Navigation stalled at " + obstacle.getBlock() + ": pos=" + villager.position()
+                        + ", shelf=" + shelf + ", target=" + target + ", onGround=" + villager.onGround()
+                        + ", horizontalCollision=" + villager.horizontalCollision
+                        + ", pathIndex=" + path.getNextNodeIndex() + "/" + path.getNodeCount()
+                        + ", nextNode=" + (path.isDone() ? "done" : path.getNextNodePos())
+                        + ", totalBodyYaw=" + totalRotation[0];
+                villager.discard();
+                helper.fail(error);
+            }
+        });
+    }
+
+    /** Control: a villager already standing on the narrow shelf top can physically depart. */
+    @GameTest(batch = "mca_half_depth_shelf_top", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 160)
+    public static void villagerLeavesHalfDepthShelfTopWithoutCircling(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos shelf = helper.absolutePos(new BlockPos(8, 2, 8));
+        BlockPos target = shelf.north(3);
+        GameTestTerrain.prepareFlatArea(helper, shelf, 5, 4);
+        level.setBlock(shelf, shelfState(), 3);
+        VillagerEntityMCA villager = spawnForShelfNavigation(level,
+                new Vec3(shelf.getX() + 0.5D, shelf.getY() + 1.0D, shelf.getZ() + 0.75D));
+        helper.assertTrue(level.noCollision(villager)
+                        && !level.noBlockCollision(villager, villager.getBoundingBox().move(0.0D, -0.02D, 0.0D)),
+                "Shelf-top start must be physically clear and supported by the half-depth shape");
+        Path path = villager.getNavigation().createPath(target, 0);
+        helper.assertTrue(path != null && path.canReach(), "The shelf top must have a reachable ground exit");
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.65D), "The shelf-top exit must start");
+        int[] ticks = {0};
+        helper.onEachTick(() -> {
+            if (villager.distanceToSqr(Vec3.atBottomCenterOf(target)) < 1.0D && villager.onGround()) {
+                villager.discard();
+                helper.succeed();
+            } else if (++ticks[0] >= 130) {
+                String error = "Villager did not leave shelf top: pos=" + villager.position()
+                        + ", horizontalCollision=" + villager.horizontalCollision
+                        + ", pathIndex=" + path.getNextNodeIndex() + "/" + path.getNodeCount();
+                villager.discard();
+                helper.fail(error);
+            }
+        });
+    }
+
+    private static BlockState shelfState() {
+        if (halfDepthShelf == null) {
+            throw new IllegalStateException("GameTest shelf proxy was not registered");
+        }
+        return halfDepthShelf.defaultBlockState();
+    }
+
+    private static VillagerEntityMCA spawnForShelfNavigation(ServerLevel level, Vec3 position) {
+        VillagerEntityMCA villager = spawn(level, position);
+        villager.refreshBrain(level);
+        villager.getBrain().removeAllBehaviors();
+        villager.setNoAi(false);
+        return villager;
+    }
+
+    @GameTest(batch = "mca_shared_node_standing_height", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 60)
+    public static void snowNodeHasSameStandingHeightInSearchAndMovement(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos snow = helper.absolutePos(new BlockPos(8, 2, 8));
+        GameTestTerrain.prepareFlatArea(helper, snow, 4, 4);
+        level.setBlock(snow, Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 3), 3);
+        VillagerEntityMCA villager = spawn(level, Vec3.atBottomCenterOf(snow.south(2)));
+        try {
+            Vec3 standing = MCAWalkNodeEvaluator.getStandingPosition(
+                    level, snow, villager, WalkNodeEvaluator.getFloorLevel(level, snow));
+            double navigationY = ((MCAGroundPathNavigation) villager.getNavigation())
+                    .getGroundY(Vec3.atBottomCenterOf(snow));
+            double collisionSurface = snow.getY() + level.getBlockState(snow)
+                    .getCollisionShape(level, snow).max(Direction.Axis.Y);
+            helper.assertTrue(Math.abs(standing.x - (snow.getX() + 0.5D)) < 1.0E-6D
+                            && Math.abs(standing.z - (snow.getZ() + 0.5D)) < 1.0E-6D,
+                    "search node standing position lost the node center: " + standing);
+            helper.assertTrue(collisionSurface > snow.getY()
+                            && Math.abs(standing.y - collisionSurface) < 1.0E-6D,
+                    "search node did not account for the three-layer snow surface: " + standing);
+            helper.assertTrue(Math.abs(navigationY - standing.y) < 1.0E-6D,
+                    "movement and node clearance disagree on snow height: " + navigationY + " vs " + standing);
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
     }
 
     /** An unavailable airborne search is not evidence that a fresh destination is unreachable. */
