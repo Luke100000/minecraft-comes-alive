@@ -77,6 +77,14 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
                 continue;
             }
 
+            // A gate above a path node was opened to clear the villager's head.
+            // Keep it open while that node is active, just like a gate at foot level.
+            if (PathingBlockInteraction.canInteractWithFenceGate(blockState)
+                    && (isInPathBodyClearance(lastNode, blockPos, entity)
+                    || isInPathBodyClearance(currentNode, blockPos, entity))) {
+                continue;
+            }
+
             // Path nodes can advance before the entity's full body has cleared a
             // toggleable. Never close one around this villager.
             if (entity.getBoundingBox().intersects(
@@ -93,6 +101,13 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
             PathingBlockInteraction.setOpen(entity, world, blockState, blockPos, false);
             iterator.remove();
         }
+    }
+
+    private static boolean isInPathBodyClearance(@Nullable Node node, BlockPos gate, LivingEntity entity) {
+        return node != null
+                && node.x == gate.getX() && node.z == gate.getZ()
+                && gate.getY() > node.y
+                && gate.getY() - node.y < Mth.ceil(entity.getBbHeight());
     }
 
     private static boolean hasOtherMobReachedToggleable(LivingEntity entity, BlockPos pos) {

@@ -10,6 +10,10 @@ config = "${mod_id}.mixins.json"
 config = "${mod_id}.journeymap.mixins.json"
 requiredMods = ["journeymap"]
 
+[[mixins]]
+config = "${mod_id}.opentogether.mixins.json"
+requiredMods = ["opentogether"]
+
 [[mods]]
 modId = "${mod_id}"
 version = "${version}"
