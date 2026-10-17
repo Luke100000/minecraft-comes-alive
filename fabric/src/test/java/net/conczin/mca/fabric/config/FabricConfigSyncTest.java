@@ -12,6 +12,45 @@ class FabricConfigSyncTest {
     @AfterEach void clear() { Config.SERVER_SPEC.clearRemote(); }
 
     @Test
+    void fcpNativeSyncIsSelectedOnlyWhenBothPeersHaveFcp() {
+        assertFalse(FabricConfigSync.requiresMcaSnapshot(true, true));
+        assertTrue(FabricConfigSync.requiresMcaSnapshot(true, false));
+        assertTrue(FabricConfigSync.requiresMcaSnapshot(false, true));
+        assertTrue(FabricConfigSync.requiresMcaSnapshot(false, false));
+    }
+
+    @Test
+    void clientCannotUseLocalServerPolicyWhileAuthoritativeSyncIsPending() {
+        var serverSnapshot = FabricConfigSync.snapshot();
+        Config.SERVER_SPEC.beginRemoteSync();
+        try {
+            assertTrue(Config.SERVER_SPEC.isAwaitingRemote());
+            assertThrows(IllegalStateException.class, () -> Config.SERVER.babyItemGrowUpTime.get());
+            FabricConfigSync.applyRemote(serverSnapshot);
+            assertFalse(Config.SERVER_SPEC.isAwaitingRemote());
+            assertEquals(24000, Config.SERVER.babyItemGrowUpTime.get());
+        } finally {
+            Config.SERVER_SPEC.clearRemote();
+        }
+    }
+
+    @Test
+    void clientLoginDependentWorkRunsOnlyAfterTheAuthoritativeServerSnapshot() {
+        var serverSnapshot = FabricConfigSync.snapshot();
+        var called = new java.util.concurrent.atomic.AtomicBoolean();
+        Config.SERVER_SPEC.beginRemoteSync();
+        try {
+            FabricConfigSync.onClientJoin(() -> called.set(true));
+            assertFalse(called.get(), "client login logic must not consume stale local SERVER policy");
+            FabricConfigSync.applyRemote(serverSnapshot);
+            FabricConfigSync.finishClientSync();
+            assertTrue(called.get());
+        } finally {
+            FabricConfigSync.onClientDisconnect();
+        }
+    }
+
+    @Test
     void serverOnlyValuesRoundTripIntoAtomicRemoteOverlay() {
         var packet = FabricConfigSync.snapshot();
         assertTrue(packet.json().contains("babyItemGrowUpTime"));

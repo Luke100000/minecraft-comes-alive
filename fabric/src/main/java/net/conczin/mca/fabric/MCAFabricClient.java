@@ -83,7 +83,7 @@ public final class MCAFabricClient extends ClientProxyAbstractImpl implements Cl
         ModelPredicatesMCA.setup(ItemProperties::register);
 
         ClientPlayConnectionEvents.JOIN.register((handler, sender, server) ->
-                MCAClient.onLogin()
+                FabricConfigSync.onClientJoin(MCAClient::onLogin)
         );
 
         BlockRenderLayerMap.INSTANCE.putBlock(BlocksMCA.INFERNAL_FLAME, RenderType.cutout());

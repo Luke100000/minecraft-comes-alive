@@ -41,7 +41,15 @@ public final class NeoForgeConfigBackend implements ConfigBackend {
             while (shared < previousParents.size() && shared < parents.size()
                     && previousParents.get(shared).equals(parents.get(shared))) shared++;
             for (int index = previousParents.size(); index > shared; index--) nativeBuilder.pop();
-            for (int index = shared; index < parents.size(); index++) nativeBuilder.push(parents.get(index));
+            for (int index = shared; index < parents.size(); index++) {
+                List<String> path = List.copyOf(parents.subList(0, index + 1));
+                ConfigSchema.Section section = schema.section(path);
+                if (section != null) {
+                    if (section.comment() != null) nativeBuilder.comment(section.comment());
+                    if (section.translation() != null) nativeBuilder.translation(section.translation());
+                }
+                nativeBuilder.push(parents.get(index));
+            }
             previousParents = parents;
             if (entry.comment() != null) nativeBuilder.comment(entry.comment());
             if (entry.translation() != null) nativeBuilder.translation(entry.translation());

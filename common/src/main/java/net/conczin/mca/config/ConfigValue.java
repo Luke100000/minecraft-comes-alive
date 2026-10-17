@@ -1,6 +1,5 @@
 package net.conczin.mca.config;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Predicate;
@@ -59,7 +58,8 @@ public final class ConfigValue<T> {
 
     @SuppressWarnings("unchecked")
     private static <T> T defensive(T value) {
-        return value instanceof List<?> list ? (T) List.copyOf(new ArrayList<>(list)) : value;
+        // List.copyOf reuses JDK immutable lists, while copying mutable native config lists.
+        return value instanceof List<?> list ? (T) List.copyOf(list) : value;
     }
 
     public record ValueSpec(Predicate<Object> validator) {

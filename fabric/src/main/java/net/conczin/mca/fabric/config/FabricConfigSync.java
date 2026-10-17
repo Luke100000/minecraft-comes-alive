@@ -18,6 +18,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.MinecraftServer;
 
 import java.io.StringReader;
 import java.math.BigDecimal;
@@ -34,8 +35,30 @@ import java.util.Map;
 public final class FabricConfigSync {
     public static final int MAX_BYTES = 1_048_576;
     public static final int PROTOCOL_VERSION = 1;
+    private static Runnable pendingClientLogin;
 
     private FabricConfigSync() {}
+
+    /** FCP receives SERVER TOML in the configuration phase, before MCA's play packets. */
+    static boolean requiresMcaSnapshot(boolean serverHasFcp, boolean clientHasFcp) {
+        return !serverHasFcp || !clientHasFcp;
+    }
+
+    /** Only FCP-equipped clients advertise this play receiver; no marker is ever sent. */
+    public record FcpClientCapability() implements CustomPacketPayload {
+        public static final Type<FcpClientCapability> TYPE = new Type<>(MCA.locate("fcp_client_capability"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, FcpClientCapability> CODEC = StreamCodec.of(
+                (buf, marker) -> {}, buf -> new FcpClientCapability());
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
+
+    /** FCP's CONFIGURATION-phase native sync has completed before the play join. */
+    public record NativeSyncReady() implements CustomPacketPayload {
+        public static final Type<NativeSyncReady> TYPE = new Type<>(MCA.locate("fcp_native_sync_ready"));
+        public static final StreamCodec<RegistryFriendlyByteBuf, NativeSyncReady> CODEC = StreamCodec.of(
+                (buf, marker) -> {}, buf -> new NativeSyncReady());
+        @Override public Type<? extends CustomPacketPayload> type() { return TYPE; }
+    }
 
     public record Snapshot(String json) implements CustomPacketPayload {
         public static final Type<Snapshot> TYPE = new Type<>(MCA.locate("server_config_snapshot"));
@@ -67,12 +90,30 @@ public final class FabricConfigSync {
 
     public static void initializeCommon() {
         PayloadTypeRegistry.playS2C().register(Snapshot.TYPE, Snapshot.CODEC);
+        PayloadTypeRegistry.playS2C().register(FcpClientCapability.TYPE, FcpClientCapability.CODEC);
+        PayloadTypeRegistry.playS2C().register(NativeSyncReady.TYPE, NativeSyncReady.CODEC);
     }
 
     public static void initializeClient() {
+        ClientPlayConnectionEvents.INIT.register((handler, client) -> {
+            pendingClientLogin = null;
+            if (client.getSingleplayerServer() == null) Config.SERVER_SPEC.beginRemoteSync();
+        });
+        ClientPlayNetworking.registerGlobalReceiver(NativeSyncReady.TYPE, (payload, context) ->
+                context.client().execute(() -> {
+                    Config.SERVER_SPEC.completeNativeRemoteSync();
+                    finishClientSync();
+                }));
+        if (FabricConfigBootstrap.hasFcp()) {
+            // canSend(TYPE) is used by the server to select FCP's already-completed native sync.
+            ClientPlayNetworking.registerGlobalReceiver(FcpClientCapability.TYPE, (payload, context) -> {});
+        }
         ClientPlayNetworking.registerGlobalReceiver(Snapshot.TYPE, (payload, context) ->
                 context.client().execute(() -> {
-                    try { applyRemote(payload); }
+                    try {
+                        applyRemote(payload);
+                        finishClientSync();
+                    }
                     catch (Exception ex) {
                         MCA.LOGGER.warn("Rejected invalid MCA SERVER configuration: {}", ex.toString());
                         if (context.client().getConnection() != null) {
@@ -81,15 +122,51 @@ public final class FabricConfigSync {
                         }
                     }
                 }));
-        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> Config.SERVER_SPEC.clearRemote());
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> onClientDisconnect());
+    }
+
+    /** Called from the client JOIN event, before play sync is necessarily complete. */
+    public static void onClientJoin(Runnable afterServerConfig) {
+        if (Config.SERVER_SPEC.isAwaitingRemote()) pendingClientLogin = afterServerConfig;
+        else afterServerConfig.run();
+    }
+
+    static void finishClientSync() {
+        if (Config.SERVER_SPEC.isAwaitingRemote()) return;
+        Runnable task = pendingClientLogin;
+        pendingClientLogin = null;
+        if (task != null) task.run();
+    }
+
+    static void onClientDisconnect() {
+        pendingClientLogin = null;
+        Config.SERVER_SPEC.clearRemote();
     }
 
     public static void send(ServerPlayer player) {
+        if (!requiresMcaSnapshot(FabricConfigBootstrap.hasFcp(),
+                ServerPlayNetworking.canSend(player, FcpClientCapability.TYPE))) {
+            if (!ServerPlayNetworking.canSend(player, NativeSyncReady.TYPE)) {
+                player.connection.disconnect(Component.literal("Missing MCA native config sync acknowledgement support"));
+            } else ServerPlayNetworking.send(player, new NativeSyncReady());
+            return;
+        }
         if (!ServerPlayNetworking.canSend(player, Snapshot.TYPE)) {
             player.connection.disconnect(Component.literal("This server requires MCA SERVER config sync"));
             return;
         }
         ServerPlayNetworking.send(player, snapshot());
+    }
+
+    /** FCP only syncs SERVER files on login; after a live server reload reconnect native peers. */
+    public static void onFcpServerReload(MinecraftServer server) {
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (ServerPlayNetworking.canSend(player, FcpClientCapability.TYPE)) {
+                player.connection.disconnect(Component.literal("MCA server configuration changed. Reconnect to synchronize."));
+            } else {
+                send(player);
+            }
+        }
     }
 
     public static Snapshot snapshot() {

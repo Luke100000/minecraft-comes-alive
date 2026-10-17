@@ -38,9 +38,20 @@ provide a convenient way to open a mod's configuration screen. FCP is not
 bundled or required by MCA. NeoForge uses its built-in native configuration
 system and existing searchable screen; it does not require FCP.
 
-Manual Fabric edits are not hot-reloaded. If TOML is malformed, MCA leaves the
-file intact so you can fix it; if individual entries are invalid, MCA uses
-validated defaults rather than silently overwriting your file.
+**Without FCP**, manually edit TOML and restart; there is no configuration
+GUI or live file watcher. Malformed TOML is left untouched so it can be fixed,
+and individual invalid entries fall back to validated defaults. **With FCP**,
+FCP itself owns TOML loading/correction, saving, GUI changes and its normal
+file watcher/reload semantics; FCP may correct noncanonical TOML files.
+MCA migrates recognized old TOML setting paths before FCP loads the files,
+preserving backups named `mca-*.toml.pre-mca-migration.bak`.
+
+Fabric servers own SERVER settings in multiplayer. When both server and client
+have FCP, FCP's native synchronization is used; other Fabric combinations
+receive a validated MCA SERVER snapshot, without synchronizing private
+COMMON or CLIENT credentials. For FCP-backed live SERVER changes, connected
+clients with FCP must reconnect to receive FCP's native updated SERVER
+settings; MCA resends its snapshot to clients without FCP.
 
 ## Compatibilities
 

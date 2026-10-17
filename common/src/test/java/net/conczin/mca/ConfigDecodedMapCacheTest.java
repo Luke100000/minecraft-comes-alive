@@ -2,6 +2,8 @@ package net.conczin.mca;
 
 import net.conczin.mca.config.ConfigSchema;
 import net.conczin.mca.config.ConfigScope;
+import net.neoforged.fml.config.NeoForgeTestConfigLoader;
+import com.electronwill.nightconfig.core.CommentedConfig;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -13,6 +15,32 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 class ConfigDecodedMapCacheTest {
+    @Test
+    void loadingDifferentNativeServerConfigDocumentsInvalidatesDecodedMapCache() {
+        var spec = NativeConfigDefaultsExtension.spec(ConfigScope.SERVER);
+        var original = CommentedConfig.inMemory();
+        spec.correct(original);
+        original.set(List.of("village_behavior", "guardsTargetEntities"),
+                List.copyOf(Config.SERVER.guardsTargetEntities.get()));
+        try {
+            var first = CommentedConfig.inMemory();
+            spec.correct(first);
+            first.set(List.of("village_behavior", "guardsTargetEntities"), List.of("minecraft:zombie=2"));
+            NeoForgeTestConfigLoader.loadConfig(spec, first);
+            Map<String, Integer> a = Config.SERVER.guardsTargetEntities();
+            assertEquals(Map.of("minecraft:zombie", 2), a);
+
+            var second = CommentedConfig.inMemory();
+            spec.correct(second);
+            second.set(List.of("village_behavior", "guardsTargetEntities"), List.of("minecraft:zombie=8"));
+            NeoForgeTestConfigLoader.loadConfig(spec, second);
+            Map<String, Integer> b = Config.SERVER.guardsTargetEntities();
+            assertEquals(Map.of("minecraft:zombie", 8), b);
+            assertNotSame(a, b, "a native spec load must invalidate the decoded map");
+        } finally {
+            NeoForgeTestConfigLoader.loadConfig(spec, original);
+        }
+    }
     @Test
     void reloadingServerConfigReplacesPriorServerMapWithoutRetainingStaleValues() {
         ServerConfig server = new ServerConfig(ConfigSchema.builder(ConfigScope.SERVER));

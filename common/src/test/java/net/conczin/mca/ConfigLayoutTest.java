@@ -1,6 +1,7 @@
 package net.conczin.mca;
 
 import net.conczin.mca.config.ConfigSchema;
+import net.conczin.mca.config.ConfigScope;
 import net.conczin.mca.config.ConfigValue;
 import org.junit.jupiter.api.Test;
 
@@ -11,6 +12,19 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ConfigLayoutTest {
+    @Test
+    void nativeSectionsKeepTranslationsDeclaredBeforePush() {
+        assertEquals("mca.configuration.section.villager_behavior",
+                Config.COMMON_SPEC.section(List.of("villager_behavior")).translation());
+        assertEquals("mca.configuration.section.ai",
+                Config.COMMON_SPEC.section(List.of("ai")).translation());
+        assertEquals("mca.configuration.section.village_behavior",
+                Config.SERVER_SPEC.section(List.of("village_behavior")).translation());
+
+        var nativeSpec = NativeConfigDefaultsExtension.spec(ConfigScope.COMMON);
+        assertEquals("mca.configuration.section.ai", nativeSpec.getLevelTranslationKey(List.of("ai")));
+    }
+
     @Test
     void nativeConfigValuesAreLoadedForCommonUnitTests() {
         assertEquals(Config.SERVER.enableAutoScanByDefault.getDefault(), Config.SERVER.enableAutoScanByDefault.get());

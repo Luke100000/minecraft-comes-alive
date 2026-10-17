@@ -36,8 +36,10 @@ public final class FabricFcpConfigIntegration {
         });
         NeoForgeModConfigEvents.reloading(MCA.MOD_ID).register(config -> {
             if (config.getSpec() == backend.spec(ConfigScope.SERVER)) {
-                MCA.getServer().ifPresent(server -> server.execute(() ->
-                        DestinyLocationResolver.refreshCachedDestinations(server, Config.SERVER)));
+                MCA.getServer().ifPresent(server -> server.execute(() -> {
+                    DestinyLocationResolver.refreshCachedDestinations(server, Config.SERVER);
+                    FabricConfigSync.onFcpServerReload(server);
+                }));
             }
         });
         NeoForgeConfigRegistry.INSTANCE.register(MCA.MOD_ID, ModConfig.Type.COMMON,

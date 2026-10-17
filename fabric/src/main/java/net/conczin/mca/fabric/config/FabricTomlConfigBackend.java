@@ -28,6 +28,7 @@ public final class FabricTomlConfigBackend implements ConfigBackend {
     private final Path directory;
     private final Map<ConfigScope, AtomicReference<Map<String, Object>>> values = new EnumMap<>(ConfigScope.class);
     private final Map<ConfigScope, Path> paths = new EnumMap<>(ConfigScope.class);
+    private Map<String, Object> globalServer;
 
     public FabricTomlConfigBackend(Path directory) {
         this.directory = directory;
@@ -37,6 +38,7 @@ public final class FabricTomlConfigBackend implements ConfigBackend {
             paths.put(scope, directory.resolve(fileName(scope)));
             for (ConfigSchema.Entry<?> entry : Config.schema(scope).entries()) bind(entry, state);
         }
+        globalServer = defaults(Config.SERVER_SPEC);
     }
 
     private static String fileName(ConfigScope scope) {
@@ -90,6 +92,8 @@ public final class FabricTomlConfigBackend implements ConfigBackend {
         ConfigSchema schema = Config.schema(scope);
         paths.put(scope, file);
         Map<String, Object> next = defaults(schema);
+        boolean valid = true;
+        boolean allEntriesValid = true;
         if (Files.isRegularFile(file)) {
             try (Reader reader = Files.newBufferedReader(file)) {
                 var parsed = new TomlParser().parse(reader);
@@ -99,33 +103,45 @@ public final class FabricTomlConfigBackend implements ConfigBackend {
                     if (raw == null) continue;
                     Object normalized = normalize(entry, raw);
                     if (entry.value().accepts(normalized)) candidate.put(entry.name(), normalized);
-                    else MCA.LOGGER.warn("Ignoring invalid config entry '{}' in {}", entry.name(), file);
+                    else {
+                        allEntriesValid = false;
+                        MCA.LOGGER.warn("Ignoring invalid config entry '{}' in {}", entry.name(), file);
+                    }
                 }
                 next = Map.copyOf(candidate);
             } catch (Exception ex) {
+                valid = false;
                 MCA.LOGGER.error("Invalid MCA TOML file {} (preserving original; error type {})",
                         file, ex.getClass().getSimpleName());
-                // Keep the last fully validated state if a reload fails.
-                next = schema.isLoaded() ? values.get(scope).get() : defaults(schema);
+                // World overrides may not inherit the preceding world's SERVER settings.
+                next = scope == ConfigScope.SERVER && !file.equals(directory.resolve(Config.SERVER_FILE_NAME))
+                        ? globalServer : defaults(schema);
             }
         }
         values.get(scope).set(next);
+        if (scope == ConfigScope.SERVER && file.equals(directory.resolve(Config.SERVER_FILE_NAME)))
+            globalServer = next;
         schema.markLoaded();
 
-        if (!Files.exists(file) && createIfMissing) {
-            boolean migrated = Config.migrateLegacy(schema, file);
+        boolean create = !Files.exists(file) && createIfMissing;
+        if (valid && allEntriesValid && (create || (createIfMissing && Files.isRegularFile(file)))) {
+            boolean migrated = create && Config.migrateLegacy(schema, file);
+            // Default-map versions apply to existing, valid TOML too.
             boolean upgraded = Config.upgradeDefaultMaps(schema);
             try {
-                write(scope, file);
+                if (create || upgraded) write(scope, file);
+                if (scope == ConfigScope.SERVER && file.equals(directory.resolve(Config.SERVER_FILE_NAME)))
+                    globalServer = values.get(scope).get();
                 if (migrated) Config.markLegacyImported(schema);
             } catch (IOException ex) {
+                values.get(scope).set(next);
                 MCA.LOGGER.error("Cannot create MCA config file {} (error type {})",
                         file, ex.getClass().getSimpleName());
             }
         }
     }
 
-    private static Object normalize(ConfigSchema.Entry<?> entry, Object value) {
+    static Object normalize(ConfigSchema.Entry<?> entry, Object value) {
         Object original = entry.defaultValue();
         if (original instanceof Integer && value instanceof Number number) {
             long candidate = number.longValue();
@@ -154,10 +170,15 @@ public final class FabricTomlConfigBackend implements ConfigBackend {
                 throw new IOException("Refusing to replace malformed or unreadable MCA TOML at " + destination, ex);
             }
         } else document = CommentedConfig.inMemory();
+        for (ConfigSchema.Section section : Config.schema(scope).sections()) {
+            if (section.comment() != null && document.getComment(section.path()) == null)
+                document.setComment(section.path(), section.comment());
+        }
         for (ConfigSchema.Entry<?> entry : Config.schema(scope).entries()) {
             document.set(entry.name(), values.get(scope).get().get(entry.name()));
-            if (entry.comment() != null && document.getComment(entry.name()) == null)
-                document.setComment(entry.name(), entry.comment());
+            String expectedComment = nativeComment(entry);
+            if (expectedComment != null && document.getComment(entry.name()) == null)
+                document.setComment(entry.name(), expectedComment);
         }
         Path temp = Files.createTempFile(destination.getParent(), ".mca-config-", ".tmp");
         try {
@@ -167,5 +188,20 @@ public final class FabricTomlConfigBackend implements ConfigBackend {
                 throw new IOException("Atomic TOML replacement unavailable for " + destination, ex);
             }
         } finally { Files.deleteIfExists(temp); }
+    }
+
+    /** Match ModConfigSpec.Builder#defineInRange comment lines without requiring FCP at runtime. */
+    private static String nativeComment(ConfigSchema.Entry<?> entry) {
+        if (entry.minimum() == null) return entry.comment();
+        Object min = entry.minimum();
+        Object max = entry.maximum();
+        String range;
+        if (min instanceof Integer && max instanceof Integer && max.equals(Integer.MAX_VALUE))
+            range = "> " + min;
+        else if (min instanceof Integer && max instanceof Integer && min.equals(Integer.MIN_VALUE))
+            range = "< " + max;
+        else range = min + " ~ " + max;
+        String suffix = " Default: " + entry.defaultValue() + "\n Range: " + range;
+        return entry.comment() == null ? suffix : entry.comment() + "\n" + suffix;
     }
 }

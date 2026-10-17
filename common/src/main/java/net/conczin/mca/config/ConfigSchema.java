@@ -23,9 +23,13 @@ public final class ConfigSchema {
         public String name() { return String.join(".", path); }
     }
 
+    public record Section(List<String> path, String comment, String translation) {}
+
     private final ConfigScope scope;
     private final LinkedHashMap<String, Entry<?>> definitions = new LinkedHashMap<>();
+    private final LinkedHashMap<List<String>, Section> sections = new LinkedHashMap<>();
     private volatile Map<ConfigValue<?>, Object> remote;
+    private volatile boolean awaitingRemote;
     private volatile boolean loaded;
 
     private ConfigSchema(ConfigScope scope) { this.scope = scope; }
@@ -36,6 +40,8 @@ public final class ConfigSchema {
     public Set<String> paths() { return Collections.unmodifiableSet(definitions.keySet()); }
     public Entry<?> entry(String key) { return definitions.get(key); }
     public Map<String, Entry<?>> definitions() { return Collections.unmodifiableMap(definitions); }
+    public Section section(List<String> path) { return sections.get(path); }
+    public List<Section> sections() { return List.copyOf(sections.values()); }
 
     // A small compatibility view for layout tests and callers that list native spec paths.
     public ValuePaths getValues() { return new ValuePaths(entries()); }
@@ -46,9 +52,24 @@ public final class ConfigSchema {
     }
 
     Object remoteValue(ConfigValue<?> value) {
+        if (awaitingRemote)
+            throw new IllegalStateException("MCA SERVER configuration not yet synchronized");
         Map<ConfigValue<?>, Object> snapshot = remote;
         return snapshot == null ? NO_REMOTE_VALUE : snapshot.getOrDefault(value, NO_REMOTE_VALUE);
     }
+
+    public synchronized void beginRemoteSync() {
+        if (scope != ConfigScope.SERVER) throw new IllegalStateException("Only SERVER settings can be remote");
+        remote = null;
+        awaitingRemote = true;
+    }
+
+    public void completeNativeRemoteSync() {
+        if (scope != ConfigScope.SERVER) throw new IllegalStateException("Only SERVER settings can be remote");
+        awaitingRemote = false;
+    }
+
+    public boolean isAwaitingRemote() { return awaitingRemote; }
 
     public synchronized void applyRemote(Map<String, Object> validatedValues) {
         if (scope != ConfigScope.SERVER) throw new IllegalStateException("Only SERVER settings can be remote");
@@ -60,9 +81,10 @@ public final class ConfigSchema {
             candidate.put(entry.value(), value instanceof List<?> list ? List.copyOf(list) : value);
         }
         remote = Map.copyOf(candidate);
+        awaitingRemote = false;
     }
 
-    public void clearRemote() { remote = null; }
+    public void clearRemote() { remote = null; awaitingRemote = false; }
     public boolean isRemote() { return remote != null; }
     public boolean isLoaded() { return loaded; }
     public void markLoaded() { loaded = true; }
@@ -80,7 +102,14 @@ public final class ConfigSchema {
 
         private Builder(ConfigSchema schema) { this.schema = schema; }
         public ConfigSchema build() { return schema; }
-        public Builder push(String section) { sections.addLast(section); return this; }
+        public Builder push(String section) {
+            sections.addLast(section);
+            List<String> path = List.copyOf(sections);
+            schema.sections.put(path, new Section(path, comment, translation));
+            comment = null;
+            translation = null;
+            return this;
+        }
         public Builder pop() { sections.removeLast(); return this; }
         public Builder comment(String text) { comment = text; return this; }
         public Builder translation(String key) { translation = key; return this; }
