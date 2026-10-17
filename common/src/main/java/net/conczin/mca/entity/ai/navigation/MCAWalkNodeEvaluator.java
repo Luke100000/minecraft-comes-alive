@@ -241,7 +241,8 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         double modeledFloor = this.getFloorLevel(originPos);
         double standingFloor = origin == this.startNode ? this.mob.getBoundingBox().minY
                 : getStandingFloorY(this.currentContext.level(), originPos, this.mob, modeledFloor);
-        if (standingFloor <= modeledFloor + RAISED_START_EPSILON) {
+        if (standingFloor <= modeledFloor + RAISED_START_EPSILON
+                && !isBarrierSupport(this.currentContext.getBlockState(originPos.below()))) {
             return nodeCount;
         }
 
