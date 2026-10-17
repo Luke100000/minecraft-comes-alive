@@ -26,7 +26,8 @@
   "accessWidener": "${mod_id}.classtweaker",
   "mixins": [
     "${mod_id}.mixins.json",
-    "${mod_id}.journeymap.mixins.json"
+    "${mod_id}.journeymap.mixins.json",
+    "${mod_id}.opentogether.mixins.json"
   ],
   "depends": {
     "fabricloader": ">=0.14",
