@@ -10,6 +10,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -96,6 +97,119 @@ public final class FloorScannerGameTests {
                             == Building.validationResult.NOT_IN_BUILDING,
                     "airborne selection crossed a fluid or non-walkable collision barrier");
         }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_stale_ceiling_attachment", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void addedUpperDeckAttachesDespiteStaleGroundFloorCeiling(GameTestHelper helper) {
+        BlockPos min = helper.absolutePos(new BlockPos(5, 2, 5));
+        buildClosedRoom(helper, min, 3, 3);
+        raiseClosedRoomRoof(helper, min, 3, 3, 10);
+        var level = helper.getLevel();
+        BlockPos groundSeed = min.offset(1, 0, 1);
+        BlockPos upstairsSeed = min.offset(2, 6, 1);
+        // The old upper landing was already supported in this column, while the
+        // rest of the registered ground Floor still used the much higher roof.
+        level.setBlock(upstairsSeed.below(), Blocks.STONE.defaultBlockState(), 3);
+        SelectedFloorScanner.Result ground = SelectedFloorScanner.scan(level, groundSeed, 256, 24);
+        helper.assertTrue(ground.result() == Building.validationResult.SUCCESS,
+                "initial lower floor scan failed");
+        helper.assertTrue(ground.floor().cellAt(min.offset(2, 0, 1)).orElseThrow().ceilingY()
+                        == upstairsSeed.getY() - 1,
+                "registered landing must end at the support of the new upper Floor");
+        Structure structure = new Structure(51, groundSeed,
+                List.of(new StructureFloor(0, 0, ground.anchorY(), ground.floor())));
+        Building room = materializedRoom(52, 51, 0,
+                componentAt(BuildingRoomScanner.partition(level, groundSeed, 256, ground), groundSeed));
+        Village village = new Village(1, level);
+        village.registerStructure(structure, room);
+
+        // The player extends the upper deck after registering the downstairs Room.
+        // Other saved lower cells still point at the old roof, masking the new Floor.
+        for (int x = 0; x < 3; x++) {
+            for (int z = 0; z < 3; z++) {
+                level.setBlock(min.offset(x, 5, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        SelectedFloorScanner.Result upstairs = SelectedFloorScanner.scan(level, upstairsSeed, 256, 24);
+        helper.assertTrue(upstairs.result() == Building.validationResult.SUCCESS,
+                "new upper floor scan failed");
+        helper.assertTrue(ground.floor().cells().stream().anyMatch(cell ->
+                        cell.ceilingY() > upstairsSeed.getY()),
+                "fixture must preserve the old high ceiling");
+        helper.assertTrue(village.resolveInteractionPosition(upstairsSeed).isEmpty(),
+                "upstairs source incorrectly borrowed lower Room ownership past its ceiling");
+        RoomScanPlan plan = village.getRoomScanPlan(level, upstairsSeed);
+        helper.assertTrue(plan.mode() == Village.RoomScanMode.ADD_ATTACHMENT
+                        && plan.targetBuildingId() == structure.getLogicalBuildingId(),
+                "new upstairs deck selected " + plan.mode() + " instead of Add Floor");
+        helper.succeed();
+    }
+
+    /** The reported staircase's irregular platform support must not change its Add Floor target. */
+    @GameTest(batch = "mca_floor_second_house_attachment", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void narrowPlatformBesideUpstairsLandingKeepsAttachment(GameTestHelper helper) {
+        BlockPos min = helper.absolutePos(new BlockPos(5, 2, 5));
+        buildClosedRoom(helper, min, 5, 5);
+        raiseClosedRoomRoof(helper, min, 5, 5, 8);
+        var level = helper.getLevel();
+        // The landing columns were already covered when downstairs was registered;
+        // otherwise the old high ceiling incorrectly owns their upstairs air.
+        level.setBlock(min.offset(2, 3, 2), Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(min.offset(3, 3, 2), Blocks.STONE.defaultBlockState(), 3);
+        BlockPos lowerSeed = min.offset(1, 0, 1);
+        SelectedFloorScanner.Result downstairs = SelectedFloorScanner.scan(level, lowerSeed, 256, 24);
+        helper.assertTrue(downstairs.result() == Building.validationResult.SUCCESS,
+                "second-house downstairs floor scan failed");
+        Structure structure = new Structure(51, lowerSeed,
+                List.of(new StructureFloor(0, 0, downstairs.anchorY(), downstairs.floor())));
+        Building room = materializedRoom(52, 51, 0,
+                componentAt(BuildingRoomScanner.partition(level, lowerSeed, 256, downstairs), lowerSeed));
+        Village village = new Village(1, level);
+        village.registerStructure(structure, room);
+
+        // Add the upper storey after downstairs was registered, as in the saved house.
+        for (int x = 0; x < 5; x++) {
+            for (int z = 0; z < 5; z++) {
+                level.setBlock(min.offset(x, 3, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        // A narrow, mod-like platform is locally solid but too thin for the floor scanner's
+        // structural support threshold; the next column is an ordinary walkable landing.
+        BlockPos oddSupport = min.offset(2, 3, 2);
+        level.setBlock(oddSupport, Blocks.IRON_BARS.defaultBlockState(), 3);
+        BlockPos landing = oddSupport.east().above();
+        BlockPos unsupportedSelection = oddSupport.above();
+        helper.assertTrue(SelectedFloorScanner.scan(level, landing, 256, 24).result()
+                        == Building.validationResult.SUCCESS,
+                "neighboring upper landing did not scan");
+        helper.assertTrue(SelectedFloorScanner.scan(level, unsupportedSelection, 256, 24).result()
+                        == Building.validationResult.NOT_IN_BUILDING,
+                "platform selection must reproduce the missing direct scan");
+        RoomScanPlan good = village.getRoomScanPlan(level, landing);
+        helper.assertTrue(good.mode() == Village.RoomScanMode.ADD_ATTACHMENT
+                        && good.targetBuildingId() == structure.getLogicalBuildingId(),
+                "upper landing did not attach to the registered house: " + good.mode());
+        RoomScanPlan adjacent = village.getRoomScanPlan(level, unsupportedSelection);
+        helper.assertTrue(adjacent.mode() == Village.RoomScanMode.ADD_ATTACHMENT
+                        && adjacent.targetBuildingId() == structure.getLogicalBuildingId(),
+                "adjacent narrow platform offered " + adjacent.mode() + " instead of Add Floor");
+
+        // Trace 9 also has a ladder one block above the irregular support; ladder collision
+        // defeats ordinary two-block headroom even though the next landing remains accessible.
+        BlockPos overheadLadder = unsupportedSelection.above();
+        level.setBlock(overheadLadder.south(), Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(overheadLadder,
+                Blocks.LADDER.defaultBlockState().setValue(LadderBlock.FACING, Direction.NORTH), 3);
+        helper.assertTrue(SelectedFloorScanner.scan(level, unsupportedSelection, 256, 24).result()
+                        == Building.validationResult.NOT_IN_BUILDING,
+                "ladder overhead should reproduce the missing direct scan");
+        RoomScanPlan belowLadder = village.getRoomScanPlan(level, unsupportedSelection);
+        helper.assertTrue(belowLadder.mode() == Village.RoomScanMode.ADD_ATTACHMENT
+                        && belowLadder.targetBuildingId() == structure.getLogicalBuildingId(),
+                "stairwell with overhead ladder offered " + belowLadder.mode() + " instead of Add Floor");
         helper.succeed();
     }
 
