@@ -10,6 +10,7 @@ import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.conczin.mca.entity.ai.navigation.TeleportBlockBlacklist;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.behavior.MoveToTargetSink;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -17,6 +18,7 @@ import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
+import net.minecraft.world.phys.AABB;
 
 public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
     private Mob movingEntity;
@@ -166,11 +168,33 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         }
     }
 
-    private static boolean canTeleportTo(ServerLevel world, Mob entity, BlockPos pos) {
+    static boolean canTeleportTo(ServerLevel world, Mob entity, BlockPos pos) {
+        // Probe exactly where teleportTo() will place the feet and body. Moving
+        // by block-position deltas retains the mob's original fractional offset
+        // and can miss a narrow collision at the destination center.
+        AABB landingBox = entity.getBoundingBox().move(
+                pos.getX() + 0.5D - entity.getX(),
+                pos.getY() - entity.getY(),
+                pos.getZ() + 0.5D - entity.getZ()
+        );
+        // Path-type classification examines neighboring blocks and collision
+        // can cross the destination chunk boundary. Check the entire probe
+        // region before a world read that could load a distant chunk.
+        int minChunkX = Math.min(pos.getX() - 1, Mth.floor(landingBox.minX)) >> 4;
+        int maxChunkX = Math.max(pos.getX() + 1, Mth.floor(landingBox.maxX)) >> 4;
+        int minChunkZ = Math.min(pos.getZ() - 1, Mth.floor(landingBox.minZ)) >> 4;
+        int maxChunkZ = Math.max(pos.getZ() + 1, Mth.floor(landingBox.maxZ)) >> 4;
+        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+                if (world.getChunkSource().getChunkNow(chunkX, chunkZ) == null) {
+                    return false;
+                }
+            }
+        }
         if (WalkNodeEvaluator.getPathTypeStatic(entity, pos.mutable()) != PathType.WALKABLE
                 || TeleportBlockBlacklist.isBlocked(world.getBlockState(pos.below()))) {
             return false;
         }
-        return world.noCollision(entity, entity.getBoundingBox().move(pos.subtract(entity.blockPosition())));
+        return world.noCollision(entity, landingBox);
     }
 }

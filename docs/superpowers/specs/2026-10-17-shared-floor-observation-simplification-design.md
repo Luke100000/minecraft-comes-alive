@@ -1,0 +1,228 @@
+# Shared floor observation without behavior or code-size growth
+
+Date: 2026-10-17. Status: proposed; awaiting review of this written specification.
+
+## Intent and success criteria
+
+Reduce floor-scanner complexity while keeping the current behavior and keeping
+production Java LOC at or below the implementation baseline. The user approved
+writing this specification and identified shared observation as the likely first
+cleanup. Implementation and an implementation plan are not yet approved.
+
+Success means fewer independent physical probes and repeated attachment checks,
+with unchanged geometry, ownership, action selection, validation and persistence.
+A transfer of methods between files alone does not meet the complexity goal.
+
+Work is scoped to `dev/1.21.1`, Minecraft 1.21.1, Java 21. The checkout is
+`C:/Users/Mik/Downloads/MCA/minecraft-comes-alive-1.21.1-floor-clean-squash`.
+No WSL or new worktrees. Preserve all existing tracked and untracked work.
+
+## Source baseline and historical decisions
+
+At drafting time HEAD is `3c89a0f1b` (Scanner fixes). The working tree also contains
+ongoing scanner corrections, house reconstructions and unrelated navigation
+work. HEAD alone is not the baseline for this refactor. Before implementation,
+establish that the other work has settled, capture the exact relevant source
+contents and hashes, and verify the affected regression suites on that state.
+Do not overwrite or absorb another agent's changes. If that state changes during
+implementation or verification, reconcile ownership and establish which source
+was actually tested before making equivalence or LOC claims.
+
+The September 16 ownership design, September 17 selected-floor simplification,
+September 19 boundary-semantics amendment (in the September 18-named file), and
+October 5 floor-regions design provide context. Later amendments and the current
+verified behavior take precedence over superseded drafts. Do not combine all
+historical designs into a new set of requirements.
+
+Preserve the current distinctions between exact structural membership, walking
+clearance, transition ownership, semantic floor numbering and saved identity.
+The furniture, staircase and stale-ceiling corrections are baseline behaviors,
+not candidates for reversal merely to reduce lines.
+
+## Concrete duplication to remove
+
+`SelectedFloorScanner.Observation` owns operation-local ceiling and surface
+evidence. `StructureScanner.resolveAttachmentSeed` creates that observation,
+but returns only the selected result. Some handoff checks create separate
+`FloorCeilingResolver` instances rather than sharing the existing observation.
+
+`StructureScanner.FloorObservation` currently carries the selected result and
+vertical connector connections. `RoomScanPlanner` passes those to
+`Village.selectAttachmentTarget`, where a new ceiling resolver and calls to
+`SelectedFloorScanner.inspectSurfaceCell` gather additional live-world evidence.
+The same live-contact relationship can then be checked during overlap rejection
+and target selection through separate loops.
+
+This creates a useful, narrow consolidation target. It does not establish that
+the current behavior is wrong, or that all handoff branches are redundant.
+
+## Proposed ownership and data flow
+
+One selected-floor operation owns the physical observation used for selection,
+necessary handoff probes and live attachment-contact evidence. Reuse the existing
+observation and caches; do not add a parallel scanner or retained world snapshot.
+
+`StructureScanner.observeFloor` retains that operation's observation while
+resolving the selected result. Seed/handoff helpers consume the same observation
+where they currently sample the same physical predicates. Their candidate
+ordering, precedence, ambiguity checks and acceptance predicates stay unchanged.
+Entry points with intentionally different policies, such as new-structure and
+reported-structure scans, retain their existing ordering and validation.
+
+After successful selection, gather the live structural-contact relationships
+needed to compare the candidate with relevant persisted floors. Reuse exact
+overlapping columns and the observation's ceiling/surface predicates. Record each
+candidate-to-persisted-floor live-contact result once for reuse by attachment
+validation and selection. Do not scan those persisted floors again, recursively
+discover adjacent storeys, or build a whole-building graph.
+
+Extend the existing `FloorObservation` with the minimum immutable contact data
+required by its consumer. Prefer an existing structure/floor relation carrier
+where it expresses the relationship without adding another public model. The
+data identifies observed contact with a particular saved floor; it does not
+grant ownership or select a winning building. It must not contain a world-reading
+callback or expose mutable caches. Treat the result as operation-local evidence,
+never as authority across a later confirmation or mutation.
+
+`Village` retains saved identity, overlap policy, candidate ranking and target
+selection. Its attachment path consumes the captured live-contact facts instead
+of performing fresh physical ceiling/support probes. Pure comparisons of stored
+geometry remain legitimate there. `RoomScanPlanner` projects the result into the
+existing action and prospective floor number.
+
+Fresh confirmation/commit validation remains authoritative. Sharing an observation
+within an operation must not reuse stale evidence from an earlier analysis after
+the world or registered structures change. Preserve current world-thread ownership.
+
+## Evidence distinctions that must survive
+
+There are three different inputs to attachment:
+
+| Input | Meaning | Required boundary |
+| --- | --- | --- |
+| Vertical connectors and scanner stair-transition matches | Explicit connection to a saved floor | Preserve the existing connection set and its precedence. |
+| Contact inferred from stored exact geometry | Existing interval/shell evidence | Preserve current formulas, ranking and rejection behavior. |
+| Contact verified in the current world | A live ceiling/support relationship, including stale saved ceilings | Keep separate from explicit connections. |
+
+Do not append live-contact relationships to `verticalConnections` or the merged
+explicit connection set. Currently live contact can excuse otherwise unproven
+overlap only when the explicit connection set is empty. Explicit connection to
+one floor can also permit certain distinct-band overlap within the same logical
+building. Treating all contact as one generic connection would broaden those
+permissions and violate behavior preservation.
+
+Preserve the precise live-contact predicate: choose lower/upper cells in the same
+column, require the current lower ceiling to equal the upper supporting block's
+Y, and require the existing lower surface inspection to succeed. Stored interval
+meeting and stored shell touching are separate predicates with different formulas;
+do not normalize them into an assumed universal touching rule.
+
+With no world, live contact is absent. Existing geometry-only/JUnit paths must
+retain their results without a fabricated world or changed inference rules.
+Update callers together rather than leaving a second implementation as a
+compatibility path. Immutable absent evidence is sufficient where appropriate.
+
+## Preserved behavior and exclusions
+
+- Preserve exact floor cells and ceilings, selected seed, supported-source
+  meaning, canonical anchors, transitions, vertical boundaries and adjacent seeds.
+- Preserve structural membership below furniture separately from clearance over
+  its actual top. Retain the chest/eaves correction and bed regressions.
+- Preserve stair halves, turning landings, short storeys, bounded label grouping,
+  door facing/ownership, trapdoor halves and ladder-exit contracts.
+- Preserve all existing room/building/floor identities and floor numbers, saved
+  fields, inheritance, overlap checks and atomic publication boundaries.
+- Preserve accepted and rejected attachment targets, ranking, tie rejection,
+  existing validation results and fallback ordering.
+- Preserve radius/size limits, operation-local caching and lazy selected-floor
+  discovery. Contact collection is limited to relevant overlapping saved floors;
+  do not inspect unrelated floors or do work on an early-return path that needs
+  no fresh observation. Do not claim a performance gain without measurements.
+
+Manual building selection, new ambiguity UI, new failure/result types, changes
+to existing Add Building fallthroughs, save repair/migration, renumbering,
+navigation changes and forward ports are outside this spec. A mismatch between
+old prose and current behavior is a separate decision, not permission to change
+the outcome during this refactor. A newly exposed bug needs its own reproduction
+and scope decision.
+
+## Deletion and LOC budget
+
+Expected production files are `SelectedFloorScanner.java`, `StructureScanner.java`,
+`Village.java` and `RoomScanPlanner.java`. Touch `FloorCeilingResolver.java` only
+if a smaller shared query requires it. Avoid new production files, generic
+evidence frameworks, pass-through service layers and broad renames.
+
+Required deletion targets are the attachment-local ceiling resolver and physical
+world-probe implementation in `Village`, duplicate live-contact iteration, and
+separate resolver allocations for handoff checks covered by the shared operation.
+Keep one implementation of the live-contact predicate. Delete helpers that become
+unused; do not retain old and new paths behind a switch.
+
+The hard size gate is aggregate physical production Java lines across every file
+changed by this refactor: final minus baseline must be at most zero. Count every
+new production Java file in full. Record per-file and aggregate deltas against the
+captured source baseline, including the already-present fixes; do not compare
+only against HEAD. A receiving file may grow while the former owner shrinks.
+This aggregate rule is the budget for this task; the historical per-file budget
+belonged to its earlier cleanup.
+
+Report nonblank production lines as an additional check. Do not meet the physical
+line budget by compressing statements, deleting useful explanations, moving logic
+into resources, or hiding complexity in abstractions. Tests and this document are
+reported separately and cannot offset production growth. Do not delete behavioral
+coverage to make the totals look smaller.
+
+If shared observation cannot eliminate enough duplicated work/code to meet the
+budget cleanly, stop at the measured proposal and discuss a smaller cleanup.
+Changing gameplay or adding a replacement framework is not an allowed escape.
+
+## Verification and acceptance
+
+Establish a passing baseline for the affected tests after concurrent fixes settle.
+The primary proof is unchanged behavioral assertions before and after the refactor.
+For representative fixtures, compare exact cells/ceilings, anchors, seeds,
+transition/boundary evidence, actions, target IDs, prospective numbers and commit
+results. Use deterministic ordering for comparisons; do not assert hash iteration
+order. Do not keep a second production implementation for differential testing.
+
+Required coverage includes:
+
+- Chest/eaves enclosure, bed-top selection, furniture footprint and low clearance.
+- Reported staircase houses, including downstairs registration, upper selection,
+  successful attachment/commit and unchanged downstairs room identity.
+- Stale lower ceilings after adding an upstairs deck and irregular/ladder-adjacent
+  selection, using the existing regressions.
+- Explicit connector and stair attachments, external basement contact, detached
+  floors, unproven overlap, already-registered copies and equally plausible targets.
+- An explicit connection combined with live contact to another floor/building,
+  verifying that the existing overlap restrictions are not relaxed. Add a focused
+  characterization fixture if the baseline does not already cover this distinction.
+- Geometry-only/no-world attachment paths and revalidation after analysis when
+  relevant world evidence or saved ownership changes.
+
+Use the existing common JUnit lane for geometry/policy and NeoForge GameTests for
+world collision and registration. Run relevant common tests first, then the floor
+scanner and affected house classes. The existing selector is
+`-PmcaGameTest=ClassName` or `-PmcaGameTest=ClassName#methodName` with
+`:neoforge:runGameTestServer`. Compile common and both loaders, run the full common
+tests and one final full NeoForge GameTest integration run before calling the
+implementation ready. Diagnose failures against the captured baseline; do not
+rewrite assertions to accommodate changed outcomes.
+
+Completion requires all of the following: the affected behavior remains equal,
+`Village` no longer gathers live physical evidence during attachment selection,
+the selected operation shares its relevant physical observation, obsolete probes
+and helpers are removed, production LOC does not increase, and unrelated work is
+preserved. Report source state and executed tests with the LOC comparison.
+
+Source-level equivalence and 1.21.1 GameTests do not establish live behavior on the
+modded 26.3 server. That remains a separately reported verification boundary.
+
+## Review and handoff
+
+Review this written specification before creating an implementation plan. Written
+spec approval permits planning; implementation follows review of that plan and
+the user's choice of execution method. This document authorizes no product edits,
+forward ports, world changes, pushes or concurrent test runs against another
+agent's active build directory.
