@@ -22,6 +22,18 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
     private Mob movingEntity;
 
     @Override
+    protected boolean checkExtraStartConditions(ServerLevel world, Mob entity) {
+        WalkTarget target = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        // Durable intent survives a jump; unavailable native search must not begin its failure episode.
+        if (target != null && target.getTarget() instanceof PersistentPathTarget
+                && entity.getNavigation() instanceof MCAGroundPathNavigation navigation
+                && !navigation.canUpdatePath()) {
+            return false;
+        }
+        return super.checkExtraStartConditions(world, entity);
+    }
+
+    @Override
     protected boolean timedOut(long gameTime) {
         if (!super.timedOut(gameTime)) {
             return false;

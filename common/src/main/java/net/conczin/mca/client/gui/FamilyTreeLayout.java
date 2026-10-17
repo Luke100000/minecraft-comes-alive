@@ -1,6 +1,5 @@
 package net.conczin.mca.client.gui;
 
-import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.network.FamilyTreeView;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import org.jetbrains.annotations.Nullable;
@@ -206,21 +205,14 @@ final class FamilyTreeLayout {
             FamilyTreeNode father = nodes.get(child.father());
             FamilyTreeNode mother = nodes.get(child.mother());
             if (father == null || mother == null || father.id().equals(mother.id())
-                    || !isUnpairedGeneratedParent(father, child.id())
-                    || !isUnpairedGeneratedParent(mother, child.id())) {
+                    || !father.isUnpairedGeneratedParentOf(child.id())
+                    || !mother.isUnpairedGeneratedParentOf(child.id())) {
                 continue;
             }
             partners.put(father.id(), mother.id());
             partners.put(mother.id(), father.id());
         }
         return partners;
-    }
-
-    private static boolean isUnpairedGeneratedParent(FamilyTreeNode node, UUID childId) {
-        return node.probablyGenerated()
-                && node.children().contains(childId)
-                && !FamilyTreeNode.isValid(node.partner())
-                && node.getRelationshipState() == RelationshipState.SINGLE;
     }
 
     private static Map<UUID, Integer> ancestorBranchWidths(
