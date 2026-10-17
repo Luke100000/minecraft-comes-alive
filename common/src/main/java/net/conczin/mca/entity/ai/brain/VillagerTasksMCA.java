@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.mojang.datafixers.util.Pair;
 import net.conczin.mca.Config;
+import net.conczin.mca.MCA;
 import net.conczin.mca.entity.EquipmentSet;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.ActivitiesMCA;
@@ -27,7 +28,6 @@ import net.conczin.mca.registry.ProfessionsMCA;
 import net.conczin.mca.server.world.data.VillageManager;
 import net.conczin.mca.server.world.data.villageComponents.VillageGuardsManager;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.MobCategory;
@@ -560,11 +560,16 @@ public class VillagerTasksMCA {
     }
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getMeetPackage(float speedModifier) {
+        var socializingTasks = ImmutableList.<Pair<? extends BehaviorControl<? super VillagerEntityMCA>, Integer>>builder()
+                .add(Pair.of(StrollAroundPoi.create(MemoryModuleType.MEETING_POINT, 0.4F, 40), 2))
+                .add(Pair.of(SocializeAtBell.create(), 2));
+
+        if (MCA.platformHelper.isModLoaded("immersive_melodies")) {
+            socializingTasks.add(Pair.of(new PlayImmersiveMelodyTask(), 1));
+        }
+
         return ImmutableList.of(
-                Pair.of(2, new RunOne<>(ImmutableList.of(
-                        Pair.of(StrollAroundPoi.create(MemoryModuleType.MEETING_POINT, 0.4F, 40), 2),
-                        Pair.of(SocializeAtBell.create(), 2))
-                )),
+                Pair.of(2, new RunOne<>(socializingTasks.build())),
                 Pair.of(10, new ShowTradesToPlayer(400, 1600)),
                 Pair.of(10, SetLookAndInteract.create(EntityType.PLAYER, 4)),
                 Pair.of(2, SetWalkTargetFromBlockMemory.create(MemoryModuleType.MEETING_POINT, speedModifier, 6, 100, 200)),

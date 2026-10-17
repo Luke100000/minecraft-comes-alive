@@ -18,6 +18,7 @@ import net.conczin.mca.resources.data.skin.HairStyle;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
+import net.conczin.mca.util.InventoryUtils;
 import net.conczin.mca.util.network.datasync.*;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
@@ -658,7 +659,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             converted.setCanPickUpLoot(source.canPickUpLoot());
             for (EquipmentSlot slot : EquipmentSlot.values()) {
                 ItemStack stack = source.getItemBySlot(slot);
-                if (!stack.isEmpty()) {
+                if (!stack.isEmpty() && !InventoryUtils.isTemporary(stack)) {
                     converted.setItemSlot(slot, stack.copyAndClear());
                     converted.setDropChance(slot, (float) dropChanceGetter.applyAsDouble(slot));
                 }

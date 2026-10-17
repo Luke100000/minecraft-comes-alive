@@ -21,6 +21,8 @@ import java.util.function.UnaryOperator;
 public interface DataComponentsMCA {
     Map<ResourceLocation, DataComponentType<?>> COMPONENTS = new HashMap<>();
 
+    DataComponentType<Boolean> TEMPORARY = register("temporary", (b) -> b.persistent(Codec.BOOL).networkSynchronized(ByteBufCodecs.BOOL));
+
     DataComponentType<GlobalPos> TRACKER_POS = register("tracker_pos", (b) -> b.persistent(GlobalPos.CODEC).networkSynchronized(GlobalPos.STREAM_CODEC));
     DataComponentType<String> TRACKER_NAME = register("tracker_name", (b) -> b.persistent(Codec.STRING).networkSynchronized(ByteBufCodecs.STRING_UTF8));
     DataComponentType<UUID> TRACKER_UUID = register("tracker_uuid", (b) -> b.persistent(UUIDUtil.CODEC).networkSynchronized(UUIDUtil.STREAM_CODEC));

@@ -33,3 +33,10 @@ type = "required"
 versionRange = "${minecraft_version_range}"
 ordering = "NONE"
 side = "BOTH"
+
+[[dependencies.${ mod_id }]]
+modId = "immersive_melodies"
+type = "optional"
+versionRange = "[${immersive_melodies_version},)"
+ordering = "AFTER"
+side = "BOTH"

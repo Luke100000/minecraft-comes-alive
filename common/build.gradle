@@ -70,6 +70,7 @@ neoForge {
 
 
 dependencies {
+    compileOnly "net.conczin:immersive_melodies:${immersive_melodies_version}+${minecraft_version}+common"
     compileOnly 'org.spongepowered:mixin:0.8.7'
     // Loader modules provide the runtime; common only needs the API and processor.
     compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:${mixin_extras_version}"))
