@@ -122,10 +122,13 @@ public class SkinExporter {
         if (MCA.isBlankString(identifier)) {
             return null;
         }
-        if (identifier.startsWith("immersive_library:")) {
-            return SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(18)));
+        if (SkinCache.isLibraryIdentifier(identifier)) {
+            return SkinCache.resolveTextureIdentifier(identifier);
         }
-        ResourceLocation id = ResourceLocation.parse(identifier);
+        ResourceLocation id = ResourceLocation.tryParse(identifier);
+        if (id == null) {
+            return null;
+        }
         ResourceLocation variantId = ResourceLocation.fromNamespaceAndPath(id.getNamespace(), id.getPath().replace("normal", variant));
         return Minecraft.getInstance().getResourceManager().getResource(variantId).isPresent() ? variantId : id;
     }
@@ -148,16 +151,17 @@ public class SkinExporter {
     }
 
     private static ResourceLocation getLibraryOrResourceIdentifier(String identifier) {
-        return identifier.startsWith("immersive_library:")
-                ? SkinCache.getTextureIdentifier(Integer.parseInt(identifier.substring(18)))
-                : ResourceLocation.parse(identifier);
+        return SkinCache.resolveTextureIdentifier(identifier);
     }
 
     private static ResourceLocation getOverlayIdentifier(String identifier) {
-        if (identifier.startsWith("immersive_library:") || !identifier.endsWith(".png")) {
+        if (SkinCache.isLibraryIdentifier(identifier) || !identifier.endsWith(".png")) {
             return null;
         }
-        ResourceLocation id = ResourceLocation.parse(identifier);
+        ResourceLocation id = ResourceLocation.tryParse(identifier);
+        if (id == null) {
+            return null;
+        }
         ResourceLocation overlay = ResourceLocation.fromNamespaceAndPath(id.getNamespace(), id.getPath().replace(".png", "_overlay.png"));
         return Minecraft.getInstance().getResourceManager().getResource(overlay).isPresent() ? overlay : null;
     }

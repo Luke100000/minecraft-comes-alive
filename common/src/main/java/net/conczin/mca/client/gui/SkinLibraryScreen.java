@@ -5,13 +5,13 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
+import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.gui.immersive_library.*;
 import net.conczin.mca.client.gui.immersive_library.responses.*;
 import net.conczin.mca.client.gui.immersive_library.types.Content;
 import net.conczin.mca.client.gui.immersive_library.types.LiteContent;
 import net.conczin.mca.client.gui.immersive_library.types.User;
 import net.conczin.mca.client.gui.widget.*;
-import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.client.resources.*;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
@@ -128,7 +128,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             this.villagerVisualization.readAdditionalSaveData(saveEntityData(villagerVisualization));
         } else {
             assert Minecraft.getInstance().player != null;
-            VillagerLike<?> villagerLike = CommonVillagerModel.getVillager(Minecraft.getInstance().level, Minecraft.getInstance().player.getUUID());
+            VillagerLike<?> villagerLike = MCAClient.resolveVillager(Minecraft.getInstance().player);
             if (villagerLike instanceof VillagerEntityMCA villager) {
                 this.villagerVisualization.readAdditionalSaveData(saveEntityData(villager));
             }
@@ -652,11 +652,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 } else {
                     if (hoveredContent.hasTag("clothing")) {
                         var villager = previousScreen.getVillager();
-                        villager.setClothes("immersive_library:" + hoveredContent.contentid());
+                        villager.setClothes(SkinCache.libraryIdentifier(hoveredContent.contentid()));
                         previousScreen.markClothingSelected();
                         returnToPreviousScreen();
                     } else if (hoveredContent.hasTag("hair")) {
-                        previousScreen.applyLibraryHair("immersive_library:" + hoveredContent.contentid());
+                        previousScreen.applyLibraryHair(SkinCache.libraryIdentifier(hoveredContent.contentid()));
                         returnToPreviousScreen();
                     }
                 }
@@ -1244,7 +1244,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         List<TooltipButtonWidget> widgets = new LinkedList<>();
 
         // subscribe
-        if (canEditServerWideContent()) {
+        if (canEditServerWideContent() || (Config.getServerConfig().allowEveryoneToAddContentGlobally
+                && getServerContentById(content.contentid()).isEmpty())) {
             widgets.add(new ToggleableTooltipIconButtonWidget(0, 0, 0, 3 * 16,
                     getServerContentById(content.contentid()).isPresent(),
                     Component.translatable("gui.skin_library.subscribe"),
@@ -1363,9 +1364,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private Optional<SkinListEntry> toListEntry(LiteContent content) {
         return SkinCache.getMeta(content).map(meta -> {
             if (content.hasTag("clothing")) {
-                return new Clothing("immersive_library:" + content.contentid(), meta.getProfession(), meta.getTemperature(), false, meta.getGender());
+                return new Clothing(SkinCache.libraryIdentifier(content.contentid()), meta.getProfession(), meta.getTemperature(), false, meta.getGender());
             } else {
-                return new Hair("immersive_library:" + content.contentid());
+                return new Hair(SkinCache.libraryIdentifier(content.contentid()));
             }
         });
     }
@@ -1820,14 +1821,12 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     private <T> void addServerContent(Map<String, T> map, String type) {
         for (Map.Entry<String, T> entry : map.entrySet()) {
-            if (entry.getKey().startsWith("immersive_library:")) {
-                try {
-                    int contentid = Integer.parseInt(entry.getKey().substring(18));
+            if (SkinCache.isLibraryIdentifier(entry.getKey())) {
+                Integer contentid = SkinCache.getContentId(entry.getKey());
+                if (contentid != null) {
                     serverContent.add(getContentById(contentid).orElse(new LiteContent(
                             contentid, -1, "unknown", -1, Set.of(type), "unknown", -1
                     )));
-                } catch (NumberFormatException ignored) {
-                    //nop
                 }
             }
         }
