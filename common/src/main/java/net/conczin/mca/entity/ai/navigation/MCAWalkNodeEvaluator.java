@@ -458,10 +458,50 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
 
     private int addClimbableNode(Node[] nodes, int nodeCount, BlockPos pos) {
         Node node = getClimbableNode(pos);
-        if (!node.closed && nodeCount < nodes.length) {
+        // Unlike a walking node, a suspended climb node has no supporting floor:
+        // the mob's feet must actually reach this node's Y, not the last ground
+        // surface reported by getFloorLevel below it.
+        if (!node.closed && hasClimbableBodyClearance(node) && nodeCount < nodes.length) {
             nodes[nodeCount++] = node;
         }
         return nodeCount;
+    }
+
+    private boolean hasClimbableBodyClearance(Node node) {
+        AABB box = getMobBoxAt(node);
+        double climbFeetY = node.y + FLOOR_EPSILON;
+        if (box.minY < climbFeetY) {
+            box = box.move(0.0D, climbFeetY - box.minY, 0.0D);
+        }
+        if (this.currentContext.getBlockState(this.collisionPos.set(node.x, node.y, node.z))
+                .is(Blocks.SCAFFOLDING)) {
+            return hasScaffoldingClimbClearance(node, box);
+        }
+        return hasExactBlockClearance(box);
+    }
+
+    private boolean hasScaffoldingClimbClearance(Node node, AABB box) {
+        // Scaffold platforms and frames may be passed while climbing/descending.
+        // Ignore only this column's scaffolding, not a roof or another obstacle.
+        for (int x = floorMin(box.minX); x <= floorMax(box.maxX); x++) {
+            for (int y = floorMin(box.minY); y <= floorMax(box.maxY); y++) {
+                for (int z = floorMin(box.minZ); z <= floorMax(box.maxZ); z++) {
+                    BlockPos pos = this.collisionPos.set(x, y, z);
+                    BlockState state = this.currentContext.getBlockState(pos);
+                    if (state.isAir() || state.is(Blocks.SCAFFOLDING)
+                            && x == node.x && z == node.z) {
+                        continue;
+                    }
+                    VoxelShape shape = state.getCollisionShape(
+                            this.currentContext.level(), pos, CollisionContext.of(this.mob));
+                    if (!shape.isEmpty() && Shapes.joinIsNotEmpty(
+                            Shapes.create(box.move(-x, -y, -z)), shape, BooleanOp.AND)) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
     }
 
     private Node getClimbableNode(BlockPos pos) {

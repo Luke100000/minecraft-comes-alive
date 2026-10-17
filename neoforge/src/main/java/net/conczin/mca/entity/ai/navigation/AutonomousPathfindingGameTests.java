@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai.navigation;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import net.conczin.mca.MCA;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
@@ -9,12 +10,17 @@ import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTask;
 import net.conczin.mca.entity.ai.brain.tasks.SmarterOpenDoorsTask;
 import net.conczin.mca.entity.ai.brain.tasks.WanderOrTeleportToTargetTask;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.Brain;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -25,8 +31,16 @@ import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.entity.schedule.ScheduleBuilder;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.FenceGateBlock;
+import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.Half;
+import net.minecraft.world.level.gameevent.BlockPositionSource;
+import net.minecraft.world.level.gameevent.DynamicGameEventListener;
+import net.minecraft.world.level.gameevent.GameEvent;
+import net.minecraft.world.level.gameevent.GameEventListener;
+import net.minecraft.world.level.gameevent.PositionSource;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -48,6 +62,10 @@ import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath;
 public final class AutonomousPathfindingGameTests {
     private static final String DETOUR_BATCH = "mca_autonomous_live_detour";
     private static final String GATE_BATCH = "mca_autonomous_closed_gate";
+    private static final String ENCLOSED_GATE_BATCH = "mca_autonomous_enclosed_gate_exit";
+    private static final String DECORATIVE_GATE_BATCH = "mca_autonomous_decorative_raised_gate";
+    private static final String WALL_GATE_BATCH = "mca_autonomous_wall_gate_approaches";
+    private static final String SLOW_HEAD_GATE_BATCH = "mca_autonomous_slow_head_gate";
     private static final String SEGMENT_BATCH = "mca_autonomous_progressive_segments";
     private static final String BOUNDED_DETOUR_BATCH = "mca_autonomous_bounded_detour";
     private static final String LONG_CORRIDOR_BATCH = "mca_autonomous_long_corridor";
@@ -55,6 +73,7 @@ public final class AutonomousPathfindingGameTests {
     private static final Set<VillagerEntityMCA> VILLAGERS = new HashSet<>();
     private static final Map<BlockPos, BlockState> ORIGINAL_BLOCKS = new LinkedHashMap<>();
     private static final Set<ChunkPos> FORCED_CHUNKS = new HashSet<>();
+    private static final Set<DynamicGameEventListener<GameEventListener>> GATE_LISTENERS = new HashSet<>();
     private static Boolean originalGateConfig;
     private static Integer originalPathDistance;
     private static Boolean originalTeleportConfig;
@@ -265,6 +284,361 @@ public final class AutonomousPathfindingGameTests {
         });
     }
 
+    @GameTest(batch = ENCLOSED_GATE_BATCH, templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 650)
+    public static void villagerEscapesEnclosedYardThroughOnlyFenceGate(GameTestHelper helper) {
+        testEnclosedGateExit(helper, false);
+    }
+
+    @GameTest(batch = ENCLOSED_GATE_BATCH, templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 650)
+    public static void villagerEscapesEnclosedYardThroughOnlyGateOnSlab(GameTestHelper helper) {
+        testEnclosedGateExit(helper, true);
+    }
+
+    private static void testEnclosedGateExit(GameTestHelper helper, boolean gateOnSlab) {
+        BlockPos start = helper.absolutePos(new BlockPos(7, 1, 7));
+        BlockPos target = start.east(7);
+        BlockPos entrance = start.east(3);
+        BlockPos gate = gateOnSlab ? entrance.above() : entrance;
+        rememberArea(helper.getLevel(), start.east(2), 9);
+        prepareFlatArea(helper, start.east(2), 9, 5);
+
+        // A three-block-high perimeter with a single one-block-wide doorway.
+        // No diagonal gap, alternative path or teleport can bypass the gate.
+        for (int x = -3; x <= 3; x++) {
+            for (int z = -3; z <= 3; z++) {
+                if (Math.abs(x) != 3 && Math.abs(z) != 3) {
+                    continue;
+                }
+                BlockPos wall = start.offset(x, 0, z);
+                for (int y = 0; y < 3; y++) {
+                    if (x == 3 && z == 0 && (gateOnSlab || y > 0)) {
+                        continue;
+                    }
+                    helper.getLevel().setBlock(wall.above(y), Blocks.STONE.defaultBlockState(), 3);
+                }
+            }
+        }
+        if (gateOnSlab) {
+            helper.getLevel().setBlock(entrance, Blocks.OAK_SLAB.defaultBlockState(), 3);
+        }
+        helper.getLevel().setBlock(gate, Blocks.OAK_FENCE_GATE.defaultBlockState()
+                .setValue(FenceGateBlock.FACING, net.minecraft.core.Direction.EAST), 3);
+
+        enableFenceGateMovementWithoutTeleporting();
+
+        VillagerEntityMCA villager = spawnAutonomousVillager(helper, start, target, 0.7F, true);
+        long started = helper.getLevel().getGameTime();
+        boolean[] lastOpen = {false};
+        boolean[] sawOpen = {false};
+        boolean[] crossedGate = {false};
+        int[] gateTransitions = {0};
+        Vec3[] lastPosition = {villager.position()};
+        helper.onEachTick(() -> {
+            long elapsed = helper.getLevel().getGameTime() - started;
+            Vec3 current = villager.position();
+            helper.assertTrue(current.distanceTo(lastPosition[0]) < 2.0D,
+                    "villager moved without walking through the enclosed yard");
+            lastPosition[0] = current;
+
+            boolean open = helper.getLevel().getBlockState(gate).getValue(BlockStateProperties.OPEN);
+            if (open != lastOpen[0]) {
+                gateTransitions[0]++;
+                lastOpen[0] = open;
+            }
+            sawOpen[0] |= open;
+            helper.assertTrue(gateTransitions[0] <= 4,
+                    "gate repeatedly opened/closed without the villager exiting: "
+                            + gateTransitions[0] + " transitions, pos=" + current);
+
+            crossedGate[0] |= current.x > gate.getX() + 1.2D
+                    && Math.abs(current.z - gate.getZ() - 0.5D) < 0.8D;
+            if (villager.blockPosition().closerThan(target, 2.0D)) {
+                helper.assertTrue(sawOpen[0] && crossedGate[0],
+                        "villager bypassed the only gate instead of passing through it");
+                helper.assertTrue(PathRequestDiagnostics.snapshot(villager).sinkRequests() > 0,
+                        "the villager never used its Brain movement path");
+                helper.succeed();
+            }
+            if (elapsed >= 600L) {
+                helper.fail("villager never exited the enclosed yard through "
+                        + (gateOnSlab ? "the raised gate on a slab" : "the normal gate")
+                        + "; pos=" + current + ", gateOpened=" + sawOpen[0]
+                        + ", toggles=" + gateTransitions[0]
+                        + ", path=" + villager.getNavigation().getPath());
+            }
+        });
+    }
+
+    @GameTest(batch = DECORATIVE_GATE_BATCH, templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 850)
+    public static void villagerDoesNotSpamDecorativeGateOnUpsideDownStairAndLeaves(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(8, 1, 8));
+        BlockPos wall = start.east(3);
+        BlockPos target = start.east(7);
+        BlockPos stair = wall.above();
+        BlockPos gate = stair.above();
+        rememberArea(helper.getLevel(), start.east(3), 12);
+        prepareFlatArea(helper, start.east(3), 12, 5);
+
+        // Exact relative layout: one leaf at (x,y), an upside-down stair at
+        // (x+1,y+1), and a closed vanilla fence gate at (x+1,y+2).
+        // The villager may cross the gate or go around the ends of the wall.
+        for (int z = -4; z <= 4; z++) {
+            BlockPos column = wall.offset(0, 0, z);
+            helper.getLevel().setBlock(column, Blocks.ACACIA_PLANKS.defaultBlockState(), 3);
+            helper.getLevel().setBlock(column.above(), Blocks.ACACIA_STAIRS.defaultBlockState()
+                    .setValue(StairBlock.FACING, Direction.WEST)
+                    .setValue(StairBlock.HALF, Half.TOP), 3);
+            helper.getLevel().setBlock(column.above(2), z == 0
+                    ? Blocks.OAK_FENCE_GATE.defaultBlockState().setValue(FenceGateBlock.FACING, Direction.WEST)
+                    : Blocks.CHERRY_FENCE.defaultBlockState(), 3);
+        }
+        BlockPos leaf = stair.west().below();
+        helper.getLevel().setBlock(leaf, Blocks.OAK_LEAVES.defaultBlockState(), 3);
+        helper.assertTrue(stair.equals(leaf.east().above()) && gate.equals(leaf.east().above(2)),
+                "fixture must have leaf (x,y), upside-down stair (x+1,y+1), gate (x+1,y+2)");
+
+        enableFenceGateMovementWithoutTeleporting();
+
+        VillagerEntityMCA villager = spawnAutonomousVillager(helper, start, target, 0.7F, true);
+        long started = helper.getLevel().getGameTime();
+        boolean[] lastOpen = {false};
+        int[] gateTransitions = {0};
+        boolean[] gateWasOpened = {false};
+        boolean[] approachedGate = {false};
+        Vec3[] lastPosition = {villager.position()};
+        helper.onEachTick(() -> {
+            long elapsed = helper.getLevel().getGameTime() - started;
+            Vec3 position = villager.position();
+            helper.assertTrue(position.distanceTo(lastPosition[0]) < 2.0D,
+                    "villager teleported rather than walking to its destination");
+            lastPosition[0] = position;
+            boolean open = helper.getLevel().getBlockState(gate).getValue(BlockStateProperties.OPEN);
+            if (open != lastOpen[0]) {
+                gateTransitions[0]++;
+                lastOpen[0] = open;
+                Path activePath = villager.getBrain().getMemory(MemoryModuleType.PATH).orElse(null);
+                MCA.LOGGER.info("[MCA Decorative Gate GameTest] gateState={} transition={} villager={} previousNode={} nextNode={}",
+                        open, gateTransitions[0], position,
+                        activePath == null ? null : activePath.getPreviousNode(),
+                        activePath == null || activePath.isDone() ? null : activePath.getNextNode());
+            }
+            gateWasOpened[0] |= open;
+            approachedGate[0] |= Math.abs(position.x - gate.getX() - 0.5D) < 3.5D
+                    && Math.abs(position.z - gate.getZ() - 0.5D) < 2.0D;
+            helper.assertTrue(gateTransitions[0] <= 4,
+                    "villager repeatedly toggled decorative gate without making progress: "
+                            + gateTransitions[0] + " transitions at " + position
+                            + ", path=" + villager.getNavigation().getPath());
+            if (villager.blockPosition().closerThan(target, 2.0D)) {
+                MCA.LOGGER.info("[MCA Decorative Gate GameTest] gateOpened={} transitions={} approached={} finalPos={}",
+                        gateWasOpened[0], gateTransitions[0], approachedGate[0], position);
+                helper.assertTrue(gateWasOpened[0], "villager reached target without exercising raised vanilla fence gate");
+                helper.assertTrue(PathRequestDiagnostics.snapshot(villager).sinkRequests() > 0,
+                        "villager reached destination without Brain pathfinding");
+                helper.succeed();
+            } else if (elapsed >= 800L) {
+                helper.fail("villager stalled by decorative gate; pos=" + position
+                        + ", approachedGate=" + approachedGate[0]
+                        + ", toggles=" + gateTransitions[0]
+                        + ", path=" + villager.getNavigation().getPath());
+            }
+        });
+    }
+
+    @GameTest(batch = WALL_GATE_BATCH, templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 4_000)
+    public static void raisedGateBesideSandstoneWallsDoesNotSpamAcrossApproaches(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos base = helper.absolutePos(new BlockPos(10, 1, 10));
+        BlockPos gate = base.above(2);
+        rememberArea(level, base, 9);
+        prepareFlatArea(helper, base, 9, 5);
+        BlockState gateState = BuiltInRegistries.BLOCK.getOptional(
+                ResourceLocation.fromNamespaceAndPath("ecologics", "azalea_fence_gate"))
+                .orElse(Blocks.OAK_FENCE_GATE).defaultBlockState()
+                .setValue(FenceGateBlock.FACING, Direction.WEST);
+        MCA.LOGGER.info("[MCA Wall Gate] testing block={}", BuiltInRegistries.BLOCK.getKey(gateState.getBlock()));
+        for (int z = -4; z <= 4; z++) {
+            for (int x = 0; x <= 5; x++) {
+                level.setBlock(base.offset(x, 0, z), Blocks.ACACIA_PLANKS.defaultBlockState(), 3);
+                level.setBlock(base.offset(x, 1, z), x == 0
+                        ? Blocks.ACACIA_STAIRS.defaultBlockState().setValue(StairBlock.FACING, Direction.WEST)
+                                .setValue(StairBlock.HALF, Half.TOP)
+                        : Blocks.ACACIA_PLANKS.defaultBlockState(), 3);
+            }
+            level.setBlock(base.west().offset(0, 0, z), Blocks.OAK_LEAVES.defaultBlockState()
+                    .setValue(BlockStateProperties.PERSISTENT, true), 3);
+            level.setBlock(gate.offset(0, 0, z), Math.abs(z) <= 1 ? gateState
+                    : Blocks.RED_SANDSTONE_WALL.defaultBlockState(), 3);
+        }
+        enableFenceGateMovementWithoutTeleporting();
+
+        int[] attempt = {0};
+        int[] events = {0};
+        int[] jumps = {0};
+        long[] started = {0};
+        boolean[] grounded = {true};
+        VillagerEntityMCA[] current = {null};
+        BlockPos[] destination = {base};
+        double[] lateralOffsets = {-1.3D, -0.7D, 0.7D, 1.3D};
+        DynamicGameEventListener<GameEventListener> listener = new DynamicGameEventListener<>(new GameEventListener() {
+            public PositionSource getListenerSource() { return new BlockPositionSource(gate); }
+            public int getListenerRadius() { return 16; }
+            public boolean handleGameEvent(ServerLevel world, Holder<GameEvent> event, GameEvent.Context context, Vec3 source) {
+                BlockPos pos = BlockPos.containing(source);
+                if (current[0] != null && pos.getX() == gate.getX() && pos.getY() == gate.getY()
+                        && Math.abs(pos.getZ() - gate.getZ()) <= 1
+                        && (event == GameEvent.BLOCK_OPEN || event == GameEvent.BLOCK_CLOSE)) {
+                    events[0]++;
+                    MCA.LOGGER.info("[MCA Wall Gate] attempt={} event={} pos={} villager={} collision={} path={} states={} / {} / {}",
+                            attempt[0], event.getRegisteredName(), pos, current[0].position(),
+                            current[0].horizontalCollision, current[0].getNavigation().getPath(),
+                            world.getBlockState(gate.north()), world.getBlockState(gate), world.getBlockState(gate.south()));
+                }
+                return false;
+            }
+        });
+        listener.add(level);
+        GATE_LISTENERS.add(listener);
+        helper.onEachTick(() -> {
+            if (current[0] == null) {
+                if (attempt[0] == 8) {
+                    helper.succeed();
+                    return;
+                }
+                for (int z = -1; z <= 1; z++) {
+                    level.setBlock(gate.offset(0, 0, z), gateState
+                            .setValue(FenceGateBlock.IN_WALL, Math.abs(z) == 1), 3);
+                }
+                boolean fromPorch = attempt[0] >= 4;
+                BlockPos start = fromPorch ? base.east(3).above(2) : base.west(3);
+                destination[0] = fromPorch ? base.west(4) : base.east(4).above(2);
+                events[0] = 0;
+                jumps[0] = 0;
+                grounded[0] = true;
+                started[0] = level.getGameTime();
+                current[0] = spawnAutonomousVillager(helper, start, destination[0], 0.7F, true);
+                // Set the initial fixture position once, then leave all movement to the Brain.
+                current[0].setPos(Vec3.atBottomCenterOf(start).add(0, 0, lateralOffsets[attempt[0] % 4]));
+                return;
+            }
+            VillagerEntityMCA villager = current[0];
+            if (grounded[0] && !villager.onGround() && villager.getDeltaMovement().y > 0) {
+                jumps[0]++;
+            }
+            grounded[0] = villager.onGround();
+            helper.assertTrue(events[0] <= 6, "repeated gate opening/closing; attempt=" + attempt[0]
+                    + ", events=" + events[0] + ", jumps=" + jumps[0] + ", pos=" + villager.position());
+            if (villager.position().distanceToSqr(Vec3.atBottomCenterOf(destination[0])) < 2.25D) {
+                MCA.LOGGER.info("[MCA Wall Gate] reached attempt={} events={} jumps={} pos={}",
+                        attempt[0], events[0], jumps[0], villager.position());
+                villager.discard();
+                VILLAGERS.remove(villager);
+                current[0] = null;
+                attempt[0]++;
+            } else if (level.getGameTime() - started[0] >= 450) {
+                helper.fail("wall/gate approach stalled; attempt=" + attempt[0] + ", events=" + events[0]
+                        + ", jumps=" + jumps[0] + ", collision=" + villager.horizontalCollision
+                        + ", pos=" + villager.position() + ", path=" + villager.getNavigation().getPath());
+            }
+        });
+    }
+
+    @GameTest(batch = SLOW_HEAD_GATE_BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 1_200)
+    public static void slowedVillagerKeepsHeadHeightGateOpenUntilItPasses(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos start = helper.absolutePos(new BlockPos(13, 1, 13));
+        BlockPos feetAtGate = start.east(4);
+        BlockPos gate = feetAtGate.above();
+        BlockPos destination = start.east(9);
+        rememberArea(level, start.east(4), 8);
+        prepareFlatArea(helper, start.east(4), 8, 4);
+        for (int z = -8; z <= 8; z++) {
+            for (int y = 0; y < 3; y++) {
+                BlockPos pos = feetAtGate.offset(0, y, z);
+                if (z == 0 && y == 0) {
+                    continue;
+                }
+                level.setBlock(pos, z == 0 && y == 1
+                        ? Blocks.OAK_FENCE_GATE.defaultBlockState().setValue(FenceGateBlock.FACING, Direction.EAST)
+                        : Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        level.setBlock(feetAtGate.west().below(), Blocks.HONEY_BLOCK.defaultBlockState(), 3);
+        level.setBlock(feetAtGate.west(), Blocks.COBWEB.defaultBlockState(), 3);
+        // Keep the web's path cost from sending the villager around the gate.
+        // This is an ordinary walkable corridor, not an injected or held path.
+        for (int x = -1; x <= 10; x++) {
+            for (int z = -1; z <= 1; z++) {
+                if (x != -1 && x != 10 && z == 0) {
+                    continue;
+                }
+                for (int y = 0; y < 3; y++) {
+                    level.setBlock(start.offset(x, y, z), Blocks.STONE.defaultBlockState(), 3);
+                }
+            }
+        }
+        enableFenceGateMovementWithoutTeleporting();
+        VillagerEntityMCA villager = spawnAutonomousVillager(helper, start, destination, 0.7F, true);
+        villager.addEffect(new MobEffectInstance(MobEffects.MOVEMENT_SLOWDOWN, 1_200, 3));
+        int[] opens = {0};
+        int[] closesBeforeCrossing = {0};
+        int[] headNodeTicks = {0};
+        boolean[] passed = {false};
+        boolean[] loggedPath = {false};
+        DynamicGameEventListener<GameEventListener> listener = new DynamicGameEventListener<>(new GameEventListener() {
+            public PositionSource getListenerSource() { return new BlockPositionSource(gate); }
+            public int getListenerRadius() { return 16; }
+            public boolean handleGameEvent(ServerLevel world, Holder<GameEvent> event, GameEvent.Context context, Vec3 source) {
+                if (BlockPos.containing(source).equals(gate)) {
+                    if (event == GameEvent.BLOCK_OPEN) {
+                        opens[0]++;
+                    } else if (event == GameEvent.BLOCK_CLOSE && villager.getX() < gate.getX()) {
+                        closesBeforeCrossing[0]++;
+                    }
+                    if (event == GameEvent.BLOCK_OPEN || event == GameEvent.BLOCK_CLOSE) {
+                        Path path = villager.getNavigation().getPath();
+                        MCA.LOGGER.info("[MCA Slow Head Gate] event={} pos={} opens={} prematureCloses={} next={}",
+                                event.getRegisteredName(), villager.position(), opens[0], closesBeforeCrossing[0],
+                                path == null || path.isDone() ? null : path.getNextNode());
+                    }
+                }
+                return false;
+            }
+        });
+        listener.add(level);
+        GATE_LISTENERS.add(listener);
+        helper.onEachTick(() -> {
+            Path path = villager.getNavigation().getPath();
+            if (path != null && !loggedPath[0]) {
+                loggedPath[0] = true;
+                MCA.LOGGER.info("[MCA Slow Head Gate] natural path={}",
+                        java.util.stream.IntStream.range(0, path.getNodeCount())
+                                .mapToObj(i -> path.getNode(i).toString()).toList());
+            }
+            if (path != null && !path.isDone() && path.getNextNode().asBlockPos().equals(feetAtGate)) {
+                headNodeTicks[0]++;
+            }
+            passed[0] |= villager.getX() > gate.getX() + 1.3D;
+            helper.assertTrue(closesBeforeCrossing[0] == 0,
+                    "head-height gate closed before the approaching villager reached it; opens=" + opens[0]
+                            + ", closes=" + closesBeforeCrossing[0] + ", headNodeTicks=" + headNodeTicks[0]
+                            + ", pos=" + villager.position());
+            if (villager.position().distanceToSqr(Vec3.atBottomCenterOf(destination)) < 2.25D) {
+                helper.assertTrue(passed[0] && opens[0] > 0 && headNodeTicks[0] > 0,
+                        "fixture did not exercise an autonomous path beneath the gate; opens=" + opens[0]
+                                + ", passed=" + passed[0] + ", headNodeTicks=" + headNodeTicks[0]);
+                MCA.LOGGER.info("[MCA Slow Head Gate] arrived opens={} prematureCloses={} headNodeTicks={}",
+                        opens[0], closesBeforeCrossing[0], headNodeTicks[0]);
+                helper.succeed();
+            }
+        });
+    }
+
     @GameTest(batch = SEGMENT_BATCH, templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 1_600)
     public static void brainWalksMultiplePartialSegmentsWithoutManualPathStart(GameTestHelper helper) {
@@ -447,6 +821,26 @@ public final class AutonomousPathfindingGameTests {
         cleanup(level);
     }
 
+    @AfterBatch(batch = ENCLOSED_GATE_BATCH)
+    public static void cleanupEnclosedGate(ServerLevel level) {
+        cleanup(level);
+    }
+
+    @AfterBatch(batch = DECORATIVE_GATE_BATCH)
+    public static void cleanupDecorativeGate(ServerLevel level) {
+        cleanup(level);
+    }
+
+    @AfterBatch(batch = WALL_GATE_BATCH)
+    public static void cleanupWallGate(ServerLevel level) {
+        cleanup(level);
+    }
+
+    @AfterBatch(batch = SLOW_HEAD_GATE_BATCH)
+    public static void cleanupSlowHeadGate(ServerLevel level) {
+        cleanup(level);
+    }
+
     @AfterBatch(batch = SEGMENT_BATCH)
     public static void cleanupSegments(ServerLevel level) {
         cleanup(level);
@@ -467,7 +861,21 @@ public final class AutonomousPathfindingGameTests {
         cleanup(level);
     }
 
+    private static void enableFenceGateMovementWithoutTeleporting() {
+        Config config = Config.getInstance();
+        if (originalGateConfig == null) {
+            originalGateConfig = config.villagersInteractWithFenceGates;
+        }
+        if (originalTeleportConfig == null) {
+            originalTeleportConfig = config.allowVillagerTeleporting;
+        }
+        config.villagersInteractWithFenceGates = true;
+        config.allowVillagerTeleporting = false;
+    }
+
     private static void cleanup(ServerLevel level) {
+        GATE_LISTENERS.forEach(listener -> listener.remove(level));
+        GATE_LISTENERS.clear();
         VILLAGERS.forEach(VillagerEntityMCA::discard);
         VILLAGERS.clear();
         ORIGINAL_BLOCKS.forEach((pos, state) -> level.setBlock(pos, state, 3));
