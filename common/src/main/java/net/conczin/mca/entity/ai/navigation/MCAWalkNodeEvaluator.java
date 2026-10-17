@@ -10,6 +10,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.PathNavigationRegion;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
@@ -24,8 +25,10 @@ import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.BooleanOp;
+import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
@@ -108,16 +111,19 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         BlockPos mobPos = this.mob.blockPosition();
         AABB startBox = this.mob.getBoundingBox();
         double modeledFloor = this.getFloorLevel(mobPos);
-        boolean raisedSameColumn = selectedStart.x == mobPos.getX()
+        boolean unreachedClimbableStart = selectedStart.x == mobPos.getX()
             && selectedStart.z == mobPos.getZ()
             && selectedStart.y > mobPos.getY()
-            && startBox.minY < selectedStart.y - RAISED_START_EPSILON;
+            && startBox.minY < selectedStart.y - RAISED_START_EPSILON
+            && isClimbable(selectedStart.asBlockPos());
         if (!selectedStart.asBlockPos().equals(mobPos)
             && startBox.minY > modeledFloor + RAISED_START_EPSILON
-            && (raisedSameColumn
+            && (selectedStart.type == PathType.BLOCKED
+                || unreachedClimbableStart
                 || getMobBoxAt(selectedStart).minY - startBox.minY > this.mob.maxUpStep()
                 || !canSweepBoxTo(selectedStart, startBox))) {
             // A raised start must be reachable from the real box without assuming a jump already happened.
+            // A rounded BLOCKED start can also overstate the occupied height above a partial floor.
             // Start from the mob cell so A* evaluates the actual exits from partial blocks.
             return this.getStartNode(mobPos);
         }
@@ -135,7 +141,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             this.expandedNodes++;
         }
         int nodeCount = super.getNeighbors(nodes, origin);
-        nodeCount = rejectBlockedRaisedStartTransitions(nodes, nodeCount, origin);
+        nodeCount = rejectBlockedRaisedSurfaceTransitions(nodes, nodeCount, origin);
         nodeCount = rejectBlockedRaisedTransitions(nodes, nodeCount, origin);
         if (!isClimbable(origin.x, origin.y, origin.z)) {
             return addDescendingClimbableEntries(nodes, nodeCount, origin.asBlockPos());
@@ -196,17 +202,21 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         return nodeCount;
     }
 
-    private int rejectBlockedRaisedStartTransitions(Node[] nodes, int nodeCount, Node origin) {
-        if (origin != this.startNode || !this.mob.onGround() || this.mob.onClimbable()) {
+    private int rejectBlockedRaisedSurfaceTransitions(Node[] nodes, int nodeCount, Node origin) {
+        if (origin == this.startNode && (!this.mob.onGround() || this.mob.onClimbable())) {
             return nodeCount;
         }
 
-        AABB startBox = this.mob.getBoundingBox();
-        double modeledFloor = this.getFloorLevel(origin.asBlockPos());
-        if (startBox.minY <= modeledFloor + RAISED_START_EPSILON) {
+        BlockPos originPos = origin.asBlockPos();
+        double modeledFloor = this.getFloorLevel(originPos);
+        double standingFloor = origin == this.startNode ? this.mob.getBoundingBox().minY
+                : getStandingFloorY(this.currentContext.level(), originPos, this.mob, modeledFloor);
+        if (standingFloor <= modeledFloor + RAISED_START_EPSILON) {
             return nodeCount;
         }
 
+        // Planned partial surfaces also need headroom until the body has left their support.
+        AABB startBox = origin == this.startNode ? this.mob.getBoundingBox() : getMobBoxAt(origin);
         int writeIndex = 0;
         for (int readIndex = 0; readIndex < nodeCount; readIndex++) {
             Node candidate = nodes[readIndex];
@@ -222,7 +232,8 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     }
 
     private int rejectBlockedRaisedTransitions(Node[] nodes, int nodeCount, Node origin) {
-        AABB originBox = null;
+        // The rounded start's modeled floor can be below the real supporting surface.
+        AABB originBox = origin == this.startNode && this.mob.onGround() ? this.mob.getBoundingBox() : null;
         int writeIndex = 0;
         for (int readIndex = 0; readIndex < nodeCount; readIndex++) {
             Node candidate = nodes[readIndex];
@@ -283,6 +294,13 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         // Entity collision can step over low edges; one tall edge also permits sliding into
         // MoveControl's jump range. Only tall edging on both sides blocks the diagonal approach.
         AABB approachBox = originBox.move(dx * approachFraction, this.mob.maxUpStep(), dz * approachFraction);
+        // Sliding past a low corner cannot clear an overhead block before the jump begins.
+        for (int y = origin.y + 1; y < Mth.ceil(approachBox.maxY); y++) {
+            if (blocksJumpApproach(candidate.x, y, origin.z, approachBox)
+                    || blocksJumpApproach(origin.x, y, candidate.z, approachBox)) {
+                return false;
+            }
+        }
         return !blocksJumpApproach(candidate.x, origin.y, origin.z, approachBox)
                 || !blocksJumpApproach(origin.x, origin.y, candidate.z, approachBox);
     }
@@ -410,10 +428,50 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
 
     private int addClimbableNode(Node[] nodes, int nodeCount, BlockPos pos) {
         Node node = getClimbableNode(pos);
-        if (!node.closed && nodeCount < nodes.length) {
+        // Unlike a walking node, a suspended climb node has no supporting floor:
+        // the mob's feet must actually reach this node's Y, not the last ground
+        // surface reported by getFloorLevel below it.
+        if (!node.closed && hasClimbableBodyClearance(node) && nodeCount < nodes.length) {
             nodes[nodeCount++] = node;
         }
         return nodeCount;
+    }
+
+    private boolean hasClimbableBodyClearance(Node node) {
+        AABB box = getMobBoxAt(node);
+        double climbFeetY = node.y + FLOOR_EPSILON;
+        if (box.minY < climbFeetY) {
+            box = box.move(0.0D, climbFeetY - box.minY, 0.0D);
+        }
+        if (this.currentContext.getBlockState(this.collisionPos.set(node.x, node.y, node.z))
+                .is(Blocks.SCAFFOLDING)) {
+            return hasScaffoldingClimbClearance(node, box);
+        }
+        return hasExactBlockClearance(box);
+    }
+
+    private boolean hasScaffoldingClimbClearance(Node node, AABB box) {
+        // Scaffold platforms and frames may be passed while climbing/descending.
+        // Ignore only this column's scaffolding, not a roof or another obstacle.
+        for (int x = floorMin(box.minX); x <= floorMax(box.maxX); x++) {
+            for (int y = floorMin(box.minY); y <= floorMax(box.maxY); y++) {
+                for (int z = floorMin(box.minZ); z <= floorMax(box.maxZ); z++) {
+                    BlockPos pos = this.collisionPos.set(x, y, z);
+                    BlockState state = this.currentContext.getBlockState(pos);
+                    if (state.isAir() || state.is(Blocks.SCAFFOLDING)
+                            && x == node.x && z == node.z) {
+                        continue;
+                    }
+                    VoxelShape shape = state.getCollisionShape(
+                            this.currentContext.level(), pos, CollisionContext.of(this.mob));
+                    if (!shape.isEmpty() && Shapes.joinIsNotEmpty(
+                            Shapes.create(box.move(-x, -y, -z)), shape, BooleanOp.AND)) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
     }
 
     private Node getClimbableNode(BlockPos pos) {
@@ -551,7 +609,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
 
     private AABB getMobBoxAt(Node node) {
         AABB box = this.mob.getBoundingBox();
-        double floorY = getStandingFloorY(node, box);
+        double floorY = getStandingFloorY(node);
         double centerX = (box.minX + box.maxX) * 0.5D;
         double centerZ = (box.minZ + box.maxZ) * 0.5D;
         return box.move(
@@ -560,15 +618,18 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
                 node.z + 0.5D - centerZ
         );
     }
-    private double getStandingFloorY(Node node, AABB mobBox) {
+    private double getStandingFloorY(Node node) {
         BlockPos pos = this.collisionPos.set(node.x, node.y, node.z);
-        double floorY = this.getFloorLevel(pos);
-        BlockState state = this.currentContext.getBlockState(pos);
+        return getStandingFloorY(this.currentContext.level(), pos, this.mob, this.getFloorLevel(pos));
+    }
+
+    static double getStandingFloorY(BlockGetter level, BlockPos pos, Mob mob, double floorY) {
+        BlockState state = level.getBlockState(pos);
         if (state.isAir() || !state.isPathfindable(PathComputationType.LAND)) {
             return floorY;
         }
 
-        VoxelShape collisionShape = state.getCollisionShape(this.currentContext.level(), pos);
+        VoxelShape collisionShape = state.getCollisionShape(level, pos, CollisionContext.of(mob));
         if (collisionShape.isEmpty()) {
             return floorY;
         }
@@ -578,6 +639,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             return floorY;
         }
 
+        AABB mobBox = mob.getBoundingBox();
         double halfWidth = mobBox.getXsize() * 0.5D;
         double halfDepth = mobBox.getZsize() * 0.5D;
         VoxelShape footprint = Shapes.box(
@@ -592,7 +654,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             return floorY;
         }
 
-        return Math.max(floorY, node.y + surfaceY);
+        return Math.max(floorY, pos.getY() + surfaceY);
     }
     private boolean canSweepBoxTo(Node candidate, AABB startBox) {
         AABB destinationBox = getMobBoxAt(candidate);

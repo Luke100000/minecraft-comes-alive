@@ -147,11 +147,20 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                         maxPathLength * VISITED_NODES_PER_BLOCK / ordinaryBudget
                 );
                 if (maxPathLength > getOrdinaryPathLength(mob)) {
-                    // An unreachable distant target can consume thousands of node
-                    // expansions in one server tick. Retain the ordinary budget and
-                    // let persistent targets progress through bounded partial paths.
-                    rangeMultiplier = Math.min(rangeMultiplier,
-                            Math.max(1.0F, (float) MAX_EXTENDED_VISITED_NODES / ordinaryBudget));
+                    boolean nearbyApproach = false;
+                    for (BlockPos target : targets) {
+                        if (!requiresExtendedPath(mob, target) && hasWalkableApproach(target)) {
+                            nearbyApproach = true;
+                            break;
+                        }
+                    }
+                    // Nearby walkable destinations can require a route that first
+                    // moves away from them. Preserve their configured detour search;
+                    // distant or sealed goals retain the smaller progressive budget.
+                    if (!nearbyApproach) {
+                        rangeMultiplier = Math.min(rangeMultiplier,
+                                Math.max(1.0F, (float) MAX_EXTENDED_VISITED_NODES / ordinaryBudget));
+                    }
                 }
                 if (!PathRequestDiagnostics.enabled()) {
                     return super.findPath(region, mob, targets, maxPathLength, reachRange,
@@ -372,7 +381,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     }
 
     @Override
-    protected boolean canUpdatePath() {
+    public boolean canUpdatePath() {
         if (super.canUpdatePath() || this.mob.onClimbable()) {
             return true;
         }
@@ -717,16 +726,19 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         // An endpoint closer to the goal is not proof that the villager moved.
         // Hand an unproductive continuation back to the destination's Brain
         // failure clock; its producer owns the next retry and eventual give-up.
-        if (this.mob.blockPosition().distSqr(completedPath.getNodePos(0)) < 4.0D) {
+        if (this.mob.blockPosition().equals(completedPath.getNodePos(0))) {
             recordTerminalPartialFailure(destination);
             return;
         }
         Path nextPath = this.createPath(destination, 0);
         if (nextPath == null
                 || (!nextPath.canReach() && !isUsefulPartialPath(nextPath, destination))) {
-            // A completed partial remains installed after a failed continuation.
-            // Without failure evidence, this same search runs every tick.
-            recordTerminalPartialFailure(destination);
+            // A useful short segment can finish at the edge of an obstacle.
+            // Let the existing navigation recovery try a flank before the
+            // producer receives terminal failure for this destination.
+            if (!beginDetour(walkTarget, destination)) {
+                recordTerminalPartialFailure(destination);
+            }
             return;
         }
         this.moveTo(nextPath, walkTarget.getSpeedModifier());
@@ -753,6 +765,33 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
         Vec3 position = this.getTempMobPos();
         if (!this.climbTraversal.followPath(this.path)) {
+            int nextIndex = this.path.getNextNodeIndex();
+            if (this.mob.onGround() && nextIndex + 1 < this.path.getNodeCount()) {
+                double nextFloor = getGroundY(this.path.getNextEntityPos(this.mob));
+                if (this.mob.getY() > nextFloor + 1.0E-3D) {
+                    Vec3 following = this.path.getEntityPosAtNode(this.mob, nextIndex + 1);
+                    if (getGroundY(following) <= this.mob.getY() + 1.0E-3D
+                            && !this.level.noBlockCollision(this.mob, this.mob.getBoundingBox().move(
+                            following.x - this.mob.getX(), 0.0D, following.z - this.mob.getZ()))) {
+                        // Width tolerance can reach a lower waypoint while the body still overlaps
+                        // its previous support. Finish that descent before turning under a low ceiling.
+                        this.doStuckDetection(position);
+                        return;
+                    }
+                }
+            }
+            WalkTarget walkTarget = this.mob.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                    .orElse(null);
+            if (this.path.canReach() && this.path.getNextNodeIndex() == this.path.getNodeCount() - 1
+                    && walkTarget != null && walkTarget.getTarget() instanceof BedApproachTarget bedTarget
+                    && bedTarget.getPathTargets(this.mob).contains(this.path.getTarget())
+                    && !bedTarget.isReached(this.mob, 0)) {
+                // Vanilla's width-based waypoint tolerance can finish a small mob's route
+                // outside sleep reach. Retain the final node so native move control finishes
+                // the safe approach; never hold partial or intermediate physical spans here.
+                this.doStuckDetection(position);
+                return;
+            }
             super.followThePath();
             return;
         }
@@ -822,6 +861,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (this.climbTraversal.isClimbable(targetPos) && this.mob.onClimbable()) {
             return this.mob.getY();
         }
-        return super.getGroundY(position);
+        return MCAWalkNodeEvaluator.getStandingFloorY(
+                this.level, targetPos, this.mob, super.getGroundY(position));
     }
 }
