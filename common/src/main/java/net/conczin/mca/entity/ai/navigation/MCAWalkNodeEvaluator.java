@@ -253,8 +253,10 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             Node candidate = nodes[readIndex];
             if (candidate != null && canSweepBoxTo(candidate, startBox)) {
                 // Vanilla's partial-collision guard measures from the live mob, so it belongs only at this start.
+                BlockPos candidatePos = candidate.asBlockPos();
                 boolean liveJump = origin == this.startNode
-                        && getStandingFloorY(candidate) - startBox.minY > this.mob.maxUpStep();
+                        && getStandingPosition(this.currentContext.level(), candidatePos, this.mob,
+                        this.getFloorLevel(candidatePos)).y - startBox.minY > this.mob.maxUpStep();
                 if (liveJump && !super.canReachWithoutCollision(candidate)) {
                     continue;
                 }
