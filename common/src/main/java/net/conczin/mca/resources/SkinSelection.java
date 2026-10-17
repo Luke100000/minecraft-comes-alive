@@ -21,7 +21,15 @@ public final class SkinSelection {
     }
 
     public static boolean matchesGender(SkinListEntry entry, Gender gender) {
-        return entry.getGender() == Gender.NEUTRAL || entry.getGender() == Gender.UNASSIGNED || gender == Gender.NEUTRAL || gender == Gender.UNASSIGNED || entry.getGender() == gender;
+        return matchesGender(entry.getGender(), gender);
+    }
+
+    public static boolean matchesGender(Gender entryGender, Gender gender) {
+        return entryGender == Gender.NEUTRAL || entryGender == Gender.UNASSIGNED || gender == Gender.NEUTRAL || gender == Gender.UNASSIGNED || entryGender == gender;
+    }
+
+    public static boolean matchesEditorGender(Gender entryGender, Gender filterGender) {
+        return filterGender == Gender.UNASSIGNED || entryGender == filterGender;
     }
 
     public static List<Clothing> editorClothing(Collection<Clothing> available, Gender gender) {

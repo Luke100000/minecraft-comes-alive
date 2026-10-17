@@ -79,7 +79,11 @@ dependencies {
 }
 
 tasks.withType(Test).configureEach {
-    useJUnitPlatform()
+    useJUnitPlatform {
+        if (!project.hasProperty('includeExperimentalTests')) {
+            excludeTags 'experimental'
+        }
+    }
 }
 
 sourceSets.test.compileClasspath += sourceSets.main.compileClasspath

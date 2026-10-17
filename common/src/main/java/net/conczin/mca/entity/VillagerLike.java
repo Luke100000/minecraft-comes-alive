@@ -4,6 +4,7 @@ import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.DialogueType;
 import net.conczin.mca.entity.ai.Genetics;
+import net.conczin.mca.entity.ai.EyeGenetics;
 import net.conczin.mca.entity.ai.Messenger;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
@@ -66,6 +67,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     CDataParameter<String> HAIR_BACK = CParameter.create("HairBack", "");
     CDataParameter<String> HAIR_FRONT = CParameter.create("HairFront", "");
     CDataParameter<String> HAIR_EXTRA = CParameter.create("HairExtra", "");
+    CResourceLocationParameter EYE_TEXTURE = CParameter.create("EyeTexture", EyeStyles.DEFAULT);
     CDataParameter<Integer> SKIN_COLOR = CParameter.create("SkinColor", 0xFF000000);
     CDataParameter<Integer> HAIR_COLOR = CParameter.create("HairColor", 0xFF000000);
     CDataParameter<Integer> EYE_COLOR = CParameter.create("EyeColor", 0xFFFFFFFF);
@@ -78,7 +80,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     static <E extends Entity> CDataManager.Builder<E> createTrackedData(Class<E> type) {
         return new CDataManager.Builder<>(type)
                 .addAll(CLOTHES, CLOTHING_LOCKED, SKIN, HAIR, HAIR_STYLE, HAIR_BASE, HAIR_BANGS, HAIR_BACK, HAIR_FRONT, HAIR_EXTRA,
-                        SKIN_COLOR, HAIR_COLOR, EYE_COLOR, EYE_COLOR_LEFT, AGE_STATE)
+                        EYE_TEXTURE, SKIN_COLOR, HAIR_COLOR, EYE_COLOR, EYE_COLOR_LEFT, AGE_STATE)
                 .add(Genetics::createTrackedData)
                 .add(Traits::createTrackedData)
                 .add(VillagerBrain::createTrackedData);
@@ -90,6 +92,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         if (villager == null) {
             return null;
         }
+        villager.setUUID(player.getUUID());
         villager.readAdditionalSaveDataForEditor(villagerData);
         return villager;
     }
@@ -113,6 +116,10 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     EntityCommandHandler<?> getInteractions();
 
     default void initialize(MobSpawnType spawnReason) {
+        if (getGenetics().getGender() == Gender.UNASSIGNED) {
+            getGenetics().setGender(Gender.getRandom());
+        }
+
         if (spawnReason != MobSpawnType.CONVERSION) {
             if (spawnReason != MobSpawnType.BREEDING) {
                 getGenetics().randomize();
@@ -123,15 +130,12 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             getVillagerBrain().randomize();
         }
 
-        if (getGenetics().getGender() == Gender.UNASSIGNED) {
-            getGenetics().setGender(Gender.getRandom());
-        }
-
         if (asEntity().getCustomName() == null) {
             asEntity().setCustomName(Component.literal(Names.pickCitizenName(getGenetics().getGender(), asEntity())));
         }
 
-        validateClothes();
+        getGenetics().finishEyeExpression(EyeGenetics.seed(asEntity().getUUID(), 0));
+        validateAppearance();
 
         asEntity().refreshDimensions();
     }
@@ -312,6 +316,14 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         for (LayeredHair.Category category : LayeredHair.Category.values()) {
             setLayeredHair(category, "");
         }
+    }
+
+    default ResourceLocation getEyeTexture() {
+        return getTrackedValue(EYE_TEXTURE);
+    }
+
+    default void setEyeTexture(ResourceLocation eyeTexture) {
+        setTrackedValue(EYE_TEXTURE, eyeTexture);
     }
 
     default void setHairStyle(HairStyle style) {
@@ -568,9 +580,10 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
         setHairStyleId("");
     }
 
-    default void validateClothes() {
+    default void validateAppearance() {
         if (!asEntity().level().isClientSide) {
             migrateLegacyHairStyle();
+
 
             if (!MCA.isBlankString(getSkin()) && !SkinVisualIds.isBodySkin(getSkin())) {
                 MCA.LOGGER.info("Villagers skin {} does not exist!", getSkin());
@@ -687,6 +700,7 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
     default void readNbtForConversion(CompoundTag input) {
         this.getTypeDataManager().load((E) asEntity(), input);
         readAdditionalConversionData(input);
+        getGenetics().finishEyeExpression(EyeGenetics.seed(asEntity().getUUID(), 0));
     }
 
     default void writeAdditionalConversionData(CompoundTag output) {

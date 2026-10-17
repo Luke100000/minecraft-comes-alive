@@ -1,0 +1,37 @@
+{
+  "replace": false,
+  "textures": [
+    {
+      "id": "mca:skins/face/normal/male/0.png",
+      "tone_overrides": {
+        "#2c1709": { "shadow": "#2c1709", "primary": "#562d12", "highlight": "#e6d7ce" },
+        "#ec68a2": { "shadow": "#ec68a2", "primary": "#d41c6c", "highlight": "#e4c5d3" },
+        "#81431a": { "shadow": "#81431a", "primary": "#562d12", "highlight": "#f9e3d4" },
+        "#b46cec": { "shadow": "#b46cec", "primary": "#831cd4", "highlight": "#d4c1e4" },
+        "#6cd71f": { "shadow": "#6cd71f", "primary": "#55ab19", "highlight": "#e3f9d4" },
+        "#2e37e2": { "shadow": "#2e37e2", "primary": "#1920ab", "highlight": "#cfd0e5" },
+        "#dc2ad2": { "shadow": "#dc2ad2", "primary": "#881682", "highlight": "#e5cfe3" },
+        "#56cbd9": { "shadow": "#56cbd9", "primary": "#2594a3", "highlight": "#bfd8db" },
+        "#dc322a": { "shadow": "#dc322a", "primary": "#871c16", "highlight": "#cdaba9" },
+        "#929292": { "shadow": "#929292", "primary": "#5d5d5d", "highlight": "#d7d7d7" },
+        "#e2d263": { "shadow": "#e2d263", "primary": "#bdaa24", "highlight": "#e4dfc1" }
+      }
+    },
+    {
+      "id": "mca:skins/face/normal/male/11.png",
+      "tone_overrides": {
+        "#2c1709": { "shadow": "#2c1709", "primary": "#2c1709", "highlight": "#2c1709" },
+        "#d41c6c": { "shadow": "#d41c6c", "primary": "#d41c6c", "highlight": "#d41c6c" },
+        "#a45f14": { "shadow": "#a45f14", "primary": "#a45f14", "highlight": "#a45f14" },
+        "#831cd4": { "shadow": "#831cd4", "primary": "#831cd4", "highlight": "#831cd4" },
+        "#55ab19": { "shadow": "#55ab19", "primary": "#55ab19", "highlight": "#55ab19" },
+        "#1920ab": { "shadow": "#1920ab", "primary": "#1920ab", "highlight": "#1920ab" },
+        "#881682": { "shadow": "#881682", "primary": "#881682", "highlight": "#881682" },
+        "#2594a3": { "shadow": "#2594a3", "primary": "#2594a3", "highlight": "#2594a3" },
+        "#dc322a": { "shadow": "#dc322a", "primary": "#dc322a", "highlight": "#dc322a" },
+        "#5d5d5d": { "shadow": "#5d5d5d", "primary": "#5d5d5d", "highlight": "#5d5d5d" },
+        "#bdaa24": { "shadow": "#bdaa24", "primary": "#bdaa24", "highlight": "#bdaa24" }
+      }
+    }
+  ]
+}

@@ -7,6 +7,7 @@ import net.conczin.mca.entity.VillagerCarryPositionGameTests;
 import net.conczin.mca.entity.VillagerChildSuffocationGameTests;
 import net.conczin.mca.entity.VillagerVoicePitchGameTests;
 import net.conczin.mca.entity.ai.ResidencyGoHomeGameTests;
+import net.conczin.mca.entity.ai.EyeGeneticsGameTests;
 import net.conczin.mca.entity.ai.ResidencySetHomeGameTests;
 import net.conczin.mca.entity.ai.brain.ForcedHomeOccupiedBedGameTests;
 import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensorGameTests;
@@ -64,6 +65,7 @@ public final class McaGameTestsRegistration {
 
     private static final List<Class<?>> GAME_TEST_CLASSES = List.of(
             TombstoneBlockGameTests.class,
+            EyeGeneticsGameTests.class,
             VillagerBedAlignmentGameTests.class,
             VillagerCarryPositionGameTests.class,
             VillagerChildSuffocationGameTests.class,

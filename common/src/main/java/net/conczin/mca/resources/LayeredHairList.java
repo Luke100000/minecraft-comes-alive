@@ -34,7 +34,7 @@ public class LayeredHairList extends SimplePreparableReloadListener<Map<Resource
     @Override
     protected void apply(Map<ResourceLocation, List<String>> data, ResourceManager manager, ProfilerFiller profiler) {
         hair.clear();
-        data.forEach((id, textures) -> SkinCatalogLoader.addLayeredHair(hair, id, textures));
+        data.forEach((id, textures) -> AppearanceCatalogLoader.addLayeredHair(hair, id, textures));
     }
 
     public LayeredHair get(String identifier, LayeredHair.Category category) {
