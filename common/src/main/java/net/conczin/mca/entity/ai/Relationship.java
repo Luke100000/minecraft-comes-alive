@@ -27,8 +27,6 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
-import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.Block;
@@ -36,6 +34,8 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BiPredicate;
@@ -44,6 +44,8 @@ import java.util.function.BiPredicate;
  * I know you, you know me, we're all a big happy family.
  */
 public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRelationship {
+    private static final int WITNESS_MOURNER_LIMIT = 2;
+
     public static final Predicate IS_MARRIED = (villager, player) -> villager.getRelationships().isMarriedTo(player);
     public static final Predicate IS_ENGAGED = (villager, player) -> villager.getRelationships().isEngagedWith(player);
     public static final Predicate IS_PROMISED = (villager, player) -> villager.getRelationships().isPromisedTo(player);
@@ -53,7 +55,8 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
     public static final Predicate IS_FAMILY = IS_MARRIED.or(IS_RELATIVE);
     public static final Predicate IS_PARENT = (villager, player) -> villager.getRelationships().getFamilyEntry().isParent(player);
     public static final Predicate IS_KID = (villager, player) -> FamilyTree.get(villager.getRelationships().getWorld()).getOrEmpty(player).filter(n -> n.isParent(villager.getRelationships().getUUID())).isPresent();
-    public static final Predicate IS_ORPHAN = (villager, player) -> villager.getRelationships().getFamilyEntry().getParents().allMatch(FamilyTreeNode::isDeceased);
+    public static final Predicate IS_ORPHAN = (villager, player) -> FamilyTree.get(villager.getRelationships().getWorld())
+            .isOrphan(villager.getRelationships().getFamilyEntry());
     protected final T entity;
     private final GiftSaturation giftSaturation = new GiftSaturation();
 
@@ -148,8 +151,9 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
             // fill it and yeet the villager into depression
             nearest.ifPresentOrElse(pos -> {
                 if (entity.level().getBlockState(pos).is(TagsMCA.Blocks.TOMBSTONES) && entity.level().getBlockEntity(pos) instanceof TombstoneBlock.Data tombstone) {
-                    onTragedy(cause, pos);
+                    // Save the tombstone before onTragedy, so it keeps the pre-death mood.
                     tombstone.setEntity(entity);
+                    onTragedy(cause, pos);
                 } else {
                     onTragedy(cause, null);
                 }
@@ -170,14 +174,28 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
     }
 
     public void onTragedy(DamageSource cause, @Nullable BlockPos burialSite) {
+        List<VillagerEntityMCA> witnesses = List.of();
+
         // The death of a villager negatively modifies the mood of nearby strangers
         if (!entity.isHostile()) {
-            WorldUtils
-                    .getCloseEntities(entity.level(), entity, 32, VillagerEntityMCA.class)
-                    .forEach(villager -> villager.getRelationships().onTragedy(cause, burialSite, RelationshipType.STRANGER, entity));
+            witnesses = WorldUtils.getCloseEntities(entity.level(), entity, 32, VillagerEntityMCA.class);
+            witnesses.forEach(villager ->
+                    villager.getRelationships().onTragedy(cause, burialSite, RelationshipType.STRANGER, entity));
         }
 
         onTragedy(cause, burialSite, RelationshipType.SELF, entity);
+
+        if (Config.getInstance().enableMourning && burialSite != null) {
+            witnesses.stream()
+                    .filter(VillagerEntityMCA::isAlive)
+                    .filter(villager -> !villager.getUUID().equals(entity.getUUID()))
+                    .filter(villager -> villager.getBrain()
+                            .getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE).isEmpty())
+                    .filter(villager -> !Mourning.isTemporarilyBlocked(villager))
+                    .sorted(Comparator.comparingDouble(entity::distanceToSqr))
+                    .limit(WITNESS_MOURNER_LIMIT)
+                    .forEach(villager -> Mourning.start(villager, burialSite));
+        }
     }
 
     @Override
@@ -193,14 +211,18 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
             }
         }
 
-        if (burialSite != null && type != RelationshipType.STRANGER) {
-            entity.getVillagerBrain().setGrieving();
-            entity.getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_SITE, burialSite);
-            entity.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION);
-            entity.getBrain().eraseMemory(MemoryModuleType.PATH);
-            entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-            entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new BlockPosTracker(burialSite));
-            entity.getBrain().setActiveActivityIfPossible(ActivitiesMCA.GRIEVE);
+        // CHILD is the callback a parent receives when their child dies; PARENT is the callback
+        // a child receives when their parent dies. Both directions should trigger family mourning.
+        boolean familyMourning = type == RelationshipType.CHILD
+                || type == RelationshipType.PARENT
+                || type == RelationshipType.SIBLING
+                || type == RelationshipType.SPOUSE;
+        if (Config.getInstance().enableMourning
+                && burialSite != null
+                && familyMourning
+                && !entity.getUUID().equals(with.getUUID())
+                && entity instanceof VillagerEntityMCA villager) {
+            Mourning.start(villager, burialSite);
         }
 
         EntityRelationship.super.onTragedy(cause, burialSite, type, with);

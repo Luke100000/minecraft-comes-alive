@@ -78,6 +78,7 @@ public class Pregnancy {
 
             child.setPos(mother.getX(), mother.getY(), mother.getZ());
             WorldUtils.spawnEntity(mother.level(), child, MobSpawnType.BREEDING);
+            child.moveToSafePositionIfSuffocating();
         });
     }
 

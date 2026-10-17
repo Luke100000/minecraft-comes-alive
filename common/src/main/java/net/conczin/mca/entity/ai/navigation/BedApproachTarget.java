@@ -1,9 +1,9 @@
 package net.conczin.mca.entity.ai.navigation;
 
+import net.conczin.mca.entity.ai.BedPoiCompatibility;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.vehicle.DismountHelper;
@@ -37,7 +37,7 @@ public final class BedApproachTarget implements MultiTargetPositionTracker {
 
     public static Optional<BedApproachTarget> create(ServerLevel level, BlockPos bedPos) {
         BlockState state = level.getBlockState(bedPos);
-        if (!isBedState(state)) {
+        if (!BedPoiCompatibility.isCompatibleBedState(state)) {
             return Optional.empty();
         }
 
@@ -46,7 +46,7 @@ public final class BedApproachTarget implements MultiTargetPositionTracker {
                 ? bedPos
                 : bedPos.relative(facing);
         BlockState headState = level.getBlockState(head);
-        return isBedHead(headState) && headState.getValue(BedBlock.FACING) == facing
+        return BedPoiCompatibility.isHomePoiState(headState) && headState.getValue(BedBlock.FACING) == facing
                 ? Optional.of(new BedApproachTarget(head))
                 : Optional.empty();
     }
@@ -91,27 +91,22 @@ public final class BedApproachTarget implements MultiTargetPositionTracker {
         }
 
         BlockPos navigationPos = navigationPosition(mob);
+        BlockPos behindFoot = getBehindFootPosition(bedState);
         for (BlockPos approach : getApproachPositions(bedState)) {
-            if (isAtApproach(mob, navigationPos, approach, closeEnoughDistance)) {
+            if (isAtApproach(mob, navigationPos, approach, closeEnoughDistance)
+                    && (approach.equals(behindFoot)
+                    || bedHead.closerToCenterThan(mob.position(), 2.0D))
+                    && mob.level().noCollision(mob, mob.getBoundingBox())) {
                 return true;
             }
         }
         return false;
     }
 
-    public boolean isAtBehindFootApproach(Mob mob) {
-        BlockState bedState = getBedHeadState(mob);
-        if (bedState == null) {
-            return false;
-        }
-
-        return isAtApproach(mob, navigationPosition(mob), getBehindFootPosition(bedState), 0);
-    }
-
     @Nullable
     private BlockState getBedHeadState(Mob mob) {
         BlockState state = mob.level().getBlockState(bedHead);
-        return isBedHead(state) ? state : null;
+        return BedPoiCompatibility.isHomePoiState(state) ? state : null;
     }
 
     private List<BlockPos> getApproachPositions(BlockState bedState) {
@@ -181,16 +176,6 @@ public final class BedApproachTarget implements MultiTargetPositionTracker {
 
     private static BlockPos navigationPosition(Mob mob) {
         return BlockPos.containing(mob.getX(), mob.getY() + 0.5D, mob.getZ());
-    }
-
-    private static boolean isBedState(BlockState state) {
-        return state.is(BlockTags.BEDS)
-                && state.hasProperty(BedBlock.FACING)
-                && state.hasProperty(BedBlock.PART);
-    }
-
-    private static boolean isBedHead(BlockState state) {
-        return isBedState(state) && state.getValue(BedBlock.PART) == BedPart.HEAD;
     }
 
     private static boolean isAtApproach(Mob mob, BlockPos navigationPos, BlockPos approach, int closeEnoughDistance) {

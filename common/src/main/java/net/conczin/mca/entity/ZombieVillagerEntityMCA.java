@@ -3,6 +3,7 @@ package net.conczin.mca.entity;
 import net.conczin.mca.Config;
 import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.ai.Genetics;
+import net.conczin.mca.entity.ai.LongTermMemory;
 import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
@@ -50,6 +51,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
 
     private String chatAIPrompt = "";
     private CompoundTag nicknameData = new CompoundTag();
+    private CompoundTag longTermMemoryData = new CompoundTag();
     private int burned;
 
     public ZombieVillagerEntityMCA(EntityType<? extends ZombieVillager> type, Level world, Gender gender) {
@@ -131,12 +133,12 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
             return SLEEPING_DIMENSIONS;
         }
 
-        boolean useRawDimensions = getAgeState() == AgeState.TEEN || getAgeState() == AgeState.ADULT;
-        float height = (useRawDimensions ? getRawVerticalScaleFactor() : getVerticalScaleFactor()) * 2.0F;
-        float width = getHorizontalScaleFactor() * 0.6F;
+        float height = getPhysicalStandingHeight();
+        float width = getPhysicalHorizontalScaleFactor() * 0.6F;
 
-        return EntityDimensions.scalable(width, height).withAttachments(EntityAttachments.builder()
-                .attach(EntityAttachment.VEHICLE, 0.0F, getRawVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F));
+        return EntityDimensions.scalable(width, height).withEyeHeight(getPhysicalStandingEyeHeight()).withAttachments(EntityAttachments.builder()
+                .attach(EntityAttachment.VEHICLE, 0.0F, getVisualVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F)
+                .attach(EntityAttachment.NAME_TAG, 0.0F, getVisualNameTagHeight(), 0.0F));
     }
 
     @Override
@@ -206,9 +208,15 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
 
     @Override
     public void die(DamageSource cause) {
+        if (dead) {
+            return;
+        }
+
         super.die(cause);
 
-        if (level().isClientSide) {
+        // NeoForge can cancel LivingDeathEvent inside super.die(). Only commit MCA's
+        // inventory and relationship death handling after vanilla commits the death.
+        if (!dead || level().isClientSide) {
             return;
         }
 
@@ -254,12 +262,14 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     public void writeAdditionalConversionData(CompoundTag output) {
         output.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
         output.put(VillagerEntityMCA.NICKNAMES_KEY, nicknameData.copy());
+        output.put(LongTermMemory.NBT_KEY, longTermMemoryData.copy());
     }
 
     @Override
     public void readAdditionalConversionData(CompoundTag input) {
         chatAIPrompt = input.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
         nicknameData = input.getCompound(VillagerEntityMCA.NICKNAMES_KEY).copy();
+        longTermMemoryData = input.getCompound(LongTermMemory.NBT_KEY).copy();
     }
 
     @Override
@@ -270,6 +280,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         relations.readFromNbt(data);
         chatAIPrompt = data.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
         nicknameData = data.getCompound(VillagerEntityMCA.NICKNAMES_KEY).copy();
+        longTermMemoryData = data.getCompound(LongTermMemory.NBT_KEY).copy();
 
         updateAttributes();
 
@@ -292,6 +303,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         InventoryUtils.saveToNBT(this.registryAccess(), inventory, nbt);
         nbt.putString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY, chatAIPrompt);
         nbt.put(VillagerEntityMCA.NICKNAMES_KEY, nicknameData.copy());
+        nbt.put(LongTermMemory.NBT_KEY, longTermMemoryData.copy());
     }
 
     @Override

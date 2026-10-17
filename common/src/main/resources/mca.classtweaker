@@ -1,5 +1,13 @@
 classTweaker v1 named
 
+# Reuse the vanilla live-hostile distance predicate for shelter overflow.
+accessible method net/minecraft/world/entity/ai/sensing/VillagerHostilesSensor isMatchingEntity (Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/entity/LivingEntity;)Z
+
+# Reuse native chunk scheduling without the public API's server-thread managedBlock.
+accessible method net/minecraft/server/level/ServerChunkCache getChunkFutureMainThread (IILnet/minecraft/world/level/chunk/status/ChunkStatus;Z)Ljava/util/concurrent/CompletableFuture;
+# Await native ring-position generation interruptibly, without duplicating its generation logic.
+accessible field net/minecraft/world/level/chunk/ChunkGeneratorStructureState ringPositions Ljava/util/Map;
+
 # Widen vanilla registry value constructors used by common registrations.
 accessible method net/minecraft/core/particles/SimpleParticleType <init> (Z)V
 accessible method net/minecraft/world/entity/ai/memory/MemoryModuleType <init> (Ljava/util/Optional;)V
@@ -11,12 +19,28 @@ accessible method net/minecraft/world/entity/npc/VillagerProfession <init> (Ljav
 accessible method net/minecraft/world/entity/npc/Villager startTrading (Lnet/minecraft/world/entity/player/Player;)V
 accessible method net/minecraft/world/entity/npc/Villager setUnhappy ()V
 
+# Restore vanilla trading data when the Staff of Life cures a resurrected zombie.
+accessible field net/minecraft/world/entity/monster/ZombieVillager gossips Lnet/minecraft/nbt/Tag;
+accessible field net/minecraft/world/entity/monster/ZombieVillager tradeOffers Lnet/minecraft/world/item/trading/MerchantOffers;
+
 # Widen AdvancementRewards.loot to allow temporary modification without an accessor mixin.
 accessible field net/minecraft/advancements/AdvancementRewards loot Ljava/util/List;
 mutable field net/minecraft/advancements/AdvancementRewards loot Ljava/util/List;
 
 # Widen MoveControl.rotlerp for task usage
 accessible method net/minecraft/world/entity/ai/control/MoveControl rotlerp (FFF)F
+
+# Widen the vanilla action-bar renderer so BlueprintScreen can place it above its blur.
+accessible method net/minecraft/client/gui/Gui renderOverlayMessage (Lnet/minecraft/client/gui/GuiGraphics;Lnet/minecraft/client/DeltaTracker;)V
+
+# Reuse vanilla's fishing-line curve primitive for MCA villager bobbers.
+accessible method net/minecraft/client/renderer/entity/FishingHookRenderer stringVertex (FFFLcom/mojang/blaze3d/vertex/VertexConsumer;Lcom/mojang/blaze3d/vertex/PoseStack$Pose;FF)V
+
+# Reuse Projectile's lifecycle without inheriting ThrowableProjectile's water bubbles/collision tick.
+accessible method net/minecraft/world/entity/projectile/Projectile <init> (Lnet/minecraft/world/entity/EntityType;Lnet/minecraft/world/level/Level;)V
+
+# Reuse ItemEntity's vanilla infinite-delay sentinel when identifying protected MCA reel items.
+accessible field net/minecraft/world/entity/item/ItemEntity INFINITE_PICKUP_DELAY I
 
 # Widen GroundPathNavigation.getSurfaceY so MCA can make water-tag-aware navigation without replacing getTempMobPos.
 extendable method net/minecraft/world/entity/ai/navigation/GroundPathNavigation getSurfaceY ()I
@@ -32,3 +56,8 @@ accessible field net/minecraft/world/level/block/FenceGateBlock type Lnet/minecr
 extendable method net/minecraft/world/entity/ai/behavior/CrossbowAttack crossbowAttack (Lnet/minecraft/world/entity/Mob;Lnet/minecraft/world/entity/LivingEntity;)V
 accessible field net/minecraft/world/entity/ai/behavior/CrossbowAttack crossbowState Lnet/minecraft/world/entity/ai/behavior/CrossbowAttack$CrossbowState;
 accessible class net/minecraft/world/entity/ai/behavior/CrossbowAttack$CrossbowState
+
+# Extend vanilla HOME POI states on Fabric without an accessor mixin.
+accessible method net/minecraft/world/entity/ai/village/poi/PoiTypes registerBlockStates (Lnet/minecraft/core/Holder;Ljava/util/Set;)V
+accessible field net/minecraft/world/entity/ai/village/poi/PoiType matchingStates Ljava/util/Set;
+mutable field net/minecraft/world/entity/ai/village/poi/PoiType matchingStates Ljava/util/Set;

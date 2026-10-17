@@ -13,6 +13,8 @@ import java.util.Map;
  * While not powerful in terms of features it allows adding more intelligence to villager interactions
  */
 public class LongTermMemory {
+    public static final String NBT_KEY = "longTermMemory";
+
     final HashMap<String, Long> memories = new HashMap<>();
 
     private final VillagerEntityMCA entity;
@@ -39,11 +41,11 @@ public class LongTermMemory {
         for (Map.Entry<String, Long> entry : memories.entrySet()) {
             memory.putLong(entry.getKey(), entry.getValue());
         }
-        nbt.put("longTermMemory", memory);
+        nbt.put(NBT_KEY, memory);
     }
 
     public void readFromNbt(CompoundTag nbt) {
-        CompoundTag memory = nbt.getCompound("longTermMemory");
+        CompoundTag memory = nbt.getCompound(NBT_KEY);
         memories.clear();
         for (String key : memory.getAllKeys()) {
             memories.put(key, memory.getLong(key));
