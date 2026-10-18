@@ -177,7 +177,10 @@ final class ClimbTraversal {
 
     @Nullable
     private Context resolveCompleted(Path path) {
-        if (!this.mob.onClimbable()) {
+        // A partial route may end partway up a decorative vine with no exit.
+        // Its exhausted endpoint is not an arrived climb target: release motion
+        // so gravity can return the mob to support instead of holding it forever.
+        if (!path.canReach() || !this.mob.onClimbable()) {
             return null;
         }
 
