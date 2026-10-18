@@ -241,7 +241,8 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         double modeledFloor = this.getFloorLevel(originPos);
         double standingFloor = origin == this.startNode ? this.mob.getBoundingBox().minY
                 : getStandingFloorY(this.currentContext.level(), originPos, this.mob, modeledFloor);
-        if (standingFloor <= modeledFloor + RAISED_START_EPSILON) {
+        if (standingFloor <= modeledFloor + RAISED_START_EPSILON
+                && !isBarrierSupport(this.currentContext.getBlockState(originPos.below()))) {
             return nodeCount;
         }
 
@@ -251,6 +252,14 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         for (int readIndex = 0; readIndex < nodeCount; readIndex++) {
             Node candidate = nodes[readIndex];
             if (candidate != null && canSweepBoxTo(candidate, startBox)) {
+                // Vanilla's partial-collision guard measures from the live mob, so it belongs only at this start.
+                BlockPos candidatePos = candidate.asBlockPos();
+                boolean liveJump = origin == this.startNode
+                        && getStandingPosition(this.currentContext.level(), candidatePos, this.mob,
+                        this.getFloorLevel(candidatePos)).y - startBox.minY > this.mob.maxUpStep();
+                if (liveJump && !super.canReachWithoutCollision(candidate)) {
+                    continue;
+                }
                 nodes[writeIndex++] = candidate;
             }
         }
@@ -299,8 +308,6 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
                 }
             }
 
-            // Apply the same-level checks only to candidates that survived the
-            // raised-transition filters, without traversing the node array again.
             if (hasPassableTrapdoorEdge(origin, candidate)
                     && hasSupportedFenceDiagonal(origin, candidate)) {
                 nodes[writeIndex++] = candidate;
@@ -352,15 +359,15 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
     private boolean hasPassableTrapdoorEdge(Node origin, Node candidate) {
         int dx = Math.abs(origin.x - candidate.x);
         int dz = Math.abs(origin.z - candidate.z);
-        if (origin.y != candidate.y || dx > 1 || dz > 1 || dx + dz == 0) {
+        if (candidate.y > origin.y || dx > 1 || dz > 1 || dx + dz == 0) {
             return true;
         }
 
-        boolean crossesTrapdoor = dx == 1 && dz == 1
-                ? isOpenTrapdoor(origin.x, origin.y, candidate.z)
-                    || isOpenTrapdoor(candidate.x, origin.y, origin.z)
-                : isOpenTrapdoor(origin.x, origin.y, origin.z)
-                    || isOpenTrapdoor(candidate.x, candidate.y, candidate.z);
+        boolean crossesTrapdoor = isOpenTrapdoor(origin.x, origin.y, origin.z)
+                || isOpenTrapdoor(candidate.x, candidate.y, candidate.z)
+                || (dx == 1 && dz == 1
+                    && (isOpenTrapdoor(origin.x, origin.y, candidate.z)
+                        || isOpenTrapdoor(candidate.x, origin.y, origin.z)));
         if (!crossesTrapdoor) {
             return true;
         }
@@ -368,6 +375,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         AABB departure = origin == this.startNode && this.mob.onGround()
                 ? this.mob.getBoundingBox() : getMobBoxAt(origin);
         AABB destination = getMobBoxAt(candidate);
+        // A descent must clear the departure panel before the body can fall to the next floor.
         double travelX = destination.minX - departure.minX;
         double travelZ = destination.minZ - departure.minZ;
         int steps = Mth.ceil(Math.max(Math.abs(travelX), Math.abs(travelZ)) * 16.0D);

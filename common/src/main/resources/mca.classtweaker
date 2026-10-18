@@ -1,5 +1,8 @@
 classTweaker v1 named
 
+# Reuse vanilla's live partial-collision transition guard for raised navigation starts.
+accessible method net/minecraft/world/level/pathfinder/WalkNodeEvaluator canReachWithoutCollision (Lnet/minecraft/world/level/pathfinder/Node;)Z
+
 # Reuse the vanilla live-hostile distance predicate for shelter overflow.
 accessible method net/minecraft/world/entity/ai/sensing/VillagerHostilesSensor isMatchingEntity (Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/entity/LivingEntity;)Z
 
