@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RoomScanPlannerTest {
@@ -20,6 +21,20 @@ class RoomScanPlannerTest {
     static void bootstrapMinecraft() {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
+    }
+
+    @Test
+    void capturedLiveContactsAreImmutableAndDoNotBecomeExplicitConnections() {
+        StructureFloor lower = floor(0, 64, 76, 0, 3);
+        Structure structure = structure(20, 20, lower);
+        var contact = new StructureConnector.VerticalConnection(structure, lower);
+        var contacts = new java.util.HashSet<>(Set.of(contact));
+        var selected = observation(new BlockPos(0, 70, 0), floor(0, 70, 74, 0, 3).geometry());
+        var captured = new StructureScanner.FloorObservation(selected.scan(), List.of(), contacts);
+        contacts.clear();
+        assertEquals(Set.of(contact), captured.liveContacts());
+        assertTrue(captured.verticalConnections().isEmpty(), "live contact must not grant explicit-connection permissions");
+        assertThrows(UnsupportedOperationException.class, () -> captured.liveContacts().clear());
     }
 
     @Test
@@ -508,7 +523,7 @@ class RoomScanPlannerTest {
         return new StructureScanner.FloorObservation(
                 new SelectedFloorScanner.Result(Building.validationResult.SUCCESS,
                 floor, selectedCell, supportedSource, floor.anchorY(), selectedCell, selectedCell,
-                transitions(floor), Set.of(), transitionSeeds), List.of());
+                transitions(floor), Set.of(), transitionSeeds), List.of(), Set.of());
     }
 
     private static Structure structure(int id, int logicalBuildingId, StructureFloor floor) {

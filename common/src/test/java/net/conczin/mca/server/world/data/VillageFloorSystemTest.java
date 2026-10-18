@@ -545,6 +545,25 @@ class VillageFloorSystemTest {
     }
 
     @Test
+    void liveContactCannotExcuseOverlapWhenExplicitConnectionTargetsAnotherBuilding() {
+        Village village = new Village(1, null);
+        StructureFloor staleLower = TestStructureFloors.create(0, 64, 76, 0, region(64));
+        StructureFloor connectedFloor = TestStructureFloors.create(0, 60, 64, 0, region(60, 20, 0));
+        Structure touching = structure(10, 10, staleLower);
+        Structure connected = structure(20, 20, connectedFloor);
+        registerStructure(village, touching, room(100, 10, 0, true));
+        registerStructure(village, connected, room(200, 20, 0, true));
+        StructureFloor upper = TestStructureFloors.create(0, 70, 74, 1, region(70));
+        var contact = new StructureConnector.VerticalConnection(touching, staleLower);
+        var explicit = new StructureConnector.VerticalConnection(connected, connectedFloor);
+
+        assertEquals(10, village.selectAttachmentTarget(upper, List.of(), List.of(), Set.of(contact))
+                .orElseThrow().buildingId(), "captured contact should prove the otherwise stale lower shell");
+        assertTrue(village.selectAttachmentTarget(upper, List.of(explicit), List.of(), Set.of(contact)).isEmpty(),
+                "live contact was promoted to an explicit connection and relaxed overlapping-owner rejection");
+    }
+
+    @Test
     void floorAttachmentRejectsAnOverlappingCopyOfTheRegisteredFloor() {
         Village village = new Village(1, null);
         StructureFloor existingFloor = TestStructureFloors.create(0, 64, 68, 0, region(64), List.of(
@@ -588,7 +607,7 @@ class VillageFloorSystemTest {
         StructureFloor upper = TestStructureFloors.create(1, 92, 95, 0, region(92));
 
         assertEquals(10, village.selectAttachmentTarget(
-                        upper, List.of(), List.of(new BlockPos(0, 90, 0)))
+                        upper, List.of(), List.of(new BlockPos(0, 90, 0)), Set.of())
                 .orElseThrow().buildingId());
     }
 

@@ -174,7 +174,8 @@ final class RoomScanPlanner {
         StructureFloor candidateFloor = new StructureFloor(
                 0, 0, observation.scan().anchorY(), observation.scan().floor());
         Village.AttachmentTarget target = village.selectAttachmentTarget(
-                candidateFloor, observation.verticalConnections(), observation.scan().adjacentFloorSeeds()).orElse(null);
+                candidateFloor, observation.verticalConnections(), observation.scan().adjacentFloorSeeds(),
+                observation.liveContacts()).orElse(null);
         if (target == null) return Optional.empty();
 
         FloorGrouping.NumberDecision number = prospectiveNumber(village, target.buildingId(), candidateFloor);

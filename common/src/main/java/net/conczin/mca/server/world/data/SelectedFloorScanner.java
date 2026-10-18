@@ -63,6 +63,7 @@ final class SelectedFloorScanner {
         private final TransitionOwnership transitionsOwner;
         private final RegionDiscovery regions;
         private final Map<BlockPos, Result> resolutions = new HashMap<>();
+        private final Map<BlockPos, OptionalDouble> surfaces = new HashMap<>();
 
         Observation(BlockGetter world, int maxSize, int maxRadius) {
             this.world = world;
@@ -70,7 +71,6 @@ final class SelectedFloorScanner {
             this.maxRadius = maxRadius;
             this.ceilings = new FloorCeilingResolver(world);
             Map<BlockPos, List<HorizontalStep>> steps = new HashMap<>();
-            Map<BlockPos, OptionalDouble> surfaces = new HashMap<>();
             Map<BlockPos, Optional<BlockPos>> boundaries = new HashMap<>();
             Map<BlockPos, Boolean> stairCells = new HashMap<>();
             Map<BlockPos, Boolean> throughLandings = new HashMap<>();
@@ -137,6 +137,22 @@ final class SelectedFloorScanner {
 
         Result selected(BlockPos seed) {
             return resolve(seed);
+        }
+
+        Optional<SurfaceCell> surfaceCell(BlockPos feet) {
+            OptionalDouble surface = surfaces.computeIfAbsent(feet.immutable(), pos -> floorSurfaceY(world, pos));
+            if (surface.isEmpty()) return Optional.empty();
+            OptionalInt ceiling = ceilings.ceilingY(feet);
+            return ceiling.isEmpty() ? Optional.empty()
+                    : Optional.of(new SurfaceCell(feet, surface.getAsDouble(), ceiling.getAsInt()));
+        }
+
+        /** New decks can replace a saved lower ceiling without changing the registered Floor. */
+        boolean shellsTouch(FloorGeometry.Cell first, FloorGeometry.Cell second) {
+            FloorGeometry.Cell lower = first.feet().getY() <= second.feet().getY() ? first : second;
+            FloorGeometry.Cell upper = lower == first ? second : first;
+            return ceilings.ceilingY(lower.feet()).orElse(Integer.MIN_VALUE) == upper.feet().getY() - 1
+                    && surfaceCell(lower.feet()).isPresent();
         }
     }
 

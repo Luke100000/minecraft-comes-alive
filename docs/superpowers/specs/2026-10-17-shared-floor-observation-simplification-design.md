@@ -1,13 +1,21 @@
 # Shared floor observation without behavior or code-size growth
 
-Date: 2026-10-17. Status: proposed; awaiting review of this written specification.
+Date: 2026-10-17. Status: approved for inline implementation on 2026-10-18.
 
 ## Intent and success criteria
 
 Reduce floor-scanner complexity while keeping the current behavior and keeping
 production Java LOC at or below the implementation baseline. The user approved
 writing this specification and identified shared observation as the likely first
-cleanup. Implementation and an implementation plan are not yet approved.
+cleanup. On 2026-10-18 the user approved checkpointing the floor fixes, updating
+this specification and its plan, and implementing the cleanup immediately.
+
+The review confirmed the distinction to retain: fresh discovery does not use
+saved membership as traversal walls; persisted membership identifies existing
+Rooms; ceiling, surface and transition caches live only within one operation.
+Do not remove those caches or rescan registered Rooms merely to choose a UI action.
+The remaining duplication is physical attachment probing outside that observation,
+not a requirement to eliminate persistence or all caching.
 
 Success means fewer independent physical probes and repeated attachment checks,
 with unchanged geometry, ownership, action selection, validation and persistence.
@@ -27,6 +35,10 @@ contents and hashes, and verify the affected regression suites on that state.
 Do not overwrite or absorb another agent's changes. If that state changes during
 implementation or verification, reconcile ownership and establish which source
 was actually tested before making equivalence or LOC claims.
+
+Implementation baseline: `f9de24136ea7f3a6c6515c2da93b185865b87243`, the
+floor-only checkpoint. Its production sources include the slab-tower, furniture
+and bounded-exterior corrections. Unrelated dirty AI/navigation work is excluded.
 
 The September 16 ownership design, September 17 selected-floor simplification,
 September 19 boundary-semantics amendment (in the September 18-named file), and
@@ -110,6 +122,12 @@ overlap only when the explicit connection set is empty. Explicit connection to
 one floor can also permit certain distinct-band overlap within the same logical
 building. Treating all contact as one generic connection would broaden those
 permissions and violate behavior preservation.
+
+Review amendment: determine explicit vertical and saved stair-transition evidence
+before collecting live contact. If either supplies an explicit connection, skip
+live ceiling/support probes entirely: neither target selection nor overlap policy
+can consume live contact on that path. Reuse the same pure explicit-evidence
+resolver for this guard and Village policy rather than duplicating matching rules.
 
 Preserve the precise live-contact predicate: choose lower/upper cells in the same
 column, require the current lower ceiling to equal the upper supporting block's
@@ -221,8 +239,23 @@ modded 26.3 server. That remains a separately reported verification boundary.
 
 ## Review and handoff
 
-Review this written specification before creating an implementation plan. Written
-spec approval permits planning; implementation follows review of that plan and
-the user's choice of execution method. This document authorizes no product edits,
-forward ports, world changes, pushes or concurrent test runs against another
-agent's active build directory.
+The user explicitly authorized immediate inline implementation on 2026-10-18.
+Plan: `docs/superpowers/plans/2026-10-18-shared-floor-observation.md`.
+Forward ports, user-world changes and pushes remain excluded. The user subsequently
+declined further test isolation: use normal Gradle tasks and confirm actual test
+registration, avoiding overlapping standard GameTest launches when practical.
+
+## Implementation status (2026-10-18)
+
+Implemented against checkpoint `f9de24136`: handoff and live-contact probes share
+the operation's existing surface/ceiling observation; Village attachment selection
+consumes immutable facts rather than reading blocks. Explicit vertical/stair
+evidence is resolved first and suppresses unused live-contact probing, addressing
+Franklin's review finding. Persistent identity and per-operation caching remain.
+
+Production size decreased by one physical and one nonblank line overall. All 596
+ordinary tests, 99 focused scanner GameTests and 7 saved-house/tower GameTests pass.
+The full 656-test NeoForge integration run had 28 failures, recorded by name in
+the plan; global readiness is therefore not established. Do not treat all those
+failures as unrelated without baseline/suite diagnosis. No forward port or live
+26.3 verification was performed, and existing saved floor ownership is unchanged.

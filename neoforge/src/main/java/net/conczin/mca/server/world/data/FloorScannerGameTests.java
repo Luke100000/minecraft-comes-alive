@@ -178,6 +178,50 @@ public final class FloorScannerGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_floor_captured_contact", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void attachmentPlanningUsesCapturedContactAndNextOperationRefreshesIt(GameTestHelper helper) {
+        BlockPos min = helper.absolutePos(new BlockPos(5, 2, 5));
+        buildClosedRoom(helper, min, 3, 3);
+        raiseClosedRoomRoof(helper, min, 3, 3, 10);
+        var level = helper.getLevel();
+        BlockPos groundSeed = min.offset(1, 0, 1);
+        BlockPos upperSeed = min.offset(1, 6, 1);
+        var lower = SelectedFloorScanner.scan(level, groundSeed, 256, 24);
+        helper.assertTrue(lower.result() == Building.validationResult.SUCCESS, "lower room did not scan");
+        Structure structure = new Structure(51, groundSeed,
+                List.of(new StructureFloor(0, 0, lower.anchorY(), lower.floor())));
+        Building room = materializedRoom(52, 51, 0,
+                componentAt(BuildingRoomScanner.partition(level, groundSeed, 256, lower), groundSeed));
+        Village village = new Village(1, level);
+        village.registerStructure(structure, room);
+        for (int x = 0; x < 3; x++) {
+            for (int z = 0; z < 3; z++) {
+                level.setBlock(min.offset(x, 5, z), Blocks.STONE.defaultBlockState(), 2);
+            }
+        }
+        var observation = StructureScanner.observeFloor(level, upperSeed, village.getStructures().values())
+                .orElseThrow();
+        var initial = RoomScanPlanner.analyzeFresh(village, upperSeed, observation).plan();
+        helper.assertTrue(initial.mode() == Village.RoomScanMode.ADD_ATTACHMENT
+                        && initial.targetBuildingId() == 51, "fixture did not need live lower-ceiling contact");
+        // Simulate a world change after capture: the old lower surfaces are no longer usable.
+        for (FloorGeometry.Cell cell : lower.floor().cells()) {
+            level.setBlock(cell.feet(), Blocks.STONE.defaultBlockState(), 2);
+        }
+        var captured = RoomScanPlanner.analyzeFresh(village, upperSeed, observation).plan();
+        helper.assertTrue(captured.mode() == Village.RoomScanMode.ADD_ATTACHMENT
+                        && captured.targetBuildingId() == 51,
+                "attachment planning re-read physical contact instead of using its captured observation");
+        var refreshed = StructureScanner.observeFloor(level, upperSeed, village.getStructures().values()).orElseThrow();
+        var fresh = RoomScanPlanner.analyzeFresh(village, upperSeed, refreshed).plan();
+        helper.assertTrue(fresh.mode() != Village.RoomScanMode.ADD_ATTACHMENT,
+                "a later operation reused stale contact after the lower surfaces changed");
+        helper.assertTrue(village.getBuilding(52).orElseThrow() == room,
+                "planning changed the registered lower Room identity");
+        helper.succeed();
+    }
+
     /** The reported staircase's irregular platform support must not change its Add Floor target. */
     @GameTest(batch = "mca_floor_second_house_attachment", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 120)
@@ -2212,6 +2256,23 @@ public final class FloorScannerGameTests {
 
         StructureFloor lowerFloor = new StructureFloor(0, 0, lower.floor());
         StructureFloor upperFloor = new StructureFloor(1, 1, upper.floor());
+        Structure registeredUpper = new Structure(10, upperMin.offset(2, 0, 2), List.of(upperFloor));
+        BlockPos contactCeiling = lowerMin.offset(3, 2, 3);
+        BlockState savedCeiling = level.getBlockState(contactCeiling);
+        level.setBlock(contactCeiling, Blocks.AIR.defaultBlockState(), 2);
+        for (int y = 0; y < 3; y++) {
+            level.setBlock(connector.east().above(y), Blocks.STONE.defaultBlockState(), 2);
+            level.setBlock(connector.above(y), ladder, 2);
+        }
+        var explicitObservation = StructureScanner.observeFloor(level, lowerMin.offset(2, 0, 2),
+                List.of(registeredUpper)).orElseThrow();
+        level.setBlock(contactCeiling, savedCeiling, 2);
+        helper.assertTrue(!explicitObservation.verticalConnections().isEmpty(),
+                "ladder did not supply explicit attachment evidence: anchor=" + explicitObservation.scan().anchorY()
+                        + " markers=" + explicitObservation.scan().floor().connectorMarkers()
+                        + " column=" + StructureConnector.verticalColumn(level, connector));
+        helper.assertTrue(explicitObservation.liveContacts().isEmpty(),
+                "explicit ladder attachment unnecessarily captured live lower-ceiling contact");
         helper.assertTrue(StructureConnector.connectsFloors(
                         java.util.List.of(connector, connector.above(), connector.above(2), connector.above(3)),
                         lowerFloor, upperFloor),
