@@ -34,7 +34,7 @@ public class BodySkinList extends SimpleJsonResourceReloadListener {
     }
 
     private void addEntries(ResourceLocation id, JsonElement file) {
-        SkinCatalogLoader.addBodySkins(skins, id, file);
+        AppearanceCatalogLoader.addBodySkins(skins, id, file);
     }
 
     public BodySkin get(String identifier) {
@@ -43,7 +43,7 @@ public class BodySkinList extends SimpleJsonResourceReloadListener {
 
     public WeightedPool<String> getPool(Gender gender) {
         return skins.values().stream()
-                .filter(s -> s.getGender() == Gender.NEUTRAL || gender == Gender.NEUTRAL || s.getGender() == gender)
+                .filter(s -> SkinSelection.matchesGender(s, gender))
                 .sorted((a, b) -> SkinListEntry.compareIdentifiers(a.getIdentifier(), b.getIdentifier()))
                 .collect(() -> new WeightedPool.Mutable<>(""),
                         (list, entry) -> list.add(entry.getIdentifier(), entry.getChance()),

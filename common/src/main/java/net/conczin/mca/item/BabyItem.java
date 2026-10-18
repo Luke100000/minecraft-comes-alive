@@ -61,7 +61,6 @@ public class BabyItem extends Item {
 
         VillagerLike<?> motherVillager = VillagerLike.toVillager(mother);
         VillagerLike<?> fatherVillager = VillagerLike.toVillager(father);
-
         // Create dummy child to generate genes and traits
         VillagerEntityMCA child = VillagerFactory.newVillager(mother.level())
                 .withPosition(mother.position())
@@ -71,14 +70,15 @@ public class BabyItem extends Item {
 
         // Combine genes
         child.getGenetics().combine(
-                motherVillager.getGenetics(),
-                fatherVillager.getGenetics(),
+                motherVillager == null ? null : motherVillager.getGenetics(),
+                fatherVillager == null ? null : fatherVillager.getGenetics(),
                 seed
         );
 
         // Inherit traits
-        child.getTraits().inherit(motherVillager.getTraits(), seed);
-        child.getTraits().inherit(fatherVillager.getTraits(), seed);
+        if (motherVillager != null) child.getTraits().inherit(motherVillager.getTraits(), seed);
+        if (fatherVillager != null) child.getTraits().inherit(fatherVillager.getTraits(), seed);
+        child.getGenetics().finishEyeExpression(seed);
 
         // Save child for later
         CompoundTag compound = new CompoundTag();

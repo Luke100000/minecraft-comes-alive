@@ -1662,6 +1662,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         getTypeDataManager().load(this, data);
+        getGenetics().finishEyeExpression(EyeGenetics.seed(getUUID(), 0));
         relations.readFromNbt(data);
         longTermMemory.readFromNbt(data);
         readNicknames(data);
@@ -1682,9 +1683,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             this.interactedWith = data.getBoolean("InteractedWith");
         }
 
-        if (data.contains("Clothes")) {
-            validateClothes();
-        }
+        validateAppearance();
 
         if (getVillagerBrain().getPersonality() == Personality.UNASSIGNED) {
             getVillagerBrain().randomize();

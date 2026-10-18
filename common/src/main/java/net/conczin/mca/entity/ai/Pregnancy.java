@@ -114,6 +114,7 @@ public class Pregnancy {
         child.getGenetics().combine(partner.getGenetics(), mother.getGenetics());
         child.getTraits().inherit(partner.getTraits());
         child.getTraits().inherit(mother.getTraits());
+        child.getGenetics().finishEyeExpression(EyeGenetics.seed(child.getUUID(), 0));
         child.setAge(getNaturalChildStartingAge());
         child.getRelationships().getFamilyEntry().replaceParents(mother.getRelationships(), partner.getRelationships());
 

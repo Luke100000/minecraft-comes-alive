@@ -3,10 +3,15 @@ package net.conczin.mca.entity.ai;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.Gender;
+import net.conczin.mca.resources.EyeCatalog;
+import net.conczin.mca.resources.EyeStyles;
 import net.conczin.mca.util.network.datasync.CDataManager;
 import net.conczin.mca.util.network.datasync.CDataParameter;
 import net.conczin.mca.util.network.datasync.CEnumParameter;
 import net.conczin.mca.util.network.datasync.CParameter;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
@@ -27,13 +32,21 @@ public class Genetics implements Iterable<Genetics.Gene> {
     public static final GeneType HEMOGLOBIN = new GeneType("Hemoglobin");
     public static final GeneType EUMELANIN = new GeneType("Eumelanin");
     public static final GeneType PHEOMELANIN = new GeneType("Pheomelanin");
+    public static final GeneType EYE_COLOR = new GeneType("EyeColor");
     public static final GeneType SKIN = new GeneType("Skin");
-    public static final GeneType FACE = new GeneType("Face");
     public static final GeneType EYE_BRIGHTNESS = new GeneType("EyeBrightness");
     public static final GeneType VOICE = new GeneType("Voice");
     public static final GeneType VOICE_TONE = new GeneType("VoiceTone");
 
     private static final CEnumParameter<Gender> GENDER = CParameter.create("Gender", Gender.UNASSIGNED);
+    private static final CDataParameter<CompoundTag> EYES = new CDataParameter<>(
+            EyeGenetics.KEY, EntityDataSerializers.COMPOUND_TAG, new CompoundTag(),
+            (nbt, key, registries) -> nbt.getCompound(key).copy(),
+            (nbt, key, value, registries) -> nbt.put(key, value.copy())
+    ) {
+        @Override public CompoundTag getDefault() { return new CompoundTag(); }
+    };
+    private static final long INHERITANCE_SALT = 0x455945494E484552L;
 
     private final Map<GeneType, Gene> genes = new HashMap<>();
     private final VillagerLike<?> entity;
@@ -43,9 +56,57 @@ public class Genetics implements Iterable<Genetics.Gene> {
         this.entity = entity;
     }
 
+    public CompoundTag getEyePayload() { return entity.getTrackedValue(EYES).copy(); }
+    public void setEyePayload(CompoundTag payload) {
+        entity.setTrackedValue(EYES, payload.copy());
+        if (EyeGenetics.hasGenotype(payload)) {
+            entity.setTrackedValue(EYE_COLOR.parameter, EyeGenetics.compatibilityScalar(payload));
+        }
+    }
+
+    public void initializeEyesIfMissing() {
+        if (entity.asEntity().level().isClientSide) return;
+        CompoundTag payload = getEyePayload();
+        setEyePayload(EyeGenetics.initializeSavedPayload(payload, entity.asEntity().getUUID(),
+                EyeGenetics.parsePreset(Config.getInstance().eyePopulationPreset)));
+    }
+
+    public void finishEyeExpression(long seed) {
+        if (entity.asEntity().level().isClientSide) return;
+        initializeEyesIfMissing();
+        CompoundTag payload = getEyePayload();
+        setEyePayload(EyeGenetics.finishSavedExpression(payload, entity.getTraits().hasTrait(Traits.HETEROCHROMIA), seed));
+    }
+
+    public int getNaturalEyeColor(boolean left) {
+        CompoundTag payload = getEyePayload();
+        boolean heterochromia = entity.getTraits().hasTrait(Traits.HETEROCHROMIA);
+        boolean albinism = entity.getTraits().hasTrait(Traits.ALBINISM);
+        if (albinism) return 0xFFE8A0A0;
+        if (payload.contains("LegacyNatural")) return EyeGenetics.resolveLegacyNatural(payload.getCompound("LegacyNatural"), left, heterochromia, false);
+        if (EyeGenetics.hasGenotype(payload)) {
+            return EyeGenetics.resolveNatural(EyeGenetics.decodeGenotype(payload),
+                    heterochromia ? EyeGenetics.decodeLocalExpression(payload) : null, left);
+        }
+        // Before the initial server snapshot (or with a future format) this is only a read-only preview.
+        CompoundTag preview = new CompoundTag();
+        preview.putFloat("Scalar", entity.getTrackedValue(EYE_COLOR.parameter));
+        return EyeGenetics.resolveLegacyNatural(preview, left, heterochromia, false);
+    }
+
+    public void setNaturalEyeColorFromLegacyScalar(float scalar) {
+        if (!Float.isFinite(scalar) || scalar < 0 || scalar > 1) throw new IllegalArgumentException("Eye colour scalar must be finite in [0,1]");
+        if (entity.asEntity().level().isClientSide) return;
+        CompoundTag payload = getEyePayload();
+        if (!payload.isEmpty() && !EyeGenetics.isSupported(payload)) throw new IllegalArgumentException("Cannot edit unsupported EyeGenetics Format " + payload.get("Format"));
+        CompoundTag legacy = new CompoundTag(); legacy.putFloat("Scalar", scalar);
+        setEyePayload(EyeGenetics.encode(EyeGenetics.inferLegacy(legacy, entity.asEntity().getUUID()), null, new CompoundTag()));
+        finishEyeExpression(EyeGenetics.seed(entity.asEntity().getUUID(), 0));
+    }
+
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(CDataManager.Builder<E> builder) {
         GENOMES.forEach(g -> builder.addAll(g.getParam()));
-        return builder.addAll(GENDER);
+        return builder.addAll(GENDER, EYES);
     }
 
     public float getVerticalScaleFactor() {
@@ -91,6 +152,9 @@ public class Genetics implements Iterable<Genetics.Gene> {
             getGenome(type).randomize();
         }
 
+        EyeCatalog eyes = EyeCatalog.getInstance();
+        entity.setEyeTexture(eyes == null ? EyeStyles.DEFAULT : eyes.pick(getGender()));
+
         // size is more centered
         setGene(SIZE, centeredRandom());
         setGene(WIDTH, centeredRandom());
@@ -116,6 +180,9 @@ public class Genetics implements Iterable<Genetics.Gene> {
 
         setGene(EUMELANIN, random.nextFloat());
         setGene(PHEOMELANIN, random.nextFloat());
+        if (!entity.asEntity().level().isClientSide) {
+            initializeEyesIfMissing();
+        }
     }
 
     /**
@@ -130,16 +197,42 @@ public class Genetics implements Iterable<Genetics.Gene> {
     }
 
     public void combine(Genetics mother, Genetics father) {
+        combineEyesAndGenes(mother, father, EyeGenetics.seed(entity.asEntity().getUUID(), INHERITANCE_SALT));
+    }
+
+    private void combineEyesAndGenes(Genetics mother, Genetics father, long eyeSeed) {
+        // Check parental formats before changing the child. Unsupported DNA must not become a fallback founder.
+        EyeGenetics.Genotype maternalEyes = inheritedEyes(mother);
+        EyeGenetics.Genotype paternalEyes = inheritedEyes(father);
         for (GeneType type : GENOMES) {
             getGenome(type).mutate(mother, father);
         }
+
+        ResourceLocation inheritedEye = random.nextBoolean()
+                ? (mother == null ? EyeStyles.DEFAULT : mother.entity.getEyeTexture())
+                : (father == null ? EyeStyles.DEFAULT : father.entity.getEyeTexture());
+        EyeCatalog eyes = EyeCatalog.getInstance();
+        entity.setEyeTexture(eyes == null ? inheritedEye : eyes.resolve(inheritedEye, getGender()));
+        if (!entity.asEntity().level().isClientSide) {
+            setEyePayload(EyeGenetics.encode(EyeGenetics.inheritWithMissingParent(maternalEyes, paternalEyes,
+                    EyeGenetics.parsePreset(Config.getInstance().eyePopulationPreset), RandomSource.create(eyeSeed)), null, new CompoundTag()));
+        }
+    }
+
+    private static EyeGenetics.Genotype inheritedEyes(Genetics parent) {
+        if (parent == null) return null;
+        parent.initializeEyesIfMissing();
+        return EyeGenetics.decodeGenotype(parent.getEyePayload());
     }
 
     public void combine(Genetics mother, Genetics father, long seed) {
         RandomSource old = random;
         random = RandomSource.create(seed);
-        combine(mother, father);
-        random = old;
+        try {
+            combineEyesAndGenes(mother, father, seed ^ INHERITANCE_SALT);
+        } finally {
+            random = old;
+        }
     }
 
     public static class GeneType implements Comparable<GeneType> {
@@ -193,25 +286,33 @@ public class Genetics implements Iterable<Genetics.Gene> {
         }
 
         public float get() {
+            if (type == EYE_COLOR) {
+                CompoundTag payload = getEyePayload();
+                if (EyeGenetics.hasGenotype(payload)) return EyeGenetics.compatibilityScalar(payload);
+            }
             return entity.getTrackedValue(type.parameter);
         }
 
         public void set(float value) {
+            if (type == EYE_COLOR) {
+                setNaturalEyeColorFromLegacyScalar(value);
+                return;
+            }
             entity.setTrackedValue(type.parameter, value);
         }
 
         public void randomize() {
-            set(random.nextFloat());
+            entity.setTrackedValue(type.parameter, random.nextFloat());
         }
 
         public void mutate(Genetics mother, Genetics father) {
-            float m = mother.getGene(type);
-            float f = father.getGene(type);
+            float m = mother == null ? 0.5F : mother.entity.getTrackedValue(type.parameter);
+            float f = father == null ? 0.5F : father.entity.getTrackedValue(type.parameter);
             float interpolation = random.nextFloat();
             float mutation = (random.nextFloat() - 0.5f) * 0.2f;
             float g = m * interpolation + f * (1.0f - interpolation) + mutation;
 
-            set((float) Math.min(1.0, Math.max(0.0, g)));
+            entity.setTrackedValue(type.parameter, (float) Math.min(1.0, Math.max(0.0, g)));
         }
     }
 }

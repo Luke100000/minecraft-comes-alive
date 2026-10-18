@@ -6,6 +6,7 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
 import net.conczin.mca.entity.EquipmentSet;
 import net.conczin.mca.entity.ai.Traits;
+import net.conczin.mca.entity.ai.EyeGenetics;
 import net.minecraft.util.Mth;
 
 import java.io.File;
@@ -233,6 +234,9 @@ public final class Config extends CommonConfig {
      * Fraction (0–1) of villagers who will have biome-independent skin tones.
      */
     public float geneticImmigrantChance = 0.2f;
+
+    /** Server-only founder distribution; inherited or saved eyes are never rerolled. */
+    public String eyePopulationPreset = "DIVERSE";
 
     /**
      * Chance multiplier (0–1) of a villager having one trait.
@@ -945,11 +949,15 @@ public final class Config extends CommonConfig {
     }
 
     public static Config loadOrCreate() {
-        File file = getConfigFile();
+        return loadOrCreate(getConfigFile());
+    }
+
+    static Config loadOrCreate(File file) {
         if (file.exists()) {
             try (FileReader reader = new FileReader(file)) {
                 Gson gson = new GsonBuilder().setPrettyPrinting().create();
                 Config config = gson.fromJson(reader, Config.class);
+                if (config != null) EyeGenetics.parsePreset(config.eyePopulationPreset);
                 if (config == null || config.version != VERSION) {
                     config = new Config();
                 } else if (config.configDefaultsVersion < DEFAULTS_VERSION) {
@@ -958,7 +966,7 @@ public final class Config extends CommonConfig {
                     config.playerRendererBlacklist = mergeDefaults(config.playerRendererBlacklist, defaults.playerRendererBlacklist);
                     config.configDefaultsVersion = DEFAULTS_VERSION;
                 }
-                config.save();
+                config.save(file);
                 return config;
             } catch (JsonSyntaxException e) {
                 MCA.LOGGER.error("");
@@ -973,7 +981,7 @@ public final class Config extends CommonConfig {
         }
 
         Config config = new Config();
-        config.save();
+        config.save(file);
         return config;
     }
 
@@ -1016,9 +1024,14 @@ public final class Config extends CommonConfig {
     }
 
     public void save() {
+        save(getConfigFile());
+    }
+
+    private void save(File file) {
+        EyeGenetics.parsePreset(eyePopulationPreset);
         autocomplete();
 
-        try (FileWriter writer = new FileWriter(getConfigFile())) {
+        try (FileWriter writer = new FileWriter(file)) {
             version = VERSION;
             configDefaultsVersion = DEFAULTS_VERSION;
             Gson gson = new GsonBuilder().setPrettyPrinting().create();

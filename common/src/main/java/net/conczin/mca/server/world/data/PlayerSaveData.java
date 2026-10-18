@@ -7,6 +7,8 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.PlayerDimensions;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.EyeGenetics;
+import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.relationship.EntityRelationship;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
@@ -113,11 +115,14 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
         VillagerEntityMCA villager = EntitiesMCA.MALE_VILLAGER.create(world);
         assert villager != null;
+        villager.setUUID(uuid);
         villager.initializeSkin(true);
         villager.getGenetics().randomize();
         villager.getTraits().randomize();
+        villager.getGenetics().finishEyeExpression(EyeGenetics.seed(uuid, 0));
         villager.getVillagerBrain().randomize();
         villager.addAdditionalSaveData(entityData);
+        setDirty();
     }
 
     public boolean isEntityDataSet() {
@@ -164,8 +169,14 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         refreshPlayerDimensions();
     }
 
-    private static CompoundTag normalizeEntityData(CompoundTag entityData) {
-        return McaDataFixers.update(entityData.copy());
+    private CompoundTag normalizeEntityData(CompoundTag entityData) {
+        CompoundTag normalized = McaDataFixers.update(entityData.copy());
+        if (normalized.getInt(McaDataFixers.DATA_VERSION_KEY) > McaDataFixers.CURRENT_VERSION) return normalized;
+        CompoundTag eyes = EyeGenetics.initializeSavedPayload(normalized.getCompound(EyeGenetics.KEY), uuid,
+                EyeGenetics.parsePreset(Config.getInstance().eyePopulationPreset));
+        normalized.put(EyeGenetics.KEY, EyeGenetics.finishSavedExpression(eyes,
+                normalized.getCompound("Traits").contains(Traits.HETEROCHROMIA.getId().toString()), EyeGenetics.seed(uuid, 0)));
+        return normalized;
     }
 
     private void refreshPlayerDimensions() {
@@ -287,7 +298,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     public CompoundTag save(CompoundTag nbt, HolderLookup.Provider provider) {
         lastSeenVillage.ifPresent(id -> nbt.putInt("lastSeenVillage", id));
         McaDataFixers.stampCurrentVersion(entityData);
-        nbt.put("entityData", entityData);
+        nbt.put("entityData", entityData.copy());
         nbt.putBoolean("entityDataSet", entityDataSet);
         nbt.putBoolean("overrideVillageRequirements", overrideVillageRequirements);
         nbt.putString("chatAIPrompt", chatAIPrompt);
