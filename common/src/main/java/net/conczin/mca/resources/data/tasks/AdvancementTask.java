@@ -23,6 +23,6 @@ public class AdvancementTask extends Task {
     @Override
     public boolean isCompleted(Village village, ServerPlayer player) {
         Advancement advancement = Objects.requireNonNull(player.getServer()).getAdvancements().getAdvancement(new ResourceLocation(identifier));
-        return player.getAdvancements().getOrStartProgress(advancement).isDone();
+        return advancement != null && player.getAdvancements().getOrStartProgress(advancement).isDone();
     }
 }

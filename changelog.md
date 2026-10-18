@@ -4,6 +4,11 @@
 * Backup your world before using.
 * Some addons may not work/crash, if so either use 7.6.28-beta or 7.7.0-beta.2
 
+# 7.7.1-beta.5
+
+* Fixed cured vanilla villagers losing their curing-related trade discounts when converted into MCA villagers.
+* Fixed issues with village progression and the Blueprint GUI when advancements are missing or modified by datapacks.
+
 # 7.7.1-beta.4
 
 * Fixed custom outfits and hairstyles missing from the World's skin library after updating, including newly added skins.

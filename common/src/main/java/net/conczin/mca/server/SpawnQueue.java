@@ -10,6 +10,7 @@ import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.server.world.data.Nationality;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.MobSpawnType;
@@ -49,6 +50,7 @@ public class SpawnQueue {
                     .withProfession(ve.getVillagerData().getProfession(), ve.getVillagerData().getLevel(), ve.getOffers())
                     .spawn(((IVillagerEntity) ve).getSpawnReason());
 
+            villager.setGossips(ve.getGossips().store(NbtOps.INSTANCE));
             copyPastaIntensifies(villager, ve);
         }
 
