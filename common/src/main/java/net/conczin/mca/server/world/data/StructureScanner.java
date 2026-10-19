@@ -311,7 +311,7 @@ final class StructureScanner {
         FloorGeometry geometry = floor.geometry();
         // An explicit refresh targets the persisted Floor, even if an old stair cell now
         // belongs upstairs. Select its ordinary anchor before scanning, rather than rescan.
-        return geometry.cells().stream()
+        List<BlockPos> candidates = geometry.cells().stream()
                 .map(FloorGeometry.Cell::feet)
                 .sorted(Comparator
                         .comparingInt((BlockPos candidate) -> Math.abs(candidate.getY() - floor.anchorY()))
@@ -319,9 +319,17 @@ final class StructureScanner {
                         .thenComparingInt(BlockPos::getY)
                         .thenComparingInt(BlockPos::getX)
                         .thenComparingInt(BlockPos::getZ))
+                .toList();
+        // Stair rows can extend below the ordinary deck's anchor. Starting a refresh
+        // there changes the seed-relative discovery band even when no blocks changed.
+        return candidates.stream()
                 .filter(candidate -> observation.surfaceCell(candidate).isPresent())
-                .map(BlockPos::immutable)
-                .findFirst();
+                .filter(candidate -> !observation.explicitStairCell(candidate))
+                .findFirst()
+                // A stair-only room still needs a fresh scan if no ordinary support remains.
+                .or(() -> candidates.stream()
+                        .filter(candidate -> observation.surfaceCell(candidate).isPresent())
+                        .findFirst());
     }
 
     private static boolean isSubFullInteraction(BlockGetter world, BlockPos source) {

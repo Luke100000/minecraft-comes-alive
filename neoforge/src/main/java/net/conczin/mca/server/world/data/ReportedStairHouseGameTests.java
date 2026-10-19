@@ -189,6 +189,91 @@ public final class ReportedStairHouseGameTests {
         }
     }
 
+    @GameTest(batch = "mca_reported_slab_tower_refresh", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 120)
+    public static void reportedSlabTowerUnchangedRefreshPreservesGeometry(GameTestHelper helper)
+            throws IOException, CommandSyntaxException {
+        var level = helper.getLevel();
+        BlockPos origin = helper.absolutePos(new BlockPos(40, 8, 40));
+        var resource = level.getServer().getResourceManager()
+                .getResourceOrThrow(MCA.locate("gametest/reported_slab_tower_probe.snbt"));
+        StructureTemplate template = new StructureTemplate();
+        try (var input = resource.open()) {
+            template.load(BuiltInRegistries.BLOCK.asLookup(),
+                    TagParser.parseTag(new String(input.readAllBytes(), StandardCharsets.UTF_8)));
+        }
+        template.placeInWorld(level, origin, origin, new StructurePlaceSettings(), level.random, 2);
+        // Exercise settled blocks, not only the tick in which the template was placed.
+        helper.runAfterDelay(5, () -> {
+            var config = net.conczin.mca.Config.getInstance();
+            int previousSize = config.maxBuildingSize, previousRadius = config.maxBuildingRadius;
+            try {
+                for (int[] limits : List.of(new int[]{2048, 32}, new int[]{8192, 320})) {
+                    config.maxBuildingSize = limits[0];
+                    config.maxBuildingRadius = limits[1];
+                    for (BlockPos registration : List.of(new BlockPos(18, 2, 11),
+                            new BlockPos(18, 2, 10), new BlockPos(17, 2, 9))) {
+                        VillageManager manager = new VillageManager(level);
+                        RoomWorkflow workflow = new RoomWorkflow(manager, level);
+                        BlockPos source = origin.offset(registration);
+                        BuildingScanResult initial = workflow.analyzeBuildingAddition(source);
+                        helper.assertTrue(initial.result() == Building.validationResult.SUCCESS,
+                                "lower tower registration failed: " + initial.result());
+                        var registrationOutcome = workflow.commitAddition(initial,
+                                initial.isAmbiguous() ? initial.matchingTypes().getFirst() : null);
+                        helper.assertTrue(registrationOutcome.status() == RoomWorkflow.Status.COMMITTED,
+                                "lower tower did not register: " + registrationOutcome);
+                        Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElseThrow();
+                        Building room = village.getRooms().findFirst().orElseThrow();
+                        // Exercise the Blueprint's world-aware selection, including
+                        // supported-surface handoffs, rather than the raw position lookup.
+                        helper.assertTrue(RoomScanPlanner.analyze(village, level, source).plan()
+                                        .currentRoom().map(Building::getId).orElse(-1) == room.getId(),
+                                "registered tower lost its selection before update at " + registration
+                                        + " limits=" + Arrays.toString(limits));
+                        Structure structure = village.getStructureFor(room).orElseThrow();
+                        StructureFloor floor = structure.getFloor(room.getFloorId()).orElseThrow();
+                        FloorGeometry originalGeometry = floor.geometry();
+                        var originalRoomCells = java.util.Set.copyOf(room.getFloorCells());
+                        for (int repetition = 0; repetition < 2; repetition++) {
+                            for (BlockPos relative : List.of(registration, new BlockPos(19, 2, 13),
+                                    new BlockPos(16, 3, 11), new BlockPos(16, 6, 11), new BlockPos(16, 10, 11))) {
+                                BlockPos interaction = origin.offset(relative);
+                                var fresh = StructureScanner.scanExistingFloor(
+                                        level, structure, floor, interaction, village.getStructures().values());
+                                helper.assertTrue(fresh.result() == Building.validationResult.SUCCESS
+                                                && originalGeometry.sameExactGeometry(fresh.scannedFloor()),
+                                        "unchanged tower refresh changes physical Floor from " + registration
+                                                + " at " + relative + " limits=" + Arrays.toString(limits)
+                                                + ": " + fresh.result() + " cells=" + originalGeometry.cells().size()
+                                                + "->" + (fresh.scannedFloor() == null ? 0 : fresh.scannedFloor().cells().size())
+                                                + " seed=" + (fresh.scan() == null ? null : fresh.scan().seed().subtract(origin)));
+                                var update = workflow.scanRoom(interaction, room.getId(), null);
+                                helper.assertTrue(update.status() == RoomWorkflow.Status.COMMITTED,
+                                        "unchanged tower update failed at " + relative + ": " + update);
+                                Building updatedRoom = village.getBuilding(room.getId()).orElseThrow();
+                                structure = village.getStructureFor(updatedRoom).orElseThrow();
+                                floor = structure.getFloor(updatedRoom.getFloorId()).orElseThrow();
+                                helper.assertTrue(originalGeometry.sameExactGeometry(floor.geometry())
+                                                && originalRoomCells.equals(java.util.Set.copyOf(updatedRoom.getFloorCells()))
+                                                && updatedRoom.getStructureId() == room.getStructureId()
+                                                && updatedRoom.getFloorId() == room.getFloorId(),
+                                        "unchanged update rewrote tower geometry or identity at " + relative);
+                            }
+                        }
+                    }
+                }
+            } finally {
+                config.maxBuildingSize = previousSize;
+                config.maxBuildingRadius = previousRadius;
+                for (BlockPos pos : BlockPos.betweenClosed(origin, origin.offset(23, 31, 20))) {
+                    level.setBlock(pos, Blocks.AIR.defaultBlockState(), 2);
+                }
+            }
+            helper.succeed();
+        });
+    }
+
     private static void verifyRemovedTowerBalconyDoors(GameTestHelper helper, BlockPos origin) {
         var level = helper.getLevel();
         var door = Blocks.OAK_DOOR.defaultBlockState().setValue(DoorBlock.FACING, Direction.NORTH);
@@ -304,6 +389,31 @@ public final class ReportedStairHouseGameTests {
         }
         helper.assertTrue(reloaded.findInteractionRoomAt(lowerSeed).orElseThrow().getId() == main.getId(),
                 "top Floor registration replaced the main Room");
+        // Refresh with all three registered storeys present: overlap checks must remain
+        // strict, but an unchanged lower stairwell must not collide with the upper Floor.
+        Map<Integer, java.util.Set<BlockPos>> roomCells = village.getRooms().collect(
+                java.util.stream.Collectors.toMap(Building::getId, room -> java.util.Set.copyOf(room.getFloorCells())));
+        Map<Integer, FloorGeometry> floorGeometry = village.getStructures().values().stream().collect(
+                java.util.stream.Collectors.toMap(Structure::getId, member -> member.getFloors().getFirst().geometry()));
+        for (int repetition = 0; repetition < 2; repetition++) {
+            for (BlockPos source : List.of(lowerSeed, origin.offset(16, 10, 11),
+                    origin.offset(17, 12, 13), upperStep)) {
+                Building selected = village.findInteractionRoomAt(source).orElseThrow();
+                var update = workflow.scanRoom(source, selected.getId(), null);
+                helper.assertTrue(update.status() == RoomWorkflow.Status.COMMITTED,
+                        "unchanged stacked tower refresh failed at " + source.subtract(origin) + ": " + update);
+            }
+            helper.assertTrue(village.getRooms().allMatch(room ->
+                            java.util.Set.copyOf(room.getFloorCells()).equals(roomCells.get(room.getId())))
+                            && village.getStructures().values().stream().allMatch(member ->
+                            member.getFloors().getFirst().geometry().sameExactGeometry(floorGeometry.get(member.getId()))),
+                    "refresh repartitioned the unchanged three-storey tower");
+        }
+        Village updatedReload = new Village(village.save(), level);
+        helper.assertTrue(updatedReload.getBuildingStructures(buildingId).size() == 3
+                        && updatedReload.findInteractionRoomAt(lowerSeed).orElseThrow().getId() == main.getId()
+                        && updatedReload.findInteractionRoomAt(upperStep).orElseThrow().getId() == upperRoom.getId(),
+                "stacked tower refresh lost storey/room identity after reload");
     }
 
     @GameTest(batch = "mca_reported_quartz_stairs", templateNamespace = "minecraft",

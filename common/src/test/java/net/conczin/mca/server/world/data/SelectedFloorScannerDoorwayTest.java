@@ -244,6 +244,46 @@ class SelectedFloorScannerDoorwayTest {
         });
     }
 
+    @Test
+    void refreshSkipsUnloadedSavedCellsBeforeReadingTheirStairState() {
+        HouseBlocks world = house(1, false);
+        BlockPos source = new BlockPos(2, 64, 2), unavailable = new BlockPos(32, 63, 32);
+        world.unknown.add(new BlockPos(32, 0, 32));
+        StructureFloor floor = new StructureFloor(0, 0, 63, new FloorGeometry(java.util.List.of(
+                new FloorGeometry.Cell(unavailable, 67), new FloorGeometry.Cell(source, 67)), Map.of()));
+        Structure structure = new Structure(1, source, java.util.List.of(floor));
+
+        var refreshed = StructureScanner.scanExistingFloor(world, structure, floor, source,
+                java.util.List.of(structure));
+
+        assertEquals(Building.validationResult.SUCCESS, refreshed.result());
+        assertNull(world.firstUnknownRead, "choosing a refresh seed read an unavailable saved column");
+    }
+
+    @Test
+    void refreshRetainsSupportedStairOnlyFloorFallback() {
+        HouseBlocks world = house(1, false);
+        world.put(5, 64, 2, Blocks.STONE.defaultBlockState());
+        world.put(5, 65, 2, Blocks.STONE.defaultBlockState());
+        BlockState support = Blocks.OAK_STAIRS.defaultBlockState().setValue(StairBlock.HALF,
+                net.minecraft.world.level.block.state.properties.Half.TOP);
+        for (int x = 1; x <= 4; x++) {
+            for (int z = 1; z <= 4; z++) world.put(x, 63, z, support);
+        }
+        BlockPos source = new BlockPos(2, 64, 2);
+        var initial = SelectedFloorScanner.scan(world, source, 512, 16);
+        assertEquals(Building.validationResult.SUCCESS, initial.result());
+        assertEquals(16, initial.floor().cells().size());
+        StructureFloor floor = new StructureFloor(0, 0, 64, initial.floor());
+        Structure structure = new Structure(1, source, java.util.List.of(floor));
+
+        var refreshed = StructureScanner.scanExistingFloor(world, structure, floor, source,
+                java.util.List.of(structure));
+
+        assertEquals(Building.validationResult.SUCCESS, refreshed.result());
+        assertTrue(initial.floor().sameExactGeometry(refreshed.scannedFloor()));
+    }
+
     private static HouseBlocks house(int width, boolean rotated) {
         HouseBlocks world = new HouseBlocks(rotated);
         for (BlockPos pos : BlockPos.betweenClosed(-20, 63, -20, 25, 63, 25)) {

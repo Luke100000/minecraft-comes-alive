@@ -170,6 +170,10 @@ final class SelectedFloorScanner {
                     : Optional.of(new SurfaceCell(feet, surface.getAsDouble(), ceiling.getAsInt()));
         }
 
+        boolean explicitStairCell(BlockPos feet) {
+            return provider.explicitStairCell(world, feet);
+        }
+
         Optional<FramedDoorway> framedDoorway(BlockPos feet, Direction.Axis normalAxis) {
             FrameKey key = new FrameKey(feet.immutable(), normalAxis);
             Optional<FramedDoorway> known = frames.get(key);

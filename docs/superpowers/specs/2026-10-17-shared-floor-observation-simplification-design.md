@@ -313,3 +313,18 @@ compares cached outcomes with independent fresh discovery; unchanged small-proof
 identity reuse guards against solving the problem by disabling the cache.
 
 Execution ledger: `.superpowers/sdd/2026-10-18-indoor-cache-dependencies/progress.md`.
+
+## Unchanged tower refresh regression (2026-10-19)
+
+Registering and repeatedly refreshing an unchanged Floor must preserve its exact
+cells, ceilings, connectors, Room membership and saved identities. Refresh still
+targets the registered Floor rather than rediscovering whichever storey contains
+the player's current step. Prefer a supported ordinary cell near its saved anchor;
+explicit stair rows can extend below that anchor and must not select a different
+seed-relative discovery band. Reuse the operation's stair classification, with
+the existing supported-cell fallback when no ordinary support remains.
+
+This does not freeze saved geometry or relax overlap checks: real world edits
+still receive a fresh scan. The reported slab tower must pass repeated refreshes
+from multiple lower-floor/stair positions at both 2048/32 and 8192/320 scan limits,
+and preserve its three registered storeys through refresh and save/reload.
