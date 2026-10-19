@@ -33,6 +33,31 @@ class SelectedFloorScannerBoundaryTest {
     }
 
     @Test
+    void selectionInAnUnknownColumnDoesNotReadItAsAir() {
+        ChunkBlocks world = houseWithPorch(16, 5, 6);
+        BlockPos unknown = new BlockPos(16, 64, 6);
+        assertEquals(Building.validationResult.NOT_IN_BUILDING,
+                SelectedFloorScanner.scan(world, unknown, 512, 16).result());
+        assertNull(world.firstMissingBlock, "unknown seed was still examined as air during adjacent fallback");
+        assertTrue(new SelectedFloorScanner.Observation(world, 512, 16).surfaceCell(unknown).isEmpty());
+        assertNull(world.firstMissingBlock, "surface inspection read an unknown column");
+    }
+
+    @Test
+    void loadedOnlyBlockViewUsesTheSameEnclosureProofAsLevelReader() {
+        for (int minPorchZ : new int[]{4, 5}) {
+            ChunkBlocks blocks = houseWithPorch(16, minPorchZ, minPorchZ == 4 ? 7 : 6);
+            BlockPos source = new BlockPos(3, 64, 6);
+            var realLevel = SelectedFloorScanner.scan(blocks.loadedView(), source, 512, 16);
+            var loadedOnly = SelectedFloorScanner.scan(blocks, source, 512, 16);
+
+            assertEquals(Building.validationResult.SUCCESS, loadedOnly.result());
+            assertTrue(realLevel.floor().sameExactGeometry(loadedOnly.floor()));
+            assertNull(blocks.firstMissingBlock, "loaded-only view read unknown blocks as air");
+        }
+    }
+
+    @Test
     void smallHouseBesideUnevenCoveredPorchDoesNotReadUnloadedNeighbor() {
         ChunkBlocks world = houseWithPorch(16, 4, 7);
         BlockPos inside = new BlockPos(3, 64, 6);
@@ -72,6 +97,8 @@ class SelectedFloorScannerBoundaryTest {
         BlockPos source = new BlockPos(13, 64, 6);
         assertEquals(Building.validationResult.NOT_IN_BUILDING,
                 SelectedFloorScanner.scan(unknown.loadedView(), source, 512, 16).result());
+        assertEquals(Building.validationResult.NOT_IN_BUILDING,
+                SelectedFloorScanner.scan(unknown, source, 512, 16).result());
         assertNull(unknown.firstMissingBlock, "finite proof loaded an unknown exterior chunk");
 
         ChunkBlocks loaded = new ChunkBlocks(32);
@@ -119,7 +146,7 @@ class SelectedFloorScannerBoundaryTest {
         return world;
     }
 
-    private static final class ChunkBlocks implements BlockGetter {
+    private static final class ChunkBlocks implements SelectedFloorScanner.LoadedColumns {
         private final Map<BlockPos, BlockState> blocks = new HashMap<>();
         private final int loadedWidth;
         private BlockPos firstMissingBlock;
@@ -128,6 +155,11 @@ class SelectedFloorScannerBoundaryTest {
         private ChunkBlocks(int loadedWidth) { this.loadedWidth = loadedWidth; }
 
         private void put(BlockPos pos, BlockState state) { blocks.put(pos.immutable(), state); }
+
+        @Override
+        public boolean hasColumn(BlockPos pos) {
+            return pos.getX() >= 0 && pos.getX() < loadedWidth && pos.getZ() >= 0 && pos.getZ() < 16;
+        }
 
         // Expose the real LevelReader availability contract as well as block reads.
         // Missing columns must reject the finite proof without being treated as air.

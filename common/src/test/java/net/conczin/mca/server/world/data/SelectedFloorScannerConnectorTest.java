@@ -19,8 +19,30 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 class SelectedFloorScannerConnectorTest {
+    @Test
+    void buildingFallbackReusesDiscoveryButTheNextOperationReadsFreshBlocks() {
+        TallRoom world = new TallRoom();
+        BlockPos source = new BlockPos(8, 64, 8);
+        var operation = new SelectedFloorScanner.Observation(world, 2048, 64);
+        var attachment = StructureScanner.observeFloor(world, source, java.util.List.of(), operation).orElseThrow();
+        int readsAfterDiscovery = world.middleLayerReads;
+
+        var addition = StructureScanner.scanNewStructure(world, source, java.util.List.of(), operation);
+
+        assertEquals(Building.validationResult.SUCCESS, addition.result());
+        assertSame(attachment.scan(), addition.scan(), "fallback rediscovered the same selected floor");
+        assertEquals(readsAfterDiscovery, world.middleLayerReads, "fallback repeated world discovery");
+        int feetReadsBeforeChange = world.feetLayerReads;
+        world.put(source.above(), Blocks.STONE.defaultBlockState());
+        var next = StructureScanner.observeFloor(world, source, java.util.List.of());
+        assertTrue(next.isEmpty() || !next.orElseThrow().scan().floor().sameExactGeometry(addition.scannedFloor()),
+                "later operation reused the earlier world's geometry");
+        assertTrue(world.feetLayerReads > feetReadsBeforeChange, "later operation did not read the world afresh");
+    }
+
     @BeforeAll
     static void bootstrapMinecraft() {
         SharedConstants.tryDetectVersion();
@@ -121,8 +143,12 @@ class SelectedFloorScannerConnectorTest {
         assertEquals(Building.validationResult.SUCCESS, openWindow.result());
         assertTrue(openWindow.floor().cellAt(new BlockPos(0, 64, 8)).isPresent(),
                 "later observation retained the old solid wall instead of the new opening");
-        // An unsupported window is a finite surface edge. Giving the same opening
-        // broad supported exterior ground must invalidate the next fresh observation.
+        // Widen the framed entrance to an unframed breach before adding broad terrain.
+        // The narrow framed entrance is intentionally valid even beside that terrain.
+        for (int z : new int[]{7, 9}) {
+            world.put(new BlockPos(0, 64, z), Blocks.AIR.defaultBlockState());
+            world.put(new BlockPos(0, 65, z), Blocks.AIR.defaultBlockState());
+        }
         for (BlockPos pos : BlockPos.betweenClosed(-10, 63, 0, -1, 63, 17)) {
             world.put(pos, Blocks.STONE.defaultBlockState());
         }

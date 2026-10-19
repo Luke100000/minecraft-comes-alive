@@ -44,6 +44,7 @@ import net.conczin.mca.entity.ai.navigation.StairWallPathfindingGameTests;
 import net.conczin.mca.server.DestinyLocationResolverGameTests;
 import net.conczin.mca.server.world.data.CopiedOpenHouseGameTests;
 import net.conczin.mca.server.world.data.FloorScannerGameTests;
+import net.conczin.mca.server.world.data.IndoorRoomCacheGameTests;
 import net.conczin.mca.server.world.data.ReportedFloorInteractionGameTests;
 import net.conczin.mca.server.world.data.ReportedStairHouseGameTests;
 import net.conczin.mca.server.world.data.TaigaFloorPerformanceGameTests;
@@ -107,6 +108,7 @@ public final class McaGameTestsRegistration {
             DestinyLocationResolverGameTests.class,
             CopiedOpenHouseGameTests.class,
             FloorScannerGameTests.class,
+            IndoorRoomCacheGameTests.class,
             ReportedFloorInteractionGameTests.class,
             ReportedStairHouseGameTests.class,
             TaigaFloorPerformanceGameTests.class,

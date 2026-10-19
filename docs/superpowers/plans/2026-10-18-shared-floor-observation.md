@@ -99,6 +99,66 @@ Final SHA256: SelectedFloorScanner `A105C296E8107446AD7F1B318BDDDCD43B919ADC6366
 - teleportprobechecksactualcenteredlandingbox
 - coldhousebesidenarrowsteppedporchdoesnotrequireneighborchunks
 - longdetourusesoverflow
+
+## Item 4: subsequently approved NPC cache dependency fix
+
+The user approved the previously deferred item 4 after the architecture follow-ups.
+The earlier deferral and verification counts above remain historical evidence.
+
+Implemented within IndoorRoomCache's existing LoadedBlocks view: record normalized
+discovery/partition block reads and loaded/unloaded column facts, merge them with
+the final floor footprint, and validate them with non-loading lookups. Include
+column facts in the unchanged per-entry/global observation budgets. When a complete
+proof cannot fit, discard partial maps and rediscover at the normal 40-tick boundary;
+do not change enclosure acceptance or reject valid room geometry due to this limit.
+Preserve unchanged complete-proof reuse, room-local fallback and saved ownership.
+
+Three focused runtime regressions were reproduced RED, then passed with the fix:
+exterior support extension, exterior roof/membership changes and oversized dependency
+proofs. After an external source overwrite, restored the exact tested patch and
+reran all three successfully. Independent read-only review found no actionable
+P0/P1/P2 issues. Chunk availability transitions/global eviction accounting were
+source-reviewed but are not directly exercised by these three regressions.
+
+Verification: normal `test :fabric:compileJava :neoforge:runGameTestServer --continue`
+completed ordinary common/Fabric testing (600 tests, zero failures/errors), Fabric
+compilation and the full runtime run (664 tests, 648 passed, 16 failed). All three
+new cache regressions passed both focused and in full integration. Global release
+readiness is NOT established. Full log: `%TEMP%/mca-cache-dependencies-final.log`.
+
+Important source-state caveat: another actor repeatedly replaced IndoorRoomCache
+with the HEAD baseline, including during final integration after the cache batch
+had executed. The tested patch was restored once the run finished, and the source
+hash again matches the independently reviewed/tested version:
+`21EBE5B8937FE5CDEB1DDBBD0E9F27CF89C369384CB37129774612EA339F8639`.
+Compiled common/NeoForge Entry classes were also rewritten afterward and no longer
+contained completeDependencies. Tests prove the implementation's regression behavior,
+not that the current compiled outputs or running client contain it. Do not rebuild
+over a running client; resolve concurrent source/output ownership first. No writer
+was identified from read-only checks, and no other chat/client was stopped or messaged.
+
+The source fix and tests remain uncommitted on dev/1.21.1. No port/push or live 26.3
+verification was performed. Remaining failures are recorded without asserting all
+are unrelated to floor work:
+
+- registeredroomcachedoesnotrestoreinvalidatedgeometry
+- villagerescapesenclosedyardthroughonlygateonslab
+- sharedroomcachereusesbedsandinvalidatesroofchanges
+- personalmourningwaitsfornearbymonster
+- airborneselectionresolvesthefloorinitsowncolumn
+- panicinterruptsandmourningcanresume
+- combatinterruptsmourningapproach
+- mourningflowerrestoresonlywhileitownsthehand
+- personalmourningwaitsforplayerdirectedmovement
+- moosavedhillsidewalksdowntoriverandfishes
+- villagerwalksunderbridgewithhangingglowberries
+- guardsreusescheduledactivitywithintickbutnotacrossticksorschedules
+- lazypoiacquisitionrespectscooldownandbothmemoryguards
+- villagerignoresunnecessaryunroofedglowberryclimb
+- resurrectionclearsexactgravelocation
+- longdetourusesoverflow
+
+Ledger: `.superpowers/sdd/2026-10-18-indoor-cache-dependencies/progress.md`.
 - lesscrowdedoverflowrespectsadditionaltravellimit
 - coldhousebesideunevenporchdoesnotrequireneighborchunks
 - compareshouseroutesinsteadoffirstbatchedhit
@@ -106,3 +166,67 @@ Final SHA256: SelectedFloorScanner `A105C296E8107446AD7F1B318BDDDCD43B919ADC6366
 - widenativeendpointcannotstandindoorway
 - exactlysixtyfourextrarouteblocksareallowed
 - colddiscoveryrejectsanunloadedboundarywithoutloadingit
+
+## Architecture follow-ups (2026-10-18)
+
+User approved items 1, 2, 3 and 5; item 4 (NPC cache invalidation dependencies)
+remains deferred. Implemented on dev/1.21.1, left uncommitted, no port or push.
+
+- Diagnostics no longer equate a refreshed persisted Floor's modal height change
+  with discovery of the player's upper Floor.
+- FloorObservation captures merged explicit attachment matches once, separately
+  from live shell contact. Village consumes these immutable facts.
+- Add Building shares its operation-local discovery and identical-result room
+  partition. Attachment/new-building fallback precedence and fresh later operations
+  are preserved. A mutation restoring independent discovery made the reuse test fail.
+- Loaded-only NPC block views expose column availability to the canonical scanner.
+  An unknown seed cannot fall through to adjacent air inspection. The cold porch
+  regression and actual unloaded-boundary rejection both pass.
+- Corrected the unloaded-boundary GameTest: its old corridor ended at local X=8
+  rather than the chunk edge. The corrected fixture asserts that it reaches X=0
+  and suppresses construction-time neighbor updates that would load the missing
+  chunk. Original rejection/no-loading assertions are unchanged.
+
+No saved ownership, numbering, NPC invalidation footprint, cache lifetime or
+observation limit was changed. Skipping item 4 can leave NPC shelter/wandering
+geometry stale after exterior edits until another invalidation/eviction; it does
+not rewrite saved Room identities. Seven production files changed, net +37 lines;
+the old no-growth simplification result above describes the completed 44e3fdcbe
+refactor, not this separately approved set of fixes.
+
+Verification:
+
+- Normal `test :fabric:compileJava`: 600 common/Fabric tests, no failures/errors;
+  Fabric compilation passed. All common tests passed again after the reuse mutation
+  was removed. NeoForge compiled and launched through normal tasks.
+- 99 focused FloorScannerGameTests and 7 ReportedStairHouseGameTests passed.
+- Cold uneven-porch GameTest: reproduced RED, then GREEN with loaded-column parity.
+- Corrected cold unloaded-boundary GameTest: GREEN, and passed in the final full run.
+- Independent read-only review found no actionable P0/P1/P2 issues in the main patch.
+- Final full NeoForge run: **658 tests, 642 passed, 16 failed**. This is not a
+  globally green release. Do not label every remaining failure unrelated: in
+  particular, airborne floor selection passes focused but fails in the full suite;
+  its integration failure remains unresolved.
+
+Final runtime log: `%TEMP%/mca-architecture-final-gametest.log`.
+Detailed execution ledger: `.superpowers/sdd/2026-10-18-floor-architecture-followups/progress.md`.
+No live 26.3 verification was performed.
+
+Remaining full-suite failures:
+
+- registeredroomcachedoesnotrestoreinvalidatedgeometry
+- villagerescapesenclosedyardthroughonlygateonslab
+- sharedroomcachereusesbedsandinvalidatesroofchanges
+- personalmourningwaitsfornearbymonster
+- airborneselectionresolvesthefloorinitsowncolumn
+- archerescapescavecornerandkillspursuingspider
+- panicinterruptsandmourningcanresume
+- combatinterruptsmourningapproach
+- mourningflowerrestoresonlywhileitownsthehand
+- personalmourningwaitsforplayerdirectedmovement
+- playerretaliationdamagedrivesactualemergencyescape
+- failedreassignmentpreservesexistingforcedhome
+- guardsreusescheduledactivitywithintickbutnotacrossticksorschedules
+- lazypoiacquisitionrespectscooldownandbothmemoryguards
+- villagerignoresunnecessaryunroofedglowberryclimb
+- longdetourusesoverflow

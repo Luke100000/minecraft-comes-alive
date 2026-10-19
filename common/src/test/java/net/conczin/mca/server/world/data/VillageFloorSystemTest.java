@@ -557,9 +557,9 @@ class VillageFloorSystemTest {
         var contact = new StructureConnector.VerticalConnection(touching, staleLower);
         var explicit = new StructureConnector.VerticalConnection(connected, connectedFloor);
 
-        assertEquals(10, village.selectAttachmentTarget(upper, List.of(), List.of(), Set.of(contact))
+        assertEquals(10, village.selectAttachmentTarget(upper, List.of(), Set.of(contact))
                 .orElseThrow().buildingId(), "captured contact should prove the otherwise stale lower shell");
-        assertTrue(village.selectAttachmentTarget(upper, List.of(explicit), List.of(), Set.of(contact)).isEmpty(),
+        assertTrue(village.selectAttachmentTarget(upper, List.of(explicit), Set.of(contact)).isEmpty(),
                 "live contact was promoted to an explicit connection and relaxed overlapping-owner rejection");
     }
 
@@ -607,7 +607,8 @@ class VillageFloorSystemTest {
         StructureFloor upper = TestStructureFloors.create(1, 92, 95, 0, region(92));
 
         assertEquals(10, village.selectAttachmentTarget(
-                        upper, List.of(), List.of(new BlockPos(0, 90, 0)), Set.of())
+                        upper, StructureScanner.attachmentConnections(village.getStructures().values(),
+                                List.of(), List.of(new BlockPos(0, 90, 0))), Set.of())
                 .orElseThrow().buildingId());
     }
 

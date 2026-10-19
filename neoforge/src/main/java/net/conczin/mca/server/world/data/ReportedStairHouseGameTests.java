@@ -30,6 +30,61 @@ public final class ReportedStairHouseGameTests {
     private ReportedStairHouseGameTests() {
     }
 
+    @GameTest(batch = "mca_reported_doorless_house", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 120)
+    public static void reportedDoorlessHouseRegistersAndRefreshes(GameTestHelper helper)
+            throws IOException, CommandSyntaxException {
+        var level = helper.getLevel();
+        BlockPos origin = helper.absolutePos(new BlockPos(40, 8, 40));
+        // Read-only capture of MCA Floor NBT Test, Overworld DataVersion 3955.
+        // Crop (-320,71,-1646)..(-310,81,-1636); template origin is (-320,71,-1646).
+        var resource = level.getServer().getResourceManager()
+                .getResourceOrThrow(MCA.locate("gametest/reported_doorless_house.snbt"));
+        StructureTemplate template = new StructureTemplate();
+        try (var input = resource.open()) {
+            template.load(BuiltInRegistries.BLOCK.asLookup(),
+                    TagParser.parseTag(new String(input.readAllBytes(), StandardCharsets.UTF_8)));
+        }
+        Map<BlockPos, net.minecraft.world.level.block.state.BlockState> original = new java.util.LinkedHashMap<>();
+        for (BlockPos pos : BlockPos.betweenClosed(origin, origin.offset(10, 10, 10))) {
+            original.put(pos.immutable(), level.getBlockState(pos));
+        }
+        try {
+            template.placeInWorld(level, origin, origin, new StructurePlaceSettings(), level.random, 2);
+            BlockPos source = origin.offset(4, 3, 4), doorway = origin.offset(4, 3, 3);
+            helper.assertTrue(level.getBlockState(doorway).isAir() && level.getBlockState(doorway.above()).isAir(),
+                    "saved house does not contain the reported removed entrance");
+            helper.assertTrue(!level.getBlockState(source.below()).getCollisionShape(level, source.below()).isEmpty(),
+                    "reported room lost its support");
+            helper.assertTrue(new FloorCeilingResolver(level).ceilingY(source).isPresent(),
+                    "reported room lost its roof");
+            RoomWorkflow workflow = new RoomWorkflow(new VillageManager(level), level);
+            helper.assertTrue(workflow.analyzeBuildingAddition(source).result() == Building.validationResult.SUCCESS,
+                    "reported framed house could not register without a door");
+            var state = Blocks.OAK_DOOR.defaultBlockState().setValue(DoorBlock.FACING, Direction.SOUTH);
+            level.setBlock(doorway, state, 2);
+            level.setBlock(doorway.above(), state.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER), 2);
+            VillageManager manager = new VillageManager(level);
+            workflow = new RoomWorkflow(manager, level);
+            BuildingScanResult initial = workflow.analyzeBuildingAddition(source);
+            helper.assertTrue(initial.result() == Building.validationResult.SUCCESS, "reported door fixture failed");
+            helper.assertTrue(workflow.commitAddition(initial,
+                            initial.isAmbiguous() ? initial.matchingTypes().getFirst() : null).status()
+                            == RoomWorkflow.Status.COMMITTED, "reported room did not register with its door");
+            Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElseThrow();
+            int roomId = village.findInteractionRoomAt(source).orElseThrow().getId();
+            level.setBlock(doorway, Blocks.AIR.defaultBlockState(), 2);
+            level.setBlock(doorway.above(), Blocks.AIR.defaultBlockState(), 2);
+            helper.assertTrue(workflow.scanRoom(source, roomId, null).status() == RoomWorkflow.Status.COMMITTED,
+                    "reported room could not refresh after door removal");
+            helper.assertTrue(village.findInteractionRoomAt(source).orElseThrow().getId() == roomId,
+                    "reported room identity changed");
+        } finally {
+            original.forEach((pos, state) -> level.setBlock(pos, state, 2));
+        }
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_reported_slab_tower", templateNamespace = "mca",
             template = "gametest/isolated_ai_arena", timeoutTicks = 120)
     public static void reportedSlabTowerAddsTopFloorWithBoundedOpenBalcony(GameTestHelper helper)

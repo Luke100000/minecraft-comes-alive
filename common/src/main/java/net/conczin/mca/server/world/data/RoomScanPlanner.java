@@ -17,6 +17,11 @@ final class RoomScanPlanner {
     }
 
     static Analysis analyze(Village village, Level level, BlockPos pos) {
+        return analyze(village, level, pos, null);
+    }
+
+    static Analysis analyze(Village village, Level level, BlockPos pos,
+                            SelectedFloorScanner.Observation operation) {
         BlockPos source = pos == null ? BlockPos.ZERO : pos.immutable();
         if (village == null || pos == null) return new Analysis(RoomScanPlan.addBuilding(source));
 
@@ -33,7 +38,8 @@ final class RoomScanPlanner {
             return new Analysis(persistedFloorPlan == null ? RoomScanPlan.addBuilding(source) : persistedFloorPlan);
         }
         StructureScanner.FloorObservation observation = StructureScanner.observeFloor(
-                level, source, village.getStructures().values()).orElse(null);
+                level, source, village.getStructures().values(),
+                operation == null ? StructureScanner.newObservation(level) : operation).orElse(null);
         if (observation == null) {
             return new Analysis(persistedFloorPlan == null ? RoomScanPlan.addBuilding(source) : persistedFloorPlan);
         }
@@ -174,7 +180,7 @@ final class RoomScanPlanner {
         StructureFloor candidateFloor = new StructureFloor(
                 0, 0, observation.scan().anchorY(), observation.scan().floor());
         Village.AttachmentTarget target = village.selectAttachmentTarget(
-                candidateFloor, observation.verticalConnections(), observation.scan().adjacentFloorSeeds(),
+                candidateFloor, observation.explicitConnections(),
                 observation.liveContacts()).orElse(null);
         if (target == null) return Optional.empty();
 

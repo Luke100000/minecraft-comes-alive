@@ -788,21 +788,19 @@ public class Village implements Iterable<Building> {
     Optional<AttachmentTarget> selectAttachmentTarget(
             StructureFloor candidate,
             Collection<StructureConnector.VerticalConnection> connections) {
-        return selectAttachmentTarget(candidate, connections, List.of(), Set.of());
+        return selectAttachmentTarget(candidate, connections, Set.of());
     }
 
     Optional<AttachmentTarget> selectAttachmentTarget(
             StructureFloor candidate,
-            Collection<StructureConnector.VerticalConnection> verticalConnections,
-            Collection<BlockPos> stairTransitions,
+            Collection<StructureConnector.VerticalConnection> explicitConnections,
             Set<StructureConnector.VerticalConnection> liveContacts) {
         if (candidate == null) return Optional.empty();
+        Set<StructureConnector.VerticalConnection> connections = Set.copyOf(explicitConnections);
         boolean alreadyRegistered = structures.values().stream()
                 .flatMap(structure -> structure.getFloors().stream())
                 .anyMatch(floor -> floor.geometry().sameCellPositions(candidate.geometry()));
         if (alreadyRegistered) return Optional.empty();
-        Set<StructureConnector.VerticalConnection> connections = StructureScanner.attachmentConnections(
-                structures.values(), verticalConnections, stairTransitions);
         if (hasUnprovenAttachmentOverlap(candidate, connections, liveContacts)) return Optional.empty();
 
         Map<Integer, AttachmentTarget> nearestByBuilding = new HashMap<>();

@@ -3,13 +3,18 @@ package net.conczin.mca.server.world.data;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.LevelReader;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.LeavesBlock;
 import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 
 import java.util.ArrayDeque;
@@ -48,6 +53,14 @@ final class SelectedFloorScanner {
     private SelectedFloorScanner() {
     }
 
+    /** Loaded-only block views must distinguish an unknown column from empty air. */
+    interface LoadedColumns extends BlockGetter {
+        boolean hasColumn(BlockPos pos);
+
+        /** Frame collision proof may depend on state normally ignored by geometry caching. */
+        default void observeFrameState(BlockPos pos, Direction face) { }
+    }
+
     /** Resolves exactly one selected Floor. */
     static Result scan(BlockGetter world, BlockPos seed, int maxSize, int maxRadius) {
         return new Observation(world, maxSize, maxRadius).selected(seed);
@@ -64,6 +77,7 @@ final class SelectedFloorScanner {
         private final RegionDiscovery regions;
         private final Map<BlockPos, Result> resolutions = new HashMap<>();
         private final Map<BlockPos, OptionalDouble> surfaces = new HashMap<>();
+        private final Map<FrameKey, Optional<FramedDoorway>> frames = new HashMap<>();
 
         Observation(BlockGetter world, int maxSize, int maxRadius) {
             this.world = world;
@@ -79,6 +93,11 @@ final class SelectedFloorScanner {
                 public List<HorizontalStep> steps(SurfaceCell cell) {
                     return steps.computeIfAbsent(cell.feet(),
                             ignored -> worldSteps(world, cell, ceilings, this));
+                }
+
+                @Override
+                public Optional<FramedDoorway> framedDoorway(BlockPos feet, Direction.Axis normalAxis) {
+                    return Observation.this.framedDoorway(feet, normalAxis);
                 }
 
                 @Override
@@ -122,6 +141,9 @@ final class SelectedFloorScanner {
 
         private Result resolve(BlockPos seed) {
             return resolutions.computeIfAbsent(seed.immutable(), requested -> {
+                if (!isLoadedColumn(world, requested)) {
+                    return Result.failure(Building.validationResult.NOT_IN_BUILDING, requested);
+                }
                 SurfaceCell supported = resolveSeedCell(world, requested, ceilings).orElse(null);
                 SurfaceCell traversalSeed = supported == null
                         ? adjacentTraversalSeed(world, requested, ceilings, provider).orElse(null) : supported;
@@ -140,11 +162,106 @@ final class SelectedFloorScanner {
         }
 
         Optional<SurfaceCell> surfaceCell(BlockPos feet) {
+            if (!isLoadedColumn(world, feet)) return Optional.empty();
             OptionalDouble surface = surfaces.computeIfAbsent(feet.immutable(), pos -> floorSurfaceY(world, pos));
             if (surface.isEmpty()) return Optional.empty();
             OptionalInt ceiling = ceilings.ceilingY(feet);
             return ceiling.isEmpty() ? Optional.empty()
                     : Optional.of(new SurfaceCell(feet, surface.getAsDouble(), ceiling.getAsInt()));
+        }
+
+        Optional<FramedDoorway> framedDoorway(BlockPos feet, Direction.Axis normalAxis) {
+            FrameKey key = new FrameKey(feet.immutable(), normalAxis);
+            Optional<FramedDoorway> known = frames.get(key);
+            if (known != null) return known;
+            Optional<FramedDoorway> frame = findFrame(feet, normalAxis);
+            frames.put(key, frame);
+            frame.ifPresent(span -> span.cells().forEach(cell -> frames.put(new FrameKey(cell, normalAxis), frame)));
+            return frame;
+        }
+
+        private Optional<FramedDoorway> findFrame(BlockPos feet, Direction.Axis normalAxis) {
+            if (normalAxis == Direction.Axis.Y || !isLoadedColumn(world, feet)) return Optional.empty();
+            Direction width = normalAxis == Direction.Axis.X ? Direction.SOUTH : Direction.EAST;
+            // Already-proven walking surfaces cannot supply either solid side jamb.
+            // Reuse that observation instead of rereading open platforms for each axis.
+            if (hasWalkingRun(feet, width) || hasWalkingRun(feet, width.getOpposite())) return Optional.empty();
+            // Most candidates are open floor, not frames. A nearby jamb must exist before
+            // reading the opening's headroom or walking either side of a possible span.
+            if (!fullFrameFace(feet.relative(width.getOpposite()), width)
+                    && !fullFrameFace(feet.relative(width.getOpposite(), 2), width)) return Optional.empty();
+            if (!openingCell(feet, normalAxis)) return Optional.empty();
+            BlockPos first = feet;
+            int length = 1;
+            while (openingCell(first.relative(width.getOpposite()), normalAxis)) {
+                if (++length > 2) return Optional.empty();
+                first = first.relative(width.getOpposite());
+            }
+            BlockPos last = feet;
+            while (openingCell(last.relative(width), normalAxis)) {
+                if (++length > 2) return Optional.empty();
+                last = last.relative(width);
+            }
+            for (int dy = 0; dy < 2; dy++) {
+                if (!fullFrameFace(first.relative(width.getOpposite()).above(dy), width)
+                        || !fullFrameFace(last.relative(width).above(dy), width.getOpposite())) return Optional.empty();
+            }
+            Direction normal = normalAxis == Direction.Axis.X ? Direction.EAST : Direction.SOUTH;
+            List<BlockPos> cells = new ArrayList<>();
+            for (int i = 0; i < length; i++) {
+                BlockPos cell = first.relative(width, i);
+                if (!isLoadedColumn(world, cell.relative(normal))
+                        || !isLoadedColumn(world, cell.relative(normal.getOpposite()))
+                        || !isTraversalOccupancyAllowed(world, cell.relative(normal))
+                        || !hasInteriorHeadroom(world, cell.relative(normal))
+                        || !isTraversalOccupancyAllowed(world, cell.relative(normal.getOpposite()))
+                        || !hasInteriorHeadroom(world, cell.relative(normal.getOpposite()))
+                        || provider.surfaceY(world, cell).isEmpty()
+                        || !fullFrameFace(cell.above(2), Direction.DOWN)) return Optional.empty();
+                cells.add(cell.immutable());
+            }
+            return Optional.of(new FramedDoorway(normalAxis, cells));
+        }
+
+        private boolean openingCell(BlockPos feet, Direction.Axis normalAxis) {
+            if (!isLoadedColumn(world, feet)) return false;
+            BlockState lower = world.getBlockState(feet), upper = world.getBlockState(feet.above());
+            if (lower.getBlock() instanceof DoorBlock) {
+                return lower.getValue(DoorBlock.HALF) == DoubleBlockHalf.LOWER
+                        && lower.getValue(DoorBlock.FACING).getAxis() == normalAxis
+                        && upper.equals(lower.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER));
+            }
+            return lower.getFluidState().isEmpty() && upper.getFluidState().isEmpty()
+                    && lower.getCollisionShape(world, feet).isEmpty()
+                    && upper.getCollisionShape(world, feet.above()).isEmpty();
+        }
+
+        private boolean hasWalkingRun(BlockPos feet, Direction direction) {
+            OptionalDouble near = surfaces.get(feet.relative(direction));
+            OptionalDouble far = surfaces.get(feet.relative(direction, 2));
+            if (near == null || near.isEmpty() || far == null || far.isEmpty()) return false;
+            observeFrameState(feet.relative(direction), direction.getOpposite());
+            observeFrameState(feet.relative(direction, 2), direction.getOpposite());
+            return true;
+        }
+
+        private boolean fullFrameFace(BlockPos pos, Direction face) {
+            if (!isLoadedColumn(world, pos)) return false;
+            OptionalDouble surface = surfaces.get(pos);
+            if (face.getAxis() != Direction.Axis.Y && surface != null && surface.isPresent()) {
+                observeFrameState(pos, face);
+                return false;
+            }
+            BlockState state = world.getBlockState(pos);
+            observeFrameState(pos, face);
+            return !state.is(BlockTags.LEAVES) && state.getFluidState().isEmpty()
+                    && !(state.getBlock() instanceof LeavesBlock)
+                    && !(state.getBlock() instanceof DoorBlock)
+                    && Block.isFaceFull(state.getCollisionShape(world, pos), face);
+        }
+
+        private void observeFrameState(BlockPos pos, Direction face) {
+            if (world instanceof LoadedColumns loaded) loaded.observeFrameState(pos, face);
         }
 
         /** New decks can replace a saved lower ceiling without changing the registered Floor. */
@@ -214,7 +331,7 @@ final class SelectedFloorScanner {
 
     private static Optional<SurfaceCell> resolveSeedCell(
             BlockGetter world, BlockPos seed, FloorCeilingResolver ceilings) {
-        if (world.isOutsideBuildHeight(seed)) return Optional.empty();
+        if (world.isOutsideBuildHeight(seed) || !isLoadedColumn(world, seed)) return Optional.empty();
         // Jumping or flying selects the surface below in this column, without crossing
         // collision shapes or fluids into another floor. Keep the original source in Result.
         while (seed.getY() > world.getMinBuildHeight()
@@ -289,8 +406,7 @@ final class SelectedFloorScanner {
                 return TraversalScan.failure(Building.validationResult.SIZE_LIMIT);
             }
             cells.put(current.feet(), current);
-            List<HorizontalStep> steps = StructureConnector.isHorizontalBoundary(
-                    world.getBlockState(current.feet()))
+            List<HorizontalStep> steps = isDiscoveryBoundary(world, current.feet(), provider)
                     ? enclosedBoundaryContinuations(
                     world, current, anchor.feet(), ceilings, maxSize, maxRadius, provider, classifier, queued)
                     : provider.steps(current);
@@ -330,8 +446,9 @@ final class SelectedFloorScanner {
             StepProvider provider,
             FloorBandClassifier classifier,
             Set<BlockPos> queued) {
+        boolean realBoundary = StructureConnector.isHorizontalBoundary(world.getBlockState(boundary.feet()));
         return provider.steps(boundary).stream()
-                .filter(step -> step.connector() == null)
+                .filter(step -> !realBoundary || step.connector() == null)
                 .filter(step -> !queued.contains(step.landing().feet()))
                 .filter(step -> hasAcceptedExposure(
                         world, step.landing(), scanAnchor, ceilings, maxSize, maxRadius, provider, classifier))
@@ -440,6 +557,10 @@ final class SelectedFloorScanner {
         Set<BlockPos> boundaryCells = traversal.connectors().stream()
                 .filter(traversalCells::contains)
                 .collect(Collectors.toSet());
+        Set<BlockPos> frameCells = traversalCells.stream()
+                .filter(pos -> !boundaryCells.contains(pos) && isFramedBoundary(pos, provider))
+                .collect(Collectors.toSet());
+        boundaryCells.addAll(frameCells);
         Map<BlockPos, List<BlockPos>> neighbors = Transition.neighborIndex(traversal.transitions());
         List<Set<BlockPos>> regions = connectedRegions(traversalCells, boundaryCells, neighbors);
         Set<BlockPos> exteriorCells = new HashSet<>();
@@ -457,6 +578,23 @@ final class SelectedFloorScanner {
             }
         }
 
+        // A frame inherits an accepted ordinary side. A frame-only fragment must
+        // prove physical enclosure without treating its own inferred cuts as walls;
+        // this preserves enclosed passages without inventing exterior threshold Rooms.
+        Set<BlockPos> visitedFrames = new HashSet<>();
+        for (BlockPos frame : frameCells) {
+            Set<BlockPos> cluster = connectedCells(frame, frameCells, neighbors, visitedFrames);
+            if (cluster.isEmpty()) continue;
+            boolean acceptedSide = cluster.stream().anyMatch(pos -> neighbors.getOrDefault(pos, List.of()).stream()
+                    .anyMatch(next -> !boundaryCells.contains(next) && !exteriorCells.contains(next)));
+            if (acceptedSide) continue;
+            SurfaceCell fragment = traversal.cells().get(cluster.stream().min(CELL_ORDER).orElseThrow());
+            if (!hasBoundedExteriorSurface(world, fragment, seed.feet(), ceilings,
+                    maxSize, maxRadius, provider, classifier, false)
+                    && reachesExterior(world, fragment, seed.feet(), ceilings,
+                    maxRadius, provider, classifier, false)) exteriorCells.addAll(cluster);
+        }
+
         if (exteriorCells.contains(seed.feet())) {
             return TraversalScan.failure(Building.validationResult.NOT_IN_BUILDING);
         }
@@ -472,7 +610,6 @@ final class SelectedFloorScanner {
         if (reachable.isEmpty()) {
             return TraversalScan.failure(Building.validationResult.NOT_IN_BUILDING);
         }
-
         Map<BlockPos, SurfaceCell> retainedCells = traversal.cells();
         Set<Transition> transitions = traversal.transitions();
         Set<BlockPos> verticalBoundaryCells = traversal.verticalBoundaryCells();
@@ -512,8 +649,8 @@ final class SelectedFloorScanner {
         // empty-air flood, whose work otherwise grows with radius even for a tiny balcony.
         return classifier.boundedExterior.computeIfAbsent(start.feet(), ignored ->
                 hasBoundedExteriorSurface(world, start, scanAnchor, ceilings,
-                        maxSize, maxRadius, provider, classifier))
-                || !reachesExterior(world, start, scanAnchor, ceilings, maxRadius, provider, classifier);
+                        maxSize, maxRadius, provider, classifier, true))
+                || !reachesExterior(world, start, scanAnchor, ceilings, maxRadius, provider, classifier, true);
     }
 
     /**
@@ -798,6 +935,7 @@ final class SelectedFloorScanner {
 
     static Optional<SurfaceCell> inspectSurfaceCell(
             BlockGetter world, BlockPos feet, FloorCeilingResolver ceilings) {
+        if (!isLoadedColumn(world, feet)) return Optional.empty();
         OptionalDouble surfaceY = floorSurfaceY(world, feet);
         if (surfaceY.isEmpty()) return Optional.empty();
         OptionalInt ceiling = ceilings.ceilingY(feet);
@@ -870,8 +1008,10 @@ final class SelectedFloorScanner {
             FloorCeilingResolver ceilings,
             int maxRadius,
             StepProvider provider,
-            FloorBandClassifier classifier) {
-        Boolean known = classifier.exterior.get(start.feet());
+            FloorBandClassifier classifier,
+            boolean framedBoundaries) {
+        Map<BlockPos, Boolean> exterior = framedBoundaries ? classifier.exterior : new HashMap<>();
+        Boolean known = exterior.get(start.feet());
         if (known != null) return known;
         ArrayDeque<SurfaceCell> floorQueue = new ArrayDeque<>();
         ArrayDeque<BlockPos> openQueue = new ArrayDeque<>();
@@ -884,13 +1024,14 @@ final class SelectedFloorScanner {
             if (!openQueue.isEmpty()) {
                 BlockPos open = openQueue.removeFirst();
                 if (horizontalDistance(open, scanAnchor) >= maxRadius - 1) {
-                    classifier.exterior.put(start.feet(), true);
+                    exterior.put(start.feet(), true);
                     return true;
                 }
                 for (Direction direction : HORIZONTAL) {
                     BlockPos next = open.relative(direction);
+                    if (framedBoundaries && provider.frameCrossing(open, next)) continue;
                     if (!isLoadedColumn(world, next)) {
-                        classifier.exterior.put(start.feet(), true);
+                        exterior.put(start.feet(), true);
                         return true;
                     }
                     if (visitedOpen.contains(next) || !isOpenPassage(world, next)) continue;
@@ -903,19 +1044,20 @@ final class SelectedFloorScanner {
 
             SurfaceCell current = floorQueue.removeFirst();
             if (horizontalDistance(current.feet(), scanAnchor) >= maxRadius - 1) {
-                classifier.exterior.put(start.feet(), true);
+                exterior.put(start.feet(), true);
                 return true;
             }
-            Boolean reachable = classifier.exterior.get(current.feet());
+            Boolean reachable = exterior.get(current.feet());
             if (Boolean.TRUE.equals(reachable)) {
-                classifier.exterior.put(start.feet(), true);
+                exterior.put(start.feet(), true);
                 return true;
             }
             if (Boolean.FALSE.equals(reachable)) continue;
             for (Direction direction : HORIZONTAL) {
                 BlockPos opening = current.feet().relative(direction);
+                if (framedBoundaries && provider.frameCrossing(current.feet(), opening)) continue;
                 if (!isLoadedColumn(world, opening)) {
-                    classifier.exterior.put(start.feet(), true);
+                    exterior.put(start.feet(), true);
                     return true;
                 }
                 // Opening detection and supported traversal use the same landing evidence.
@@ -933,7 +1075,7 @@ final class SelectedFloorScanner {
                     OptionalInt ceiling = ceilings.ceilingY(next);
                     if (ceiling.isEmpty()) {
                         // Edges can be directional: only the start is proven to reach this exit.
-                        classifier.exterior.put(start.feet(), true);
+                        exterior.put(start.feet(), true);
                         return true;
                     }
                     SurfaceCell cell = new SurfaceCell(next, landing.surfaceY(), ceiling.getAsInt());
@@ -943,7 +1085,7 @@ final class SelectedFloorScanner {
             }
         }
         // Exhausting the traversal proves every visited cell has no route outside.
-        visitedFloor.forEach(cell -> classifier.exterior.put(cell, false));
+        visitedFloor.forEach(cell -> exterior.put(cell, false));
         return false;
     }
 
@@ -954,7 +1096,8 @@ final class SelectedFloorScanner {
      */
     private static boolean hasBoundedExteriorSurface(
             BlockGetter world, SurfaceCell start, BlockPos scanAnchor, FloorCeilingResolver ceilings,
-            int maxSize, int maxRadius, StepProvider provider, FloorBandClassifier classifier) {
+            int maxSize, int maxRadius, StepProvider provider, FloorBandClassifier classifier,
+            boolean framedBoundaries) {
         ArrayDeque<SurfaceProbe> queue = new ArrayDeque<>();
         Set<BlockPos> visited = new HashSet<>();
         queue.addLast(new SurfaceProbe(start.feet(), start.surfaceY()));
@@ -978,6 +1121,7 @@ final class SelectedFloorScanner {
             for (FloorStep step : floorSteps(world, current, provider)) {
                 if (step.connector() != null) continue;
                 SurfaceProbe next = step.landing();
+                if (framedBoundaries && provider.frameCrossing(current.feet(), next.feet())) continue;
                 if (visited.contains(next.feet())) continue;
                 OptionalInt ceiling = ceilings.ceilingY(next.feet());
                 // Uncovered supports have no canonical storey owner. Probing a flight
@@ -1004,6 +1148,7 @@ final class SelectedFloorScanner {
 
     @SuppressWarnings("deprecation") // LevelReader's non-loading chunk availability contract.
     private static boolean isLoadedColumn(BlockGetter world, BlockPos pos) {
+        if (world instanceof LoadedColumns loaded) return loaded.hasColumn(pos);
         return !(world instanceof LevelReader reader) || reader.hasChunk(pos.getX() >> 4, pos.getZ() >> 4);
     }
 
@@ -1293,8 +1438,11 @@ final class SelectedFloorScanner {
             cells.put(seed.feet(), seed);
             while (!queue.isEmpty()) {
                 SurfaceCell current = queue.removeFirst();
-                boolean boundary = StructureConnector.isHorizontalBoundary(world.getBlockState(current.feet()));
-                if (boundary) doors.add(current.feet());
+                boolean realBoundary = StructureConnector.isHorizontalBoundary(world.getBlockState(current.feet()));
+                boolean boundary = realBoundary || isFramedBoundary(current.feet(), provider);
+                // Empty frames only bound exposure; accepted roofed sides still vote as
+                // one ordinary region. Only real connectors divide anchor representatives.
+                if (realBoundary) doors.add(current.feet());
                 for (HorizontalStep step : provider.steps(current)) {
                     SurfaceCell next = step.landing();
                     if (provider.explicitStairCell(world, next.feet())
@@ -1472,6 +1620,15 @@ final class SelectedFloorScanner {
     private interface StepProvider {
         List<HorizontalStep> steps(SurfaceCell cell);
 
+        default Optional<FramedDoorway> framedDoorway(BlockPos feet, Direction.Axis normalAxis) {
+            return Optional.empty();
+        }
+
+        default boolean frameCrossing(BlockPos first, BlockPos second) {
+            Direction.Axis axis = first.getX() != second.getX() ? Direction.Axis.X : Direction.Axis.Z;
+            return framedDoorway(first, axis).isPresent() || framedDoorway(second, axis).isPresent();
+        }
+
         default boolean stableLanding(SurfaceCell cell) {
             // Consecutive half-slab steps may share integer feet Y without forming a landing.
             return steps(cell).stream().filter(step -> step.connector() == null)
@@ -1517,6 +1674,21 @@ final class SelectedFloorScanner {
     }
 
     private record MaterializedFloor(FloorGeometry floor, Set<Transition> transitions) {
+    }
+
+    private static boolean isFramedBoundary(BlockPos feet, StepProvider provider) {
+        return provider.framedDoorway(feet, Direction.Axis.X).isPresent()
+                || provider.framedDoorway(feet, Direction.Axis.Z).isPresent();
+    }
+
+    private static boolean isDiscoveryBoundary(BlockGetter world, BlockPos feet, StepProvider provider) {
+        return StructureConnector.isHorizontalBoundary(world.getBlockState(feet)) || isFramedBoundary(feet, provider);
+    }
+
+    private record FrameKey(BlockPos feet, Direction.Axis normalAxis) { }
+
+    record FramedDoorway(Direction.Axis normalAxis, List<BlockPos> cells) {
+        FramedDoorway { cells = List.copyOf(cells); }
     }
 
     private record SurfaceProbe(BlockPos feet, double surfaceY) {

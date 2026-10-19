@@ -259,3 +259,57 @@ The full 656-test NeoForge integration run had 28 failures, recorded by name in
 the plan; global readiness is therefore not established. Do not treat all those
 failures as unrelated without baseline/suite diagnosis. No forward port or live
 26.3 verification was performed, and existing saved floor ownership is unchanged.
+
+## Approved architecture follow-ups (2026-10-18)
+
+The user approved review items 1, 2, 3 and 5, explicitly deferring item 4
+(NPC cache observation/invalidation dependencies). These follow-ups extend the
+completed simplification; they are not a claim that every tower or live 26.3
+scenario is fixed.
+
+- A refresh of a persisted Floor is not discovery of the player's upper Floor.
+  Diagnostics report a changed modal cell height without asserting a new storey.
+- FloorObservation captures the merged explicit connector/stair matches once.
+  Live shell contact remains separate and never grants explicit-connector permissions.
+- Add Building shares discovery within that server operation. Attachment and new
+  structure selection retain their different fallback precedence. Room partitions
+  are reused only for the identical selected observation result. Later UI confirmation
+  and later operations still observe the world afresh.
+- Loaded-only block views expose non-loading column availability to the same scanner
+  guards used by LevelReader. Unknown columns cannot prove a finite exterior edge
+  or be read as air during seed fallback. The NPC cache's invalidation footprint,
+  lifetime and observation limit are unchanged.
+
+Execution/evidence ledger:
+`.superpowers/sdd/2026-10-18-floor-architecture-followups/progress.md`.
+
+## NPC cache dependency follow-up (item 4, subsequently approved)
+
+The user subsequently approved item 4. The earlier deferral above records the
+previous scope, not the current decision.
+
+IndoorRoomCache must validate the evidence used to accept a room, not only the
+canonical geometry it returned. Its existing loaded-only discovery view now
+captures normalized block states read during discovery/partition, including
+exterior supports, natural edges and ceiling rays, plus queried loaded/unloaded
+column availability. The entry combines those facts with the existing final
+floor/room observation. Validation remains non-loading and uses the existing
+40-tick interval; bed occupancy and open/closed toggleable state remain normalized.
+
+Both block and column facts count toward the existing 8192-entry dependency cap
+and 65536-fact shared limit. If a full proof does not fit, discard the partial
+dependency snapshot and rediscover on the next validation boundary. Keep room
+geometry usable until then rather than rejecting an otherwise valid room or
+allowing a truncated proof to certify it indefinitely. Unchanged complete proofs
+still reuse their Room objects across validation; this is not blanket cache expiry.
+
+No enclosure-policy, saved ownership/numbering, TTL, global hook or alternate
+geometry pipeline is introduced. Auxiliary connector-read views remain nonrecording.
+This trades periodic rediscovery for bounded memory only on proofs too large to retain.
+
+Runtime regressions cover exterior support extension, a new exterior ceiling above
+the old physical band, and a large proof that exceeds the dependency budget. Each
+compares cached outcomes with independent fresh discovery; unchanged small-proof
+identity reuse guards against solving the problem by disabling the cache.
+
+Execution ledger: `.superpowers/sdd/2026-10-18-indoor-cache-dependencies/progress.md`.

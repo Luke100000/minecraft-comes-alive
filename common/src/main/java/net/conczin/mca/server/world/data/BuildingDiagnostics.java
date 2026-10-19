@@ -72,7 +72,7 @@ public final class BuildingDiagnostics {
                 id(structureAt), id(interactionStructure), id(nearestStructure),
                 room == null ? "none" : room.getId(), room == null ? "none" : room.getFloorId());
 
-        FloorGeometry freshPlayerFloor = null;
+        FloorGeometry refreshedPersistedFloor = null;
         if (inspected != null) {
             boolean contains = inspected.containsPos(pos);
             Structure.InteractionPosition interaction = inspected
@@ -119,12 +119,12 @@ public final class BuildingDiagnostics {
                     ? StructureScanner.Result.failure(Building.validationResult.NOT_IN_BUILDING, pos)
                     : StructureScanner.scanExistingFloor(
                     world, inspected, selectedFloor, pos, village.getStructures().values());
-            freshPlayerFloor = scan.result() == Building.validationResult.SUCCESS
+            refreshedPersistedFloor = scan.result() == Building.validationResult.SUCCESS
                     ? scan.scannedFloor()
                     : null;
             log(traceId, "freshFloorScan persistedFloor={} result={} scanSeed={} bounds={}..{} freshFloor={}",
                     floor(selectedFloor), scan.result(), scan.source(), scan.min(), scan.max(),
-                    floor(freshPlayerFloor));
+                    floor(refreshedPersistedFloor));
             logFloorDifference(traceId, selectedFloor, scan.scannedFloor(), verbose);
         }
 
@@ -140,7 +140,7 @@ public final class BuildingDiagnostics {
         log(traceId, "analysis action={} result={}", uiAction, analysis);
 
         String verdict = verdict(
-                position, uiAction, analysis, inspected, inspectedRooms, room, freshPlayerFloor, pos, world);
+                position, uiAction, analysis, inspected, inspectedRooms, room, refreshedPersistedFloor, pos, world);
         log(traceId, "verdict={}", verdict);
         return new Result(traceId, position, uiAction, verdict);
     }
@@ -220,7 +220,7 @@ public final class BuildingDiagnostics {
                                   Structure structure,
                                   Collection<Building> rooms,
                                   Building room,
-                                  FloorGeometry freshPlayerFloor,
+                                  FloorGeometry refreshedPersistedFloor,
                                   BlockPos pos,
                                   ServerLevel world) {
         if (structure == null) {
@@ -237,11 +237,11 @@ public final class BuildingDiagnostics {
         }
         if (room != null) {
             StructureFloor persistentRoomFloor = structure.getFloor(room.getFloorId()).orElse(null);
-            if (persistentRoomFloor != null && freshPlayerFloor != null
-                    && freshPlayerFloor.anchorY() > persistentRoomFloor.anchorY()) {
-                return "FRESH_SCAN_SEPARATES_UPPER_FLOOR: persisted Room is Floor " + room.getFloorId()
-                        + " @" + persistentRoomFloor.anchorY() + " but fresh scan resolves player to @"
-                        + freshPlayerFloor.anchorY();
+            if (persistentRoomFloor != null && refreshedPersistedFloor != null
+                    && refreshedPersistedFloor.anchorY() != persistentRoomFloor.anchorY()) {
+                return "PERSISTED_FLOOR_ANCHOR_CHANGED: persisted Room is Floor " + room.getFloorId()
+                        + " @" + persistentRoomFloor.anchorY() + "; refreshing that Floor gives modal cell height @"
+                        + refreshedPersistedFloor.anchorY() + "; this does not establish a separate upper Floor";
             }
             if (persistentRoomFloor != null
                     && pos.getY() > persistentRoomFloor.anchorY() + StructureFloor.ANCHOR_PROXIMITY
