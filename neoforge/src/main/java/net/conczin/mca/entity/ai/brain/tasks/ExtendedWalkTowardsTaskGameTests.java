@@ -202,6 +202,26 @@ public final class ExtendedWalkTowardsTaskGameTests {
     }
 
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void emptyFinalTargetResolverRetainsItsPersistentJourney(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        setHome(villager, villager.blockPosition().east(6));
+        OneShot<VillagerEntityMCA> task = ExtendedWalkTowardsTask.createWithFinalTarget(
+                MemoryModuleType.HOME, 0.5F, 1, TEST_TIMEOUT, ignored -> false, ignored -> { },
+                (world, entity, destination) -> Optional.empty());
+        long time = helper.getLevel().getGameTime();
+        task.tryStart(helper.getLevel(), villager, time);
+        WalkTarget first = villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElseThrow();
+        helper.assertTrue(first.getTarget() instanceof PersistentPathTarget,
+                "An absent semantic override must retain the ordinary persistent target");
+        task.tryStart(helper.getLevel(), villager, time + 1);
+        helper.assertTrue(villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET)
+                        .filter(target -> target == first).isPresent(),
+                "An empty final-target resolver erased its still-owned persistent journey");
+        villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
     public static void unreachableTimestampStillAllowsRetryBeforeTimeout(GameTestHelper helper) {
         VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
         BlockPos home = villager.blockPosition().east((int)villager.getAttributeValue(Attributes.FOLLOW_RANGE) + 16);
