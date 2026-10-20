@@ -19,8 +19,10 @@ final class FloorGrouping {
         }
     }
 
-    record NumberDecision(Building.validationResult result, OptionalInt number) {
+    record NumberDecision(Building.validationResult result, OptionalInt number,
+                          Map<Integer, Integer> shiftedNumbers) {
         NumberDecision {
+            shiftedNumbers = Map.copyOf(shiftedNumbers);
             if ((result == Building.validationResult.SUCCESS) != number.isPresent()) {
                 throw new IllegalArgumentException("A successful floor number decision needs a number");
             }
@@ -41,7 +43,7 @@ final class FloorGrouping {
                                                     StructureFloor ground, int candidateY,
                                                     StructureFloor candidateFloor) {
         if (ground == null || !registered.contains(ground)) {
-            return new NumberDecision(Building.validationResult.NOT_IN_BUILDING, OptionalInt.empty());
+            return new NumberDecision(Building.validationResult.NOT_IN_BUILDING, OptionalInt.empty(), Map.of());
         }
         if (ground.floorNumber() != 0) return ambiguous();
         // Saved labels define existing groups. A new candidate must not repartition those
@@ -88,20 +90,29 @@ final class FloorGrouping {
                 ? below == null ? Long.MAX_VALUE : (long) below + 1
                 : above == null ? Long.MIN_VALUE : (long) above - 1;
         if (proposed <= Integer.MIN_VALUE || proposed > Integer.MAX_VALUE
-                || below != null && proposed <= below || above != null && proposed >= above
+                || below != null && proposed < below || above != null && proposed > above
                 || candidateY > ground.anchorY() && proposed <= 0
                 || candidateY < ground.anchorY() && proposed >= 0) return ambiguous();
-        for (StructureFloor floor : registered) {
-            if (floor.floorNumber() == proposed) return ambiguous();
+        Map<Integer, Integer> shiftedNumbers = new HashMap<>();
+        if (groups.containsKey((int) proposed)) {
+            // An explicit insertion may open a label between existing storeys. Keep
+            // the decision pure: only the successful addition commit applies shifts.
+            int direction = proposed > 0 ? 1 : -1;
+            for (int number : groups.keySet()) {
+                if (direction > 0 ? number < proposed : number > proposed) continue;
+                long shifted = (long) number + direction;
+                if (shifted <= Integer.MIN_VALUE || shifted > Integer.MAX_VALUE) return ambiguous();
+                shiftedNumbers.put(number, (int) shifted);
+            }
         }
-        return success((int) proposed);
+        return new NumberDecision(Building.validationResult.SUCCESS, OptionalInt.of((int) proposed), shiftedNumbers);
     }
 
     private static NumberDecision success(int number) {
-        return new NumberDecision(Building.validationResult.SUCCESS, OptionalInt.of(number));
+        return new NumberDecision(Building.validationResult.SUCCESS, OptionalInt.of(number), Map.of());
     }
 
     private static NumberDecision ambiguous() {
-        return new NumberDecision(Building.validationResult.AMBIGUOUS_STRUCTURE, OptionalInt.empty());
+        return new NumberDecision(Building.validationResult.AMBIGUOUS_STRUCTURE, OptionalInt.empty(), Map.of());
     }
 }

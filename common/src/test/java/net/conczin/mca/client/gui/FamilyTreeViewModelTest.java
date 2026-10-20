@@ -314,6 +314,46 @@ class FamilyTreeViewModelTest {
     }
 
     @Test
+    void partnersAncestorControlLoadsParentsWithoutChangingSelection() {
+        FamilyTreeNode root = node(ROOT);
+        FamilyTreeNode child = node(CHILD);
+        FamilyTreeNode partner = node(OTHER);
+        FamilyTreeNode mother = node(PARENT);
+        FamilyTreeNode father = node(GRANDPARENT);
+        child.setFather(root);
+        child.updatePartner(partner);
+        partner.updatePartner(child);
+        partner.setMother(mother);
+        partner.setFather(father);
+        FamilyTreeView.Continuation ancestors = new FamilyTreeView.Continuation(OTHER, ANCESTORS);
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        long initial = model.beginFocus(ROOT, viewport(0, 0, 1));
+        model.accept(response(initial, ROOT, view(
+                Map.of(ROOT, root, CHILD, child, OTHER, partner), Set.of(ancestors), Set.of()
+        )));
+
+        FamilyTreeLayout.Result layout = FamilyTreeLayout.layout(model.snapshot());
+        FamilyTreeLayout.ContinuationControl control = layout.continuations().stream()
+                .filter(item -> item.anchor().equals(OTHER) && item.direction() == ANCESTORS)
+                .findFirst().orElseThrow();
+        assertEquals(new FamilyTreeScreen.ContinuationTarget(OTHER, ANCESTORS),
+                FamilyTreeScreen.hitTargetAt(layout, control.bounds().centerX(), control.bounds().centerY())
+                        .orElseThrow());
+
+        long expansion = model.beginExpansion(OTHER, ANCESTORS);
+        model.accept(response(expansion, OTHER, view(
+                Map.of(OTHER, partner, PARENT, mother, GRANDPARENT, father), Set.of(), Set.of()
+        )));
+
+        assertEquals(ROOT, model.focusId());
+        assertEquals(ROOT, model.layoutRootId());
+        assertTrue(model.nodes().keySet().containsAll(Set.of(ROOT, CHILD, OTHER, PARENT, GRANDPARENT)));
+        assertFalse(model.snapshot().continuations().contains(ancestors));
+        assertTrue(FamilyTreeLayout.layout(model.snapshot()).cards().stream().anyMatch(card -> card.uuid().equals(PARENT)));
+        assertTrue(FamilyTreeLayout.layout(model.snapshot()).cards().stream().anyMatch(card -> card.uuid().equals(GRANDPARENT)));
+    }
+
+    @Test
     void unavailableUuidPrunesContinuationWithoutCreatingSyntheticPerson() {
         FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
         FamilyTreeNode root = node(ROOT);

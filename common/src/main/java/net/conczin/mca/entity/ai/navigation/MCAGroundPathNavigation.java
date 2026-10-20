@@ -809,24 +809,22 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 this.doStuckDetection(position);
                 return;
             }
-            int currentIndex = this.path.getNextNodeIndex();
-            Path currentPath = this.path;
-            super.followThePath();
-            if (this.path == currentPath && !currentPath.isDone()
-                    && currentPath.getNextNodeIndex() == currentIndex && this.mob.onGround()) {
-                // A path node may occupy a passable partial-collision block while the
-                // mob actually stands on its top surface. Vanilla requires the feet
-                // to be strictly less than one block above the node before advancing,
-                // so an exact one-block surface leaves this waypoint permanently stuck.
-                // Advance only after reaching both the node center and the physical floor.
-                BlockPos next = currentPath.getNextNodePos();
-                Vec3 standing = getStandingPosition(next, currentPath.getNextEntityPos(this.mob));
-                if (standing.y > next.getY() + 1.0E-3D
-                        && Math.abs(this.mob.getY() - standing.y) < 0.125D
+            BlockPos next = this.path.getNextNodePos();
+            Vec3 standing = getStandingPosition(next, this.path.getNextEntityPos(this.mob));
+            if (standing.y > next.getY() + PathNodeGeometry.FLOOR_EPSILON) {
+                // Raw node Y is not the feet height on a passable partial surface.
+                // Use the same physical pose as movement instead of first accepting
+                // vanilla's raw-node tolerance and then correcting only missed arrivals.
+                this.maxDistanceToWaypoint = this.mob.getBbWidth() > 0.75F ? this.mob.getBbWidth() / 2.0F
+                        : 0.75F - this.mob.getBbWidth() / 2.0F;
+                if (this.mob.onGround() && Math.abs(this.mob.getY() - standing.y) < 0.125D
                         && Math.abs(this.mob.getX() - standing.x) < this.maxDistanceToWaypoint
                         && Math.abs(this.mob.getZ() - standing.z) < this.maxDistanceToWaypoint) {
-                    currentPath.advance();
+                    this.path.advance();
                 }
+                this.doStuckDetection(position);
+            } else {
+                super.followThePath();
             }
             return;
         }
@@ -900,7 +898,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (this.climbTraversal.isClimbable(node) && this.mob.onClimbable()) {
             return new Vec3(node.getX() + 0.5D, this.mob.getY(), node.getZ() + 0.5D);
         }
-        return MCAWalkNodeEvaluator.getStandingPosition(
+        return PathNodeGeometry.walkingPosition(
                 this.level, node, this.mob, super.getGroundY(pathPosition));
     }
 }

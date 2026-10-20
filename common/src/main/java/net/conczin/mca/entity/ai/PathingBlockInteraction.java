@@ -111,6 +111,16 @@ public final class PathingBlockInteraction {
         return true;
     }
 
+    public static boolean shouldBeOpenForMovement(BlockState state, BlockPos node, @Nullable BlockPos adjacent) {
+        Direction.Axis axis = null;
+        if (adjacent != null && adjacent.getY() == node.getY()) {
+            boolean changesX = adjacent.getX() != node.getX();
+            boolean changesZ = adjacent.getZ() != node.getZ();
+            if (changesX != changesZ) axis = changesX ? Direction.Axis.X : Direction.Axis.Z;
+        }
+        return shouldBeOpenForMovement(state, axis);
+    }
+
     public static boolean setOpen(@Nullable Entity entity, Level level, BlockState state, BlockPos pos, boolean open) {
         if (!isOpenable(state)
                 || !state.hasProperty(BlockStateProperties.OPEN)

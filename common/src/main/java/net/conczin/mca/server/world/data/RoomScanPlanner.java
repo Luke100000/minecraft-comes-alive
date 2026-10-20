@@ -189,8 +189,8 @@ final class RoomScanPlanner {
                 target.buildingId(), number.number().orElse(Integer.MIN_VALUE), source, observation.seed()));
     }
 
-    private static FloorGrouping.NumberDecision prospectiveNumber(Village village, int buildingId,
-                                                                  StructureFloor candidate) {
+    static FloorGrouping.NumberDecision prospectiveNumber(Village village, int buildingId,
+                                                         StructureFloor candidate) {
         List<StructureFloor> floors = village.getBuildingStructures(buildingId).stream()
                 .flatMap(structure -> structure.getFloors().stream()).toList();
         Building main = village.getLogicalBuilding(buildingId)

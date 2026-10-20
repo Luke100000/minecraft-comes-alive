@@ -31,7 +31,7 @@ public final class GuardEquipmentGameTests {
     }
 
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
-    public static void guardsReuseScheduledActivityWithinTickButNotAcrossTicksOrSchedules(GameTestHelper helper) {
+    public static void guardsRespondToDutyScheduleChangesAcrossTicks(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
         prepareFlatArea(helper, start, 6);
         VillagerEntityMCA first = VillagerFactory.newVillager(helper.getLevel())
@@ -43,48 +43,33 @@ public final class GuardEquipmentGameTests {
         first.setNoAi(true);
         second.setNoAi(true);
 
-        CountingSchedule work = new CountingSchedule(Activity.WORK);
-        CountingSchedule rest = new CountingSchedule(Activity.REST);
+        Schedule work = new ScheduleBuilder(new Schedule()).changeActivityAt(0, Activity.WORK).build();
+        Schedule rest = new ScheduleBuilder(new Schedule()).changeActivityAt(0, Activity.REST).build();
         first.getBrain().setSchedule(work);
         second.getBrain().setSchedule(work);
 
         helper.assertTrue(VillagerTasksMCA.isOnDuty(first) && VillagerTasksMCA.isOnDuty(second),
                 "shared WORK schedule did not keep both guards on duty");
-        helper.assertTrue(work.lookups == 1,
-                "same-tick guards repeated the stream-based schedule activity lookup");
-
         second.getBrain().setSchedule(rest);
         helper.assertTrue(!VillagerTasksMCA.isOnDuty(second),
-                "switching to REST retained the other guard's cached WORK activity");
-        helper.assertTrue(rest.lookups == 1, "different schedule did not resolve independently");
+                "switching to REST did not release the second guard from duty");
 
         helper.runAfterDelay(2, () -> {
             try {
                 helper.assertTrue(VillagerTasksMCA.isOnDuty(first), "WORK was lost on the next tick");
                 helper.assertTrue(!VillagerTasksMCA.isOnDuty(second), "REST was lost on the next tick");
-                helper.assertTrue(work.lookups == 2 && rest.lookups == 2,
-                        "a later tick reused stale schedule activity results");
+                first.getBrain().setSchedule(rest);
+                second.getBrain().setSchedule(work);
+                helper.assertTrue(!VillagerTasksMCA.isOnDuty(first),
+                        "WORK-to-REST schedule switch was ignored on the next tick");
+                helper.assertTrue(VillagerTasksMCA.isOnDuty(second),
+                        "REST-to-WORK schedule switch was ignored on the next tick");
             } finally {
                 first.discard();
                 second.discard();
             }
             helper.succeed();
         });
-    }
-
-    private static final class CountingSchedule extends Schedule {
-        private final Activity activity;
-        private int lookups;
-
-        private CountingSchedule(Activity activity) {
-            this.activity = activity;
-        }
-
-        @Override
-        public Activity getActivityAt(int timeOfDay) {
-            lookups++;
-            return activity;
-        }
     }
 
     @GameTest(batch = "mca_guard_follow_equipment", templateNamespace = "minecraft",

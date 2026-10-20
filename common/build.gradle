@@ -71,7 +71,7 @@ neoForge {
 
 dependencies {
     compileOnly 'org.spongepowered:mixin:0.8.7'
-    compileOnly 'org.ow2.asm:asm-tree:9.7.1'
+    compileOnly 'org.ow2.asm:asm-tree:9.10.1'
     // Loader modules provide the runtime; common only needs the API and processor.
     compileOnly(annotationProcessor("io.github.llamalad7:mixinextras-common:${mixin_extras_version}"))
     testImplementation platform('org.junit:junit-bom:6.1.3')

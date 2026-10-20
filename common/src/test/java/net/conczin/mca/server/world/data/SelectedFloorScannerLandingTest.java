@@ -2,10 +2,12 @@ package net.conczin.mca.server.world.data;
 
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.SlabBlock;
+import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.SlabType;
@@ -22,6 +24,25 @@ class SelectedFloorScannerLandingTest {
     static void bootstrapMinecraft() {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
+    }
+
+    @Test
+    void twoBlockRightAngleStairTurnDoesNotBecomeAnotherStorey() {
+        BlockGetter world = new TurningStairs();
+        var lower = SelectedFloorScanner.scan(world, new BlockPos(1, 60, -4), 2048, 64);
+        var upper = SelectedFloorScanner.scan(world, new BlockPos(7, 65, 0), 2048, 64);
+        assertEquals(Building.validationResult.SUCCESS, lower.result());
+        assertEquals(Building.validationResult.SUCCESS, upper.result());
+        assertEquals(60, lower.anchorY());
+        assertEquals(65, upper.anchorY());
+        assertFalse(lower.floor().sameCellPositions(upper.floor()));
+        for (BlockPos turn : new BlockPos[]{new BlockPos(1, 62, 0), new BlockPos(2, 62, 0)}) {
+            var selected = SelectedFloorScanner.scan(world, turn, 2048, 64);
+            assertEquals(Building.validationResult.SUCCESS, selected.result());
+            assertEquals(60, selected.anchorY(), "the two-block turn invented an intermediate storey at " + turn);
+            assertTrue(lower.floor().sameExactGeometry(selected.floor()),
+                    "standing on either corner must select the same lower flight half");
+        }
     }
 
     @Test
@@ -65,6 +86,41 @@ class SelectedFloorScannerLandingTest {
                     "a previous incomplete proof froze the end as another storey");
             assertEquals(true, through.invoke(provider, middle));
         }
+    }
+
+    /** Two full-block flights joined by two flat blocks and a ninety-degree turn. */
+    private static final class TurningStairs implements BlockGetter {
+        @Override
+        public BlockState getBlockState(BlockPos pos) {
+            int x = pos.getX(), y = pos.getY(), z = pos.getZ();
+            if (x < -1 || x > 9 || z < -6 || z > 2 || y < 59 || y > 75) {
+                return Blocks.AIR.defaultBlockState();
+            }
+            int feet = x >= 0 && x <= 2 && z >= -5 && z <= -3 ? 60
+                    : x == 1 && z == -2 ? 61
+                    : x == 1 && z == -1 || (x == 1 || x == 2) && z == 0 ? 62
+                    : x >= 3 && x <= 5 && z == 0 ? 60 + x
+                    : x >= 6 && x <= 8 && z >= -1 && z <= 1 ? 65 : -1;
+            if (feet < 0 || y < feet - 1 || y == 75) return Blocks.STONE.defaultBlockState();
+            if (y >= feet) return Blocks.AIR.defaultBlockState();
+            if (x == 1 && (z == -2 || z == -1) || x >= 3 && x <= 5 && z == 0) {
+                return Blocks.OAK_STAIRS.defaultBlockState().setValue(StairBlock.FACING,
+                        x == 1 ? Direction.SOUTH : Direction.EAST);
+            }
+            return Blocks.STONE.defaultBlockState();
+        }
+
+        @Override
+        public FluidState getFluidState(BlockPos pos) { return getBlockState(pos).getFluidState(); }
+
+        @Override
+        public BlockEntity getBlockEntity(BlockPos pos) { return null; }
+
+        @Override
+        public int getHeight() { return 128; }
+
+        @Override
+        public int getMinBuildHeight() { return 0; }
     }
 
     /** Two genuine end decks, half-slab flights and a configurable flat middle patch. */

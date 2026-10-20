@@ -129,7 +129,7 @@ final class SelectedFloorScanner {
 
                 @Override
                 public boolean throughLanding(SurfaceCell cell) {
-                    return isThroughHalfStepLanding(world, cell, this, maxSize, maxRadius, throughLandings);
+                    return isThroughStairLanding(world, cell, this, maxSize, maxRadius, throughLandings);
                 }
             };
             this.regions = new RegionDiscovery(world, ceilings, provider, maxSize, maxRadius);
@@ -472,12 +472,12 @@ final class SelectedFloorScanner {
         return provider.stableLanding(cell);
     }
 
-    /** A narrow half-step turn connects flights; its flat outer corner is not another storey. */
-    private static boolean isThroughHalfStepLanding(BlockGetter world, SurfaceCell seed, StepProvider provider,
+    /** A narrow stair turn connects flights; its flat outer corner is not another storey. */
+    private static boolean isThroughStairLanding(BlockGetter world, SurfaceCell seed, StepProvider provider,
                                                    int maxSize, int maxRadius, Map<BlockPos, Boolean> cache) {
         Boolean cached = cache.get(seed.feet());
         if (cached != null) return cached;
-        if (!canBeHalfStepLanding(world, seed, provider)) {
+        if (!canBeStairLanding(world, seed, provider)) {
             cache.put(seed.feet(), false);
             return false;
         }
@@ -496,7 +496,7 @@ final class SelectedFloorScanner {
                 // A later central seed may prove the whole patch within its radius.
                 return false;
             }
-            if (!canBeHalfStepLanding(world, cell, provider)) {
+            if (!canBeStairLanding(world, cell, provider)) {
                 through = false;
                 break;
             }
@@ -515,8 +515,8 @@ final class SelectedFloorScanner {
                     if (visited.add(next.feet())) queue.addLast(next);
                 } else {
                     changesHeight = true;
-                    rises |= delta > 0 && delta <= 0.5D;
-                    drops |= delta < 0 && delta >= -0.5D;
+                    rises |= delta > 0 && delta <= MAX_STEP_HEIGHT;
+                    drops |= delta < 0 && delta >= -MAX_STEP_HEIGHT;
                 }
             }
             // A narrow hall also has usable level depth: its middle can be crossed
@@ -539,10 +539,12 @@ final class SelectedFloorScanner {
         return through;
     }
 
-    private static boolean canBeHalfStepLanding(BlockGetter world, SurfaceCell cell, StepProvider provider) {
+    private static boolean canBeStairLanding(BlockGetter world, SurfaceCell cell, StepProvider provider) {
+        if (provider.explicitStairCell(world, cell.feet())) return true;
         // Mixed stair supports (for example an embedded light) still carry a half-step flight.
         if (provider.steps(cell).stream().anyMatch(step -> step.connector() == null
-                && Math.abs(step.landing().surfaceY() - cell.surfaceY()) == 0.5D)) return true;
+                && (Math.abs(step.landing().surfaceY() - cell.surfaceY()) == 0.5D
+                || provider.explicitStairCell(world, step.landing().feet())))) return true;
         // A bottom slab may be the low obstacle in the feet cell, not the block underneath it.
         return world.getBlockState(cell.feet().below()).getBlock() instanceof SlabBlock
                 || world.getBlockState(cell.feet()).getBlock() instanceof SlabBlock;

@@ -177,7 +177,7 @@ public final class NavigationPhysicalSafetyGameTests {
         level.setBlock(snow, Blocks.SNOW.defaultBlockState().setValue(BlockStateProperties.LAYERS, 3), 3);
         VillagerEntityMCA villager = spawn(level, Vec3.atBottomCenterOf(snow.south(2)));
         try {
-            Vec3 standing = MCAWalkNodeEvaluator.getStandingPosition(
+            Vec3 standing = PathNodeGeometry.walkingPosition(
                     level, snow, villager, WalkNodeEvaluator.getFloorLevel(level, snow));
             double navigationY = ((MCAGroundPathNavigation) villager.getNavigation())
                     .getGroundY(Vec3.atBottomCenterOf(snow));
@@ -544,6 +544,15 @@ public final class NavigationPhysicalSafetyGameTests {
 
     @GameTest(batch = "mca_fence_diagonal", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
     public static void fenceTopCornerRejectsUnsupportedDiagonal(GameTestHelper helper) {
+        assertFenceTopCorner(helper, false);
+    }
+
+    @GameTest(batch = "mca_grounded_fence_diagonal", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void groundedFenceTopCornerRejectsUnsupportedDiagonal(GameTestHelper helper) {
+        assertFenceTopCorner(helper, true);
+    }
+
+    private static void assertFenceTopCorner(GameTestHelper helper, boolean groundedStart) {
         ServerLevel level = helper.getLevel();
         BlockPos origin = helper.absolutePos(new BlockPos(8, 4, 8));
         BlockPos corner = origin.south();
@@ -557,7 +566,9 @@ public final class NavigationPhysicalSafetyGameTests {
         level.setBlock(diagonal.below(), Blocks.ACACIA_FENCE.defaultBlockState()
                 .setValue(FenceBlock.WEST, true), exactShape);
 
-        VillagerEntityMCA villager = spawn(level, Vec3.atBottomCenterOf(origin).add(0.0D, 0.5D, 0.0D));
+        // Tiny collision rounding keeps getStart in this cell, rather than the one above the fence top.
+        VillagerEntityMCA villager = spawn(level, Vec3.atBottomCenterOf(origin)
+                .add(0.0D, groundedStart ? 0.5D - 1.0E-8D : 0.5D, 0.0D));
         try {
             helper.assertTrue(level.noBlockCollision(villager, villager.getBoundingBox()),
                     "Fence-top start must be clear");
@@ -570,7 +581,8 @@ public final class NavigationPhysicalSafetyGameTests {
                         villager.getBoundingBox().move(fraction, -0.05D, fraction));
             }
             helper.assertTrue(unsupported, "Diagonal fixture must cross an unsupported inside fence corner");
-            List<BlockPos> offered = neighborsAtPlannedNode(level, villager, origin);
+            List<BlockPos> offered = groundedStart ? neighbors(level, villager, origin)
+                    : neighborsAtPlannedNode(level, villager, origin);
             helper.assertTrue(offered.contains(corner), "Supported cardinal fence route must remain available");
             helper.assertTrue(!offered.contains(diagonal),
                     "MCA offered an unsupported diagonal that drops the villager into the fence pen");

@@ -23,11 +23,13 @@ import net.minecraft.world.entity.projectile.ProjectileUtil;
 import net.minecraft.world.item.FishingRodItem;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 import org.jetbrains.annotations.Nullable;
@@ -35,6 +37,8 @@ import org.jetbrains.annotations.Nullable;
 public final class MCAFishingBobberEntity extends Projectile {
     private static final int MAX_FLYING_TICKS = 40;
     private static final double MAX_OWNER_DISTANCE_SQR = 32.0 * 32.0;
+    private static final double FLYING_DRAG = 0.92;
+    private static final double FLYING_GRAVITY = 0.03;
     private static final EntityDataAccessor<Boolean> DATA_BITING =
             SynchedEntityData.defineId(MCAFishingBobberEntity.class, EntityDataSerializers.BOOLEAN);
 
@@ -107,25 +111,74 @@ public final class MCAFishingBobberEntity extends Projectile {
         return entityData.get(DATA_BITING);
     }
 
-    private void launchAt(VillagerEntityMCA owner, BlockPos targetWater) {
+    private record Launch(Vec3 origin, Vec3 velocity, int ticks) { }
+
+    /** Use the same launch model for actual casts and preflight obstruction checks. */
+    private static Launch calculateLaunch(VillagerEntityMCA owner, BlockPos targetWater, Vec3 ownerPosition) {
         int handSide = owner.getMainArm() == HumanoidArm.RIGHT ? 1 : -1;
         float bodyYaw = owner.yBodyRot * Mth.DEG_TO_RAD;
         double sin = Mth.sin(bodyYaw);
         double cos = Mth.cos(bodyYaw);
 
-        Vec3 origin = owner.getEyePosition().add(
+        Vec3 origin = owner.getEyePosition().add(ownerPosition.subtract(owner.position())).add(
                 -cos * handSide * 0.20 - sin * 0.20,
                 -0.35,
                 -sin * handSide * 0.20 + cos * 0.20
         );
-        FluidState fluid = level().getFluidState(targetWater);
-        double surfaceY = targetWater.getY() + fluid.getHeight(level(), targetWater);
-        Vec3 destination = new Vec3(targetWater.getX() + 0.5, surfaceY, targetWater.getZ() + 0.5);
+        FluidState fluid = owner.level().getFluidState(targetWater);
+        double surfaceY = targetWater.getY() + fluid.getHeight(owner.level(), targetWater);
+        Vec3 destination = new Vec3(targetWater.getX() + 0.5, surfaceY - 0.02, targetWater.getZ() + 0.5);
         Vec3 direction = destination.subtract(origin);
-        double horizontalDistance = direction.horizontalDistance();
+        // Give elevated banks enough flight time to clear the shoreline lip.
+        // A short, fast downward throw can hit the bank before reaching water.
+        int flightTicks = Mth.clamp((int)Math.ceil(direction.horizontalDistance() / 0.35), 10, 30);
+        double dragSum = 0;
+        double drag = 1;
+        double fallingVelocity = 0;
+        double gravityDrop = 0;
+        for (int tick = 0; tick < flightTicks; tick++) {
+            dragSum += drag;
+            drag *= FLYING_DRAG;
+            fallingVelocity -= FLYING_GRAVITY;
+            gravityDrop += fallingVelocity;
+            fallingVelocity *= FLYING_DRAG;
+        }
+        // Solve the same gravity-before-move, drag-after-move steps used below.
+        // Normalizing to a fixed launch speed made distant aims fall short.
+        Vec3 velocity = new Vec3(direction.x / dragSum, (direction.y - gravityDrop) / dragSum, direction.z / dragSum);
+        return new Launch(origin, velocity, flightTicks);
+    }
 
-        setPos(origin.x, origin.y, origin.z);
-        shoot(direction.x, direction.y + horizontalDistance * 0.10, direction.z, 0.6F, 0.1F);
+    private void launchAt(VillagerEntityMCA owner, BlockPos targetWater) {
+        Launch launch = calculateLaunch(owner, targetWater, owner.position());
+        setPos(launch.origin.x, launch.origin.y, launch.origin.z);
+        shoot(launch.velocity.x, launch.velocity.y, launch.velocity.z,
+                (float)launch.velocity.length(), 0.0F);
+    }
+
+    /** Check the rising arc from the supplied feet position, including off-centre arrivals. */
+    public static boolean isTrajectoryClear(ServerLevel world, VillagerEntityMCA owner,
+                                            Vec3 ownerPosition, BlockPos targetWater) {
+        Launch launch = calculateLaunch(owner, targetWater, ownerPosition);
+        Vec3 position = launch.origin;
+        Vec3 velocity = launch.velocity;
+        for (int tick = 0; tick < launch.ticks; tick++) {
+            // Flight physics apply gravity before moving, then drag afterward.
+            Vec3 movement = velocity.add(0.0, -FLYING_GRAVITY, 0.0);
+            Vec3 next = position.add(movement);
+            for (int x = Mth.floor(Math.min(position.x, next.x)) >> 4;
+                 x <= Mth.floor(Math.max(position.x, next.x)) >> 4; x++) {
+                for (int z = Mth.floor(Math.min(position.z, next.z)) >> 4;
+                     z <= Mth.floor(Math.max(position.z, next.z)) >> 4; z++) {
+                    if (world.getChunkSource().getChunkNow(x, z) == null) return false;
+                }
+            }
+            if (world.clip(new ClipContext(position, next, ClipContext.Block.COLLIDER,
+                    ClipContext.Fluid.NONE, owner)).getType() != HitResult.Type.MISS) return false;
+            position = next;
+            velocity = movement.scale(FLYING_DRAG);
+        }
+        return true;
     }
 
     private void updateOwnerInfo(@Nullable MCAFishingBobberEntity bobber) {
@@ -209,7 +262,7 @@ public final class MCAFishingBobberEntity extends Projectile {
         }
 
         if (!inWater) {
-            setDeltaMovement(getDeltaMovement().add(0.0, -0.03, 0.0));
+            setDeltaMovement(getDeltaMovement().add(0.0, -FLYING_GRAVITY, 0.0));
         }
 
         move(MoverType.SELF, getDeltaMovement());
@@ -217,7 +270,7 @@ public final class MCAFishingBobberEntity extends Projectile {
         if (!bobbing && (onGround() || horizontalCollision)) {
             setDeltaMovement(Vec3.ZERO);
         }
-        setDeltaMovement(getDeltaMovement().scale(0.92));
+        setDeltaMovement(getDeltaMovement().scale(FLYING_DRAG));
         reapplyPosition();
     }
 

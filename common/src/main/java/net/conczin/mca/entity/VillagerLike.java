@@ -36,6 +36,8 @@ import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.npc.VillagerDataHolder;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.DyeColor;
@@ -642,6 +644,14 @@ public interface VillagerLike<E extends Entity & VillagerLike<E>> extends CTrack
             return null;
         }
 
+        // Discard does not wake a sleeper or release its HOME. Finish that lifecycle
+        // before copying position so the replacement also starts at the safe wake-up spot.
+        if (source.isSleeping()) {
+            source.stopSleeping();
+        }
+        if (source instanceof Villager villager) {
+            villager.releasePoi(MemoryModuleType.HOME);
+        }
         Entity vehicle = source.getVehicle();
         converted.copyPosition(source);
         converted.setBaby(source.isBaby());

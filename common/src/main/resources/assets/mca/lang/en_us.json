@@ -899,6 +899,7 @@
   "server.sentProposal": "You have already sent a proposal to %1$s.",
   "server.spouseNotPresent": "Your spouse is not present on the server.",
   "server.procreationSuccessful": "Procreation successful!",
+  "interaction.procreate.fail.inventoryfull": "Cannot procreate: make room in your inventory or your spouse's inventory.",
   "server.procreationRequest": "%1$s has requested procreation. To accept, type /mca procreate within 10 seconds.",
   "server.marriedToVillager": "You cannot use this command when married to a villager.",
   "server.babyPresent": "You already have a baby with this partner.",

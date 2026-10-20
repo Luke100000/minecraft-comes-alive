@@ -914,6 +914,7 @@ public final class HomelessShelterGameTests {
         level.setBlock(gate, Blocks.OAK_FENCE_GATE.defaultBlockState(), 3);
         var cache = VillageManager.get(level).getIndoorRooms();
         IndoorRoomCache.Room[] original = {null};
+        IndoorRoomCache.Room[] openedRoof = {null};
         BlockPos roof = center.north().above(3);
         helper.runAfterDelay(10, () -> {
             if (registered) registerStrollHouse(helper, center);
@@ -933,14 +934,22 @@ public final class HomelessShelterGameTests {
             level.setBlock(roof, Blocks.AIR.defaultBlockState(), 3);
         });
         helper.runAfterDelay(110, () -> {
-            helper.assertTrue(cache.resolve(head).isEmpty(), "roof opening retained stale indoor room geometry");
+            openedRoof[0] = cache.resolve(head).orElseThrow();
+            helper.assertTrue(openedRoof[0] != original[0],
+                    "roof opening retained the cached geometry rather than rescanning");
+            helper.assertTrue(!openedRoof[0].floorCells().contains(roof.below(3)),
+                    "unroofed column still belonged to the indoor room");
         });
         helper.runAfterDelay(320, () -> {
-            helper.assertTrue(cache.resolve(head).isEmpty(), "retry resurrected stale registered geometry with an open roof");
+            helper.assertTrue(cache.resolve(head).orElseThrow().floorCells().equals(openedRoof[0].floorCells()),
+                    "unchanged roof opening altered the cached room on retry");
             level.setBlock(roof, Blocks.STONE.defaultBlockState(), 3);
         });
         helper.runAfterDelay(525, () -> {
-            helper.assertTrue(cache.resolve(head).orElseThrow() != original[0], "repaired roof did not produce fresh geometry");
+            IndoorRoomCache.Room repaired = cache.resolve(head).orElseThrow();
+            helper.assertTrue(repaired != openedRoof[0], "repaired roof did not produce fresh geometry");
+            helper.assertTrue(repaired.floorCells().contains(roof.below(3)),
+                    "repaired roof did not restore the formerly unroofed floor column");
             helper.succeed();
         });
     }

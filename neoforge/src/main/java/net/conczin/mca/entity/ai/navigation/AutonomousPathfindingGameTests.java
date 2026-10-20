@@ -63,6 +63,7 @@ public final class AutonomousPathfindingGameTests {
     private static final String DETOUR_BATCH = "mca_autonomous_live_detour";
     private static final String GATE_BATCH = "mca_autonomous_closed_gate";
     private static final String ENCLOSED_GATE_BATCH = "mca_autonomous_enclosed_gate_exit";
+    private static final String ENCLOSED_RAISED_GATE_BATCH = "mca_autonomous_enclosed_raised_gate_exit";
     private static final String DECORATIVE_GATE_BATCH = "mca_autonomous_decorative_raised_gate";
     private static final String WALL_GATE_BATCH = "mca_autonomous_wall_gate_approaches";
     private static final String SLOW_HEAD_GATE_BATCH = "mca_autonomous_slow_head_gate";
@@ -290,7 +291,7 @@ public final class AutonomousPathfindingGameTests {
         testEnclosedGateExit(helper, false);
     }
 
-    @GameTest(batch = ENCLOSED_GATE_BATCH, templateNamespace = "minecraft",
+    @GameTest(batch = ENCLOSED_RAISED_GATE_BATCH, templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 650)
     public static void villagerEscapesEnclosedYardThroughOnlyGateOnSlab(GameTestHelper helper) {
         testEnclosedGateExit(helper, true);
@@ -823,6 +824,11 @@ public final class AutonomousPathfindingGameTests {
 
     @AfterBatch(batch = ENCLOSED_GATE_BATCH)
     public static void cleanupEnclosedGate(ServerLevel level) {
+        cleanup(level);
+    }
+
+    @AfterBatch(batch = ENCLOSED_RAISED_GATE_BATCH)
+    public static void cleanupEnclosedRaisedGate(ServerLevel level) {
         cleanup(level);
     }
 

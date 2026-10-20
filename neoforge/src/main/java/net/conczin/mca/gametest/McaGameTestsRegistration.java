@@ -6,6 +6,8 @@ import net.conczin.mca.entity.VillagerBedAlignmentGameTests;
 import net.conczin.mca.entity.VillagerCarryPositionGameTests;
 import net.conczin.mca.entity.VillagerChildSuffocationGameTests;
 import net.conczin.mca.entity.VillagerVoicePitchGameTests;
+import net.conczin.mca.entity.ai.ProcreationInventoryGameTests;
+import net.conczin.mca.entity.ai.BedOccupancyLifecycleGameTests;
 import net.conczin.mca.entity.ai.ResidencyGoHomeGameTests;
 import net.conczin.mca.entity.ai.ResidencySetHomeGameTests;
 import net.conczin.mca.entity.ai.brain.ForcedHomeOccupiedBedGameTests;
@@ -28,6 +30,7 @@ import net.conczin.mca.entity.ai.brain.tasks.chore.AbstractChoreTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.ChoppingTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.ChorePathfindingGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.FishingTaskGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.chore.FishingSiteGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.HarvestingTaskGameTests;
 import net.conczin.mca.entity.ai.navigation.AutonomousPathfindingGameTests;
 import net.conczin.mca.entity.ai.navigation.CaveVineNavigationGameTests;
@@ -41,6 +44,7 @@ import net.conczin.mca.entity.ai.navigation.NavigationRecoveryGameTests;
 import net.conczin.mca.entity.ai.navigation.NavigationPhysicalSafetyGameTests;
 import net.conczin.mca.entity.ai.navigation.PathRetryLifecycleGameTests;
 import net.conczin.mca.entity.ai.navigation.StairWallPathfindingGameTests;
+import net.conczin.mca.entity.ai.navigation.StairDoorNavigationGameTests;
 import net.conczin.mca.server.DestinyLocationResolverGameTests;
 import net.conczin.mca.server.world.data.CopiedOpenHouseGameTests;
 import net.conczin.mca.server.world.data.FloorScannerGameTests;
@@ -70,6 +74,8 @@ public final class McaGameTestsRegistration {
             VillagerCarryPositionGameTests.class,
             VillagerChildSuffocationGameTests.class,
             VillagerVoicePitchGameTests.class,
+            ProcreationInventoryGameTests.class,
+            BedOccupancyLifecycleGameTests.class,
             ResidencyGoHomeGameTests.class,
             ResidencySetHomeGameTests.class,
             ForcedHomeOccupiedBedGameTests.class,
@@ -92,6 +98,7 @@ public final class McaGameTestsRegistration {
             ChoppingTaskGameTests.class,
             ChorePathfindingGameTests.class,
             FishingTaskGameTests.class,
+            FishingSiteGameTests.class,
             HarvestingTaskGameTests.class,
             AutonomousPathfindingGameTests.class,
             CaveVineNavigationGameTests.class,
@@ -105,6 +112,7 @@ public final class McaGameTestsRegistration {
             NavigationPhysicalSafetyGameTests.class,
             PathRetryLifecycleGameTests.class,
             StairWallPathfindingGameTests.class,
+            StairDoorNavigationGameTests.class,
             DestinyLocationResolverGameTests.class,
             CopiedOpenHouseGameTests.class,
             FloorScannerGameTests.class,

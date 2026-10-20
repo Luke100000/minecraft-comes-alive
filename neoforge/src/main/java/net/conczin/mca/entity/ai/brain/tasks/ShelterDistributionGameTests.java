@@ -927,7 +927,9 @@ public final class ShelterDistributionGameTests {
     @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void coldDiscoveryRejectsAnUnloadedBoundaryWithoutLoadingIt(GameTestHelper helper) {
         var level = helper.getLevel();
-        BlockPos center = new BlockPos(73003, helper.absolutePos(new BlockPos(0, 2, 0)).getY(), 73003);
+        // Keep the room inside one chunk and its three-block corridor at the west edge.
+        int coordinate = (73003 & ~15) + 3;
+        BlockPos center = new BlockPos(coordinate, helper.absolutePos(new BlockPos(0, 2, 0)).getY(), coordinate);
         ChunkPos source = new ChunkPos(center);
         level.getChunk(source.x, source.z);
         room(level, center);
@@ -936,12 +938,18 @@ public final class ShelterDistributionGameTests {
         for (int x = -3; x <= -1; x++) {
             for (int y = -1; y <= 3; y++) {
                 for (int z = 1; z <= 3; z++) {
-                    put(level, center.offset(x, y, z), y == -1 || y == 3 || z == 1 || z == 3
-                            ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState());
+                    BlockPos pos = center.offset(x, y, z);
+                    BLOCKS.putIfAbsent(pos, level.getBlockState(pos));
+                    // Final fixture shapes must not load the absent chunk through neighbor updates.
+                    level.setBlock(pos, y == -1 || y == 3 || z == 1 || z == 3
+                                    ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(),
+                            Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
                 }
             }
         }
         ChunkPos absent = new ChunkPos(source.x - 1, source.z);
+        helper.assertTrue(center.getX() - 3 == source.getMinBlockX(),
+                "fixture corridor does not reach the unloaded chunk boundary");
         helper.assertTrue(level.getChunkSource().getChunkNow(absent.x, absent.z) == null,
                 "fixture boundary chunk was already loaded");
         helper.assertTrue(VillageManager.get(level).getIndoorRooms().resolve(bed).isEmpty(),
@@ -1042,8 +1050,22 @@ public final class ShelterDistributionGameTests {
         for (BlockPos pos : BlockPos.betweenClosed(center.offset(-6, -1, 15), center.offset(24, 2, 45))) {
             put(helper.getLevel(), pos, pos.getY() == center.getY() - 1 ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState());
         }
-        for (int z = -30; z <= 40; z++) for (int y = 0; y < 3; y++) {
+        for (int z = -16; z <= 36; z++) for (int y = 0; y < 3; y++) {
             put(helper.getLevel(), center.offset(8, y, z), Blocks.STONE.defaultBlockState());
+        }
+        // The far house is nearby in straight-line distance, but the only
+        // supported outdoor route bends south around the wall and back north.
+        // Do not leave a huge open plain whose A* frontier can exhaust the
+        // path budget before finding this deliberately long, real corridor.
+        for (int z = 6; z <= 45; z++) for (int x = -6; x <= 42; x++) {
+            boolean nearDoor = x == 2 && z <= 9;
+            boolean westApproach = z == 9 && x >= 2 && x <= 7;
+            boolean westLane = x == 7 && z >= 9 && z <= 37;
+            boolean turn = z == 37 && x >= 7 && x <= 18;
+            boolean eastLane = x == 18 && z <= 37;
+            if (!(nearDoor || westApproach || westLane || turn || eastLane)) {
+                put(helper.getLevel(), center.offset(x, -1, z), Blocks.AIR.defaultBlockState());
+            }
         }
         fill(helper, center, 6);
         var incoming = spawn(helper, center.east(2).south(9));

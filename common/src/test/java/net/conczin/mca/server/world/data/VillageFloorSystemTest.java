@@ -134,7 +134,7 @@ class VillageFloorSystemTest {
     }
 
     @Test
-    void insertingConflictingLabelsDoesNotRenumberExistingFloors() {
+    void rawRegistrationAndInsertionPreviewDoNotRenumberExistingFloors() {
         Village village = new Village(1, null);
         Structure original = structure(10, 77,
                 TestStructureFloors.create(0, 64, 68, 0, region(64)),
@@ -150,10 +150,76 @@ class VillageFloorSystemTest {
         assertEquals(0, original.getFloor(0).orElseThrow().floorNumber());
         assertEquals(1, inserted.getFloor(0).orElseThrow().floorNumber());
         assertEquals(1, original.getFloor(1).orElseThrow().floorNumber());
-        assertEquals(Building.validationResult.AMBIGUOUS_STRUCTURE,
-                FloorGrouping.prospectiveNumber(List.of(original.getFloor(0).orElseThrow(),
-                        original.getFloor(1).orElseThrow()), original.getFloor(0).orElseThrow(),
-                        inserted.getFloor(0).orElseThrow()).result());
+        var preview = FloorGrouping.prospectiveNumber(List.of(original.getFloor(0).orElseThrow(),
+                original.getFloor(1).orElseThrow()), original.getFloor(0).orElseThrow(),
+                inserted.getFloor(0).orElseThrow());
+        assertEquals(Building.validationResult.SUCCESS, preview.result());
+        assertEquals(Map.of(1, 2), preview.shiftedNumbers());
+        assertEquals(1, original.getFloor(1).orElseThrow().floorNumber());
+    }
+
+    @Test
+    void explicitInsertionShiftsOnlyItsBuildingAndKeepsSharedStoreysTogether() {
+        for (int direction : new int[]{1, -1}) {
+            Village village = new Village(1, null);
+            registerInsertionFloors(village, direction);
+            var originals = village.getStructures().values().stream().map(Structure::copy).toList();
+            VillageManager manager = new VillageManager(null);
+
+            assertEquals(Building.validationResult.SUCCESS,
+                    manager.commitRoomAddition(pendingInsertion(village, direction), null));
+
+            assertEquals(0, village.getStructure(10).orElseThrow().getFloor(0).orElseThrow().floorNumber());
+            for (int id : new int[]{20, 21}) {
+                assertEquals(2 * direction,
+                        village.getStructure(id).orElseThrow().getFloor(0).orElseThrow().floorNumber());
+            }
+            assertEquals(3 * direction,
+                    village.getStructure(30).orElseThrow().getFloor(0).orElseThrow().floorNumber());
+            assertEquals(direction,
+                    village.getStructure(40).orElseThrow().getFloor(0).orElseThrow().floorNumber());
+            for (Structure original : originals) {
+                StructureFloor current = village.getStructure(original.getId()).orElseThrow().getFloor(0).orElseThrow();
+                assertEquals(original.getFloor(0).orElseThrow().anchorY(), current.anchorY());
+                assertTrue(original.getFloor(0).orElseThrow().geometry().sameExactGeometry(current.geometry()));
+            }
+            Village reloaded = new Village(village.save(), null);
+            assertEquals(2 * direction,
+                    reloaded.getStructure(20).orElseThrow().getFloor(0).orElseThrow().floorNumber());
+            assertEquals(100, reloaded.getLogicalBuilding(10).orElseThrow().mainRoomId());
+        }
+    }
+
+    @Test
+    void staleInsertionLabelIsRejectedWithoutChangingRegisteredState() {
+        Village village = new Village(1, null);
+        registerInsertionFloors(village, 1);
+        BuildingScanResult captured = pendingInsertion(village, 1);
+        for (int id : new int[]{20, 21, 30}) {
+            Structure member = village.getStructure(id).orElseThrow();
+            member.setFloorNumber(0, member.getFloor(0).orElseThrow().floorNumber() + 1);
+        }
+        registerStructure(village, structure(50, 10, floor(0, 67).withFloorNumber(1)), room(150, 50, 0, true));
+        CompoundTag before = village.save();
+
+        assertEquals(Building.validationResult.TARGET_CHANGED,
+                new VillageManager(null).commitRoomAddition(captured, null));
+        assertEquals(before, village.save());
+    }
+
+    @Test
+    void failedInsertionRollsBackShiftedLabelsAndCanBeRetried() {
+        ThrowOnceMarkDirtyVillage village = new ThrowOnceMarkDirtyVillage();
+        registerInsertionFloors(village, 1);
+        BuildingScanResult addition = pendingInsertion(village, 1);
+        VillageManager manager = new VillageManager(null);
+        CompoundTag before = village.save();
+        village.failNextMarkDirty();
+
+        assertThrows(IllegalStateException.class, () -> manager.commitRoomAddition(addition, null));
+        assertEquals(before, village.save());
+        assertEquals(Building.validationResult.SUCCESS, manager.commitRoomAddition(addition, null));
+        assertEquals(2, village.getStructure(20).orElseThrow().getFloor(0).orElseThrow().floorNumber());
     }
 
     @Test
@@ -1063,6 +1129,26 @@ class VillageFloorSystemTest {
         JsonObject type = new JsonObject();
         type.add("blocks", blocks);
         return new BuildingType(name, type);
+    }
+
+    private static void registerInsertionFloors(Village village, int direction) {
+        registerStructure(village, structure(10, 10, floor(0, 64)), room(100, 10, 0, true));
+        registerStructure(village, structure(20, 10, floor(0, 64 + 12 * direction).withFloorNumber(direction)),
+                room(120, 20, 0, true));
+        registerStructure(village, structure(21, 10, floor(0, 64 + 13 * direction).withFloorNumber(direction)),
+                room(121, 21, 0, true));
+        registerStructure(village, structure(30, 10, floor(0, 64 + 20 * direction).withFloorNumber(2 * direction)),
+                room(130, 30, 0, true));
+        registerStructure(village, structure(40, 40, TestStructureFloors.create(0, 76, 80, direction,
+                region(76, 20, 0))), room(140, 40, 0, true));
+    }
+
+    private static BuildingScanResult pendingInsertion(Village village, int direction) {
+        Structure pending = structure(-1, 10, floor(0, 64 + 6 * direction).withFloorNumber(direction));
+        Building room = room(-1, -1, 0, true);
+        ensureRoomOwnership(pending, room);
+        return new BuildingScanResult(Building.validationResult.SUCCESS, room.getSourceBlock(), room,
+                List.of(), village, pending);
     }
 
     private static Structure structure(int id, int logicalId, StructureFloor... floors) {

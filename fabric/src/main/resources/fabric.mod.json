@@ -30,7 +30,7 @@
     "${mod_id}.opentogether.mixins.json"
   ],
   "depends": {
-    "fabricloader": ">=0.14",
+    "fabricloader": ">=0.18",
     "fabric": "*",
     "minecraft": "${minecraft_version}",
     "java": ">=17"
