@@ -296,6 +296,44 @@ public final class StairDoorNavigationGameTests {
                         && actor.onGround(), "partial waypoint never completed its physical descent: " + actor.position()));
     }
 
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 80)
+    public static void semanticFinalTargetFinishesItsPartialFloorDescent(GameTestHelper helper) {
+        BlockPos target = helper.absolutePos(new BlockPos(40, 3, 40));
+        prepareArea(helper, target, 5, 5);
+        helper.getLevel().setBlock(target.east(), Blocks.STONE_SLAB.defaultBlockState(), 3);
+        VillagerEntityMCA actor = spawnProbe(helper,
+                new Vec3(target.getX() + 0.92D, target.getY() + 0.5D, target.getZ() + 0.5D));
+        class FloorTarget extends net.minecraft.world.entity.ai.behavior.BlockPosTracker
+                implements MultiTargetPositionTracker {
+            FloorTarget() { super(target); }
+
+            @Override
+            public Set<BlockPos> getPathTargets(net.minecraft.world.entity.Mob mob) { return Set.of(target); }
+
+            @Override
+            public boolean isReached(net.minecraft.world.entity.Mob mob, int distance) {
+                return mob.onGround() && mob.blockPosition().equals(target)
+                        && Math.abs(mob.getY() - target.getY()) < 0.125D;
+            }
+        }
+        FloorTarget destination = new FloorTarget();
+        actor.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(destination, 0.55F, 0));
+        Path route = actor.getNavigation().createPath(target, 0);
+        helper.assertTrue(route != null && route.canReach()
+                        && actor.getNavigation().moveTo(route, 0.55D),
+                "The semantic floor target must retain a native admitted descent");
+        actor.setNoAi(false);
+        helper.onEachTick(() -> {
+            if (destination.isReached(actor, 0)) {
+                helper.succeed();
+            } else {
+                helper.assertTrue(!actor.getNavigation().isDone(),
+                        "Native navigation completed the logical final node before its semantic descent: "
+                                + actor.position() + " target=" + target);
+            }
+        });
+    }
+
     private static BlockPos prepareSnowDoorCorridor(GameTestHelper helper) {
         BlockPos snow = helper.absolutePos(new BlockPos(40, 3, 40));
         prepareArea(helper, snow, 8, 6);
