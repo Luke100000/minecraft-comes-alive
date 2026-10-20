@@ -329,7 +329,11 @@ public final class StairDoorNavigationGameTests {
             } else {
                 helper.assertTrue(!actor.getNavigation().isDone(),
                         "Native navigation completed the logical final node before its semantic descent: "
-                                + actor.position() + " target=" + target);
+                                + actor.position() + " target=" + target + " grounded=" + actor.onGround()
+                                + " path=" + describe(actor.getNavigation().getPath())
+                                + " pathTarget=" + route.getTarget() + " reachable=" + route.canReach()
+                                + " walk=" + actor.getBrain().getMemory(MemoryModuleType.WALK_TARGET)
+                                .map(walk -> walk.getTarget().getClass().getName()));
             }
         });
     }
