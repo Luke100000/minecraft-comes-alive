@@ -46,6 +46,7 @@ import java.util.Set;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath;
+import static net.conczin.mca.gametest.GameTestTerrain.whenSkyLightBlocked;
 
 @GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
@@ -1671,7 +1672,7 @@ public final class MCAGroundPathNavigationGameTests {
 
         var stroll = LocalInsideBrownianWalk.create(0.5F);
         villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-        helper.runAfterDelay(5, () -> {
+        helper.runAfterDelay(5, () -> whenSkyLightBlocked(helper, feet, 55, () -> {
             helper.assertTrue(!helper.getLevel().canSeeSky(villager.blockPosition()),
                     "indoor stroll fixture has open sky");
             helper.assertTrue(stroll.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime()),
@@ -1689,7 +1690,7 @@ public final class MCAGroundPathNavigationGameTests {
                     "moving villager did not receive a new indoor destination");
             villager.discard();
             helper.succeed();
-        });
+        }));
     }
 
     @GameTest(batch = "mca_navigation_local_brownian_rejected", templateNamespace = "minecraft",
