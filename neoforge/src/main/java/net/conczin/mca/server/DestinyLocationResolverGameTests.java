@@ -14,6 +14,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.levelgen.FlatLevelSource;
 import net.minecraft.world.level.levelgen.structure.Structure;
 
 import java.util.List;
@@ -35,10 +36,15 @@ public final class DestinyLocationResolverGameTests {
         ServerLevel overworld = helper.getLevel().getServer().overworld();
         ServerLevel nether = helper.getLevel().getServer().getLevel(Level.NETHER);
 
-        helper.assertTrue(
-                !overworld.getChunkSource().getGeneratorState().getPlacementsForStructure(plainsVillage).isEmpty(),
-                "plains village should have Overworld placements"
-        );
+        boolean overworldHasVillages = !overworld.getChunkSource().getGeneratorState()
+                .getPlacementsForStructure(plainsVillage).isEmpty();
+        // 26.3's GameTest world uses FLAT_ALL_DIMENSIONS. Its Overworld does
+        // not necessarily generate village structures, even though the village
+        // is present in the registry. The resolver must follow the *actual*
+        // generator, rather than invent an unreachable destination.
+        helper.assertTrue(overworldHasVillages
+                        || overworld.getChunkSource().getGenerator() instanceof FlatLevelSource,
+                "a non-flat Overworld unexpectedly has no plains village placements");
         helper.assertTrue(
                 nether != null && nether.getChunkSource().getGeneratorState().getPlacementsForStructure(plainsVillage).isEmpty(),
                 "plains village should not have Nether placements"
@@ -59,8 +65,9 @@ public final class DestinyLocationResolverGameTests {
                 "somewhere should stay dimensionless"
         );
         helper.assertTrue(
-                destinations.contains(new DestinyDestination("minecraft:village_plains", Optional.of(Level.OVERWORLD))),
-                "plains village should resolve to Overworld"
+                destinations.contains(new DestinyDestination("minecraft:village_plains", Optional.of(Level.OVERWORLD)))
+                        == hasPlainsVillagePlacement(helper.getLevel().getServer().overworld()),
+                "plains village availability must match the Overworld generator"
         );
         helper.assertTrue(
                 !destinations.contains(new DestinyDestination("minecraft:village_plains", Optional.of(Level.NETHER))),
@@ -124,8 +131,9 @@ public final class DestinyLocationResolverGameTests {
                 "Overworld-only mode should keep dimensionless choices"
         );
         helper.assertTrue(
-                destinations.contains(new DestinyDestination("minecraft:village_plains", Optional.of(Level.OVERWORLD))),
-                "Overworld-only mode should keep Overworld destinations"
+                destinations.contains(new DestinyDestination("minecraft:village_plains", Optional.of(Level.OVERWORLD)))
+                        == hasPlainsVillagePlacement(helper.getLevel().getServer().overworld()),
+                "Overworld-only mode must respect actual Overworld structure placements"
         );
         helper.assertTrue(
                 !destinations.contains(new DestinyDestination("minecraft:bastion_remnant", Optional.of(Level.NETHER))),
@@ -159,5 +167,12 @@ public final class DestinyLocationResolverGameTests {
             DestinyLocationResolver.refreshCachedDestinations(server, Config.getInstance());
         }
         helper.succeed();
+    }
+
+    private static boolean hasPlainsVillagePlacement(ServerLevel level) {
+        Registry<Structure> structures = level.registryAccess().lookupOrThrow(Registries.STRUCTURE);
+        Holder.Reference<Structure> village = structures.get(Identifier.parse("minecraft:village_plains"))
+                .orElseThrow();
+        return !level.getChunkSource().getGeneratorState().getPlacementsForStructure(village).isEmpty();
     }
 }

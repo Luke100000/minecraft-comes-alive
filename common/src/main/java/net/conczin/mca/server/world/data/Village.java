@@ -787,22 +787,20 @@ public class Village implements Iterable<Building> {
     Optional<AttachmentTarget> selectAttachmentTarget(
             StructureFloor candidate,
             Collection<StructureConnector.VerticalConnection> connections) {
-        return selectAttachmentTarget(candidate, connections, List.of());
+        return selectAttachmentTarget(candidate, connections, Set.of());
     }
 
     Optional<AttachmentTarget> selectAttachmentTarget(
             StructureFloor candidate,
-            Collection<StructureConnector.VerticalConnection> verticalConnections,
-            Collection<BlockPos> stairTransitions) {
+            Collection<StructureConnector.VerticalConnection> explicitConnections,
+            Set<StructureConnector.VerticalConnection> liveContacts) {
         if (candidate == null) return Optional.empty();
+        Set<StructureConnector.VerticalConnection> connections = Set.copyOf(explicitConnections);
         boolean alreadyRegistered = structures.values().stream()
                 .flatMap(structure -> structure.getFloors().stream())
                 .anyMatch(floor -> floor.geometry().sameCellPositions(candidate.geometry()));
         if (alreadyRegistered) return Optional.empty();
-        Set<StructureConnector.VerticalConnection> connections = attachmentConnections(
-                candidate, verticalConnections, stairTransitions);
-        FloorCeilingResolver liveCeilings = world == null ? null : new FloorCeilingResolver(world);
-        if (hasUnprovenAttachmentOverlap(candidate, connections, liveCeilings)) return Optional.empty();
+        if (hasUnprovenAttachmentOverlap(candidate, connections, liveContacts)) return Optional.empty();
 
         Map<Integer, AttachmentTarget> nearestByBuilding = new HashMap<>();
         if (!connections.isEmpty()) {
@@ -817,7 +815,8 @@ public class Village implements Iterable<Building> {
                 for (StructureFloor floor : structure.getFloors()) {
                     if (candidate.geometry().footprintIntersectionArea(floor.geometry()) == 0) continue;
                     int gap = candidate.attachmentGapTo(floor);
-                    if (!hasDirectVerticalAttachmentEvidence(candidate, floor, liveCeilings)) continue;
+                    if (!liveContacts.contains(new StructureConnector.VerticalConnection(structure, floor))
+                            && !hasDirectVerticalAttachmentEvidence(candidate, floor)) continue;
                     addAttachmentTarget(nearestByBuilding, structure, floor, gap);
                 }
             }
@@ -837,30 +836,17 @@ public class Village implements Iterable<Building> {
      * two vertical structures physically meet. Canonical cell intervals may either meet directly, or the
      * lower cell's first ceiling block may touch the upper cell's supporting block.
      */
-    private boolean hasDirectVerticalAttachmentEvidence(StructureFloor first, StructureFloor second,
-                                                        FloorCeilingResolver liveCeilings) {
+    private static boolean hasDirectVerticalAttachmentEvidence(StructureFloor first, StructureFloor second) {
         for (FloorGeometry.Cell firstCell : first.geometry().cells()) {
             for (FloorGeometry.Cell secondCell : second.geometry()
                     .cellsAtColumn(firstCell.feet().getX(), firstCell.feet().getZ())) {
                 if (verticalIntervalsMeet(firstCell, secondCell)
-                        || structuralShellsTouch(firstCell, secondCell)
-                        || liveStructuralShellsTouch(firstCell, secondCell, liveCeilings)) {
+                        || structuralShellsTouch(firstCell, secondCell)) {
                     return true;
                 }
             }
         }
         return false;
-    }
-
-    /** New construction can replace a saved lower ceiling without changing the registered Floor. */
-    private boolean liveStructuralShellsTouch(FloorGeometry.Cell first, FloorGeometry.Cell second,
-                                               FloorCeilingResolver liveCeilings) {
-        if (world == null || liveCeilings == null) return false;
-        FloorGeometry.Cell lower = first.feet().getY() <= second.feet().getY() ? first : second;
-        FloorGeometry.Cell upper = lower == first ? second : first;
-        int upperSupportY = upper.feet().getY() - 1;
-        return liveCeilings.ceilingY(lower.feet()).orElse(Integer.MIN_VALUE) == upperSupportY
-                && SelectedFloorScanner.inspectSurfaceCell(world, lower.feet(), liveCeilings).isPresent();
     }
 
     private static boolean verticalIntervalsMeet(FloorGeometry.Cell first, FloorGeometry.Cell second) {
@@ -888,31 +874,10 @@ public class Village implements Iterable<Building> {
                 (first, second) -> ATTACHMENT_TARGET_ORDER.compare(first, second) <= 0 ? first : second);
     }
 
-    private Set<StructureConnector.VerticalConnection> attachmentConnections(
-            StructureFloor candidate,
-            Collection<StructureConnector.VerticalConnection> verticalConnections,
-            Collection<BlockPos> stairTransitions) {
-        LinkedHashSet<StructureConnector.VerticalConnection> connections = new LinkedHashSet<>();
-        if (verticalConnections != null) connections.addAll(verticalConnections);
-        if (stairTransitions == null) return Set.copyOf(connections);
-
-        for (BlockPos transition : stairTransitions) {
-            for (Structure structure : structures.values()) {
-                for (StructureFloor floor : structure.getFloors()) {
-                    if (floor.geometry().interactionCellAt(
-                            transition.getX(), transition.getY(), transition.getZ()).isPresent()) {
-                        connections.add(new StructureConnector.VerticalConnection(structure, floor));
-                    }
-                }
-            }
-        }
-        return Set.copyOf(connections);
-    }
-
     private boolean hasUnprovenAttachmentOverlap(
             StructureFloor candidate,
             Set<StructureConnector.VerticalConnection> connections,
-            FloorCeilingResolver liveCeilings) {
+            Set<StructureConnector.VerticalConnection> liveContacts) {
         Set<Integer> provenBuildingIds = connections.stream()
                 .map(connection -> connection.structure().getLogicalBuildingId())
                 .collect(Collectors.toSet());
@@ -926,22 +891,9 @@ public class Village implements Iterable<Building> {
                         && !candidate.hasNearbyAnchor(floor);
                 if (!directlyProven && !belongsToProvenBuilding
                         && !(connections.isEmpty()
-                        && hasDirectLiveAttachmentEvidence(candidate, floor, liveCeilings))) {
+                        && liveContacts.contains(new StructureConnector.VerticalConnection(structure, floor)))) {
                     return true;
                 }
-            }
-        }
-        return false;
-    }
-
-    /** Proves contact in the current world only; stored ceilings may predate an upstairs deck. */
-    private boolean hasDirectLiveAttachmentEvidence(StructureFloor first, StructureFloor second,
-                                                    FloorCeilingResolver liveCeilings) {
-        if (liveCeilings == null) return false;
-        for (FloorGeometry.Cell firstCell : first.geometry().cells()) {
-            for (FloorGeometry.Cell secondCell : second.geometry()
-                    .cellsAtColumn(firstCell.feet().getX(), firstCell.feet().getZ())) {
-                if (liveStructuralShellsTouch(firstCell, secondCell, liveCeilings)) return true;
             }
         }
         return false;

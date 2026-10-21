@@ -41,7 +41,7 @@ public final class McaSparkPathProfileGameTests {
     private McaSparkPathProfileGameTests() { }
 
     @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air",
-            timeoutTicks = 650)
+            timeoutTicks = 650, manualOnly = true)
     public static void captureRepeatedBlockedMcaPathsWithSpark(GameTestHelper helper) {
         helper.assertTrue(PathRequestDiagnostics.enabled(), "MCA path diagnostics must be active");
         previousPathDistance = Config.getInstance().villagerPathfindingDistance;

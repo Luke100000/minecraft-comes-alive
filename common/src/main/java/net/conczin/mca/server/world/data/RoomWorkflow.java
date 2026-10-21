@@ -22,9 +22,11 @@ public final class RoomWorkflow {
     }
 
     public Outcome addBuilding(BlockPos source, int expectedTargetBuildingId, String selectedType) {
+        SelectedFloorScanner.Observation operation = StructureScanner.newObservation(world);
         Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
+        RoomScanPlanner.Analysis analysis = null;
         if (village != null) {
-            RoomScanPlanner.Analysis analysis = RoomScanPlanner.analyze(village, world, source);
+            analysis = RoomScanPlanner.analyze(village, world, source, operation);
             RoomScanPlan plan = analysis.plan();
             if (analysis.result() != Building.validationResult.SUCCESS) {
                 return Outcome.failed(analysis.result(), source, expectedTargetBuildingId);
@@ -44,21 +46,23 @@ public final class RoomWorkflow {
                         Building.validationResult.NOT_IN_BUILDING, source, expectedTargetBuildingId);
             }
         }
-        return commitAddition(analyzeBuildingAddition(source), selectedType);
+        return commitAddition(analyzeBuildingAddition(source, false, operation, analysis), selectedType);
     }
 
     public Outcome scanRoom(BlockPos source, int expectedRoomId, String selectedType) {
         Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
         if (village == null) {
-            return Outcome.failed(Building.validationResult.NOT_IN_BUILDING, source, expectedRoomId);
+            return Outcome.failed(expectedRoomId >= 0 ? Building.validationResult.TARGET_CHANGED
+                    : Building.validationResult.NOT_IN_BUILDING, source, expectedRoomId);
         }
         RoomScanPlanner.Analysis analysis = RoomScanPlanner.analyze(village, world, source);
         RoomScanPlan plan = analysis.plan();
+        if (expectedRoomId >= 0 && (plan.mode() != Village.RoomScanMode.UPDATE_ROOM
+                || plan.currentRoom().map(Building::getId).orElse(-1) != expectedRoomId)) {
+            return Outcome.failed(Building.validationResult.TARGET_CHANGED, source, expectedRoomId);
+        }
         if (analysis.result() != Building.validationResult.SUCCESS) {
             return Outcome.failed(analysis.result(), source, expectedRoomId);
-        }
-        if (expectedRoomId >= 0 && plan.mode() != Village.RoomScanMode.UPDATE_ROOM) {
-            return Outcome.failed(Building.validationResult.NOT_IN_BUILDING, source, expectedRoomId);
         }
         if (expectedRoomId < 0 && plan.mode() == Village.RoomScanMode.UPDATE_ROOM) {
             return Outcome.failed(Building.validationResult.IDENTICAL, source, expectedRoomId);
@@ -73,14 +77,16 @@ public final class RoomWorkflow {
     }
 
     BuildingScanResult analyzeBuildingAddition(BlockPos source) {
-        return analyzeBuildingAddition(source, false);
+        return analyzeBuildingAddition(source, false, StructureScanner.newObservation(world), null);
     }
 
     BuildingScanResult analyzeReportedBuildingAddition(BlockPos source) {
-        return analyzeBuildingAddition(source, true);
+        return analyzeBuildingAddition(source, true, null, null);
     }
 
-    private BuildingScanResult analyzeBuildingAddition(BlockPos source, boolean reportedSource) {
+    private BuildingScanResult analyzeBuildingAddition(BlockPos source, boolean reportedSource,
+                                                       SelectedFloorScanner.Observation operation,
+                                                       RoomScanPlanner.Analysis preliminary) {
         Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
         Collection<Structure> existing = village == null ? List.of() : village.getStructures().values();
         if (village != null && village.getInteractionStructureAt(source).isPresent()) {
@@ -89,7 +95,7 @@ public final class RoomWorkflow {
 
         StructureScanner.Result structureScan = reportedSource
                 ? StructureScanner.scanReportedStructure(world, source, existing)
-                : StructureScanner.scanNewStructure(world, source, existing);
+                : StructureScanner.scanNewStructure(world, source, existing, operation);
         if (structureScan.result() != Building.validationResult.SUCCESS) {
             return failedRoom(structureScan.result(), source, village);
         }
@@ -97,7 +103,10 @@ public final class RoomWorkflow {
         Structure candidate = structureScan.toStructure(-1);
         StructureFloor floor = candidate.getFloors().getFirst();
         SelectedFloorScanner.Result floorScan = structureScan.scan();
-        List<RoomPartitioner.Component> components = BuildingRoomScanner.components(world, floorScan);
+        // Selection policies differ. Reuse a partition only when both selected the same observation result.
+        List<RoomPartitioner.Component> components = preliminary != null && preliminary.observation() != null
+                && preliminary.observation().scan() == floorScan
+                ? preliminary.components() : BuildingRoomScanner.components(world, floorScan);
         BuildingRoomScanner.Result selectedGeometry = BuildingRoomScanner.materializeSelected(
                 structureScan.source(), Config.getInstance().maxBuildingSize,
                 floorScan.floor(), components);
@@ -397,7 +406,8 @@ public final class RoomWorkflow {
                                int expectedRoomId,
                                String selectedType) {
         if (room == null || expectedRoomId >= 0 && room.getId() != expectedRoomId) {
-            return Outcome.failed(Building.validationResult.NOT_IN_BUILDING, source, expectedRoomId);
+            return Outcome.failed(expectedRoomId >= 0 ? Building.validationResult.TARGET_CHANGED
+                    : Building.validationResult.NOT_IN_BUILDING, source, expectedRoomId);
         }
 
         RegisteredRoomUpdate update = analyzeRegisteredRoomUpdate(village, room.getId(), source);
@@ -417,7 +427,8 @@ public final class RoomWorkflow {
                                      String selectedType) {
         ResolvedRoom resolved = resolveRoom(source, expectedRoomId);
         if (resolved == null) {
-            return Outcome.failed(Building.validationResult.NOT_IN_BUILDING, source, expectedRoomId);
+            return Outcome.failed(expectedRoomId >= 0 ? Building.validationResult.TARGET_CHANGED
+                    : Building.validationResult.NOT_IN_BUILDING, source, expectedRoomId);
         }
 
         Village village = resolved.village();

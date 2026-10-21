@@ -42,7 +42,7 @@ public final class McaSparkFullBrainProfileGameTests {
     }
 
     @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air",
-            timeoutTicks = 12000)
+            timeoutTicks = 12000, manualOnly = true)
     public static void captureFullMcaBrainAiStepWithSpark(GameTestHelper helper) {
         helper.assertTrue(PathRequestDiagnostics.enabled(), "development diagnostics must be enabled");
         helper.assertTrue(Files.isDirectory(SPARK_DIRECTORY), "install Spark in run-gametest/mods first");

@@ -16,6 +16,7 @@ import net.conczin.mca.util.network.datasync.CDataManager;
 import net.conczin.mca.util.network.datasync.CDataParameter;
 import net.conczin.mca.util.network.datasync.CParameter;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.ItemTags;
 import net.minecraft.util.Mth;
@@ -37,6 +38,7 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
     private static final CDataParameter<Integer> LAST_PROCREATION = CParameter.create("LastProcreation", 0);
     private final Pregnancy pregnancy;
     private int procreateTick = -1;
+    private int pendingBabyCount;
 
     public BreedableRelationship(VillagerEntityMCA entity) {
         super(entity);
@@ -57,6 +59,16 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
         return entity.getTrackedValue(IS_PROCREATING);
     }
 
+    /** The rolled twin count and animation timer are not persisted. Refund an interrupted attempt. */
+    public void cancelInterruptedProcreationAfterLoad() {
+        if (isProcreating()) {
+            entity.setTrackedValue(IS_PROCREATING, false);
+            entity.setTrackedValue(LAST_PROCREATION, 0);
+        }
+        pendingBabyCount = 0;
+        procreateTick = -1;
+    }
+
     public boolean mayProcreateAgain(long time) {
         int intTime = (int) time;
         Integer trackedValue = entity.getTrackedValue(LAST_PROCREATION);
@@ -64,10 +76,17 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
         return trackedValue == 0 || delta < 0 || delta > Config.getInstance().procreationCooldown;
     }
 
-    public void startProcreating(long time) {
+    public boolean startProcreating(Entity spouse, long time) {
+        int count = pregnancy.rollBabyCount();
+        if (!pregnancy.hasRoomForBabies(spouse, count)) {
+            return false;
+        }
+
+        pendingBabyCount = count;
         procreateTick = 60;
         entity.setTrackedValue(IS_PROCREATING, true);
         entity.setTrackedValue(LAST_PROCREATION, (int) time);
+        return true;
     }
 
     public void tick(int age) {
@@ -79,17 +98,32 @@ public class BreedableRelationship extends Relationship<VillagerEntityMCA> {
             return;
         }
 
+        // Only the tracked flag survives an entity reload. Never complete an
+        // interrupted animation with the default (zero) pending baby count.
+        if (pendingBabyCount <= 0) {
+            procreateTick = -1;
+            entity.setTrackedValue(IS_PROCREATING, false);
+            entity.setTrackedValue(LAST_PROCREATION, 0);
+            return;
+        }
+
         if (procreateTick > 0) {
             procreateTick--;
             entity.getNavigation().stop();
             entity.level().broadcastEntityEvent(entity, Status.VILLAGER_HEARTS);
         } else {
+            int count = pendingBabyCount;
+            pendingBabyCount = 0;
             getFamilyTree().getOrCreate(entity);
-            getPartner().ifPresent(spouse -> {
-                pregnancy.procreate(spouse);
-
-                entity.setTrackedValue(IS_PROCREATING, false);
-            });
+            getPartner().ifPresentOrElse(spouse -> {
+                if (!pregnancy.procreate(spouse, count)) {
+                    entity.setTrackedValue(LAST_PROCREATION, 0);
+                    if (spouse instanceof ServerPlayer player) {
+                        player.sendSystemMessage(Component.translatable("interaction.procreate.fail.inventoryfull"));
+                    }
+                }
+            }, () -> entity.setTrackedValue(LAST_PROCREATION, 0));
+            entity.setTrackedValue(IS_PROCREATING, false);
         }
     }
 

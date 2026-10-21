@@ -8,6 +8,7 @@ import net.minecraft.world.level.EmptyBlockGetter;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -52,6 +53,10 @@ class SelectedFloorScannerCachingTest {
                         SelectedFloorScanner.SurfaceCell requested =
                                 (SelectedFloorScanner.SurfaceCell) args[0];
                         return steps.getOrDefault(requested.feet(), List.of());
+                    }
+                    if (method.isDefault()) {
+                        return MethodHandles.privateLookupIn(providerType, MethodHandles.lookup())
+                                .unreflectSpecial(method, providerType).bindTo(proxy).invokeWithArguments(args);
                     }
                     return switch (method.getName()) {
                         case "toString" -> "counting step provider";

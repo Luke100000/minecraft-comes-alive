@@ -15,6 +15,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.entity.monster.zombie.ZombieVillager;
 import net.minecraft.world.entity.npc.villager.Villager;
@@ -49,6 +50,11 @@ public class SpawnQueue {
         // The chunk loaded check apparently does not function properly in this context, this is shown by villagers spawning fine without it, but NEVER spawn with it if far away and JUST generated.
         Villager ve = villagerSpawnQueue.poll();
         if (ve != null) {
+            // The fresh MCA resident acquires its own HOME; discard alone leaves the old bed occupied and claimed.
+            if (ve.isSleeping()) {
+                ve.stopSleeping();
+            }
+            ve.releasePoi(MemoryModuleType.HOME);
             ve.discard();
             VillagerEntityMCA villager = VillagerFactory.newVillager(ve.level())
                     .withName(ve.hasCustomName() ? ve.getName().getString() : null)

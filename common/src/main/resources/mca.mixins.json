@@ -10,6 +10,7 @@
     "MixinCrossbowAttack",
     "MixinEntity",
     "MixinFishingHookPredicate",
+    "MixinGameTestInfo",
     "MixinGoat",
     "MixinHopperBlockEntity",
     "MixinInventory",

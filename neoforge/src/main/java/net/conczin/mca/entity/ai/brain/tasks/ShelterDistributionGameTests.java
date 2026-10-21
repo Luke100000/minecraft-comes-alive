@@ -4,11 +4,13 @@ import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
+import net.conczin.mca.entity.ai.BedPoiCompatibility;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.gametest.GameTestPoi;
+import net.conczin.mca.gametest.GameTestTerrain;
 import net.conczin.mca.neoforge.gametest.AfterBatch;
 import net.conczin.mca.neoforge.gametest.GameTest;
 import net.conczin.mca.neoforge.gametest.PrefixGameTestTemplate;
@@ -21,6 +23,8 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.zombie.Zombie;
@@ -29,6 +33,7 @@ import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.gamerules.GameRules;
@@ -59,10 +64,13 @@ import java.util.Set;
 public final class ShelterDistributionGameTests {
     private static final String BATCH = "mca_shelter_distribution";
     private static final String GLOBAL_STATE_BATCH = "mca_shelter_distribution_global_state";
+    private static final String ROUTE_BOUNDARY_BATCH = "mca_shelter_distribution_route_boundary";
+    private static final String UNLOADED_POI_BATCH = "mca_shelter_distribution_unloaded_poi";
     private static final Map<BlockPos, BlockState> BLOCKS = new LinkedHashMap<>();
     private static final Set<ChunkPos> CHUNKS = new HashSet<>();
     private static final List<Villager> VILLAGERS = new ArrayList<>();
     private static final List<LivingEntity> THREATS = new ArrayList<>();
+    private static final List<Entity> OBSTACLES = new ArrayList<>();
     private static final Set<Integer> VILLAGES = new HashSet<>();
     private static Long previousDayTime;
     private static Boolean previousDaylight;
@@ -163,7 +171,9 @@ public final class ShelterDistributionGameTests {
         verifyRouteAllowance(helper, 20, 30, true);
     }
 
-    @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air")
+    // Keep the exact-length route boundary independent of simultaneous shelter
+    // fixtures that change village occupancy and perform large chunk searches.
+    @GameTest(batch = ROUTE_BOUNDARY_BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void moreThanThirtyExtraRouteBlocksAreAllowed(GameTestHelper helper) {
         verifyRouteAllowance(helper, 21, 31, true);
     }
@@ -321,7 +331,9 @@ public final class ShelterDistributionGameTests {
         });
     }
 
-    @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 400)
+    // The unload assertion needs a quiet chunk-tick environment; other 50-test
+    // arenas in the same batch can delay unloading long beyond the test timeout.
+    @GameTest(batch = UNLOADED_POI_BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 400)
     public static void unloadedPoiDoesNotForceChunkDuringShelterSearch(GameTestHelper helper) {
         BlockPos center = arena(helper, 24);
         BlockPos nearest = house(helper.getLevel(), center);
@@ -481,6 +493,8 @@ public final class ShelterDistributionGameTests {
         BlockPos nearest = house(helper.getLevel(), center);
         BlockPos alternative = house(helper.getLevel(), center.east(16));
         fill(helper, center, 4);
+        // Equalise initial occupancy so the test isolates admission accounting, not density preference.
+        fill(helper, center.east(16), 4);
         var first = spawn(helper, center.east(2).south(6));
         var second = spawn(helper, center.east(3).south(6));
         helper.runAfterDelay(10, () -> {
@@ -534,6 +548,8 @@ public final class ShelterDistributionGameTests {
         BlockPos nearest = house(helper.getLevel(), center);
         BlockPos alternative = house(helper.getLevel(), center.east(16));
         fill(helper, center, 4);
+        // Equalise initial occupancy so the test isolates admission accounting, not density preference.
+        fill(helper, center.east(16), 5);
         var owner = spawn(helper, center.east(3).south(3));
         owner.getBrain().setMemory(MemoryModuleType.HOME, GlobalPos.of(helper.getLevel().dimension(), nearest));
         var first = spawn(helper, center.east(2).south(9));
@@ -571,6 +587,8 @@ public final class ShelterDistributionGameTests {
         BlockPos nearest = house(helper.getLevel(), center);
         house(helper.getLevel(), center.east(16));
         fill(helper, center, 5);
+        // Equalise initial occupancy so the test isolates admission accounting, not density preference.
+        fill(helper, center.east(16), 5);
         var former = spawn(helper, center.west(20));
         former.moveTowardsPersistent(center.east(3).south(3), 0.5F, 0);
         var incoming = spawn(helper, center.east(2).south(9));
@@ -918,7 +936,9 @@ public final class ShelterDistributionGameTests {
     @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void coldDiscoveryRejectsAnUnloadedBoundaryWithoutLoadingIt(GameTestHelper helper) {
         var level = helper.getLevel();
-        BlockPos center = new BlockPos(73003, helper.absolutePos(new BlockPos(0, 2, 0)).getY(), 73003);
+        // Place the western corridor exactly at the chunk edge, with the room inside the loaded chunk.
+        int coordinate = (73003 & ~15) + 3;
+        BlockPos center = new BlockPos(coordinate, helper.absolutePos(new BlockPos(0, 2, 0)).getY(), coordinate);
         ChunkPos source = ChunkPos.containing(center);
         level.getChunk(source.x(), source.z());
         room(level, center);
@@ -927,12 +947,18 @@ public final class ShelterDistributionGameTests {
         for (int x = -3; x <= -1; x++) {
             for (int y = -1; y <= 3; y++) {
                 for (int z = 1; z <= 3; z++) {
-                    put(level, center.offset(x, y, z), y == -1 || y == 3 || z == 1 || z == 3
-                            ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState());
+                    BlockPos pos = center.offset(x, y, z);
+                    BLOCKS.putIfAbsent(pos, level.getBlockState(pos));
+                    // Final fixture shapes must not load the absent chunk through neighbor updates.
+                    level.setBlock(pos, y == -1 || y == 3 || z == 1 || z == 3
+                                    ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(),
+                            Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
                 }
             }
         }
         ChunkPos absent = new ChunkPos(source.x() - 1, source.z());
+        helper.assertTrue(center.getX() - 3 == source.getMinBlockX(),
+                "fixture corridor does not reach the unloaded chunk boundary");
         helper.assertTrue(level.getChunkSource().getChunkNow(absent.x(), absent.z()) == null,
                 "fixture boundary chunk was already loaded");
         helper.assertTrue(VillageManager.get(level).getIndoorRooms().resolve(bed).isEmpty(),
@@ -1033,8 +1059,26 @@ public final class ShelterDistributionGameTests {
         for (BlockPos pos : BlockPos.betweenClosed(center.offset(-6, -1, 15), center.offset(24, 2, 45))) {
             put(helper.getLevel(), pos, pos.getY() == center.getY() - 1 ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState());
         }
-        for (int z = -30; z <= 40; z++) for (int y = 0; y < 3; y++) {
+        for (int z = -16; z <= 36; z++) for (int y = 0; y < 3; y++) {
             put(helper.getLevel(), center.offset(8, y, z), Blocks.STONE.defaultBlockState());
+        }
+        // The far house is nearby in straight-line distance, but the only
+        // supported outdoor route bends south around the wall and back north.
+          // Keep the route a bounded, elevated corridor. Removing unsupported
+          // floor outside it lets 26.3 navigation step down onto the flat
+          // world's lower ground, from which the distant room cannot be reached.
+          // Solid sides make the only *walkable* route the intended long detour.
+        for (int z = 6; z <= 45; z++) for (int x = -6; x <= 42; x++) {
+            boolean nearDoor = x == 2 && z <= 9;
+            boolean westApproach = z == 9 && x >= 2 && x <= 7;
+            boolean westLane = x == 7 && z >= 9 && z <= 37;
+            boolean turn = z == 37 && x >= 7 && x <= 18;
+            boolean eastLane = x == 18 && z <= 37;
+              if (!(nearDoor || westApproach || westLane || turn || eastLane)) {
+                  for (int y = 0; y < 3; y++) {
+                      put(helper.getLevel(), center.offset(x, y, z), Blocks.STONE.defaultBlockState());
+                  }
+              }
         }
         fill(helper, center, 6);
         var incoming = spawn(helper, center.east(2).south(9));
@@ -1100,6 +1144,8 @@ public final class ShelterDistributionGameTests {
         BlockPos nearest = house(helper.getLevel(), center);
         BlockPos alternative = house(helper.getLevel(), center.east(16));
         fill(helper, center, 5);
+        // Equalise initial occupancy so the test isolates admission accounting, not density preference.
+        fill(helper, center.east(16), 5);
         var first = spawn(helper, center.east(2).south(9));
         var second = spawn(helper, center.east(3).south(9));
         helper.runAfterDelay(10, () -> {
@@ -1117,10 +1163,19 @@ public final class ShelterDistributionGameTests {
         house(helper.getLevel(), center);
         BlockPos alternative = house(helper.getLevel(), center.east(16));
         fill(helper, center, 5);
-        var distant = spawn(helper, center.west(70));
+        // Remain well outside the house but inside the fixture's known loaded
+        // floor and chunk footprint. A spawn 70 west could be constructed before
+        // its separate forced chunk became entity-ticking, so it wasn't indexed.
+        BlockPos distantPos = center.east(40);
+        GameTestTerrain.ensureEntityTickingChunk(helper, distantPos);
+        var distant = spawn(helper, distantPos);
+        helper.assertTrue(helper.getLevel().getEntity(distant.getUUID()) == distant,
+                "distant fixture villager did not enter the entity-ticking world");
         distant.moveTowardsPersistent(center.east(3).south(3), 0.5F, 0);
         var incoming = spawn(helper, center.east(2).south(9));
         helper.runAfterDelay(10, () -> {
+            helper.assertTrue(VillageManager.get(helper.getLevel()).getLoadedVillagers().contains(distant),
+                    "distant incoming villager was not tracked by the live occupancy index");
             choose(helper, incoming);
             helper.assertTrue(selected(incoming).equals(alternative), "distant incoming destination was omitted");
             helper.succeed();
@@ -1133,12 +1188,289 @@ public final class ShelterDistributionGameTests {
         BlockPos nearest = house(helper.getLevel(), center);
         house(helper.getLevel(), center.east(16));
         fill(helper, center, 5);
+        // Equalise initial occupancy so the test isolates admission accounting, not density preference.
+        fill(helper, center.east(16), 5);
         var former = spawn(helper, center.west(20));
         former.getBrain().setMemory(MemoryModuleTypeMCA.SHELTER_BED, GlobalPos.of(helper.getLevel().dimension(), nearest));
         var incoming = spawn(helper, center.east(2).south(9));
         helper.runAfterDelay(10, () -> {
             choose(helper, incoming);
             helper.assertTrue(selected(incoming).equals(nearest), "bed memory reserved without active walking intent");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void smallHouseTotalCapacityUsesClearFloor(GameTestHelper helper) {
+        BlockPos center = arena(helper, 60);
+        BlockPos nearest = furnishedHouse(helper.getLevel(), center, 8);
+        BlockPos alternative = house(helper.getLevel(), center.east(16));
+        claim(helper, nearest);
+        for (int i = 0; i < 3; i++) spawn(helper, center.east(2).south(2 + i % 2));
+        var incoming = spawn(helper, center.east(2).south(9));
+        helper.runAfterDelay(10, () -> {
+            choose(helper, incoming);
+            helper.assertTrue(selected(incoming).equals(alternative), "eight clear cells admitted more than four total occupants");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void roomierHouseWinsBeforeNearestReachesCapacity(GameTestHelper helper) {
+        BlockPos center = arena(helper, 61);
+        BlockPos nearest = furnishedHouse(helper.getLevel(), center, 8);
+        BlockPos alternative = furnishedHouse(helper.getLevel(), center.east(16), 20);
+        claim(helper, nearest);
+        claim(helper, alternative);
+        spawn(helper, center.east(2).south(3));
+        var incoming = spawn(helper, center.east(2).south(9));
+        helper.runAfterDelay(10, () -> {
+            choose(helper, incoming);
+            helper.assertTrue(selected(incoming).equals(alternative), "nearest under-capacity house beat roomier alternative");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void noEligibleHouseFallsBackToLowestProjectedDensity(GameTestHelper helper) {
+        BlockPos center = arena(helper, 62);
+        BlockPos nearest = furnishedHouse(helper.getLevel(), center, 8);
+        BlockPos alternative = furnishedHouse(helper.getLevel(), center.east(16), 20);
+        claim(helper, nearest);
+        claim(helper, alternative);
+        for (int i = 0; i < 4; i++) spawn(helper, center.east(2).south(2 + i % 2));
+        for (int i = 0; i < 7; i++) spawn(helper, center.east(18).south(2 + i % 2));
+        var incoming = spawn(helper, center.east(2).south(9));
+        helper.runAfterDelay(10, () -> {
+            choose(helper, incoming);
+            helper.assertTrue(selected(incoming).equals(alternative), "overflow ignored projected floor density");
+            helper.succeed();
+        });
+    }
+
+    private static BlockPos furnishedHouse(ServerLevel level, BlockPos center, int clearCells) {
+        return furnishedHouse(level, center, clearCells, 1);
+    }
+
+    private static BlockPos furnishedHouse(ServerLevel level, BlockPos center, int clearCells, int bedCount) {
+        BlockPos head = house(level, center);
+        if (bedCount == 2) bed(level, center.east(3).south());
+        List<BlockPos> available = new ArrayList<>();
+        for (int z = 4; z >= 0; z--) available.add(center.east(2).south(z));
+        for (int z : new int[]{2, 3, 4, 0, 1}) {
+            for (int x : new int[]{1, 3, 0, 4}) {
+                BlockPos pos = center.east(x).south(z);
+                if (!BedPoiCompatibility.isCompatibleBedState(level.getBlockState(pos))) available.add(pos);
+            }
+        }
+        for (int i = clearCells; i < available.size(); i++) {
+            for (int y = 0; y < 3; y++) put(level, available.get(i).above(y), Blocks.STONE.defaultBlockState());
+        }
+        return head;
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void freeBedsDoNotBypassFloorCapacity(GameTestHelper helper) {
+        BlockPos center = arena(helper, 63);
+        BlockPos nearest = furnishedHouse(helper.getLevel(), center, 4, 2);
+        BlockPos alternative = house(helper.getLevel(), center.east(16));
+        spawn(helper, center.east(2).south(3));
+        spawn(helper, center.east(2).south(2));
+        var incoming = spawn(helper, center.east(2).south(9));
+        helper.runAfterDelay(10, () -> {
+            choose(helper, incoming);
+            helper.assertTrue(selected(incoming).equals(alternative), "unclaimed beds bypassed floor capacity");
+            helper.assertTrue(GameTestPoi.getFreeTickets(helper.getLevel().getPoiManager(), nearest) == 1, "temporary shelter claimed a free bed");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void structuralAreaIgnoresEntitiesAndRespondsToBlocks(GameTestHelper helper) {
+        BlockPos center = arena(helper, 64);
+        BlockPos head = furnishedHouse(helper.getLevel(), center, 8);
+        var incoming = spawn(helper, center.east(2).south(9));
+        helper.runAfterDelay(10, () -> {
+            var house = VillageManager.get(helper.getLevel()).getIndoorRooms().resolveHouse(head).orElseThrow();
+            helper.assertTrue(house.membershipKnown(), "furnished fixture did not resolve whole-house membership");
+            Set<BlockPos> cells = house.rooms().stream().flatMap(room -> room.floorCells().stream())
+                    .collect(java.util.stream.Collectors.toSet());
+            long initial = cells.stream().filter(pos -> EnterBuildingTask.isUsableFloorGeometry(helper.getLevel(), incoming, pos)).count();
+            helper.assertTrue(initial == 8, "expected eight structural cells, got " + initial);
+            var guest = spawn(helper, center.east(2).south(3));
+            var boat = EntityTypes.OAK_BOAT.create(helper.getLevel(), EntitySpawnReason.STRUCTURE);
+            boat.setPos(Vec3.atBottomCenterOf(center.east(2).south(3)));
+            helper.getLevel().addFreshEntity(boat);
+            OBSTACLES.add(boat);
+            helper.assertTrue(cells.stream().filter(pos -> EnterBuildingTask.isUsableFloorGeometry(helper.getLevel(), incoming, pos)).count() == 8,
+                    "entity occupancy shrank structural area");
+            helper.assertTrue(!EnterBuildingTask.isUsableFloor(helper.getLevel(), incoming, center.east(2).south(3)),
+                    "full movement clearance ignored the collidable entity");
+            BlockPos obstruction = center.east(2).south(2);
+            put(helper.getLevel(), obstruction, Blocks.STONE.defaultBlockState());
+            helper.assertTrue(!EnterBuildingTask.isUsableFloorGeometry(helper.getLevel(), incoming, obstruction)
+                    && !EnterBuildingTask.isUsableFloor(helper.getLevel(), incoming, obstruction), "furniture did not remove standing space");
+            put(helper.getLevel(), obstruction, Blocks.AIR.defaultBlockState());
+            helper.assertTrue(EnterBuildingTask.isUsableFloorGeometry(helper.getLevel(), incoming, obstruction), "cleared floor did not become available");
+            guest.discard();
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void eligibleHouseWinsBeforeOverflow(GameTestHelper helper) {
+        BlockPos center = arena(helper, 65);
+        BlockPos nearest = furnishedHouse(helper.getLevel(), center, 8);
+        BlockPos alternative = furnishedHouse(helper.getLevel(), center.east(16), 20);
+        claim(helper, nearest);
+        claim(helper, alternative);
+        for (int i = 0; i < 2; i++) spawn(helper, center.east(2).south(2 + i));
+        for (int i = 0; i < 5; i++) spawn(helper, center.east(18).south(2 + i % 2));
+        var incoming = spawn(helper, center.east(2).south(9));
+        helper.runAfterDelay(10, () -> {
+            choose(helper, incoming);
+            helper.assertTrue(selected(incoming).equals(nearest), "full house beat a normally eligible house");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void clearFloorThresholdsRespectTotalOccupancyAndBedCeiling(GameTestHelper helper) {
+        int[] areas = {4, 8, 11, 12, 13, 20};
+        int[] totals = {2, 4, 5, 6, 6, 6};
+        for (int i = 0; i < areas.length; i++) {
+            BlockPos center = arena(helper, 80 + i);
+            BlockPos near = furnishedHouse(helper.getLevel(), center, areas[i]);
+            BlockPos far = furnishedHouse(helper.getLevel(), center.east(16), 23);
+            claim(helper, near);
+            claim(helper, far);
+            for (int guest = 1; guest < totals[i] - 1; guest++) spawn(helper, center.east(2).south(3));
+            for (int guest = 0; guest < 5; guest++) spawn(helper, center.east(18).south(3));
+            var incoming = spawn(helper, center.east(2).south(9));
+            var next = spawn(helper, center.east(3).south(9));
+            helper.runAfterDelay(10, () -> {
+                choose(helper, incoming);
+                helper.assertTrue(selected(incoming).equals(near), "last normal place was rejected at " + near);
+                choose(helper, next);
+                helper.assertTrue(selected(next).equals(far), "incoming arrival did not consume last place at " + near);
+            });
+        }
+        helper.runAfterDelay(12, helper::succeed);
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void twoBedsShareTotalFloorCapacity(GameTestHelper helper) {
+        BlockPos center = arena(helper, 90);
+        BlockPos nearest = furnishedHouse(helper.getLevel(), center, 20, 2);
+        BlockPos alternative = furnishedHouse(helper.getLevel(), center.east(16), 20);
+        claim(helper, nearest);
+        claim(helper, center.east(4).south());
+        claim(helper, alternative);
+        for (int i = 0; i < 4; i++) spawn(helper, center.east(2).south(2));
+        for (int i = 0; i < 5; i++) spawn(helper, center.east(18).south(2));
+        var first = spawn(helper, center.east(2).south(9));
+        var second = spawn(helper, center.east(3).south(9));
+        helper.runAfterDelay(10, () -> {
+            choose(helper, first);
+            helper.assertTrue(selected(first).equals(nearest), "two-bed house lost its seventh total place");
+            choose(helper, second);
+            helper.assertTrue(selected(second).equals(alternative), "reserved owners were added on top of total capacity");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void zeroClearFloorHasNoStandingEntry(GameTestHelper helper) {
+        BlockPos center = arena(helper, 91);
+        furnishedHouse(helper.getLevel(), center, 0);
+        var incoming = spawn(helper, center.east(2).south(9));
+        var shelter = new SeekIndoorShelterTask(0.5F);
+        helper.runAfterDelay(10, () -> {
+            shelter.tryStart(helper.getLevel(), incoming, helper.getLevel().getGameTime());
+            helper.assertTrue(!incoming.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET), "zero clear floor published an entry target");
+            helper.assertTrue(!incoming.getBrain().hasMemoryValue(MemoryModuleType.HOME), "failed entry claimed HOME");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void spaceRankingUsesProjectedOccupancyAndStableTies(GameTestHelper helper) {
+        BlockPos center = arena(helper, 92);
+        BlockPos nearest = furnishedHouse(helper.getLevel(), center, 8);
+        BlockPos alternative = furnishedHouse(helper.getLevel(), center.east(16), 20);
+        claim(helper, nearest);
+        claim(helper, alternative);
+        for (int i = 0; i < 3; i++) spawn(helper, center.east(18).south(3));
+        var incoming = spawn(helper, center.east(2).south(9));
+        helper.runAfterDelay(10, () -> {
+            choose(helper, incoming);
+            helper.assertTrue(selected(incoming).equals(nearest), "equal projected density did not prefer the shorter route");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = GLOBAL_STATE_BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 500)
+    public static void spaceAwareSelectionReachesChosenHouseWithoutTakingHome(GameTestHelper helper) {
+        BlockPos center = arena(helper, 93);
+        BlockPos nearest = furnishedHouse(helper.getLevel(), center, 8);
+        BlockPos alternative = furnishedHouse(helper.getLevel(), center.east(16), 20);
+        claim(helper, nearest);
+        claim(helper, alternative);
+        spawn(helper, center.east(2).south(3));
+        var incoming = spawn(helper, center.east(2).south(9));
+        helper.runAfterDelay(10, () -> {
+            var level = helper.getLevel();
+            if (previousDayTime == null) {
+                previousDayTime = level.getOverworldClockTime();
+                previousDaylight = level.getGameRules().get(GameRules.ADVANCE_TIME);
+                previousTeleport = Config.getInstance().allowVillagerTeleporting;
+            }
+            setDayTime(level, 13000L);
+            level.getGameRules().set(GameRules.ADVANCE_TIME, false, level.getServer());
+            Config.getInstance().allowVillagerTeleporting = false;
+            choose(helper, incoming);
+            helper.assertTrue(selected(incoming).equals(alternative), "real arrival did not select the roomier house");
+            incoming.setNoAi(false);
+            helper.succeedWhen(() -> {
+                helper.assertTrue(VillageManager.get(level).getIndoorRooms().resolve(alternative).orElseThrow()
+                        .floorCells().contains(incoming.blockPosition()), "villager has not reached selected room");
+                helper.assertTrue(!incoming.getBrain().hasMemoryValue(MemoryModuleType.HOME), "temporary arrival claimed HOME");
+                helper.assertTrue(GameTestPoi.getFreeTickets(level.getPoiManager(), nearest) == 0
+                        && GameTestPoi.getFreeTickets(level.getPoiManager(), alternative) == 0, "shelter movement changed bed tickets");
+            });
+        });
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void guestCountsInCurrentHouseAndActiveArrival(GameTestHelper helper) {
+        BlockPos center = arena(helper, 94);
+        BlockPos current = furnishedHouse(helper.getLevel(), center, 8);
+        BlockPos destination = furnishedHouse(helper.getLevel(), center.east(16), 8);
+        BlockPos overflow = furnishedHouse(helper.getLevel(), center.east(32), 23);
+        claim(helper, current);
+        claim(helper, destination);
+        claim(helper, overflow);
+        spawn(helper, center.east(2).south(2));
+        var guest = spawn(helper, center.east(2).south(3));
+        for (int i = 0; i < 2; i++) spawn(helper, center.east(18).south(3));
+        for (int i = 0; i < 5; i++) spawn(helper, center.east(34).south(3));
+        var first = spawn(helper, center.east(2).south(9));
+        var second = spawn(helper, center.east(3).south(9));
+        var third = spawn(helper, center.east(4).south(9));
+        helper.runAfterDelay(10, () -> {
+            guest.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(center.east(2).south(2), 0.5F, 0));
+            choose(helper, first);
+            helper.assertTrue(selected(first).equals(current), "physical guest and same-house intent were counted twice");
+            guest.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(center.east(18).south(2), 0.5F, 0));
+            choose(helper, second);
+            helper.assertTrue(selected(second).equals(overflow), "guest was not counted in both current and destination houses");
+            guest.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+            choose(helper, third);
+            helper.assertTrue(selected(third).equals(destination), "cleared arrival did not release its place");
+            helper.assertTrue(GameTestPoi.getFreeTickets(helper.getLevel().getPoiManager(), current) == 0
+                    && GameTestPoi.getFreeTickets(helper.getLevel().getPoiManager(), destination) == 0, "guest accounting changed ownership tickets");
             helper.succeed();
         });
     }
@@ -1242,6 +1574,16 @@ public final class ShelterDistributionGameTests {
         cleanupState(level);
     }
 
+    @AfterBatch(batch = ROUTE_BOUNDARY_BATCH)
+    public static void cleanupRouteBoundary(ServerLevel level) {
+        cleanupState(level);
+    }
+
+    @AfterBatch(batch = UNLOADED_POI_BATCH)
+    public static void cleanupUnloadedPoi(ServerLevel level) {
+        cleanupState(level);
+    }
+
     @AfterBatch(batch = GLOBAL_STATE_BATCH)
     public static void cleanupGlobalStateBatch(ServerLevel level) {
         cleanupState(level);
@@ -1252,6 +1594,8 @@ public final class ShelterDistributionGameTests {
         VILLAGERS.clear();
         THREATS.forEach(LivingEntity::discard);
         THREATS.clear();
+        OBSTACLES.forEach(Entity::discard);
+        OBSTACLES.clear();
         BLOCKS.forEach((pos, state) -> level.setBlock(pos, state, 3));
         BLOCKS.clear();
         CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x(), chunk.z(), false));

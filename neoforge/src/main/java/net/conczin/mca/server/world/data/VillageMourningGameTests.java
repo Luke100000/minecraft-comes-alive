@@ -142,6 +142,7 @@ public final class VillageMourningGameTests {
         prepareFlatArea(helper, grave, 3, 3);
         occupyGrave(helper, grave);
         VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(4, 1, 3), "Interrupted Mourner");
+        makeAwake(mourner);
 
         Mourning.start(mourner, grave);
         EnterGraveyardTask enter = new EnterGraveyardTask();
@@ -262,6 +263,7 @@ public final class VillageMourningGameTests {
         occupyGrave(helper, grave);
         VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(1, 1, 3), "Combat Interrupted Mourner");
         VillagerEntityMCA threat = spawnVillager(helper, new BlockPos(1, 1, 5), "Combat Interruption Probe");
+        makeAwake(mourner);
 
         Mourning.start(mourner, grave);
         mourner.getBrain().tick(helper.getLevel(), mourner);
@@ -303,6 +305,7 @@ public final class VillageMourningGameTests {
         prepareFlatArea(helper, grave, 3, 3);
         occupyGrave(helper, grave);
         VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(4, 1, 3), "Flower Ownership Mourner");
+        makeAwake(mourner);
         mourner.setItemInHand(InteractionHand.MAIN_HAND, Items.IRON_SWORD.getDefaultInstance());
 
         Mourning.start(mourner, grave);
@@ -347,6 +350,7 @@ public final class VillageMourningGameTests {
         VillagerEntityMCA reloaded = VillagerFactory.newVillager(helper.getLevel()).build();
         reloaded.load(TagValueInput.create(ProblemReporter.DISCARDING, helper.getLevel().registryAccess(), saved));
         reloaded.refreshBrain(helper.getLevel());
+        makeAwake(reloaded);
         reloaded.getBrain().setActiveActivityIfPossible(ActivitiesMCA.GRIEVE);
 
         helper.assertTrue(reloaded.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND)
@@ -695,6 +699,8 @@ public final class VillageMourningGameTests {
         Player followedPlayer = helper.makeMockPlayer(GameType.SURVIVAL);
         VillagerEntityMCA follower = spawnVillager(helper, new BlockPos(3, 1, 1), "Following Mourner Probe");
         VillagerEntityMCA staying = spawnVillager(helper, new BlockPos(4, 1, 1), "Staying Mourner Probe");
+        makeAwake(follower);
+        makeAwake(staying);
 
         follower.getBrain().setMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING, followedPlayer);
         staying.getBrain().setMemory(MemoryModuleTypeMCA.STAYING, true);
@@ -1084,6 +1090,10 @@ public final class VillageMourningGameTests {
         VillagerEntityMCA meet = spawnVillager(helper, new BlockPos(3, 1, 1), "Burst Meet Probe");
         VillagerEntityMCA work = spawnVillager(helper, new BlockPos(4, 1, 1), "Burst Work Probe");
         VillagerEntityMCA rest = spawnVillager(helper, new BlockPos(5, 1, 1), "Burst Rest Probe");
+        // Random spawn professions and the live clock can start a villager in
+        // WORK or REST. Establish the IDLE precondition explicitly so the test
+        // isolates mourning eligibility instead of testing random schedules.
+        makeAwake(idle);
         GlobalPos poi = GlobalPos.of(helper.getLevel().dimension(), helper.absolutePos(new BlockPos(2, 1, 2)));
         meet.getBrain().setMemory(MemoryModuleType.MEETING_POINT, poi);
         meet.getBrain().setActiveActivityIfPossible(Activity.MEET);
@@ -1205,7 +1215,10 @@ public final class VillageMourningGameTests {
     }
 
     private static void makeAwake(VillagerEntityMCA villager) {
-        villager.getBrain().setSchedule(SchedulesMCA.GUESTS);
+        // The suite runs every fixture at arbitrary in-game times. An IDLE-only
+        // schedule prevents an unrelated time-of-day REST transition from erasing
+        // the mourning intent when tests advance the real villager brain.
+        villager.getBrain().setSchedule(net.conczin.mca.gametest.GameTestBrain.fixedSchedule(Activity.IDLE));
         villager.getBrain().setActiveActivityIfPossible(Activity.IDLE);
     }
 

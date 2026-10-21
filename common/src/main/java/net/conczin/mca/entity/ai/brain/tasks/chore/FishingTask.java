@@ -5,7 +5,6 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.entity.MCAFishingBobberEntity;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Chore;
-import net.conczin.mca.entity.ai.TaskUtils;
 import net.conczin.mca.util.InventoryUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -14,11 +13,11 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.EnchantmentHelper;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.level.storage.loot.BuiltInLootTables;
 import net.minecraft.world.level.storage.loot.LootParams;
@@ -28,7 +27,6 @@ import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 public class FishingTask extends AbstractChoreTask {
@@ -37,7 +35,16 @@ public class FishingTask extends AbstractChoreTask {
     private static final int MAX_BITE_REACTION_TICKS = 12;
     private static final double REEL_DELIVERY_DISTANCE_SQR = 0.5 * 0.5;
 
-    private BlockPos targetWater;
+    private final FishingSiteSearch siteSearch = new FishingSiteSearch();
+    private FishingSiteSearch.Site currentSite;
+    private BlockPos previousCastWater;
+    private WalkTarget fishingWalkTarget;
+    private MCAFishingBobberEntity castBobber;
+    private boolean castReachedWater;
+    private long lastProgress;
+    private long approachStarted;
+    private Vec3 previousApproachPosition;
+    private long nextSiteCheck;
     private final List<ItemEntity> reelItems = new ArrayList<>();
     private int reelTicks;
     private boolean biteAttempted;
@@ -66,14 +73,19 @@ public class FishingTask extends AbstractChoreTask {
     @Override
     protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.start(world, villager, time);
-        if (!villager.isUsingRecoveryFood()) {
-            equipFishingRod(villager);
-        }
+        siteSearch.reset();
+        currentSite = null;
+        previousCastWater = null;
+        resetApproach(time);
     }
 
     @Override
     protected void tick(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.tick(world, villager, time);
+
+        if (failedTicks > 0 || villager.getVillagerBrain().getCurrentJob() != Chore.FISH) {
+            return;
+        }
 
         if (tickReelItems(villager)) {
             return;
@@ -90,77 +102,161 @@ public class FishingTask extends AbstractChoreTask {
                 );
             }
             discardBobber(villager);
+            clearFishingMovement(villager);
+            resetApproach(time);
             return;
         }
 
-        if (!equipFishingRod(villager)) {
+        if (!hasFishingRod(villager)) {
+            abandonJobWithMessage("chore.fishing.norod");
             discardBobber(villager);
             return;
         }
 
-        if (targetWater != null && !world.getBlockState(targetWater).is(Blocks.WATER)) {
-            discardBobber(villager);
-            targetWater = null;
+        if (castBobber != null) {
+            if (castBobber.isBobbing()) castReachedWater = true;
+            if (bobber != castBobber || castBobber.isRemoved()) {
+                boolean failedFlight = !castReachedWater;
+                castBobber = null;
+                castReachedWater = false;
+                if (failedFlight) {
+                    rejectSite(villager);
+                    return;
+                }
+            }
         }
 
-        if (targetWater == null) {
-            List<BlockPos> nearbyStaticLiquid = TaskUtils.getNearbyBlocks(villager.blockPosition(), villager.level(), blockState -> blockState.is(Blocks.WATER), 12, 3);
-            targetWater = nearbyStaticLiquid.stream()
-                    .filter((p) -> villager.level().getBlockState(p).getBlock() == Blocks.WATER)
-                    .min(Comparator.comparingDouble(d -> villager.distanceToSqr(d.getX(), d.getY(), d.getZ()))).orElse(null);
+        if (currentSite == null) {
+            currentSite = siteSearch.tick(world, villager);
+            if (currentSite == null) {
+                if (siteSearch.exhausted()) failedTicks = FAILED_COOLDOWN;
+                return;
+            }
+            resetApproach(time);
+            nextSiteCheck = time;
+        }
 
-            if (targetWater == null) {
+        if (time >= nextSiteCheck || bobber == null) {
+            if (!FishingSiteSearch.isUsable(world, villager, currentSite)) {
+                rejectSite(villager);
+                return;
+            }
+            nextSiteCheck = time + 10;
+        }
+
+        BlockPos standingPos = currentSite.standingPos();
+        Vec3 delta = villager.position().subtract(Vec3.atBottomCenterOf(standingPos));
+        // The arrival radius alone can include an adjacent block whose dry
+        // footprint was never checked, especially for a two-block cast.
+        if (delta.horizontalDistanceSqr() > 0.64 || Math.abs(delta.y) > 0.5
+                || villager.getBlockX() != standingPos.getX() || villager.getBlockZ() != standingPos.getZ()) {
+            if (bobber != null) discardBobber(villager);
+            // A valid path can lead away from the destination around an obstacle.
+            // Only an actual lack of motion should trip the approach watchdog.
+            Vec3 position = villager.position();
+            if (previousApproachPosition == null || position.distanceToSqr(previousApproachPosition) > 0.04) {
+                previousApproachPosition = position;
+                lastProgress = time;
+            }
+            // Bound an oscillating but moving route as well as a true stall.
+            if (time - lastProgress >= 60 || time - approachStarted >= 1200) {
+                rejectSite(villager);
+                return;
+            }
+            WalkTarget current = villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
+            if (current != null && current != fishingWalkTarget) {
+                // A different producer now owns movement; let normal chore cleanup run.
                 failedTicks = FAILED_COOLDOWN;
+                return;
             }
-        } else if (villager.distanceToSqr(targetWater.getX(), targetWater.getY(), targetWater.getZ()) < 5.0D) {
-            villager.getNavigation().stop();
-            villager.lookAt(targetWater);
+            villager.moveTowardsPersistent(currentSite.standingPos(), 0.5F, 0);
+            fishingWalkTarget = villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
+            return;
+        }
 
-            if (bobber == null || bobber.isRemoved()) {
-                ItemStack fishingRod = villager.getItemInHand(villager.getDominantHand());
-                villager.swing(villager.getDominantHand(), fishingRod.getInteractAnimation());
-                bobber = MCAFishingBobberEntity.cast(world, villager, targetWater);
+        clearFishingMovement(villager);
+        if (bobber == null || bobber.isRemoved()) {
+            FishingSiteSearch.Site castSite = siteSearch.chooseCastSite(world, villager, currentSite, previousCastWater);
+            if (castSite == null) {
+                rejectSite(villager);
+                return;
+            }
+            currentSite = castSite;
+        }
+        villager.lookAt(currentSite.waterPos());
+        if (!equipFishingRod(villager)) return;
+
+        if (bobber == null || bobber.isRemoved()) {
+            ItemStack fishingRod = villager.getItemInHand(villager.getDominantHand());
+            villager.swing(villager.getDominantHand(), fishingRod.getInteractAnimation());
+            bobber = MCAFishingBobberEntity.cast(world, villager, currentSite.waterPos());
+            previousCastWater = currentSite.waterPos();
+            castBobber = bobber;
+            castReachedWater = false;
+        }
+
+        if (!bobber.isBobbing()) {
+            return;
+        }
+
+        if (!bobber.isBiting()) {
+            biteAttempted = false;
+            biteReactionTicksRemaining = -1;
+        } else if (!biteAttempted) {
+            if (biteReactionTicksRemaining < 0) {
+                biteReactionTicksRemaining = Mth.nextInt(
+                        villager.getRandom(),
+                        MIN_BITE_REACTION_TICKS,
+                        MAX_BITE_REACTION_TICKS
+                );
+                MCA.LOGGER.info(
+                        "[MCA Fishing Debug] bite-reaction-start villager={} bobber={} delayTicks={}",
+                        villager.getUUID(), bobber.getId(), biteReactionTicksRemaining
+                );
             }
 
-            if (!bobber.isBobbing()) {
+            if (biteReactionTicksRemaining-- > 0) {
                 return;
             }
 
-            if (!bobber.isBiting()) {
-                biteAttempted = false;
-                biteReactionTicksRemaining = -1;
-            } else if (!biteAttempted) {
-                if (biteReactionTicksRemaining < 0) {
-                    biteReactionTicksRemaining = Mth.nextInt(
-                            villager.getRandom(),
-                            MIN_BITE_REACTION_TICKS,
-                            MAX_BITE_REACTION_TICKS
-                    );
-                    MCA.LOGGER.info(
-                            "[MCA Fishing Debug] bite-reaction-start villager={} bobber={} delayTicks={}",
-                            villager.getUUID(), bobber.getId(), biteReactionTicksRemaining
-                    );
-                }
-
-                if (biteReactionTicksRemaining-- > 0) {
-                    return;
-                }
-
-                biteAttempted = true;
-                boolean catchSucceeded = shouldReelBite(villager);
-                MCA.LOGGER.info(
-                        "[MCA Fishing Debug] bite-observed villager={} bobber={} result={} held={} inventoryRods={}",
-                        villager.getUUID(), bobber.getId(), catchSucceeded ? "CATCH" : "MISS",
-                        villager.getItemInHand(villager.getDominantHand()), villager.getInventory().countItem(Items.FISHING_ROD)
-                );
-                if (catchSucceeded) {
-                    beginReel(world, villager);
-                }
+            biteAttempted = true;
+            boolean catchSucceeded = shouldReelBite(villager);
+            MCA.LOGGER.info(
+                    "[MCA Fishing Debug] bite-observed villager={} bobber={} result={} held={} inventoryRods={}",
+                    villager.getUUID(), bobber.getId(), catchSucceeded ? "CATCH" : "MISS",
+                    villager.getItemInHand(villager.getDominantHand()), villager.getInventory().countItem(Items.FISHING_ROD)
+            );
+            if (catchSucceeded) {
+                beginReel(world, villager);
             }
-        } else {
-            villager.moveTowardsPersistent(targetWater, 0.5F, 1);
         }
+    }
 
+    private boolean hasFishingRod(VillagerEntityMCA villager) {
+        return Chore.FISH.matchesTool(villager.getItemInHand(villager.getDominantHand()))
+                || InventoryUtils.contains(villager.getInventory(), Chore.FISH::matchesTool);
+    }
+
+    private void resetApproach(long time) {
+        lastProgress = time;
+        approachStarted = time;
+        previousApproachPosition = null;
+    }
+
+    private void rejectSite(VillagerEntityMCA villager) {
+        discardBobber(villager);
+        clearFishingMovement(villager);
+        if (currentSite != null) siteSearch.reject(currentSite);
+        currentSite = null;
+    }
+
+    private void clearFishingMovement(VillagerEntityMCA villager) {
+        WalkTarget current = villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
+        if (fishingWalkTarget != null && (current == fishingWalkTarget || current == null)) {
+            if (current == fishingWalkTarget) villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+            villager.getNavigation().stop();
+        }
+        fishingWalkTarget = null;
     }
 
     boolean shouldReelBite(VillagerEntityMCA villager) {
@@ -353,6 +449,8 @@ public class FishingTask extends AbstractChoreTask {
         }
         biteAttempted = false;
         biteReactionTicksRemaining = -1;
+        castBobber = null;
+        castReachedWater = false;
     }
 
     @Override
@@ -366,7 +464,10 @@ public class FishingTask extends AbstractChoreTask {
         }
 
         discardBobber(villager);
-        targetWater = null;
+        clearFishingMovement(villager);
+        currentSite = null;
+        siteSearch.reset();
+        previousCastWater = null;
 
         if (villager.isUsingRecoveryFood()) {
             villager.stopUsingItem();
