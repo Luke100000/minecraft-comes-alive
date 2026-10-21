@@ -9,6 +9,8 @@ import net.conczin.mca.entity.VillagerChildSuffocationGameTests;
 import net.conczin.mca.entity.VillagerConversionGameTests;
 import net.conczin.mca.entity.VillagerRecoveryFoodGameTests;
 import net.conczin.mca.entity.VillagerVoicePitchGameTests;
+import net.conczin.mca.entity.ai.BedOccupancyLifecycleGameTests;
+import net.conczin.mca.entity.ai.ProcreationInventoryGameTests;
 import net.conczin.mca.entity.ai.ChoreToolMatchingGameTests;
 import net.conczin.mca.entity.ai.ResidencyGoHomeGameTests;
 import net.conczin.mca.entity.ai.ResidencySetHomeGameTests;
@@ -32,8 +34,10 @@ import net.conczin.mca.entity.ai.brain.tasks.chore.AbstractChoreTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.ChoppingTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.ChorePathfindingGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.FishingTaskGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.chore.FishingSiteGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.HarvestingTaskGameTests;
 import net.conczin.mca.entity.ai.navigation.AutonomousPathfindingGameTests;
+import net.conczin.mca.entity.ai.navigation.CaveVineNavigationGameTests;
 import net.conczin.mca.entity.ai.navigation.FenceGateInteractionGameTests;
 import net.conczin.mca.entity.ai.navigation.HomeArrivalGameTests;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigationGameTests;
@@ -44,9 +48,11 @@ import net.conczin.mca.entity.ai.navigation.NavigationRecoveryGameTests;
 import net.conczin.mca.entity.ai.navigation.NavigationPhysicalSafetyGameTests;
 import net.conczin.mca.entity.ai.navigation.PathRetryLifecycleGameTests;
 import net.conczin.mca.entity.ai.navigation.StairWallPathfindingGameTests;
+import net.conczin.mca.entity.ai.navigation.StairDoorNavigationGameTests;
 import net.conczin.mca.server.DestinyLocationResolverGameTests;
 import net.conczin.mca.server.world.data.CopiedOpenHouseGameTests;
 import net.conczin.mca.server.world.data.FloorScannerGameTests;
+import net.conczin.mca.server.world.data.IndoorRoomCacheGameTests;
 import net.conczin.mca.server.world.data.TaigaFloorPerformanceGameTests;
 import net.conczin.mca.server.world.data.ReportedFloorInteractionGameTests;
 import net.conczin.mca.server.world.data.ReportedStairHouseGameTests;
@@ -95,6 +101,8 @@ public final class McaGameTestRegistration {
             VillagerConversionGameTests.class,
             VillagerRecoveryFoodGameTests.class,
             VillagerVoicePitchGameTests.class,
+            BedOccupancyLifecycleGameTests.class,
+            ProcreationInventoryGameTests.class,
             ChoreToolMatchingGameTests.class,
             ResidencyGoHomeGameTests.class,
             ResidencySetHomeGameTests.class,
@@ -119,6 +127,7 @@ public final class McaGameTestRegistration {
             ChorePathfindingGameTests.class,
             FenceGateInteractionGameTests.class,
             AutonomousPathfindingGameTests.class,
+            CaveVineNavigationGameTests.class,
             HomeArrivalGameTests.class,
             MCAGroundPathNavigationGameTests.class,
             MCAWalkNodeEvaluatorLookupGameTests.class,
@@ -128,10 +137,13 @@ public final class McaGameTestRegistration {
             NavigationPhysicalSafetyGameTests.class,
             PathRetryLifecycleGameTests.class,
             StairWallPathfindingGameTests.class,
+            StairDoorNavigationGameTests.class,
             FishingTaskGameTests.class,
+            FishingSiteGameTests.class,
             HarvestingTaskGameTests.class,
             CopiedOpenHouseGameTests.class,
             FloorScannerGameTests.class,
+            IndoorRoomCacheGameTests.class,
             TaigaFloorPerformanceGameTests.class,
             ReportedFloorInteractionGameTests.class,
             ReportedStairHouseGameTests.class,
@@ -177,6 +189,7 @@ public final class McaGameTestRegistration {
                                         String selectedMethodName) {
         Map<String, Holder<TestEnvironmentDefinition<?>>> environments = new HashMap<>();
         Map<String, List<Method>> teardownMethods = new HashMap<>();
+        Map<String, Integer> batchCounts = new HashMap<>();
 
         for (Class<?> testClass : testClasses) {
             for (Method method : testClass.getDeclaredMethods()) {
@@ -201,12 +214,25 @@ public final class McaGameTestRegistration {
                 // 1.21 grouped tests by @GameTest.batch. In 26.x that grouping moved
                 // into TestData.environment, so preserve it instead of running every
                 // ported test concurrently in one environment.
+                String legacyBatch = metadata.batch();
+                // MCA's ported fixtures are substantially larger than NeoForge's
+                // small isolated templates. Split a legacy batch into smaller
+                // sequential environments in GameTest runs rather than changing
+                // Minecraft's global batch factory with a production mixin.
+                String environmentBatch = legacyBatch;
+                if (Boolean.getBoolean("mca.gametest.smallBatches")) {
+                    int batchIndex = batchCounts.merge(legacyBatch, 1, Integer::sum) - 1;
+                    // Shelter fixtures share global live-villager, POI, and room
+                    // caches. Keep their setup and teardown strictly sequential.
+                    int batchSize = testClass == ShelterDistributionGameTests.class ? 1 : 10;
+                    environmentBatch = legacyBatch + "/part_" + (batchIndex / batchSize);
+                }
                 Holder<TestEnvironmentDefinition<?>> environment = environments.computeIfAbsent(
-                        metadata.batch(),
+                        environmentBatch,
                         batch -> event.registerEnvironment(
                                 MCA.locate("ported_1_21_1/" + batch.toLowerCase(Locale.ROOT)),
-                                teardownMethods.containsKey(batch)
-                                        ? new BatchTeardownEnvironment(teardownMethods.get(batch))
+                                teardownMethods.containsKey(legacyBatch)
+                                        ? new BatchTeardownEnvironment(teardownMethods.get(legacyBatch))
                                         : new TestEnvironmentDefinition.AllOf()
                         )
                 );
@@ -365,6 +391,12 @@ public final class McaGameTestRegistration {
             } catch (InvocationTargetException e) {
                 Throwable cause = e.getCause();
                 if (cause instanceof RuntimeException runtimeException) throw runtimeException;
+                // 26.x GameTestInfo catches Exception but not Error. Ported tests use
+                // AssertionError for failed preconditions; report those as test failures
+                // instead of crashing the entire dedicated GameTest server.
+                if (cause instanceof AssertionError assertionError) {
+                    throw new IllegalStateException("Ported GameTest assertion: " + assertionError.getMessage(), assertionError);
+                }
                 if (cause instanceof Error error) throw error;
                 throw new RuntimeException(cause);
             } catch (ReflectiveOperationException e) {

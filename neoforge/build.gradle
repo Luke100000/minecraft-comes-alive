@@ -92,6 +92,8 @@ neoForge {
             ideName = "NeoForge GameTest Server (${project.path})"
             systemProperty('neoforge.enabledGameTestNamespaces', "${mod_id},minecraft")
             systemProperty('mca.gametest.enabled', 'true')
+            systemProperty('mca.gametest.repairChunkTickets', 'true')
+            systemProperty('mca.gametest.smallBatches', 'true')
             focusedGameTest.orNull?.with { selectedGameTest ->
                 validateFocusedGameTest(selectedGameTest)
                 systemProperty('mca.gametest.select', selectedGameTest)

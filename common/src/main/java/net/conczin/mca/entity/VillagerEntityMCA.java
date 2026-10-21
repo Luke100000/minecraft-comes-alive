@@ -1765,6 +1765,15 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         UUID oldUuid = getUUID();
 
+        if (convertingToZombieVillager && params.type().shouldDiscardAfterConversion()) {
+            // Minecraft's conversion copies the source pose, including sleeping.
+            // Wake before the copy and release the original resident's HOME POI.
+            if (isSleeping()) {
+                stopSleeping();
+            }
+            releasePoi(MemoryModuleType.HOME);
+        }
+
         return (T) super.convertTo((EntityType) convertedType, params, mob -> {
             if (mob instanceof ZombieVillager zombie) {
                 // 26.2+ tracks whether villager data has already been finalized. Preserve it
@@ -1812,6 +1821,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         super.readAdditionalSaveData(input);
 
         if (!level().isClientSide() && isSleeping()) {
+            BedDebugLog.lifecycle(this, "load-sleeper", getSleepingPos().orElse(null));
             boolean sleepingAtHome = getBrain().getMemory(MemoryModuleType.HOME)
                     .filter(home -> home.dimension().equals(level().dimension()))
                     .map(home -> home.pos())
@@ -1824,8 +1834,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         boolean vanillaAgeLocked = super.isAgeLocked();
-
         getTypeDataManager().load(this, nbt);
+        // The persisted tracked flag is restored by CDataManager.load, not by
+        // the vanilla super call. Clear an interrupted animation only afterwards.
+        relations.cancelInterruptedProcreationAfterLoad();
         if (savedVanillaAge.isEmpty()) {
             migrateLegacyLifecycleAge(nbt);
         }
@@ -2036,6 +2048,28 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         } else {
             return ItemStack.EMPTY;
         }
+    }
+
+    @Override
+    public void startSleeping(BlockPos bed) {
+        super.startSleeping(bed);
+        BedDebugLog.lifecycle(this, "sleep-start", bed);
+    }
+
+    @Override
+    public void stopSleeping() {
+        BlockPos bed = getSleepingPos().orElse(null);
+        BedDebugLog.lifecycle(this, "wake-before", bed);
+        super.stopSleeping();
+        BedDebugLog.lifecycle(this, "wake-after", bed);
+    }
+
+    @Override
+    public void remove(RemovalReason reason) {
+        if (isSleeping()) {
+            BedDebugLog.lifecycle(this, "remove-sleeper/" + reason, getSleepingPos().orElse(null));
+        }
+        super.remove(reason);
     }
 
     private void tickDespawnDelay() {

@@ -5,6 +5,7 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.Genetics;
+import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.SchedulesMCA;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
@@ -96,9 +97,16 @@ public final class HomeArrivalGameTests {
         configureNight(helper.getLevel());
         VillagerEntityMCA villager = spawnResident(helper, head.west().south(), head);
         villager.getGenetics().setGene(Genetics.WIDTH, 0.0F);
+        // Random TOUGH genetics scale physical width by 1.2x; this must be
+        // a narrow-collider test regardless of randomly generated traits.
+        villager.getTraits().removeTrait(Traits.TOUGH);
+        // Updating a tracked gene doesn't synchronously resize the physical collider.
+        villager.refreshDimensions();
         villager.snapTo(head.getX() - 0.99D, head.getY(), head.getZ() + 1.99D);
         helper.assertTrue(villager.getBbWidth() < 0.5F && helper.getLevel().noCollision(villager),
-                "small resident fixture was not collision-free and narrow");
+                "small resident fixture was not collision-free and narrow: width=" + villager.getBbWidth()
+                        + ", collisionFree=" + helper.getLevel().noCollision(villager)
+                        + ", pos=" + villager.position());
         helper.assertTrue(!head.closerToCenterThan(villager.position(), 2.1D),
                 "outer corner was already within bedside sleep reach");
         long started = helper.getLevel().getGameTime();

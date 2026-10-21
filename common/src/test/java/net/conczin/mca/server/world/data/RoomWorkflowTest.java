@@ -21,6 +21,54 @@ class RoomWorkflowTest {
     }
 
     @Test
+    void expectedRoomMismatchReturnsTargetChanged() {
+        BlockPos source = new BlockPos(4, 8, 12);
+        StructureFloor floor = new StructureFloor(3, 0,
+                new FloorGeometry(List.of(new FloorGeometry.Cell(source, 15)), Map.of()));
+        Structure structure = new Structure(7, source, List.of(floor));
+        Building room = new Building(source);
+        room.setId(21);
+        room.setStructureId(7);
+        room.setFloorId(3);
+        var before = room.save();
+        CountingManager manager = new CountingManager(new StaleRoomVillage(structure, floor, room));
+        RoomWorkflow workflow = new RoomWorkflow(manager, null);
+        // A delayed type confirmation must recheck the expected Room just like the initial request.
+        for (String selectedType : new String[]{null, "library"}) {
+            var outcome = workflow.scanRoom(source, 99, selectedType);
+            assertEquals(RoomWorkflow.Status.FAILED, outcome.status());
+            assertEquals(Building.validationResult.TARGET_CHANGED, outcome.result());
+            assertEquals(99, outcome.expectedTargetId());
+        }
+        assertEquals(0, manager.updateCommits);
+        assertEquals(before, room.save());
+    }
+
+    @Test
+    void missingExpectedRoomReturnsTargetChanged() {
+        CountingManager manager = new CountingManager(null);
+        RoomWorkflow workflow = new RoomWorkflow(manager, null);
+        var outcome = workflow.scanRoom(BlockPos.ZERO, 99, null);
+        assertEquals(RoomWorkflow.Status.FAILED, outcome.status());
+        assertEquals(Building.validationResult.TARGET_CHANGED, outcome.result());
+        assertEquals(0, manager.updateCommits);
+        assertEquals(Building.validationResult.NOT_IN_BUILDING,
+                workflow.scanRoom(BlockPos.ZERO, -1, null).result());
+    }
+
+    @Test
+    void inheritanceTargetMismatchReturnsTargetChanged() {
+        CountingManager manager = new CountingManager(null);
+        RoomWorkflow workflow = new RoomWorkflow(manager, null);
+        var outcome = workflow.updateInheritance(BlockPos.ZERO, 99, true, null);
+        assertEquals(RoomWorkflow.Status.FAILED, outcome.status());
+        assertEquals(Building.validationResult.TARGET_CHANGED, outcome.result());
+        assertEquals(0, manager.updateCommits);
+        assertEquals(Building.validationResult.NOT_IN_BUILDING,
+                workflow.updateInheritance(BlockPos.ZERO, -1, true, null).result());
+    }
+
+    @Test
     void ambiguousAddBuildingDefersCommitAndConfirmationReusesSameWorkflow() throws Exception {
         BlockPos source = new BlockPos(4, 8, 12);
         StubManager manager = new StubManager(new BuildingScanResult(
@@ -141,6 +189,7 @@ class RoomWorkflowTest {
 
     private static final class CountingManager extends VillageManager {
         private final Village village;
+        private int updateCommits;
 
         private CountingManager(Village village) {
             super(null);
@@ -149,7 +198,13 @@ class RoomWorkflowTest {
 
         @Override
         public Optional<Village> findNearestVillage(BlockPos pos, int margin) {
-            return Optional.of(village);
+            return Optional.ofNullable(village);
+        }
+
+        @Override
+        public Building.validationResult commitRegisteredRoomUpdate(RegisteredRoomUpdate update, String forcedType) {
+            updateCommits++;
+            return Building.validationResult.SUCCESS;
         }
     }
 

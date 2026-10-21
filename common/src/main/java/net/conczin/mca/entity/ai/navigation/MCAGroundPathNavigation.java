@@ -147,6 +147,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                         1.0F,
                         maxPathLength * VISITED_NODES_PER_BLOCK / ordinaryBudget
                 );
+                float effectiveMultiplier = visitedNodesMultiplier * rangeMultiplier;
                 if (maxPathLength > getOrdinaryPathLength(mob)) {
                     boolean nearbyApproach = false;
                     for (BlockPos target : targets) {
@@ -159,17 +160,25 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                     // moves away from them. Preserve their configured detour search;
                     // distant or sealed goals retain the smaller progressive budget.
                     if (!nearbyApproach) {
-                        rangeMultiplier = Math.min(rangeMultiplier,
-                                Math.max(1.0F, (float) MAX_EXTENDED_VISITED_NODES / ordinaryBudget));
+                        // PathFinder applies the navigation multiplier *after* our range multiplier.
+                        // Cap their product, otherwise a persistent search can exceed its node budget.
+                        // The PathFinder's base budget uses base FOLLOW_RANGE,
+                        // whereas ordinary searches use the effective attribute
+                        // value (including modifiers). Preserve the latter budget
+                        // when bounding an extended search.
+                        int ordinaryEffectiveBudget = Math.max(ordinaryBudget,
+                                Mth.ceil(getOrdinaryPathLength(mob) * VISITED_NODES_PER_BLOCK));
+                        effectiveMultiplier = Math.min(effectiveMultiplier,
+                                (float) Math.max(MAX_EXTENDED_VISITED_NODES, ordinaryEffectiveBudget) / ordinaryBudget);
                     }
                 }
                 if (!PathRequestDiagnostics.enabled()) {
                     return super.findPath(region, mob, targets, maxPathLength, reachRange,
-                            visitedNodesMultiplier * rangeMultiplier);
+                            effectiveMultiplier);
                 }
                 long startedNanos = System.nanoTime();
                 Path result = super.findPath(region, mob, targets, maxPathLength, reachRange,
-                        visitedNodesMultiplier * rangeMultiplier);
+                        effectiveMultiplier);
                 PathRequestDiagnostics.recordSearch(mob, System.nanoTime() - startedNanos,
                         maxPathLength > getOrdinaryPathLength(mob), evaluator.expandedNodes());
                 return result;
@@ -788,7 +797,8 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (!this.climbTraversal.followPath(this.path)) {
             int nextIndex = this.path.getNextNodeIndex();
             if (this.mob.onGround() && nextIndex + 1 < this.path.getNodeCount()) {
-                double nextFloor = getGroundY(this.path.getNextEntityPos(this.mob));
+                double nextFloor = getStandingPosition(this.path.getNextNodePos(),
+                        this.path.getNextEntityPos(this.mob)).y;
                 if (this.mob.getY() > nextFloor + 1.0E-3D) {
                     Vec3 following = this.path.getEntityPosAtNode(this.mob, nextIndex + 1);
                     if (getGroundY(following) <= this.mob.getY() + 1.0E-3D
@@ -813,7 +823,23 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 this.doStuckDetection(position);
                 return;
             }
-            super.followThePath();
+            BlockPos next = this.path.getNextNodePos();
+            Vec3 standing = getStandingPosition(next, this.path.getNextEntityPos(this.mob));
+            if (standing.y > next.getY() + PathNodeGeometry.FLOOR_EPSILON) {
+                // Raw node Y is not the feet height on a passable partial surface.
+                // Use the same physical pose as movement instead of first accepting
+                // vanilla's raw-node tolerance and then correcting only missed arrivals.
+                this.maxDistanceToWaypoint = this.mob.getBbWidth() > 0.75F ? this.mob.getBbWidth() / 2.0F
+                        : 0.75F - this.mob.getBbWidth() / 2.0F;
+                if (this.mob.onGround() && Math.abs(this.mob.getY() - standing.y) < 0.125D
+                        && Math.abs(this.mob.getX() - standing.x) < this.maxDistanceToWaypoint
+                        && Math.abs(this.mob.getZ() - standing.z) < this.maxDistanceToWaypoint) {
+                    this.path.advance();
+                }
+                this.doStuckDetection(position);
+            } else {
+                super.followThePath();
+            }
             return;
         }
         this.doStuckDetection(position);
@@ -879,10 +905,14 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     @Override
     protected double getGroundY(Vec3 position) {
         BlockPos targetPos = BlockPos.containing(position);
-        if (this.climbTraversal.isClimbable(targetPos) && this.mob.onClimbable()) {
-            return this.mob.getY();
+        return getStandingPosition(targetPos, position).y;
+    }
+
+    private Vec3 getStandingPosition(BlockPos node, Vec3 pathPosition) {
+        if (this.climbTraversal.isClimbable(node) && this.mob.onClimbable()) {
+            return new Vec3(node.getX() + 0.5D, this.mob.getY(), node.getZ() + 0.5D);
         }
-        return MCAWalkNodeEvaluator.getStandingFloorY(
-                this.level, targetPos, this.mob, super.getGroundY(position));
+        return PathNodeGeometry.walkingPosition(
+                this.level, node, this.mob, super.getGroundY(pathPosition));
     }
 }

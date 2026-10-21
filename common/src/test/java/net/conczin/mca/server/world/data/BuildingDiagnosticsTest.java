@@ -1,6 +1,7 @@
 package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
+import net.conczin.mca.server.world.data.BuildingDiagnostics.StructuralPosition;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -8,8 +9,28 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class BuildingDiagnosticsTest {
+    @Test
+    void refreshedPersistedFloorAnchorDoesNotProveASeparateUpperFloor() throws Exception {
+        BlockPos source = new BlockPos(0, 76, 0);
+        FloorGeometry geometry = new FloorGeometry(Set.of(new FloorGeometry.Cell(source.above(), 88)), List.of());
+        Structure structure = new Structure(80, source, List.of(new StructureFloor(0, 0, 76, geometry)));
+        Building room = new Building(source);
+        room.setFloorId(0);
+        var verdict = BuildingDiagnostics.class.getDeclaredMethod("verdict", StructuralPosition.class,
+                String.class, Building.validationResult.class, Structure.class, java.util.Collection.class,
+                Building.class, FloorGeometry.class, BlockPos.class, net.minecraft.server.level.ServerLevel.class);
+        verdict.setAccessible(true);
+
+        String message = (String) verdict.invoke(null, StructuralPosition.REGISTERED_ROOM, "UPDATE_ROOM",
+                Building.validationResult.SUCCESS, structure, List.of(room), room, geometry, source, null);
+
+        assertFalse(message.contains("SEPARATES_UPPER_FLOOR"), "refresh of the same persisted floor claimed a new storey: " + message);
+        assertFalse(message.contains("resolves player"), "persisted-floor refresh was presented as player-floor discovery");
+    }
+
     @Test
     void persistedConnectorLookupUsesPhysicalMarkerPosition() {
         BlockPos floorCell = new BlockPos(10, 64, 20);

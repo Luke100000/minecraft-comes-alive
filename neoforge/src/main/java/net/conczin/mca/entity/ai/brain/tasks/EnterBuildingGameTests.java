@@ -150,9 +150,15 @@ public final class EnterBuildingGameTests {
 
         for (BlockPos floorCell : floorCells) {
             helper.getLevel().setBlock(floorCell.below(), Blocks.STONE.defaultBlockState(), 3);
+            // The 26.x empty GameTest template fills its interior with barriers;
+            // explicitly clear the walking volume before testing reachability.
+            helper.getLevel().setBlock(floorCell, Blocks.AIR.defaultBlockState(), 3);
+            helper.getLevel().setBlock(floorCell.above(), Blocks.AIR.defaultBlockState(), 3);
             helper.getLevel().setBlock(floorCell.above(2), Blocks.STONE.defaultBlockState(), 3);
         }
         helper.getLevel().setBlock(elevatedShelfTarget.below(), Blocks.STONE.defaultBlockState(), 3);
+        helper.getLevel().setBlock(elevatedShelfTarget, Blocks.AIR.defaultBlockState(), 3);
+        helper.getLevel().setBlock(elevatedShelfTarget.above(), Blocks.AIR.defaultBlockState(), 3);
         helper.getLevel().setBlock(elevatedShelfTarget.above(2), Blocks.STONE.defaultBlockState(), 3);
 
         VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())

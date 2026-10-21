@@ -170,12 +170,10 @@ public class FamilyTreeScreen extends Screen {
             return;
         }
         rebuildLayout();
-        if (result == FamilyTreeViewModel.MergeResult.APPLIED
-                && response.found()
-                && response.requestId() == pendingRecenterRequestId) {
-            viewport = focusViewportAfterResponse(layout, viewport, response.uuid());
-            pendingRecenterRequestId = -1L;
-        } else if (response.requestId() == pendingRecenterRequestId) {
+        if (response.requestId() == pendingRecenterRequestId) {
+            if (result == FamilyTreeViewModel.MergeResult.APPLIED && response.found()) {
+                viewport = focusViewportAfterResponse(layout, viewport, response.uuid());
+            }
             pendingRecenterRequestId = -1L;
         }
     }

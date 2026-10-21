@@ -1,6 +1,7 @@
 package net.conczin.mca.entity.ai;
 
 import net.conczin.mca.gametest.GameTestPoi;
+import net.conczin.mca.gametest.GameTestBrain;
 import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
@@ -15,6 +16,7 @@ import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.core.registries.Registries;
 import net.conczin.mca.neoforge.gametest.AfterBatch;
 import net.conczin.mca.neoforge.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -22,12 +24,15 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.entity.ai.behavior.ValidateNearbyPoi;
 import net.minecraft.world.entity.ai.behavior.OneShot;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
+import net.minecraft.world.entity.schedule.Activity;
+import net.minecraft.world.attribute.EnvironmentAttribute;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -44,6 +49,9 @@ import java.util.Optional;
 @PrefixGameTestTemplate(false)
 public final class ResidencySetHomeGameTests {
     private static final List<VillagerEntityMCA> REPLACEMENT_VILLAGERS = new ArrayList<>();
+    // This fixture exercises natural HOME acquisition and sleeping, not the shared world's clock.
+    private static final EnvironmentAttribute<Activity> REPLACEMENT_REST_SCHEDULE =
+            GameTestBrain.fixedSchedule(Activity.REST);
     private static long previousReplacementDayTime;
 
     private ResidencySetHomeGameTests() {
@@ -728,10 +736,32 @@ public final class ResidencySetHomeGameTests {
         VillagerEntityMCA owner = spawnNightVillager(helper, head.south(3), "Original Bed Owner");
         REPLACEMENT_VILLAGERS.add(owner);
         VillagerEntityMCA[] incoming = new VillagerEntityMCA[1];
+        // This scenario exercises HOME ownership and the natural SleepInBed
+        // behavior, not activity scheduling. Other villager tasks can switch
+        // activity to WORK during the long 1,000-tick fixture, even though the
+        // test schedule remains fixed to REST. Keep the test actors in REST
+        // without granting HOME, changing POI tickets, or putting them to sleep.
+        helper.onEachTick(() -> {
+            maintainNaturalRest(owner);
+            if (incoming[0] != null) maintainNaturalRest(incoming[0]);
+        });
         boolean[] sawReclaim = {false};
+        int[] originalSleepTicks = {-1};
         helper.startSequence().thenWaitUntil(() -> {
-            helper.assertTrue(owner.isSleeping(), "original villager did not naturally acquire HOME and sleep");
+            if (!owner.isSleeping()) {
+                helper.fail("original villager did not naturally acquire HOME and sleep"
+                        + "; ticks=" + owner.tickCount
+                        + "; dayTime=" + getDayTime(helper.getLevel())
+                        + "; activity=" + owner.getBrain().getActiveNonCoreActivity()
+                        + "; home=" + owner.getBrain().getMemory(MemoryModuleType.HOME)
+                        + "; walk=" + owner.getBrain().getMemory(MemoryModuleType.WALK_TARGET)
+                        + "; cantReach=" + owner.getBrain().getMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                        + "; bedTickets=" + GameTestPoi.getFreeTickets(poiManager, head)
+                        + "; position=" + owner.position()
+                        + "; navDone=" + owner.getNavigation().isDone());
+            }
         }).thenExecute(() -> {
+            originalSleepTicks[0] = owner.tickCount;
             helper.assertTrue(owner.getResidency().getHome()
                             .filter(home -> home.pos().equals(head)).isPresent(),
                     "natural sleeper did not remember the fixture bed as HOME");
@@ -771,8 +801,29 @@ public final class ResidencySetHomeGameTests {
                 helper.fail(failure);
             }
         }).thenWaitUntil(() -> {
-            helper.assertTrue(incoming[0].getSleepingPos().filter(head::equals).isPresent(),
-                    "replacement claimant did not naturally sleep in its claimed bed");
+            VillagerEntityMCA claimant = incoming[0];
+            if (claimant.getSleepingPos().filter(head::equals).isEmpty()) {
+                helper.fail("replacement claimant did not naturally sleep in its claimed bed"
+                        + "; originalSleepTicks=" + originalSleepTicks[0]
+                        + "; claimantTicks=" + claimant.tickCount
+                        + "; dayTime=" + getDayTime(helper.getLevel())
+                        + "; claimantActivity=" + claimant.getBrain().getActiveNonCoreActivity()
+                        + "; claimantScheduledRest=" + Activity.REST
+                        + "; claimantGuard=" + claimant.isGuard()
+                        + "; claimantProfession=" + claimant.getVillagerData().profession()
+                        + "; claimantAttack=" + claimant.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET)
+                        + "; claimantJobSite=" + claimant.getBrain().getMemory(MemoryModuleType.JOB_SITE)
+                        + "; claimantPanic=" + claimant.getBrain().getActiveNonCoreActivity()
+                        + "; claimantHome=" + claimant.getBrain().getMemory(MemoryModuleType.HOME)
+                        + "; claimantWalk=" + claimant.getBrain().getMemory(MemoryModuleType.WALK_TARGET)
+                        + "; claimantCantReach=" + claimant.getBrain().getMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                        + "; claimantPosition=" + claimant.position()
+                        + "; claimantNavDone=" + claimant.getNavigation().isDone()
+                        + "; bedOccupied=" + helper.getLevel().getBlockState(head).getValue(BedBlock.OCCUPIED)
+                        + "; bedTickets=" + GameTestPoi.getFreeTickets(poiManager, head)
+                        + "; originalSleeping=" + owner.isSleeping()
+                        + "; originalHome=" + owner.getBrain().getMemory(MemoryModuleType.HOME));
+            }
         }).thenExecute(() -> {
             helper.assertTrue(sawReclaim[0], "replacement claimant never acquired the recreated HOME ticket");
             helper.assertTrue(GameTestPoi.getFreeTickets(poiManager, head) == 0, "replacement claimant lost its HOME ticket");
@@ -788,15 +839,27 @@ public final class ResidencySetHomeGameTests {
     private static VillagerEntityMCA spawnNightVillager(GameTestHelper helper, BlockPos feet, String name) {
         VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
                 .withAge(0)
+                .withProfession(helper.getLevel().registryAccess().lookupOrThrow(
+                        Registries.VILLAGER_PROFESSION).getOrThrow(VillagerProfession.NONE).value())
                 .withPosition(Vec3.atBottomCenterOf(feet))
                 .withName(name)
                 .spawn(EntitySpawnReason.STRUCTURE);
         villager.setOnGround(true);
-        villager.refreshBrain(helper.getLevel());
-        villager.getBrain().setSchedule(SchedulesMCA.DEFAULT);
+        // finalizeSpawn can replace the factory-selected profession with GUARD.
+        // That profession prioritizes WORK even under our fixed REST schedule.
+        villager.setProfession(helper.getLevel().registryAccess().lookupOrThrow(
+                Registries.VILLAGER_PROFESSION).getOrThrow(VillagerProfession.NONE).value());
+        villager.getBrain().setSchedule(REPLACEMENT_REST_SCHEDULE);
         villager.getBrain().updateActivityFromSchedule(
                 helper.getLevel().environmentAttributes(), helper.getLevel().getGameTime(), villager.position());
         return villager;
+    }
+
+    private static void maintainNaturalRest(VillagerEntityMCA villager) {
+        if (!villager.isAlive() || villager.isSleeping()) return;
+        if (!villager.getBrain().isActive(Activity.REST)) {
+            villager.getBrain().setActiveActivityIfPossible(Activity.REST);
+        }
     }
 
     private static void assertHome(GameTestHelper helper, VillagerEntityMCA villager, BlockPos expectedHome) {

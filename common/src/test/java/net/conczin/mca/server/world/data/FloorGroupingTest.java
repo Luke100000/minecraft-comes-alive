@@ -29,18 +29,64 @@ class FloorGroupingTest {
         var decision = FloorGrouping.prospectiveNumber(List.of(ground, floor(1, 72, 1), landing), ground, 78);
         assertEquals(Building.validationResult.SUCCESS, decision.result());
         assertEquals(OptionalInt.of(2), decision.number());
+        assertTrue(decision.shiftedNumbers().isEmpty());
         assertEquals(2, landing.floorNumber());
     }
 
     @Test
-    void conflictingSavedNumbersAndOccupiedGapAreAmbiguous() {
+    void conflictingSavedNumbersRemainAmbiguous() {
         var ground = floor(0, 67, 0);
         var conflict = FloorGrouping.prospectiveNumber(List.of(ground, floor(1, 76, 2), floor(2, 78, 3)), ground, 78);
         assertEquals(Building.validationResult.AMBIGUOUS_STRUCTURE, conflict.result());
         assertTrue(conflict.number().isEmpty());
-        var insertion = FloorGrouping.prospectiveNumber(List.of(ground, floor(1, 78, 1)), ground, 72);
-        assertEquals(Building.validationResult.AMBIGUOUS_STRUCTURE, insertion.result());
-        assertTrue(insertion.number().isEmpty());
+    }
+
+    @Test
+    void missingIntermediateStoreyCanBeInsertedWithoutChangingPreviewInputs() {
+        var ground = floor(0, 73, 0);
+        var upper = floor(1, 85, 1);
+        var top = floor(2, 90, 2);
+        var insertion = FloorGrouping.prospectiveNumber(List.of(ground, upper, top), ground, 79);
+        assertEquals(Building.validationResult.SUCCESS, insertion.result());
+        assertEquals(OptionalInt.of(1), insertion.number());
+        assertEquals(Map.of(1, 2, 2, 3), insertion.shiftedNumbers());
+        assertEquals(1, upper.floorNumber());
+        assertEquals(2, top.floorNumber());
+    }
+
+    @Test
+    void missingBasementCanBeInsertedBetweenGroundAndExistingBasement() {
+        var ground = floor(0, 73, 0);
+        var basement = floor(1, 61, -1);
+        var insertion = FloorGrouping.prospectiveNumber(List.of(ground, basement), ground, 67);
+        assertEquals(Building.validationResult.SUCCESS, insertion.result());
+        assertEquals(OptionalInt.of(-1), insertion.number());
+        assertEquals(Map.of(-1, -2), insertion.shiftedNumbers());
+        assertEquals(-1, basement.floorNumber());
+    }
+
+    @Test
+    void insertionCannotOverflowAnExistingStoreyLabel() {
+        var ground = floor(0, 73, 0);
+        assertEquals(Building.validationResult.AMBIGUOUS_STRUCTURE,
+                FloorGrouping.prospectiveNumber(List.of(ground, floor(1, 85, 1),
+                        floor(2, 90, Integer.MAX_VALUE)), ground, 79).result());
+        assertEquals(Building.validationResult.AMBIGUOUS_STRUCTURE,
+                FloorGrouping.prospectiveNumber(List.of(ground, floor(1, 61, -1),
+                        floor(2, 55, Integer.MIN_VALUE + 1)), ground, 67).result());
+    }
+
+    @Test
+    void insertionShiftsWholeSharedStoreysButDoesNotCloseUnrelatedNumberGaps() {
+        var ground = floor(0, 73, 0);
+        var upper = floor(1, 85, 1);
+        var sameStorey = floor(2, 86, 1);
+        var top = floor(3, 90, 4);
+        var insertion = FloorGrouping.prospectiveNumber(List.of(ground, upper, sameStorey, top), ground, 79);
+        assertEquals(Map.of(1, 2, 4, 5), insertion.shiftedNumbers());
+        var unusedNumber = FloorGrouping.prospectiveNumber(List.of(ground, floor(1, 85, 3)), ground, 79);
+        assertEquals(OptionalInt.of(1), unusedNumber.number());
+        assertTrue(unusedNumber.shiftedNumbers().isEmpty());
     }
 
     @Test

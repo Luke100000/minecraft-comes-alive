@@ -51,6 +51,12 @@ public final class GameTestTerrain {
         }
     }
 
+    /** Wait for a fixture's distant spawn chunk to become entity-ticking before adding a mob. */
+    public static void ensureEntityTickingChunk(GameTestHelper helper, BlockPos position) {
+        ChunkPos chunk = ChunkPos.containing(position);
+        ensureEntityTickingChunks(helper, chunk, chunk);
+    }
+
     private static void ensureEntityTickingChunks(GameTestHelper helper, ChunkPos minChunk, ChunkPos maxChunk) {
         ServerLevel level = helper.getLevel();
         List<ChunkPos> chunks = new ArrayList<>();

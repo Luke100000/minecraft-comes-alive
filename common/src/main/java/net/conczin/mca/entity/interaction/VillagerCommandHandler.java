@@ -15,6 +15,7 @@ import net.conczin.mca.registry.ProfessionsMCA;
 import net.conczin.mca.server.world.data.FamilyTree;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
+import net.conczin.mca.util.InventoryUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderSet;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -81,6 +82,12 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
         }
 
         if (Chore.byCommand(command).filter(chore -> {
+            if (chore == Chore.FISH
+                    && !chore.matchesTool(entity.getItemInHand(entity.getDominantHand()))
+                    && !InventoryUtils.contains(entity.getInventory(), chore::matchesTool)) {
+                entity.sendChatMessage(player, "chore.fishing.norod");
+                return true;
+            }
             entity.getVillagerBrain().assignJob(chore, player);
             CriterionMCA.GENERIC_EVENT.trigger(player, "chores");
             entity.sendChatMessage(Component.translatable("chore.success"), player);
@@ -168,7 +175,11 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                     case LOW_HEARTS -> entity.sendChatMessage(player, "interaction.procreate.fail.lowhearts");
                     case INFERTILE -> entity.sendChatMessage(player, "interaction.procreate.fail.infertile");
                     case TOO_SOON -> entity.sendChatMessage(player, "interaction.procreate.fail.toosoon");
-                    case START -> entity.getRelationships().startProcreating(gameTime);
+                    case START -> {
+                        if (!entity.getRelationships().startProcreating(player, gameTime)) {
+                            player.sendSystemMessage(Component.translatable("interaction.procreate.fail.inventoryfull"));
+                        }
+                    }
                 }
                 return true;
             }
