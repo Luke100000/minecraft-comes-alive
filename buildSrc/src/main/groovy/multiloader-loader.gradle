@@ -46,3 +46,44 @@ tasks.named('sourcesJar', Jar) {
     dependsOn(configurations.commonResources)
     from(configurations.commonResources)
 }
+
+tasks.named('jar', Jar) {
+    // Runtime GameTests still use the unmodified classes/resources in build/.
+    // Only the publishable archive drops the diagnostic Mixin and its entry.
+    exclude 'net/conczin/mca/mixin/MixinGameTestInfo.class'
+    filesMatching('mca.mixins.json') {
+        filter { String line -> line.replace('"MixinGameTestInfo",', '') }
+    }
+}
+
+// The chunk-ticket recovery probe is needed for development GameTests, but
+// neither loader's distribution should register or ship its Mixin class.
+tasks.register('verifyProductionMixinIsolation') {
+    dependsOn tasks.named('jar')
+    doLast {
+        def distribution = tasks.named('jar', Jar).get().archiveFile.get().asFile
+        def archive = new java.util.zip.ZipFile(distribution)
+        try {
+            if (archive.getEntry('net/conczin/mca/mixin/MixinGameTestInfo.class') != null) {
+                throw new GradleException("GameTest-only Mixin class is packaged in ${distribution}")
+            }
+            def config = archive.getEntry('mca.mixins.json')
+            if (config == null) {
+                throw new GradleException("Main Mixin config is missing from ${distribution}")
+            }
+            def content = archive.getInputStream(config).getText('UTF-8')
+            if (content.contains('"MixinGameTestInfo"')) {
+                throw new GradleException("GameTest-only Mixin is registered in ${distribution}")
+            }
+            if (!content.contains('"MixinMoveToTargetSink"')) {
+                throw new GradleException("Production navigation Mixin disappeared from ${distribution}")
+            }
+        } finally {
+            archive.close()
+        }
+    }
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('verifyProductionMixinIsolation')
+}
