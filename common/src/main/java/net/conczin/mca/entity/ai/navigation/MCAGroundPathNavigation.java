@@ -150,6 +150,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                         1.0F,
                         maxPathLength * VISITED_NODES_PER_BLOCK / ordinaryBudget
                 );
+                float effectiveMultiplier = visitedNodesMultiplier * rangeMultiplier;
                 if (maxPathLength > getOrdinaryPathLength(mob)) {
                     boolean nearbyApproach = false;
                     for (BlockPos target : targets) {
@@ -162,17 +163,20 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                     // moves away from them. Preserve their configured detour search;
                     // distant or sealed goals retain the smaller progressive budget.
                     if (!nearbyApproach) {
-                        rangeMultiplier = Math.min(rangeMultiplier,
-                                Math.max(1.0F, (float) MAX_EXTENDED_VISITED_NODES / ordinaryBudget));
+                        // PathFinder multiplies the ordinary node budget by this value.
+                        // Cap the combined multiplier without shrinking ordinary searches.
+                        effectiveMultiplier = Math.min(effectiveMultiplier,
+                                Math.max(visitedNodesMultiplier,
+                                        (float) MAX_EXTENDED_VISITED_NODES / ordinaryBudget));
                     }
                 }
                 if (!PathRequestDiagnostics.enabled()) {
                     return super.findPath(region, mob, targets, maxPathLength, reachRange,
-                            visitedNodesMultiplier * rangeMultiplier);
+                            effectiveMultiplier);
                 }
                 long startedNanos = System.nanoTime();
                 Path result = super.findPath(region, mob, targets, maxPathLength, reachRange,
-                        visitedNodesMultiplier * rangeMultiplier);
+                        effectiveMultiplier);
                 PathRequestDiagnostics.recordSearch(mob, System.nanoTime() - startedNanos,
                         maxPathLength > getOrdinaryPathLength(mob), evaluator.expandedNodes());
                 return result;
