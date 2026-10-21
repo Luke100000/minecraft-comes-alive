@@ -45,6 +45,10 @@ tasks.named('sourcesJar', Jar) {
     from(configurations.commonJava)
     dependsOn(configurations.commonResources)
     from(configurations.commonResources)
+    exclude 'net/conczin/mca/mixin/MixinGameTestInfo.java'
+    filesMatching('mca.mixins.json') {
+        filter { String line -> line.replace('"MixinGameTestInfo",', '') }
+    }
 }
 
 tasks.named('jar', Jar) {
@@ -60,6 +64,7 @@ tasks.named('jar', Jar) {
 // neither loader's distribution should register or ship its Mixin class.
 tasks.register('verifyProductionMixinIsolation') {
     dependsOn tasks.named('jar')
+    dependsOn tasks.named('sourcesJar')
     doLast {
         def distribution = tasks.named('jar', Jar).get().archiveFile.get().asFile
         def archive = new java.util.zip.ZipFile(distribution)
@@ -80,6 +85,20 @@ tasks.register('verifyProductionMixinIsolation') {
             }
         } finally {
             archive.close()
+        }
+
+        def sources = tasks.named('sourcesJar', Jar).get().archiveFile.get().asFile
+        def sourcesArchive = new java.util.zip.ZipFile(sources)
+        try {
+            if (sourcesArchive.getEntry('net/conczin/mca/mixin/MixinGameTestInfo.java') != null) {
+                throw new GradleException("GameTest-only Mixin source is packaged in ${sources}")
+            }
+            def config = sourcesArchive.getEntry('mca.mixins.json')
+            if (config == null || sourcesArchive.getInputStream(config).getText('UTF-8').contains('"MixinGameTestInfo"')) {
+                throw new GradleException("Sources Mixin config includes GameTest probe or is missing from ${sources}")
+            }
+        } finally {
+            sourcesArchive.close()
         }
     }
 }
