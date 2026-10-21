@@ -14,6 +14,24 @@ public final class GameTestTerrain {
     private GameTestTerrain() {
     }
 
+    /**
+     * Building a test roof queues skylight work. A covered block can still report
+     * sky brightness 15 for a few ticks in a busy full suite; wait for actual
+     * lighting readiness before asserting the behavior under test.
+     */
+    public static void whenSkyLightBlocked(GameTestHelper helper, BlockPos position,
+                                           int remainingTicks, Runnable continuation) {
+        if (!helper.getLevel().canSeeSky(position)) {
+            continuation.run();
+            return;
+        }
+        helper.assertTrue(remainingTicks > 0,
+                "GameTest fixture lighting never settled beneath its roof at " + position
+                        + "; skyLight=" + helper.getLevel().getBrightness(
+                                net.minecraft.world.level.LightLayer.SKY, position));
+        helper.runAfterDelay(1, () -> whenSkyLightBlocked(helper, position, remainingTicks - 1, continuation));
+    }
+
     public static void prepareFlatArea(GameTestHelper helper, BlockPos center, int radius) {
         prepareFlatArea(helper, center, radius, 2);
     }

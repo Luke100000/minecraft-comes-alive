@@ -48,6 +48,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
+import static net.conczin.mca.gametest.GameTestTerrain.whenSkyLightBlocked;
 
 @PrefixGameTestTemplate(false)
 public final class HomelessShelterGameTests {
@@ -104,13 +105,13 @@ public final class HomelessShelterGameTests {
     public static void registeredRoomWanderingUsesRoomFloorAndLongerSteps(GameTestHelper helper) {
         BlockPos center = helper.absolutePos(new BlockPos(208, 2, 80));
         prepareBedsideHouse(helper, center);
-        helper.runAfterDelay(10, () -> {
+        BlockPos doorstep = center.east().south(5);
+        helper.runAfterDelay(10, () -> whenSkyLightBlocked(helper, doorstep, 50, () -> {
             Village village = registerStrollHouse(helper, center);
             VillagerEntityMCA villager = spawn(helper, center.east().south(3));
             STROLL_VILLAGERS.add(villager);
             villager.getResidency().reconcileVillageMembership();
             Building room = village.findPhysicalRoomAt(villager.blockPosition()).orElseThrow();
-            BlockPos doorstep = center.east().south(5);
             helper.assertTrue(!room.containsFloorPosition(doorstep)
                             && !helper.getLevel().canSeeSky(doorstep),
                     "fixture lacks covered exterior floor: inRoom=" + room.containsFloorPosition(doorstep)
@@ -143,7 +144,7 @@ public final class HomelessShelterGameTests {
             }
             helper.assertTrue(longerStep, "registered room wandering still only selected one-block steps");
             helper.succeed();
-        });
+        }));
     }
 
     private static Village registerStrollHouse(GameTestHelper helper, BlockPos center) {
