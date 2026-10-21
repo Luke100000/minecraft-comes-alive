@@ -6,9 +6,11 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
+import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.behavior.MoveToTargetSink;
@@ -33,6 +35,19 @@ abstract class MixinMoveToTargetSink {
     @Unique
     private static final String MCA_REACHED_TARGET =
             "reachedTarget(Lnet/minecraft/world/entity/Mob;Lnet/minecraft/world/entity/ai/memory/WalkTarget;)Z";
+
+    @Inject(
+            method = "checkExtraStartConditions(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/Mob;)Z",
+            at = @At("HEAD"),
+            cancellable = true
+    )
+    private void mca$waitForNativeSearchReadiness(ServerLevel level, Mob mob, CallbackInfoReturnable<Boolean> cir) {
+        if (mob instanceof VillagerEntityMCA
+                && mob.getNavigation() instanceof MCAGroundPathNavigation navigation
+                && !navigation.canUpdatePath()) {
+            cir.setReturnValue(false);
+        }
+    }
 
     @Inject(method = MCA_TRY_COMPUTE_PATH, at = @At("HEAD"))
     private void mca$clearFailureFromPreviousTarget(
