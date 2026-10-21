@@ -77,7 +77,7 @@ public final class FamilyTreeViewBuilder {
         includePartners(tree, nodes, unavailable, continuations);
 
         unavailable.removeAll(nodes.keySet());
-        Map<UUID, FamilyTreeNode> snapshots = snapshotNodes(tree, nodes, continuations);
+        Map<UUID, FamilyTreeNode> snapshots = snapshotNodes(tree, nodes, continuations, unavailable);
         Set<UUID> orphans = collectOrphans(tree, snapshots.values());
         Map<UUID, GlobalPos> graves = new LinkedHashMap<>();
         snapshots.keySet().forEach(id -> graveLookup.apply(id).ifPresent(grave -> graves.put(id, grave)));
@@ -278,10 +278,22 @@ public final class FamilyTreeViewBuilder {
     private static Map<UUID, FamilyTreeNode> snapshotNodes(
             FamilyTree tree,
             Map<UUID, FamilyTreeNode> nodes,
-            Set<FamilyTreeView.Continuation> continuations
+            Set<FamilyTreeView.Continuation> continuations,
+            Set<UUID> unavailable
     ) {
         Map<UUID, FamilyTreeNode> snapshots = new LinkedHashMap<>(nodes.size());
         for (FamilyTreeNode node : nodes.values()) {
+            // Partners and siblings can enter the view without an ancestry walk.
+            // Describe their omitted parents without expanding the bounded response.
+            for (UUID parentId : node.streamParents().toList()) {
+                if (!nodes.containsKey(parentId)) {
+                    if (tree.getOrEmpty(parentId).isPresent()) {
+                        addContinuation(continuations, node.id(), FamilyTreeView.Direction.ANCESTORS);
+                    } else {
+                        addUnavailable(unavailable, parentId);
+                    }
+                }
+            }
             Set<UUID> children = new LinkedHashSet<>();
             node.streamChildren().filter(nodes::containsKey).forEach(children::add);
             boolean hasMoreDescendants = continuations.contains(new FamilyTreeView.Continuation(

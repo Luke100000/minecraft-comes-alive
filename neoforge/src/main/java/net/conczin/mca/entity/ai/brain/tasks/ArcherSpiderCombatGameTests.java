@@ -62,7 +62,8 @@ public final class ArcherSpiderCombatGameTests {
         requireBowTaskKill(helper, archer, spider, 300, "cave spider");
     }
 
-    @GameTest(batch = "mca_archer_spider_cave_escape", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 500)
+    @GameTest(batch = "mca_archer_spider_cave_escape", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 500)
     public static void archerEscapesCaveCornerAndKillsPursuingSpider(GameTestHelper helper) {
         cleanupTestEntities();
         BlockPos archerPos = helper.absolutePos(new BlockPos(14, 22, 14));
@@ -70,6 +71,9 @@ public final class ArcherSpiderCombatGameTests {
         buildCaveCorner(helper, archerPos);
 
         VillagerEntityMCA archer = spawnArcher(helper, archerPos);
+        archer.getBrain().setSchedule(net.conczin.mca.gametest.GameTestBrain.fixedSchedule(
+                net.minecraft.world.entity.schedule.Activity.IDLE));
+        archer.getBrain().setActiveActivityIfPossible(net.minecraft.world.entity.schedule.Activity.IDLE);
         Spider spider = spawnSpider(helper, EntityType.SPIDER, archerPos.east(2), false);
         // Movement is the subject of this integration test. Real bow spread is intentionally
         // stochastic, so require one post-escape hit rather than a random number of hits.

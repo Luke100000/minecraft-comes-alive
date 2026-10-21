@@ -4,7 +4,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import net.conczin.mca.entity.ai.PathingBlockInteraction;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
@@ -189,7 +188,8 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
 
         boolean shouldBeOpen = PathingBlockInteraction.shouldBeOpenForMovement(
                 blockState,
-                getHorizontalMovementAxis(pathNode, adjacentNode)
+                blockPos,
+                adjacentNode == null ? null : adjacentNode.asBlockPos()
         );
         boolean wasAlreadyOpen = PathingBlockInteraction.isOpenable(blockState)
                 && blockState.hasProperty(BlockStateProperties.OPEN)
@@ -208,20 +208,6 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
                 && adjacentNode.x == node.x
                 && adjacentNode.z == node.z
                 && adjacentNode.y != node.y;
-    }
-
-    @Nullable
-    private static Direction.Axis getHorizontalMovementAxis(Node node, @Nullable Node adjacentNode) {
-        if (adjacentNode == null || adjacentNode.y != node.y) {
-            return null;
-        }
-
-        boolean changesX = adjacentNode.x != node.x;
-        boolean changesZ = adjacentNode.z != node.z;
-        if (changesX == changesZ) {
-            return null;
-        }
-        return changesX ? Direction.Axis.X : Direction.Axis.Z;
     }
 
     private void openToggleablesBetweenPathNodes(ServerLevel world, LivingEntity entity,

@@ -36,6 +36,8 @@ import java.util.stream.Stream;
 public final class SeekIndoorShelterTask extends EnterBuildingTask {
     private static final int MAX_HOUSES = 10;
     private static final double MAX_ADDITIONAL_TRAVEL = 64.0D;
+    private static final int MAX_EXTRA_OCCUPANTS = 5;
+    private static final int FLOOR_CELLS_PER_OCCUPANT = 2;
     private static final long FAILED_SEARCH_RETRY_TICKS = 100L;
     private static final VillagerHostilesSensor HOSTILES = new VillagerHostilesSensor();
     private long nextAttemptTime;
@@ -130,9 +132,18 @@ public final class SeekIndoorShelterTask extends EnterBuildingTask {
         List<ReachableHouse> reachable = new ArrayList<>();
         ReachableHouse nearest = null;
         for (var house : houses) {
+            Set<BlockPos> floor = new HashSet<>();
+            for (var room : house.rooms()) floor.addAll(room.floorCells());
+            int usableFloorCells = 0;
+            Set<BlockPos> candidates = new HashSet<>();
+            for (BlockPos pos : floor) {
+                if (!isLoaded(level, pos) || !isUsableFloorGeometry(level, villager, pos)) continue;
+                usableFloorCells++;
+                if (isUsableFloor(level, villager, pos)) candidates.add(pos);
+            }
             Occupancy occupancy;
             if (house.membershipKnown()) {
-                occupancy = occupancy(level, villager, house, loaded, homes, debug);
+                occupancy = occupancy(level, villager, house, loaded, homes, usableFloorCells, debug);
             } else {
                 occupancy = null;
                 if (debug) {
@@ -140,9 +151,6 @@ public final class SeekIndoorShelterTask extends EnterBuildingTask {
                             villager.getUUID(), level.getGameTime(), house.anchor(), house.bedHeads(), house.floorCells().size());
                 }
             }
-            Set<BlockPos> candidates = house.rooms().stream().flatMap(room -> room.floorCells().stream())
-                    .filter(pos -> isLoaded(level, pos) && isUsableFloor(level, villager, pos))
-                    .collect(java.util.stream.Collectors.toSet());
             ReachableHouse route = findReachable(level, villager, house, candidates, occupancy, debug);
             if (route == null) continue;
             reachable.add(route);
@@ -159,23 +167,27 @@ public final class SeekIndoorShelterTask extends EnterBuildingTask {
         ReachableHouse admitted = null;
         boolean danger = hasDetectedDanger(villager);
         String reason = nearest.house.membershipKnown() ? "NEAREST_HAS_SPACE" : "NEAREST_CAPACITY_UNKNOWN";
-        if (!danger && !nearest.hasCapacity()) {
+        if (!danger && nearest.occupancy != null) {
+            ReachableHouse unknown = null;
+            ReachableHouse overflow = nearest;
             for (ReachableHouse route : reachable) {
-                if (route.hasCapacity() && (admitted == null || route.distance < admitted.distance)) admitted = route;
-            }
-            if (admitted != null && admitted.distance <= nearest.distance + MAX_ADDITIONAL_TRAVEL) {
-                chosen = admitted;
-                reason = "ALTERNATIVE_HAS_SPACE";
-            } else {
-                reason = admitted == null ? "NO_REACHABLE_HOUSE_WITH_SPACE" : "EXTRA_TRAVEL_OVERFLOW";
-                for (ReachableHouse route : reachable) {
-                    if (route.occupancy == null || route.distance > nearest.distance + MAX_ADDITIONAL_TRAVEL) continue;
-                    if (route.occupancy.excess() < chosen.occupancy.excess()
-                            || route.occupancy.excess() == chosen.occupancy.excess() && route.distance < chosen.distance) {
-                        chosen = route;
-                    }
+                if (route.distance > nearest.distance + MAX_ADDITIONAL_TRAVEL) continue;
+                if (route.occupancy == null) {
+                    if (unknown == null || route.distance < unknown.distance) unknown = route;
+                    continue;
                 }
-                if (chosen != nearest) reason = "LESS_CROWDED_OVERFLOW";
+                if (route.hasCapacity() && (admitted == null || isBetterShelter(route, admitted))) admitted = route;
+                if (isBetterShelter(route, overflow)) overflow = route;
+            }
+            if (admitted != null) {
+                chosen = admitted;
+                reason = "SPACE_PER_OCCUPANT";
+            } else if (unknown != null) {
+                chosen = unknown;
+                reason = "ALTERNATIVE_CAPACITY_UNKNOWN";
+            } else {
+                chosen = overflow;
+                reason = "DENSITY_OVERFLOW";
             }
         } else if (danger && !nearest.hasCapacity()) {
             reason = "DANGER_OVERFLOW";
@@ -184,6 +196,13 @@ public final class SeekIndoorShelterTask extends EnterBuildingTask {
         villager.getBrain().setMemory(MemoryModuleTypeMCA.SHELTER_BED,
                 GlobalPos.of(level.dimension(), chosen.house.anchorFor(chosen.standing)));
         return Optional.of(chosen.endpoint);
+    }
+
+    private static boolean isBetterShelter(ReachableHouse candidate, ReachableHouse current) {
+        long candidateSpace = candidate.occupancy.usableFloorCells * (current.occupancy.occupants + 1L);
+        long currentSpace = current.occupancy.usableFloorCells * (candidate.occupancy.occupants + 1L);
+        return candidateSpace > currentSpace
+                || candidateSpace == currentSpace && candidate.distance < current.distance;
     }
 
     private void backOffFailedSearch(ServerLevel level) {
@@ -231,7 +250,7 @@ public final class SeekIndoorShelterTask extends EnterBuildingTask {
 
     private static Occupancy occupancy(ServerLevel level, VillagerEntityMCA selecting,
                                        IndoorRoomCache.House house, List<? extends Villager> loaded,
-                                       Map<UUID, BlockPos> homes, boolean debug) {
+                                       Map<UUID, BlockPos> homes, int usableFloorCells, boolean debug) {
         Set<BlockPos> reservedBeds = new HashSet<>();
         Map<BlockPos, UUID> ownerByBed = new HashMap<>();
         for (var entry : homes.entrySet()) {
@@ -247,7 +266,8 @@ public final class SeekIndoorShelterTask extends EnterBuildingTask {
         }
         Set<UUID> owners = new HashSet<>(ownerByBed.values());
         int occupants = reservedBeds.size();
-        int capacity = house.bedHeads().size() + 5;
+        int capacity = Math.min(house.bedHeads().size() + MAX_EXTRA_OCCUPANTS,
+                usableFloorCells / FLOOR_CELLS_PER_OCCUPANT);
         int physicalGuests = 0;
         int incomingGuests = 0;
         List<String> countedGuests = debug ? new ArrayList<>() : null;
@@ -279,11 +299,11 @@ public final class SeekIndoorShelterTask extends EnterBuildingTask {
                     resident -> resident.isAlive() && house.contains(resident.blockPosition()));
             var unindexed = present.stream().filter(resident -> !loaded.contains(resident))
                     .map(resident -> resident.getName().getString() + "/" + resident.getUUID()).toList();
-            MCA.LOGGER.info("[MCA-SHELTER][capacity] uuid={} gameTime={} anchor={} membershipKnown=true beds={} capacity={} reservedBeds={} physicalGuests={} incomingGuests={} countedOccupantsExcludingSelector={} hasSpace={} indexedVillagers={} actualInside={} unindexedInside={} countedGuestsFirst16={}",
-                    selecting.getUUID(), level.getGameTime(), house.anchor(), house.bedHeads(), capacity, reservedBeds,
+            MCA.LOGGER.info("[MCA-SHELTER][capacity] uuid={} gameTime={} anchor={} membershipKnown=true beds={} usableFloorCells={} capacity={} reservedBeds={} physicalGuests={} incomingGuests={} countedOccupantsExcludingSelector={} hasSpace={} indexedVillagers={} actualInside={} unindexedInside={} countedGuestsFirst16={}",
+                    selecting.getUUID(), level.getGameTime(), house.anchor(), house.bedHeads(), usableFloorCells, capacity, reservedBeds,
                     physicalGuests, incomingGuests, occupants, occupants < capacity, loaded.size(), present.size(), unindexed, countedGuests);
         }
-        return new Occupancy(occupants, capacity);
+        return new Occupancy(occupants, capacity, usableFloorCells);
     }
 
     private static void logRoute(VillagerEntityMCA villager, IndoorRoomCache.House house,
@@ -339,9 +359,8 @@ public final class SeekIndoorShelterTask extends EnterBuildingTask {
         return threat.isAlive() && !threat.isRemoved() && threat.level() == villager.level();
     }
 
-    private record Occupancy(int occupants, int capacity) {
+    private record Occupancy(int occupants, int capacity, int usableFloorCells) {
         private boolean hasSpace() { return occupants < capacity; }
-        private int excess() { return Math.max(0, occupants - capacity); }
     }
 
     private record ReachableHouse(IndoorRoomCache.House house, BlockPos endpoint, BlockPos standing,

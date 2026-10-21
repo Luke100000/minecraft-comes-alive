@@ -13,6 +13,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RoomScanPlannerTest {
@@ -20,6 +21,20 @@ class RoomScanPlannerTest {
     static void bootstrapMinecraft() {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
+    }
+
+    @Test
+    void capturedLiveContactsAreImmutableAndDoNotBecomeExplicitConnections() {
+        StructureFloor lower = floor(0, 64, 76, 0, 3);
+        Structure structure = structure(20, 20, lower);
+        var contact = new StructureConnector.VerticalConnection(structure, lower);
+        var contacts = new java.util.HashSet<>(Set.of(contact));
+        var selected = observation(new BlockPos(0, 70, 0), floor(0, 70, 74, 0, 3).geometry());
+        var captured = new StructureScanner.FloorObservation(selected.scan(), Set.of(), contacts);
+        contacts.clear();
+        assertEquals(Set.of(contact), captured.liveContacts());
+        assertTrue(captured.explicitConnections().isEmpty(), "live contact must not grant explicit-connection permissions");
+        assertThrows(UnsupportedOperationException.class, () -> captured.liveContacts().clear());
     }
 
     @Test
@@ -85,7 +100,7 @@ class RoomScanPlannerTest {
         village.registerStructure(landing, room(101, 21, 0, Set.of(new BlockPos(5, 76, 0))));
         BlockPos source = new BlockPos(9, 78, 0);
         RoomScanPlan plan = RoomScanPlanner.planFresh(village, source,
-                observation(source, scannedFloor(78, 82, 9, 12), Set.of(new BlockPos(8, 76, 0))));
+                observation(source, scannedFloor(78, 82, 9, 12), Set.of(new BlockPos(8, 76, 0)), village));
         assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, plan.mode());
         assertEquals(2, plan.prospectiveFloorNumber());
     }
@@ -100,7 +115,7 @@ class RoomScanPlannerTest {
                 room(102, 22, 0, Set.of(new BlockPos(15, 78, 0))));
         BlockPos source = new BlockPos(9, 78, 0);
         var analysis = RoomScanPlanner.analyzeFresh(village, source,
-                observation(source, scannedFloor(78, 82, 9, 12), Set.of(new BlockPos(8, 76, 0))));
+                observation(source, scannedFloor(78, 82, 9, 12), Set.of(new BlockPos(8, 76, 0)), village));
         assertEquals(Building.validationResult.AMBIGUOUS_STRUCTURE, analysis.result());
         assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, analysis.plan().mode());
         assertEquals(20, analysis.plan().targetBuildingId());
@@ -344,7 +359,7 @@ class RoomScanPlannerTest {
         FloorGeometry upper = scannedFloor(68, 72, 0, 3);
 
         RoomScanPlan plan = RoomScanPlanner.planFresh(
-                village, source, observation(source, upper, Set.of(new BlockPos(0, 67, 0))));
+                village, source, observation(source, upper, Set.of(new BlockPos(0, 67, 0)), village));
 
         assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, plan.mode());
         assertEquals(20, plan.targetBuildingId());
@@ -362,7 +377,7 @@ class RoomScanPlannerTest {
         FloorGeometry primary = scannedFloor(63, 68, 0, 4);
 
         RoomScanPlanner.Analysis analysis = RoomScanPlanner.analyzeFresh(
-                village, source, observation(source, primary, Set.of(new BlockPos(0, 64, 0))));
+                village, source, observation(source, primary, Set.of(new BlockPos(0, 64, 0)), village));
         RoomScanPlan plan = analysis.plan();
 
         assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, plan.mode());
@@ -406,7 +421,7 @@ class RoomScanPlannerTest {
         FloorGeometry primary = scannedFloor(65, 69, 0, 4);
 
         RoomScanPlan plan = RoomScanPlanner.planFresh(
-                village, source, observation(source, primary, Set.of(new BlockPos(0, 64, 0))));
+                village, source, observation(source, primary, Set.of(new BlockPos(0, 64, 0)), village));
 
         assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, plan.mode());
         assertEquals(20, plan.targetBuildingId());
@@ -424,7 +439,7 @@ class RoomScanPlannerTest {
         FloorGeometry primary = scannedFloor(63, 68, 0, 4);
 
         RoomScanPlanner.Analysis analysis = RoomScanPlanner.analyzeFresh(village, source,
-                observation(source, primary, Set.of(new BlockPos(0, 64, 0))));
+                observation(source, primary, Set.of(new BlockPos(0, 64, 0)), village));
 
         assertEquals(Village.RoomScanMode.ADD_ATTACHMENT, analysis.plan().mode());
         assertTrue(analysis.observation().scan().floor().sameCellPositions(primary),
@@ -488,16 +503,18 @@ class RoomScanPlannerTest {
     }
 
     private static StructureScanner.FloorObservation observation(BlockPos source, FloorGeometry floor) {
-        return observation(source, floor, Set.of());
+        return observation(source, floor, Set.of(), null);
     }
 
     private static StructureScanner.FloorObservation observation(
             BlockPos source,
             FloorGeometry floor,
-            Set<BlockPos> transitionSeeds) {
+            Set<BlockPos> transitionSeeds, Village village) {
         BlockPos selectedCell = floor.interactionCellAt(source.getX(), source.getY(), source.getZ())
                 .map(FloorGeometry.Cell::feet).orElse(source);
-        return observation(selectedCell, source, floor, transitionSeeds);
+        var selected = observation(selectedCell, source, floor, transitionSeeds);
+        return new StructureScanner.FloorObservation(selected.scan(), StructureScanner.attachmentConnections(
+                village == null ? List.of() : village.getStructures().values(), List.of(), transitionSeeds), Set.of());
     }
 
     private static StructureScanner.FloorObservation observation(
@@ -508,7 +525,7 @@ class RoomScanPlannerTest {
         return new StructureScanner.FloorObservation(
                 new SelectedFloorScanner.Result(Building.validationResult.SUCCESS,
                 floor, selectedCell, supportedSource, floor.anchorY(), selectedCell, selectedCell,
-                transitions(floor), Set.of(), transitionSeeds), List.of());
+                transitions(floor), Set.of(), transitionSeeds), Set.of(), Set.of());
     }
 
     private static Structure structure(int id, int logicalBuildingId, StructureFloor floor) {

@@ -433,6 +433,16 @@ public class VillageManager extends SavedData implements Iterable<Village> {
             return Building.validationResult.NOT_IN_BUILDING;
         }
 
+        StructureFloor candidateFloor = structure.getFloors().getFirst();
+        FloorGrouping.NumberDecision numbering = targetBuildingId == structure.getId() ? null
+                : RoomScanPlanner.prospectiveNumber(village, targetBuildingId, candidateFloor);
+        if (numbering != null) {
+            if (numbering.result() != Building.validationResult.SUCCESS) return numbering.result();
+            if (numbering.number().orElseThrow() != candidateFloor.floorNumber()) {
+                return Building.validationResult.TARGET_CHANGED;
+            }
+        }
+
         Structure committedStructure = structure.copy();
         committedStructure.setId(lastBuildingId);
         Building committedRoom = room.copy();
@@ -441,7 +451,17 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         committedRoom.setType(category);
         committedRoom.setTypeForced(forcedType != null);
         Village targetVillage = village;
-        targetVillage.publishBuildingMutation(() -> targetVillage.registerStructure(committedStructure, committedRoom));
+        targetVillage.publishBuildingMutation(() -> {
+            if (numbering != null && !numbering.shiftedNumbers().isEmpty()) {
+                for (Structure member : targetVillage.getBuildingStructures(targetBuildingId)) {
+                    for (StructureFloor floor : member.getFloors()) {
+                        Integer shifted = numbering.shiftedNumbers().get(floor.floorNumber());
+                        if (shifted != null) member.setFloorNumber(floor.id(), shifted);
+                    }
+                }
+            }
+            targetVillage.registerStructure(committedStructure, committedRoom);
+        });
         lastBuildingId += 2;
         villages.put(village.getId(), village);
         finalizeVillageMutation(village);

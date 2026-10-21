@@ -36,7 +36,8 @@ public final class ExtendedFindPointOfInterestTaskGameTests {
     private ExtendedFindPointOfInterestTaskGameTests() {
     }
 
-    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 260)
+    @GameTest(batch = "mca_lazy_poi_acquisition", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 260)
     public static void lazyPoiAcquisitionRespectsCooldownAndBothMemoryGuards(GameTestHelper helper) {
         BlockPos foot = helper.absolutePos(new BlockPos(3, 1, 3));
         BlockPos head = foot.east();

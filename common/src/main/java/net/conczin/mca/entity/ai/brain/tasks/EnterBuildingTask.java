@@ -103,10 +103,21 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
 
     /** Idle standing space within a room, excluding sleep surfaces and doorways. */
     static boolean isUsableFloor(Level world, PathfinderMob mob, BlockPos pos) {
+        return isIdleFloorSurface(world, pos) && hasStandingSpace(world, mob, pos);
+    }
+
+    /** Structural space does not shrink when another entity occupies the floor. */
+    static boolean isUsableFloorGeometry(Level world, PathfinderMob mob, BlockPos pos) {
+        return isIdleFloorSurface(world, pos)
+                && mob.getNavigation().isStableDestination(pos)
+                && world.noBlockCollision(mob,
+                        mob.getBoundingBox().move(Vec3.atBottomCenterOf(pos).subtract(mob.position())));
+    }
+
+    private static boolean isIdleFloorSurface(Level world, BlockPos pos) {
         return !world.getBlockState(pos).is(BlockTags.DOORS)
                 && !BedPoiCompatibility.isCompatibleBedState(world.getBlockState(pos))
-                && !BedPoiCompatibility.isCompatibleBedState(world.getBlockState(pos.below()))
-                && hasStandingSpace(world, mob, pos);
+                && !BedPoiCompatibility.isCompatibleBedState(world.getBlockState(pos.below()));
     }
 
     static boolean hasStandingSpace(Level world, PathfinderMob mob, BlockPos pos) {

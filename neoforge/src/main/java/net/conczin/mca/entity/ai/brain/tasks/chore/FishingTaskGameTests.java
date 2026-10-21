@@ -8,10 +8,12 @@ import net.conczin.mca.entity.ai.Chore;
 import net.conczin.mca.entity.ai.TaskUtils;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.ChunkPos;
 import net.conczin.mca.neoforge.gametest.GameTest;
 import net.conczin.mca.neoforge.gametest.GameTestHolder;
 import net.conczin.mca.neoforge.gametest.PrefixGameTestTemplate;
 import net.minecraft.core.UUIDUtil;
+import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -27,18 +29,24 @@ import net.minecraft.world.item.FishingRodItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantments;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.block.entity.HopperBlockEntity;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.BiomeResolver;
+import net.minecraft.world.level.biome.Biomes;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.storage.ServerLevelData;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -48,12 +56,40 @@ import java.lang.reflect.Method;
 @GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class FishingTaskGameTests {
+    @GameTest(batch = "mca_fishing_cast_distance", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void fartherCastLandsAtChosenWaterAcrossBankHeights(GameTestHelper helper) {
+        BlockPos stance = helper.absolutePos(new BlockPos(40, 6, 40));
+        for (BlockPos p : BlockPos.betweenClosed(stance.offset(-3, -5, -8), stance.offset(12, 5, 8))) {
+            helper.getLevel().setBlock(p, p.getY() < stance.getY() ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 2);
+        }
+        VillagerEntityMCA villager = spawnFisher(helper, stance);
+        try {
+            for (int bankHeight = 0; bankHeight <= 3; bankHeight++) {
+                for (BlockPos p : BlockPos.betweenClosed(stance.offset(2, -4, -5), stance.offset(11, 1, 5))) {
+                    helper.getLevel().setBlock(p, p.getY() <= stance.getY() - bankHeight
+                            ? Blocks.WATER.defaultBlockState() : Blocks.AIR.defaultBlockState(), 2);
+                }
+                for (int distance = 4; distance <= 7; distance++) {
+                    BlockPos target = stance.east(distance).below(bankHeight);
+                    MCAFishingBobberEntity bobber = MCAFishingBobberEntity.cast(helper.getLevel(), villager, target);
+                    try {
+                        for (int tick = 0; tick < 40 && !bobber.isBobbing() && !bobber.isRemoved(); tick++) bobber.tick();
+                        helper.assertTrue(bobber.isBobbing(), "cast missed water at distance " + distance + ", bankHeight=" + bankHeight);
+                        helper.assertTrue(bobber.position().subtract(Vec3.atCenterOf(target)).horizontalDistance() <= 0.8,
+                                "cast landed short: target=" + target + ", landing=" + bobber.position() + ", bankHeight=" + bankHeight);
+                    } finally { bobber.discard(); }
+                }
+            }
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
     private FishingTaskGameTests() {
     }
 
-    @GameTest(batch = "mca_fishing_bobber", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    @GameTest(batch = "mca_fishing_bobber", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void bobberCastAtSelectedWaterStartsBobbing(GameTestHelper helper) {
-        BlockPos villagerPos = helper.absolutePos(new BlockPos(3, 2, 3));
+        BlockPos villagerPos = helper.absolutePos(new BlockPos(40, 3, 40));
         BlockPos water = villagerPos.east(2);
         prepareWater(helper, water);
 
@@ -75,9 +111,9 @@ public final class FishingTaskGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "mca_fishing_bobber", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    @GameTest(batch = "mca_fishing_bobber", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void bobberOwnerReferenceFollowsCurrentBobberLifecycle(GameTestHelper helper) {
-        BlockPos villagerPos = helper.absolutePos(new BlockPos(3, 2, 3));
+        BlockPos villagerPos = helper.absolutePos(new BlockPos(40, 3, 40));
         BlockPos water = villagerPos.east(2);
         prepareWater(helper, water);
 
@@ -98,8 +134,8 @@ public final class FishingTaskGameTests {
 
     @GameTest(
             batch = "mca_fishing_bite",
-            templateNamespace = "minecraft",
-            template = "bastion/blocks/air",
+            templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena",
             timeoutTicks = 800
     )
     public static void bobberEventuallyEntersRealBiteWindow(GameTestHelper helper) {
@@ -131,8 +167,8 @@ public final class FishingTaskGameTests {
 
     @GameTest(
             batch = "mca_fishing_reel",
-            templateNamespace = "minecraft",
-            template = "bastion/blocks/air",
+            templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena",
             timeoutTicks = 900
     )
     public static void biteReelsOneProtectedItemIntoInventory(GameTestHelper helper) {
@@ -224,8 +260,8 @@ public final class FishingTaskGameTests {
 
     @GameTest(
             batch = "mca_fishing_reel_homing",
-            templateNamespace = "minecraft",
-            template = "bastion/blocks/air",
+            templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena",
             timeoutTicks = 900
     )
     public static void reelItemUsesXpStyleHomingInsideOldDeliveryRadius(GameTestHelper helper) {
@@ -290,9 +326,9 @@ public final class FishingTaskGameTests {
         helper.succeedWhen(() -> helper.assertTrue(checkedHoming.get(), "no reel item reached the homing assertion"));
     }
 
-    @GameTest(batch = "mca_fishing_reel_hopper_protection", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    @GameTest(batch = "mca_fishing_reel_hopper_protection", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void protectedReelItemCannotBeCollectedByHoppers(GameTestHelper helper) {
-        BlockPos hopperPos = new BlockPos(3, 2, 3);
+        BlockPos hopperPos = new BlockPos(40, 3, 40);
         helper.setBlock(hopperPos, Blocks.HOPPER);
         BlockPos absoluteHopperPos = helper.absolutePos(hopperPos);
         HopperBlockEntity hopper = (HopperBlockEntity) helper.getLevel().getBlockEntity(absoluteHopperPos);
@@ -329,8 +365,8 @@ public final class FishingTaskGameTests {
 
     @GameTest(
             batch = "mca_fishing_lure",
-            templateNamespace = "minecraft",
-            template = "bastion/blocks/air",
+            templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena",
             timeoutTicks = 800
     )
     public static void lureOneReducesInitialWaitByVanillaAmount(GameTestHelper helper) {
@@ -374,19 +410,23 @@ public final class FishingTaskGameTests {
 
     @GameTest(
             batch = "mca_fishing_rain",
-            templateNamespace = "minecraft",
-            template = "bastion/blocks/air",
+            templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena",
             timeoutTicks = 800
     )
     public static void rainAdvancesFishingCountdownLikeVanilla(GameTestHelper helper) {
         BlockPos villagerPos = biteCycleVillagerPos(helper);
         BlockPos water = villagerPos.east(2);
         prepareBiteWater(helper, water);
+        for (BlockPos pos : BlockPos.betweenClosed(water.offset(-2, 1, -2), water.offset(10, 6, 2))) {
+            helper.getLevel().setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
+        }
         VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
         MCAFishingBobberEntity bobber = MCAFishingBobberEntity.cast(helper.getLevel(), villager, water);
         tickUntilBobbing(helper, bobber);
         long rainSeed = findSeedForRainRoll(bobber);
 
+        try (RainFixture ignored = new RainFixture(helper.getLevel(), bobber.blockPosition())) {
         helper.getLevel().getWeatherData().setClearWeatherTime(6000);
         helper.getLevel().getWeatherData().setRainTime(0);
         helper.getLevel().getWeatherData().setRaining(false);
@@ -407,7 +447,14 @@ public final class FishingTaskGameTests {
         helper.getLevel().setRainLevel(1.0F);
         helper.assertTrue(
                 helper.getLevel().isRainingAt(bobber.blockPosition().above()),
-                "rain timing fixture was not actually raining at the bobber"
+                "rain timing fixture was not actually raining at the bobber; raining=" + helper.getLevel().isRaining()
+                        + "; sky=" + helper.getLevel().canSeeSky(bobber.blockPosition().above())
+                        + "; height=" + helper.getLevel().getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, bobber.blockPosition().above())
+                        + "; topBlock=" + helper.getLevel().getBlockState(helper.getLevel().getHeightmapPos(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING, bobber.blockPosition().above()).below())
+                        + "; pos=" + bobber.blockPosition().above()
+                        + "; biome=" + helper.getLevel().getBiome(bobber.blockPosition().above()).unwrapKey()
+                        + "; precipitation=" + helper.getLevel().getBiome(bobber.blockPosition().above()).value()
+                                .getPrecipitationAt(bobber.blockPosition().above(), helper.getLevel().getSeaLevel())
         );
         setFishingCountdown(bobber, "timeUntilLured", 2);
         bobber.getRandom().setSeed(rainSeed);
@@ -416,13 +463,17 @@ public final class FishingTaskGameTests {
                 getFishingCountdown(bobber, "timeUntilLured") <= 0,
                 "rain did not apply vanilla's extra fishing-countdown tick"
         );
+        } finally {
+            bobber.discard();
+            villager.discard();
+        }
         helper.succeed();
     }
 
     @GameTest(
             batch = "mca_fishing_luck",
-            templateNamespace = "minecraft",
-            template = "bastion/blocks/air"
+            templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena"
     )
     public static void luckOfTheSeaContributesToFishingLootLuck(GameTestHelper helper) {
         BlockPos villagerPos = biteCycleVillagerPos(helper);
@@ -457,8 +508,8 @@ public final class FishingTaskGameTests {
 
     @GameTest(
             batch = "mca_fishing_open_water",
-            templateNamespace = "minecraft",
-            template = "bastion/blocks/air",
+            templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena",
             timeoutTicks = 800
     )
     public static void mcaBobberParticipatesInVanillaOpenWaterPredicate(GameTestHelper helper) {
@@ -494,9 +545,9 @@ public final class FishingTaskGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "mca_fishing_empty_loot", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    @GameTest(batch = "mca_fishing_empty_loot", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void emptyFishingLootDoesNotCreateFallbackCatchOrCrash(GameTestHelper helper) {
-        BlockPos villagerPos = helper.absolutePos(new BlockPos(3, 2, 3));
+        BlockPos villagerPos = helper.absolutePos(new BlockPos(40, 3, 40));
         prepareWater(helper, villagerPos.east(2));
         VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
         TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL))
@@ -533,8 +584,8 @@ public final class FishingTaskGameTests {
 
     @GameTest(
             batch = "mca_fishing_reaction",
-            templateNamespace = "minecraft",
-            template = "bastion/blocks/air",
+            templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena",
             timeoutTicks = 900
     )
     public static void successfulBiteRemainsVisibleBeforeNpcReels(GameTestHelper helper) {
@@ -573,8 +624,8 @@ public final class FishingTaskGameTests {
 
     @GameTest(
             batch = "mca_fishing_miss",
-            templateNamespace = "minecraft",
-            template = "bastion/blocks/air",
+            templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena",
             timeoutTicks = 900
     )
     public static void failedOriginCatchRollLetsBiteExpireWithoutLoot(GameTestHelper helper) {
@@ -633,8 +684,8 @@ public final class FishingTaskGameTests {
 
     @GameTest(
             batch = "mca_fishing_reel_remainder",
-            templateNamespace = "minecraft",
-            template = "bastion/blocks/air",
+            templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena",
             timeoutTicks = 900
     )
     public static void fullInventoryReleasesOnlyTheRealReelRemainder(GameTestHelper helper) {
@@ -688,9 +739,9 @@ public final class FishingTaskGameTests {
         });
     }
 
-    @GameTest(batch = "mca_fishing_timeout", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    @GameTest(batch = "mca_fishing_timeout", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void fishingDoesNotUseInheritedTimeout(GameTestHelper helper) {
-        VillagerEntityMCA villager = spawnFisher(helper, helper.absolutePos(new BlockPos(3, 2, 3)));
+        VillagerEntityMCA villager = spawnFisher(helper, helper.absolutePos(new BlockPos(40, 3, 40)));
         TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL));
 
         task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
@@ -699,9 +750,9 @@ public final class FishingTaskGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "mca_fishing_single_bobber", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    @GameTest(batch = "mca_fishing_single_bobber", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void repeatedFishingTicksKeepOneBobber(GameTestHelper helper) {
-        BlockPos villagerPos = helper.absolutePos(new BlockPos(3, 2, 3));
+        BlockPos villagerPos = helper.absolutePos(new BlockPos(40, 3, 40));
         prepareWater(helper, villagerPos.east(2));
         VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
         TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL));
@@ -720,9 +771,9 @@ public final class FishingTaskGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "mca_fishing_stop", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    @GameTest(batch = "mca_fishing_stop", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void stoppingFishingClearsBobberAndRod(GameTestHelper helper) {
-        BlockPos villagerPos = helper.absolutePos(new BlockPos(3, 2, 3));
+        BlockPos villagerPos = helper.absolutePos(new BlockPos(40, 3, 40));
         prepareWater(helper, villagerPos.east(2));
         VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
         TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL));
@@ -741,9 +792,9 @@ public final class FishingTaskGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "mca_fishing_rod_loss", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    @GameTest(batch = "mca_fishing_rod_loss", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void losingLastRodDiscardsBobber(GameTestHelper helper) {
-        BlockPos villagerPos = helper.absolutePos(new BlockPos(3, 2, 3));
+        BlockPos villagerPos = helper.absolutePos(new BlockPos(40, 3, 40));
         prepareWater(helper, villagerPos.east(2));
         VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
         TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL));
@@ -764,9 +815,9 @@ public final class FishingTaskGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "mca_fishing_recovery", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    @GameTest(batch = "mca_fishing_recovery", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void stoppingFishingDuringRecoveryReturnsFoodAndClearsRod(GameTestHelper helper) {
-        BlockPos villagerPos = helper.absolutePos(new BlockPos(3, 2, 3));
+        BlockPos villagerPos = helper.absolutePos(new BlockPos(40, 3, 40));
         VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
         TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL));
 
@@ -813,9 +864,9 @@ public final class FishingTaskGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "mca_fishing_head_tracking", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    @GameTest(batch = "mca_fishing_head_tracking", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void fishingKeepsLookingAtWaterAcrossLookSinkLifecycle(GameTestHelper helper) {
-        BlockPos villagerPos = helper.absolutePos(new BlockPos(3, 2, 3));
+        BlockPos villagerPos = helper.absolutePos(new BlockPos(40, 3, 40));
         BlockPos water = villagerPos.east(2);
         prepareWater(helper, water);
         VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
@@ -873,7 +924,7 @@ public final class FishingTaskGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "mca_chore_look_lifecycle", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    @GameTest(batch = "mca_chore_look_lifecycle", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void allChoresRunAfterCoreLookSink(GameTestHelper helper) {
         var chorePackage = VillagerTasksMCA.getChorePackage();
 
@@ -916,13 +967,26 @@ public final class FishingTaskGameTests {
         );
     }
 
+    /** Catch/reel fixtures begin at a valid bank; movement itself is covered by FishingSiteGameTests. */
+    private static void prepareTaskWater(ServerLevel world, BlockPos feet) {
+        for (BlockPos pos : BlockPos.betweenClosed(feet.offset(-13, -2, -13), feet.offset(13, 4, 13))) {
+            world.setBlock(pos, pos.getY() < feet.getY() ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 2);
+        }
+        for (BlockPos water : BlockPos.betweenClosed(feet.offset(2, -1, -2), feet.offset(10, -1, 2))) {
+            world.setBlock(water, Blocks.WATER.defaultBlockState(), 2);
+    }
+    }
+
     private static void prepareWater(GameTestHelper helper, BlockPos center) {
         for (int x = -1; x <= 1; x++) {
             for (int z = -1; z <= 1; z++) {
                 BlockPos water = center.offset(x, 0, z);
                 helper.getLevel().setBlock(water.below(), Blocks.STONE.defaultBlockState(), 3);
                 helper.getLevel().setBlock(water, Blocks.WATER.defaultBlockState(), 3);
-                helper.getLevel().setBlock(water.above(), Blocks.AIR.defaultBlockState(), 3);
+                // The bobber rises above a straight sightline on a normal cast.
+                for (int y = 1; y <= 4; y++) {
+                    helper.getLevel().setBlock(water.above(y), Blocks.AIR.defaultBlockState(), 3);
+                }
             }
         }
     }
@@ -1128,6 +1192,65 @@ public final class FishingTaskGameTests {
                 || stack.is(Items.BAMBOO);
     }
 
+    /** Local synchronous rain check: restore both chunk palettes and weather on any assertion failure. */
+    private static final class RainFixture implements AutoCloseable {
+        private final ServerLevel world;
+        private final Map<LevelChunk, BiomeResolver> originals = new HashMap<>();
+        private final int clearTime;
+        private final int rainTime;
+        private final int thunderTime;
+        private final boolean raining;
+        private final boolean thundering;
+        private final float rainLevel;
+        private final float thunderLevel;
+
+        RainFixture(ServerLevel world, BlockPos bobber) {
+            this.world = world;
+            var data = world.getWeatherData();
+            clearTime = data.getClearWeatherTime();
+            rainTime = data.getRainTime();
+            thunderTime = data.getThunderTime();
+            raining = data.isRaining();
+            thundering = data.isThundering();
+            rainLevel = world.getRainLevel(1);
+            thunderLevel = world.getThunderLevel(1);
+            var plains = world.registryAccess().lookupOrThrow(Registries.BIOME).getOrThrow(Biomes.PLAINS);
+            // BiomeManager can sample across a chunk border around the bobber.
+            for (int cx = (bobber.getX() - 4) >> 4; cx <= (bobber.getX() + 4) >> 4; cx++) {
+                for (int cz = (bobber.getZ() - 4) >> 4; cz <= (bobber.getZ() + 4) >> 4; cz++) {
+                    LevelChunk chunk = world.getChunk(cx, cz);
+                    Map<BlockPos, Holder<Biome>> palette = new HashMap<>();
+                    for (int x = cx * 4; x < cx * 4 + 4; x++) {
+                        for (int z = cz * 4; z < cz * 4 + 4; z++) {
+                            for (int y = world.getMinY() >> 2; y <= world.getMaxY() >> 2; y++) {
+                                palette.put(new BlockPos(x, y, z), chunk.getNoiseBiome(x, y, z));
+                            }
+                        }
+                    }
+                    originals.put(chunk, (x, y, z, sampler) -> palette.get(new BlockPos(x, y, z)));
+                    chunk.fillBiomesFromNoise((x, y, z, sampler) -> plains, world.getChunkSource().randomState().sampler());
+                    chunk.markUnsaved();
+                }
+            }
+        }
+
+        @Override
+        public void close() {
+            for (var entry : originals.entrySet()) {
+                entry.getKey().fillBiomesFromNoise(entry.getValue(), world.getChunkSource().randomState().sampler());
+                entry.getKey().markUnsaved();
+            }
+            var data = world.getWeatherData();
+            data.setClearWeatherTime(clearTime);
+            data.setRainTime(rainTime);
+            data.setThunderTime(thunderTime);
+            data.setRaining(raining);
+            data.setThundering(thundering);
+            world.setRainLevel(rainLevel);
+            world.setThunderLevel(thunderLevel);
+        }
+    }
+
     private static final class TestFishingTask extends FishingTask {
         private final Player assigningPlayer;
         private final Boolean forcedBiteResult;
@@ -1141,6 +1264,21 @@ public final class FishingTaskGameTests {
         private TestFishingTask(Player assigningPlayer, Boolean forcedBiteResult) {
             this.assigningPlayer = assigningPlayer;
             this.forcedBiteResult = forcedBiteResult;
+        }
+
+        @Override
+        protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
+            // These tests exercise catches, not discovery latency or movement. Keep
+            // their initial cast ready, using real search over a safe isolated bank.
+            boolean waterPresent = !TaskUtils.getNearbyBlocks(villager.blockPosition(), world,
+                    state -> state.is(Blocks.WATER), 12, 3).isEmpty();
+            if (waterPresent && !villager.isUsingRecoveryFood()) prepareTaskWater(world, villager.blockPosition());
+            super.start(world, villager, time);
+            if (waterPresent && !villager.isUsingRecoveryFood()) {
+                for (int tick = 0; tick < 40 && villager.getFishingBobber() == null; tick++) {
+                    super.tick(world, villager, time);
+                }
+            }
         }
 
         @Override

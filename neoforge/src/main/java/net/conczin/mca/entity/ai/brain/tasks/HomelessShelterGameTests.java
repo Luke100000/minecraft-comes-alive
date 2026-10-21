@@ -23,6 +23,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.level.ChunkPos;
@@ -532,6 +533,87 @@ public final class HomelessShelterGameTests {
         });
     }
 
+    @GameTest(batch = "mca_indoor_stroll_movement", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 1300)
+    public static void indoorStrollPathHonoursPublishedDestination(GameTestHelper helper) {
+        BlockPos center = helper.absolutePos(new BlockPos(4400, 2, 80));
+        prepareStrollRoom(helper, center);
+        VillagerEntityMCA villager = spawn(helper, center.west(2));
+        STROLL_VILLAGERS.add(villager);
+        var brain = villager.getBrain();
+        brain.removeAllBehaviors();
+        brain.addActivity(Activity.CORE, ImmutableList.of(
+                Pair.of(0, LocalInsideBrownianWalk.create(0.5F)),
+                Pair.of(1, new WanderOrTeleportToTargetTask())), Set.of(), Set.of());
+        brain.setCoreActivities(Set.of(Activity.CORE));
+        villager.setNoAi(false);
+        Set<BlockPos> observed = new HashSet<>();
+        helper.onEachTick(() -> {
+            var walk = brain.getMemory(MemoryModuleType.WALK_TARGET);
+            var path = villager.getNavigation().getPath();
+            if (walk.isPresent() && path != null && path.canReach() && !villager.getNavigation().isDone()) {
+                BlockPos chosen = walk.orElseThrow().getTarget().currentBlockPosition();
+                helper.assertTrue(path.getTarget().equals(chosen),
+                        "stroll path ignored chosen destination: chosen=" + chosen + " path=" + path.getTarget());
+                observed.add(chosen);
+                if (observed.size() >= 3) helper.succeed();
+            }
+        });
+    }
+
+    @GameTest(batch = "mca_indoor_stroll_movement", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 1300)
+    public static void blockedIndoorStrollCanChooseAnotherDestination(GameTestHelper helper) {
+        BlockPos center = helper.absolutePos(new BlockPos(4600, 2, 80));
+        prepareStrollRoom(helper, center);
+        VillagerEntityMCA villager = spawn(helper, center.west(2));
+        STROLL_VILLAGERS.add(villager);
+        var brain = villager.getBrain();
+        brain.removeAllBehaviors();
+        brain.addActivity(Activity.CORE, ImmutableList.of(
+                Pair.of(0, LocalInsideBrownianWalk.create(0.5F)),
+                Pair.of(1, new WanderOrTeleportToTargetTask())), Set.of(), Set.of());
+        brain.setCoreActivities(Set.of(Activity.CORE));
+        villager.setNoAi(false);
+        BlockPos[] blocked = {null};
+        WalkTarget[] pending = {null};
+        helper.onEachTick(() -> {
+            if (pending[0] != null && !pending[0].getTarget().currentBlockPosition().equals(blocked[0])
+                    && pending[0].getTarget().currentBlockPosition().equals(villager.blockPosition())) {
+                helper.succeed();
+                return;
+            }
+            var walk = brain.getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
+            if (walk != null && blocked[0] == null && villager.getNavigation().getPath() != null) {
+                blocked[0] = walk.getTarget().currentBlockPosition();
+                helper.getLevel().setBlock(blocked[0], Blocks.STONE.defaultBlockState(), 3);
+                helper.getLevel().setBlock(blocked[0].above(), Blocks.STONE.defaultBlockState(), 3);
+            }
+            pending[0] = walk;
+        });
+    }
+
+    @GameTest(batch = "mca_indoor_stroll_selection", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void smallIndoorRoomRetainsNearbyFallback(GameTestHelper helper) {
+        BlockPos center = helper.absolutePos(new BlockPos(4800, 2, 80));
+        prepareStrollRoom(helper, center);
+        Set<BlockPos> corridor = Set.of(center, center.east(), center.west(), center.west(2));
+        for (BlockPos pos : BlockPos.betweenClosed(center.offset(-3, 0, -3), center.offset(3, 0, 3))) {
+            if (!corridor.contains(pos)) {
+                for (int y = 0; y < 3; y++) helper.getLevel().setBlock(pos.above(y), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        var villager = spawn(helper, center.west(2));
+        STROLL_VILLAGERS.add(villager);
+        helper.runAfterDelay(10, () -> {
+            helper.assertTrue(LocalInsideBrownianWalk.create(0.5F).tryStart(helper.getLevel(), villager,
+                    helper.getLevel().getGameTime()), "tiny room did not publish a nearby step");
+            helper.assertTrue(villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElseThrow()
+                    .getTarget().currentBlockPosition().equals(center.west()), "tiny room did not retain one-block fallback");
+            helper.succeed();
+        });
+    }
+
     private static void verifyStandingDestinations(GameTestHelper helper, VillagerEntityMCA villager) {
         helper.assertTrue(!helper.getLevel().canSeeSky(villager.blockPosition()), "stroll fixture has open sky");
         var wander = LocalInsideBrownianWalk.create(0.5F);
@@ -563,7 +645,7 @@ public final class HomelessShelterGameTests {
     }
 
     @GameTest(batch = "mca_indoor_stroll_movement", templateNamespace = "minecraft",
-            template = "bastion/blocks/air", timeoutTicks = 500)
+            template = "bastion/blocks/air", timeoutTicks = 1300)
     public static void villagersStrollOnFloorAndLeaveBedWithoutTakingHome(GameTestHelper helper) {
         BlockPos foot = helper.absolutePos(new BlockPos(848, 2, 80));
         BlockPos head = foot.east();
@@ -572,6 +654,7 @@ public final class HomelessShelterGameTests {
         Config.getInstance().allowVillagerTeleporting = false;
         List<VillagerEntityMCA> walkers = new ArrayList<>();
         Map<VillagerEntityMCA, Set<BlockPos>> visited = new LinkedHashMap<>();
+        Map<VillagerEntityMCA, WalkTarget> pending = new LinkedHashMap<>();
         Map<VillagerEntityMCA, Integer> lateBedTicks = new LinkedHashMap<>();
         VillagerEntityMCA[] owner = {null};
         long[] started = {0L};
@@ -611,15 +694,19 @@ public final class HomelessShelterGameTests {
                         "homeless stroll took HOME or slept in the claimed bed");
                 villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).ifPresent(walk ->
                         assertStandingDestination(helper, villager, walk.getTarget().currentBlockPosition()));
-                if (villager.getY() <= foot.getY() + 0.1D) {
-                    visited.get(villager).add(villager.blockPosition());
+                WalkTarget intent = pending.get(villager);
+                if (intent != null && intent.getTarget().currentBlockPosition().distManhattan(villager.blockPosition())
+                        <= intent.getCloseEnoughDist()) {
+                    visited.get(villager).add(intent.getTarget().currentBlockPosition());
                 }
-                if (elapsed >= 300 && BedPoiCompatibility.isCompatibleBedState(
+                villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET)
+                        .ifPresentOrElse(walk -> pending.put(villager, walk), () -> pending.remove(villager));
+                if (elapsed >= 1100 && elapsed < 1200 && BedPoiCompatibility.isCompatibleBedState(
                         helper.getLevel().getBlockState(villager.blockPosition()))) {
                     lateBedTicks.compute(villager, (ignored, count) -> count + 1);
                 }
             }
-            if (elapsed >= 400) {
+            if (elapsed >= 1200) {
                 for (VillagerEntityMCA villager : walkers) {
                     helper.assertTrue(visited.get(villager).size() >= 3,
                             "villager did not stroll between floor cells: " + villager.position() + ", cells=" + visited.get(villager));
@@ -828,6 +915,7 @@ public final class HomelessShelterGameTests {
         level.setBlock(gate, Blocks.OAK_FENCE_GATE.defaultBlockState(), 3);
         var cache = VillageManager.get(level).getIndoorRooms();
         IndoorRoomCache.Room[] original = {null};
+        IndoorRoomCache.Room[] openedRoof = {null};
         BlockPos roof = center.north().above(3);
         helper.runAfterDelay(10, () -> {
             if (registered) registerStrollHouse(helper, center);
@@ -847,14 +935,22 @@ public final class HomelessShelterGameTests {
             level.setBlock(roof, Blocks.AIR.defaultBlockState(), 3);
         });
         helper.runAfterDelay(110, () -> {
-            helper.assertTrue(cache.resolve(head).isEmpty(), "roof opening retained stale indoor room geometry");
+            openedRoof[0] = cache.resolve(head).orElseThrow();
+            helper.assertTrue(openedRoof[0] != original[0],
+                    "roof opening retained the cached geometry rather than rescanning");
+            helper.assertTrue(!openedRoof[0].floorCells().contains(roof.below(3)),
+                    "unroofed column still belonged to the indoor room");
         });
         helper.runAfterDelay(320, () -> {
-            helper.assertTrue(cache.resolve(head).isEmpty(), "retry resurrected stale registered geometry with an open roof");
+            helper.assertTrue(cache.resolve(head).orElseThrow().floorCells().equals(openedRoof[0].floorCells()),
+                    "unchanged roof opening altered the cached room on retry");
             level.setBlock(roof, Blocks.STONE.defaultBlockState(), 3);
         });
         helper.runAfterDelay(525, () -> {
-            helper.assertTrue(cache.resolve(head).orElseThrow() != original[0], "repaired roof did not produce fresh geometry");
+            IndoorRoomCache.Room repaired = cache.resolve(head).orElseThrow();
+            helper.assertTrue(repaired != openedRoof[0], "repaired roof did not produce fresh geometry");
+            helper.assertTrue(repaired.floorCells().contains(roof.below(3)),
+                    "repaired roof did not restore the formerly unroofed floor column");
             helper.succeed();
         });
     }

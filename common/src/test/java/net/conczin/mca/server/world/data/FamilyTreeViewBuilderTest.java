@@ -164,6 +164,75 @@ class FamilyTreeViewBuilderTest {
     }
 
     @Test
+    void descendantsPartnerOffersUnloadedAncestorsWithoutFetchingThem() {
+        FamilyTree tree = tree();
+        FamilyTreeNode damian = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode than = node(tree, MOTHER, Gender.FEMALE);
+        FamilyTreeNode lilija = node(tree, CHILD, Gender.FEMALE);
+        FamilyTreeNode alexander = node(tree, PARTNER, Gender.MALE);
+        FamilyTreeNode natalia = node(tree, FATHER, Gender.FEMALE);
+        FamilyTreeNode alihan = node(tree, PATERNAL_GRANDFATHER, Gender.MALE);
+        damian.updatePartner(than);
+        than.updatePartner(damian);
+        lilija.setFather(damian);
+        lilija.setMother(than);
+        lilija.updatePartner(alexander);
+        alexander.updatePartner(lilija);
+        alexander.setMother(natalia);
+        alexander.setFather(alihan);
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, 4, 4).orElseThrow();
+
+        assertEquals(Set.of(ROOT, MOTHER, CHILD, PARTNER), view.nodes().keySet());
+        assertEquals(Set.of(new FamilyTreeView.Continuation(PARTNER, ANCESTORS)), view.continuations());
+        assertEquals(Set.of(), view.unavailable());
+        assertEquals(FATHER, view.nodes().get(PARTNER).mother());
+        assertEquals(PATERNAL_GRANDFATHER, view.nodes().get(PARTNER).father());
+
+        FamilyTreeView expansion = FamilyTreeViewBuilder.build(tree, PARTNER, 2, 0).orElseThrow();
+        assertTrue(expansion.nodes().keySet().containsAll(Set.of(FATHER, PATERNAL_GRANDFATHER)));
+    }
+
+    @Test
+    void descendantsPartnerWithMissingParentRecordIsUnavailableNotExpandable() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode child = node(tree, CHILD, Gender.FEMALE);
+        FamilyTreeNode partner = node(tree, PARTNER, Gender.MALE);
+        FamilyTreeNode missing = node(tree, DANGLING, Gender.FEMALE);
+        child.setFather(root);
+        child.updatePartner(partner);
+        partner.updatePartner(child);
+        partner.setMother(missing);
+        tree.remove(DANGLING);
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, 4, 4).orElseThrow();
+
+        assertEquals(Set.of(ROOT, CHILD, PARTNER), view.nodes().keySet());
+        assertEquals(Set.of(), view.continuations());
+        assertEquals(Set.of(DANGLING), view.unavailable());
+    }
+
+    @Test
+    void fullViewStillOffersPartnersUnloadedParentWithoutExceedingNodeBudget() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode partner = node(tree, PARTNER, Gender.FEMALE);
+        root.updatePartner(partner);
+        partner.updatePartner(root);
+        partner.setMother(node(tree, MOTHER, Gender.FEMALE));
+        for (int index = 0; index < 300; index++) {
+            node(tree, uuid(1_000 + index), Gender.MALE).setFather(root);
+        }
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, 0, 1).orElseThrow();
+
+        assertEquals(256, view.nodes().size());
+        assertFalse(view.nodes().containsKey(MOTHER));
+        assertTrue(view.continuations().contains(new FamilyTreeView.Continuation(PARTNER, ANCESTORS)));
+    }
+
+    @Test
     void orphanMetadataUsesFullTreePastTheBoundedView() {
         FamilyTree tree = tree();
         FamilyTreeNode root = node(tree, ROOT, Gender.MALE);

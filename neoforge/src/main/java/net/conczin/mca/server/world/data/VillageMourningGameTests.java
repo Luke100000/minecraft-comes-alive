@@ -142,6 +142,7 @@ public final class VillageMourningGameTests {
         prepareFlatArea(helper, grave, 3, 3);
         occupyGrave(helper, grave);
         VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(4, 1, 3), "Interrupted Mourner");
+        makeAwake(mourner);
 
         Mourning.start(mourner, grave);
         EnterGraveyardTask enter = new EnterGraveyardTask();
@@ -262,6 +263,7 @@ public final class VillageMourningGameTests {
         occupyGrave(helper, grave);
         VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(1, 1, 3), "Combat Interrupted Mourner");
         VillagerEntityMCA threat = spawnVillager(helper, new BlockPos(1, 1, 5), "Combat Interruption Probe");
+        makeAwake(mourner);
 
         Mourning.start(mourner, grave);
         mourner.getBrain().tick(helper.getLevel(), mourner);
@@ -303,6 +305,7 @@ public final class VillageMourningGameTests {
         prepareFlatArea(helper, grave, 3, 3);
         occupyGrave(helper, grave);
         VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(4, 1, 3), "Flower Ownership Mourner");
+        makeAwake(mourner);
         mourner.setItemInHand(InteractionHand.MAIN_HAND, Items.IRON_SWORD.getDefaultInstance());
 
         Mourning.start(mourner, grave);
@@ -347,6 +350,7 @@ public final class VillageMourningGameTests {
         VillagerEntityMCA reloaded = VillagerFactory.newVillager(helper.getLevel()).build();
         reloaded.load(TagValueInput.create(ProblemReporter.DISCARDING, helper.getLevel().registryAccess(), saved));
         reloaded.refreshBrain(helper.getLevel());
+        makeAwake(reloaded);
         reloaded.getBrain().setActiveActivityIfPossible(ActivitiesMCA.GRIEVE);
 
         helper.assertTrue(reloaded.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND)
@@ -695,6 +699,8 @@ public final class VillageMourningGameTests {
         Player followedPlayer = helper.makeMockPlayer(GameType.SURVIVAL);
         VillagerEntityMCA follower = spawnVillager(helper, new BlockPos(3, 1, 1), "Following Mourner Probe");
         VillagerEntityMCA staying = spawnVillager(helper, new BlockPos(4, 1, 1), "Staying Mourner Probe");
+        makeAwake(follower);
+        makeAwake(staying);
 
         follower.getBrain().setMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING, followedPlayer);
         staying.getBrain().setMemory(MemoryModuleTypeMCA.STAYING, true);

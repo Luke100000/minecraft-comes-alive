@@ -19,8 +19,30 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 class SelectedFloorScannerConnectorTest {
+    @Test
+    void buildingFallbackReusesDiscoveryButTheNextOperationReadsFreshBlocks() {
+        TallRoom world = new TallRoom();
+        BlockPos source = new BlockPos(8, 64, 8);
+        var operation = new SelectedFloorScanner.Observation(world, 2048, 64);
+        var attachment = StructureScanner.observeFloor(world, source, java.util.List.of(), operation).orElseThrow();
+        int readsAfterDiscovery = world.middleLayerReads;
+
+        var addition = StructureScanner.scanNewStructure(world, source, java.util.List.of(), operation);
+
+        assertEquals(Building.validationResult.SUCCESS, addition.result());
+        assertSame(attachment.scan(), addition.scan(), "fallback rediscovered the same selected floor");
+        assertEquals(readsAfterDiscovery, world.middleLayerReads, "fallback repeated world discovery");
+        int feetReadsBeforeChange = world.feetLayerReads;
+        world.put(source.above(), Blocks.STONE.defaultBlockState());
+        var next = StructureScanner.observeFloor(world, source, java.util.List.of());
+        assertTrue(next.isEmpty() || !next.orElseThrow().scan().floor().sameExactGeometry(addition.scannedFloor()),
+                "later operation reused the earlier world's geometry");
+        assertTrue(world.feetLayerReads > feetReadsBeforeChange, "later operation did not read the world afresh");
+    }
+
     @BeforeAll
     static void bootstrapMinecraft() {
         SharedConstants.tryDetectVersion();
@@ -85,6 +107,31 @@ class SelectedFloorScannerConnectorTest {
     }
 
     @Test
+    void finiteRoofedPlatformDoesNotFloodAirToTheConfiguredRadius() {
+        // Repeating stair/door classification, or restoring the strict air flood
+        // before finite-surface validation, must fail this budget without changing geometry.
+        var source = new BlockPos(3, 64, 3);
+        RoofedPlatform nearby = new RoofedPlatform();
+        RoofedPlatform wideRadius = new RoofedPlatform();
+        var local = SelectedFloorScanner.scan(nearby, source, 8192, 16);
+        var configured = SelectedFloorScanner.scan(wideRadius, source, 8192, 320);
+
+        assertEquals(Building.validationResult.SUCCESS, local.result());
+        assertEquals(Building.validationResult.SUCCESS, configured.result());
+        assertEquals(64, configured.floor().cells().size());
+        assertTrue(local.floor().sameExactGeometry(configured.floor()),
+                "search radius changed the finite platform's canonical geometry");
+        assertTrue(wideRadius.blockReads <= 2_600,
+                "finite 64-cell platform repeated classification or flooded exterior air: "
+                        + wideRadius.blockReads + " block reads");
+        assertTrue(wideRadius.blockReads <= nearby.blockReads + 1_000,
+                "larger search radius expanded work on an unchanged finite platform: "
+                        + nearby.blockReads + " -> " + wideRadius.blockReads);
+        System.out.println("Finite platform block reads: radius16=" + nearby.blockReads
+                + " radius320=" + wideRadius.blockReads);
+    }
+
+    @Test
     void laterScanObservesNewExteriorOpening() {
         TallRoom world = new TallRoom();
         assertEquals(Building.validationResult.SUCCESS,
@@ -92,6 +139,19 @@ class SelectedFloorScannerConnectorTest {
         world.put(new BlockPos(0, 64, 8), Blocks.AIR.defaultBlockState());
         world.put(new BlockPos(0, 65, 8), Blocks.AIR.defaultBlockState());
 
+        var openWindow = SelectedFloorScanner.scan(world, new BlockPos(8, 64, 8), 2048, 64);
+        assertEquals(Building.validationResult.SUCCESS, openWindow.result());
+        assertTrue(openWindow.floor().cellAt(new BlockPos(0, 64, 8)).isPresent(),
+                "later observation retained the old solid wall instead of the new opening");
+        // Widen the framed entrance to an unframed breach before adding broad terrain.
+        // The narrow framed entrance is intentionally valid even beside that terrain.
+        for (int z : new int[]{7, 9}) {
+            world.put(new BlockPos(0, 64, z), Blocks.AIR.defaultBlockState());
+            world.put(new BlockPos(0, 65, z), Blocks.AIR.defaultBlockState());
+        }
+        for (BlockPos pos : BlockPos.betweenClosed(-10, 63, 0, -1, 63, 17)) {
+            world.put(pos, Blocks.STONE.defaultBlockState());
+        }
         assertEquals(Building.validationResult.NOT_IN_BUILDING,
                 SelectedFloorScanner.scan(world, new BlockPos(8, 64, 8), 2048, 64).result());
     }
@@ -144,6 +204,30 @@ class SelectedFloorScannerConnectorTest {
         assertTrue(scan.floor().cellAt(opening).isPresent());
         assertEquals(Set.of(ladder), scan.floor().connectorMarkers().stream()
                 .map(FloorConnector.Marker::pos).collect(Collectors.toSet()));
+    }
+
+    private static final class RoofedPlatform implements BlockGetter {
+        private int blockReads;
+
+        @Override
+        public BlockState getBlockState(BlockPos pos) {
+            blockReads++;
+            boolean inside = pos.getX() >= 0 && pos.getX() < 8 && pos.getZ() >= 0 && pos.getZ() < 8;
+            return inside && (pos.getY() == 63 || pos.getY() == 66)
+                    ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState();
+        }
+
+        @Override
+        public FluidState getFluidState(BlockPos pos) { return getBlockState(pos).getFluidState(); }
+
+        @Override
+        public BlockEntity getBlockEntity(BlockPos pos) { return null; }
+
+        @Override
+        public int getHeight() { return 128; }
+
+        @Override
+        public int getMinY() { return 0; }
     }
 
     private static final class TallRoom implements BlockGetter {

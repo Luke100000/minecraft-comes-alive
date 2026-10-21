@@ -139,27 +139,59 @@ public class Pregnancy {
                 .map(VillagerEntityMCA.class::cast);
     }
 
-    public void procreate(Entity spouse) {
-        RandomSource random = mother.getRandom();
+    /** Baby items are unstackable, so each child requires its own free inventory slot. */
+    public boolean hasRoomForBabies(Entity spouse, int count) {
+        int freeSlots = 0;
+        if (spouse instanceof Player player) {
+            for (int slot = 0; slot < player.getInventory().getContainerSize(); slot++) {
+                if (player.getInventory().getItem(slot).isEmpty()) {
+                    freeSlots++;
+                }
+            }
+        }
+        for (int slot = 0; slot < mother.getInventory().getContainerSize(); slot++) {
+            if (mother.getInventory().getItem(slot).isEmpty()) {
+                freeSlots++;
+            }
+        }
+        return freeSlots >= count;
+    }
 
-        //make sure this villager is registered in the family tree
+    public int rollBabyCount() {
+        RandomSource random = mother.getRandom();
         int count = 1;
         while (random.nextFloat() < Config.getInstance().twinBabyChance && count < 8) {
             count++;
         }
+        return count;
+    }
 
-        // advancement
-        if (spouse instanceof ServerPlayer player) {
-            CriterionMCA.BABY.trigger(player, count);
+    public boolean procreate(Entity spouse) {
+        return procreate(spouse, rollBabyCount());
+    }
+
+    public boolean procreate(Entity spouse, int count) {
+        // Verify capacity for all children before generating any of them.
+        if (!hasRoomForBabies(spouse, count)) {
+            return false;
         }
 
-        long seed = random.nextLong();
+        long seed = mother.getRandom().nextLong();
         for (int i = 0; i < count; i++) {
             boolean flip = mother.getGenetics().getGender() == Gender.MALE;
             ItemStack stack = BabyItem.createItem(flip ? spouse : mother, flip ? mother : spouse, seed);
-            if (!(spouse instanceof Player player && player.addItem(stack))) {
-                mother.getInventory().addItem(stack);
+            // Creative mode can consume an item while reporting addItem() success when full.
+            if (!(spouse instanceof Player player && player.getInventory().getFreeSlot() >= 0 && player.addItem(stack))) {
+                ItemStack remainder = mother.getInventory().addItem(stack);
+                if (!remainder.isEmpty()) {
+                    return false;
+                }
             }
         }
+
+        if (spouse instanceof ServerPlayer player) {
+            CriterionMCA.BABY.trigger(player, count);
+        }
+        return true;
     }
 }

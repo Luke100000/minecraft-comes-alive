@@ -58,6 +58,14 @@ public final class GuardEquipmentGameTests {
             try {
                 helper.assertTrue(VillagerTasksMCA.isOnDuty(first), "WORK was lost on the next tick");
                 helper.assertTrue(!VillagerTasksMCA.isOnDuty(second), "REST was lost on the next tick");
+                first.getBrain().setSchedule(GameTestBrain.fixedSchedule(Activity.REST));
+                second.getBrain().setSchedule(GameTestBrain.fixedSchedule(Activity.WORK));
+                first.getBrain().setActiveActivityIfPossible(Activity.REST);
+                second.getBrain().setActiveActivityIfPossible(Activity.WORK);
+                helper.assertTrue(!VillagerTasksMCA.isOnDuty(first),
+                        "WORK-to-REST schedule switch was ignored on the next tick");
+                helper.assertTrue(VillagerTasksMCA.isOnDuty(second),
+                        "REST-to-WORK schedule switch was ignored on the next tick");
             } finally {
                 first.discard();
                 second.discard();

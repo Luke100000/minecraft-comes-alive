@@ -1,21 +1,16 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
-import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.behavior.BehaviorControl;
 import net.minecraft.world.entity.ai.behavior.declarative.BehaviorBuilder;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Selects short walks within the same resolved room used for shelter entry.
@@ -53,45 +48,9 @@ public final class LocalInsideBrownianWalk {
                     if (candidates.isEmpty()) return false;
 
                     BlockPos preferred = candidates.get(level.getRandom().nextInt(candidates.size()));
-                    walkTarget.set(new WalkTarget(new RoomStrollTarget(preferred, Set.copyOf(candidates)), speedModifier, 0));
+                    walkTarget.set(new WalkTarget(preferred, speedModifier, 0));
                     retryGate.tryReserve(origin, origin, gameTime);
                     return true;
                 }));
-    }
-
-    /** Movement owns path selection; the producer only supplies equivalent room-local endpoints. */
-    private static final class RoomStrollTarget implements MultiTargetPositionTracker {
-        private final BlockPos preferred;
-        private final Set<BlockPos> targets;
-
-        private RoomStrollTarget(BlockPos preferred, Set<BlockPos> targets) {
-            this.preferred = preferred.immutable();
-            this.targets = targets;
-        }
-
-        @Override
-        public Vec3 currentPosition() {
-            return Vec3.atBottomCenterOf(preferred);
-        }
-
-        @Override
-        public BlockPos currentBlockPosition() {
-            return preferred;
-        }
-
-        @Override
-        public boolean isVisibleBy(LivingEntity livingEntity) {
-            return true;
-        }
-
-        @Override
-        public Set<BlockPos> getPathTargets(Mob mob) {
-            return targets;
-        }
-
-        @Override
-        public boolean isReached(Mob mob, int closeEnoughDistance) {
-            return targets.stream().anyMatch(target -> target.distManhattan(mob.blockPosition()) <= closeEnoughDistance);
-        }
     }
 }

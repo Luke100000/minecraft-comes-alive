@@ -6,8 +6,8 @@ import net.conczin.mca.entity.ai.BedPoiCompatibility;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.material.FluidState;
@@ -209,10 +209,10 @@ public final class IndoorRoomCache {
             return null;
         }
         entry = discover(source, now);
-        int observedCount = entries.values().stream().mapToInt(cached -> cached.observed.size()).sum();
+        int observedCount = entries.values().stream().mapToInt(Entry::observedCount).sum();
         while (!entries.isEmpty() && (entries.size() >= MAX_ENTRIES
-                || observedCount + entry.observed.size() > MAX_TOTAL_OBSERVED_BLOCKS)) {
-            observedCount -= entries.pollFirstEntry().getValue().observed.size();
+                || observedCount + entry.observedCount() > MAX_TOTAL_OBSERVED_BLOCKS)) {
+            observedCount -= entries.pollFirstEntry().getValue().observedCount();
         }
         entries.put(source.immutable(), entry);
         return entry;
@@ -225,7 +225,7 @@ public final class IndoorRoomCache {
     }
 
     private Entry discover(BlockPos source, long now) {
-        LoadedBlocks blocks = new LoadedBlocks();
+        LoadedBlocks blocks = new LoadedBlocks(true);
         SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(blocks, source, MAX_SCAN_CELLS, MAX_SCAN_RADIUS);
         if (blocks.firstMissingBlock != null) return failed(source, now, Building.validationResult.BLOCK_LIMIT,
                 "FLOOR_SCAN", blocks.firstMissingBlock, 0);
@@ -239,7 +239,7 @@ public final class IndoorRoomCache {
         List<Room> rooms = components.stream().map(room -> new Room(room.floorCells())).toList();
         Map<BlockPos, BlockState> observed = new HashMap<>();
         if (observe(scan.floor().cells(), observed, blocks)) {
-            return new Entry(source, scan, rooms, Map.copyOf(observed), now, Building.validationResult.SUCCESS);
+            return new Entry(source, scan, rooms, observed, blocks, now, Building.validationResult.SUCCESS);
         }
 
         // Keep the existing room-sized shelter access if a larger floor exceeds observation limits.
@@ -249,7 +249,7 @@ public final class IndoorRoomCache {
             blocks.firstMissingBlock = null;
             if (observe(selected.cells(), observed, blocks)) {
                 return new Entry(source, null, List.of(new Room(selected.floorCells())),
-                        Map.copyOf(observed), now, Building.validationResult.SUCCESS);
+                        observed, blocks, now, Building.validationResult.SUCCESS);
             }
         }
         return failed(source, now, Building.validationResult.BLOCK_LIMIT, "OBSERVATION",
@@ -267,7 +267,7 @@ public final class IndoorRoomCache {
                     missingBlock == null ? null : ChunkPos.containing(missingBlock),
                     observedBlocks, MAX_OBSERVED_BLOCKS, MAX_SCAN_CELLS, MAX_SCAN_RADIUS, FAILED_RETRY_TICKS);
         }
-        return new Entry(source, null, List.of(), Map.of(), now, result);
+        return new Entry(source, null, List.of(), Map.of(), null, now, result);
     }
 
     private boolean observe(Collection<FloorGeometry.Cell> cells, Map<BlockPos, BlockState> observed,
@@ -298,8 +298,60 @@ public final class IndoorRoomCache {
     }
 
     /** Operation-local read view: never load chunks, and never accept missing evidence as air. */
-    private final class LoadedBlocks implements BlockGetter {
+    private final class LoadedBlocks implements SelectedFloorScanner.LoadedColumns {
         private BlockPos firstMissingBlock;
+        private final Map<BlockPos, BlockState> observed = new HashMap<>();
+        private final Map<Long, Boolean> columns = new HashMap<>();
+        private final Set<BlockPos> collisionStates = new HashSet<>();
+        private boolean complete;
+
+        private LoadedBlocks() {
+            this(false);
+        }
+
+        private LoadedBlocks(boolean captureDependencies) {
+            complete = captureDependencies;
+        }
+
+        private void boundDependencies() {
+            if (observed.size() + columns.size() + collisionStates.size() <= MAX_OBSERVED_BLOCKS) return;
+            // Geometry is valid now, but a truncated proof cannot certify future cache hits.
+            complete = false;
+            observed.clear();
+            columns.clear();
+            collisionStates.clear();
+        }
+
+        private void observeColumn(BlockPos pos, boolean loaded) {
+            if (!complete) return;
+            columns.putIfAbsent(ChunkPos.pack(pos.getX() >> 4, pos.getZ() >> 4), loaded);
+            boundDependencies();
+        }
+
+        @Override
+        public boolean hasColumn(BlockPos pos) {
+            boolean loaded = isLoaded(pos);
+            observeColumn(pos, loaded);
+            return loaded;
+        }
+
+        @Override
+        public void observeFrameState(BlockPos pos, Direction face) {
+            BlockState observedState = observed.get(pos);
+            if (!complete || observedState == null
+                    || !(observedState.getBlock() instanceof TrapDoorBlock
+                    || observedState.getBlock() instanceof FenceGateBlock)) return;
+            BlockState raw = getBlockState(pos);
+            if (!complete) return;
+            // Only retain OPEN when it changes the face used by this proof.
+            // Ordinary gates/hatches still use the structural-state normalization.
+            BlockState toggled = raw.cycle(BlockStateProperties.OPEN);
+            if (Block.isFaceFull(raw.getCollisionShape(this, pos), face)
+                    == Block.isFaceFull(toggled.getCollisionShape(this, pos), face)) return;
+            collisionStates.add(pos.immutable());
+            observed.put(pos.immutable(), raw);
+            boundDependencies();
+        }
 
         private void markMissing(BlockPos pos) {
             if (firstMissingBlock == null) firstMissingBlock = pos.immutable();
@@ -309,11 +361,17 @@ public final class IndoorRoomCache {
         public BlockState getBlockState(BlockPos pos) {
             if (level.isOutsideBuildHeight(pos)) return Blocks.VOID_AIR.defaultBlockState();
             var chunk = level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
+            observeColumn(pos, chunk != null);
             if (chunk == null) {
                 markMissing(pos);
                 return Blocks.AIR.defaultBlockState();
             }
-            return chunk.getBlockState(pos);
+            BlockState state = chunk.getBlockState(pos);
+            if (complete) {
+                observed.putIfAbsent(pos.immutable(), structuralState(state));
+                boundDependencies();
+            }
+            return state;
         }
 
         @Override
@@ -404,30 +462,52 @@ public final class IndoorRoomCache {
         private final SelectedFloorScanner.Result scan;
         private final List<Room> rooms;
         private final Map<BlockPos, BlockState> observed;
+        private final Map<Long, Boolean> columns;
+        private final Set<BlockPos> collisionStates;
+        private final boolean completeDependencies;
         private final Building.validationResult failure;
         private final long created;
         private long lastUsed;
         private long nextValidation;
 
         private Entry(BlockPos source, SelectedFloorScanner.Result scan, List<Room> rooms,
-                      Map<BlockPos, BlockState> observed, long now, Building.validationResult failure) {
+                      Map<BlockPos, BlockState> observed, LoadedBlocks blocks,
+                      long now, Building.validationResult failure) {
             this.source = source.immutable();
             this.scan = scan;
             this.rooms = List.copyOf(rooms);
-            this.observed = observed;
+            Map<BlockPos, BlockState> dependencies = new HashMap<>(observed);
+            if (blocks != null && blocks.complete) dependencies.putAll(blocks.observed);
+            completeDependencies = blocks != null && blocks.complete
+                    && dependencies.size() + blocks.columns.size() + blocks.collisionStates.size() <= MAX_OBSERVED_BLOCKS;
+            this.observed = completeDependencies ? Map.copyOf(dependencies) : Map.of();
+            this.columns = completeDependencies ? Map.copyOf(blocks.columns) : Map.of();
+            this.collisionStates = completeDependencies ? Set.copyOf(blocks.collisionStates) : Set.of();
             this.failure = failure;
             this.created = now;
             this.lastUsed = now;
             this.nextValidation = now + VALIDATION_TICKS;
         }
 
+        private int observedCount() {
+            return observed.size() + columns.size() + collisionStates.size();
+        }
+
         private boolean isCurrent(long now) {
             if (now - lastUsed >= IDLE_TICKS || !isLoaded(source)) return false;
             if (rooms.isEmpty()) return now - created < FAILED_RETRY_TICKS;
             if (now < nextValidation) return true;
+            if (!completeDependencies) return false;
+            for (var column : columns.entrySet()) {
+                long key = column.getKey();
+                boolean loaded = level.getChunkSource().getChunkNow(ChunkPos.getX(key), ChunkPos.getZ(key)) != null;
+                if (loaded != column.getValue()) return false;
+            }
             for (var block : observed.entrySet()) {
-                if (!isLoaded(block.getKey())
-                        || !structuralState(level.getBlockState(block.getKey())).equals(block.getValue())) return false;
+                if (!isLoaded(block.getKey())) return false;
+                BlockState current = level.getBlockState(block.getKey());
+                if (!(collisionStates.contains(block.getKey()) ? current : structuralState(current))
+                        .equals(block.getValue())) return false;
             }
             nextValidation = now + VALIDATION_TICKS;
             return true;
