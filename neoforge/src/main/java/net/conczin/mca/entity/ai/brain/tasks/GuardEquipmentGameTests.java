@@ -34,11 +34,15 @@ public final class GuardEquipmentGameTests {
         BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
         prepareFlatArea(helper, start, 6);
         VillagerEntityMCA first = VillagerFactory.newVillager(helper.getLevel())
-                .withAge(0).withPosition(Vec3.atBottomCenterOf(start))
+                .withAge(0).withProfession(ProfessionsMCA.GUARD).withPosition(Vec3.atBottomCenterOf(start))
                 .spawn(EntitySpawnReason.STRUCTURE);
         VillagerEntityMCA second = VillagerFactory.newVillager(helper.getLevel())
-                .withAge(0).withPosition(Vec3.atBottomCenterOf(start.east(2)))
+                .withAge(0).withProfession(ProfessionsMCA.GUARD).withPosition(Vec3.atBottomCenterOf(start.east(2)))
                 .spawn(EntitySpawnReason.STRUCTURE);
+        // The factory assigns the profession after the entity's initial brain is built.
+        // Rebuild it so WORK is registered as a valid guard activity.
+        first.refreshBrain(helper.getLevel());
+        second.refreshBrain(helper.getLevel());
         first.setNoAi(true);
         second.setNoAi(true);
 

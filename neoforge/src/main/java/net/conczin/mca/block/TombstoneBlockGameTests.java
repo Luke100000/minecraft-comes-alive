@@ -138,6 +138,9 @@ public final class TombstoneBlockGameTests {
         helper.getLevel().setBlock(grave, BlocksMCA.CROSS_HEADSTONE.defaultBlockState(), 3);
         TombstoneBlock.Data data = TombstoneBlock.Data.of(helper.getLevel().getBlockEntity(grave)).orElseThrow();
         data.setEntity(deceased);
+        // Resurrection recreates the stored UUID; the snapshot's original
+        // entity must be gone, as it would be after an actual death.
+        deceased.discard();
         data.startResurrecting(false);
 
         helper.runAfterDelay(520, () -> {

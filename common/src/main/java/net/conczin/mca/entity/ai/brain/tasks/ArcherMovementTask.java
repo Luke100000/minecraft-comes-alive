@@ -601,6 +601,13 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         if (escape.isPathSafe(entity, path)) {
             return;
         }
+        // A pursuer can close the gap while both mobs move along the same escape
+        // corridor. Revalidating against its new position must not discard a
+        // still-useful emergency retreat on every fifth tick. A newly active
+        // attacker is different: preserve strict clearance checking for it.
+        if (!newThreats && escape.isDegradedEmergencyPathSafe(entity, path)) {
+            return;
+        }
 
         // Both the published walk intent and the native path still belong to this
         // behavior. Never stop an unrelated PATH or erase a foreign WALK_TARGET.

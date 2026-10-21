@@ -16,6 +16,7 @@ import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.core.registries.Registries;
 import net.conczin.mca.neoforge.gametest.AfterBatch;
 import net.conczin.mca.neoforge.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -23,6 +24,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.entity.ai.behavior.ValidateNearbyPoi;
 import net.minecraft.world.entity.ai.behavior.OneShot;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -734,6 +736,15 @@ public final class ResidencySetHomeGameTests {
         VillagerEntityMCA owner = spawnNightVillager(helper, head.south(3), "Original Bed Owner");
         REPLACEMENT_VILLAGERS.add(owner);
         VillagerEntityMCA[] incoming = new VillagerEntityMCA[1];
+        // This scenario exercises HOME ownership and the natural SleepInBed
+        // behavior, not activity scheduling. Other villager tasks can switch
+        // activity to WORK during the long 1,000-tick fixture, even though the
+        // test schedule remains fixed to REST. Keep the test actors in REST
+        // without granting HOME, changing POI tickets, or putting them to sleep.
+        helper.onEachTick(() -> {
+            maintainNaturalRest(owner);
+            if (incoming[0] != null) maintainNaturalRest(incoming[0]);
+        });
         boolean[] sawReclaim = {false};
         int[] originalSleepTicks = {-1};
         helper.startSequence().thenWaitUntil(() -> {
@@ -828,15 +839,27 @@ public final class ResidencySetHomeGameTests {
     private static VillagerEntityMCA spawnNightVillager(GameTestHelper helper, BlockPos feet, String name) {
         VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
                 .withAge(0)
+                .withProfession(helper.getLevel().registryAccess().lookupOrThrow(
+                        Registries.VILLAGER_PROFESSION).getOrThrow(VillagerProfession.NONE).value())
                 .withPosition(Vec3.atBottomCenterOf(feet))
                 .withName(name)
                 .spawn(EntitySpawnReason.STRUCTURE);
         villager.setOnGround(true);
-        villager.refreshBrain(helper.getLevel());
+        // finalizeSpawn can replace the factory-selected profession with GUARD.
+        // That profession prioritizes WORK even under our fixed REST schedule.
+        villager.setProfession(helper.getLevel().registryAccess().lookupOrThrow(
+                Registries.VILLAGER_PROFESSION).getOrThrow(VillagerProfession.NONE).value());
         villager.getBrain().setSchedule(REPLACEMENT_REST_SCHEDULE);
         villager.getBrain().updateActivityFromSchedule(
                 helper.getLevel().environmentAttributes(), helper.getLevel().getGameTime(), villager.position());
         return villager;
+    }
+
+    private static void maintainNaturalRest(VillagerEntityMCA villager) {
+        if (!villager.isAlive() || villager.isSleeping()) return;
+        if (!villager.getBrain().isActive(Activity.REST)) {
+            villager.getBrain().setActiveActivityIfPossible(Activity.REST);
+        }
     }
 
     private static void assertHome(GameTestHelper helper, VillagerEntityMCA villager, BlockPos expectedHome) {

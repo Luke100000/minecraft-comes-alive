@@ -10,6 +10,7 @@ import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.gametest.GameTestPoi;
+import net.conczin.mca.gametest.GameTestTerrain;
 import net.conczin.mca.neoforge.gametest.AfterBatch;
 import net.conczin.mca.neoforge.gametest.GameTest;
 import net.conczin.mca.neoforge.gametest.PrefixGameTestTemplate;
@@ -62,6 +63,8 @@ import java.util.Set;
 public final class ShelterDistributionGameTests {
     private static final String BATCH = "mca_shelter_distribution";
     private static final String GLOBAL_STATE_BATCH = "mca_shelter_distribution_global_state";
+    private static final String ROUTE_BOUNDARY_BATCH = "mca_shelter_distribution_route_boundary";
+    private static final String UNLOADED_POI_BATCH = "mca_shelter_distribution_unloaded_poi";
     private static final Map<BlockPos, BlockState> BLOCKS = new LinkedHashMap<>();
     private static final Set<ChunkPos> CHUNKS = new HashSet<>();
     private static final List<Villager> VILLAGERS = new ArrayList<>();
@@ -167,7 +170,9 @@ public final class ShelterDistributionGameTests {
         verifyRouteAllowance(helper, 20, 30, true);
     }
 
-    @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air")
+    // Keep the exact-length route boundary independent of simultaneous shelter
+    // fixtures that change village occupancy and perform large chunk searches.
+    @GameTest(batch = ROUTE_BOUNDARY_BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void moreThanThirtyExtraRouteBlocksAreAllowed(GameTestHelper helper) {
         verifyRouteAllowance(helper, 21, 31, true);
     }
@@ -325,7 +330,9 @@ public final class ShelterDistributionGameTests {
         });
     }
 
-    @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 400)
+    // The unload assertion needs a quiet chunk-tick environment; other 50-test
+    // arenas in the same batch can delay unloading long beyond the test timeout.
+    @GameTest(batch = UNLOADED_POI_BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 400)
     public static void unloadedPoiDoesNotForceChunkDuringShelterSearch(GameTestHelper helper) {
         BlockPos center = arena(helper, 24);
         BlockPos nearest = house(helper.getLevel(), center);
@@ -1151,10 +1158,19 @@ public final class ShelterDistributionGameTests {
         house(helper.getLevel(), center);
         BlockPos alternative = house(helper.getLevel(), center.east(16));
         fill(helper, center, 5);
-        var distant = spawn(helper, center.west(70));
+        // Remain well outside the house but inside the fixture's known loaded
+        // floor and chunk footprint. A spawn 70 west could be constructed before
+        // its separate forced chunk became entity-ticking, so it wasn't indexed.
+        BlockPos distantPos = center.east(40);
+        GameTestTerrain.ensureEntityTickingChunk(helper, distantPos);
+        var distant = spawn(helper, distantPos);
+        helper.assertTrue(helper.getLevel().getEntity(distant.getUUID()) == distant,
+                "distant fixture villager did not enter the entity-ticking world");
         distant.moveTowardsPersistent(center.east(3).south(3), 0.5F, 0);
         var incoming = spawn(helper, center.east(2).south(9));
         helper.runAfterDelay(10, () -> {
+            helper.assertTrue(VillageManager.get(helper.getLevel()).getLoadedVillagers().contains(distant),
+                    "distant incoming villager was not tracked by the live occupancy index");
             choose(helper, incoming);
             helper.assertTrue(selected(incoming).equals(alternative), "distant incoming destination was omitted");
             helper.succeed();
@@ -1550,6 +1566,16 @@ public final class ShelterDistributionGameTests {
 
     @AfterBatch(batch = BATCH)
     public static void cleanup(ServerLevel level) {
+        cleanupState(level);
+    }
+
+    @AfterBatch(batch = ROUTE_BOUNDARY_BATCH)
+    public static void cleanupRouteBoundary(ServerLevel level) {
+        cleanupState(level);
+    }
+
+    @AfterBatch(batch = UNLOADED_POI_BATCH)
+    public static void cleanupUnloadedPoi(ServerLevel level) {
         cleanupState(level);
     }
 

@@ -1765,6 +1765,15 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         UUID oldUuid = getUUID();
 
+        if (convertingToZombieVillager && params.type().shouldDiscardAfterConversion()) {
+            // Minecraft's conversion copies the source pose, including sleeping.
+            // Wake before the copy and release the original resident's HOME POI.
+            if (isSleeping()) {
+                stopSleeping();
+            }
+            releasePoi(MemoryModuleType.HOME);
+        }
+
         return (T) super.convertTo((EntityType) convertedType, params, mob -> {
             ((ConversionParams.AfterConversion) afterConversion).finalizeConversion(mob);
 

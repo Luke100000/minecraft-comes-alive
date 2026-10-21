@@ -619,7 +619,7 @@ public final class ArcherCombatMovementGameTests {
     }
 
     @GameTest(batch = "mca_archer_combat_ownership", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
-    public static void emergencyFleeReplacesPreCombatWalkTarget(GameTestHelper helper) {
+    public static void emergencyFleeDoesNotOverwritePreCombatWalkTarget(GameTestHelper helper) {
         cleanupTestEntities();
         BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
         prepareFlatArea(helper, start, 12);
@@ -642,12 +642,10 @@ public final class ArcherCombatMovementGameTests {
                 "close threat did not enter EMERGENCY_FLEE"
         );
         WalkTarget combatTarget = archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
-        helper.assertTrue(combatTarget != null, "EMERGENCY_FLEE lost WALK_TARGET while taking combat ownership");
-        helper.assertTrue(combatTarget != preCombatTarget, "EMERGENCY_FLEE preserved the pre-combat WALK_TARGET");
-        helper.assertTrue(
-                combatTarget.getTarget().currentPosition().distanceToSqr(target.position()) > archer.distanceToSqr(target),
-                "EMERGENCY_FLEE replacement WALK_TARGET did not open distance from the threat"
-        );
+        // A later, independently owned movement task must not be interrupted
+        // by ranged combat merely because a threat entered emergency range.
+        helper.assertTrue(combatTarget == preCombatTarget,
+                "EMERGENCY_FLEE overwrote another behavior's WALK_TARGET");
         helper.succeed();
     }
 
@@ -677,7 +675,7 @@ public final class ArcherCombatMovementGameTests {
     }
 
     @GameTest(batch = "mca_archer_hold_ownership", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
-    public static void holdStopsPreCombatNavigation(GameTestHelper helper) {
+    public static void holdPreservesUnownedPreCombatNavigation(GameTestHelper helper) {
         cleanupTestEntities();
         BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
         prepareFlatArea(helper, start, 12);
@@ -685,10 +683,8 @@ public final class ArcherCombatMovementGameTests {
         Zombie target = spawnTarget(helper, start.east(10));
         archer.setNoAi(true);
         archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
-        archer.getBrain().setMemory(
-                MemoryModuleType.WALK_TARGET,
-                new WalkTarget(Vec3.atBottomCenterOf(start.north(8)), 0.5F, 0)
-        );
+        WalkTarget preCombatTarget = new WalkTarget(Vec3.atBottomCenterOf(start.north(8)), 0.5F, 0);
+        archer.getBrain().setMemory(MemoryModuleType.WALK_TARGET, preCombatTarget);
         archer.setOnGround(true);
         helper.assertTrue(
                 archer.getNavigation().moveTo(start.getX() + 0.5D, start.getY(), start.getZ() - 8.5D, 0.5D),
@@ -706,10 +702,11 @@ public final class ArcherCombatMovementGameTests {
                 "stable target did not enter HOLD; state=" + RangedCombatState.current(archer).orElse(null)
         );
         helper.assertTrue(
-                archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).isEmpty(),
-                "HOLD retained a pre-combat WALK_TARGET"
+                archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null) == preCombatTarget,
+                "HOLD erased another behavior's pre-combat WALK_TARGET"
         );
-        helper.assertTrue(archer.getNavigation().isDone(), "HOLD left pre-combat navigation running underneath direct movement");
+        helper.assertTrue(!archer.getNavigation().isDone(),
+                "HOLD stopped navigation belonging to another behavior");
         helper.succeed();
     }
 

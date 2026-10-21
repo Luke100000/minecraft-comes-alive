@@ -91,6 +91,11 @@ public final class FishingTaskGameTests {
     public static void bobberCastAtSelectedWaterStartsBobbing(GameTestHelper helper) {
         BlockPos villagerPos = helper.absolutePos(new BlockPos(40, 3, 40));
         BlockPos water = villagerPos.east(2);
+        // The 26.x blank arena fills unprepared volume with barrier blocks.
+        // Clear the casting lane before preparing the pond and its shoreline.
+        for (BlockPos pos : BlockPos.betweenClosed(villagerPos.offset(-2, 0, -2), water.offset(2, 5, 2))) {
+            helper.getLevel().setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
+        }
         prepareWater(helper, water);
 
         VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
@@ -330,6 +335,7 @@ public final class FishingTaskGameTests {
     public static void protectedReelItemCannotBeCollectedByHoppers(GameTestHelper helper) {
         BlockPos hopperPos = new BlockPos(40, 3, 40);
         helper.setBlock(hopperPos, Blocks.HOPPER);
+        helper.setBlock(hopperPos.above(), Blocks.AIR);
         BlockPos absoluteHopperPos = helper.absolutePos(hopperPos);
         HopperBlockEntity hopper = (HopperBlockEntity) helper.getLevel().getBlockEntity(absoluteHopperPos);
         helper.assertTrue(hopper != null, "test hopper block entity was not created");

@@ -1211,7 +1211,10 @@ public final class VillageMourningGameTests {
     }
 
     private static void makeAwake(VillagerEntityMCA villager) {
-        villager.getBrain().setSchedule(SchedulesMCA.GUESTS);
+        // The suite runs every fixture at arbitrary in-game times. An IDLE-only
+        // schedule prevents an unrelated time-of-day REST transition from erasing
+        // the mourning intent when tests advance the real villager brain.
+        villager.getBrain().setSchedule(net.conczin.mca.gametest.GameTestBrain.fixedSchedule(Activity.IDLE));
         villager.getBrain().setActiveActivityIfPossible(Activity.IDLE);
     }
 

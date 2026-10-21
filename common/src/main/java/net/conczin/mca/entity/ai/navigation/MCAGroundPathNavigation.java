@@ -147,6 +147,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                         1.0F,
                         maxPathLength * VISITED_NODES_PER_BLOCK / ordinaryBudget
                 );
+                float effectiveMultiplier = visitedNodesMultiplier * rangeMultiplier;
                 if (maxPathLength > getOrdinaryPathLength(mob)) {
                     boolean nearbyApproach = false;
                     for (BlockPos target : targets) {
@@ -159,17 +160,25 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                     // moves away from them. Preserve their configured detour search;
                     // distant or sealed goals retain the smaller progressive budget.
                     if (!nearbyApproach) {
-                        rangeMultiplier = Math.min(rangeMultiplier,
-                                Math.max(1.0F, (float) MAX_EXTENDED_VISITED_NODES / ordinaryBudget));
+                        // PathFinder applies the navigation multiplier *after* our range multiplier.
+                        // Cap their product, otherwise a persistent search can exceed its node budget.
+                        // The PathFinder's base budget uses base FOLLOW_RANGE,
+                        // whereas ordinary searches use the effective attribute
+                        // value (including modifiers). Preserve the latter budget
+                        // when bounding an extended search.
+                        int ordinaryEffectiveBudget = Math.max(ordinaryBudget,
+                                Mth.ceil(getOrdinaryPathLength(mob) * VISITED_NODES_PER_BLOCK));
+                        effectiveMultiplier = Math.min(effectiveMultiplier,
+                                (float) Math.max(MAX_EXTENDED_VISITED_NODES, ordinaryEffectiveBudget) / ordinaryBudget);
                     }
                 }
                 if (!PathRequestDiagnostics.enabled()) {
                     return super.findPath(region, mob, targets, maxPathLength, reachRange,
-                            visitedNodesMultiplier * rangeMultiplier);
+                            effectiveMultiplier);
                 }
                 long startedNanos = System.nanoTime();
                 Path result = super.findPath(region, mob, targets, maxPathLength, reachRange,
-                        visitedNodesMultiplier * rangeMultiplier);
+                        effectiveMultiplier);
                 PathRequestDiagnostics.recordSearch(mob, System.nanoTime() - startedNanos,
                         maxPathLength > getOrdinaryPathLength(mob), evaluator.expandedNodes());
                 return result;
