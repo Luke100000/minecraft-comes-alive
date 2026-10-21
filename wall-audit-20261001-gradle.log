@@ -1,0 +1,474 @@
+Starting a Gradle Daemon, 1 incompatible Daemon could not be reused, use --status for details
+Calculating task graph as configuration cache cannot be reused because Gradle property 'mcaSearchHorizon' has changed.
+> Task :buildSrc:extractPluginRequests UP-TO-DATE
+> Task :buildSrc:generatePluginAdapters UP-TO-DATE
+> Task :buildSrc:compileJava UP-TO-DATE
+> Task :buildSrc:compileGroovy NO-SOURCE
+> Task :buildSrc:compileGroovyPlugins UP-TO-DATE
+> Task :buildSrc:pluginDescriptors UP-TO-DATE
+> Task :buildSrc:processResources UP-TO-DATE
+> Task :buildSrc:classes UP-TO-DATE
+> Task :buildSrc:jar UP-TO-DATE
+
+> Configure project :fabric
+Fabric Loom: 1.18.2
+
+> Task :common:generateAccessTransformer UP-TO-DATE
+> Task :neoforge:writeSearchBudgetGameTestServerLegacyClasspath UP-TO-DATE
+> Task :neoforge:downloadAssets UP-TO-DATE
+> Task :common:createMinecraftArtifacts UP-TO-DATE
+> Task :neoforge:createMinecraftArtifacts UP-TO-DATE
+> Task :neoforge:prepareSearchBudgetGameTestServerRun UP-TO-DATE
+> Task :common:compileJava UP-TO-DATE
+> Task :neoforge:compileJava UP-TO-DATE
+> Task :common:prepareCommonResources UP-TO-DATE
+> Task :neoforge:processResources UP-TO-DATE
+> Task :neoforge:classes UP-TO-DATE
+
+> Task :neoforge:runSearchBudgetGameTestServer
+WARN StatusConsoleListener Advanced terminal features are not available in this environment
+[10:42:45] [main/INFO] [cp.mo.mo.Launcher/MODLAUNCHER]: ModLauncher running: args [--launchTarget, forgeserverdev, --gameDir, ., --fml.fmlVersion, 4.0.44, --fml.mcVersion, 1.21.1, --fml.neoForgeVersion, 21.1.251, --fml.neoFormVersion, 20240808.144430]
+[10:42:45] [main/INFO] [cp.mo.mo.Launcher/MODLAUNCHER]: JVM identified as Eclipse Adoptium OpenJDK 64-Bit Server VM 21.0.9+10-LTS
+[10:42:45] [main/INFO] [cp.mo.mo.Launcher/MODLAUNCHER]: ModLauncher 11.0.5+main.901c6ea8 starting: java version 21.0.9 by Eclipse Adoptium; OS Windows 11 arch amd64 version 10.0
+[10:42:45] [main/INFO] [ne.ne.fm.lo.ImmediateWindowHandler/]: ImmediateWindowProvider not loading because launch target is forgeserverdev
+[10:42:45] [main/INFO] [mixin/]: SpongePowered MIXIN Subsystem Version=0.8.7 Source=union:/C:/Users/Mik/.gradle/caches/modules-2/files-2.1/net.fabricmc/sponge-mixin/0.15.2+mixin.0.8.7/2af2f021d8e02a0220dc27a7a72b4666d66d44ca/sponge-mixin-0.15.2+mixin.0.8.7.jar%2394!/ Service=ModLauncher Env=SERVER
+[10:42:45] [main/WARN] [ne.ne.ja.se.JarSelector/]: Attempted to select a dependency jar for JarJar which was passed in as source: library:mixinextras.neoforge. Using Mod File: C:\Users\Mik\.gradle\caches\modules-2\files-2.1\io.github.llamalad7\mixinextras-neoforge\0.5.5\26f2905a37afd203c3da1d6a2e164472a7531b41\mixinextras-neoforge-0.5.5.jar
+[10:42:45] [main/WARN] [ne.ne.ja.se.JarSelector/]: Attempted to select a dependency jar for JarJar which was passed in as source: sodium. Using Mod File: C:\Users\Mik\.gradle\caches\modules-2\files-2.1\maven.modrinth\sodium\mc1.21.1-0.8.13-neoforge\1757289be21ed18db5b0d90703fa3db1b2de5693\sodium-mc1.21.1-0.8.13-neoforge.jar
+[10:42:45] [main/INFO] [ne.ne.fm.lo.mo.lo.JarInJarDependencyLocator/]: Found 5 dependencies adding them to mods collection
+[10:42:45] [main/INFO] [ne.ne.fm.lo.mo.ModDiscoverer/]: 
+     Mod List:
+		Name Version (Mod Id)
+
+		Ferrite Core 7.0.3 (ferritecore)
+		Forgified Fabric API Base 0.4.42+d1308ded19 (fabric_api_base)
+		Forgified Fabric BlockView API (v2) 1.0.10+9afaaf8c19 (fabric_block_view_api_v2)
+		Forgified Fabric Renderer API (v1) 3.4.1+9125b6dc19 (fabric_renderer_api_v1)
+		Forgified Fabric Rendering Data Attachment (v1) 0.3.48+73761d2e19 (fabric_rendering_data_attachment_v1)
+		Minecraft 1.21.1 (minecraft)
+		Minecraft Comes Alive 1.21.1-SNAPSHOT (mca)
+		NeoForge 21.1.251 (neoforge)
+		Sodium 0.8.13+mc1.21.1 (sodium)
+[10:42:46] [main/INFO] [mixin/]: Compatibility level set to JAVA_17
+[10:42:46] [main/INFO] [mixin/]: Compatibility level set to JAVA_21
+[10:42:46] [main/INFO] [cp.mo.mo.LaunchServiceHandler/MODLAUNCHER]: Launching target 'forgeserverdev' with arguments [--gameDir, .]
+[10:42:46] [main/WARN] [mixin/]: Reference map 'mca.refmap.json' for mca.mixins.json could not be read. If this is a development environment you can ignore this message
+[10:42:46] [main/WARN] [mixin/]: Reference map '${refmap_target}refmap.json' for ferritecore.predicates.mixin.json could not be read. If this is a development environment you can ignore this message
+[10:42:46] [main/WARN] [mixin/]: Reference map '${refmap_target}refmap.json' for ferritecore.fastmap.mixin.json could not be read. If this is a development environment you can ignore this message
+[10:42:46] [main/WARN] [mixin/]: Reference map '${refmap_target}refmap.json' for ferritecore.mrl.mixin.json could not be read. If this is a development environment you can ignore this message
+[10:42:46] [main/WARN] [mixin/]: Reference map '${refmap_target}refmap.json' for ferritecore.dedupmultipart.mixin.json could not be read. If this is a development environment you can ignore this message
+[10:42:46] [main/WARN] [mixin/]: Reference map '${refmap_target}refmap.json' for ferritecore.blockstatecache.mixin.json could not be read. If this is a development environment you can ignore this message
+[10:42:46] [main/WARN] [mixin/]: Reference map '${refmap_target}refmap.json' for ferritecore.dedupbakedquad.mixin.json could not be read. If this is a development environment you can ignore this message
+[10:42:46] [main/WARN] [mixin/]: Reference map '${refmap_target}refmap.json' for ferritecore.threaddetec.mixin.json could not be read. If this is a development environment you can ignore this message
+[10:42:46] [main/WARN] [mixin/]: Reference map '${refmap_target}refmap.json' for ferritecore.modelsides.mixin.json could not be read. If this is a development environment you can ignore this message
+[10:42:46] [main/WARN] [mixin/]: Reference map '${refmap_target}refmap.json' for ferritecore.datacomponents.mixin.json could not be read. If this is a development environment you can ignore this message
+[10:42:46] [main/WARN] [mixin/]: Reference map '${refmap_target}refmap.json' for ferritecore.accessors.mixin.json could not be read. If this is a development environment you can ignore this message
+[10:42:47] [main/INFO] [MixinExtras|Service/]: Initializing MixinExtras via com.llamalad7.mixinextras.service.MixinExtrasServiceImpl(version=0.5.5).
+[10:42:52] [main/WARN] [minecraft/Commands]: Ambiguity between arguments [teleport, location] and [teleport, destination] with inputs: [0.1 -0.5 .9, 0 0 0]
+[10:42:52] [main/WARN] [minecraft/Commands]: Ambiguity between arguments [teleport, location] and [teleport, targets] with inputs: [0.1 -0.5 .9, 0 0 0]
+[10:42:52] [main/WARN] [minecraft/Commands]: Ambiguity between arguments [teleport, destination] and [teleport, targets] with inputs: [Player, 0123, @e, dd12be42-52a9-4a91-a8a1-11c01849e498]
+[10:42:52] [main/WARN] [minecraft/Commands]: Ambiguity between arguments [teleport, targets] and [teleport, destination] with inputs: [Player, 0123, dd12be42-52a9-4a91-a8a1-11c01849e498]
+[10:42:52] [main/WARN] [minecraft/Commands]: Ambiguity between arguments [teleport, targets, location] and [teleport, targets, destination] with inputs: [0.1 -0.5 .9, 0 0 0]
+[10:42:52] [modloading-worker-0/INFO] [ne.ne.ne.co.NeoForgeMod/NEOFORGE-MOD]: NeoForge mod loading, version 21.1.251, for MC 1.21.1
+[10:42:53] [main/ERROR] [minecraft/Settings]: Failed to load properties from file: server.properties
+java.nio.file.NoSuchFileException: server.properties
+	at java.base/sun.nio.fs.WindowsException.translateToIOException(WindowsException.java:85) ~[?:?] {}
+	at java.base/sun.nio.fs.WindowsException.rethrowAsIOException(WindowsException.java:103) ~[?:?] {}
+	at java.base/sun.nio.fs.WindowsException.rethrowAsIOException(WindowsException.java:108) ~[?:?] {}
+	at java.base/sun.nio.fs.WindowsFileSystemProvider.newByteChannel(WindowsFileSystemProvider.java:234) ~[?:?] {}
+	at java.base/java.nio.file.Files.newByteChannel(Files.java:380) ~[?:?] {}
+	at java.base/java.nio.file.Files.newByteChannel(Files.java:432) ~[?:?] {}
+	at java.base/java.nio.file.spi.FileSystemProvider.newInputStream(FileSystemProvider.java:420) ~[?:?] {}
+	at java.base/java.nio.file.Files.newInputStream(Files.java:160) ~[?:?] {}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.dedicated.Settings.loadFromFile(Settings.java:38) ~[neoforge-21.1.251.jar%23125!/:?] {re:classloading}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.dedicated.DedicatedServerProperties.fromFile(DedicatedServerProperties.java:132) ~[neoforge-21.1.251.jar%23125!/:?] {re:classloading}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.dedicated.DedicatedServerSettings.<init>(DedicatedServerSettings.java:12) ~[neoforge-21.1.251.jar%23125!/:?] {re:classloading}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.Main.main(Main.java:125) ~[neoforge-21.1.251.jar%23125!/:?] {re:classloading}
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[?:?] {}
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[?:?] {}
+	at MC-BOOTSTRAP/fml_loader@4.0.44/net.neoforged.fml.loading.targets.CommonLaunchHandler.runTarget(CommonLaunchHandler.java:136) ~[loader-4.0.44.jar%23102!/:4.0] {}
+	at MC-BOOTSTRAP/fml_loader@4.0.44/net.neoforged.fml.loading.targets.CommonLaunchHandler.serverService(CommonLaunchHandler.java:128) ~[loader-4.0.44.jar%23102!/:4.0] {}
+	at MC-BOOTSTRAP/fml_loader@4.0.44/net.neoforged.fml.loading.targets.NeoForgeServerDevLaunchHandler.runService(NeoForgeServerDevLaunchHandler.java:23) ~[loader-4.0.44.jar%23102!/:4.0] {}
+	at MC-BOOTSTRAP/fml_loader@4.0.44/net.neoforged.fml.loading.targets.CommonLaunchHandler.lambda$launchService$4(CommonLaunchHandler.java:118) ~[loader-4.0.44.jar%23102!/:4.0] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.LaunchServiceHandlerDecorator.launch(LaunchServiceHandlerDecorator.java:30) [modlauncher-11.0.5.jar%2382!/:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.LaunchServiceHandler.launch(LaunchServiceHandler.java:53) [modlauncher-11.0.5.jar%2382!/:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.LaunchServiceHandler.launch(LaunchServiceHandler.java:71) [modlauncher-11.0.5.jar%2382!/:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.Launcher.run(Launcher.java:103) [modlauncher-11.0.5.jar%2382!/:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.Launcher.main(Launcher.java:74) [modlauncher-11.0.5.jar%2382!/:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.BootstrapLaunchConsumer.accept(BootstrapLaunchConsumer.java:26) [modlauncher-11.0.5.jar%2382!/:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.BootstrapLaunchConsumer.accept(BootstrapLaunchConsumer.java:23) [modlauncher-11.0.5.jar%2382!/:?] {}
+	at cpw.mods.bootstraplauncher@2.0.2/cpw.mods.bootstraplauncher.BootstrapLauncher.run(BootstrapLauncher.java:210) [bootstraplauncher-2.0.2.jar:?] {}
+	at cpw.mods.bootstraplauncher@2.0.2/cpw.mods.bootstraplauncher.BootstrapLauncher.main(BootstrapLauncher.java:69) [bootstraplauncher-2.0.2.jar:?] {}
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103) ~[?:?] {}
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580) ~[?:?] {}
+	at net.neoforged.devlaunch.Main.main(Main.java:57) [DevLaunch-1.0.2.jar:?] {}
+[10:42:53] [main/INFO] [mojang/YggdrasilAuthenticationService]: Environment: Environment[sessionHost=https://sessionserver.mojang.com, servicesHost=https://api.minecraftservices.com, name=PROD]
+[10:42:53] [main/WARN] [minecraft/VanillaPackResourcesBuilder]: Assets URL 'union:/C:/Users/Mik/Downloads/MCA/minecraft-comes-alive-1.21.1-floor-clean-squash/neoforge/build/moddev/artifacts/neoforge-21.1.251.jar%23125!/assets/.mcassetsroot' uses unexpected schema
+[10:42:53] [main/WARN] [minecraft/VanillaPackResourcesBuilder]: Assets URL 'union:/C:/Users/Mik/Downloads/MCA/minecraft-comes-alive-1.21.1-floor-clean-squash/neoforge/build/moddev/artifacts/neoforge-21.1.251.jar%23125!/data/.mcassetsroot' uses unexpected schema
+[10:42:53] [main/INFO] [ne.ne.ne.ga.GameTestHooks/]: Enabled Gametest Namespaces: [mca_ab]
+[10:42:53] [main/INFO] [ne.co.mc.MCA/]: [MCA Search Probe] registering autonomous search experiments
+[10:42:54] [main/INFO] [minecraft/RecipeManager]: Loaded 1517 recipes
+[10:42:54] [main/INFO] [minecraft/AdvancementTree]: Loaded 1621 advancements
+[10:42:55] [Server thread/INFO] [minecraft/MinecraftServer]: Preparing start region for dimension minecraft:overworld
+[10:42:55] [worldgen/INFO] [minecraft/LoggerChunkProgressListener]: Preparing spawn area: 2%
+[10:42:55] [Server thread/INFO] [minecraft/LoggerChunkProgressListener]: Time elapsed: 162 ms
+[10:42:55] [Server thread/INFO] [minecraft/GameTestServer]: Started game test server
+[10:42:55] [Server thread/INFO] [ne.ne.ne.se.pe.PermissionAPI/]: Successfully initialized permission handler neoforge:default_handler
+[10:42:55] [Server thread/INFO] [minecraft/GameTestServer]: 6 tests are now running at position 2447667, -59, 5392797!
+[10:42:55] [Server thread/INFO] [minecraft/GameTestRunner]: Running test batch 'mca_search_open:0' (1 tests)...
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [      ]
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [      ]
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=147 position=BlockPos{x=2447671, y=-59, z=5392801} targets=[BlockPos{x=2447801, y=-59, z=5392801}] reachable=false nodes=48 end=Node{x=2447718, y=-59, z=5392801}
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1..101 origin=sink producer=ExtendedWalkTowardsTask tracker=LongDistancePathTarget requests=1 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=1 searchMs=20.298 maxSearchMs=20.298 reachable=0 partial=1 null=0 lastEntity=7fbddf86-2ab3-462c-bf04-4ebf624a9f18 lastPos=2447671, -59, 5392801 lastTarget=2447801, -59, 5392801 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=147 maxExpandedNodes=147
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=147 position=BlockPos{x=2447718, y=-59, z=5392801} targets=[BlockPos{x=2447801, y=-59, z=5392801}] reachable=false nodes=48 end=Node{x=2447765, y=-59, z=5392801}
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=201..301 origin=navigation producer=PartialPathChain tracker=LongDistancePathTarget requests=1 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=1 searchMs=5.131 maxSearchMs=5.131 reachable=0 partial=1 null=0 lastEntity=7fbddf86-2ab3-462c-bf04-4ebf624a9f18 lastPos=2447718, -59, 5392801 lastTarget=2447801, -59, 5392801 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=147 maxExpandedNodes=147
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=147 position=BlockPos{x=2447753, y=-59, z=5392801} targets=[BlockPos{x=2447801, y=-59, z=5392801}] reachable=false nodes=48 end=Node{x=2447800, y=-59, z=5392801}
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=301..401 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=1 searchMs=3.125 maxSearchMs=3.125 reachable=0 partial=1 null=0 lastEntity=7fbddf86-2ab3-462c-bf04-4ebf624a9f18 lastPos=2447753, -59, 5392801 lastTarget=2447801, -59, 5392801 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=147 maxExpandedNodes=147
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [minecraft/GameTestServer]: [_     ]
+[10:42:56] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=1 position=BlockPos{x=2447800, y=-59, z=5392801} targets=[BlockPos{x=2447801, y=-59, z=5392801}] reachable=true nodes=2 end=Node{x=2447801, y=-59, z=5392801}
+[10:42:56] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Probe] scenario=open130 horizon=160 extendedNodeCap=0 arrived=true ticks=507 distance=129.53930157097057 ordinary=4 extended=0 suppressed=0 deferred=0 expanded=442 maxExpanded=147 searchMs=29.102399
+[10:42:57] [Server thread/INFO] [minecraft/GameTestRunner]: Running test batch 'mca_search_detour:0' (1 tests)...
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [+     ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [+     ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [+     ]
+[10:42:57] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=501..601 origin=navigation producer=PartialPathChain tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=1 searchMs=0.548 maxSearchMs=0.548 reachable=1 partial=0 null=0 lastEntity=7fbddf86-2ab3-462c-bf04-4ebf624a9f18 lastPos=2447800, -59, 5392801 lastTarget=2447801, -59, 5392801 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=1 maxExpandedNodes=1
+[10:42:57] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447817, y=-59, z=5392830} targets=[BlockPos{x=2447819, y=-59, z=5392830}] reachable=false nodes=1 end=Node{x=2447817, y=-59, z=5392830}
+[10:42:57] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=916 position=BlockPos{x=2447817, y=-59, z=5392830} targets=[BlockPos{x=2447819, y=-59, z=5392830}] reachable=true nodes=51 end=Node{x=2447819, y=-59, z=5392830}
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [+_    ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [+_    ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [+_    ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [+_    ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [+_    ]
+[10:42:57] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=601..701 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=2 searchMs=19.540 maxSearchMs=10.105 reachable=1 partial=1 null=0 lastEntity=bb96470d-7de4-4dd4-ac02-a81432ab3999 lastPos=2447817, -59, 5392830 lastTarget=2447819, -59, 5392830 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=1475 maxExpandedNodes=916
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [+_    ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [+_    ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [+_    ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [+_    ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [+_    ]
+[10:42:57] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Probe] scenario=wall47 horizon=160 extendedNodeCap=0 arrived=true ticks=202 distance=2.0188291704980785 ordinary=1 extended=1 suppressed=0 deferred=0 expanded=1475 maxExpanded=916 searchMs=19.540499
+[10:42:57] [Server thread/INFO] [minecraft/GameTestRunner]: Running test batch 'mca_search_long_detour:0' (1 tests)...
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++    ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++    ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:57] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=801..901 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=2 sameTarget=1 failureEvidence=1 activePath=0 activePartial=0 searches=3 searchMs=28.203 maxSearchMs=19.637 reachable=0 partial=3 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=1 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3677 maxExpandedNodes=2559
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:57] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=901..1001 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2447966, -59, 5392862 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:57] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=901..1001 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=20.706 maxSearchMs=17.264 reachable=0 partial=2 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3118 maxExpandedNodes=2559
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:57] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1001..1101 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2447966, -59, 5392862 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:57] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1001..1101 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=18.184 maxSearchMs=15.114 reachable=0 partial=2 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3118 maxExpandedNodes=2559
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:57] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1101..1201 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2447966, -59, 5392862 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:57] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1101..1201 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=16.080 maxSearchMs=12.842 reachable=0 partial=2 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3118 maxExpandedNodes=2559
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:57] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1201..1301 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2447966, -59, 5392862 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:57] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1201..1301 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=13.923 maxSearchMs=11.405 reachable=0 partial=2 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3118 maxExpandedNodes=2559
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:57] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1301..1401 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2447966, -59, 5392862 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:57] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1301..1401 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=13.394 maxSearchMs=11.027 reachable=0 partial=2 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3118 maxExpandedNodes=2559
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:57] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1401..1501 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2447966, -59, 5392862 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1401..1501 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=13.781 maxSearchMs=11.386 reachable=0 partial=2 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3118 maxExpandedNodes=2559
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1501..1601 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2447966, -59, 5392862 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1501..1601 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=14.094 maxSearchMs=11.428 reachable=0 partial=2 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3118 maxExpandedNodes=2559
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1601..1701 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2447966, -59, 5392862 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1601..1701 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=13.496 maxSearchMs=10.637 reachable=0 partial=2 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3118 maxExpandedNodes=2559
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1701..1801 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2447966, -59, 5392862 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1701..1801 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=12.778 maxSearchMs=10.528 reachable=0 partial=2 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3118 maxExpandedNodes=2559
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1801..1901 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2447966, -59, 5392862 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1801..1901 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=13.208 maxSearchMs=10.579 reachable=0 partial=2 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3118 maxExpandedNodes=2559
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1901..2001 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2447966, -59, 5392862 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=1901..2001 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=14.370 maxSearchMs=10.784 reachable=0 partial=2 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3118 maxExpandedNodes=2559
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=2001..2101 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2447966, -59, 5392862 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=2001..2101 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=15.444 maxSearchMs=13.191 reachable=0 partial=2 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3118 maxExpandedNodes=2559
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=2101..2201 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2447966, -59, 5392862 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=2101..2201 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=12.920 maxSearchMs=10.539 reachable=0 partial=2 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3118 maxExpandedNodes=2559
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=2201..2301 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2447966, -59, 5392862 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=2201..2301 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=13.049 maxSearchMs=10.718 reachable=0 partial=2 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3118 maxExpandedNodes=2559
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=2301..2401 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2447966, -59, 5392862 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=2301..2401 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=13.394 maxSearchMs=10.873 reachable=0 partial=2 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3118 maxExpandedNodes=2559
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=2401..2501 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2447966, -59, 5392862 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=2401..2501 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=13.735 maxSearchMs=11.458 reachable=0 partial=2 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3118 maxExpandedNodes=2559
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=2501..2601 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2447966, -59, 5392862 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=2501..2601 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=12.448 maxSearchMs=10.058 reachable=0 partial=2 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3118 maxExpandedNodes=2559
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=2601..2701 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2447966, -59, 5392862 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=2601..2701 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=13.219 maxSearchMs=10.997 reachable=0 partial=2 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3118 maxExpandedNodes=2559
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2447966, y=-59, z=5392862} targets=[BlockPos{x=2447968, y=-59, z=5392862}] reachable=false nodes=1 end=Node{x=2447966, y=-59, z=5392862}
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=2701..2801 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2447966, -59, 5392862 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=2701..2801 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=13.068 maxSearchMs=10.849 reachable=0 partial=2 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3118 maxExpandedNodes=2559
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++_   ]
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Probe] scenario=wall111 horizon=160 extendedNodeCap=0 arrived=false ticks=2000 distance=0.0 ordinary=21 extended=20 suppressed=1 deferred=79 expanded=62919 maxExpanded=2559 searchMs=299.495499
+[10:42:58] [Server thread/WARN] [minecraft/LogTestReporter]: (optional) brainwalksaround111blockwall failed at 2447901, -60, 5392797. search alternative failed to reach HOME: scenario=wall111, horizon=160, nodeCap=0, position=BlockPos{x=2447966, y=-59, z=5392862}, path=null
+[10:42:58] [Server thread/INFO] [minecraft/GameTestRunner]: Running test batch 'mca_search_long_corridor:0' (1 tests)...
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x   ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=2801..2901 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=6e55cbbd-2566-4022-85bb-4d9db2c8f228 lastPos=2447966, -59, 5392862 lastTarget=2447968, -59, 5392862 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=3 previousOrigin=2447966, -59, 5392862 movementSq=0.0 retryAgeTicks=60 expandedNodes=0 maxExpandedNodes=0
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=48 position=BlockPos{x=2448022, y=-59, z=5392801} targets=[BlockPos{x=2448024, y=-59, z=5392801}] reachable=false nodes=1 end=Node{x=2448022, y=-59, z=5392801}
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=114 position=BlockPos{x=2448022, y=-59, z=5392801} targets=[BlockPos{x=2448024, y=-59, z=5392801}] reachable=true nodes=115 end=Node{x=2448024, y=-59, z=5392801}
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=2901..3001 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=2 searchMs=1.212 maxSearchMs=0.645 reachable=1 partial=1 null=0 lastEntity=ef6a9eff-1541-4bfc-a79d-2ae90ebae11f lastPos=2448022, -59, 5392801 lastTarget=2448024, -59, 5392801 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=162 maxExpandedNodes=114
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [Server thread/INFO] [minecraft/GameTestServer]: [++x_  ]
+[10:42:58] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Probe] scenario=corridor114 horizon=160 extendedNodeCap=0 arrived=true ticks=444 distance=2.0194163194887387 ordinary=1 extended=1 suppressed=0 deferred=0 expanded=162 maxExpanded=114 searchMs=1.2116
+[10:42:59] [Server thread/INFO] [minecraft/GameTestRunner]: Running test batch 'mca_search_medium_detour:0' (1 tests)...
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x+  ]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x+  ]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x+  ]
+[10:42:59] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=559 position=BlockPos{x=2448180, y=-59, z=5392842} targets=[BlockPos{x=2448182, y=-59, z=5392842}] reachable=false nodes=1 end=Node{x=2448180, y=-59, z=5392842}
+[10:42:59] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2030 position=BlockPos{x=2448180, y=-59, z=5392842} targets=[BlockPos{x=2448182, y=-59, z=5392842}] reachable=true nodes=75 end=Node{x=2448182, y=-59, z=5392842}
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x+_ ]
+[10:42:59] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=3301..3401 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=2 searchMs=13.523 maxSearchMs=10.028 reachable=1 partial=1 null=0 lastEntity=4f5cd8e5-d7b3-480c-972b-9b47958e819c lastPos=2448180, -59, 5392842 lastTarget=2448182, -59, 5392842 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=2589 maxExpandedNodes=2030
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x+_ ]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x+_ ]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x+_ ]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x+_ ]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x+_ ]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x+_ ]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x+_ ]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x+_ ]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x+_ ]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x+_ ]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x+_ ]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x+_ ]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x+_ ]
+[10:42:59] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Probe] scenario=wall71 horizon=160 extendedNodeCap=0 arrived=true ticks=292 distance=2.0367470635406444 ordinary=1 extended=1 suppressed=0 deferred=0 expanded=2589 maxExpanded=2030 searchMs=13.522899
+[10:42:59] [Server thread/INFO] [minecraft/GameTestRunner]: Running test batch 'mca_search_blocked:0' (1 tests)...
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++ ]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++ ]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++ ]
+[10:42:59] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=767 position=BlockPos{x=2448276, y=-59, z=5392821} targets=[BlockPos{x=2448286, y=-59, z=5392821}] reachable=false nodes=9 end=Node{x=2448284, y=-59, z=5392821}
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++_]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++_]
+[10:42:59] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=767 position=BlockPos{x=2448284, y=-59, z=5392821} targets=[BlockPos{x=2448286, y=-59, z=5392821}] reachable=false nodes=1 end=Node{x=2448284, y=-59, z=5392821}
+[10:42:59] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2448284, y=-59, z=5392821} targets=[BlockPos{x=2448286, y=-59, z=5392821}] reachable=false nodes=1 end=Node{x=2448284, y=-59, z=5392821}
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++_]
+[10:42:59] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=767 position=BlockPos{x=2448284, y=-59, z=5392821} targets=[BlockPos{x=2448286, y=-59, z=5392821}] reachable=false nodes=1 end=Node{x=2448284, y=-59, z=5392821}
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++_]
+[10:42:59] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=3701..3801 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=2 sameTarget=1 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=9.237 maxSearchMs=5.661 reachable=0 partial=2 null=0 lastEntity=3c5a108b-baae-4574-bb34-b57f91eaa30c lastPos=2448284, -59, 5392821 lastTarget=2448286, -59, 5392821 destinationMemory=minecraft:home suppressedExtended=1 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=1534 maxExpandedNodes=767
+[10:42:59] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=3701..3801 origin=navigation producer=PartialPathChain tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=2 searchMs=22.355 maxSearchMs=17.637 reachable=0 partial=2 null=0 lastEntity=3c5a108b-baae-4574-bb34-b57f91eaa30c lastPos=2448284, -59, 5392821 lastTarget=2448286, -59, 5392821 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3326 maxExpandedNodes=2559
+[10:42:59] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=3701..3801 origin=producer producer=PartialPathChain tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=3c5a108b-baae-4574-bb34-b57f91eaa30c lastPos=2448284, -59, 5392821 lastTarget=2448286, -59, 5392821 destinationMemory=none suppressedExtended=0 sourceDeferred=1 previousOrigin=2448276, -59, 5392821 movementSq=64.0 retryAgeTicks=0 expandedNodes=0 maxExpandedNodes=0
+[10:42:59] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=767 position=BlockPos{x=2448284, y=-59, z=5392821} targets=[BlockPos{x=2448286, y=-59, z=5392821}] reachable=false nodes=1 end=Node{x=2448284, y=-59, z=5392821}
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++_]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++_]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++_]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++_]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++_]
+[10:42:59] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=3801..3901 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=1 searchMs=3.419 maxSearchMs=3.419 reachable=0 partial=1 null=0 lastEntity=3c5a108b-baae-4574-bb34-b57f91eaa30c lastPos=2448284, -59, 5392821 lastTarget=2448286, -59, 5392821 destinationMemory=minecraft:home suppressedExtended=1 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=767 maxExpandedNodes=767
+[10:42:59] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=3801..3901 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=3c5a108b-baae-4574-bb34-b57f91eaa30c lastPos=2448284, -59, 5392821 lastTarget=2448286, -59, 5392821 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2448284, -59, 5392821 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:59] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=767 position=BlockPos{x=2448284, y=-59, z=5392821} targets=[BlockPos{x=2448286, y=-59, z=5392821}] reachable=false nodes=1 end=Node{x=2448284, y=-59, z=5392821}
+[10:42:59] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2448284, y=-59, z=5392821} targets=[BlockPos{x=2448286, y=-59, z=5392821}] reachable=false nodes=1 end=Node{x=2448284, y=-59, z=5392821}
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++_]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++_]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++_]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++_]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++_]
+[10:42:59] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=3901..4001 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=14.548 maxSearchMs=11.325 reachable=0 partial=2 null=0 lastEntity=3c5a108b-baae-4574-bb34-b57f91eaa30c lastPos=2448284, -59, 5392821 lastTarget=2448286, -59, 5392821 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3326 maxExpandedNodes=2559
+[10:42:59] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=3901..4001 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=3c5a108b-baae-4574-bb34-b57f91eaa30c lastPos=2448284, -59, 5392821 lastTarget=2448286, -59, 5392821 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2448284, -59, 5392821 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:59] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=767 position=BlockPos{x=2448284, y=-59, z=5392821} targets=[BlockPos{x=2448286, y=-59, z=5392821}] reachable=false nodes=1 end=Node{x=2448284, y=-59, z=5392821}
+[10:42:59] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=160.0 budget=2560 expanded=2559 position=BlockPos{x=2448284, y=-59, z=5392821} targets=[BlockPos{x=2448286, y=-59, z=5392821}] reachable=false nodes=1 end=Node{x=2448284, y=-59, z=5392821}
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++_]
+[10:42:59] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Probe] scenario=blocked300 horizon=160 extendedNodeCap=0 arrived=false ticks=300 distance=7.928217475768179 ordinary=6 extended=3 suppressed=2 deferred=9 expanded=12279 maxExpanded=2559 searchMs=64.8952
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++_]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++_]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++_]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x++_]
+[10:42:59] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=4001..4101 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=2 searchMs=15.335 maxSearchMs=12.007 reachable=0 partial=2 null=0 lastEntity=3c5a108b-baae-4574-bb34-b57f91eaa30c lastPos=2448284, -59, 5392821 lastTarget=2448286, -59, 5392821 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=3326 maxExpandedNodes=2559
+[10:42:59] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=4001..4101 origin=producer producer=ExtendedWalkTowardsTask tracker=none requests=0 sameTarget=0 failureEvidence=0 activePath=0 activePartial=0 searches=0 searchMs=0.000 maxSearchMs=0.000 reachable=0 partial=0 null=0 lastEntity=3c5a108b-baae-4574-bb34-b57f91eaa30c lastPos=2448284, -59, 5392821 lastTarget=2448286, -59, 5392821 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=4 previousOrigin=2448284, -59, 5392821 movementSq=0.0 retryAgeTicks=80 expandedNodes=0 maxExpandedNodes=0
+[10:42:59] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Query] maxLength=48.0 budget=768 expanded=2 position=BlockPos{x=2448284, y=-59, z=5392821} targets=[BlockPos{x=2448286, y=-59, z=5392821}] reachable=true nodes=3 end=Node{x=2448286, y=-59, z=5392821}
+[10:42:59] [Server thread/INFO] [ne.co.mc.MCA/]: [MCA Search Probe] scenario=blocked_then_open horizon=160 extendedNodeCap=0 arrived=true ticks=392 distance=9.728136186022311 ordinary=7 extended=3 suppressed=2 deferred=13 expanded=12281 maxExpanded=2559 searchMs=65.072201
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: [++x+++]
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: ========= 6 GAME TESTS COMPLETE IN 4.063 s ======================
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: All 6 required tests passed :)
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: 1 optional tests failed
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]:    - brainwalksaround111blockwall
+[10:42:59] [Server thread/INFO] [minecraft/GameTestServer]: ====================================================
+[10:42:59] [MCA Path Debug Logger/INFO] [ne.co.mc.MCA/]: [MCA Path Debug] window=4101..4118 origin=sink producer=ExtendedWalkTowardsTask tracker=BlockPosTracker requests=1 sameTarget=0 failureEvidence=1 activePath=0 activePartial=0 searches=1 searchMs=0.177 maxSearchMs=0.177 reachable=1 partial=0 null=0 lastEntity=3c5a108b-baae-4574-bb34-b57f91eaa30c lastPos=2448284, -59, 5392821 lastTarget=2448286, -59, 5392821 destinationMemory=minecraft:home suppressedExtended=0 sourceDeferred=0 previousOrigin=none movementSq=0.0 retryAgeTicks=0 expandedNodes=2 maxExpandedNodes=2
+[10:42:59] [Server thread/INFO] [minecraft/MinecraftServer]: Stopping server
+[10:42:59] [Server thread/INFO] [minecraft/MinecraftServer]: Saving players
+[10:42:59] [Server thread/INFO] [minecraft/MinecraftServer]: Saving worlds
+[10:42:59] [Server thread/INFO] [minecraft/MinecraftServer]: Saving chunks for level 'ServerLevel[Test Level]'/minecraft:overworld
+[10:43:00] [Server thread/INFO] [minecraft/MinecraftServer]: Saving chunks for level 'ServerLevel[Test Level]'/minecraft:the_end
+[10:43:00] [Server thread/INFO] [minecraft/MinecraftServer]: Saving chunks for level 'ServerLevel[Test Level]'/minecraft:the_nether
+[10:43:00] [Server thread/INFO] [minecraft/MinecraftServer]: ThreadedAnvilChunkStorage (world): All chunks are saved
+[10:43:00] [Server thread/INFO] [minecraft/MinecraftServer]: ThreadedAnvilChunkStorage (DIM1): All chunks are saved
+[10:43:00] [Server thread/INFO] [minecraft/MinecraftServer]: ThreadedAnvilChunkStorage (DIM-1): All chunks are saved
+[10:43:00] [Server thread/INFO] [minecraft/MinecraftServer]: ThreadedAnvilChunkStorage: All dimensions are saved
+[10:43:00] [Server thread/INFO] [minecraft/GameTestServer]: Game test server shutting down
+
+BUILD SUCCESSFUL in 33s
+18 actionable tasks: 1 executed, 17 up-to-date
+Configuration cache entry stored.

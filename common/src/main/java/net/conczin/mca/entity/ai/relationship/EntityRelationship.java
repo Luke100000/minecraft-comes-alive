@@ -61,12 +61,12 @@ public interface EntityRelationship {
     }
 
     default Optional<Entity> getPartner() {
-        UUID partnerUUID = getFamilyEntry().partner();
-        Entity entity = getWorld().getEntity(partnerUUID);
-        if (entity == null) {
-            entity = getWorld().getServer().getPlayerList().getPlayer(partnerUUID);
-        }
-        return Optional.ofNullable(entity);
+        return getPartnerUUID().map(partnerUUID -> {
+            Entity entity = getWorld().getEntity(partnerUUID);
+            return entity == null
+                    ? getWorld().getServer().getPlayerList().getPlayer(partnerUUID)
+                    : entity;
+        });
     }
 
     //try to load a PlayerSaveData before loading the entity
@@ -89,6 +89,9 @@ public interface EntityRelationship {
             getRelationshipStream(getFamilyEntry().streamParents())
                     .forEach(r -> r.onTragedy(cause, burialSite, RelationshipType.CHILD, victim));
 
+            getRelationshipStream(getFamilyEntry().streamChildren())
+                    .forEach(r -> r.onTragedy(cause, burialSite, RelationshipType.PARENT, victim));
+
             getRelationshipStream(getFamilyEntry().siblings().stream())
                     .forEach(r -> r.onTragedy(cause, burialSite, RelationshipType.SIBLING, victim));
 
@@ -104,6 +107,28 @@ public interface EntityRelationship {
                 endRelationShip(RelationshipState.SINGLE);
             }
         }
+    }
+
+    /**
+     * Undoes death for a villager revived from a tombstone. Death marks the marriage WIDOW but
+     * keeps the partner uuid, so re-marry when that partner still points back. Otherwise the
+     * villager stays a widow and can remarry.
+     */
+    default void onResurrection() {
+        FamilyTreeNode entry = getFamilyEntry();
+        entry.setDeceased(false);
+
+        UUID partnerId = entry.partner();
+        if (entry.getRelationshipState() != RelationshipState.WIDOW || !FamilyTreeNode.isValid(partnerId)) {
+            return;
+        }
+
+        getFamilyTree().getOrEmpty(partnerId)
+                .filter(partner -> entry.id().equals(partner.partner()))
+                .ifPresent(partner -> {
+                    entry.updatePartner(partner);
+                    partner.updatePartner(entry);
+                });
     }
 
     default void marry(Entity spouse) {
@@ -137,16 +162,14 @@ public interface EntityRelationship {
     }
 
     default Optional<UUID> getPartnerUUID() {
-        UUID spouse = getFamilyEntry().partner();
-        if (spouse.equals(Util.NIL_UUID)) {
-            return Optional.empty();
-        } else {
-            return Optional.of(spouse);
-        }
+        return getFamilyEntry().activePartner();
     }
 
     default Optional<Component> getPartnerName() {
-        return getFamilyTree().getOrEmpty(getFamilyEntry().partner()).map(FamilyTreeNode::getName).map(Component::literal);
+        return getPartnerUUID()
+                .flatMap(getFamilyTree()::getOrEmpty)
+                .map(FamilyTreeNode::getName)
+                .map(Component::literal);
     }
 
     default boolean isMarried() {

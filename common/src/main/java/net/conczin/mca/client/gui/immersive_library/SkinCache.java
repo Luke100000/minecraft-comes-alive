@@ -9,6 +9,7 @@ import net.conczin.mca.client.gui.immersive_library.responses.Response;
 import net.conczin.mca.client.gui.immersive_library.types.Content;
 import net.conczin.mca.client.gui.immersive_library.types.LiteContent;
 import net.conczin.mca.client.resources.SkinMeta;
+import net.conczin.mca.client.render.DynamicSkinCache;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.texture.TextureManager;
@@ -159,6 +160,7 @@ public class SkinCache {
             ResourceLocation identifier = ResourceLocation.fromNamespaceAndPath("immersive_library", String.valueOf(contentid));
 
             TextureManager textureManager = Minecraft.getInstance().getTextureManager();
+            DynamicSkinCache.invalidateSourceTexture(identifier);
             textureManager.register(identifier, new DynamicTexture(image));
 
             textureIdentifiers.put(contentid, identifier);

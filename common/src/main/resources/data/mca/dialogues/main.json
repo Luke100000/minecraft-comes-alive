@@ -101,7 +101,6 @@
     },
     {
       "name": "rumors",
-      "constraints": "rumors_cooldown",
       "results": [
         {
           "actions": {

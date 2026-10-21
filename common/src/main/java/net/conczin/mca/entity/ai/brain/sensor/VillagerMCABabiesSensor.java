@@ -1,5 +1,6 @@
 package net.conczin.mca.entity.ai.brain.sensor;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.minecraft.server.level.ServerLevel;
@@ -23,7 +24,7 @@ public class VillagerMCABabiesSensor extends Sensor<LivingEntity> {
     }
 
     private List<LivingEntity> getVisibleVillagerBabies(LivingEntity entities) {
-        return getVisibleMobs(entities).find(this::isVillagerBaby).toList();
+        return ImmutableList.copyOf(getVisibleMobs(entities).findAll(this::isVillagerBaby));
     }
 
     private boolean isVillagerBaby(LivingEntity entity) {

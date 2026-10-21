@@ -27,8 +27,6 @@ import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 
 public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> extends HumanoidMobRenderer<T, VillagerEntityModelMCA<T>> {
-    private static final double CARRIED_NAME_TAG_Y = 0.63;
-
     public VillagerLikeEntityMCARenderer(EntityRendererProvider.Context ctx, VillagerEntityModelMCA<T> model) {
         super(ctx, model, 0.5F);
         addLayer(new HumanoidArmorLayer<>(this, createArmorModel(0.3f), createArmorModel(0.55f), ctx.getModelManager()));
@@ -44,8 +42,8 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> exte
 
     @Override
     protected void scale(T villager, PoseStack matrices, float tickDelta) {
-        float height = villager.getRawVerticalScaleFactor();
-        float width = villager.getRawHorizontalScaleFactor();
+        float height = villager.getVisualVerticalScaleFactor();
+        float width = villager.getVisualHorizontalScaleFactor();
         matrices.scale(width, height, width);
         if (villager.getAgeState() == AgeState.BABY && !villager.isPassenger()) {
             matrices.translate(0, 0.6F, 0);
@@ -90,7 +88,7 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> exte
         boolean visibleThroughWalls = !villager.isDiscrete();
         int yOffset = "deadmau5".equals(displayName.getString()) ? -10 : 0;
         poseStack.pushPose();
-        poseStack.translate(attachment.x, CARRIED_NAME_TAG_Y + 0.5, attachment.z);
+        poseStack.translate(attachment.x, villager.getVisualNameTagHeight() + 0.5, attachment.z);
         poseStack.mulPose(this.entityRenderDispatcher.cameraOrientation());
         poseStack.scale(0.025F, -0.025F, 0.025F);
         Matrix4f matrix = poseStack.last().pose();
