@@ -168,7 +168,8 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                         int ordinaryEffectiveBudget = Math.max(ordinaryBudget,
                                 Mth.ceil(getOrdinaryPathLength(mob) * VISITED_NODES_PER_BLOCK));
                         effectiveMultiplier = Math.min(effectiveMultiplier,
-                                (float) Math.max(MAX_EXTENDED_VISITED_NODES, ordinaryEffectiveBudget) / ordinaryBudget);
+                                (float) Math.max(MAX_EXTENDED_VISITED_NODES, ordinaryEffectiveBudget)
+                                        / ordinaryBudget);
                     }
                 }
                 if (!PathRequestDiagnostics.enabled()) {
@@ -479,6 +480,11 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     @Override
     public void tick() {
         super.tick();
+        if (this.path != null && this.path.isDone() && hasUnreachedFinalTarget()) {
+            // Vanilla's airborne branch can advance the final node without followThePath.
+            // Keep that same admitted node until native movement satisfies its semantic target.
+            this.path.setNextNodeIndex(this.path.getNodeCount() - 1);
+        }
         recoverCompletedPersistentWalkTarget();
         chainCompletedPersistentWalkTarget();
         this.climbTraversal.tick(this.path, this.speedModifier, this.tick);
@@ -790,15 +796,9 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                     }
                 }
             }
-            WalkTarget walkTarget = this.mob.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
-                    .orElse(null);
-            if (this.path.canReach() && this.path.getNextNodeIndex() == this.path.getNodeCount() - 1
-                    && walkTarget != null && walkTarget.getTarget() instanceof BedApproachTarget bedTarget
-                    && bedTarget.getPathTargets(this.mob).contains(this.path.getTarget())
-                    && !bedTarget.isReached(this.mob, 0)) {
-                // Vanilla's width-based waypoint tolerance can finish a small mob's route
-                // outside sleep reach. Retain the final node so native move control finishes
-                // the safe approach; never hold partial or intermediate physical spans here.
+            if (this.path.getNextNodeIndex() == this.path.getNodeCount() - 1 && hasUnreachedFinalTarget()) {
+                // Logical arrival can precede the producer's interaction pose. Partial and
+                // intermediate spans keep the ordinary physical waypoint rules.
                 this.doStuckDetection(position);
                 return;
             }
@@ -822,6 +822,14 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             return;
         }
         this.doStuckDetection(position);
+    }
+
+    private boolean hasUnreachedFinalTarget() {
+        if (this.path == null || !this.path.canReach() || this.path.getNodeCount() == 0) return false;
+        WalkTarget walkTarget = this.mob.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        return walkTarget != null && walkTarget.getTarget() instanceof MultiTargetPositionTracker target
+                && target.getPathTargets(this.mob).contains(this.path.getTarget())
+                && !target.isReached(this.mob, 0);
     }
 
     @Override
