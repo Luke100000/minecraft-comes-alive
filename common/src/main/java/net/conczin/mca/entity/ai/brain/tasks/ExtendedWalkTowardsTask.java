@@ -87,7 +87,7 @@ public final class ExtendedWalkTowardsTask {
                             }
 
                             if (currentWalkTarget != null) {
-                                if (!preserveCurrentWalkTarget(entity, retryGate, destination, globalPos, currentWalkTarget, policy)) {
+                                if (!preserveCurrentWalkTarget(world, entity, retryGate, destination, globalPos, currentWalkTarget, policy)) {
                                     walkTarget.erase();
                                     if (currentWalkTarget instanceof DestinationOwnedWalkTarget ownedTarget
                                             && ownedTarget.ownedBy(destination)) {
@@ -180,7 +180,7 @@ public final class ExtendedWalkTowardsTask {
         }
     }
 
-    private static boolean preserveCurrentWalkTarget(VillagerEntityMCA entity, WalkTargetRetryGate retryGate,
+    private static boolean preserveCurrentWalkTarget(ServerLevel world, VillagerEntityMCA entity, WalkTargetRetryGate retryGate,
                                                      MemoryModuleType<GlobalPos> destinationMemory, GlobalPos destination,
                                                      WalkTarget currentTarget, Policy policy) {
         if (currentTarget instanceof DestinationOwnedWalkTarget ownedFinalTarget) {
@@ -195,7 +195,8 @@ public final class ExtendedWalkTowardsTask {
             }
             return !(currentTarget.getTarget() instanceof PersistentPathTarget)
                     || policy.finalTargetResolver() == NO_FINAL_TARGET_OVERRIDE
-                    || MCAGroundPathNavigation.requiresExtendedPath(entity, destination.pos());
+                    || MCAGroundPathNavigation.requiresExtendedPath(entity, destination.pos())
+                    || policy.finalTargetResolver().resolve(world, entity, destination).isEmpty();
         }
         return true;
     }

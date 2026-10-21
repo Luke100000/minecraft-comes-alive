@@ -1090,6 +1090,9 @@ public final class VillageMourningGameTests {
         VillagerEntityMCA meet = spawnVillager(helper, new BlockPos(3, 1, 1), "Burst Meet Probe");
         VillagerEntityMCA work = spawnVillager(helper, new BlockPos(4, 1, 1), "Burst Work Probe");
         VillagerEntityMCA rest = spawnVillager(helper, new BlockPos(5, 1, 1), "Burst Rest Probe");
+        // Keep the IDLE test resident independent of random spawn professions
+        // and the shared test world's clock before testing mourning selection.
+        makeAwake(idle);
         GlobalPos poi = GlobalPos.of(helper.getLevel().dimension(), helper.absolutePos(new BlockPos(2, 1, 2)));
         meet.getBrain().setMemory(MemoryModuleType.MEETING_POINT, poi);
         meet.getBrain().setActiveActivityIfPossible(Activity.MEET);
