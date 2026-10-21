@@ -34,6 +34,7 @@ import net.conczin.mca.entity.ai.brain.tasks.chore.ChorePathfindingGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.FishingTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.HarvestingTaskGameTests;
 import net.conczin.mca.entity.ai.navigation.AutonomousPathfindingGameTests;
+import net.conczin.mca.entity.ai.navigation.ReportedBridgeNavigationGameTests;
 import net.conczin.mca.entity.ai.navigation.FenceGateInteractionGameTests;
 import net.conczin.mca.entity.ai.navigation.HomeArrivalGameTests;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigationGameTests;
@@ -120,6 +121,7 @@ public final class McaGameTestRegistration {
             ChorePathfindingGameTests.class,
             FenceGateInteractionGameTests.class,
             AutonomousPathfindingGameTests.class,
+            ReportedBridgeNavigationGameTests.class,
             HomeArrivalGameTests.class,
             MCAGroundPathNavigationGameTests.class,
             MCAWalkNodeEvaluatorLookupGameTests.class,
