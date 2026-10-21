@@ -14,7 +14,7 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 /** Physical node poses shared by search clearance, movement targets, and arrival. */
-final class PathNodeGeometry {
+public final class PathNodeGeometry {
     static final double FLOOR_EPSILON = 1.0E-3D;
 
     private PathNodeGeometry() { }
@@ -34,7 +34,7 @@ final class PathNodeGeometry {
                 feet.y - box.minY, feet.z - (box.minZ + box.maxZ) * 0.5D);
     }
 
-    static double walkingFloorY(BlockGetter level, BlockPos pos, Mob mob, double floorY) {
+    public static double walkingFloorY(BlockGetter level, BlockPos pos, Mob mob, double floorY) {
         BlockState state = level.getBlockState(pos);
         if (state.isAir() || !state.isPathfindable(PathComputationType.LAND)) return floorY;
 
