@@ -3,14 +3,15 @@ package net.conczin.mca.client.render.layer;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCA;
-import net.conczin.mca.client.model.CommonVillagerModel;
+import net.conczin.mca.MCAClient;
+import net.conczin.mca.client.model.VillagerOverlayModel;
 import net.conczin.mca.client.resources.EyeTextureLayers;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.resources.FaceList;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.model.HumanoidModel;
+import net.minecraft.client.model.PlayerModel;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
@@ -25,26 +26,20 @@ import net.minecraft.world.item.DyeColor;
 import java.io.InputStream;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> extends VillagerLayer<T, M> {
+public class FaceLayer<T extends LivingEntity> extends VillagerLayer<T> {
     private static final int OPAQUE_WHITE = 0xFFFFFFFF;
     private static final Map<EyeLayerKey, ResourceLocation> EYE_TEXTURE_CACHE = new ConcurrentHashMap<>();
 
-    private final String variant;
-
-    public FaceLayer(RenderLayerParent<T, M> renderer, M model, String variant) {
+    public FaceLayer(RenderLayerParent<T, PlayerModel<T>> renderer, VillagerOverlayModel<T> model) {
         super(renderer, model);
-        this.variant = variant;
     }
 
     @Override
-    public void render(PoseStack transform, MultiBufferSource provider, int light, T villager, float limbAngle, float limbDistance, float tickDelta, float animationProgress, float headYaw, float headPitch) {
+    protected void configureModel(T villager) {
         model.setAllVisible(false);
-        model.head.visible = true;
-
-        super.render(transform, provider, light, villager, limbAngle, limbDistance, tickDelta, animationProgress, headYaw, headPitch);
+        model.head.visible = getParentModel().head.visible;
     }
 
     @Override
@@ -53,35 +48,31 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
     }
 
     @Override
-    public void renderFinal(PoseStack transform, MultiBufferSource provider, int light, T villager, float tickDelta, boolean visible, boolean glowing) {
+    public void renderFinal(PoseStack transform, MultiBufferSource provider, int light, T villager, float tickDelta, Visibility visibility) {
         int overlay = LivingEntityRenderer.getOverlayCoords(villager, 0);
         ResourceLocation skin = getSkin(villager);
 
         if (isBlinking(villager)) {
             ResourceLocation blink = getBlinkSkin();
             if (canUse(blink)) {
-                renderModel(transform, provider, light, model, OPAQUE_WHITE, blink, overlay, visible, glowing);
+                renderModel(transform, provider, light, OPAQUE_WHITE, blink, overlay, visibility);
             }
             return;
         }
 
         VillagerLike<?> villagerLike = getVillager(villager);
         if (canUse(skin)) {
-            renderModel(transform, provider, light, model, OPAQUE_WHITE, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.SCLERA, EyeTextureLayers.Side.FULL), overlay, visible, glowing);
-            renderModel(transform, provider, light, model, EyeTextureLayers.DETAILS_TINT, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.DETAILS, EyeTextureLayers.Side.FULL), overlay, visible, glowing);
+            renderModel(transform, provider, light, OPAQUE_WHITE, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.SCLERA, EyeTextureLayers.Side.FULL), overlay, visibility);
+            renderModel(transform, provider, light, EyeTextureLayers.DETAILS_TINT, getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.DETAILS, EyeTextureLayers.Side.FULL), overlay, visibility);
 
             if (villagerLike.getTraits().hasTrait(Traits.HETEROCHROMIA)) {
-                renderModel(transform, provider, light, model, getEyeColor(villager, tickDelta, true), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.LEFT), overlay, visible, glowing);
-                renderModel(transform, provider, light, model, getEyeColor(villager, tickDelta, false), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.RIGHT), overlay, visible, glowing);
+                renderModel(transform, provider, light, getEyeColor(villager, tickDelta, true), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.LEFT), overlay, visibility);
+                renderModel(transform, provider, light, getEyeColor(villager, tickDelta, false), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.RIGHT), overlay, visibility);
             } else {
-                renderModel(transform, provider, light, model, getEyeColor(villager, tickDelta, false), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.FULL), overlay, visible, glowing);
+                renderModel(transform, provider, light, getEyeColor(villager, tickDelta, false), getOrGenerateEyeLayer(skin, EyeTextureLayers.Layer.IRIS, EyeTextureLayers.Side.FULL), overlay, visibility);
             }
         }
 
-        ResourceLocation extraOverlay = getOverlay(villager);
-        if (!Objects.equals(skin, extraOverlay) && canUse(extraOverlay)) {
-            renderModel(transform, provider, light, model, OPAQUE_WHITE, extraOverlay, overlay, visible, glowing);
-        }
     }
 
     @Override
@@ -90,16 +81,11 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
         if (list == null) {
             return getBlinkSkin();
         }
-        return list.pick(variant, getVillager(villager).getGenetics().getGene(Genetics.FACE));
+        return list.pick("normal", getVillager(villager).getGenetics().getGene(Genetics.FACE));
     }
 
     private ResourceLocation getBlinkSkin() {
         return cached("skins/face/normal/blink.png", MCA::locate);
-    }
-
-    @Override
-    protected ResourceLocation getOverlay(T villager) {
-        return null;
     }
 
     public static void clearGeneratedEyeTextureCache() {
@@ -196,7 +182,7 @@ public class FaceLayer<T extends LivingEntity, M extends HumanoidModel<T>> exten
     }
 
     private VillagerLike<?> getVillager(T villager) {
-        return CommonVillagerModel.getVillager(villager);
+        return MCAClient.resolveVillager(villager);
     }
 
     private record EyeLayerKey(ResourceLocation texture, EyeTextureLayers.Layer layer, EyeTextureLayers.Side side) {

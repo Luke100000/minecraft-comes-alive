@@ -2,7 +2,6 @@ package net.conczin.mca.mixin.client;
 
 import net.conczin.mca.Config;
 import net.conczin.mca.MCAClient;
-import net.conczin.mca.client.model.CommonVillagerModel;
 import net.conczin.mca.entity.VillagerLike;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
@@ -38,7 +37,7 @@ public abstract class MixinGameRenderer {
     @Inject(method = "tick", at = @At("TAIL"))
     public void mca$injectTick(CallbackInfo ci) {
         if (MCAClient.areShadersAllowed() && minecraft.cameraEntity != null) {
-            VillagerLike<?> villagerLike = CommonVillagerModel.getVillager(minecraft.cameraEntity);
+            VillagerLike<?> villagerLike = MCAClient.resolveVillager(minecraft.cameraEntity);
             if (villagerLike != null) {
                 if (postEffect == null) {
                     if (mca$currentShader != null) {

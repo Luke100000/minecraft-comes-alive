@@ -32,22 +32,26 @@ public record AddCustomClothingMessage(String identifier, boolean isHair, String
 
     @Override
     public void handleServer(ServerPlayer player) {
-        if (!CustomClothingManager.canEdit(player) || !isValidLibraryId(identifier) || json.length() > 4096) {
+        if (!isValidLibraryId(identifier) || json.length() > 4096) {
             return;
         }
 
-        SkinListEntry entry;
-        try {
-            JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
-            entry = isHair ? new Hair(identifier, obj) : new Clothing(identifier, obj);
-        } catch (RuntimeException invalidPayload) {
-            MCA.LOGGER.warn("Ignoring invalid global skin data for {}", identifier);
+        boolean alreadyExists = isHair
+                ? CustomClothingManager.getHair().getEntries().containsKey(identifier)
+                : CustomClothingManager.getClothing().getEntries().containsKey(identifier);
+        if (!CustomClothingManager.canAdd(player, alreadyExists)) {
             return;
         }
-        if (entry instanceof Hair hair) {
-            CustomClothingManager.getHair().addEntry(identifier, hair);
-        } else if (entry instanceof Clothing clothing) {
-            CustomClothingManager.getClothing().addEntry(identifier, clothing);
+
+        try {
+            JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
+            if (isHair) {
+                CustomClothingManager.getHair().addEntry(identifier, new Hair(identifier, obj));
+            } else {
+                CustomClothingManager.getClothing().addEntry(identifier, new Clothing(identifier, obj));
+            }
+        } catch (RuntimeException invalidPayload) {
+            MCA.LOGGER.warn("Ignoring invalid global skin data for {}", identifier);
         }
     }
 
@@ -57,6 +61,9 @@ public record AddCustomClothingMessage(String identifier, boolean isHair, String
                 || !id.getPath().matches("[0-9]{1,10}")) {
             return false;
         }
+
+        // The library and its client-side texture cache both use integer content IDs.
+        // Reject aliases ("0012") so server entry keys match client cache keys.
         try {
             return id.getPath().equals(Integer.toString(Integer.parseInt(id.getPath())));
         } catch (NumberFormatException outOfRange) {

@@ -4,16 +4,17 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.MCAClient;
-import net.conczin.mca.client.model.PlayerArmorExtendedModel;
-import net.conczin.mca.client.model.VillagerEntityModelMCA;
+import net.conczin.mca.client.model.MCAModelLayers;
+import net.conczin.mca.client.model.MCAArmorModel;
+import net.conczin.mca.entity.VillagerLike;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.HumanoidModel;
-import net.minecraft.client.model.geom.builders.CubeDeformation;
-import net.minecraft.client.model.geom.builders.LayerDefinition;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.layers.HumanoidArmorLayer;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -22,16 +23,33 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(HumanoidArmorLayer.class)
 public abstract class MixinHumanoidArmorLayer<T extends LivingEntity, A extends HumanoidModel<T>> {
     @Unique
-    protected final A mca$leggingsModel = mca$createModel(0.5F);
+    @Nullable
+    private A mca$leggingsModel;
     @Unique
-    protected final A mca$bodyModel = mca$createModel(1.0F);
+    @Nullable
+    private A mca$bodyModel;
     @Shadow
     protected abstract boolean usesInnerModel(EquipmentSlot slot);
 
     @Unique
     @SuppressWarnings("unchecked")
-    private A mca$createModel(float dilation) {
-        return (A) new PlayerArmorExtendedModel<T>(LayerDefinition.create(VillagerEntityModelMCA.armorData(new CubeDeformation(dilation)), 64, 32).bakeRoot());
+    private A mca$getModel(boolean inner) {
+        A current = inner ? mca$leggingsModel : mca$bodyModel;
+        if (current != null) {
+            return current;
+        }
+
+        current = (A) new MCAArmorModel<T>(
+                Minecraft.getInstance().getEntityModels().bakeLayer(
+                        inner ? MCAModelLayers.PLAYER_INNER_ARMOR : MCAModelLayers.PLAYER_OUTER_ARMOR
+                )
+        );
+        if (inner) {
+            mca$leggingsModel = current;
+        } else {
+            mca$bodyModel = current;
+        }
+        return current;
     }
 
     @WrapOperation(
@@ -46,23 +64,29 @@ public abstract class MixinHumanoidArmorLayer<T extends LivingEntity, A extends 
             HumanoidArmorLayer<?, ?, ?> layer,
             EquipmentSlot slot,
             Operation<A> original,
-            PoseStack matrixStack,
-            MultiBufferSource vertexConsumerProvider,
+            PoseStack matrices,
+            MultiBufferSource buffers,
             int light,
-            T livingEntity,
-            float limbSwing,
-            float limbSwingAmount,
-            float partialTick,
-            float ageInTicks,
-            float netHeadYaw,
+            T entity,
+            float limbAngle,
+            float limbDistance,
+            float tickDelta,
+            float animationProgress,
+            float headYaw,
             float headPitch
     ) {
-        if (livingEntity instanceof Player && MCAClient.useGeneticsRenderer(livingEntity.getUUID())) {
-            A model = this.usesInnerModel(slot) ? mca$leggingsModel : mca$bodyModel;
-            if (model != null) {
-                return model;
+        boolean geneticsPlayer = entity instanceof Player && MCAClient.useGeneticsRenderer(entity.getUUID());
+        A model = geneticsPlayer
+                ? mca$getModel(usesInnerModel(slot))
+                : original.call(layer, slot);
+
+        if (model instanceof MCAArmorModel<?> morphology) {
+            if (slot == EquipmentSlot.CHEST && (entity instanceof VillagerLike<?> || geneticsPlayer)) {
+                morphology.applyMorphology(MCAClient.resolveVillager(entity));
+            } else {
+                morphology.hideMorphology();
             }
         }
-        return original.call(layer, slot);
+        return model;
     }
 }
