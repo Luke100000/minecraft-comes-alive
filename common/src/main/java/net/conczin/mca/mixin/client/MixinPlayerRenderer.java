@@ -128,10 +128,12 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<LivingEnt
 
     @Inject(method = "scale(Lnet/minecraft/client/renderer/entity/state/AvatarRenderState;Lcom/mojang/blaze3d/vertex/PoseStack;)V", at = @At("TAIL"))
     private void mca$injectScale(AvatarRenderState state, PoseStack poseStack, CallbackInfo ci) {
+        if (!MCAClient.isPlayerRendererAllowed()) {
+            return;
+        }
+
         if (!(state instanceof VillagerStateHolder holder) || !holder.mca$isGeneticsRendererActive()) {
-            if (MCAClient.isPlayerRendererAllowed()) {
-                model = mca$vanillaModel;
-            }
+            model = mca$vanillaModel;
             return;
         }
 

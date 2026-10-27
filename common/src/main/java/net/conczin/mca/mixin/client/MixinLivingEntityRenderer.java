@@ -1,6 +1,7 @@
 package net.conczin.mca.mixin.client;
 
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
+import net.conczin.mca.MCAClient;
 import net.conczin.mca.client.gui.PreviewEntityAnimation;
 import net.conczin.mca.client.render.VillagerStateHolder;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
@@ -36,7 +37,9 @@ public class MixinLivingEntityRenderer {
             boolean translucent,
             boolean showOutline
     ) {
-        return state instanceof VillagerStateHolder holder && holder.mca$isVillagerRendererActive()
+        return MCAClient.isPlayerRendererAllowed()
+                && state instanceof VillagerStateHolder holder
+                && holder.mca$isVillagerRendererActive()
                 ? null
                 : original;
     }
