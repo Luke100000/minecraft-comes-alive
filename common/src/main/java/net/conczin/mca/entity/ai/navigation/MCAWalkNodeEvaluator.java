@@ -125,12 +125,15 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
 
         BlockPos mobPos = this.mob.blockPosition();
         AABB startBox = this.mob.getBoundingBox();
-        if (selectedStart.type == PathType.BLOCKED && selectedStart.asBlockPos().equals(mobPos)
+        if ((selectedStart.type == PathType.BLOCKED
+                || selectedStart.type == PathType.TRAPDOOR
+                || selectedStart.type == PathType.DANGER_TRAPDOOR)
+                && selectedStart.asBlockPos().equals(mobPos)
                 && startBox.minY > mobPos.getY() + RAISED_START_EPSILON
                 && Math.abs(this.getFloorLevel(mobPos.above()) - startBox.minY) < RAISED_START_EPSILON) {
             // Rounding can put the start inside a low support, such as an extinguished
-            // campfire. Its floor is below the bridge, so native jump checks reject
-            // the next support. Use the clear node resting on the actual surface.
+            // campfire or closed trapdoor. The lower floor rejects real exits and
+            // leaves movement aiming beneath the feet. Start on the actual surface.
             Node supportedStart = this.getStartNode(mobPos.above());
             if (supportedStart.costMalus >= 0.0F && hasBlockClearance(supportedStart)) {
                 return supportedStart;
