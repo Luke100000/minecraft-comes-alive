@@ -14,6 +14,20 @@ public final class GameTestTerrain {
     private GameTestTerrain() {
     }
 
+    /** Wait for queued roof lighting before checking the behavior under test. */
+    public static void whenSkyLightBlocked(GameTestHelper helper, BlockPos position,
+                                           int remainingTicks, Runnable continuation) {
+        if (!helper.getLevel().canSeeSky(position)) {
+            continuation.run();
+            return;
+        }
+        helper.assertTrue(remainingTicks > 0,
+                "GameTest fixture lighting never settled beneath its roof at " + position
+                        + "; skyLight=" + helper.getLevel().getBrightness(
+                                net.minecraft.world.level.LightLayer.SKY, position));
+        helper.runAfterDelay(1, () -> whenSkyLightBlocked(helper, position, remainingTicks - 1, continuation));
+    }
+
     public static void prepareFlatArea(GameTestHelper helper, BlockPos center, int radius) {
         prepareFlatArea(helper, center, radius, 2);
     }

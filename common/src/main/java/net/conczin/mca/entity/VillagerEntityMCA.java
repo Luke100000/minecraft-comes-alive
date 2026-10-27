@@ -1770,6 +1770,29 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             getVillagerBrain().randomize();
         }
 
+        ItemStack mourningFlower = getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_FLOWER)
+                .orElse(ItemStack.EMPTY);
+        boolean restoreMourningFlower = !mourningFlower.isEmpty()
+                && getBrain().hasMemoryValue(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND)
+                && (getMainHandItem().isEmpty() || ItemStack.matches(getMainHandItem(), mourningFlower));
+
+        // Older saves kept the displaced mourning item only in Brain memory.
+        // Migrate it into the inventory that now owns real equipment.
+        if (!data.getBoolean("EquipmentInventorySeparated") && restoreMourningFlower) {
+            getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND)
+                    .filter(stack -> !stack.isEmpty() && !InventoryUtils.isTemporary(stack))
+                    .filter(stack -> InventoryUtils.stream(inventory).noneMatch(item -> ItemStack.matches(item, stack)))
+                    .ifPresent(stack -> {
+                        ItemStack leftover = inventory.addItem(stack.copy());
+                        if (!leftover.isEmpty() && !level().isClientSide) {
+                            spawnAtLocation(leftover);
+                        }
+                    });
+        }
+        if (restoreMourningFlower && ItemStack.matches(getMainHandItem(), mourningFlower)) {
+            super.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
+        }
+
         // Older saves also serialized borrowed inventory stacks as equipment.
         if (!data.getBoolean("EquipmentInventorySeparated")) {
             for (EquipmentSlot slot : EquipmentSlot.values()) {
@@ -1782,6 +1805,11 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         // Rebuild equipment from inventory; the setter preserves equipment-only real items.
         clearEquipment();
+        if (restoreMourningFlower) {
+            ItemStack flower = InventoryUtils.temporary(mourningFlower.copy());
+            getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_FLOWER, flower.copy());
+            setItemInHand(InteractionHand.MAIN_HAND, flower);
+        }
     }
 
     @Override

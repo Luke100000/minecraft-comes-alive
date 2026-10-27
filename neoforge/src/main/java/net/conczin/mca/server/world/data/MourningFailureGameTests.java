@@ -254,9 +254,9 @@ public final class MourningFailureGameTests {
 
     private static BlockPos prepareArena(GameTestHelper helper) {
         BlockPos center = helper.absolutePos(new BlockPos(12, 1, 12));
-        helper.assertTrue(helper.getBounds().contains(Vec3.atCenterOf(center.offset(9, 3, 9))),
+        helper.assertTrue(helper.getBounds().contains(Vec3.atCenterOf(center.offset(9, 2, 9))),
                 "mourning fixture must fit inside its allocated template");
-        prepareFlatArea(helper, center, 9, 4);
+        prepareFlatArea(helper, center, 9, 3);
         for (int x = -9; x <= 9; x++) {
             for (int z = -9; z <= 9; z++) {
                 if (Math.max(Math.abs(x), Math.abs(z)) != 9) continue;

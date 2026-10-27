@@ -9,6 +9,7 @@ import net.conczin.mca.registry.TagsMCA;
 import net.conczin.mca.server.world.data.Building;
 import net.conczin.mca.server.world.data.GraveyardManager;
 import net.conczin.mca.server.world.data.Village;
+import net.conczin.mca.util.InventoryUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
@@ -152,9 +153,15 @@ public final class Mourning {
                 .filter(mourningFlower -> ItemStack.matches(currentMainHand, mourningFlower))
                 .flatMap(mourningFlower -> villager.getBrain()
                         .getMemoryInternal(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND))
+                .map(previousMainHand -> {
+                    if (InventoryUtils.isTemporary(previousMainHand)) return previousMainHand.copy();
+                    return InventoryUtils.stream(villager.getInventory())
+                            .filter(stack -> ItemStack.matches(stack, previousMainHand))
+                            .findFirst().orElse(ItemStack.EMPTY);
+                })
                 .ifPresent(previousMainHand -> villager.setItemInHand(
                         InteractionHand.MAIN_HAND,
-                        previousMainHand.copy()
+                        previousMainHand
                 ));
         villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND);
         villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_FLOWER);

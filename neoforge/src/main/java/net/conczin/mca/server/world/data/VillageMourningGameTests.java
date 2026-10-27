@@ -8,6 +8,7 @@ import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.MoodGroup;
 import net.conczin.mca.entity.ai.Mourning;
+import net.conczin.mca.util.InventoryUtils;
 import net.conczin.mca.entity.ai.SchedulesMCA;
 import net.conczin.mca.entity.ai.brain.tasks.EnterGraveyardTask;
 import net.conczin.mca.entity.ai.brain.tasks.GrieveTask;
@@ -316,6 +317,9 @@ public final class VillageMourningGameTests {
         restore.doStop(helper.getLevel(), mourner, helper.getLevel().getGameTime() + 1L);
         helper.assertTrue(mourner.getMainHandItem().is(Items.IRON_SWORD),
                 "stopping mourning while the flower still owns the hand must restore the previous item");
+        helper.assertTrue(InventoryUtils.stream(mourner.getInventory())
+                        .noneMatch(stack -> stack.is(Items.IRON_SWORD) && stack != mourner.getMainHandItem()),
+                "restoring mourning equipment created a second sword");
 
         Mourning.start(mourner, grave);
         EnterGraveyardTask secondEnter = new EnterGraveyardTask();
