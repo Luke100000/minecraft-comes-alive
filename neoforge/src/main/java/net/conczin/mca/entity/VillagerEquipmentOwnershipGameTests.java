@@ -1,17 +1,17 @@
 package net.conczin.mca.entity;
 
+import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
+import net.conczin.mca.entity.ai.Mourning;
+import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.neoforge.gametest.GameTest;
 import net.conczin.mca.neoforge.gametest.PrefixGameTestTemplate;
 import net.conczin.mca.util.InventoryUtils;
-import net.conczin.mca.entity.ai.relationship.Gender;
-import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
-import net.conczin.mca.entity.ai.Mourning;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.util.ProblemReporter;
-import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.ConversionParams;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.item.ItemEntity;

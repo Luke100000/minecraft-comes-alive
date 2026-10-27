@@ -1,6 +1,5 @@
 package net.conczin.mca.server.world.data;
 
-import net.conczin.mca.util.InventoryUtils;
 
 import net.conczin.mca.Config;
 import net.conczin.mca.block.TombstoneBlock;
@@ -10,6 +9,7 @@ import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.MoodGroup;
 import net.conczin.mca.entity.ai.Mourning;
+import net.conczin.mca.util.InventoryUtils;
 import net.conczin.mca.entity.ai.SchedulesMCA;
 import net.conczin.mca.entity.ai.brain.tasks.EnterGraveyardTask;
 import net.conczin.mca.entity.ai.brain.tasks.GrieveTask;
