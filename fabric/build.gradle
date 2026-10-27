@@ -18,8 +18,6 @@ dependencies {
     testImplementation platform('org.junit:junit-bom:6.1.3')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-    compileOnly "net.conczin:immersive_melodies:${immersive_melodies_version}+${minecraft_version}+fabric"
-    localRuntime "net.conczin:immersive_melodies:${immersive_melodies_version}+${minecraft_version}+fabric"
 }
 
 tasks.withType(Test).configureEach {

@@ -65,7 +65,6 @@ neoForge {
 }
 
 dependencies {
-    compileOnly "net.conczin:immersive_melodies:${immersive_melodies_version}+${minecraft_version}+common"
     compileOnly 'org.spongepowered:mixin:0.8.7'
     compileOnly 'org.ow2.asm:asm-tree:9.10.1'
     // Loader modules provide the runtime; common only needs the API and processor.
@@ -74,6 +73,10 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
+
+// Temporarily exclude the integration until Immersive Melodies publishes a 26.3 build.
+// Keep the source in place for re-enabling on a supported version.
+sourceSets.main.java.exclude '**/PlayImmersiveMelodyTask.java'
 
 tasks.withType(Test).configureEach {
     useJUnitPlatform()

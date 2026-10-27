@@ -335,7 +335,7 @@ public final class MourningFailureGameTests {
     }
 
     private static long getDayTime(ServerLevel level) {
-        return level.clockManager().getTotalTicks(level.dimensionType().defaultClock().orElseThrow());
+        return level.clockManager().getInstance(level.dimensionType().defaultClock().orElseThrow()).totalTicks();
     }
 
     private static void setDayTime(ServerLevel level, long ticks) {

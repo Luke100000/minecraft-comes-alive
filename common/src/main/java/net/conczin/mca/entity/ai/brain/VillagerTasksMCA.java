@@ -591,9 +591,7 @@ public class VillagerTasksMCA {
                 .add(Pair.of(StrollAroundPoi.create(MemoryModuleType.MEETING_POINT, 0.4F, 40), 2))
                 .add(Pair.of(SocializeAtBell.create(), 2));
 
-        if (MCA.platformHelper.isModLoaded("immersive_melodies")) {
-            socializingTasks.add(Pair.of(new PlayImmersiveMelodyTask(), 1));
-        }
+        // Immersive Melodies integration is disabled until its 26.3 build is published.
 
         return ImmutableList.of(
                 Pair.of(2, new RunOne<>(socializingTasks.build())),
