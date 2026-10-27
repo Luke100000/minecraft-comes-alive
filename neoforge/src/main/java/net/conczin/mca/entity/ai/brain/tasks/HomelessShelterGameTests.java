@@ -8,7 +8,7 @@ import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.BedPoiCompatibility;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
-import net.conczin.mca.entity.ai.SchedulesMCA;
+import net.conczin.mca.gametest.GameTestBrain;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
 import net.conczin.mca.entity.ai.navigation.BedApproachTarget;
 import net.conczin.mca.server.world.data.Building;
@@ -187,7 +187,9 @@ public final class HomelessShelterGameTests {
         brain.addActivity(Activity.REST, VillagerTasksMCA.getRestPackage(0.5F), Set.of(), Set.of());
         brain.setCoreActivities(Set.of(Activity.CORE));
         brain.setDefaultActivity(Activity.REST);
-        brain.setSchedule(SchedulesMCA.DEFAULT);
+        // This test isolates REST roaming, while other GameTest batches can
+        // change the shared test world's clock in the middle of a walk.
+        brain.setSchedule(GameTestBrain.fixedSchedule(Activity.REST));
         brain.setActiveActivityIfPossible(Activity.REST);
         villager.setNoAi(false);
     }
