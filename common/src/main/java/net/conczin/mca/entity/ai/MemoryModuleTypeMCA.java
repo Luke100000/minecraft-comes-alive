@@ -29,6 +29,7 @@ public interface MemoryModuleTypeMCA {
     MemoryModuleType<Long> LAST_GRIEVE = register("last_grieve", Optional.of(Codec.LONG));
     MemoryModuleType<GlobalPos> MOURNING_SITE = register("mourning_site", Optional.of(GlobalPos.CODEC));
     MemoryModuleType<GlobalPos> MOURNING_POSITION = register("mourning_position", Optional.of(GlobalPos.CODEC));
+    MemoryModuleType<Boolean> MOURNING_AMBIENT = register("mourning_ambient", Optional.of(Codec.BOOL));
     MemoryModuleType<Long> LAST_AMBIENT_MOURNING = register("last_ambient_mourning", Optional.of(Codec.LONG));
     MemoryModuleType<Long> MOURNING_RETRY_AT = register("mourning_retry_at", Optional.of(Codec.LONG));
     MemoryModuleType<ItemStack> MOURNING_PREVIOUS_MAIN_HAND = register("mourning_previous_main_hand", Optional.of(ItemStack.OPTIONAL_CODEC));

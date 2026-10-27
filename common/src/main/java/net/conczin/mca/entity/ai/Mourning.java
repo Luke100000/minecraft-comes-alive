@@ -3,6 +3,7 @@ package net.conczin.mca.entity.ai;
 import net.conczin.mca.Config;
 import net.conczin.mca.block.TombstoneBlock;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.util.InventoryUtils;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
 import net.conczin.mca.registry.TagsMCA;
@@ -27,6 +28,7 @@ import java.util.List;
 
 public final class Mourning {
     private static final long RETRY_DELAY = 1_200L;
+    private static final long FAILED_PATH_RETRY_DELAY = 4_800L;
     private static final long SAFETY_RETRY_DELAY = 200L;
     private static final double MONSTER_HORIZONTAL_RANGE = 8.0D;
     private static final double MONSTER_VERTICAL_RANGE = 5.0D;
@@ -35,6 +37,16 @@ public final class Mourning {
     }
 
     public static void start(VillagerEntityMCA villager, BlockPos grave) {
+        villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_AMBIENT);
+        assign(villager, grave);
+    }
+
+    public static void startAmbient(VillagerEntityMCA villager, BlockPos grave) {
+        villager.getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_AMBIENT, true);
+        assign(villager, grave);
+    }
+
+    private static void assign(VillagerEntityMCA villager, BlockPos grave) {
         villager.getBrain().setMemory(
                 MemoryModuleTypeMCA.MOURNING_SITE,
                 GlobalPos.of(villager.level().dimension(), grave)
@@ -74,6 +86,7 @@ public final class Mourning {
         restorePreviousHand(villager);
         villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_SITE);
         villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_POSITION);
+        villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_AMBIENT);
         villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_RETRY_AT);
     }
 
@@ -85,11 +98,35 @@ public final class Mourning {
     }
 
     public static void retry(VillagerEntityMCA villager) {
+        retry(villager, RETRY_DELAY);
+    }
+
+    public static void noStandingPosition(VillagerEntityMCA villager) {
+        if (isAmbient(villager)) {
+            finish(villager);
+        } else {
+            retry(villager);
+        }
+    }
+
+    public static void unreachable(VillagerEntityMCA villager) {
+        if (isAmbient(villager)) {
+            finish(villager);
+        } else {
+            retry(villager, FAILED_PATH_RETRY_DELAY);
+        }
+    }
+
+    private static boolean isAmbient(VillagerEntityMCA villager) {
+        return villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_AMBIENT).orElse(false);
+    }
+
+    private static void retry(VillagerEntityMCA villager, long delay) {
         restorePreviousHand(villager);
         clearMovement(villager);
         villager.getBrain().setMemory(
                 MemoryModuleTypeMCA.MOURNING_RETRY_AT,
-                villager.level().getGameTime() + RETRY_DELAY
+                villager.level().getGameTime() + delay
         );
         leaveGrievingActivity(villager);
     }
@@ -116,9 +153,15 @@ public final class Mourning {
                 .filter(mourningFlower -> ItemStack.matches(currentMainHand, mourningFlower))
                 .flatMap(mourningFlower -> villager.getBrain()
                         .getMemoryInternal(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND))
+                .map(previousMainHand -> {
+                    if (InventoryUtils.isTemporary(previousMainHand)) return previousMainHand.copy();
+                    return InventoryUtils.stream(villager.getInventory())
+                            .filter(stack -> ItemStack.matches(stack, previousMainHand))
+                            .findFirst().orElse(ItemStack.EMPTY);
+                })
                 .ifPresent(previousMainHand -> villager.setItemInHand(
                         InteractionHand.MAIN_HAND,
-                        previousMainHand.copy()
+                        previousMainHand
                 ));
         villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND);
         villager.getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_FLOWER);

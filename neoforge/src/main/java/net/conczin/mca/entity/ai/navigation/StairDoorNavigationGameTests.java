@@ -339,6 +339,45 @@ public final class StairDoorNavigationGameTests {
         });
     }
 
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 260)
+    public static void impossibleSemanticFinalTargetEventuallyYields(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(40, 3, 40));
+        prepareArea(helper, start, 6, 5);
+        BlockPos target = start.east(4);
+        VillagerEntityMCA actor = spawnProbe(helper, Vec3.atBottomCenterOf(start));
+        class ImpossibleFloorTarget extends net.minecraft.world.entity.ai.behavior.BlockPosTracker
+                implements MultiTargetPositionTracker {
+            ImpossibleFloorTarget() { super(target); }
+
+            @Override
+            public Set<BlockPos> getPathTargets(net.minecraft.world.entity.Mob mob) { return Set.of(target); }
+
+            @Override
+            public boolean isReached(net.minecraft.world.entity.Mob mob, int distance) {
+                // No platform exists two blocks above the admitted ground waypoint.
+                return mob.onGround() && mob.blockPosition().equals(target.above(2));
+            }
+        }
+        ImpossibleFloorTarget semantic = new ImpossibleFloorTarget();
+        Path path = actor.getNavigation().createPath(target, 0);
+        helper.assertTrue(path != null && path.canReach(), "fixture requires a reachable ground waypoint");
+        startWalking(helper, actor, target, true);
+        actor.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(semantic, 0.55F, 0));
+        boolean[] approached = {false};
+        helper.onEachTick(() -> {
+            approached[0] |= actor.distanceToSqr(Vec3.atBottomCenterOf(target)) < 1.5D;
+            helper.assertTrue(!semantic.isReached(actor, 0), "fixture unexpectedly satisfied its impossible arrival");
+            if (approached[0] && (!actor.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                    || actor.getBrain().hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE))) {
+                helper.succeed();
+            } else if (helper.getTick() >= 240) {
+                helper.fail("Unreachable semantic endpoint kept the journey alive without recovery: pos="
+                        + actor.position() + ", path=" + describe(actor.getNavigation().getPath())
+                        + ", walk=" + actor.getBrain().getMemory(MemoryModuleType.WALK_TARGET));
+            }
+        });
+    }
+
     private static BlockPos prepareSnowDoorCorridor(GameTestHelper helper) {
         BlockPos snow = helper.absolutePos(new BlockPos(40, 3, 40));
         prepareArea(helper, snow, 8, 6);

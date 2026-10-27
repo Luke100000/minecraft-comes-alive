@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.mojang.datafixers.util.Pair;
 import net.conczin.mca.Config;
+import net.conczin.mca.MCA;
 import net.conczin.mca.entity.EquipmentSet;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.ActivitiesMCA;
@@ -97,6 +98,7 @@ public class VillagerTasksMCA {
             MemoryModuleTypeMCA.HIT_BY_PLAYER,
             MemoryModuleTypeMCA.MOURNING_SITE,
             MemoryModuleTypeMCA.MOURNING_POSITION,
+            MemoryModuleTypeMCA.MOURNING_AMBIENT,
             MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING,
             MemoryModuleTypeMCA.MOURNING_RETRY_AT,
             MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND,
@@ -411,7 +413,8 @@ public class VillagerTasksMCA {
         return target.isAlive()
                && !target.isRemoved()
                && target.level() == villager.level()
-               && villager.canAttack(target);
+               && villager.canAttack(target)
+               && (getActivity(villager) != Activity.REST || shouldDefendDuringRest(villager, target));
     }
 
     private static boolean shouldRespondToGuardEnemy(VillagerEntityMCA villager, LivingEntity target) {
@@ -421,10 +424,17 @@ public class VillagerTasksMCA {
     }
 
     private static boolean shouldRespondToAttackTarget(VillagerEntityMCA villager, LivingEntity target) {
+        return getActivity(villager) != Activity.REST || shouldDefendDuringRest(villager, target);
+    }
+
+    private static boolean shouldDefendDuringRest(VillagerEntityMCA villager, LivingEntity target) {
         return isFollowingPlayer(villager)
-               || getActivity(villager) != Activity.REST
                || target.distanceTo(villager) < 8.0
-               || villager.getResidency().getHomeVillage().filter(village -> village.isWithinBorder(villager)).isEmpty();
+               // Homeless guards away from a village still defend themselves at range.
+               // Once a bed is claimed, a distant enemy must not prevent scheduled REST.
+               || (villager.getBrain().getMemoryInternal(MemoryModuleType.HOME).isEmpty()
+                   && villager.getResidency().getHomeVillage()
+                           .filter(village -> village.isWithinBorder(villager)).isEmpty());
     }
 
     private static boolean isFollowingPlayer(VillagerEntityMCA villager) {
@@ -458,7 +468,9 @@ public class VillagerTasksMCA {
     }
 
     private static Activity getActivity(VillagerEntityMCA villager) {
-        return villager.getBrain().getActiveNonCoreActivity().orElse(Activity.IDLE);
+        var schedule = villager.getBrain().schedule;
+        return schedule == null ? Activity.IDLE
+                : villager.level().environmentAttributes().getValue(schedule, villager.position());
     }
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getGrievingPackage() {
@@ -471,7 +483,7 @@ public class VillagerTasksMCA {
                         0,
                         GRIEVING_PATH_TIMEOUT,
                         villager -> true,
-                        Mourning::retry
+                        Mourning::unreachable
                 ))
         );
     }
@@ -575,11 +587,16 @@ public class VillagerTasksMCA {
     }
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getMeetPackage(float speedModifier) {
+        var socializingTasks = ImmutableList.<Pair<? extends BehaviorControl<? super VillagerEntityMCA>, Integer>>builder()
+                .add(Pair.of(StrollAroundPoi.create(MemoryModuleType.MEETING_POINT, 0.4F, 40), 2))
+                .add(Pair.of(SocializeAtBell.create(), 2));
+
+        if (MCA.platformHelper.isModLoaded("immersive_melodies")) {
+            socializingTasks.add(Pair.of(new PlayImmersiveMelodyTask(), 1));
+        }
+
         return ImmutableList.of(
-                Pair.of(2, new RunOne<>(ImmutableList.of(
-                        Pair.of(StrollAroundPoi.create(MemoryModuleType.MEETING_POINT, 0.4F, 40), 2),
-                        Pair.of(SocializeAtBell.create(), 2))
-                )),
+                Pair.of(2, new RunOne<>(socializingTasks.build())),
                 Pair.of(10, new ShowTradesToPlayer(400, 1600)),
                 Pair.of(10, SetLookAndInteract.create(EntityType.PLAYER, 4)),
                 Pair.of(2, SetWalkTargetFromBlockMemory.create(MemoryModuleType.MEETING_POINT, speedModifier, 6, 100, 200)),

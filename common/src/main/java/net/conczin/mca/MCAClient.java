@@ -36,6 +36,10 @@ public class MCAClient {
             return Optional.empty();
         }
 
+        return getOrRequestPlayerData(uuid);
+    }
+
+    private static Optional<VillagerLike<?>> getOrRequestPlayerData(UUID uuid) {
         if (!playerDataRequests.contains(uuid) && Minecraft.getInstance().getConnection() != null) {
             playerDataRequests.add(uuid);
             Network.sendToServer(new PlayerDataRequest(uuid));
@@ -51,11 +55,11 @@ public class MCAClient {
     }
 
     public static boolean useGeneticsRenderer(UUID uuid) {
-        return isPlayerRendererAllowed() && getGeneticsRendererData(uuid).isPresent();
+        return isPlayerRendererAllowed() && getOrRequestPlayerData(uuid).filter(data -> data.getPlayerModel() != VillagerLike.PlayerModel.VANILLA).isPresent();
     }
 
     public static boolean useVillagerRenderer(UUID uuid) {
-        return isPlayerRendererAllowed() && getVillagerRendererData(uuid).isPresent();
+        return isPlayerRendererAllowed() && getOrRequestPlayerData(uuid).filter(data -> data.getPlayerModel() == VillagerLike.PlayerModel.VILLAGER).isPresent();
     }
 
     public static Optional<VillagerLike<?>> getGeneticsRendererData(UUID uuid) {
@@ -67,10 +71,7 @@ public class MCAClient {
     }
 
     public static boolean renderArms(UUID uuid, String key) {
-        return useVillagerRenderer(uuid) &&
-               Config.getInstance().playerRendererBlacklist.entrySet().stream()
-                       .filter(entry -> entry.getValue().equals("arms") || entry.getValue().equals(key))
-                       .noneMatch(entry -> MCA.platformHelper.isModLoaded(entry.getKey()));
+        return useVillagerRenderer(uuid) && !isRendererBlocked("arms", key);
     }
 
     public static void tickClient(Minecraft client) {
@@ -116,24 +117,25 @@ public class MCAClient {
     }
 
     public static boolean isPlayerRendererAllowed() {
-        return Config.getInstance().enableVillagerPlayerModel &&
-               Config.getInstance().playerRendererBlacklist.entrySet().stream()
-                       .filter(entry -> entry.getValue().equals("all") || entry.getValue().equals("block_player"))
-                       .noneMatch(entry -> MCA.platformHelper.isModLoaded(entry.getKey()));
+        return Config.getInstance().enableVillagerPlayerModel && !isRendererBlocked("all", "block_player");
     }
 
     public static boolean isVillagerRendererAllowed() {
-        return !Config.getInstance().forceVillagerPlayerModel &&
-               Config.getInstance().playerRendererBlacklist.entrySet().stream()
-                       .filter(entry -> entry.getValue().equals("all") || entry.getValue().equals("block_villager"))
-                       .noneMatch(entry -> MCA.platformHelper.isModLoaded(entry.getKey()));
+        return !Config.getInstance().forceVillagerPlayerModel && !isRendererBlocked("all", "block_villager");
     }
 
     public static boolean areShadersAllowed(String key) {
-        return Config.getInstance().enablePlayerShaders &&
-               Config.getInstance().playerRendererBlacklist.entrySet().stream()
-                       .filter(entry -> entry.getValue().equals("shaders") || entry.getValue().equals(key))
-                       .noneMatch(entry -> MCA.platformHelper.isModLoaded(entry.getKey()));
+        return Config.getInstance().enablePlayerShaders && !isRendererBlocked("shaders", key);
+    }
+
+    private static boolean isRendererBlocked(String category, String key) {
+        for (var entry : Config.getInstance().playerRendererBlacklist.entrySet()) {
+            String value = entry.getValue();
+            if ((value.equals(category) || value.equals(key)) && MCA.platformHelper.isModLoaded(entry.getKey())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static boolean areShadersAllowed() {

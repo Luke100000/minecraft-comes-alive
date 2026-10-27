@@ -313,7 +313,7 @@ public final class HomelessShelterGameTests {
         BlockPos doorstep = center.east().south(5);
         VillagerEntityMCA villager = spawn(helper, doorstep);
         STROLL_VILLAGERS.add(villager);
-        helper.runAfterDelay(10, () -> {
+        helper.runAfterDelay(10, () -> whenSkyLightBlocked(helper, doorstep, 50, () -> {
             helper.assertTrue(!helper.getLevel().canSeeSky(doorstep), "fixture overhang did not cover doorstep");
             helper.assertTrue(villager.getResidency().getHomeVillage().isEmpty(), "fixture house was registered");
             var bedside = BedApproachTarget.create(helper.getLevel(), head).orElseThrow().getPathTargets(villager);
@@ -335,7 +335,7 @@ public final class HomelessShelterGameTests {
             helper.assertTrue(!new SeekIndoorShelterTask(0.5F).tryStart(helper.getLevel(), villager,
                     helper.getLevel().getGameTime()), "already at bedside floor but shelter restarted");
             helper.succeed();
-        });
+        }));
     }
 
     @GameTest(batch = "mca_shelter_bedside_movement", templateNamespace = "minecraft",
