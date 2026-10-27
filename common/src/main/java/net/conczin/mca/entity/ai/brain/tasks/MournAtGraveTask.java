@@ -4,6 +4,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Mourning;
+import net.conczin.mca.util.InventoryUtils;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
@@ -62,7 +63,7 @@ public class MournAtGraveTask extends Behavior<VillagerEntityMCA> {
         remainingDialogues = DIALOGUE_COUNT;
         if (villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND).isEmpty()) {
             ItemStack previousMainHand = villager.getMainHandItem().copy();
-            ItemStack mourningFlower = new ItemStack(getFlower(villager));
+            ItemStack mourningFlower = InventoryUtils.temporary(new ItemStack(getFlower(villager)));
             villager.getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND, previousMainHand);
             villager.getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_FLOWER, mourningFlower.copy());
             villager.setItemInHand(InteractionHand.MAIN_HAND, mourningFlower);
