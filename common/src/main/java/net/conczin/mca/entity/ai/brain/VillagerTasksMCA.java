@@ -96,6 +96,7 @@ public class VillagerTasksMCA {
             MemoryModuleTypeMCA.HIT_BY_PLAYER,
             MemoryModuleTypeMCA.MOURNING_SITE,
             MemoryModuleTypeMCA.MOURNING_POSITION,
+            MemoryModuleTypeMCA.MOURNING_AMBIENT,
             MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING,
             MemoryModuleTypeMCA.MOURNING_RETRY_AT,
             MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND,
@@ -395,7 +396,8 @@ public class VillagerTasksMCA {
         return target.isAlive()
                && !target.isRemoved()
                && target.level() == villager.level()
-               && villager.canAttack(target);
+               && villager.canAttack(target)
+               && (getActivity(villager) != Activity.REST || shouldDefendDuringRest(villager, target));
     }
 
     private static boolean shouldRespondToGuardEnemy(VillagerEntityMCA villager, LivingEntity target) {
@@ -405,10 +407,17 @@ public class VillagerTasksMCA {
     }
 
     private static boolean shouldRespondToAttackTarget(VillagerEntityMCA villager, LivingEntity target) {
+        return getActivity(villager) != Activity.REST || shouldDefendDuringRest(villager, target);
+    }
+
+    private static boolean shouldDefendDuringRest(VillagerEntityMCA villager, LivingEntity target) {
         return isFollowingPlayer(villager)
-               || getActivity(villager) != Activity.REST
                || target.distanceTo(villager) < 8.0
-               || villager.getResidency().getHomeVillage().filter(village -> village.isWithinBorder(villager)).isEmpty();
+               // Homeless guards away from a village still defend themselves at range.
+               // Once a bed is claimed, a distant enemy must not prevent scheduled REST.
+               || (villager.getBrain().getMemoryInternal(MemoryModuleType.HOME).isEmpty()
+                   && villager.getResidency().getHomeVillage()
+                           .filter(village -> village.isWithinBorder(villager)).isEmpty());
     }
 
     private static boolean isFollowingPlayer(VillagerEntityMCA villager) {
@@ -456,7 +465,7 @@ public class VillagerTasksMCA {
                         0,
                         GRIEVING_PATH_TIMEOUT,
                         villager -> true,
-                        Mourning::retry
+                        Mourning::unreachable
                 ))
         );
     }

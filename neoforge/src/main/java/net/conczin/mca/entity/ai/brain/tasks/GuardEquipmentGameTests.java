@@ -85,7 +85,10 @@ public final class GuardEquipmentGameTests {
     }
 
     private static void checkFollowEquipment(GameTestHelper helper, VillagerProfession profession, boolean leftHanded) {
-        BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
+        // Other GameTest fixtures can leave hostile mobs in the shared level.
+        // Keep this peaceful-follow scenario outside the guard's 48-block scan
+        // of those ground-level actors while retaining real guard sensing.
+        BlockPos start = helper.absolutePos(new BlockPos(4, 82, 4));
         prepareFlatArea(helper, start, 6);
         VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
                 .withAge(0)
@@ -124,7 +127,10 @@ public final class GuardEquipmentGameTests {
                         "fixture lost its follow command");
                 helper.assertTrue(villager.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).isEmpty()
                                 && villager.getBrain().getMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY).isEmpty(),
-                        "combat masked the peaceful follow equipment check");
+                        "combat masked the peaceful follow equipment check at tick " + tick
+                                + ", attackTarget=" + villager.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).orElse(null)
+                                + ", guardEnemy=" + villager.getBrain().getMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY).orElse(null)
+                                + ", position=" + villager.position());
                 helper.assertTrue(ItemStack.matches(equipment[0], villager.getItemBySlot(villager.getDominantSlot())),
                         "peaceful following villager unequipped its weapon at tick " + tick);
                 helper.assertTrue(ItemStack.matches(equipment[1], villager.getItemBySlot(EquipmentSlot.CHEST)),

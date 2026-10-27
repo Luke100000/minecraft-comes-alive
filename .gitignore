@@ -45,5 +45,6 @@ neoforge/run-searchbudget-*
 
 # Local dev/runtime output
 common/logs/
+/logs/
 fabric/logs/
 fabric/config/

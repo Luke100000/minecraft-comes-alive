@@ -50,6 +50,7 @@ import net.conczin.mca.server.DestinyLocationResolverGameTests;
 import net.conczin.mca.server.world.data.CopiedOpenHouseGameTests;
 import net.conczin.mca.server.world.data.FloorScannerGameTests;
 import net.conczin.mca.server.world.data.IndoorRoomCacheGameTests;
+import net.conczin.mca.server.world.data.MourningFailureGameTests;
 import net.conczin.mca.server.world.data.ReportedFloorInteractionGameTests;
 import net.conczin.mca.server.world.data.ReportedStairHouseGameTests;
 import net.conczin.mca.server.world.data.TaigaFloorPerformanceGameTests;
@@ -122,7 +123,8 @@ public final class McaGameTestsRegistration {
             ReportedFloorInteractionGameTests.class,
             ReportedStairHouseGameTests.class,
             TaigaFloorPerformanceGameTests.class,
-            VillageMourningGameTests.class
+            VillageMourningGameTests.class,
+            MourningFailureGameTests.class
     );
 
     private McaGameTestsRegistration() {

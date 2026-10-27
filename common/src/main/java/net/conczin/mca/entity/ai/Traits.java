@@ -91,7 +91,7 @@ public class Traits {
     }
 
     public boolean hasTrait(VillagerLike<?> target, Trait trait) {
-        return trait != null && target.getTrackedValue(TRAITS).contains(trait.getId().toString());
+        return trait != null && target.getTrackedValue(TRAITS).contains(trait.storageKey);
     }
 
     public boolean hasTrait(Trait trait) {
@@ -116,7 +116,7 @@ public class Traits {
         }
 
         CompoundTag traits = entity.getTrackedValue(TRAITS).copy();
-        traits.putBoolean(trait.getId().toString(), true);
+        traits.putBoolean(trait.storageKey, true);
         entity.setTrackedValue(TRAITS, traits);
     }
 
@@ -126,7 +126,7 @@ public class Traits {
         }
 
         CompoundTag traits = entity.getTrackedValue(TRAITS).copy();
-        traits.remove(trait.getId().toString());
+        traits.remove(trait.storageKey);
         entity.setTrackedValue(TRAITS, traits);
     }
 
@@ -165,12 +165,14 @@ public class Traits {
 
     public static final class Trait {
         private final ResourceLocation id;
+        private final String storageKey;
         private final float chance;
         private final float inherit;
         private final boolean usableOnPlayer;
 
         private Trait(ResourceLocation id, float chance, float inherit, boolean usableOnPlayer) {
             this.id = id;
+            this.storageKey = id.toString();
             this.chance = chance;
             this.inherit = inherit;
             this.usableOnPlayer = usableOnPlayer;
@@ -194,7 +196,7 @@ public class Traits {
 
         public boolean isEnabled() {
             Map<String, Boolean> enabledTraits = Config.getServerConfig().enabledTraits;
-            return enabledTraits.getOrDefault(id.toString(), true);
+            return enabledTraits.getOrDefault(storageKey, true);
         }
     }
 }

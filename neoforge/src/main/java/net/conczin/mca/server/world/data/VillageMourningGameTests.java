@@ -960,25 +960,29 @@ public final class VillageMourningGameTests {
         zombie.setNoAi(true);
         helper.getLevel().addFreshEntity(zombie);
 
-        helper.assertTrue(graves.subList(0, 4).stream().noneMatch(grave -> Mourning.isSafeToMourn(helper.getLevel(), grave)),
-                "the first four grave fixtures must be unsafe");
-        helper.assertTrue(Mourning.isSafeToMourn(helper.getLevel(), safeGrave),
-                "the distant fallback grave must be safe");
+        try {
+            helper.assertTrue(graves.subList(0, 4).stream().noneMatch(grave -> Mourning.isSafeToMourn(helper.getLevel(), grave)),
+                    "the first four grave fixtures must be unsafe");
+            helper.assertTrue(Mourning.isSafeToMourn(helper.getLevel(), safeGrave),
+                    "the distant fallback grave must be safe");
 
-        long seed = 0L;
-        while (true) {
-            List<BlockPos> shuffled = new ArrayList<>(graves);
-            Util.shuffle(shuffled, RandomSource.create(seed));
-            if (shuffled.getLast().equals(safeGrave)) {
-                break;
+            long seed = 0L;
+            while (true) {
+                List<BlockPos> shuffled = new ArrayList<>(graves);
+                Util.shuffle(shuffled, RandomSource.create(seed));
+                if (shuffled.getLast().equals(safeGrave)) {
+                    break;
+                }
+                seed++;
             }
-            seed++;
-        }
 
-        List<BlockPos> selected = Village.selectSafeMourningGraves(graves, RandomSource.create(seed),
-                grave -> Mourning.isSafeToMourn(helper.getLevel(), grave));
-        helper.assertTrue(selected.equals(List.of(safeGrave)),
-                "ambient grave selection must search past four unsafe graves to find a safe fallback");
+            List<BlockPos> selected = Village.selectSafeMourningGraves(graves, RandomSource.create(seed),
+                    grave -> Mourning.isSafeToMourn(helper.getLevel(), grave));
+            helper.assertTrue(selected.equals(List.of(safeGrave)),
+                    "ambient grave selection must search past four unsafe graves to find a safe fallback");
+        } finally {
+            zombie.discard();
+        }
         helper.succeed();
     }
 
@@ -1019,9 +1023,10 @@ public final class VillageMourningGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "mca_mourning_fallback_graves", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    @GameTest(batch = "mca_mourning_fallback_graves", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void ambientMourningFallsBackToIndexedVillageTombstone(GameTestHelper helper) {
-        BlockPos formalAnchor = helper.absolutePos(new BlockPos(3, 1, 3));
+        // Keep the village's 48-block discovery border inside this fixture.
+        BlockPos formalAnchor = helper.absolutePos(new BlockPos(56, 1, 56));
         helper.getLevel().setBlock(formalAnchor, BlocksMCA.CROSS_HEADSTONE.defaultBlockState(), 3);
         helper.getLevel().setBlock(formalAnchor.east(), BlocksMCA.CROSS_HEADSTONE.defaultBlockState(), 3);
         helper.getLevel().setBlock(formalAnchor.west(), BlocksMCA.CROSS_HEADSTONE.defaultBlockState(), 3);

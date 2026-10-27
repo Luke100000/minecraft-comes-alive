@@ -135,10 +135,19 @@ public final class TombstoneBlockGameTests {
         helper.getLevel().setBlock(grave, BlocksMCA.CROSS_HEADSTONE.defaultBlockState(), 3);
         TombstoneBlock.Data data = TombstoneBlock.Data.of(helper.getLevel().getBlockEntity(grave)).orElseThrow();
         data.setEntity(deceased);
+        UUID deceasedId = deceased.getUUID();
+        GlobalPos expected = GlobalPos.of(helper.getLevel().dimension(), grave);
+        helper.assertTrue(GraveyardManager.get(helper.getLevel()).getOccupiedGrave(deceasedId)
+                        .filter(expected::equals).isPresent(),
+                "fixture must register the deceased at the exact grave before resurrection");
+        // Resurrection recreates the stored UUID; its original living entity must be gone.
+        deceased.discard();
         data.startResurrecting(false);
 
         helper.runAfterDelay(520, () -> {
-            helper.assertTrue(GraveyardManager.get(helper.getLevel()).getOccupiedGrave(deceased.getUUID()).isEmpty(),
+            helper.assertTrue(helper.getLevel().getEntity(deceasedId) instanceof VillagerEntityMCA,
+                    "resurrection must recreate the deceased villager");
+            helper.assertTrue(GraveyardManager.get(helper.getLevel()).getOccupiedGrave(deceasedId).isEmpty(),
                     "resurrection must clear the exact grave mapping");
             helper.succeed();
         });
