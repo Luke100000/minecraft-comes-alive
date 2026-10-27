@@ -816,7 +816,12 @@ public final class FishingTaskGameTests {
         helper.assertTrue(activeBobberCount(helper, villager) == 1L, "fishing did not create a bobber before rod loss");
 
         villager.getInventory().clearContent();
+        // Clearing a real equipment slot now stows its item; model actual rod removal.
+        villager.getItemInHand(villager.getDominantHand()).copyAndClear();
         villager.setItemInHand(villager.getDominantHand(), ItemStack.EMPTY);
+        helper.assertTrue(villager.getInventory().countItem(Items.FISHING_ROD) == 0
+                        && villager.getItemInHand(villager.getDominantHand()).isEmpty(),
+                "fixture did not remove the last fishing rod");
         task.tick(helper.getLevel(), villager, time + 3);
 
         helper.assertTrue(activeBobberCount(helper, villager) == 0L, "losing the last rod left an active bobber");
@@ -839,7 +844,8 @@ public final class FishingTaskGameTests {
         villager.getInventory().addItem(new ItemStack(Items.BREAD, 2));
         villager.setHealth(villager.getMaxHealth() - 1.0F);
 
-        int startingInventoryRods = villager.getInventory().countItem(Items.FISHING_ROD);
+        int startingRods = villager.getInventory().countItem(Items.FISHING_ROD)
+                + villager.getItemInHand(villager.getDominantHand()).getCount();
         int startingBread = villager.getInventory().countItem(Items.BREAD);
         task.start(helper.getLevel(), villager, helper.getLevel().getGameTime());
 
@@ -859,8 +865,8 @@ public final class FishingTaskGameTests {
                 "stopping fishing during recovery deleted recovery food"
         );
         helper.assertTrue(
-                villager.getInventory().countItem(Items.FISHING_ROD) == startingInventoryRods,
-                "fishing hand takeover duplicated the inventory fishing rod during recovery"
+                villager.getInventory().countItem(Items.FISHING_ROD) == startingRods,
+                "fishing hand takeover lost or duplicated a real fishing rod during recovery"
         );
         helper.assertTrue(
                 villager.getItemInHand(villager.getDominantHand()).isEmpty(),
@@ -870,6 +876,9 @@ public final class FishingTaskGameTests {
                 inventoryRod.getDamageValue() == 34,
                 "stopping fishing changed the inventory fishing rod during recovery cleanup"
         );
+        helper.assertTrue(villager.getInventory().getItems().stream()
+                        .filter(stack -> stack.is(Items.FISHING_ROD) && stack.getDamageValue() == 46).count() == 1L,
+                "stopping fishing lost the distinct rod that had occupied the hand");
         helper.succeed();
     }
 

@@ -62,11 +62,13 @@ tasks.named('jar', Jar) {
 
 // The chunk-ticket recovery probe is needed for development GameTests, but
 // neither loader's distribution should register or ship its Mixin class.
+def distributionJarArchive = tasks.named('jar', Jar).flatMap { it.archiveFile }
+def sourcesJarArchive = tasks.named('sourcesJar', Jar).flatMap { it.archiveFile }
 tasks.register('verifyProductionMixinIsolation') {
     dependsOn tasks.named('jar')
     dependsOn tasks.named('sourcesJar')
     doLast {
-        def distribution = tasks.named('jar', Jar).get().archiveFile.get().asFile
+        def distribution = distributionJarArchive.get().asFile
         def archive = new java.util.zip.ZipFile(distribution)
         try {
             if (archive.getEntry('net/conczin/mca/mixin/MixinGameTestInfo.class') != null) {
@@ -87,7 +89,7 @@ tasks.register('verifyProductionMixinIsolation') {
             archive.close()
         }
 
-        def sources = tasks.named('sourcesJar', Jar).get().archiveFile.get().asFile
+        def sources = sourcesJarArchive.get().asFile
         def sourcesArchive = new java.util.zip.ZipFile(sources)
         try {
             if (sourcesArchive.getEntry('net/conczin/mca/mixin/MixinGameTestInfo.java') != null) {

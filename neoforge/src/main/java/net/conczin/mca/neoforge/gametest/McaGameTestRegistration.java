@@ -7,6 +7,7 @@ import net.conczin.mca.entity.VillagerBedAlignmentGameTests;
 import net.conczin.mca.entity.VillagerCarryPositionGameTests;
 import net.conczin.mca.entity.VillagerChildSuffocationGameTests;
 import net.conczin.mca.entity.VillagerConversionGameTests;
+import net.conczin.mca.entity.VillagerEquipmentOwnershipGameTests;
 import net.conczin.mca.entity.VillagerRecoveryFoodGameTests;
 import net.conczin.mca.entity.VillagerVoicePitchGameTests;
 import net.conczin.mca.entity.ai.BedOccupancyLifecycleGameTests;
@@ -59,6 +60,7 @@ import net.conczin.mca.server.world.data.TaigaFloorPerformanceGameTests;
 import net.conczin.mca.server.world.data.ReportedFloorInteractionGameTests;
 import net.conczin.mca.server.world.data.ReportedStairHouseGameTests;
 import net.conczin.mca.server.world.data.VillageMourningGameTests;
+import net.conczin.mca.server.world.data.MourningFailureGameTests;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.FunctionGameTestInstance;
@@ -102,6 +104,7 @@ public final class McaGameTestRegistration {
             VillagerCarryPositionGameTests.class,
             VillagerChildSuffocationGameTests.class,
             VillagerConversionGameTests.class,
+            VillagerEquipmentOwnershipGameTests.class,
             VillagerRecoveryFoodGameTests.class,
             VillagerVoicePitchGameTests.class,
             BedOccupancyLifecycleGameTests.class,
@@ -152,7 +155,8 @@ public final class McaGameTestRegistration {
             TaigaFloorPerformanceGameTests.class,
             ReportedFloorInteractionGameTests.class,
             ReportedStairHouseGameTests.class,
-            VillageMourningGameTests.class
+            VillageMourningGameTests.class,
+            MourningFailureGameTests.class
     );
 
     private McaGameTestRegistration() {
@@ -193,11 +197,19 @@ public final class McaGameTestRegistration {
     private static void registerClasses(RegisterGameTestsEvent event, Collection<Class<?>> testClasses,
                                         String selectedMethodName) {
         Map<String, Holder<TestEnvironmentDefinition<?>>> environments = new HashMap<>();
+        Map<String, List<Method>> setupMethods = new HashMap<>();
         Map<String, List<Method>> teardownMethods = new HashMap<>();
         Map<String, Integer> batchCounts = new HashMap<>();
 
         for (Class<?> testClass : testClasses) {
             for (Method method : testClass.getDeclaredMethods()) {
+                BeforeBatch beforeBatch = method.getAnnotation(BeforeBatch.class);
+                if (beforeBatch != null) {
+                    if (!Modifier.isStatic(method.getModifiers())) {
+                        throw new IllegalStateException("MCA BeforeBatch callback must be static: " + method);
+                    }
+                    setupMethods.computeIfAbsent(beforeBatch.batch(), ignored -> new ArrayList<>()).add(method);
+                }
                 AfterBatch afterBatch = method.getAnnotation(AfterBatch.class);
                 if (afterBatch == null) continue;
                 if (!Modifier.isStatic(method.getModifiers())) {
@@ -236,8 +248,9 @@ public final class McaGameTestRegistration {
                         environmentBatch,
                         batch -> event.registerEnvironment(
                                 MCA.locate("ported_1_21_1/" + batch.toLowerCase(Locale.ROOT)),
-                                teardownMethods.containsKey(legacyBatch)
-                                        ? new BatchTeardownEnvironment(teardownMethods.get(legacyBatch))
+                                (setupMethods.containsKey(legacyBatch) || teardownMethods.containsKey(legacyBatch))
+                                        ? new BatchTeardownEnvironment(setupMethods.getOrDefault(legacyBatch, List.of()),
+                                                teardownMethods.getOrDefault(legacyBatch, List.of()))
                                         : new TestEnvironmentDefinition.AllOf()
                         )
                 );
@@ -347,16 +360,19 @@ public final class McaGameTestRegistration {
 
     private static final class BatchTeardownEnvironment implements TestEnvironmentDefinition<Unit> {
         private static final MapCodec<BatchTeardownEnvironment> CODEC =
-                MapCodec.unit(() -> new BatchTeardownEnvironment(List.of()));
+                MapCodec.unit(() -> new BatchTeardownEnvironment(List.of(), List.of()));
 
+        private final List<Method> setupCallbacks;
         private final List<Method> callbacks;
 
-        private BatchTeardownEnvironment(List<Method> callbacks) {
+        private BatchTeardownEnvironment(List<Method> setupCallbacks, List<Method> callbacks) {
+            this.setupCallbacks = List.copyOf(setupCallbacks);
             this.callbacks = List.copyOf(callbacks);
         }
 
         @Override
         public Unit setup(ServerLevel level) {
+            setupCallbacks.forEach(callback -> invokeBatchCallback(callback, level));
             return Unit.INSTANCE;
         }
 

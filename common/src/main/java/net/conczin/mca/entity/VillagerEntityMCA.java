@@ -106,6 +106,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -113,9 +114,15 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.WeakHashMap;
+import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 
 
+/**
+ * MCA villagers borrow inventory items for equipment and mark generated props with mca:temporary.
+ * Replacing equipment stores real items in inventory and discards props. Equipment saves and death
+ * drops exclude props and inventory references, so borrowed items are not counted a second time.
+ */
 public class VillagerEntityMCA extends Villager implements VillagerLike<VillagerEntityMCA>, MenuProvider, CompassionateEntity<BreedableRelationship>, CrossbowAttackMob {
     private static final float FRIENDLY_ARROW_UNCERTAINTY = 2.0F;
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("InfectionProgress", 0.0f);
@@ -143,6 +150,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private final BreedableRelationship relations = new BreedableRelationship(this);
     private final VillagerCommandHandler interactions = new VillagerCommandHandler(this);
     private final UpdatableInventory inventory = new UpdatableInventory(27);
+    private final EnumSet<EquipmentSlot> borrowedEquipment = EnumSet.noneOf(EquipmentSlot.class);
     private final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.UNASSIGNED);
     long lastCooldown = 0L;
     private PlayerModel playerModel;
@@ -157,10 +165,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private boolean wasPanicking;
     private double lastAppliedHealthBonus = Double.NaN;
     private boolean recoveryFoodUseActive;
-    private boolean completingRecoveryFoodUse;
-    private boolean recoveryFoodFromInventory;
     private int recoveryFoodUseTicks;
-    private ItemStack recoveryPreviousMainHand = ItemStack.EMPTY;
+    private int recoveryFoodSlot = -1;
+    private ItemStack recoveryFoodSource = ItemStack.EMPTY;
+    private BooleanSupplier melodyTick;
 
     @SuppressWarnings("deprecation")
     public static CompoundTag readMcaSaveData(ValueInput input) {
@@ -874,6 +882,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (!level().isClientSide()) {
             tickRecoveryFoodUse();
 
+            if (melodyTick != null && !melodyTick.getAsBoolean()) {
+                melodyTick = null;
+            }
+
             if (tickCount % 200 == 0
                     && getHealth() < getMaxHealth()
                     && canRecoverHealthNow()) {
@@ -925,6 +937,60 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         return false;
     }
 
+    private void clearEquipment() {
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            setItemSlot(slot, ItemStack.EMPTY);
+        }
+    }
+
+    @Override
+    public void setItemSlot(EquipmentSlot slot, ItemStack stack) {
+        ItemStack previous = super.getItemBySlot(slot);
+        boolean borrowed = borrowedEquipment != null && borrowedEquipment.remove(slot);
+        if (inventory != null && !stack.isEmpty() && InventoryUtils.containsReference(inventory, stack)) {
+            borrowedEquipment.add(slot);
+        }
+
+        super.setItemSlot(slot, stack);
+
+        if (!level().isClientSide() && inventory != null && previous != stack) {
+            if (!borrowed && !previous.isEmpty() && !InventoryUtils.isTemporary(previous)
+                && !InventoryUtils.containsReference(inventory, previous)) {
+                ItemStack leftover = inventory.addItem(previous.copyAndClear());
+                if (!leftover.isEmpty()) {
+                    spawnAtLocation((ServerLevel) level(), leftover, 0.0F);
+                }
+            }
+
+            if (recoveryFoodUseActive && slot == getDominantSlot() && stack != recoveryFoodSource) {
+                stopUsingItem();
+            }
+        }
+    }
+
+    @Override
+    public ItemStack equipItemIfPossible(ServerLevel level, ItemStack stack) {
+        EquipmentSlot slot = getEquipmentSlotForItem(stack);
+        if (!isEquippableInSlot(stack, slot)) return ItemStack.EMPTY;
+        ItemStack previous = getItemBySlot(slot);
+        boolean canReplace = canReplaceCurrentItem(stack, previous, slot);
+        if (slot.isArmor() && !canReplace) {
+            slot = EquipmentSlot.MAINHAND;
+            canReplace = getItemBySlot(slot).isEmpty();
+        }
+
+        if (!canReplace || !canHoldItem(stack)) return ItemStack.EMPTY;
+
+        // The setter stores displaced equipment; vanilla would drop it before calling the setter.
+        ItemStack equipped = slot.limit(stack);
+        setItemSlotAndDropWhenKilled(slot, equipped);
+        return equipped;
+    }
+
+    public void setMelodyTick(BooleanSupplier tick) {
+        melodyTick = tick;
+    }
+
     public boolean isUsingRecoveryFood() {
         return recoveryFoodUseActive;
     }
@@ -970,69 +1036,44 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     private boolean startRecoveryFoodUse() {
-        ItemStack mainHandFood = getMainHandItem();
-        FoodProperties mainHandFoodProperties = mainHandFood.get(DataComponents.FOOD);
-        if (canEat(mainHandFood, mainHandFoodProperties)) {
-            return startRecoveryFoodUse(mainHandFoodProperties, false, ItemStack.EMPTY);
-        }
-
         int slot = InventoryUtils.getFirstSlotContainingItem(getInventory(), VillagerEntityMCA::canEat);
         if (slot < 0) {
             return false;
         }
 
         ItemStack food = getInventory().getItem(slot);
-        FoodProperties foodProperties = food.get(DataComponents.FOOD);
-        if (!canEat(food, foodProperties)) {
-            return false;
-        }
-
-        ItemStack previousMainHand = getMainHandItem().copy();
-        ItemStack replacement = food.split(1);
-        if (replacement.isEmpty()) {
-            return false;
-        }
-
-        setItemInHand(getDominantHand(), replacement);
-        return startRecoveryFoodUse(foodProperties, true, previousMainHand);
-    }
-
-    private boolean startRecoveryFoodUse(FoodProperties foodProperties, boolean fromInventory, ItemStack previousMainHand) {
-        if (foodProperties == null) {
+        if (!canEat(food)) {
             return false;
         }
 
         recoveryFoodUseActive = true;
-        recoveryFoodFromInventory = fromInventory;
         recoveryFoodUseTicks = 0;
-        recoveryPreviousMainHand = previousMainHand;
+        recoveryFoodSlot = slot;
+        recoveryFoodSource = food;
+        setItemInHand(getDominantHand(), food);
         startUsingItem(getDominantHand());
 
         if (!isUsingItem()) {
-            finishRecoveryFoodUse();
+            endRecoveryFoodUse();
             return false;
         }
 
         return true;
     }
 
-    private void finishRecoveryFoodUse() {
-        if (recoveryFoodFromInventory) {
-            ItemStack remainder = getMainHandItem();
-            if (!remainder.isEmpty()) {
-                ItemStack leftover = getInventory().addItem(remainder);
-                if (!leftover.isEmpty()) {
-                    spawnAtLocation((ServerLevel) level(), leftover, 0.0F);
-                }
-            }
-            setItemInHand(getDominantHand(), recoveryPreviousMainHand);
+    private void endRecoveryFoodUse() {
+        if (!recoveryFoodUseActive) {
+            return;
         }
 
+        boolean stillHoldingFood = getItemInHand(getDominantHand()) == recoveryFoodSource;
         recoveryFoodUseActive = false;
-        completingRecoveryFoodUse = false;
-        recoveryFoodFromInventory = false;
         recoveryFoodUseTicks = 0;
-        recoveryPreviousMainHand = ItemStack.EMPTY;
+        recoveryFoodSlot = -1;
+        recoveryFoodSource = ItemStack.EMPTY;
+        if (stillHoldingFood) {
+            setItemInHand(getDominantHand(), ItemStack.EMPTY);
+        }
     }
 
     @Override
@@ -1200,33 +1241,44 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     protected void completeUsingItem() {
-        boolean completedRecoveryFoodUse = recoveryFoodUseActive
-                && isUsingItem()
-                && getUsedItemHand() == getDominantHand();
-        FoodProperties recoveryFoodProperties = completedRecoveryFoodUse
-                ? getUseItem().get(DataComponents.FOOD)
-                : null;
-
-        completingRecoveryFoodUse = completedRecoveryFoodUse;
-        if (recoveryFoodProperties != null) {
-            heal(recoveryFoodProperties.nutrition());
+        if (!recoveryFoodUseActive || !isUsingItem() || getUsedItemHand() != getDominantHand()) {
+            super.completeUsingItem();
+            return;
         }
-        super.completeUsingItem();
-        completingRecoveryFoodUse = false;
 
-        if (completedRecoveryFoodUse) {
-            finishRecoveryFoodUse();
+        ItemStack held = getItemInHand(getDominantHand());
+        boolean valid = canContinueRecoveryFoodUse()
+                        && canEat(held)
+                        && held == recoveryFoodSource
+                        && getInventory().getItem(recoveryFoodSlot) == recoveryFoodSource;
+
+        recoveryFoodUseActive = false;
+        recoveryFoodUseTicks = 0;
+        recoveryFoodSlot = -1;
+        recoveryFoodSource = ItemStack.EMPTY;
+
+        if (valid) {
+            // Consume exactly one, atomically: give vanilla a one-item stack so food effects and
+            // container items (bowls, bottles) behave, then stow the returned container.
+            ItemStack portion = held.split(1);
+            this.useItem = portion;
+            setItemInHand(getDominantHand(), portion);
+            FoodProperties food = portion.get(DataComponents.FOOD);
+            if (food != null) heal(food.nutrition());
+            super.completeUsingItem();
+
+            getInventory().setChanged();
+            setItemInHand(getDominantHand(), ItemStack.EMPTY);
+        } else {
+            super.stopUsingItem();
+            setItemInHand(getDominantHand(), ItemStack.EMPTY);
         }
     }
 
     @Override
     public void stopUsingItem() {
-        boolean interruptedRecoveryFoodUse = recoveryFoodUseActive && !completingRecoveryFoodUse;
         super.stopUsingItem();
-
-        if (interruptedRecoveryFoodUse) {
-            finishRecoveryFoodUse();
-        }
+        endRecoveryFoodUse();
     }
 
     private void spawnRecoveryFoodParticles(ServerLevel level, ItemStack food, int count) {
@@ -1384,6 +1436,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (!dead) {
             return;
         }
+
+        // Stow real equipment and discard props before MCA drops its inventory.
+        clearEquipment();
 
         if (level().isClientSide()) {
             return;
@@ -1744,7 +1799,15 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     public void onInvChange(Container inventoryFromListener) {
-        //nop
+        if (level().isClientSide()) return;
+
+        // Inventory transfers can move the actual stack object to a player; do not stow it again.
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            if (borrowedEquipment.contains(slot)
+                && !InventoryUtils.containsReference(inventory, getItemBySlot(slot))) {
+                setItemSlot(slot, ItemStack.EMPTY);
+            }
+        }
     }
 
     private void finalizeInfectionConversion(ZombieVillager zombie) {
@@ -1758,6 +1821,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     @Nullable
     public <T extends Mob> T convertTo(EntityType<T> type, ConversionParams params, ConversionParams.AfterConversion<T> afterConversion) {
+        stopUsingItem();
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            if (InventoryUtils.isTemporary(getItemBySlot(slot))) setItemSlot(slot, ItemStack.EMPTY);
+        }
         boolean convertingToZombieVillager = !isRemoved() && type == EntityTypes.ZOMBIE_VILLAGER;
         EntityType<? extends Mob> convertedType = convertingToZombieVillager ? getGenetics().getGender().getZombieType() : type;
 
@@ -1796,6 +1863,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             }
 
             if (mob instanceof ZombieVillagerEntityMCA zombie) {
+                clearEquipment();
                 zombie.setInventory(inventory);
                 zombie.setAgeState(getAgeState());
             }
@@ -1816,6 +1884,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public void readAdditionalSaveData(ValueInput input) {
         Optional<Integer> savedVanillaAge = input.getInt("Age");
         CompoundTag nbt = McaDataFixers.update(readMcaSaveData(input));
+        stopUsingItem();
+        borrowedEquipment.clear();
         super.readAdditionalSaveData(input);
 
         if (!level().isClientSide() && isSleeping()) {
@@ -1868,6 +1938,47 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             getVillagerBrain().randomize();
         }
 
+        ItemStack mourningFlower = getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_FLOWER)
+                .orElse(ItemStack.EMPTY);
+        boolean restoreMourningFlower = !mourningFlower.isEmpty()
+                && getBrain().hasMemoryValue(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND)
+                && (getMainHandItem().isEmpty() || ItemStack.matches(getMainHandItem(), mourningFlower));
+
+        // Older saves kept the displaced mourning item only in Brain memory.
+        // Migrate it into the inventory that now owns real equipment.
+        if (!nbt.getBooleanOr("EquipmentInventorySeparated", false) && restoreMourningFlower) {
+            getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND)
+                    .filter(stack -> !stack.isEmpty() && !InventoryUtils.isTemporary(stack))
+                    .filter(stack -> InventoryUtils.stream(inventory).noneMatch(item -> ItemStack.matches(item, stack)))
+                    .ifPresent(stack -> {
+                        ItemStack leftover = inventory.addItem(stack.copy());
+                        if (!leftover.isEmpty() && level() instanceof ServerLevel serverLevel) {
+                            spawnAtLocation(serverLevel, leftover);
+                        }
+                    });
+        }
+        if (restoreMourningFlower && ItemStack.matches(getMainHandItem(), mourningFlower)) {
+            super.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
+        }
+
+        // Older saves also serialized borrowed inventory stacks as equipment.
+        if (!nbt.getBooleanOr("EquipmentInventorySeparated", false)) {
+            for (EquipmentSlot slot : EquipmentSlot.values()) {
+                ItemStack stack = getItemBySlot(slot);
+                if (InventoryUtils.getFirstSlotContainingItem(inventory, item -> ItemStack.matches(stack, item)) >= 0) {
+                    super.setItemSlot(slot, ItemStack.EMPTY);
+                }
+            }
+        }
+
+        // Rebuild equipment from inventory; the setter preserves equipment-only real items.
+        clearEquipment();
+        if (restoreMourningFlower) {
+            ItemStack flower = InventoryUtils.temporary(mourningFlower.copy());
+            getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_FLOWER, flower.copy());
+            setItemInHand(InteractionHand.MAIN_HAND, flower);
+        }
+
         ageStateEventsEnabled = true;
     }
 
@@ -1897,6 +2008,16 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public final void addAdditionalSaveData(ValueOutput output) {
         CompoundTag nbt = new CompoundTag();
         super.addAdditionalSaveData(output);
+        nbt.putBoolean("EquipmentInventorySeparated", true);
+        EntityEquipment savedEquipment = new EntityEquipment();
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            ItemStack stack = getItemBySlot(slot);
+            if (!InventoryUtils.isTemporary(stack) && !borrowedEquipment.contains(slot)
+                    && !InventoryUtils.containsReference(inventory, stack)) {
+                savedEquipment.set(slot, stack);
+            }
+        }
+        output.store("equipment", EntityEquipment.CODEC, savedEquipment);
 
         relations.writeToNbt(nbt);
         longTermMemory.writeToNbt(nbt);

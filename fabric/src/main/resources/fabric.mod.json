@@ -44,5 +44,9 @@
     "java": ">=${java_version}"
   },
   "suggests": {
+    "immersive_melodies": ">=${immersive_melodies_version}"
+  },
+  "breaks": {
+    "immersive_melodies": "<${immersive_melodies_version}"
   }
 }

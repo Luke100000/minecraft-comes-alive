@@ -79,6 +79,7 @@ public class RealtimeSpeechManager {
     }
 
     public void play(String phrase, float pitch, Entity entity, boolean cacheable, String voice) {
+        long request = SpeechManager.INSTANCE.beginVoiceRequest(entity.getUUID());
         CompletableFuture.runAsync(() -> {
             String text = cacheable ? OnlineSpeechManager.cleanPhrase(phrase) : phrase;
             String hash = cacheable ? AudioCache.getHash(voice) + "/" + AudioCache.getHash(text) : "realtime";
@@ -86,7 +87,7 @@ public class RealtimeSpeechManager {
                 downloadAudio(output, voice, text);
             }, cacheable)) {
                 Identifier soundLocation = MCA.locate("tts_cache/" + hash);
-                SpeechManager.INSTANCE.playSound(pitch, entity, soundLocation);
+                SpeechManager.INSTANCE.playSound(pitch, entity, soundLocation, request);
             }
         });
     }
