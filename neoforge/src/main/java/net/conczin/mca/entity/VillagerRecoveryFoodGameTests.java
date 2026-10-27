@@ -21,7 +21,7 @@ public final class VillagerRecoveryFoodGameTests {
     }
 
     @GameTest(batch = "mca_recovery_food_complete", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 160)
-    public static void inventoryFoodRestoresEquippedWeaponAfterUse(GameTestHelper helper) {
+    public static void inventoryFoodPreservesEquippedWeaponAfterUse(GameTestHelper helper) {
         VillagerEntityMCA villager = spawnRecoveringVillager(helper);
         float healthBefore = villager.getHealth();
         boolean[] sawRecoveryUse = {false};
@@ -33,8 +33,8 @@ public final class VillagerRecoveryFoodGameTests {
             }
 
             if (sawRecoveryUse[0]) {
-                helper.assertTrue(villager.getMainHandItem().is(Items.IRON_SWORD),
-                        "recovery food did not restore the equipped sword");
+                helper.assertTrue(countItem(villager, Items.IRON_SWORD) == 1,
+                        "recovery food did not preserve exactly one sword in inventory");
                 helper.assertTrue(villager.getHealth() > healthBefore,
                         "completed recovery food did not heal the villager");
                 helper.assertTrue(countItem(villager, Items.APPLE) == 0,
@@ -45,7 +45,7 @@ public final class VillagerRecoveryFoodGameTests {
     }
 
     @GameTest(batch = "mca_recovery_food_interrupt", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 160)
-    public static void dangerInterruptRestoresWeaponWithoutConsumingFood(GameTestHelper helper) {
+    public static void dangerInterruptPreservesWeaponWithoutConsumingFood(GameTestHelper helper) {
         VillagerEntityMCA villager = spawnRecoveringVillager(helper);
         Zombie threat = spawnThreat(helper, helper.absolutePos(new BlockPos(10, 2, 6)));
         float healthBefore = villager.getHealth();
@@ -59,8 +59,8 @@ public final class VillagerRecoveryFoodGameTests {
             }
 
             if (injectedDanger[0] && !villager.isUsingRecoveryFood()) {
-                helper.assertTrue(villager.getMainHandItem().is(Items.IRON_SWORD),
-                        "interrupted recovery food did not restore the equipped sword");
+                helper.assertTrue(countItem(villager, Items.IRON_SWORD) == 1,
+                        "interrupted recovery food did not preserve exactly one sword in inventory");
                 helper.assertTrue(countItem(villager, Items.APPLE) == 1,
                         "interrupted recovery food consumed or lost the apple");
                 helper.assertTrue(villager.getHealth() == healthBefore,
@@ -88,6 +88,26 @@ public final class VillagerRecoveryFoodGameTests {
             if (ticks[0] >= 10) {
                 helper.assertTrue(countItem(villager, Items.APPLE) == 1,
                         "danger recovery check removed the apple from inventory");
+                helper.succeed();
+            }
+        });
+    }
+
+    @GameTest(batch = "mca_recovery_food_container", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 160)
+    public static void stewConsumptionPreservesOneContainerAndWeapon(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnRecoveringVillager(helper);
+        villager.getInventory().setItem(0, Items.MUSHROOM_STEW.getDefaultInstance());
+        float healthBefore = villager.getHealth();
+        boolean[] sawRecoveryUse = {false};
+        helper.onEachTick(() -> {
+            if (villager.isUsingRecoveryFood()) {
+                sawRecoveryUse[0] = true;
+            } else if (sawRecoveryUse[0]) {
+                helper.assertTrue(villager.getHealth() > healthBefore, "stew did not heal the villager");
+                helper.assertTrue(countItem(villager, Items.MUSHROOM_STEW) == 0, "stew was not consumed exactly once");
+                helper.assertTrue(countItem(villager, Items.BOWL) == 1, "stew did not preserve exactly one bowl");
+                helper.assertTrue(countItem(villager, Items.IRON_SWORD) == 1, "stew lost or duplicated the displaced weapon");
+                villager.discard();
                 helper.succeed();
             }
         });

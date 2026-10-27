@@ -1137,6 +1137,58 @@ public final class ArcherCombatMovementGameTests {
     }
 
     @GameTest(batch = "mca_archer_escape_route_revalidation", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void pursuingAttackerDoesNotCancelStillUsefulEmergencyPath(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(12, 2, 12));
+        prepareFlatArea(helper, start, 20);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        Zombie pursuer = spawnTarget(helper, start.east(2));
+        archer.setNoAi(true);
+        archer.setOnGround(true);
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, pursuer);
+        seedNearbyEnemies(archer, List.of(pursuer));
+
+        ArcherMovementTask<VillagerEntityMCA> movement = new ArcherMovementTask<>(15);
+        long time = helper.getLevel().getGameTime();
+        movement.start(helper.getLevel(), archer, time);
+        movement.tick(helper.getLevel(), archer, time + 1);
+        WalkTarget owned = archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElseThrow();
+        helper.assertTrue(owned.getTarget() instanceof CombatEscapePositionTracker,
+                "fixture never published an emergency escape target");
+        CombatEscapePositionTracker escape = (CombatEscapePositionTracker) owned.getTarget();
+        var sink = new WanderOrTeleportToTargetTask();
+        helper.assertTrue(sink.tryStart(helper.getLevel(), archer, time + 2),
+                "fixture could not start the emergency escape route");
+        var path = archer.getNavigation().getPath();
+        helper.assertTrue(path != null && path.getNodeCount() >= 5
+                        && archer.getBrain().getMemory(MemoryModuleType.PATH).orElse(null) == path,
+                "fixture has no combat-owned native escape path with remaining nodes");
+        helper.assertTrue(escape.isPathSafe(archer, path),
+                "fixture's emergency route was not initially strictly safe");
+
+        // Record the original threat set while the path is safe, then let that same
+        // pursuer enter the escape corridor without introducing another attacker.
+        movement.tick(helper.getLevel(), archer, time + 3);
+        helper.assertTrue(archer.getNavigation().getPath() == path,
+                "fixture lost its escape path before the pursuer moved");
+        Vec3 onRoute = path.getEntityPosAtNode(archer, Math.min(3, path.getNodeCount() - 2));
+        pursuer.teleportTo(onRoute.x, onRoute.y, onRoute.z);
+        helper.assertTrue(archer.distanceToSqr(pursuer) < 25.0D,
+                "pursuer moved outside the emergency-retreat hysteresis band");
+        helper.assertTrue(!escape.isPathSafe(archer, path),
+                "moving pursuer did not invalidate strict corridor clearance");
+        helper.assertTrue(escape.isDegradedEmergencyPathSafe(archer, path),
+                "route no longer opens useful distance from the moving pursuer");
+
+        movement.tick(helper.getLevel(), archer, time + 8);
+        helper.assertTrue(archer.getNavigation().getPath() == path
+                        && archer.getBrain().getMemory(MemoryModuleType.PATH).orElse(null) == path
+                        && archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null) == owned,
+                "unchanged pursuer caused the archer to discard a useful emergency escape route");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_escape_route_revalidation", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
     public static void movingAttackerInvalidatesOwnedEscapeWithoutRetainingUnsafePath(GameTestHelper helper) {
         cleanupTestEntities();
         BlockPos start = helper.absolutePos(new BlockPos(12, 2, 12));
@@ -1161,6 +1213,7 @@ public final class ArcherCombatMovementGameTests {
         var path = archer.getNavigation().getPath();
         helper.assertTrue(path != null && path.getNodeCount() > 2,
                 "fixture did not produce a usable route with remaining nodes");
+        CombatEscapePositionTracker escape = (CombatEscapePositionTracker) owned.getTarget();
 
         Skeleton attacker = spawnSkeleton(helper, start.south(20), archer);
         Vec3 unsafe = path.getEntityPosAtNode(archer, Math.max(1, path.getNodeCount() / 2));
@@ -1168,6 +1221,10 @@ public final class ArcherCombatMovementGameTests {
         seedNearbyEnemies(archer, List.of(target, attacker));
         helper.assertTrue(RangedCombatPositioning.collectThreatContext(archer, target).escapeThreats().contains(attacker),
                 "fixture attacker did not enter active escape-threat context");
+        helper.assertTrue(!escape.isPathSafe(archer, path),
+                "newly active attacker did not invalidate strict route clearance");
+        helper.assertTrue(escape.isDegradedEmergencyPathSafe(archer, path),
+                "fixture did not exercise the emergency fallback's new-attacker exception");
 
         for (int tick = 3; tick <= 9; tick++) {
             movement.tick(helper.getLevel(), archer, time + tick);

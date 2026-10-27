@@ -14,11 +14,7 @@ public final class GameTestTerrain {
     private GameTestTerrain() {
     }
 
-    /**
-     * Building a test roof queues skylight work. A covered block can still report
-     * sky brightness 15 for a few ticks in a busy full suite; wait for actual
-     * lighting readiness before asserting the behavior under test.
-     */
+    /** Wait for queued roof lighting before checking the behavior under test. */
     public static void whenSkyLightBlocked(GameTestHelper helper, BlockPos position,
                                            int remainingTicks, Runnable continuation) {
         if (!helper.getLevel().canSeeSky(position)) {

@@ -265,6 +265,11 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
     @Nullable
     public <T extends Mob> T convertTo(EntityType<T> type, ConversionParams params, ConversionParams.AfterConversion<T> afterConversion) {
         boolean convertingToVillager = !isRemoved() && type == EntityTypes.VILLAGER;
+        if (convertingToVillager) {
+            for (EquipmentSlot slot : EquipmentSlot.values()) {
+                if (InventoryUtils.isTemporary(getItemBySlot(slot))) setItemSlot(slot, ItemStack.EMPTY);
+            }
+        }
         EntityType<? extends Mob> convertedType = convertingToVillager ? getGenetics().getGender().getVillagerType() : type;
 
         UUID oldUuid = getUUID();
