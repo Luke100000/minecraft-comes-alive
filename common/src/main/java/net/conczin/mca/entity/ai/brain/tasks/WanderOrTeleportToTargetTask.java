@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
@@ -12,6 +13,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.behavior.MoveToTargetSink;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
@@ -57,7 +59,7 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
 
     @Override
     protected boolean canStillUse(ServerLevel world, Mob entity, long gameTime) {
-        if (shouldYieldToEmergencyCombat(entity)) {
+        if (shouldYieldToCombat(entity)) {
             return false;
         }
 
@@ -119,13 +121,20 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         super.stop(world, entity, gameTime);
     }
 
-    private static boolean shouldYieldToEmergencyCombat(Mob entity) {
-        if (RangedCombatState.current(entity).orElse(null) != RangedCombatState.EMERGENCY_FLEE) {
+    private static boolean shouldYieldToCombat(Mob entity) {
+        RangedCombatState combat = RangedCombatState.current(entity).orElse(null);
+        WalkTarget walkTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        if (walkTarget == null) {
             return false;
         }
-
-        WalkTarget walkTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
-        return walkTarget != null && !(walkTarget.getTarget() instanceof CombatEscapePositionTracker);
+        if (combat == RangedCombatState.EMERGENCY_FLEE) {
+            return !(walkTarget.getTarget() instanceof CombatEscapePositionTracker);
+        }
+        return (combat == RangedCombatState.HOLD || combat == RangedCombatState.STRAFE)
+                && walkTarget.getTarget() instanceof BlockPosTracker
+                && !(walkTarget.getTarget() instanceof PersistentPathTarget)
+                && !entity.getBrain().hasMemoryValue(MemoryModuleTypeMCA.PLAYER_FOLLOWING)
+                && !entity.getBrain().hasMemoryValue(MemoryModuleTypeMCA.STAYING);
     }
 
     private static boolean walkTargetReached(Mob entity, WalkTarget walkTarget) {

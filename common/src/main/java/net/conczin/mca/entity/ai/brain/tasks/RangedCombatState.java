@@ -10,11 +10,20 @@ public enum RangedCombatState {
     STRAFE,
     APPROACH,
     REPOSITION,
+    RECOVER,
     KITE,
     EMERGENCY_FLEE;
 
     public boolean suppressesRangedAttack() {
-        return this == EMERGENCY_FLEE;
+        return !permitsDrawing();
+    }
+
+    public boolean permitsDrawing() {
+        return this != EMERGENCY_FLEE && this != REPOSITION && this != RECOVER;
+    }
+
+    public boolean permitsBowDrawContinuation() {
+        return this != EMERGENCY_FLEE && this != RECOVER;
     }
 
     public static Optional<RangedCombatState> current(LivingEntity entity) {

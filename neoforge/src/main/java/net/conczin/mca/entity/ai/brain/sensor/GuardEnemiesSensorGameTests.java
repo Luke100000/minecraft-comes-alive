@@ -72,6 +72,10 @@ public final class GuardEnemiesSensorGameTests {
         level.setBlock(foot, bed, 3);
         level.setBlock(head, bed.setValue(BedBlock.PART, BedPart.HEAD), 3);
 
+        // A GameTest block fixture can place blocks before its chunks are
+        // entity-ticking. Ensure both spawned actors join loaded chunks.
+        level.getChunk(guardPos);
+        level.getChunk(enemyPos);
         VillagerEntityMCA guard = VillagerFactory.newVillager(level)
                 .withAge(0)
                 .withProfession(ProfessionsMCA.GUARD)
@@ -79,6 +83,8 @@ public final class GuardEnemiesSensorGameTests {
                 .withName("Guard Bedtime Combat Probe")
                 .spawn(MobSpawnType.STRUCTURE);
         TEST_ENTITIES.add(guard);
+        helper.assertTrue(level.getEntity(guard.getId()) == guard,
+                "bedtime guard fixture was not added to the world");
         guard.refreshBrain(level);
         guard.getBrain().setSchedule(SchedulesMCA.GUARD);
         guard.getBrain().updateActivityFromSchedule(level.getDayTime(), level.getGameTime());
@@ -100,10 +106,17 @@ public final class GuardEnemiesSensorGameTests {
         helper.assertTrue(guard.getBrain().getMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY)
                         .orElse(null) == target,
                 "fixture guard failed to detect the 24-block enemy while on duty");
-        guard.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
-
+        // A distant monster detected by the guard sensor is not, by itself,
+        // an ongoing fight. Do not seed ATTACK_TARGET: combat already underway
+        // is covered by the separate REST target-continuity regression.
+        guard.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
         level.setDayTime(15010);
-        guard.getBrain().updateActivityFromSchedule(level.getDayTime(), level.getGameTime());
+        // The fixture jumps the time-of-day forward by 20 ticks without
+        // advancing game time. Vanilla throttles schedule updates by 20 game
+        // ticks; simulate that elapsed interval for this controlled handoff.
+        guard.getBrain().updateActivityFromSchedule(level.getDayTime(), level.getGameTime() + 21L);
+        helper.assertTrue(guard.getBrain().isActive(Activity.REST),
+                "guard did not enter its scheduled REST activity with no attack target");
         long started = level.getGameTime();
         helper.onEachTick(() -> {
             if (guard.isSleeping()) {
@@ -115,9 +128,17 @@ public final class GuardEnemiesSensorGameTests {
                         "guard kept the distant enemy while sleeping");
                 helper.succeed();
             } else if (level.getGameTime() - started >= 180) {
+                helper.assertTrue(guard.tickCount > 0,
+                        "bedtime guard never ticked after being spawned into the world");
                 helper.fail("guard stayed awake at bedtime with a 24-block enemy: activity="
                         + guard.getBrain().getActiveNonCoreActivity() + ", attackTarget="
                         + guard.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET)
+                        + ", daytime=" + level.getDayTime()
+                        + ", scheduled=" + guard.getBrain().getSchedule()
+                                .getActivityAt((int) (level.getDayTime() % 24000L))
+                        + ", enemyDistance=" + guard.distanceTo(target)
+                        + ", bedState=" + level.getBlockState(head)
+                        + ", entityTicks=" + guard.tickCount
                         + ", home=" + guard.getBrain().getMemory(MemoryModuleType.HOME)
                         + ", walk=" + guard.getBrain().getMemory(MemoryModuleType.WALK_TARGET)
                         + ", path=" + guard.getNavigation().getPath()

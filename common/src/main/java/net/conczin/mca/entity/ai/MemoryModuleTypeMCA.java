@@ -3,6 +3,7 @@ package net.conczin.mca.entity.ai;
 import com.mojang.serialization.Codec;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.brain.tasks.RangedCombatState;
+import net.conczin.mca.entity.ai.brain.UnreachableCombatTargets;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.world.entity.LivingEntity;
@@ -11,6 +12,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -35,6 +37,7 @@ public interface MemoryModuleTypeMCA {
     MemoryModuleType<ItemStack> MOURNING_FLOWER = register("mourning_flower", Optional.of(ItemStack.CODEC));
     MemoryModuleType<Boolean> FORCED_HOME = register("forced_home", Optional.of(Codec.BOOL));
     MemoryModuleType<RangedCombatState> RANGED_COMBAT_STATE = register("ranged_combat_state", Optional.empty());
+    MemoryModuleType<List<UnreachableCombatTargets.Failure>> UNREACHABLE_COMBAT_TARGETS = register("unreachable_combat_targets", Optional.empty());
     MemoryModuleType<GlobalPos> CANT_REACH_WALK_TARGET = register("cant_reach_walk_target", Optional.empty());
     MemoryModuleType<GlobalPos> SHELTER_BED = register("shelter_bed", Optional.empty());
 

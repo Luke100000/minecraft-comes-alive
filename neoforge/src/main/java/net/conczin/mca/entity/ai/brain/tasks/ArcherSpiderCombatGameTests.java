@@ -289,7 +289,9 @@ public final class ArcherSpiderCombatGameTests {
             }
             if (ticks[0] >= deadlineTicks) {
                 helper.fail("archer failed to kill the " + targetName + "; health=" + spider.getHealth()
-                        + ", state=" + RangedCombatState.current(archer).orElse(null));
+                        + ", state=" + RangedCombatState.current(archer).orElse(null)
+                        + ", actorTicks=" + archer.tickCount + ", drawTicks=" + archer.getTicksUsingItem()
+                        + ", usingItem=" + archer.isUsingItem());
             }
         });
     }

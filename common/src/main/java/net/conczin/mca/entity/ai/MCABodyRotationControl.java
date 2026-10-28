@@ -20,7 +20,12 @@ public class MCABodyRotationControl extends BodyRotationControl {
 
     @Override
     public void clientTick() {
-        if (this.faceLookDirection.getAsBoolean()) {
+        // Vanilla owns the body facing while walking. Turning the body toward
+        // a bow's LOOK_TARGET during escape can rotate it 180 degrees against
+        // navigation, making the fleeing archer appear to run backward/spin.
+        double dx = this.mob.getX() - this.mob.xo;
+        double dz = this.mob.getZ() - this.mob.zo;
+        if (this.faceLookDirection.getAsBoolean() && dx * dx + dz * dz <= 2.5000003E-7D) {
             this.mob.yBodyRot = this.mob.yHeadRot;
             return;
         }

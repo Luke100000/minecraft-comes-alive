@@ -16,6 +16,8 @@ import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensorGameTests;
 import net.conczin.mca.entity.ai.brain.sensor.VillagerMCABabiesSensorGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherArrowFriendlyFireGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherBowTrajectoryGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ArcherTerrainCombatGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ArcherCombatStabilityGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherCombatMovementGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherSpiderCombatGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.DoorInteractionGameTests;
@@ -87,6 +89,8 @@ public final class McaGameTestsRegistration {
             VillagerMCABabiesSensorGameTests.class,
             ArcherArrowFriendlyFireGameTests.class,
             ArcherBowTrajectoryGameTests.class,
+            ArcherTerrainCombatGameTests.class,
+            ArcherCombatStabilityGameTests.class,
             ArcherCombatMovementGameTests.class,
             ArcherSpiderCombatGameTests.class,
             DoorInteractionGameTests.class,

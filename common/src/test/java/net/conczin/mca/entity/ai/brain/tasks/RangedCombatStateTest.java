@@ -24,12 +24,18 @@ class RangedCombatStateTest {
     }
 
     @Test
-    void onlyEmergencyFleeSuppressesRangedAttack() {
+    void escapeAndRecoverySuppressRangedAttack() {
         for (RangedCombatState state : RangedCombatState.values()) {
-            if (state == RangedCombatState.EMERGENCY_FLEE) {
+            if (state == RangedCombatState.EMERGENCY_FLEE || state == RangedCombatState.REPOSITION
+                    || state == RangedCombatState.RECOVER) {
                 assertTrue(state.suppressesRangedAttack());
             } else {
                 assertFalse(state.suppressesRangedAttack(), state.name());
+            }
+            if (state == RangedCombatState.EMERGENCY_FLEE || state == RangedCombatState.RECOVER) {
+                assertFalse(state.permitsBowDrawContinuation());
+            } else {
+                assertTrue(state.permitsBowDrawContinuation());
             }
         }
     }

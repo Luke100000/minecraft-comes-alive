@@ -57,10 +57,21 @@
 ## Combat
 
 * Improved archer movement and aiming when approaching, holding position, keeping distance, repositioning, or retreating.
+* Archers lead moving targets and check the arrow's path before shooting, including shots uphill and downhill.
+* Archers can seek a clear shot around ledges and climb accessible steps out of depressions instead of waiting for the enemy to move out of range.
+* Archers can use a safe step up when a corner blocks both sidesteps.
+* Archers stop ordinary wandering when combat starts and turn towards their enemy before sidestepping.
+* Archers temporarily skip enemies after failed routes leave them unable to move closer or take a shot. Moving enemies can be reconsidered sooner.
+* Archers prioritise nearby attackers, keep track of enemies pursuing them down steps, and finish useful escape routes before choosing their next move.
+* Archers keep an existing bow draw during brief repositioning or a blocked shot, and lower it while recovering or fleeing immediate danger. Shots still check for solid terrain before release.
+* Archer sidesteps tolerate brief sight interruptions and use consistent movement checks when starting beside obstacles.
+* Armour refreshes no longer replace a ranged weapon while it is being drawn.
+* Archers prefer retreat routes without drops they cannot jump back up.
 * Archers avoid crowds and obstacles while retreating and keep facing their target while moving.
 * Guards and archers keep their weapons and armour while peacefully following a player.
 * MCA archer arrows can pass through villagers and iron golems. This is controlled by `archerArrowsIgnoreVillagers`.
 * Guards can spot visible threats from farther away.
+* Guards can still go to bed when enemies are far away, while responding to nearby threats.
 
 ## Family Tree, ChatAI, Destiny, and villager tools
 

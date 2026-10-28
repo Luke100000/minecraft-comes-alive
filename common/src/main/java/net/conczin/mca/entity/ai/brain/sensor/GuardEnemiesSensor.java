@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableSet;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
+import net.conczin.mca.entity.ai.brain.UnreachableCombatTargets;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
@@ -62,6 +63,7 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
                 MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES,
                 MemoryModuleType.ATTACK_TARGET,
                 MemoryModuleTypeMCA.PLAYER_FOLLOWING,
+                MemoryModuleTypeMCA.UNREACHABLE_COMBAT_TARGETS,
                 MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY
         );
     }
@@ -148,6 +150,7 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
                     configuredPriority
             );
             if (priority < 0
+                    || UnreachableCombatTargets.contains(entity, target)
                     || !isWithinGuardEnemyRange(entity, target, followedPlayer)
                     || !isVisibleToGuard(entity, target, followedPlayer)) {
                 continue;

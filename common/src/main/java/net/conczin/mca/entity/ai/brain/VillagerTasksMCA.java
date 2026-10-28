@@ -30,6 +30,7 @@ import net.conczin.mca.server.world.data.villageComponents.VillageGuardsManager;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.ai.Brain;
 import net.minecraft.world.entity.ai.behavior.*;
@@ -103,6 +104,7 @@ public class VillagerTasksMCA {
             MemoryModuleTypeMCA.MOURNING_FLOWER,
             MemoryModuleTypeMCA.FORCED_HOME,
             MemoryModuleTypeMCA.RANGED_COMBAT_STATE,
+            MemoryModuleTypeMCA.UNREACHABLE_COMBAT_TARGETS,
             MemoryModuleTypeMCA.CANT_REACH_WALK_TARGET,
             MemoryModuleTypeMCA.SHELTER_BED
     );
@@ -378,6 +380,13 @@ public class VillagerTasksMCA {
         if (guardTooHurt(villager)) {
             return Optional.empty();
         } else {
+            if (villager.getProfession() == ProfessionsMCA.ARCHER && RangedWeaponHelper.isHoldingSupportedWeapon(villager)) {
+                Optional<LivingEntity> immediate = ArcherMovementTask.findImmediateArcherAttacker(villager)
+                        .filter(attacker -> shouldRespondToGuardEnemy(villager, attacker));
+                if (immediate.isPresent()) {
+                    return immediate;
+                }
+            }
             Optional<LivingEntity> current = villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET);
             if (current.isPresent() && shouldKeepAttackTarget(villager, current.get())) {
                 return current;
@@ -397,7 +406,12 @@ public class VillagerTasksMCA {
                && !target.isRemoved()
                && target.level() == villager.level()
                && villager.canAttack(target)
-               && (getActivity(villager) != Activity.REST || shouldDefendDuringRest(villager, target));
+               && !UnreachableCombatTargets.contains(villager, target)
+               // Finish an already-started nearby fight after the shift ends,
+               // but do not let a long-range pursuit prevent scheduled sleep.
+               && (getActivity(villager) != Activity.REST
+                   || target.distanceToSqr(villager) < 24.0D * 24.0D
+                   || shouldDefendDuringRest(villager, target));
     }
 
     private static boolean shouldRespondToGuardEnemy(VillagerEntityMCA villager, LivingEntity target) {
@@ -413,6 +427,10 @@ public class VillagerTasksMCA {
     private static boolean shouldDefendDuringRest(VillagerEntityMCA villager, LivingEntity target) {
         return isFollowingPlayer(villager)
                || target.distanceTo(villager) < 8.0
+               // A village guard must not go off duty while a nearby monster
+               // is actively attacking one of its neighbours during REST.
+               || (target.distanceToSqr(villager) < 16.0 * 16.0
+                   && target instanceof Mob mob && mob.getTarget() instanceof Villager)
                // Homeless guards away from a village still defend themselves at range.
                // Once a bed is claimed, a distant enemy must not prevent scheduled REST.
                || (villager.getBrain().getMemoryInternal(MemoryModuleType.HOME).isEmpty()
@@ -579,7 +597,11 @@ public class VillagerTasksMCA {
 
         return ImmutableList.of(
                 Pair.of(2, new RunOne<>(socializingTasks.build())),
-                Pair.of(10, new ShowTradesToPlayer(400, 1600)),
+                // Vanilla's trade-display task unconditionally clears MAINHAND
+                // when it stops, including while guard CORE is actively using
+                // that hand for a bow. Guards retain their combat equipment.
+                Pair.of(10, new ConditionalTask<>(new ShowTradesToPlayer(400, 1600),
+                        (VillagerEntityMCA v) -> !v.isGuard())),
                 Pair.of(10, SetLookAndInteract.create(EntityType.PLAYER, 4)),
                 Pair.of(2, SetWalkTargetFromBlockMemory.create(MemoryModuleType.MEETING_POINT, speedModifier, 6, 100, 200)),
                 Pair.of(3, new GiveGiftToHero(100)),
@@ -613,7 +635,8 @@ public class VillagerTasksMCA {
                 )),
                 Pair.of(3, new GiveGiftToHero(100)),
                 Pair.of(3, SetLookAndInteract.create(EntityType.PLAYER, 4)),
-                Pair.of(3, new ShowTradesToPlayer(400, 1600)),
+                Pair.of(3, new ConditionalTask<>(new ShowTradesToPlayer(400, 1600),
+                        (VillagerEntityMCA v) -> !v.isGuard())),
                 Pair.of(3, new GrieveTask()),
                 Pair.of(3, new GateBehavior<>(ImmutableMap.of(),
                         ImmutableSet.of(MemoryModuleType.INTERACTION_TARGET),
