@@ -13,6 +13,9 @@ import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.CaveSpider;
 import net.minecraft.world.entity.monster.Spider;
+import net.minecraft.world.entity.schedule.Activity;
+import net.minecraft.world.entity.schedule.Schedule;
+import net.minecraft.world.entity.schedule.ScheduleBuilder;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
@@ -68,8 +71,10 @@ public final class ArcherSpiderCombatGameTests {
         buildCaveCorner(helper, archerPos);
 
         VillagerEntityMCA archer = spawnArcher(helper, archerPos);
-        archer.getBrain().setSchedule(net.minecraft.world.entity.schedule.Schedule.EMPTY);
-        archer.getBrain().setActiveActivityIfPossible(net.minecraft.world.entity.schedule.Activity.IDLE);
+        // Keep the archer awake throughout the real spider pursuit; the
+        // scheduled activity must not replace the one-time active IDLE.
+        archer.getBrain().setSchedule(new ScheduleBuilder(new Schedule()).changeActivityAt(0, Activity.IDLE).build());
+        archer.getBrain().setActiveActivityIfPossible(Activity.IDLE);
         Spider spider = spawnSpider(helper, EntityType.SPIDER, archerPos.east(2), false);
         // Movement is the subject of this integration test. Real bow spread is intentionally
         // stochastic, so require one post-escape hit rather than a random number of hits.

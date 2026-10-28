@@ -1884,9 +1884,9 @@ public final class MCAGroundPathNavigationGameTests {
         villager.setNoAi(true);
         villager.setOnGround(true);
         try {
+            MCAGroundPathNavigation navigation = (MCAGroundPathNavigation) villager.getNavigation();
             PathRequestDiagnostics.SearchSnapshot before = PathRequestDiagnostics.snapshot(villager);
-            Path path = ((MCAGroundPathNavigation) villager.getNavigation())
-                    .createPathForPersistentIntent(Set.of(target), 0);
+            Path path = navigation.createPathForPersistentIntent(Set.of(target), 0);
             PathRequestDiagnostics.SearchSnapshot after = PathRequestDiagnostics.snapshot(villager);
             long expanded = after.expandedNodes() - before.expandedNodes();
             helper.assertTrue(path != null && !path.canReach(), "sealed target was unexpectedly reachable");
@@ -1894,6 +1894,20 @@ public final class MCAGroundPathNavigationGameTests {
                     "test did not exercise the extended search budget");
             helper.assertTrue(expanded <= 1_024,
                     "unreachable extended search expanded " + expanded + " nodes instead of staying bounded");
+
+            // A boosted ordinary search may visit 1,536 nodes (768 * 2), but
+            // the extended search must not multiply that allowance again.
+            navigation.setMaxVisitedNodesMultiplier(2.0F);
+            PathRequestDiagnostics.SearchSnapshot boostedBefore = PathRequestDiagnostics.snapshot(villager);
+            Path boostedPath = navigation.createPathForPersistentIntent(Set.of(target), 0);
+            PathRequestDiagnostics.SearchSnapshot boostedAfter = PathRequestDiagnostics.snapshot(villager);
+            long boostedExpanded = boostedAfter.expandedNodes() - boostedBefore.expandedNodes();
+            helper.assertTrue(boostedPath != null && !boostedPath.canReach(),
+                    "sealed target unexpectedly became reachable with a boosted search");
+            helper.assertTrue(boostedAfter.extendedSearches() == boostedBefore.extendedSearches() + 1,
+                    "boosted search did not exercise the extended node budget");
+            helper.assertTrue(boostedExpanded <= 1_536,
+                    "boosted extended search expanded " + boostedExpanded + " nodes beyond its ordinary allowance");
         } finally {
             villager.discard();
         }

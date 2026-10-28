@@ -11,7 +11,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.AfterBatch;
-import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -44,14 +43,8 @@ public final class ResidencySetHomeGameTests {
     // This fixture exercises natural HOME acquisition and sleeping, not the shared world's clock.
     private static final Schedule REPLACEMENT_REST_SCHEDULE = new ScheduleBuilder(new Schedule())
             .changeActivityAt(0, Activity.REST).build();
-    private static long previousReplacementDayTime;
 
     private ResidencySetHomeGameTests() {
-    }
-
-    @BeforeBatch(batch = "mca_replaced_sleeping_home")
-    public static void rememberReplacementDayTime(ServerLevel level) {
-        previousReplacementDayTime = level.getDayTime();
     }
 
     @AfterBatch(batch = "mca_replaced_sleeping_home")
@@ -64,7 +57,6 @@ public final class ResidencySetHomeGameTests {
             villager.discard();
         }
         REPLACEMENT_VILLAGERS.clear();
-        level.setDayTime(previousReplacementDayTime);
     }
 
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
@@ -714,7 +706,6 @@ public final class ResidencySetHomeGameTests {
     public static void replacingClaimedBedDoesNotAllowTwoSleepingOwners(GameTestHelper helper) {
         BlockPos center = helper.absolutePos(new BlockPos(56, 1, 56));
         GameTestTerrain.prepareFlatArea(helper, center, 12, 3);
-        helper.getLevel().setDayTime(13_000L);
         BlockPos bell = center.west(6);
         helper.getLevel().setBlock(bell, Blocks.BELL.defaultBlockState(), 3);
         helper.assertTrue(VillageManager.get(helper.getLevel()).processBuilding(bell) == Building.validationResult.SUCCESS,
@@ -731,22 +722,9 @@ public final class ResidencySetHomeGameTests {
         REPLACEMENT_VILLAGERS.add(owner);
         VillagerEntityMCA[] incoming = new VillagerEntityMCA[1];
         boolean[] sawReclaim = {false};
-        int[] originalSleepTicks = {-1};
         helper.startSequence().thenWaitUntil(() -> {
-            if (!owner.isSleeping()) {
-                helper.fail("original villager did not naturally acquire HOME and sleep"
-                        + "; ticks=" + owner.tickCount
-                        + "; dayTime=" + helper.getLevel().getDayTime()
-                        + "; activity=" + owner.getBrain().getActiveNonCoreActivity()
-                        + "; home=" + owner.getBrain().getMemory(MemoryModuleType.HOME)
-                        + "; walk=" + owner.getBrain().getMemory(MemoryModuleType.WALK_TARGET)
-                        + "; cantReach=" + owner.getBrain().getMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
-                        + "; bedTickets=" + poiManager.getFreeTickets(head)
-                        + "; position=" + owner.position()
-                        + "; navDone=" + owner.getNavigation().isDone());
-            }
+            helper.assertTrue(owner.isSleeping(), "original villager did not naturally acquire HOME and sleep");
         }).thenExecute(() -> {
-            originalSleepTicks[0] = owner.tickCount;
             helper.assertTrue(owner.getResidency().getHome()
                             .filter(home -> home.pos().equals(head)).isPresent(),
                     "natural sleeper did not remember the fixture bed as HOME");
@@ -786,31 +764,8 @@ public final class ResidencySetHomeGameTests {
                 helper.fail(failure);
             }
         }).thenWaitUntil(() -> {
-            VillagerEntityMCA claimant = incoming[0];
-            if (claimant.getSleepingPos().filter(head::equals).isEmpty()) {
-                helper.fail("replacement claimant did not naturally sleep in its claimed bed"
-                        + "; originalSleepTicks=" + originalSleepTicks[0]
-                        + "; claimantTicks=" + claimant.tickCount
-                        + "; dayTime=" + helper.getLevel().getDayTime()
-                        + "; claimantActivity=" + claimant.getBrain().getActiveNonCoreActivity()
-                        + "; claimantScheduled=" + claimant.getBrain().getSchedule()
-                        .getActivityAt((int) (helper.getLevel().getDayTime() % 24000))
-                        + "; claimantDefaultSchedule=" + (claimant.getBrain().getSchedule() == SchedulesMCA.DEFAULT)
-                        + "; claimantGuard=" + claimant.isGuard()
-                        + "; claimantProfession=" + claimant.getVillagerData().getProfession()
-                        + "; claimantAttack=" + claimant.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET)
-                        + "; claimantJobSite=" + claimant.getBrain().getMemory(MemoryModuleType.JOB_SITE)
-                        + "; claimantPanic=" + claimant.getBrain().getActiveNonCoreActivity()
-                        + "; claimantHome=" + claimant.getBrain().getMemory(MemoryModuleType.HOME)
-                        + "; claimantWalk=" + claimant.getBrain().getMemory(MemoryModuleType.WALK_TARGET)
-                        + "; claimantCantReach=" + claimant.getBrain().getMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
-                        + "; claimantPosition=" + claimant.position()
-                        + "; claimantNavDone=" + claimant.getNavigation().isDone()
-                        + "; bedOccupied=" + helper.getLevel().getBlockState(head).getValue(BedBlock.OCCUPIED)
-                        + "; bedTickets=" + poiManager.getFreeTickets(head)
-                        + "; originalSleeping=" + owner.isSleeping()
-                        + "; originalHome=" + owner.getBrain().getMemory(MemoryModuleType.HOME));
-            }
+            helper.assertTrue(incoming[0].getSleepingPos().filter(head::equals).isPresent(),
+                    "replacement claimant did not naturally sleep in its claimed bed");
         }).thenExecute(() -> {
             helper.assertTrue(sawReclaim[0], "replacement claimant never acquired the recreated HOME ticket");
             helper.assertTrue(poiManager.getFreeTickets(head) == 0, "replacement claimant lost its HOME ticket");
@@ -829,6 +784,9 @@ public final class ResidencySetHomeGameTests {
                 .withPosition(Vec3.atBottomCenterOf(feet))
                 .withName(name)
                 .spawn(MobSpawnType.STRUCTURE);
+        // Village guard recruitment resets the villager's brain and replaces the test REST schedule.
+        // A little trading XP makes this ordinary resident ineligible without disabling its AI.
+        villager.setVillagerXp(1);
         villager.setOnGround(true);
         villager.refreshBrain(helper.getLevel());
         villager.getBrain().setSchedule(REPLACEMENT_REST_SCHEDULE);

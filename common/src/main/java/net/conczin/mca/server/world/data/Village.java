@@ -675,7 +675,7 @@ public class Village implements Iterable<Building> {
         for (int index = 0; index < count; index++) {
             VillagerEntityMCA villager = candidates.get(index);
             villager.getBrain().setMemory(MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING, time);
-            Mourning.start(villager, safeGraves.get(index % safeGraves.size()));
+            Mourning.startAmbient(villager, safeGraves.get(index % safeGraves.size()));
         }
         return MourningBurstResult.STARTED;
     }

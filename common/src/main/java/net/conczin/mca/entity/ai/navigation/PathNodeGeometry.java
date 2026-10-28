@@ -42,7 +42,7 @@ public final class PathNodeGeometry {
         if (collisionShape.isEmpty()) return floorY;
 
         double surfaceY = collisionShape.max(Direction.Axis.Y);
-        if (surfaceY > 1.0D) return floorY;
+        if (surfaceY <= 0.0D || surfaceY > 1.0D) return floorY;
 
         AABB mobBox = mob.getBoundingBox();
         double halfWidth = mobBox.getXsize() * 0.5D;

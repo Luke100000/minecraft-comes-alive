@@ -6,6 +6,7 @@ import net.conczin.mca.entity.VillagerBedAlignmentGameTests;
 import net.conczin.mca.entity.VillagerCarryPositionGameTests;
 import net.conczin.mca.entity.VillagerChildSuffocationGameTests;
 import net.conczin.mca.entity.VillagerVoicePitchGameTests;
+import net.conczin.mca.entity.VillagerEquipmentOwnershipGameTests;
 import net.conczin.mca.entity.ai.ProcreationInventoryGameTests;
 import net.conczin.mca.entity.ai.BedOccupancyLifecycleGameTests;
 import net.conczin.mca.entity.ai.ResidencyGoHomeGameTests;
@@ -34,6 +35,7 @@ import net.conczin.mca.entity.ai.brain.tasks.chore.FishingSiteGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.HarvestingTaskGameTests;
 import net.conczin.mca.entity.ai.navigation.AutonomousPathfindingGameTests;
 import net.conczin.mca.entity.ai.navigation.CaveVineNavigationGameTests;
+import net.conczin.mca.entity.ai.navigation.CampfireNavigationGameTests;
 import net.conczin.mca.entity.ai.navigation.FenceGateInteractionGameTests;
 import net.conczin.mca.entity.ai.navigation.HomeArrivalGameTests;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigationGameTests;
@@ -49,6 +51,7 @@ import net.conczin.mca.server.DestinyLocationResolverGameTests;
 import net.conczin.mca.server.world.data.CopiedOpenHouseGameTests;
 import net.conczin.mca.server.world.data.FloorScannerGameTests;
 import net.conczin.mca.server.world.data.IndoorRoomCacheGameTests;
+import net.conczin.mca.server.world.data.MourningFailureGameTests;
 import net.conczin.mca.server.world.data.ReportedFloorInteractionGameTests;
 import net.conczin.mca.server.world.data.ReportedStairHouseGameTests;
 import net.conczin.mca.server.world.data.TaigaFloorPerformanceGameTests;
@@ -74,6 +77,7 @@ public final class McaGameTestsRegistration {
             VillagerCarryPositionGameTests.class,
             VillagerChildSuffocationGameTests.class,
             VillagerVoicePitchGameTests.class,
+            VillagerEquipmentOwnershipGameTests.class,
             ProcreationInventoryGameTests.class,
             BedOccupancyLifecycleGameTests.class,
             ResidencyGoHomeGameTests.class,
@@ -102,6 +106,7 @@ public final class McaGameTestsRegistration {
             HarvestingTaskGameTests.class,
             AutonomousPathfindingGameTests.class,
             CaveVineNavigationGameTests.class,
+            CampfireNavigationGameTests.class,
             FenceGateInteractionGameTests.class,
             HomeArrivalGameTests.class,
             MCAGroundPathNavigationGameTests.class,
@@ -120,7 +125,8 @@ public final class McaGameTestsRegistration {
             ReportedFloorInteractionGameTests.class,
             ReportedStairHouseGameTests.class,
             TaigaFloorPerformanceGameTests.class,
-            VillageMourningGameTests.class
+            VillageMourningGameTests.class,
+            MourningFailureGameTests.class
     );
 
     private McaGameTestsRegistration() {

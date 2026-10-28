@@ -3,6 +3,7 @@ package net.conczin.mca.util;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -21,6 +22,8 @@ public final class ExtensibleTypeRegistry<T> {
     private final String defaultNamespace;
     private final String typeName;
     private final Map<ResourceLocation, T> entries = new LinkedHashMap<>();
+    // Derived only during registration; aliases never grow with lookup input or cache misses.
+    private final Map<String, T> entriesByName = new HashMap<>();
 
     public ExtensibleTypeRegistry(String defaultNamespace, String typeName) {
         this.defaultNamespace = Objects.requireNonNull(defaultNamespace, "defaultNamespace");
@@ -39,6 +42,16 @@ public final class ExtensibleTypeRegistry<T> {
 
         V value = Objects.requireNonNull(factory.apply(id), typeName + " factory result");
         entries.put(id, value);
+        if (!id.getNamespace().isEmpty()) {
+            entriesByName.put(id.toString(), value);
+        }
+        if (id.getNamespace().equals(defaultNamespace)) {
+            entriesByName.put(id.getPath(), value);
+        }
+        // ResourceLocation interprets an empty explicit namespace as minecraft, not the registry default.
+        if (id.getNamespace().equals(ResourceLocation.DEFAULT_NAMESPACE)) {
+            entriesByName.put(":" + id.getPath(), value);
+        }
         return value;
     }
 
@@ -46,8 +59,8 @@ public final class ExtensibleTypeRegistry<T> {
         return Optional.ofNullable(entries.get(id));
     }
 
-    public Optional<T> get(@Nullable String id) {
-        return parse(id).flatMap(this::get);
+    public synchronized Optional<T> get(@Nullable String id) {
+        return id == null ? Optional.empty() : Optional.ofNullable(entriesByName.get(id.toLowerCase(Locale.ROOT)));
     }
 
     public synchronized List<T> all() {

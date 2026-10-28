@@ -127,6 +127,12 @@ public class FishingTask extends AbstractChoreTask {
         }
 
         if (currentSite == null) {
+            // Discovery path probes mutate navigation's cached target. Yield before
+            // probing when another behaviour has acquired movement during the scan.
+            if (villager.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET)) {
+                failedTicks = FAILED_COOLDOWN;
+                return;
+            }
             currentSite = siteSearch.tick(world, villager);
             if (currentSite == null) {
                 if (siteSearch.exhausted()) failedTicks = FAILED_COOLDOWN;

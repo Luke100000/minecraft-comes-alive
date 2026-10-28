@@ -1,49 +1,40 @@
-# eclipse
-bin
-*.launch
-.settings
-.metadata
-.classpath
-.project
+# Local dotfiles and directories
+.*
+!.gitignore
+!.gitattributes
+!/.github/
 
-# idea
-out
+# IDE output
+bin/
+out/
+eclipse/
+*.launch
 *.ipr
 *.iws
 *.iml
-.idea
-*.env
 
-# gradle
-build
-.gradle
-
-# other
-eclipse
-run
-backup
-
-# Files from Forge MDK
-forge*changelog.txt
-/src/main/resources/assets/mca/skins/old
-/src/main/original-java
-/mapppings
-/mcmodsrepo
+# Build and runtime output
+build/
+run/
+run-gametest/
+logs/
+backup/
 /local.properties
 
-.vscode/
+# Editor and script artifacts
 *.kra
 *.kate-swp
+*~
+__pycache__/
 
-.*
+# Local credentials
+*.env
 
-
+# NeoForge dev/run directories
 neoforge/run-gametest*/
 neoforge/run-abbenchmark
 neoforge/run-abopen
 neoforge/run-searchbudget-*
 
 # Local dev/runtime output
-common/logs/
-fabric/logs/
 fabric/config/

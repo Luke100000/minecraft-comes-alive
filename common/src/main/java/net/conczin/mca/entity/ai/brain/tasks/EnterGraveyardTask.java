@@ -84,7 +84,7 @@ public class EnterGraveyardTask extends Behavior<VillagerEntityMCA> {
         findStandingPosition(world, villager, grave)
                 .ifPresentOrElse(
                         position -> setMourningPosition(villager, GlobalPos.of(world.dimension(), position)),
-                        () -> Mourning.retry(villager)
+                        () -> Mourning.noStandingPosition(villager)
                 );
     }
 

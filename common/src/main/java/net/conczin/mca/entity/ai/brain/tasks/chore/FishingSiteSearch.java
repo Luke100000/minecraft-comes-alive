@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai.brain.tasks.chore;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.MCAFishingBobberEntity;
+import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -21,33 +22,47 @@ import java.util.Set;
 
 final class FishingSiteSearch {
     private static final int NEARBY_RADIUS = 12;
-    private static final int SEARCH_RADIUS = 48;
+    private static final int SEARCH_RADIUS = 60;
     private static final int DISCOVERY_VERTICAL_RADIUS = 14;
     private static final int COLUMNS_PER_TICK = 64;
     private static final int MAX_CANDIDATES = 16;
+    private static final int MIN_SURFACE_WATER_BLOCKS = 8;
+    private static final int MAX_SMALL_WATER_CANDIDATES = 4;
     private static final int GEOMETRY_CHECKS_PER_TICK = 16;
+    private static final int PATH_PROBES_PER_RADIUS = 4;
     private static final int MIN_CAST_DISTANCE = 2;
     private static final int PREFERRED_MIN_CAST_DISTANCE = 3;
     private static final int MAX_CAST_DISTANCE = 7;
     private static final int[][] DIRECTIONS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1},
             {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
 
-    record Site(BlockPos standingPos, BlockPos waterPos, boolean likelyOpenWater) {
+    record Site(BlockPos standingPos, BlockPos waterPos, boolean likelyOpenWater, boolean smallWater) {
         Site {
             standingPos = standingPos.immutable();
             waterPos = waterPos.immutable();
         }
 
+        Site(BlockPos standingPos, BlockPos waterPos, boolean likelyOpenWater) {
+            this(standingPos, waterPos, likelyOpenWater, false);
+        }
+
         private SiteKey key() { return new SiteKey(standingPos, waterPos); }
     }
 
-    // Open-water preference ranks a site; it must not change its rejection identity.
+    // Water-quality metadata ranks a site; it must not change its rejection identity.
     private record SiteKey(BlockPos standingPos, BlockPos waterPos) { }
 
     private final List<Site> candidates = new ArrayList<>(MAX_CANDIDATES);
     private final List<Site> remainingSurface = new ArrayList<>(MAX_CANDIDATES);
     private final Set<SiteKey> rejected = new HashSet<>();
     private BlockPos origin;
+    private final Comparator<Site> siteOrder = Comparator.comparing(Site::smallWater)
+            .thenComparingDouble(site -> site.standingPos().distSqr(origin))
+            .thenComparing(site -> castDistance(site) < PREFERRED_MIN_CAST_DISTANCE)
+            .thenComparing(Comparator.comparing(Site::likelyOpenWater).reversed())
+            .thenComparingDouble(site -> Math.abs(castDistance(site) - 5.0))
+            .thenComparing(Site::standingPos, BlockPos::compareTo)
+            .thenComparing(Site::waterPos, BlockPos::compareTo);
     private int radius = NEARBY_RADIUS;
     private int column;
     private boolean covered;
@@ -55,6 +70,7 @@ final class FishingSiteSearch {
     private boolean done;
     private int pathProbes;
     private int geometryBudget;
+    private Site smallWaterFallback;
 
     /** Offers the next site on the server tick thread; the chore owns the selected site. */
     @Nullable
@@ -74,7 +90,9 @@ final class FishingSiteSearch {
                 if (chunk == null) continue;
                 int y = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, x & 15, z & 15);
                 if (!covered) {
-                    if (Math.abs(y - origin.getY()) <= DISCOVERY_VERTICAL_RADIUS) offerWater(world, new BlockPos(x, y, z));
+                    if (Math.abs(y - origin.getY()) > DISCOVERY_VERTICAL_RADIUS) continue;
+                    BlockPos water = new BlockPos(x, y, z);
+                    if (waterSurface(world, water)) offerWater(world, water);
                 } else {
                     // At most one exposed water surface per fallback column.
                     for (int dy = DISCOVERY_VERTICAL_RADIUS; dy >= -DISCOVERY_VERTICAL_RADIUS; dy--) {
@@ -93,48 +111,61 @@ final class FishingSiteSearch {
             for (Site site : candidates) {
                 geometryBudget--;
                 if (isUsable(world, villager, site)) {
-                    usable.add(new Site(site.standingPos(), site.waterPos(), likelyOpenWater(world, site.waterPos())));
+                    usable.add(new Site(site.standingPos(), site.waterPos(), likelyOpenWater(world, site.waterPos()), site.smallWater()));
                 }
             }
             candidates.clear();
             candidates.addAll(usable);
-            candidates.sort(order());
+            candidates.sort(siteOrder);
             validated = true;
             return null;
         }
-        if (pathProbes >= 4) {
+        boolean reserveFallbackQuery = radius == SEARCH_RADIUS && smallWaterFallback != null;
+        int probeLimit = PATH_PROBES_PER_RADIUS - (reserveFallbackQuery ? 1 : 0);
+        if (pathProbes >= probeLimit && (!reserveFallbackQuery || covered)) {
             if (radius < SEARCH_RADIUS) {
                 // Near-bank failures must not consume the distant search's
                 // separate, still bounded pathfinding allowance.
                 beginSearch(SEARCH_RADIUS);
                 return null;
             }
-            done = true;
-            return null;
+            return finishSearch(world, villager);
         }
-        if (!covered && pathProbes >= 3) {
+        // Reserve a covered-water probe as well as the saved fallback's final recheck.
+        if (!covered && pathProbes >= probeLimit - 1) {
             remainingSurface.addAll(candidates);
             candidates.clear();
+        }
+        if (covered && pathProbes == PATH_PROBES_PER_RADIUS - 1 && smallWaterFallback == null) {
+            // Reserve the last probe for a tiny-pool fallback when larger banks fail.
+            Site fallback = null;
+            for (Site site : candidates) {
+                if (site.smallWater() && (fallback == null || siteOrder.compare(site, fallback) < 0)) fallback = site;
+            }
+            for (Site site : remainingSurface) {
+                if (site.smallWater() && (fallback == null || siteOrder.compare(site, fallback) < 0)) fallback = site;
+            }
+            if (fallback != null) {
+                candidates.remove(fallback);
+                remainingSurface.remove(fallback);
+                candidates.addFirst(fallback);
+            }
         }
         while (!candidates.isEmpty()) {
             if (geometryBudget == 0) return null;
             Site site = candidates.removeFirst();
             if (rejected.contains(site.key())) continue;
+            if (site.smallWater() && smallWaterFallback != null && siteOrder.compare(site, smallWaterFallback) >= 0) continue;
             geometryBudget--;
             if (!isUsable(world, villager, site)) continue;
-            Vec3 delta = villager.position().subtract(Vec3.atBottomCenterOf(site.standingPos()));
-            if (delta.horizontalDistanceSqr() <= 0.64 && Math.abs(delta.y) <= 0.5) return site;
-            pathProbes++;
-            var path = villager.getNavigation().createPath(site.standingPos(), 0);
             // Even a failed query consumes this tick's one-query allowance.
-            return path != null && path.canReach() && path.getEndNode() != null
-                    && path.getEndNode().asBlockPos().equals(site.standingPos()) ? site : null;
+            return canReachSite(villager, site) ? offerReachable(site) : null;
         }
         if (!covered) {
             covered = true;
             column = 0;
             validated = false;
-        } else if (!remainingSurface.isEmpty() && pathProbes < 4) {
+        } else if (!remainingSurface.isEmpty() && pathProbes < PATH_PROBES_PER_RADIUS) {
             candidates.addAll(remainingSurface);
             remainingSurface.clear();
         } else if (radius < SEARCH_RADIUS) {
@@ -142,16 +173,53 @@ final class FishingSiteSearch {
             // the failed-chore cooldown that permits random wandering.
             beginSearch(SEARCH_RADIUS);
         } else {
-            done = true;
+            return finishSearch(world, villager);
         }
         return null;
     }
 
     boolean exhausted() { return done; }
 
+    @Nullable
+    private Site offerReachable(Site site) {
+        if (!site.smallWater()) return site;
+        if (radius == SEARCH_RADIUS && pathProbes == PATH_PROBES_PER_RADIUS) {
+            done = true;
+            smallWaterFallback = null;
+            return site;
+        }
+        if (smallWaterFallback == null || siteOrder.compare(site, smallWaterFallback) < 0) smallWaterFallback = site;
+        return null;
+    }
+
+    private boolean canReachSite(VillagerEntityMCA villager, Site site) {
+        Vec3 delta = villager.position().subtract(Vec3.atBottomCenterOf(site.standingPos()));
+        if (delta.horizontalDistanceSqr() <= 0.64 && Math.abs(delta.y) <= 0.5) return true;
+        if (pathProbes >= PATH_PROBES_PER_RADIUS) return false;
+        pathProbes++;
+        var navigation = villager.getNavigation();
+        var path = navigation instanceof MCAGroundPathNavigation mcaNavigation
+                ? mcaNavigation.createPathForPersistentIntent(Set.of(site.standingPos()), 0)
+                : navigation.createPath(site.standingPos(), 0);
+        return path != null && path.canReach() && path.getEndNode() != null
+                && path.getEndNode().asBlockPos().equals(site.standingPos());
+    }
+
+    @Nullable
+    private Site finishSearch(ServerLevel world, VillagerEntityMCA villager) {
+        if (smallWaterFallback != null && geometryBudget == 0) return null;
+        done = true;
+        Site fallback = smallWaterFallback;
+        smallWaterFallback = null;
+        if (fallback == null || rejected.contains(fallback.key())) return null;
+        geometryBudget--;
+        return isUsable(world, villager, fallback) && canReachSite(villager, fallback) ? fallback : null;
+    }
+
     void reset() {
         rejected.clear();
         origin = null;
+        smallWaterFallback = null;
         done = false;
         beginSearch(NEARBY_RADIUS);
     }
@@ -168,6 +236,7 @@ final class FishingSiteSearch {
 
     void reject(Site site) {
         rejected.add(site.key());
+        if (smallWaterFallback != null && smallWaterFallback.key().equals(site.key())) smallWaterFallback = null;
     }
 
     /** A bounded new aim from the existing bank; never requests another path. */
@@ -225,22 +294,12 @@ final class FishingSiteSearch {
         return new Site(feet, choice.waterPos(), likelyOpenWater(world, choice.waterPos()));
     }
 
-    private Comparator<Site> order() {
-        return Comparator.comparing((Site site) -> castDistance(site) < PREFERRED_MIN_CAST_DISTANCE)
-                .thenComparing(Comparator.comparing(Site::likelyOpenWater).reversed())
-                .thenComparingDouble(site -> Math.abs(castDistance(site) - 5.0))
-                .thenComparingDouble(site -> site.standingPos().distSqr(origin))
-                .thenComparing(Site::standingPos, BlockPos::compareTo)
-                .thenComparing(Site::waterPos, BlockPos::compareTo);
-    }
-
     private void offerWater(ServerLevel world, BlockPos water) {
-        if (!waterSurface(world, water)) return;
+        boolean smallWater = !hasEnoughSurfaceWater(world, water);
         // Cheap depth/neighbour hint; the full vanilla-shaped check follows on the shortlist.
         boolean openHint = sourceWater(world, water.below())
                 && sourceWater(world, water.east(2)) && sourceWater(world, water.west(2))
                 && sourceWater(world, water.north(2)) && sourceWater(world, water.south(2));
-        Comparator<Site> siteOrder = order();
         for (int[] direction : DIRECTIONS) {
             double length = Math.hypot(direction[0], direction[1]);
             for (int distance = MIN_CAST_DISTANCE; distance <= MAX_CAST_DISTANCE; distance++) {
@@ -250,7 +309,7 @@ final class FishingSiteSearch {
                 if (bank == null || Math.abs(x - origin.getX()) > radius || Math.abs(z - origin.getZ()) > radius) continue;
                 BlockPos standing = standingCentre(world, bank, x, z, water.getY());
                 if (standing == null) continue;
-                Site site = new Site(standing, water, openHint);
+                Site site = new Site(standing, water, openHint, smallWater);
                 if (castDistance(site) < MIN_CAST_DISTANCE || castDistance(site) > MAX_CAST_DISTANCE) continue;
                 // Keep distinct standing destinations, rather than sixteen targets for the same bank.
                 int sameStanding = -1;
@@ -263,9 +322,31 @@ final class FishingSiteSearch {
                 }
                 candidates.add(site);
                 candidates.sort(siteOrder);
-                if (candidates.size() > MAX_CANDIDATES) candidates.removeLast();
+                int smallCount = 0;
+                for (Site candidate : candidates) if (candidate.smallWater()) smallCount++;
+                if (smallCount > MAX_SMALL_WATER_CANDIDATES) {
+                    candidates.removeLast();
+                } else if (candidates.size() > MAX_CANDIDATES) {
+                    // Keep some tiny pools even when larger but unreachable banks fill the shortlist.
+                    candidates.remove(candidates.size() - smallCount - 1);
+                }
             }
         }
+    }
+
+    private static boolean hasEnoughSurfaceWater(ServerLevel world, BlockPos water) {
+        List<BlockPos> connected = new ArrayList<>(MIN_SURFACE_WATER_BLOCKS);
+        connected.add(water);
+        for (int index = 0; index < connected.size(); index++) {
+            for (Direction direction : Direction.Plane.HORIZONTAL) {
+                BlockPos neighbour = connected.get(index).relative(direction);
+                if (!connected.contains(neighbour) && waterSurface(world, neighbour)) {
+                    connected.add(neighbour);
+                    if (connected.size() == MIN_SURFACE_WATER_BLOCKS) return true;
+                }
+            }
+        }
+        return false;
     }
 
     @Nullable

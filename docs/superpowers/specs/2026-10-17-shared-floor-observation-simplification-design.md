@@ -1,6 +1,8 @@
 # Shared floor observation without behavior or code-size growth
 
-Date: 2026-10-17. Status: approved for inline implementation on 2026-10-18.
+Date: 2026-10-17. Original scope approved for inline implementation on 2026-10-18.
+The 2026-10-20 orchestration addendum below is a document revision for review,
+not a claim that the additional implementation has started.
 
 ## Intent and success criteria
 
@@ -328,3 +330,145 @@ This does not freeze saved geometry or relax overlap checks: real world edits
 still receive a fresh scan. The reported slab tower must pass repeated refreshes
 from multiple lower-floor/stair positions at both 2048/32 and 8192/320 scan limits,
 and preserve its three registered storeys through refresh and save/reload.
+
+## Explicit missing-storey insertion and short stair turns (2026-10-19)
+
+This is a separately approved behavior correction, not part of the original
+behavior-preserving refactor. A genuine missing storey may be inserted between
+existing labels: Add Floor shifts higher positive labels upward, or lower basement
+labels downward. `FloorGrouping` returns a pure insertion decision; the existing
+atomic addition commit revalidates and applies its label shifts only to the target
+logical Building. Preview, loading, raw registration and ordinary Room updates
+must not renumber anything. Preserve all existing IDs, anchors, geometry, Room
+ownership and main-Room identity. Reject stale labels and integer overflow;
+failed or repeated additions must not leave shifts behind.
+
+A short flat turn joining full-block stair flights is part of the flight, just
+like an equivalent slab turn. Extend the existing through-landing proof with
+explicit stair evidence and full-step rises/drops; retain its doorway and usable
+level-depth guards so real intermediate Rooms keep their own storeys. The saved
+two-block right-angle turn must select the same physical Floor as downstairs.
+Refreshing that saved downstairs Room may adopt formerly omitted turn cells;
+this is not permission to assign an unowned cell to a nearby registered Room.
+
+Regression evidence uses the existing tower SNBT plus a 58-block delta and copied
+registration state from the stopped test save. It is not live 26.3 verification.
+
+## Incremental simplification and floor-batched refresh (2026-10-20)
+
+The user asked to fold the architectural recommendation into this spec and the
+current plan. Preserve current registration, type selection, independent Room
+roles, inheritance and contribution controls. These support the user's eventual
+compound-Building/subroom goal, such as a prison with a cafeteria; implementing
+new compound recognition or a new hierarchy is not part of this revision.
+
+The existing physical pipeline is already shared. Simplification should remove
+repeated orchestration around it, not replace the scanner or merge intentionally
+different Add Building, Add Floor, Add Room and Update Room policies. One physical
+observation is shared within an operation; later operations observe the world
+again. Structural membership, movement clearance, storey boundaries, attachment
+permission and saved identity remain separate decisions using that evidence.
+
+Implement in two phases in
+`docs/superpowers/plans/2026-10-19-floor-system-simplification.md`:
+
+1. Small cleanup: let Observation implement its existing StepProvider directly
+   and remove the redundant StructureFloor geometry-replacement overload. Keep
+   the focused ceiling, partition/materialization and inheritance owners.
+2. Floor-batched whole-village refresh: observe each registered physical Floor
+   once, partition once, reconcile its registered Rooms together and publish the
+   complete replacement set through the existing atomic boundary.
+
+The user's separately requested ceiling policy is also explicit: search from
+feet Y + 1 through min(feet Y + 128, exclusive world maximum Y - 1), inclusive;
+skip nonempty fluid states, including waterlogged collision shapes, without
+extending that distance. Retain the existing leaves and collision predicates.
+This intentionally excludes roofs more than 128 blocks above the feet and is
+not a behavior-preserving cleanup.
+
+### Why whole-village refresh needs a different reconciliation scope
+
+At revision baseline `4cc3b86f7` plus the current dirty tower fixes,
+`VillageManager.fullScan` iterates registered Rooms. Each
+`RoomWorkflow.analyzeRegisteredRoomUpdate` scans and partitions the entire saved
+Floor, then compares the selected replacement with stale sibling memberships.
+If Room A is unchanged but an exterior wall shrinks Room B, A's update can reject
+the missing old B cells before B is refreshed. This is source-predicted R1 in
+`docs/superpowers/reviews/2026-10-19-floor-pipeline-architecture-review.md`;
+runtime reproduction remains a prerequisite, not an already-passing claim.
+During document revision the shared checkout advanced to `1ef6fc025`, which
+checkpointed the inspected floor fixes alongside other work. Re-capture the
+actual source baseline before execution; this document revision made no commit.
+
+Keep that sibling guard for a selected-room update. Whole-village maintenance
+instead reconciles the complete registered Room set for each
+`(structureId, floorId)`. Never group by displayed floor number or only by logical
+Building: separate Structures can share a label without sharing scan geometry.
+
+### Batch reconciliation and publication contract
+
+- Enumerate only Floors referenced by registered functional Rooms, ordered by
+  structure ID then floor ID. Choose the lowest-ID Room's saved source as the
+  deterministic request source; retain scanExistingFloor's ordinary supported
+  seed preference and fallback policy. Do not scan unregistered storeys.
+- Use one top-level scanExistingFloor call and one world-aware components call
+  per target key. Materialize matched Rooms from those components using existing
+  Room/POI owners. No second scanner, retained world snapshot or global cache.
+- Match identities using the fresh FloorGeometry.roomIdentityOverlapCount,
+  retaining its boundary-cell exclusions. Every saved Room must overlap exactly
+  one fresh component, and no matched component may overlap another saved Room.
+  Zero matches, splits and merges return the existing OVERLAP result. Do not
+  choose by nearest position, largest overlap, room ID or majority voting.
+- Unmatched fresh components remain unregistered. Successful replacement has
+  exactly the original Room ID set; no automatic Room creation/deletion, ID
+  allocation, ownership transfer or main-Room replacement occurs.
+- Preserve structure/logical-Building/floor IDs, saved floor labels and semantic
+  anchors, forced direct types and flags, inheritance and contribution controls.
+  Refresh exact geometry and POIs. Use the current RoomTypeResolver for automatic
+  direct types with all of this Floor's replacements in the prospective set;
+  inherited presentation uses the resulting published Rooms. Add no compound
+  classification rules or new type-selection prompts to maintenance.
+- Validate cross-Structure overlap with the current scanner policy. Unknown
+  columns and exceeded budgets remain failures, not permission to invent a
+  boundary or substitute saved geometry. Preserve underlying scan/materialization
+  failure results rather than translating every failure to OVERLAP.
+- Analyze without mutating registered objects, then call the existing
+  Village.publishFloorRefresh once with the complete replacement set. For later
+  Floors of the same Structure, use its current copy so earlier refreshed Floors
+  cannot be overwritten by an older Structure snapshot.
+- Retain the whole-village BuildingStateSnapshot and finalize the manager only
+  after every Floor succeeds. On a later analysis/validation/publication failure,
+  restore all earlier Floors, Rooms, POIs, types, labels and logical metadata.
+  On a RuntimeException restore the same snapshot before rethrowing; do not
+  swallow programming failures or leave earlier Floors partially updated.
+- Keep all work synchronous on the owning server thread, with no interleaved UI
+  confirmation or reuse across requests. The existing floor publication and
+  settlement rollback boundaries remain the owners; no new transaction service.
+
+### Acceptance and scope boundaries
+
+First reproduce the sibling-shrink rejection in a focused GameTest and preserve
+the selected-room rejection on that same edited fixture. Then prove the batch
+succeeds with both IDs and roles intact. Cover merge/split/missing identity,
+unregistered components, multiple Floors of one Structure, later failure and
+publication-exception rollback, insertion-order independence, unchanged tower
+refresh and save/reload. Retain the current doorway, enclosure, attachment,
+missing-storey insertion and dependency-aware NPC-cache regressions.
+
+The batch is an explicit maintenance correctness correction, not permission to
+weaken selected-room validation or broadly change scan results. Any other newly
+discovered behavior difference needs a focused failing reproduction and scope
+decision before another exception is added. Diagnostic provenance/double-scan
+changes remain deferred; a network-preview redesign remains out of scope.
+
+Keep the non-positive aggregate production LOC gate for pure cleanup and report
+physical/nonblank deltas against the captured current source. Report the ceiling
+policy and batch correction separately as well as the overall delta; moving code
+is not a saving. No large LOC or timing reduction is promised. If the batch needs
+net production growth beyond the cleanup budget, present the measured proposal
+for explicit approval rather than hiding it in the refactor tally.
+
+This addendum records the requested design revision. Review the revised spec and
+plan before implementation; the historical 2026-10-18 implementation approval is
+not approval to execute newly added tasks. No source, tests, saves, index or
+commits are changed by this document revision.
