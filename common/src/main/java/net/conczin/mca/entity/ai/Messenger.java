@@ -131,7 +131,8 @@ public interface Messenger extends EntityWrapper {
         VillagerMessage msg = new VillagerMessage(prefix, message, asEntity().getUUID());
         if (receiver instanceof ServerPlayer serverPlayer) {
             Network.sendToPlayer(msg, serverPlayer);
-        } else {
+        } else if (receiver.level().isClientSide() && ClientProxy.getNetworkHandler() != null) {
+            // Mock players on the dedicated GameTest server have no client handler.
             ClientProxy.getNetworkHandler().handleVillagerMessage(msg);
         }
 

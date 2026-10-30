@@ -17,11 +17,13 @@ import net.conczin.mca.registry.ItemsMCA;
 import net.conczin.mca.server.world.data.FamilyTree;
 import net.conczin.mca.util.WorldUtils;
 import net.minecraft.ChatFormatting;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.util.StringUtil;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -35,6 +37,8 @@ import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
 import java.util.Objects;
@@ -42,6 +46,8 @@ import java.util.Optional;
 import java.util.stream.Stream;
 
 public class BabyItem extends Item {
+    private static final double MIN_PLACEMENT_CLEARANCE = 2.0D;
+
     private final Gender gender;
 
     public BabyItem(Gender gender, Item.Properties properties) {
@@ -112,7 +118,36 @@ public class BabyItem extends Item {
 
     @Override
     public InteractionResult useOn(UseOnContext context) {
-        return InteractionResult.PASS;
+        ItemStack stack = context.getItemInHand();
+        Player player = context.getPlayer();
+        if (player == null || !stack.has(DataComponents.CUSTOM_NAME) || !isReadyToGrowUp(stack)) {
+            return InteractionResult.PASS;
+        }
+
+        Level level = context.getLevel();
+        if (level.isClientSide) {
+            return InteractionResult.SUCCESS;
+        }
+
+        BlockPos clickedPos = context.getClickedPos();
+        BlockPos placementPos = level.getBlockState(clickedPos).getCollisionShape(level, clickedPos).isEmpty()
+                ? clickedPos
+                : clickedPos.relative(context.getClickedFace());
+
+        Optional<VillagerEntityMCA> child = birthChild(
+                stack,
+                (ServerLevel) level,
+                player,
+                Vec3.atBottomCenterOf(placementPos),
+                placementPos
+        );
+        if (child.isEmpty()) {
+            player.displayClientMessage(Component.translatable("item.mca.baby.cannot_place"), true);
+            return InteractionResult.FAIL;
+        }
+
+        stack.shrink(1);
+        return InteractionResult.CONSUME;
     }
 
     public boolean onDropped(ItemStack stack, Player player) {
@@ -183,17 +218,31 @@ public class BabyItem extends Item {
         }
 
         // Name is good and we're ready to grow
-        if (player instanceof ServerPlayer serverPlayer) {
-            birthChild(stack, (ServerLevel) world, serverPlayer);
+        Optional<VillagerEntityMCA> child = birthChild(
+                stack,
+                (ServerLevel) world,
+                player,
+                player.position(),
+                player.blockPosition()
+        );
+        if (child.isEmpty()) {
+            player.displayClientMessage(Component.translatable("item.mca.baby.cannot_place"), true);
+            return InteractionResultHolder.fail(stack);
         }
         stack.shrink(1);
 
         return InteractionResultHolder.success(stack);
     }
 
-    protected VillagerEntityMCA birthChild(ItemStack stack, ServerLevel world, ServerPlayer player) {
+    protected final Optional<VillagerEntityMCA> birthChild(
+            ItemStack stack,
+            ServerLevel world,
+            Player player,
+            Vec3 spawnPosition,
+            BlockPos placementPos
+    ) {
         VillagerEntityMCA child = VillagerFactory.newVillager(world)
-                .withPosition(player.position())
+                .withPosition(spawnPosition)
                 .withGender(gender)
                 .withAge(-AgeState.getMaxAge())
                 .build();
@@ -204,6 +253,17 @@ public class BabyItem extends Item {
         }
 
         child.setCustomName(stack.getOrDefault(DataComponents.CUSTOM_NAME, Component.literal("Unnamed")));
+        configureChild(child);
+        child.refreshDimensions();
+
+        AABB bounds = child.getBoundingBox();
+        AABB placementClearance = new AABB(
+                bounds.minX, bounds.minY, bounds.minZ,
+                bounds.maxX, bounds.minY + MIN_PLACEMENT_CLEARANCE, bounds.maxZ
+        );
+        if (!isSafePlacement(world, child, placementPos, placementClearance)) {
+            return Optional.empty();
+        }
 
         WorldUtils.spawnEntity(world, child, MobSpawnType.BREEDING);
 
@@ -239,7 +299,27 @@ public class BabyItem extends Item {
                     });
         }
 
-        return child;
+        return Optional.of(child);
+    }
+
+    private static boolean isSafePlacement(ServerLevel world, VillagerEntityMCA child, BlockPos placementPos, AABB clearance) {
+        BlockPos supportPos = placementPos.below();
+        if (world.getBlockState(supportPos).getCollisionShape(world, supportPos).isEmpty()) {
+            return false;
+        }
+
+        for (BlockPos checkedPos : List.of(supportPos, placementPos, placementPos.above())) {
+            if (child.getType().isBlockDangerous(world.getBlockState(checkedPos))
+                    || world.getFluidState(checkedPos).is(FluidTags.WATER)
+                    || world.getFluidState(checkedPos).is(FluidTags.LAVA)) {
+                return false;
+            }
+        }
+
+        return world.noBlockCollision(child, clearance) && !child.isInWall();
+    }
+
+    protected void configureChild(VillagerEntityMCA child) {
     }
 
     @Override

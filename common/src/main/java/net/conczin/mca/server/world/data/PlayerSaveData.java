@@ -332,9 +332,10 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         public Letter(CompoundTag nbt, HolderLookup.Provider registries) {
             this(
                     nbt.getString("title"),
-                    PAGES_CODEC
-                            .parse(registries.createSerializationContext(NbtOps.INSTANCE), nbt.getCompound("pages"))
-                            .resultOrPartial(MCA.LOGGER::error)
+                    Optional.ofNullable(nbt.get("pages"))
+                            .flatMap(tag -> PAGES_CODEC
+                                    .parse(registries.createSerializationContext(NbtOps.INSTANCE), tag)
+                                    .resultOrPartial(MCA.LOGGER::error))
                             .orElse(List.of())
             );
         }

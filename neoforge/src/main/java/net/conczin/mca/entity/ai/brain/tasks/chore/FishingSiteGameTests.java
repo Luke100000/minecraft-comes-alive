@@ -1,0 +1,1611 @@
+package net.conczin.mca.entity.ai.brain.tasks.chore;
+
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
+import com.mojang.datafixers.util.Pair;
+import com.mojang.authlib.GameProfile;
+import net.conczin.mca.entity.MCAFishingBobberEntity;
+import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.VillagerFactory;
+import net.conczin.mca.entity.ai.Chore;
+import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
+import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
+import net.conczin.mca.gametest.GameTestTerrain;
+import net.conczin.mca.entity.interaction.VillagerCommandHandler;
+import net.conczin.mca.entity.ai.brain.tasks.WanderOrTeleportToTargetTask;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.GameTest;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.ai.Brain;
+import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.behavior.LookAtTargetSink;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.entity.schedule.Activity;
+import net.minecraft.world.entity.schedule.Schedule;
+import net.minecraft.world.entity.schedule.ScheduleBuilder;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+import net.neoforged.neoforge.common.util.FakePlayer;
+
+import java.util.Optional;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.HashSet;
+import java.util.Comparator;
+
+@PrefixGameTestTemplate(false)
+public final class FishingSiteGameTests {
+    private FishingSiteGameTests() {}
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void candidateRankingKeepsLargeWaterAndNearbyBanksFirst(GameTestHelper helper) throws ReflectiveOperationException {
+        BlockPos start = prepare(helper);
+        FishingSiteSearch search = new FishingSiteSearch();
+        var origin = FishingSiteSearch.class.getDeclaredField("origin");
+        origin.setAccessible(true);
+        origin.set(search, start);
+        var order = FishingSiteSearch.class.getDeclaredField("siteOrder");
+        order.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Comparator<FishingSiteSearch.Site> comparator = (Comparator<FishingSiteSearch.Site>)order.get(search);
+        var larger = new FishingSiteSearch.Site(start.east(2), start.east(7), false, false, 4);
+        List<FishingSiteSearch.Site> shortlist = new ArrayList<>();
+        shortlist.add(larger);
+        for (int i = 0; i < 5; i++) {
+            shortlist.add(new FishingSiteSearch.Site(start.west(i + 2), start.west(i + 4), false, true, 0));
+        }
+        shortlist.sort(comparator);
+        helper.assertTrue(shortlist.getFirst() == larger && shortlist.getLast().smallWater(),
+                "tiny-water quota eviction must remove a tiny site, not a larger-water site");
+        var near = new FishingSiteSearch.Site(start.east(2), start.east(6), false, false, 2);
+        var far = new FishingSiteSearch.Site(start.east(9), start.east(12), true, false, 0);
+        helper.assertTrue(comparator.compare(near, far) < 0, "open-water quality or random setback overrode a much nearer bank");
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void rejectedSiteStaysRejectedWhenPreferenceChanges(GameTestHelper helper) {
+        BlockPos stance = prepare(helper);
+        pond(helper.getLevel(), stance.east(7).below(), 3, true);
+        VillagerEntityMCA villager = spawn(helper, stance);
+        FishingSiteSearch search = new FishingSiteSearch();
+        try {
+            FishingSiteSearch.Site first = null;
+            for (int tick = 0; tick < 80 && first == null; tick++) first = search.tick(helper.getLevel(), villager);
+            helper.assertTrue(first != null, "control fixture did not discover a fishing site");
+            search.reject(new FishingSiteSearch.Site(first.standingPos(), first.waterPos(), !first.likelyOpenWater()));
+            for (int tick = 0; tick < 600 && !search.exhausted(); tick++) {
+                var next = search.tick(helper.getLevel(), villager);
+                if (next == null) continue;
+                helper.assertTrue(!next.standingPos().equals(first.standingPos()) || !next.waterPos().equals(first.waterPos()),
+                        "rejected physical site was selected again after only its preference flag changed");
+                search.reject(new FishingSiteSearch.Site(next.standingPos(), next.waterPos(), !next.likelyOpenWater()));
+            }
+            helper.assertTrue(search.exhausted(), "rejecting sites restarted the bounded search indefinitely");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void rejectedCurrentAimIsNotUsedAsCastFallback(GameTestHelper helper) {
+        BlockPos stance = prepare(helper);
+        BlockPos water = stance.east(5).below();
+        pond(helper.getLevel(), water, 0, false);
+        VillagerEntityMCA villager = spawn(helper, stance);
+        try {
+            var site = new FishingSiteSearch.Site(stance, water, false);
+            helper.assertTrue(FishingSiteSearch.isUsable(helper.getLevel(), villager, site), "control cast was not usable");
+            FishingSiteSearch search = new FishingSiteSearch();
+            search.reject(new FishingSiteSearch.Site(stance, water, true));
+            helper.assertTrue(search.chooseCastSite(helper.getLevel(), villager, site, null) == null,
+                    "cast fallback revived a rejected aim with different preference metadata");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void repeatedCastsVaryLandingAcrossDistancesAndKeepSameStance(GameTestHelper helper) throws ReflectiveOperationException {
+        BlockPos stance = prepare(helper);
+        pond(helper.getLevel(), stance.east(6).below(), 4, true);
+        VillagerEntityMCA villager = spawn(helper, stance);
+        villager.getRandom().setSeed(48371L);
+        Session task = new Session(helper.makeMockPlayer(GameType.SURVIVAL));
+        var siteField = FishingTask.class.getDeclaredField("currentSite");
+        siteField.setAccessible(true);
+        var targets = new HashSet<BlockPos>();
+        BlockPos previous = null;
+        ItemStack held = null;
+        boolean shortCast = false;
+        boolean longCast = false;
+        try {
+            task.start(helper.getLevel(), villager, 0);
+            siteField.set(task, new FishingSiteSearch.Site(stance, stance.east(5).below(), false));
+            for (int cast = 0; cast < 40; cast++) {
+                task.tick(helper.getLevel(), villager, cast * 50L);
+                var site = (FishingSiteSearch.Site)siteField.get(task);
+                var bobber = villager.getFishingBobber();
+                helper.assertTrue(bobber != null, "did not cast from the safe stance");
+                helper.assertTrue(!site.waterPos().equals(previous), "repeated previous target despite a broad pond");
+                helper.assertTrue(site.standingPos().equals(stance), "changed standing destination for another cast");
+                targets.add(site.waterPos());
+                double distance = Vec3.atCenterOf(site.waterPos()).subtract(Vec3.atCenterOf(stance)).horizontalDistance();
+                helper.assertTrue(distance >= 3 && distance <= 6, "cast outside the preferred range: " + site);
+                shortCast |= distance <= 4;
+                longCast |= distance >= 6;
+                if (held == null) held = villager.getItemInHand(villager.getDominantHand());
+                helper.assertTrue(villager.getItemInHand(villager.getDominantHand()) == held, "changed held rod between casts");
+                for (int tick = 0; tick < 40 && !bobber.isBobbing() && !bobber.isRemoved(); tick++) bobber.tick();
+                helper.assertTrue(bobber.isBobbing(), "varied cast failed to reach water");
+                helper.assertTrue(bobber.position().subtract(Vec3.atCenterOf(site.waterPos())).horizontalDistance() <= 0.8,
+                        "bobber entered near water before its selected target: " + site + ", landing=" + bobber.position());
+                for (int tick = 0; tick < 30 && !bobber.isRemoved(); tick++) bobber.tick();
+                helper.assertTrue(bobber.isBobbing()
+                                && bobber.position().subtract(Vec3.atCenterOf(site.waterPos())).horizontalDistance() <= 0.8,
+                        "bobber drifted away from its selected target after landing: " + site + ", settled=" + bobber.position());
+                helper.assertTrue(villager.position().equals(Vec3.atBottomCenterOf(stance)), "moved to make another cast");
+                helper.assertTrue(villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).isEmpty(), "cast variation requested movement");
+                // Observe actual successful landing, then simulate ordinary hook removal;
+                // existing bite/reel tests cover the catch and delivery lifecycle.
+                task.tick(helper.getLevel(), villager, cast * 50L + 1);
+                previous = site.waterPos();
+                bobber.discard();
+            }
+            helper.assertTrue(targets.size() >= 3, "casts did not explore the three available preferred open-water targets");
+            helper.assertTrue(shortCast && longCast, "did not mix short and long casts");
+            helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() == 0, "recasts searched for paths");
+        } finally { cleanup(helper, villager, task); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void desiredDistanceSelectsMatchingWaterAcrossWholeRange(GameTestHelper helper) {
+        BlockPos stance = prepare(helper);
+        for (int distance = 3; distance <= 7; distance++) pond(helper.getLevel(), stance.east(distance).below(), 0, false);
+        VillagerEntityMCA villager = spawn(helper, stance);
+        var distances = new HashSet<Integer>();
+        try {
+            var current = new FishingSiteSearch.Site(stance, stance.east(5).below(), false);
+            for (int seed = 0; seed < 64; seed++) {
+                // Control only the first roll. Target choice must reflect it in
+                // the world, regardless of candidate ordering or tie-breaking.
+                long randomSeed = seed * 0x9E3779B97F4A7C15L;
+                int desired = 3 + RandomSource.create(randomSeed).nextInt(4);
+                villager.getRandom().setSeed(randomSeed);
+                var chosen = new FishingSiteSearch().chooseCastSite(helper.getLevel(), villager, current, null);
+                helper.assertTrue(chosen != null && chosen.waterPos().equals(stance.east(desired).below()),
+                        "ignored desired cast distance " + desired + ": " + chosen);
+                distances.add(desired);
+            }
+            helper.assertTrue(distances.size() == 4, "fixture did not exercise all four preferred distances");
+            helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() == 0, "distance choice requested a path");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void smallPondFallsBackToShortCastWithoutMoving(GameTestHelper helper) {
+        BlockPos stance = prepare(helper);
+        BlockPos shortWater = stance.east(3).below();
+        BlockPos previousWater = stance.east(4).below();
+        pond(helper.getLevel(), shortWater, 0, false);
+        pond(helper.getLevel(), previousWater, 0, false);
+        VillagerEntityMCA villager = spawn(helper, stance);
+        try {
+            var current = new FishingSiteSearch.Site(stance, previousWater, false);
+            for (int seed = 0; seed < 32; seed++) {
+                villager.getRandom().setSeed(seed);
+                var chosen = new FishingSiteSearch().chooseCastSite(helper.getLevel(), villager, current, previousWater);
+                helper.assertTrue(chosen != null && chosen.waterPos().equals(shortWater) && chosen.standingPos().equals(stance),
+                        "small pond did not fall back to its shorter, non-repeated target: " + chosen);
+            }
+            helper.assertTrue(villager.position().equals(Vec3.atBottomCenterOf(stance)), "fallback moved the villager");
+            helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() == 0, "small pond fallback requested a path");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void discoversThreeBlockCastFromExistingSafeStance(GameTestHelper helper) {
+        assertOnlyStanceDiscovery(helper, 3);
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void discoversTwoBlockFallbackFromOnlySafeStance(GameTestHelper helper) {
+        assertOnlyStanceDiscovery(helper, 2);
+    }
+
+    private static void assertOnlyStanceDiscovery(GameTestHelper helper, int distance) {
+        BlockPos stance = prepare(helper);
+        BlockPos water = stance.east(distance).below();
+        // Only this full block supports a dry standing position. Adjacent water
+        // is allowed; other cast lengths cannot satisfy discovery by moving.
+        for (BlockPos p : BlockPos.betweenClosed(stance.offset(-5, -6, -8), stance.offset(11, -1, 8))) {
+            helper.getLevel().setBlock(p, Blocks.AIR.defaultBlockState(), 2);
+        }
+        helper.getLevel().setBlock(stance.below(), Blocks.STONE.defaultBlockState(), 2);
+        pond(helper.getLevel(), water, 0, false);
+        VillagerEntityMCA villager = spawn(helper, stance);
+        try {
+            var found = find(helper, villager);
+            helper.assertTrue(found.standingPos().equals(stance) && found.waterPos().equals(water),
+                    "did not discover the available " + distance + "-block cast: " + found);
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void twoBlockOnlyPondCastsAndReusesTargetWithoutMoving(GameTestHelper helper) throws ReflectiveOperationException {
+        BlockPos stance = prepare(helper);
+        BlockPos water = stance.east(2).below();
+        pond(helper.getLevel(), water, 0, false);
+        VillagerEntityMCA villager = spawn(helper, stance);
+        Session task = new Session(helper.makeMockPlayer(GameType.SURVIVAL));
+        var siteField = FishingTask.class.getDeclaredField("currentSite");
+        siteField.setAccessible(true);
+        ItemStack held = null;
+        try {
+            task.start(helper.getLevel(), villager, 0);
+            siteField.set(task, new FishingSiteSearch.Site(stance, water, false));
+            for (int cast = 0; cast < 4; cast++) {
+                task.tick(helper.getLevel(), villager, cast * 50L);
+                var bobber = villager.getFishingBobber();
+                helper.assertTrue(bobber != null, "did not cast into the only two-block water target");
+                var site = (FishingSiteSearch.Site)siteField.get(task);
+                helper.assertTrue(site.standingPos().equals(stance) && site.waterPos().equals(water), "short cast changed the safe stance or sole target");
+                if (held == null) held = villager.getItemInHand(villager.getDominantHand());
+                helper.assertTrue(villager.getItemInHand(villager.getDominantHand()) == held, "short recast changed the held rod");
+                for (int tick = 0; tick < 40 && !bobber.isBobbing() && !bobber.isRemoved(); tick++) bobber.tick();
+                helper.assertTrue(bobber.isBobbing(), "two-block cast did not reach water");
+                for (int tick = 0; tick < 30 && !bobber.isRemoved(); tick++) bobber.tick();
+                helper.assertTrue(bobber.isBobbing() && bobber.position().subtract(Vec3.atCenterOf(water)).horizontalDistance() <= 0.8,
+                        "two-block cast missed or drifted away from its sole target: " + bobber.position());
+                helper.assertTrue(villager.position().equals(Vec3.atBottomCenterOf(stance)), "short recast moved the villager");
+                helper.assertTrue(villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).isEmpty(), "short recast requested movement");
+                for (BlockPos p : BlockPos.betweenClosed(stance.offset(-1, 0, -1), stance.offset(1, 0, 1))) {
+                    helper.assertTrue(helper.getLevel().getFluidState(p).isEmpty() && helper.getLevel().getFluidState(p.below()).isEmpty(),
+                            "two-block fallback relaxed the dry standing footprint");
+                }
+                task.tick(helper.getLevel(), villager, cast * 50L + 1);
+                bobber.discard();
+            }
+            helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() == 0, "short recasts requested paths");
+        } finally { cleanup(helper, villager, task); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void shortCastWaitsForActualSafeStandingBlock(GameTestHelper helper) throws ReflectiveOperationException {
+        BlockPos stance = prepare(helper);
+        BlockPos water = stance.east(2).below();
+        pond(helper.getLevel(), water, 0, false);
+        VillagerEntityMCA villager = spawn(helper, stance);
+        Session task = new Session(helper.makeMockPlayer(GameType.SURVIVAL));
+        var siteField = FishingTask.class.getDeclaredField("currentSite");
+        siteField.setAccessible(true);
+        try {
+            task.start(helper.getLevel(), villager, 0);
+            siteField.set(task, new FishingSiteSearch.Site(stance, water, false));
+            // Within the old 0.8 radius, but still on the adjacent shore block.
+            villager.setPos(Vec3.atBottomCenterOf(stance).add(0.6, 0, 0));
+            task.tick(helper.getLevel(), villager, 0);
+            helper.assertTrue(villager.getFishingBobber() == null && villager.getItemInHand(villager.getDominantHand()).isEmpty(),
+                    "cast or equipped from the neighbouring block instead of the checked stance");
+            var walk = villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
+            helper.assertTrue(walk != null && walk.getTarget().currentBlockPosition().equals(stance),
+                    "did not retain movement to the actual safe stance");
+            // This isolates the arrival gate; natural navigation has separate tests.
+            villager.setPos(Vec3.atBottomCenterOf(stance));
+            task.tick(helper.getLevel(), villager, 1);
+            helper.assertTrue(villager.getFishingBobber() != null, "did not cast after arriving on the safe block");
+        } finally { cleanup(helper, villager, task); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void offCentreCastRejectsPostBlockedAimAndUsesClearAlternative(GameTestHelper helper) throws ReflectiveOperationException {
+        BlockPos stance = prepare(helper);
+        BlockPos blockedWater = stance.east(7).below();
+        BlockPos clearWater = stance.west(5).below();
+        pond(helper.getLevel(), blockedWater, 0, false);
+        pond(helper.getLevel(), stance.east().below(), 0, false);
+        VillagerEntityMCA villager = spawn(helper, stance);
+        villager.setLeftHanded(false);
+        villager.yBodyRot = 0;
+        villager.setPos(Vec3.atBottomCenterOf(stance).add(0, 0, 0.49));
+        for (int y = 0; y <= 3; y++) {
+            helper.getLevel().setBlock(stance.offset(2, y, 1), Blocks.STONE.defaultBlockState(), 2);
+        }
+        Session task = new Session(helper.makeMockPlayer(GameType.SURVIVAL));
+        var siteField = FishingTask.class.getDeclaredField("currentSite");
+        siteField.setAccessible(true);
+        var site = new FishingSiteSearch.Site(stance, blockedWater, false);
+        try {
+            helper.assertTrue(FishingSiteSearch.isUsable(helper.getLevel(), villager, site),
+                    "centred planning arc should clear the side post");
+            // Establish the real obstruction independently of preflight validation.
+            villager.setItemInHand(villager.getDominantHand(), new ItemStack(Items.FISHING_ROD));
+            var blocked = MCAFishingBobberEntity.cast(helper.getLevel(), villager, blockedWater);
+            for (int tick = 0; tick < 40 && !blocked.isRemoved() && !blocked.isBobbing(); tick++) blocked.tick();
+            helper.assertTrue(blocked.isRemoved() && !blocked.isBobbing(),
+                    "off-centre control cast did not hit the side post");
+            villager.setItemInHand(villager.getDominantHand(), ItemStack.EMPTY);
+
+            task.start(helper.getLevel(), villager, 0);
+            siteField.set(task, site);
+            task.tick(helper.getLevel(), villager, 0);
+            helper.assertTrue(villager.getFishingBobber() == null,
+                    "fishing launched a cast whose actual origin is blocked by the side post");
+
+            pond(helper.getLevel(), clearWater, 0, false);
+            siteField.set(task, site);
+            task.tick(helper.getLevel(), villager, 1);
+            var chosen = (FishingSiteSearch.Site)siteField.get(task);
+            var bobber = villager.getFishingBobber();
+            helper.assertTrue(bobber != null && chosen.waterPos().equals(clearWater),
+                    "fishing did not fall back to water clear from the actual position");
+            for (int tick = 0; tick < 40 && !bobber.isRemoved() && !bobber.isBobbing(); tick++) bobber.tick();
+            helper.assertTrue(bobber.isBobbing(), "off-centre alternative did not reach water");
+        } finally { cleanup(helper, villager, task); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void preferredTargetIsReusedInsteadOfTakingTwoBlockAlternative(GameTestHelper helper) {
+        BlockPos stance = prepare(helper);
+        BlockPos preferred = stance.west(5).below();
+        pond(helper.getLevel(), stance.east(2).below(), 0, false);
+        pond(helper.getLevel(), preferred, 0, false);
+        VillagerEntityMCA villager = spawn(helper, stance);
+        try {
+            var current = new FishingSiteSearch.Site(stance, preferred, false);
+            for (int seed = 0; seed < 32; seed++) {
+                villager.getRandom().setSeed(seed);
+                var chosen = new FishingSiteSearch().chooseCastSite(helper.getLevel(), villager, current, preferred);
+                helper.assertTrue(chosen != null && chosen.waterPos().equals(preferred), "avoiding a repeat took priority over a valid preferred-range cast: " + chosen);
+            }
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void twoBlockFallbackIsUsedWhenPreferredWaterIsBlocked(GameTestHelper helper) {
+        BlockPos stance = prepare(helper);
+        BlockPos shortWater = stance.east(2).below();
+        pond(helper.getLevel(), shortWater, 0, false);
+        pond(helper.getLevel(), stance.west(5).below(), 0, false);
+        for (BlockPos p : BlockPos.betweenClosed(stance.offset(-2, 0, -1), stance.offset(-2, 4, 1))) {
+            helper.getLevel().setBlock(p, Blocks.STONE.defaultBlockState(), 2);
+        }
+        VillagerEntityMCA villager = spawn(helper, stance);
+        try {
+            var chosen = new FishingSiteSearch().chooseCastSite(helper.getLevel(), villager,
+                    new FishingSiteSearch.Site(stance, shortWater, false), shortWater);
+            helper.assertTrue(chosen != null && chosen.standingPos().equals(stance) && chosen.waterPos().equals(shortWater),
+                    "blocked preferred water prevented a safe short fallback: " + chosen);
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void shortFallbackRejectsOneBlockTargetAndWetStandingFootprint(GameTestHelper helper) {
+        BlockPos stance = prepare(helper);
+        BlockPos water = stance.east(1).below();
+        pond(helper.getLevel(), water, 0, false);
+        VillagerEntityMCA villager = spawn(helper, stance);
+        try {
+            var site = new FishingSiteSearch.Site(stance, water, false);
+            helper.assertTrue(!FishingSiteSearch.isUsable(helper.getLevel(), villager, site), "accepted a one-block shore stance");
+            helper.assertTrue(new FishingSiteSearch().chooseCastSite(helper.getLevel(), villager, site, water) == null,
+                    "fallback relaxed safety to reuse a one-block shore cast");
+            BlockPos shortWater = stance.east(2).below();
+            pond(helper.getLevel(), shortWater, 0, false);
+            var shortSite = new FishingSiteSearch.Site(stance, shortWater, false);
+            helper.getLevel().setBlock(stance, Blocks.WATER.defaultBlockState(), 2);
+            helper.assertTrue(!FishingSiteSearch.isUsable(helper.getLevel(), villager, shortSite), "short range overrode the wet standing footprint");
+            helper.assertTrue(new FishingSiteSearch().chooseCastSite(helper.getLevel(), villager, shortSite, shortWater) == null,
+                    "short fallback accepted a wet bank");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void blockedDesiredDistanceFallsBackToClearWater(GameTestHelper helper) {
+        BlockPos stance = prepare(helper);
+        BlockPos blocked = stance.east(3).below();
+        BlockPos clear = stance.west(7).below();
+        pond(helper.getLevel(), blocked, 0, false);
+        pond(helper.getLevel(), clear, 0, false);
+        pond(helper.getLevel(), stance.west().below(), 0, false);
+        for (BlockPos p : BlockPos.betweenClosed(stance.offset(2, 0, -1), stance.offset(2, 4, 1))) {
+            helper.getLevel().setBlock(p, Blocks.STONE.defaultBlockState(), 2);
+        }
+        VillagerEntityMCA villager = spawn(helper, stance);
+        try {
+            villager.getRandom().setSeed(0L); // First desired-distance roll is 3.
+            var chosen = new FishingSiteSearch().chooseCastSite(helper.getLevel(), villager,
+                    new FishingSiteSearch.Site(stance, clear, false), null);
+            helper.assertTrue(chosen != null && chosen.waterPos().equals(clear) && chosen.standingPos().equals(stance),
+                    "blocked desired cast did not fall back to clear water: " + chosen);
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void oneWaterTargetCanBeReusedWhenNoAlternativeFits(GameTestHelper helper) {
+        BlockPos stance = prepare(helper);
+        BlockPos water = stance.east(3).below();
+        pond(helper.getLevel(), water, 0, false);
+        VillagerEntityMCA villager = spawn(helper, stance);
+        try {
+            var site = new FishingSiteSearch.Site(stance, water, false);
+            var chosen = new FishingSiteSearch().chooseCastSite(helper.getLevel(), villager, site, water);
+            helper.assertTrue(chosen != null && chosen.standingPos().equals(stance) && chosen.waterPos().equals(water),
+                    "single-target pond was rejected to force variety");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void sevenBlockCastRemainsAvailableAsFallback(GameTestHelper helper) {
+        BlockPos stance = prepare(helper);
+        BlockPos water = stance.east(7).below();
+        pond(helper.getLevel(), stance.east().below(), 0, false);
+        pond(helper.getLevel(), water, 0, false);
+        VillagerEntityMCA villager = spawn(helper, stance);
+        try {
+            var current = new FishingSiteSearch.Site(stance, water, false);
+            var choice = new FishingSiteSearch().chooseCastSite(helper.getLevel(), villager, current, null);
+            helper.assertTrue(choice != null && choice.waterPos().equals(water), "seven-block fallback was lost");
+            helper.assertTrue(choice.standingPos().equals(stance), "fallback requested a different standing position");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void variedTargetsRejectBlockedCastsWithoutMoving(GameTestHelper helper) {
+        BlockPos stance = prepare(helper);
+        pond(helper.getLevel(), stance.east(6).below(), 4, true);
+        for (BlockPos p : BlockPos.betweenClosed(stance.offset(1, 0, -6), stance.offset(1, 4, 6))) {
+            helper.getLevel().setBlock(p, Blocks.STONE.defaultBlockState(), 2);
+        }
+        VillagerEntityMCA villager = spawn(helper, stance);
+        try {
+            var chosen = new FishingSiteSearch().chooseCastSite(helper.getLevel(), villager,
+                    new FishingSiteSearch.Site(stance, stance.east(5).below(), false), null);
+            helper.assertTrue(chosen == null, "variation selected a target through the bank wall");
+            helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() == 0, "variation queried navigation");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void fishingCommandRejectsMissingRodImmediatelyWithoutReplacingOtherJob(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawn(helper, prepare(helper));
+        FakePlayer player = new FakePlayer(helper.getLevel(), new GameProfile(UUID.randomUUID(), "FishingCommandTest"));
+        try {
+            villager.getInventory().clearContent();
+            villager.getVillagerBrain().assignJob(Chore.CHOP, player);
+            boolean handled = new VillagerCommandHandler(villager).handle(player, "fishing");
+            helper.assertTrue(handled, "fishing command was not handled");
+            helper.assertTrue(villager.getVillagerBrain().getCurrentJob() == Chore.CHOP,
+                    "accepted rodless fishing before validating the command's tool requirement");
+            helper.assertTrue(villager.getFishingBobber() == null, "rodless command spawned a bobber");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void fishingCommandAcceptsInventoryRodWithoutEquippingIt(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawn(helper, prepare(helper));
+        FakePlayer player = new FakePlayer(helper.getLevel(), new GameProfile(UUID.randomUUID(), "FishingCommandTest"));
+        try {
+            villager.getVillagerBrain().abandonJob();
+            helper.assertTrue(new VillagerCommandHandler(villager).handle(player, "fishing"), "fishing command was not handled");
+            helper.assertTrue(villager.getVillagerBrain().getCurrentJob() == Chore.FISH, "inventory rod was not accepted");
+            helper.assertTrue(villager.getItemInHand(villager.getDominantHand()).isEmpty(), "command equipped rod before a site was ready");
+            helper.assertTrue(villager.getInventory().countItem(Items.FISHING_ROD) == 1, "command moved or consumed rod");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void fishingCommandAcceptsHeldRodOutsideInventory(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawn(helper, prepare(helper));
+        FakePlayer player = new FakePlayer(helper.getLevel(), new GameProfile(UUID.randomUUID(), "FishingCommandTest"));
+        ItemStack held = new ItemStack(Items.FISHING_ROD);
+        try {
+            villager.getVillagerBrain().abandonJob();
+            villager.getInventory().clearContent();
+            villager.setItemInHand(villager.getDominantHand(), held);
+            new VillagerCommandHandler(villager).handle(player, "fishing");
+            helper.assertTrue(villager.getVillagerBrain().getCurrentJob() == Chore.FISH, "held rod was incorrectly rejected");
+            helper.assertTrue(villager.getItemInHand(villager.getDominantHand()) == held, "command replaced held rod");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void reachableRiverFourteenBlocksBelowIsDiscovered(GameTestHelper helper) {
+        assertDownhillDiscovery(helper, 13, true);
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void riverOutsideFourteenBlockDiscoveryRemainsBounded(GameTestHelper helper) {
+        assertDownhillDiscovery(helper, 14, false);
+    }
+
+    private static void assertDownhillDiscovery(GameTestHelper helper, int rise, boolean expected) {
+        BlockPos base = prepare(helper);
+        for (int x = -3; x <= 34; x++) {
+            int height = Math.max(0, rise - Math.max(0, x));
+            for (BlockPos p : BlockPos.betweenClosed(base.offset(x, -2, -7), base.offset(x, rise + 4, 7))) {
+                helper.getLevel().setBlock(p, p.getY() < base.getY() + height
+                        ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 2);
+            }
+        }
+        BlockPos river = base.east(25).below();
+        pond(helper.getLevel(), river, 3, true);
+        VillagerEntityMCA villager = spawn(helper, base.above(rise));
+        FishingSiteSearch search = new FishingSiteSearch();
+        FishingSiteSearch.Site found = null;
+        try {
+            for (int i = 0; i < 600 && !search.exhausted() && found == null; i++) found = search.tick(helper.getLevel(), villager);
+            helper.assertTrue((found != null) == expected, "wrong downhill discovery for vertical difference " + (rise + 1));
+            if (found != null) {
+                helper.assertTrue(found.waterPos().getY() == river.getY(), "discovered unrelated water");
+                assertSetback(helper, found);
+            } else helper.assertTrue(search.exhausted(), "out-of-range search did not finish");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 1000)
+    public static void walksToLakeFortyBlocksAwayAndActuallyFishes(GameTestHelper helper) {
+        BlockPos start = distantLake(helper);
+        VillagerEntityMCA villager = spawn(helper, start);
+        Session task = naturalSession(helper, villager);
+        int[] ticks = {0};
+        boolean[] directedWalk = {false};
+        helper.onEachTick(() -> {
+            try {
+                var target = villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
+                if (target != null) {
+                    helper.assertTrue(target.getTarget().currentBlockPosition().getX() > start.getX() + 25,
+                            "wandered locally instead of walking directly to the distant bank: tick=" + ticks[0]
+                                    + ", start=" + start + ", pos=" + villager.position()
+                                    + ", target=" + target.getTarget().currentBlockPosition()
+                                    + ", tracker=" + target.getTarget().getClass().getSimpleName()
+                                    + ", activity=" + villager.getBrain().getActiveNonCoreActivity()
+                                    + ", job=" + villager.getVillagerBrain().getCurrentJob()
+                                    + ", taskStatus=" + task.getStatus() + ", failedTicks=" + task.failedTicks
+                                    + ", navTarget=" + villager.getNavigation().getTargetPos());
+                    directedWalk[0] = true;
+                    helper.assertTrue(target.getTarget() instanceof PersistentPathTarget,
+                            "distant fishing destination lost persistent movement intent");
+                }
+                var bobber = villager.getFishingBobber();
+                if (bobber != null && bobber.isBobbing()) {
+                    helper.assertTrue(directedWalk[0], "never published a persistent walk toward the lake");
+                    helper.assertTrue(villager.getX() > start.getX() + 30, "cast before walking to the distant bank");
+                    helper.assertTrue(bobber.getX() >= start.getX() + 36, "hook did not land in the distant lake");
+                    assertSafeStanding(helper, villager);
+                    finish(helper, villager, task);
+                } else if (++ticks[0] > 940) {
+                    helper.fail("did not fish at lake 40 blocks away: pos=" + villager.position()
+                            + ", directedWalk=" + directedWalk[0] + ", target="
+                            + (target == null ? null : target.getTarget().currentBlockPosition())
+                            + ", choreStatus=" + task.getStatus());
+                }
+            } catch (RuntimeException failure) { cleanup(helper, villager, task); throw failure; }
+        });
+    }
+
+    @GameTest(batch = "mca_fishing_extended_sixty", templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 1200)
+    public static void walksToLakeSixtyBlocksAwayAndActuallyFishes(GameTestHelper helper) {
+        BlockPos start = distantLake(helper, 60);
+        VillagerEntityMCA villager = spawn(helper, start);
+        Session task = naturalSession(helper, villager);
+        int[] ticks = {0};
+        helper.onEachTick(() -> {
+            try {
+                var target = villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
+                if (target != null) {
+                    helper.assertTrue(target.getTarget() instanceof PersistentPathTarget
+                                    && target.getTarget().currentBlockPosition().getX() > start.getX() + 48,
+                            "60-block fishing approach lost its distant persistent destination");
+                }
+                var bobber = villager.getFishingBobber();
+                if (bobber != null && bobber.isBobbing()) {
+                    helper.assertTrue(villager.getX() > start.getX() + 48, "did not walk to the extended fishing bank");
+                    helper.assertTrue(bobber.getX() >= start.getX() + 56, "hook did not land in the 60-block lake");
+                    assertSafeStanding(helper, villager);
+                    finish(helper, villager, task);
+                } else if (++ticks[0] > 1140) {
+                    helper.fail("never fished at lake 60 blocks away: pos=" + villager.position());
+                }
+            } catch (RuntimeException failure) { cleanup(helper, villager, task); throw failure; }
+        });
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void progressingLongApproachKeepsItsPersistentDestination(GameTestHelper helper) throws ReflectiveOperationException {
+        BlockPos start = distantLake(helper);
+        VillagerEntityMCA villager = spawn(helper, start);
+        Session task = new Session(helper.makeMockPlayer(GameType.SURVIVAL));
+        var selectedSite = new FishingSiteSearch.Site(start.east(34), start.east(39).below(), true);
+        var siteField = FishingTask.class.getDeclaredField("currentSite");
+        siteField.setAccessible(true);
+        try {
+            helper.assertTrue(FishingSiteSearch.isUsable(helper.getLevel(), villager, selectedSite), "unsafe long-walk fixture");
+            task.start(helper.getLevel(), villager, 0);
+            siteField.set(task, selectedSite);
+            task.tick(helper.getLevel(), villager, 0);
+            var original = villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElseThrow();
+            for (int tick = 1; tick <= 200; tick++) {
+                // Isolate the chore's journey watchdog; real navigation is covered above.
+                villager.setPos(Vec3.atBottomCenterOf(start).add(tick * 0.1, 0, 0));
+                task.tick(helper.getLevel(), villager, tick);
+                helper.assertTrue(siteField.get(task) == selectedSite, "abandoned progressing approach at tick " + tick);
+                helper.assertTrue(villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null) == original,
+                        "replaced or cleared the persistent destination at tick " + tick);
+                helper.assertTrue(villager.getItemInHand(villager.getDominantHand()).isEmpty(), "equipped before arrival");
+            }
+            for (int tick = 201; tick <= 260; tick++) task.tick(helper.getLevel(), villager, tick);
+            helper.assertTrue(siteField.get(task) == null, "actually stalled approach never released its destination");
+            helper.assertTrue(villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).isEmpty(), "stalled approach kept movement intent");
+        } finally { cleanup(helper, villager, task); }
+        helper.succeed();
+    }
+
+    private static BlockPos distantLake(GameTestHelper helper) {
+        return distantLake(helper, 40);
+    }
+
+    private static BlockPos distantLake(GameTestHelper helper, int distance) {
+        BlockPos start = prepare(helper);
+        GameTestTerrain.prepareFlatPath(helper, start, start.east(distance + 8));
+        for (BlockPos p : BlockPos.betweenClosed(start.offset(-4, -2, -12), start.offset(distance + 12, 5, 12))) {
+            helper.getLevel().setBlock(p, p.getY() < start.getY() ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 2);
+        }
+        pond(helper.getLevel(), start.east(distance).below(), 3, true);
+        return start;
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void flowersDoNotHideSupportedBank(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.east(7).below(), 3, true);
+        for (BlockPos feet : BlockPos.betweenClosed(start.offset(-13, 0, -13), start.offset(13, 0, 13))) {
+            if (helper.getLevel().getBlockState(feet.below()).is(Blocks.STONE)) {
+                helper.getLevel().setBlock(feet.below(), Blocks.GRASS_BLOCK.defaultBlockState(), 2);
+                helper.getLevel().setBlock(feet, ((feet.getX() + feet.getZ()) % 2 == 0
+                        ? Blocks.SHORT_GRASS : Blocks.DANDELION).defaultBlockState(), 2);
+            }
+        }
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            var site = find(helper, villager);
+            helper.assertTrue(site.standingPos().getY() == start.getY(), "treated vegetation top as the standing surface");
+            assertSetback(helper, site);
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void wetAndCoveredSearchRespectFootprintBudget(GameTestHelper helper) throws ReflectiveOperationException {
+        BlockPos start = prepare(helper);
+        BlockPos water = start.east(7).below();
+        pond(helper.getLevel(), water, 5, true);
+        VillagerEntityMCA villager = spawn(helper, start);
+        var budget = FishingSiteSearch.class.getDeclaredField("geometryBudget");
+        budget.setAccessible(true);
+        try {
+            for (int covered = 0; covered < 2; covered++) {
+                if (covered == 1) {
+                    for (BlockPos roof : BlockPos.betweenClosed(water.offset(-5, 3, -5), water.offset(5, 3, 5))) {
+                        helper.getLevel().setBlock(roof, Blocks.STONE.defaultBlockState(), 2);
+                    }
+                }
+                FishingSiteSearch search = new FishingSiteSearch();
+                boolean validated = false;
+                for (int tick = 0; tick < 600 && !search.exhausted(); tick++) {
+                    var site = search.tick(helper.getLevel(), villager);
+                    int remaining = budget.getInt(search);
+                    helper.assertTrue(remaining >= 0 && remaining <= 16,
+                            "search exceeded full-footprint budget: remaining=" + remaining + ", covered=" + covered + ", tick=" + tick);
+                    validated |= remaining < 16;
+                    if (site != null) search.reject(site);
+                }
+                helper.assertTrue(validated, "fixture never exercised full site validation");
+                helper.assertTrue(search.exhausted(), "wet search never exhausted its bounded attempt");
+            }
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void multipleFishersExhaustDrySearchWithoutPathQueries(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        List<VillagerEntityMCA> villagers = new ArrayList<>();
+        List<FishingSiteSearch> searches = new ArrayList<>();
+        for (int i = 0; i < 12; i++) {
+            villagers.add(spawn(helper, start));
+            searches.add(new FishingSiteSearch());
+        }
+        long singleNanos = 0;
+        long allNanos = 0;
+        int ticks = 0;
+        try {
+            for (; ticks < 600 && searches.stream().anyMatch(search -> !search.exhausted()); ticks++) {
+                for (int i = 0; i < searches.size(); i++) {
+                    long before = System.nanoTime();
+                    var site = searches.get(i).tick(helper.getLevel(), villagers.get(i));
+                    long elapsed = System.nanoTime() - before;
+                    if (i == 0) singleNanos += elapsed;
+                    allNanos += elapsed;
+                    helper.assertTrue(site == null, "dry arena yielded a fishing site");
+                }
+            }
+            helper.assertTrue(searches.stream().allMatch(FishingSiteSearch::exhausted), "many fishers never finished bounded dry search");
+            for (VillagerEntityMCA villager : villagers) {
+                helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() == 0, "dry search requested paths");
+                helper.assertTrue(villager.getItemInHand(villager.getDominantHand()).isEmpty(), "search equipped a rod");
+            }
+            System.out.println("[FishingSearchBudget] fishers=12 ticks=" + ticks + " singleSearchNanos=" + singleNanos
+                    + " allSearchesNanos=" + allNanos + " pathQueries=0");
+        } finally { villagers.forEach(VillagerEntityMCA::discard); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void multipleFishersFindDistantWaterWithinPathBudget(GameTestHelper helper) {
+        BlockPos start = distantLake(helper);
+        List<VillagerEntityMCA> villagers = new ArrayList<>();
+        List<FishingSiteSearch> searches = new ArrayList<>();
+        boolean[] found = new boolean[12];
+        for (int i = 0; i < found.length; i++) {
+            villagers.add(spawn(helper, start));
+            searches.add(new FishingSiteSearch());
+        }
+        int ticks = 0;
+        int completed = 0;
+        try {
+            for (; ticks < 600 && completed < found.length; ticks++) {
+                for (int i = 0; i < found.length; i++) {
+                    if (found[i]) continue;
+                    VillagerEntityMCA villager = villagers.get(i);
+                    int previous = PathRequestDiagnostics.snapshot(villager).directRequests();
+                    var site = searches.get(i).tick(helper.getLevel(), villager);
+                    helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() - previous <= 1,
+                            "simultaneous wet searches exceeded one query per fisher per tick");
+                    if (site != null) {
+                        helper.assertTrue(site.waterPos().getX() > start.getX() + 30, "selected unrelated nearby water");
+                        found[i] = true;
+                        completed++;
+                    }
+                }
+            }
+            helper.assertTrue(completed == found.length, "simultaneous wet searches never found reachable banks");
+            for (VillagerEntityMCA villager : villagers) {
+                var stats = PathRequestDiagnostics.snapshot(villager);
+                helper.assertTrue(stats.directRequests() > 0 && stats.directRequests() <= 8, "wet search exceeded its total path allowance");
+            }
+        } finally { villagers.forEach(VillagerEntityMCA::discard); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void noWaterNeverEquipsRodAcrossRetries(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        VillagerEntityMCA villager = spawn(helper, start);
+        Session task = new Session(helper.makeMockPlayer(GameType.SURVIVAL));
+        int starts = 0;
+        try {
+            for (int tick = 0; tick < 900; tick++) {
+                villager.tickCount++;
+                if (task.getStatus() == Behavior.Status.STOPPED && task.tryStart(helper.getLevel(), villager, tick)) starts++;
+                if (task.getStatus() == Behavior.Status.RUNNING) task.tickOrStop(helper.getLevel(), villager, tick);
+                helper.assertTrue(villager.getItemInHand(villager.getDominantHand()).isEmpty(), "no-water attempt flashed a rod at tick " + tick);
+                helper.assertTrue(villager.getFishingBobber() == null, "no-water attempt spawned a bobber");
+            }
+            helper.assertTrue(starts >= 2, "fixture did not exercise a retry");
+            helper.assertTrue(villager.getInventory().countItem(Items.FISHING_ROD) == 1, "no-water retry changed rod ownership");
+        } finally { task.stop(helper.getLevel(), villager, 901); villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 260)
+    public static void approachesInlandBeforeEquipping(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.east(12).below(), 3, true);
+        VillagerEntityMCA villager = spawn(helper, start);
+        Session task = naturalSession(helper, villager);
+        boolean[] walked = {false};
+        int[] ticks = {0};
+        helper.onEachTick(() -> {
+            try {
+                var target = villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
+                if (target != null) {
+                    walked[0] = true;
+                    helper.assertTrue(target.getCloseEnoughDist() == 0, "fishing uses shoreline arrival tolerance");
+                    helper.assertTrue(helper.getLevel().getFluidState(target.getTarget().currentBlockPosition()).isEmpty(), "walking destination is water");
+                }
+                if (!villager.getItemInHand(villager.getDominantHand()).isEmpty()) {
+                    helper.assertTrue(walked[0] && villager.position().subtract(Vec3.atBottomCenterOf(start)).horizontalDistance() > 0.8,
+                            "equipped before actually approaching inland site");
+                    helper.assertTrue(villager.getFishingBobber() != null, "rod equipped without a cast-ready site");
+                    finish(helper, villager, task);
+                } else if (++ticks[0] > 230) helper.fail("never reached fishing site: " + villager.position());
+            } catch (RuntimeException failure) { cleanup(helper, villager, task); throw failure; }
+        });
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 360)
+    public static void villagerCastsAtSelectedWaterAndStaysInland(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.east(9).below(), 3, true);
+        VillagerEntityMCA villager = spawn(helper, start);
+        Session task = naturalSession(helper, villager);
+        Vec3[] stance = {null};
+        ItemStack[] held = {null};
+        int[] stableTicks = {0};
+        int[] ticks = {0};
+        helper.onEachTick(() -> {
+            try {
+                MCAFishingBobberEntity bobber = villager.getFishingBobber();
+                if (bobber != null && bobber.isBobbing()) {
+                    if (stance[0] == null) { stance[0] = villager.position(); held[0] = villager.getItemInHand(villager.getDominantHand()); }
+                    assertSafeStanding(helper, villager);
+                }
+                if (stance[0] != null) {
+                    helper.assertTrue(villager.position().subtract(stance[0]).horizontalDistance() <= 0.8, "drifted toward shoreline while fishing");
+                    helper.assertTrue(villager.getItemInHand(villager.getDominantHand()) == held[0], "active fishing replaced or unequipped rod");
+                    assertSafeStanding(helper, villager);
+                    if (++stableTicks[0] >= 60) finish(helper, villager, task);
+                }
+                if (++ticks[0] > 325) helper.fail("real bobber never settled in water: " + villager.position());
+            } catch (RuntimeException failure) { cleanup(helper, villager, task); throw failure; }
+        });
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void siteChangeCancelsCastSafely(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.east(5), 2, true);
+        VillagerEntityMCA villager = spawn(helper, start);
+        Session task = stationarySession(helper, villager);
+        try {
+            MCAFishingBobberEntity original = villager.getFishingBobber();
+            for (BlockPos p : BlockPos.betweenClosed(start.offset(3, -1, -2), start.offset(7, 0, 2))) {
+                helper.getLevel().setBlock(p, Blocks.STONE.defaultBlockState(), 2);
+            }
+            for (int i = 0; i < 25; i++) task.tick(helper.getLevel(), villager, i + 100);
+            helper.assertTrue(original.isRemoved(), "changed pond retained current cast");
+            helper.assertTrue(villager.getFishingBobber() == null, "cast into removed pond");
+        } finally { cleanup(helper, villager, task); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void failedCastDoesNotSpawnBobberLoop(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.east(5), 2, true);
+        VillagerEntityMCA villager = spawn(helper, start);
+        Session task = stationarySession(helper, villager);
+        int casts = 0;
+        try {
+            for (int i = 0; i < 260; i++) {
+                var bobber = villager.getFishingBobber();
+                if (bobber != null) { casts++; bobber.discard(); }
+                task.tick(helper.getLevel(), villager, i + 100);
+            }
+            helper.assertTrue(casts <= 5, "failed flights caused repeated per-tick recasting: " + casts);
+        } finally { cleanup(helper, villager, task); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void recoveryFoodKeepsHandOwnership(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        VillagerEntityMCA villager = spawn(helper, start);
+        Session task = new Session(helper.makeMockPlayer(GameType.SURVIVAL));
+        try {
+            villager.getInventory().addItem(new ItemStack(Items.BREAD, 2));
+            villager.setHealth(villager.getMaxHealth() - 1);
+            task.start(helper.getLevel(), villager, 0);
+            villager.tickCount = 200;
+            villager.aiStep();
+            helper.assertTrue(villager.isUsingRecoveryFood(), "recovery fixture never started eating");
+            task.tick(helper.getLevel(), villager, 1);
+            helper.assertTrue(villager.getItemInHand(villager.getDominantHand()).is(Items.BREAD), "fishing took hand from recovery food");
+        } finally { cleanup(helper, villager, task); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void choreStopLeavesNoBobberOrEquippedRod(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.east(5), 2, true);
+        VillagerEntityMCA villager = spawn(helper, start);
+        Session task = stationarySession(helper, villager);
+        try {
+            task.stop(helper.getLevel(), villager, 100);
+            helper.assertTrue(villager.getFishingBobber() == null, "stopped task owns a bobber");
+            helper.assertTrue(villager.getItemInHand(villager.getDominantHand()).isEmpty(), "stopped task retained rod");
+            helper.assertTrue(villager.getInventory().countItem(Items.FISHING_ROD) == 1, "cleanup changed inventory rod count");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    private static Session stationarySession(GameTestHelper helper, VillagerEntityMCA villager) {
+        Session task = new Session(helper.makeMockPlayer(GameType.SURVIVAL));
+        task.start(helper.getLevel(), villager, 0);
+        for (int i = 0; i < 600 && villager.getFishingBobber() == null; i++) task.tick(helper.getLevel(), villager, i);
+        helper.assertTrue(villager.getFishingBobber() != null, "stationary safe-site fixture never cast");
+        return task;
+    }
+
+    private static Session naturalSession(GameTestHelper helper, VillagerEntityMCA villager) {
+        Session task = new Session(helper.makeMockPlayer(GameType.SURVIVAL));
+        @SuppressWarnings("unchecked")
+        Brain<VillagerEntityMCA> brain = (Brain<VillagerEntityMCA>)(Brain<?>)villager.getBrain();
+        brain.stopAll(helper.getLevel(), villager);
+        brain.removeAllBehaviors();
+        brain.addActivity(Activity.CORE, ImmutableList.of(Pair.of(0, new WanderOrTeleportToTargetTask()),
+                Pair.of(1, new LookAtTargetSink(45, 90)), Pair.of(5, task)));
+        brain.setCoreActivities(ImmutableSet.of(Activity.CORE));
+        brain.setDefaultActivity(Activity.IDLE);
+        brain.setSchedule(new ScheduleBuilder(new Schedule()).changeActivityAt(0, Activity.IDLE).build());
+        brain.setActiveActivityIfPossible(Activity.IDLE);
+        villager.setNoAi(false);
+        return task;
+    }
+
+    private static void cleanup(GameTestHelper helper, VillagerEntityMCA villager, Session task) {
+        task.stop(helper.getLevel(), villager, helper.getLevel().getGameTime());
+        villager.discard();
+    }
+
+    private static void finish(GameTestHelper helper, VillagerEntityMCA villager, Session task) {
+        cleanup(helper, villager, task);
+        helper.succeed();
+    }
+
+    private static final class Session extends FishingTask {
+        private final Player assigningPlayer;
+        Session(Player assigningPlayer) { this.assigningPlayer = assigningPlayer; }
+        @Override Optional<Player> getAssigningPlayer() { return Optional.of(assigningPlayer); }
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void wallBlockedWaterIsRejected(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.east(6), 2, false);
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            var site = new FishingSiteSearch.Site(start, start.east(6), false);
+            helper.assertTrue(FishingSiteSearch.isUsable(helper.getLevel(), villager, site), "clear cast control not usable");
+            for (int y = 0; y <= 3; y++) helper.getLevel().setBlock(start.east(2).above(y), Blocks.STONE.defaultBlockState(), 2);
+            helper.assertTrue(!FishingSiteSearch.isUsable(helper.getLevel(), villager, site), "wall-blocked cast accepted");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void unreachableNearShoreFallsBack(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.east(9), 3, true);
+        BlockPos covered = start.west(7);
+        pond(helper.getLevel(), covered, 2, false);
+        for (BlockPos p : BlockPos.betweenClosed(covered.offset(-2, 3, -2), covered.offset(2, 3, 2))) {
+            helper.getLevel().setBlock(p, Blocks.STONE.defaultBlockState(), 2);
+        }
+        for (BlockPos p : BlockPos.betweenClosed(start.offset(1, 0, -21), start.offset(1, 3, 21))) {
+            helper.getLevel().setBlock(p, Blocks.STONE.defaultBlockState(), 2);
+        }
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            var site = find(helper, villager);
+            helper.assertTrue(site.waterPos().getX() < start.getX(), "unreachable surface pond hid accessible covered pond: " + site);
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void candidatePathProbeBudgetIsBounded(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.east(9), 3, true);
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            FishingSiteSearch search = new FishingSiteSearch();
+            int before = PathRequestDiagnostics.snapshot(villager).directRequests();
+            for (int i = 0; i < 600 && !search.exhausted(); i++) {
+                int previous = PathRequestDiagnostics.snapshot(villager).directRequests();
+                var site = search.tick(helper.getLevel(), villager);
+                helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() - previous <= 1, "more than one path probe in tick");
+                if (site != null) search.reject(site);
+            }
+            int probes = PathRequestDiagnostics.snapshot(villager).directRequests() - before;
+            helper.assertTrue(probes > 0 && probes <= 8, "expected bounded near and far path queries, saw " + probes);
+            helper.assertTrue(search.exhausted(), "rejected sites reset search budget forever");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena", skyAccess = true)
+    public static void unusedCoveredProbeFindsFourthNearbySurfaceBank(GameTestHelper helper) throws ReflectiveOperationException {
+        assertUnusedProbeFindsSurfaceBank(helper, false);
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena", skyAccess = true)
+    public static void unusedFallbackProbesFindFourthDistantSurfaceBank(GameTestHelper helper) throws ReflectiveOperationException {
+        assertUnusedProbeFindsSurfaceBank(helper, true);
+    }
+
+    private static void assertUnusedProbeFindsSurfaceBank(GameTestHelper helper, boolean distant)
+            throws ReflectiveOperationException {
+        BlockPos start = prepare(helper);
+        int offset = distant ? 12 : 0;
+        pond(helper.getLevel(), start.east(offset + 9).below(), 2, true);
+        pond(helper.getLevel(), start.west(offset + 11).below(), 2, true);
+        for (BlockPos wall : BlockPos.betweenClosed(start.offset(1, 0, -21), start.offset(1, 4, 21))) {
+            helper.getLevel().setBlock(wall, Blocks.STONE.defaultBlockState(), 2);
+        }
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            List<FishingSiteSearch.Site> banks = new ArrayList<>();
+            for (int x = 3; x <= 5; x++) {
+                banks.add(new FishingSiteSearch.Site(start.east(offset + x), start.east(offset + 8).below(), false));
+            }
+            var reachable = new FishingSiteSearch.Site(start.west(offset + 6), start.west(offset + 10).below(), false);
+            banks.add(reachable);
+            for (int i = 0; i < banks.size(); i++) {
+                var bank = banks.get(i);
+                helper.assertTrue(FishingSiteSearch.isUsable(helper.getLevel(), villager, bank),
+                        "control bank must have a safe stance and cast: " + bank);
+                var path = villager.getNavigation().createPath(bank.standingPos(), 0);
+                helper.assertTrue((path != null && path.canReach()) == (i == 3),
+                        "fixture must have three unreachable banks followed by a reachable fourth");
+                var chunk = helper.getLevel().getChunkAt(bank.waterPos());
+                helper.assertTrue(chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE,
+                                bank.waterPos().getX() & 15, bank.waterPos().getZ() & 15) == bank.waterPos().getY(),
+                        "fixture water must be uncovered");
+            }
+
+            FishingSiteSearch search = new FishingSiteSearch();
+            // Isolate candidate consumption after discovery; navigation, casting and the covered pass remain real.
+            var origin = FishingSiteSearch.class.getDeclaredField("origin");
+            origin.setAccessible(true);
+            origin.set(search, start);
+            var radius = FishingSiteSearch.class.getDeclaredField("radius");
+            radius.setAccessible(true);
+            radius.setInt(search, distant ? 60 : 12);
+            var column = FishingSiteSearch.class.getDeclaredField("column");
+            column.setAccessible(true);
+            column.setInt(search, distant ? 121 * 121 : 25 * 25);
+            var candidates = FishingSiteSearch.class.getDeclaredField("candidates");
+            candidates.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            List<FishingSiteSearch.Site> pending = (List<FishingSiteSearch.Site>) candidates.get(search);
+            pending.addAll(banks);
+
+            int before = PathRequestDiagnostics.snapshot(villager).directRequests();
+            FishingSiteSearch.Site found = null;
+            for (int tick = 0; tick < 600 && !search.exhausted() && found == null; tick++) {
+                int previous = PathRequestDiagnostics.snapshot(villager).directRequests();
+                found = search.tick(helper.getLevel(), villager);
+                helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() - previous <= 1,
+                        "fallback exceeded one path query per tick");
+                helper.assertTrue(radius.getInt(search) == (distant ? 60 : 12),
+                        "unused reservation abandoned a reachable bank before finishing this radius");
+            }
+            helper.assertTrue(reachable.equals(found), "unused fallback probes discarded the reachable fourth surface bank");
+            helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() - before == 4,
+                    "fourth-bank recovery must use exactly the existing four-query allowance");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void surfaceAndCoveredWaterShareFourQueriesPerRadius(GameTestHelper helper) throws ReflectiveOperationException {
+        BlockPos start = distantLake(helper);
+        GameTestTerrain.prepareFlatPath(helper, start, start.west(40));
+        for (BlockPos pos : BlockPos.betweenClosed(start.offset(-40, -2, -12), start.offset(-4, 5, 12))) {
+            helper.getLevel().setBlock(pos, pos.getY() < start.getY() ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 2);
+        }
+        pond(helper.getLevel(), start.north(9).below(), 3, true);
+        for (BlockPos center : List.of(start.south(9).below(), start.west(30).below())) {
+            pond(helper.getLevel(), center, 3, true);
+            for (BlockPos roof : BlockPos.betweenClosed(center.offset(-3, 3, -3), center.offset(3, 3, 3))) {
+                helper.getLevel().setBlock(roof, Blocks.STONE.defaultBlockState(), 2);
+            }
+        }
+        VillagerEntityMCA villager = spawn(helper, start);
+        FishingSiteSearch search = new FishingSiteSearch();
+        var radius = FishingSiteSearch.class.getDeclaredField("radius");
+        radius.setAccessible(true);
+        int nearQueries = 0;
+        int extendedQueries = 0;
+        try {
+            for (int tick = 0; tick < 600 && !search.exhausted(); tick++) {
+                int previous = PathRequestDiagnostics.snapshot(villager).directRequests();
+                int searchRadius = radius.getInt(search);
+                var site = search.tick(helper.getLevel(), villager);
+                int queries = PathRequestDiagnostics.snapshot(villager).directRequests() - previous;
+                helper.assertTrue(queries <= 1, "more than one path query in one tick");
+                if (searchRadius == 12) nearQueries += queries;
+                else extendedQueries += queries;
+                helper.assertTrue(nearQueries <= 4 && extendedQueries <= 4,
+                        "surface and covered water reset the same radius's allowance: " + nearQueries + "/" + extendedQueries);
+                if (site != null) search.reject(site);
+            }
+            helper.assertTrue(search.exhausted() && nearQueries > 0 && extendedQueries > 0,
+                    "fixture did not exercise both complete search radii");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void selectedStandingBlockIsNotWaterEdge(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.east(9), 3, true);
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            var site = find(helper, villager);
+            assertSetback(helper, site);
+            var path = villager.getNavigation().createPath(site.standingPos(), 0);
+            helper.assertTrue(path != null && path.canReach() && path.getEndNode() != null
+                    && path.getEndNode().asBlockPos().equals(site.standingPos()), "selection is not an exactly reachable dry endpoint");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void prefersLargerWaterOverNearTinyPool(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.east(4), 0, false);
+        pond(helper.getLevel(), start.east(9), 3, true);
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            var site = find(helper, villager);
+            helper.assertTrue(site.waterPos().getX() >= start.getX() + 6, "selected tiny pool instead of larger lake: " + site);
+            assertSetback(helper, site);
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void nearbyShallowPondBeatsFartherOpenWater(GameTestHelper helper) {
+        assertNearbyPoolPreference(helper, 9, true);
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void eightConnectedSurfaceBlocksAreEnoughToPreferNearbyPool(GameTestHelper helper) {
+        assertNearbyPoolPreference(helper, 8, true);
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void sevenConnectedSurfaceBlocksKeepLookingForLargerPool(GameTestHelper helper) {
+        assertNearbyPoolPreference(helper, 7, false);
+    }
+
+    private static void assertNearbyPoolPreference(GameTestHelper helper, int surfaceBlocks, boolean preferNearby) {
+        BlockPos start = prepare(helper);
+        BlockPos near = start.west(6).below();
+        pond(helper.getLevel(), near, 1, false);
+        if (surfaceBlocks < 9) helper.getLevel().setBlock(near.offset(-1, 0, -1), Blocks.STONE.defaultBlockState(), 2);
+        if (surfaceBlocks < 8) helper.getLevel().setBlock(near.offset(-1, 0, 1), Blocks.STONE.defaultBlockState(), 2);
+        pond(helper.getLevel(), start.east(9).below(), 3, true);
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            var site = find(helper, villager);
+            helper.assertTrue((site.waterPos().getX() < start.getX()) == preferNearby,
+                    "wrong bank choice for " + surfaceBlocks + " connected surface blocks: " + site);
+            assertSetback(helper, site);
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void tinyNearbyPoolDoesNotEndExtendedSearch(GameTestHelper helper) {
+        BlockPos start = distantLake(helper);
+        pond(helper.getLevel(), start.west(6).below(), 0, false);
+        VillagerEntityMCA villager = spawn(helper, start);
+        FishingSiteSearch search = new FishingSiteSearch();
+        try {
+            FishingSiteSearch.Site selected = null;
+            for (int tick = 0; tick < 600 && !search.exhausted() && selected == null; tick++) {
+                selected = search.tick(helper.getLevel(), villager);
+            }
+            helper.assertTrue(selected != null && selected.waterPos().getX() > start.getX() + 30,
+                    "tiny nearby pool prevented discovery of the larger reachable lake: " + selected);
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void tinyPoolIsRetainedWhenLargerAlternativesCannotBeReached(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        BlockPos tiny = start.west(6).below();
+        pond(helper.getLevel(), tiny, 0, false);
+        pond(helper.getLevel(), start.east(9).below(), 3, true);
+        for (BlockPos p : BlockPos.betweenClosed(start.offset(1, 0, -21), start.offset(1, 4, 21))) {
+            helper.getLevel().setBlock(p, Blocks.STONE.defaultBlockState(), 2);
+        }
+        VillagerEntityMCA villager = spawn(helper, start);
+        FishingSiteSearch search = new FishingSiteSearch();
+        try {
+            FishingSiteSearch.Site selected = null;
+            for (int tick = 0; tick < 600 && !search.exhausted() && selected == null; tick++) {
+                selected = search.tick(helper.getLevel(), villager);
+            }
+            helper.assertTrue(selected != null && selected.waterPos().equals(tiny),
+                    "unreachable larger water prevented reachable tiny-pool fallback: " + selected);
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void coveredDistantPoolIsTriedBeforeSavedTinyFallback(GameTestHelper helper) {
+        BlockPos start = distantLake(helper);
+        pond(helper.getLevel(), start.west(6).below(), 0, false);
+        for (BlockPos wall : BlockPos.betweenClosed(start.offset(30, 0, -9), start.offset(50, 4, 9))) {
+            if (wall.getX() == start.getX() + 30 || wall.getX() == start.getX() + 50
+                    || wall.getZ() == start.getZ() - 9 || wall.getZ() == start.getZ() + 9) {
+                helper.getLevel().setBlock(wall, Blocks.STONE.defaultBlockState(), 2);
+            }
+        }
+        GameTestTerrain.prepareFlatPath(helper, start, start.north(36));
+        for (BlockPos p : BlockPos.betweenClosed(start.offset(-8, -2, -36), start.offset(8, 5, -20))) {
+            helper.getLevel().setBlock(p, p.getY() < start.getY() ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 2);
+        }
+        BlockPos covered = start.north(30).below();
+        pond(helper.getLevel(), covered, 2, false);
+        for (BlockPos roof : BlockPos.betweenClosed(covered.offset(-2, 3, -2), covered.offset(2, 3, 2))) {
+            helper.getLevel().setBlock(roof, Blocks.STONE.defaultBlockState(), 2);
+        }
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            FishingSiteSearch search = new FishingSiteSearch();
+            FishingSiteSearch.Site site = null;
+            for (int tick = 0; tick < 600 && !search.exhausted() && site == null; tick++) {
+                int previous = PathRequestDiagnostics.snapshot(villager).directRequests();
+                site = search.tick(helper.getLevel(), villager);
+                helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() - previous <= 1,
+                        "covered-water fallback exceeded one path query per tick");
+            }
+            helper.assertTrue(site != null && site.waterPos().getZ() < start.getZ() - 20,
+                    "saved tiny fallback ended the extended search before the reachable covered pond: " + site);
+            helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() <= 8,
+                    "covered-water fallback exceeded the existing query allowance");
+            assertSetback(helper, site);
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void disconnectedPuddlesDoNotCombineIntoEightSurfaceBlocks(GameTestHelper helper) {
+        BlockPos start = distantLake(helper);
+        for (BlockPos center : List.of(start.west(6).north(3).below(), start.west(6).south(3).below())) {
+            for (BlockPos water : BlockPos.betweenClosed(center, center.east().south())) {
+                helper.getLevel().setBlock(water, Blocks.WATER.defaultBlockState(), 2);
+            }
+        }
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            var site = find(helper, villager);
+            helper.assertTrue(site.waterPos().getX() > start.getX() + 30,
+                    "disconnected four-block puddles were treated as one large pool: " + site);
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void tinyPoolPathIsRecheckedAfterExtendedSearch(GameTestHelper helper) throws ReflectiveOperationException {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.west(12).below(), 0, false);
+        VillagerEntityMCA villager = spawn(helper, start);
+        FishingSiteSearch search = new FishingSiteSearch();
+        var candidatesField = FishingSiteSearch.class.getDeclaredField("candidates");
+        candidatesField.setAccessible(true);
+        var radiusField = FishingSiteSearch.class.getDeclaredField("radius");
+        radiusField.setAccessible(true);
+        try {
+            boolean blocked = false;
+            for (int tick = 0; tick < 600 && !search.exhausted(); tick++) {
+                var site = search.tick(helper.getLevel(), villager);
+                helper.assertTrue(site == null, "returned a tiny pool whose approach was blocked during the extended search: " + site);
+                @SuppressWarnings("unchecked")
+                List<FishingSiteSearch.Site> pending = (List<FishingSiteSearch.Site>)candidatesField.get(search);
+                if (!blocked && radiusField.getInt(search) == 60 && pending.stream().anyMatch(FishingSiteSearch.Site::smallWater)) {
+                    for (BlockPos p : BlockPos.betweenClosed(start.offset(-2, 0, -21), start.offset(-2, 4, 21))) {
+                        helper.getLevel().setBlock(p, Blocks.STONE.defaultBlockState(), 2);
+                    }
+                    blocked = true;
+                }
+            }
+            helper.assertTrue(blocked && search.exhausted(), "fixture never checked an invalidated fallback path");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void siteDiscoveryYieldsWithoutProbingAnotherProducersPath(GameTestHelper helper) {
+        BlockPos start = distantLake(helper);
+        VillagerEntityMCA villager = spawn(helper, start);
+        Session task = new Session(helper.makeMockPlayer(GameType.SURVIVAL));
+        try {
+            task.start(helper.getLevel(), villager, 0);
+            BlockPos otherDestination = start.west(10);
+            var otherPath = villager.getNavigation().createPath(otherDestination, 0);
+            helper.assertTrue(otherPath != null && otherPath.canReach(), "other producer's route was not reachable");
+            villager.getNavigation().moveTo(otherPath, 0.5);
+            WalkTarget otherTarget = new WalkTarget(new PersistentPathTarget(otherDestination), 0.5F, 0);
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET, otherTarget);
+            int previous = PathRequestDiagnostics.snapshot(villager).directRequests();
+            for (int tick = 0; tick < 600; tick++) task.tick(helper.getLevel(), villager, tick);
+            helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() == previous,
+                    "fishing discovery probed candidates while another producer owned movement");
+            task.stop(helper.getLevel(), villager, 600);
+            helper.assertTrue(villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null) == otherTarget,
+                    "fishing cleanup erased the other producer's walk target");
+            helper.assertTrue(villager.getNavigation().getPath() == otherPath
+                            && otherDestination.equals(villager.getNavigation().getTargetPos()),
+                    "fishing discovery or cleanup changed the other producer's navigation state");
+        } finally { cleanup(helper, villager, task); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void shallowPondIsUsableFallback(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.east(6), 1, false);
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            var site = find(helper, villager);
+            helper.assertTrue(!site.likelyOpenWater(), "shallow pond incorrectly qualified for open-water preference");
+            assertSetback(helper, site);
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void safeWaterAdjacentBankCanCast(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.east(6), 2, false);
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            var safe = new FishingSiteSearch.Site(start, start.east(6), false);
+            helper.assertTrue(FishingSiteSearch.isUsable(helper.getLevel(), villager, safe), "control dry site was not usable");
+            helper.getLevel().setBlock(start.north(), Blocks.WATER.defaultBlockState(), 2);
+            helper.assertTrue(FishingSiteSearch.isUsable(helper.getLevel(), villager, safe), "rejected safe ground directly beside water");
+            helper.getLevel().setBlock(start.north(), Blocks.AIR.defaultBlockState(), 2);
+            helper.getLevel().setBlock(start.below(), Blocks.AIR.defaultBlockState(), 2);
+            helper.assertTrue(!FishingSiteSearch.isUsable(helper.getLevel(), villager, safe), "accepted unsupported bank/pier");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void narrowSupportAndBlockedStandingBodyAreRejected(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.east(6), 2, false);
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            var site = new FishingSiteSearch.Site(start, start.east(6), false);
+            helper.assertTrue(FishingSiteSearch.isUsable(helper.getLevel(), villager, site), "control bank was not usable");
+            helper.getLevel().setBlock(start.below(), Blocks.OAK_FENCE.defaultBlockState(), 2);
+            helper.assertTrue(!FishingSiteSearch.isUsable(helper.getLevel(), villager, site), "accepted a narrow fence support");
+            helper.getLevel().setBlock(start.below(), Blocks.STONE.defaultBlockState(), 2);
+            helper.getLevel().setBlock(start.above(), Blocks.STONE.defaultBlockState(), 2);
+            helper.assertTrue(!FishingSiteSearch.isUsable(helper.getLevel(), villager, site), "accepted an obstructed standing body");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void shorelineSetbackBeyondFourBlocksIsRejected(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        BlockPos water = start.east(5).below();
+        pond(helper.getLevel(), water, 0, false);
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            helper.assertTrue(FishingSiteSearch.isUsable(helper.getLevel(), villager,
+                    new FishingSiteSearch.Site(start, water, false)), "four-block shoreline fallback was rejected");
+            helper.getLevel().setBlock(water, Blocks.STONE.defaultBlockState(), 2);
+            water = water.east();
+            pond(helper.getLevel(), water, 0, false);
+            helper.assertTrue(!FishingSiteSearch.isUsable(helper.getLevel(), villager,
+                    new FishingSiteSearch.Site(start, water, false)), "accepted a shoreline setback beyond four blocks");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void castsPreferSuitableOpenWaterWithoutChangingStance(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        BlockPos open = start.east(5).below();
+        pond(helper.getLevel(), open, 2, true);
+        pond(helper.getLevel(), start.west(3).below(), 0, false);
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            var current = new FishingSiteSearch.Site(start, open, true);
+            for (int seed = 0; seed < 16; seed++) {
+                villager.getRandom().setSeed(seed);
+                var chosen = new FishingSiteSearch().chooseCastSite(helper.getLevel(), villager, current, null);
+                helper.assertTrue(chosen != null && chosen.likelyOpenWater() && chosen.waterPos().equals(open),
+                        "cast chose shallow edge water despite a suitable open-water target: " + chosen);
+                helper.assertTrue(chosen.standingPos().equals(start), "open-water preference changed the stance");
+            }
+            helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() == 0, "aim selection requested navigation");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void blockedTinyBankDoesNotHideReachableTinyWater(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.west(6).below(), 0, false);
+        BlockPos reachable = start.south(6).below();
+        pond(helper.getLevel(), reachable, 0, false);
+        for (BlockPos wall : BlockPos.betweenClosed(start.offset(-1, 0, -21), start.offset(-1, 4, 21))) {
+            helper.getLevel().setBlock(wall, Blocks.STONE.defaultBlockState(), 2);
+        }
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            FishingSiteSearch search = new FishingSiteSearch();
+            FishingSiteSearch.Site site = null;
+            for (int tick = 0; tick < 600 && !search.exhausted() && site == null; tick++) {
+                int previous = PathRequestDiagnostics.snapshot(villager).directRequests();
+                site = search.tick(helper.getLevel(), villager);
+                helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() - previous <= 1,
+                        "tiny alternatives exceeded one query per tick");
+            }
+            helper.assertTrue(site != null && site.waterPos().equals(reachable),
+                    "unreachable nearest tiny bank hid reachable tiny water: " + site);
+            helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() <= 8,
+                    "tiny alternatives exceeded total path allowance");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void suitableOpenAimIsCheckedBeforeShallowAimLimit(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.below(), 9, false);
+        helper.getLevel().setBlock(start.below(), Blocks.STONE.defaultBlockState(), 2);
+        BlockPos open = start.east(6).below();
+        pond(helper.getLevel(), open, 2, true);
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            var current = new FishingSiteSearch.Site(start, start.north(3).below(), false);
+            int exercised = 0;
+            for (int seed = 0; seed < 32; seed++) {
+                long randomSeed = seed * 0x9E3779B97F4A7C15L;
+                if (RandomSource.create(randomSeed).nextInt(4) != 0) continue;
+                villager.getRandom().setSeed(randomSeed);
+                var site = new FishingSiteSearch().chooseCastSite(helper.getLevel(), villager, current, null);
+                helper.assertTrue(site != null && site.likelyOpenWater() && site.waterPos().equals(open),
+                        "short-distance ordering hid the suitable six-block open-water aim: " + site);
+                exercised++;
+            }
+            helper.assertTrue(exercised > 0, "fixture never rolled the three-block distance");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void roofedWaterFallbackFindsSite(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        BlockPos water = start.east(6);
+        pond(helper.getLevel(), water, 2, false);
+        for (BlockPos p : BlockPos.betweenClosed(water.offset(-2, 3, -2), water.offset(2, 3, 2))) {
+            helper.getLevel().setBlock(p, Blocks.STONE.defaultBlockState(), 2);
+        }
+        VillagerEntityMCA villager = spawn(helper, start);
+        try { assertSetback(helper, find(helper, villager)); }
+        finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void missingChunkIsNotLoaded(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        VillagerEntityMCA villager = spawn(helper, start);
+        BlockPos missing = new BlockPos(29000000, start.getY(), 29000000);
+        try {
+            helper.assertTrue(helper.getLevel().getChunkSource().getChunkNow(missing.getX() >> 4, missing.getZ() >> 4) == null, "missing chunk fixture already loaded");
+            helper.assertTrue(!FishingSiteSearch.isUsable(helper.getLevel(), villager,
+                    new FishingSiteSearch.Site(missing, missing.east(5), false)), "unloaded site accepted");
+            villager.setPos(Vec3.atBottomCenterOf(missing));
+            FishingSiteSearch search = new FishingSiteSearch();
+            for (int i = 0; i < 600 && !search.exhausted(); i++) search.tick(helper.getLevel(), villager);
+            helper.assertTrue(search.exhausted(), "missing-chunk search never exhausted");
+            helper.assertTrue(helper.getLevel().getChunkSource().getChunkNow(missing.getX() >> 4, missing.getZ() >> 4) == null, "finder loaded missing chunk");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    private static BlockPos prepare(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(40, 3, 40));
+        for (BlockPos p : BlockPos.betweenClosed(start.offset(-21, -2, -21), start.offset(21, 5, 21))) {
+            helper.getLevel().setBlock(p, p.getY() < start.getY() ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 2);
+        }
+        return start;
+    }
+
+    private static void pond(ServerLevel world, BlockPos center, int radius, boolean deep) {
+        for (BlockPos p : BlockPos.betweenClosed(center.offset(-radius, deep ? -2 : -1, -radius), center.offset(radius, deep ? -2 : -1, radius))) {
+            world.setBlock(p, Blocks.STONE.defaultBlockState(), 2);
+        }
+        for (BlockPos p : BlockPos.betweenClosed(center.offset(-radius, deep ? -1 : 0, -radius), center.offset(radius, 0, radius))) {
+            world.setBlock(p, Blocks.WATER.defaultBlockState(), 2);
+        }
+    }
+
+    private static VillagerEntityMCA spawn(GameTestHelper helper, BlockPos start) {
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel()).withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(start)).withName("Fishing Site Probe").spawn(MobSpawnType.STRUCTURE);
+        villager.getInventory().addItem(new ItemStack(Items.FISHING_ROD));
+        villager.setItemInHand(villager.getDominantHand(), ItemStack.EMPTY);
+        villager.getVillagerBrain().assignJob(Chore.FISH, helper.makeMockPlayer(GameType.SURVIVAL));
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+        return villager;
+    }
+
+    private static FishingSiteSearch.Site find(GameTestHelper helper, VillagerEntityMCA villager) {
+        FishingSiteSearch search = new FishingSiteSearch();
+        for (int i = 0; i < 600; i++) {
+            var site = search.tick(helper.getLevel(), villager);
+            if (site != null) return site;
+            if (search.exhausted()) break;
+        }
+        helper.fail("No safe fishing site discovered");
+        return null;
+    }
+
+    private static void assertSafeStanding(GameTestHelper helper, VillagerEntityMCA villager) {
+        BlockPos feet = villager.blockPosition();
+        helper.assertTrue(helper.getLevel().getFluidState(feet).isEmpty()
+                        && helper.getLevel().getFluidState(feet.below()).isEmpty(),
+                "standing in water: " + feet);
+        helper.assertTrue(helper.getLevel().getBlockState(feet.below())
+                        .isFaceSturdy(helper.getLevel(), feet.below(), net.minecraft.core.Direction.UP),
+                "standing without stable support: " + feet);
+        helper.assertTrue(helper.getLevel().noCollision(villager, villager.getBoundingBox()), "standing body intersects a block");
+    }
+
+    private static void assertSetback(GameTestHelper helper, FishingSiteSearch.Site site) {
+        double distance = Vec3.atCenterOf(site.waterPos()).subtract(Vec3.atCenterOf(site.standingPos())).horizontalDistance();
+        helper.assertTrue(distance >= 2 && distance <= 7, "wrong cast distance: " + site);
+        helper.assertTrue(helper.getLevel().getFluidState(site.standingPos()).isEmpty()
+                        && helper.getLevel().getFluidState(site.standingPos().below()).isEmpty(),
+                "selected standing position is wet: " + site);
+        int dx = site.waterPos().getX() - site.standingPos().getX();
+        int dz = site.waterPos().getZ() - site.standingPos().getZ();
+        int steps = Math.max(Math.abs(dx), Math.abs(dz));
+        int setback = steps;
+        for (int step = 1; step <= steps; step++) {
+            BlockPos pos = new BlockPos(site.standingPos().getX() + (int)Math.round((double)dx * step / steps),
+                    site.waterPos().getY(), site.standingPos().getZ() + (int)Math.round((double)dz * step / steps));
+            if (helper.getLevel().getFluidState(pos).is(net.minecraft.tags.FluidTags.WATER)) {
+                setback = step - 1;
+                break;
+            }
+        }
+        helper.assertTrue(setback <= 4, "selected bank is more than four blocks from its shoreline: " + site);
+    }
+}

@@ -46,6 +46,13 @@ public class FamilyTree extends SavedData {
         return id == null ? Optional.empty() : Optional.ofNullable(entries.get(id));
     }
 
+    public boolean isOrphan(FamilyTreeNode node) {
+        return node.streamParents()
+                .map(this::getOrEmpty)
+                .flatMap(Optional::stream)
+                .allMatch(FamilyTreeNode::isDeceased);
+    }
+
     public Stream<FamilyTreeNode> getAllWithName(String name) {
         return entries.values().stream().filter(n -> n.getName().toLowerCase(Locale.ROOT).equals(name.toLowerCase(Locale.ROOT)));
     }
@@ -59,11 +66,47 @@ public class FamilyTree extends SavedData {
         return entries.values().stream()
                 .map(n -> new NameSearchResult(n, normalizeNameSearch(n.getName())))
                 .filter(result -> result.normalizedName().contains(query))
-                .sorted(Comparator
-                        .comparingInt((NameSearchResult result) -> result.normalizedName().startsWith(query) ? 0 : 1)
-                        .thenComparing(NameSearchResult::normalizedName)
-                        .thenComparing(result -> result.node().id()))
+                .sorted(nameSearchOrder(query))
                 .map(NameSearchResult::node);
+    }
+
+    public List<FamilyTreeNode> getAllWithNameContaining(String name, int limit) {
+        if (limit <= 0) {
+            return List.of();
+        }
+
+        String query = normalizeNameSearch(name.trim());
+        if (query.isEmpty()) {
+            return List.of();
+        }
+
+        Comparator<NameSearchResult> order = nameSearchOrder(query);
+        PriorityQueue<NameSearchResult> bestMatches = new PriorityQueue<>(limit, order.reversed());
+        for (FamilyTreeNode node : entries.values()) {
+            String normalizedName = normalizeNameSearch(node.getName());
+            if (!normalizedName.contains(query)) {
+                continue;
+            }
+
+            NameSearchResult result = new NameSearchResult(node, normalizedName);
+            if (bestMatches.size() < limit) {
+                bestMatches.offer(result);
+            } else if (order.compare(result, bestMatches.peek()) < 0) {
+                bestMatches.poll();
+                bestMatches.offer(result);
+            }
+        }
+
+        List<NameSearchResult> ordered = new ArrayList<>(bestMatches);
+        ordered.sort(order);
+        return ordered.stream().map(NameSearchResult::node).toList();
+    }
+
+    private static Comparator<NameSearchResult> nameSearchOrder(String query) {
+        return Comparator
+                .comparingInt((NameSearchResult result) -> result.normalizedName().startsWith(query) ? 0 : 1)
+                .thenComparing(NameSearchResult::normalizedName)
+                .thenComparing(result -> result.node().id());
     }
 
     private static String normalizeNameSearch(String name) {

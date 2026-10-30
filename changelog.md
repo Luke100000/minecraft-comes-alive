@@ -1,16 +1,146 @@
-# TBD
+# 7.8.0
 
-* Fixed adding skins to server wide pool not working without cheats in singleplayer
+* ***__Back up__*** your world before updating. MCA updates existing 7.7.36 building and floor data when the world loads.
 
-# 7.7.37
+## Buildings and Blueprint
 
-* Improved villager bed pathfinding and sleeping reliability.
-* Improved ladder climbing and ladder-to-floor transitions.
-* Fixed workplace assignment and job POI ownership.
-* Fixed duplicate villager residency and bed ownership.
-* Improved HOME POI validation and repaired invalid resident-home assignments.
-* Fixed residents being assigned to the wrong building.
-* Fixed villager age scaling at growth-stage boundaries.
+* Building, floor, and room detection now handles multi-floor, stacked, irregular, and partially connected builds more consistently.
+* Floors now keep their own geometry across stairs, ladders, doors, landings, uneven rooms, and nearby structures instead of being merged by height alone.
+* Improved building and floor detection around uneven and stepped porches.
+* Improved rescanning around narrow doorways, doorless rooms, and stacked slab floors so unchanged buildings keep their detected floor layout.
+* Reduced repeated work when rescanning unchanged floors and building layouts.
+* Added a **Remove Floor** action for empty floors.
+* Building edits no longer apply to the wrong room or floor if you move away before confirming them.
+* Admin building-type changes now apply to the room you are standing in.
+* Rooms can use the building's **Main Room** requirements. The Main Room can be chosen manually or selected automatically.
+* Expanded the **Blueprint Map**:
+  * Added mouse panning and cursor-centred scroll-wheel zooming.
+  * Improved floor selection, room outlines, labels, tooltips, and the player marker.
+  * Room tooltips show residents and room requirements.
+  * The Building Catalog shows current and required block counts for the room you are standing in.
+  * Added controls for floors, basements, room updates, room removal, and requirement sharing.
+  * Added map scale options, fit-to-village, terrain and building-icon toggles, player-centred mode, and a player-marker toggle.
+  * Reduced terrain-loading stalls and improved water and seabed rendering.
+  * Adjusted some map colours for readability.
+
+## Villager movement, homes, and mourning
+
+* Villagers now keep useful routes when possible, retry stalled destinations, and recover better during long walks.
+* Improved movement around beds, stairs, ladders, doors, fence gates, walls, and between floors.
+* Improved pathfinding on slabs, snow layers and other partial-height blocks, with safer clearance checks under low ceilings and around open trapdoors.
+* Villagers can open hand-openable Dramatic Doors and doors included in Dramatic Doors' mob-interaction tags, including tall and short variants.
+* Added `villagersInteractWithAnyDoor` to optionally let villagers operate all vanilla-style doors instead of only mob-interactable ones.
+* Villagers can open, close, and walk through fence gates. This is controlled by `villagersInteractWithFenceGates`.
+* Improved home, bed, workplace, and resident assignment, including support for more modded beds.
+* Added `villagersChangeProfession` so assigning a workplace can preserve a villager's existing profession instead of changing it.
+* **Set Home** only assigns a bed the villager can reach. If no reachable replacement is available, the current home is kept.
+* Villagers move into a safe position beside their bed before going to sleep.
+* Homeless villagers use nearby houses more naturally for nighttime shelter without claiming a bed as their home.
+  * They spread between available houses and favour rooms with space instead of crowding the nearest one.
+  * Full houses can be skipped in favour of another reachable shelter, while villagers in danger prioritise getting indoors.
+  * Once inside, villagers wander around reachable room floor space instead of wandering onto beds or getting stuck around doorways.
+* Fixed villagers sometimes getting stuck at trapdoors above ladders and other climbable passages.
+* Mourning now works at village scope:
+  * Added `enableMourning` to disable mourning.
+  * Ambient mourning happens in small groups instead of pulling the whole village to a graveyard.
+  * Work, chores, rest, follow/stay orders, and danger take priority over ambient mourning.
+  * Mourning prefers villagers who have not mourned recently and only checks occupied graves in loaded areas.
+  * Close family members can still mourn together at the deceased villager's grave.
+  * Villagers stop ambient mourning visits when the grave cannot be reached, allowing them to return to other activities.
+  * Mourning flowers no longer replace a villager's real equipment, including when loading older saves.
+
+## Chores
+
+* Villagers keep facing their work target during chores.
+* Harvesting villagers prioritise mature crops. They only target empty farmland when they have seeds, and can bonemeal immature crops before moving on.
+* Chopping villagers must reach a tree before they start chopping it.
+* Fixed harvesting loot from blocks that need block-entity data to calculate their drops.
+* Villager fishing now has a visible bobber and line, lure and bite behaviour, splash effects, reeling, weather effects, and visible catches.
+* **Lure** speeds up villager fishing and **Luck of the Sea** affects fishing loot.
+* Rain can speed up bites, and villagers have a short reaction delay before reeling in.
+* Fishing pauses safely while a villager eats recovery food, and long fishing sessions no longer end unexpectedly.
+* Fishing villagers search for reachable riverbanks, including downhill, and prefer larger stretches of water while keeping small ponds as a fallback.
+* Fishing casts now check for obstacles and account for the bobber's flight, making casts from raised banks more reliable.
+* Villagers report when they have no fishing rod instead of starting a fishing chore they cannot perform.
+
+## Combat
+
+* Improved archer movement and aiming when approaching, holding position, keeping distance, repositioning, or retreating.
+* Archers lead moving targets and check the arrow's path before shooting, including shots uphill and downhill.
+* Archers can seek a clear shot around ledges and climb accessible steps out of depressions instead of waiting for the enemy to move out of range.
+* Archers can use a safe step up when a corner blocks both sidesteps.
+* Archers stop ordinary wandering when combat starts and turn towards their enemy before sidestepping.
+* Archers temporarily skip enemies after failed routes leave them unable to move closer or take a shot. Moving enemies can be reconsidered sooner.
+* Archers prioritise nearby attackers, keep track of enemies pursuing them down steps, and finish useful escape routes before choosing their next move.
+* Archers keep an existing bow draw during brief repositioning or a blocked shot, and lower it while recovering or fleeing immediate danger. Shots still check for solid terrain before release.
+* Archer sidesteps tolerate brief sight interruptions and use consistent movement checks when starting beside obstacles.
+* Armour refreshes no longer replace a ranged weapon while it is being drawn.
+* Archers prefer retreat routes without drops they cannot jump back up.
+* Archers avoid crowds and obstacles while retreating.
+* Archers turn smoothly between travel and firing positions, without forcing their body towards an enemy while approaching or climbing.
+* Archers keep bow and crossbow charge through ordinary jumps and step-ups, waiting to face their target before releasing.
+* Archers keep ranged evasion routes within shooting range when a safe firing position is available, reducing repeated retreating and approaching.
+* Archers react to ranged enemies targeting them from high ledges even when those enemies have no melee route down.
+* Badly wounded guards keep their weapons and armour while a visible ranged attacker that injured them is still targeting them nearby, even between hits.
+* Guards and archers keep their weapons and armour while peacefully following a player.
+* MCA archer arrows can pass through villagers and iron golems. This is controlled by `archerArrowsIgnoreVillagers`.
+* Guards can spot visible threats from farther away.
+* Guards can still go to bed when enemies are far away, while responding to nearby threats.
+
+## Family Tree, ChatAI, Destiny, and villager tools
+
+* The **Family Tree** has a new layout and navigation for larger branches, including partners, parents, children, siblings, and generated parents.
+* Family Tree search and navigation now work inside the viewer, with cursor-centred zooming and clearer deceased-villager tooltips.
+* Fixed generated parents sometimes being omitted when parts of a family tree load separately.
+* Opening the Family Tree or Villager Tracker with an empty search starts from your player name.
+* The whistle's family list no longer includes former partners who are no longer relatives.
+* ChatAI talks to the villager you interacted with, handles full names and nicknames more accurately, and no longer holds up the server while waiting for a reply.
+* Villager long-term interaction memory now survives infection into a zombie villager and curing back into a villager.
+* Reviving a villager from a tombstone restores their previous mood and marriage if their partner has not moved on.
+* Having a baby now checks for enough inventory space for all baby items, including twins, before the animation starts. Interrupted attempts reset when the villager reloads.
+* Fixed a possible error when a villager's interaction memory data is missing.
+* Profession changes in the Villager Editor now refresh consistently.
+* Villager gifts can now be given with **Enter** as well as the right mouse button.
+* Added `whistleCallMakesVillagersFollow` to optionally make villagers follow after being called with the whistle.
+* Destiny can automatically discover vanilla and modded village structures, including destinations in other dimensions.
+* Fixed the Destiny screen reopening repeatedly after it was opened.
+* Added `autoDiscoverDestinyLocations`, `destinySpawnLocationBlacklist`, `destinyOverworldOnly`, and `destinyDimensionBlacklist`. Blacklists support simple `*` wildcards such as `ctov:*`.
+* Destiny no longer teleports to locations that have since been disabled.
+* Destiny and villager structure lookups now run without blocking normal server work.
+* Server-wide Skin Library pool changes no longer require cheats in singleplayer.
+
+## Music and voices
+
+* Villagers can play **Immersive Melodies** instruments while socialising, and nearby villagers can join in. `immersiveMelodiesChance` controls how often this happens, while `immersiveMelodiesNamespace` limits which melodies they play.
+* Villager voice lines no longer overlap for the same villager. Delayed text-to-speech responses are ignored when newer requests have taken their place.
+
+## Other fixes
+
+* Reduced panic scream spam with one scream per villager per panic episode and a level-wide cooldown.
+* Fixed blacklisted interaction items still opening villager interactions or trades.
+* Added `villagerTagBlacklist` to prevent MCA from converting villagers with specified scoreboard tags, including certain modded entities.
+* Updated default VillagersPlus profession-to-clothing mappings and added missing neutral cleric clothing.
+* Improved player-model compatibility defaults for Custom Player Models, Mowzie's Mobs, ParCool, Mo' Bends, and morphing mods.
+* Existing config files now receive new default compatibility-map entries without overwriting their current values or repeatedly restoring removed entries.
+* Restored intended drops and rewards for MCA blocks, books, and entities on 1.21.1, including gravestones, **Silk Touch**, and zombie-villager **Looting** drops.
+* Fixed MCA's root and bouquet advancements on 1.21.1.
+* Fixed carried-baby hitboxes, crib positioning, and child ageing from golden apples.
+* Babies are no longer placed where they would immediately spawn inside solid blocks.
+* Ready, named baby items can now be placed directly onto a safe block instead of only being released at the player's position. Unsafe, unsupported, waterlogged, lava-filled, or obstructed placements are rejected.
+* Baby zombie villagers stay babies when converted from vanilla baby zombie villagers.
+* Cribs are easier to interact with.
+* Fixed villager voice pitch changing over time instead of with growth.
+* Fixed temporary items used during activities replacing a villager's real equipment after saving and loading.
+* Fixed changed villager locations sometimes not being saved by the Villager Tracker.
+* Fixed saved letters losing their pages after loading the world again.
+* Vanilla villagers being converted into MCA villagers now release their previous bed claims.
+* Changes to custom clothing and skin textures now refresh cached villager textures and face icons.
+* Fixed villager and player size, eye height, name-tag position, and hitbox updates across growth, respawning, and dimension changes.
+* Fixed carried-villager name tags using a fixed height instead of following the villager's visual size.
+* Fixed translated text not refreshing after changing language or reloading resources.
+* Updated translations across supported languages.
+* Fixed flirty personality dialogue overriding parent/child dialogue for the player's children.
+* Fixed some dialogue options appearing or behaving incorrectly, including child greetings and rumours.
 
 # 7.7.36
 * Recommended to ***__backup__*** your world.
@@ -21,15 +151,24 @@
 * Fixed gender potions.
 * Fixed rare crash in blueprint screen
 
-# 7.7.35
-
-* Improve mob compatibility
+# 7.7.35-beta.3
+## **IMPORTANT**
+* Recommended to ***__backup__*** your world.
+* This release won't be backwards compatible with 7.7.32 and below due to internal changes with how traits and personalities are saved
+* This release works with 26.1.2/26.2 - >=8.1.7
+* Improve mod compatibility
 * Improve villager migration behaviour
+* Fix bugs
 
 # 7.7.34
 
 * Fixed villagers being stuck and not able to move
-  * sleeping should be more reliable 
+  * sleeping should be more reliable
+
+# 7.7.33-beta.3
+
+* For a full changelog, look at 7.7.31-beta.1
+* Fixed auto scan.
 
 # 7.7.33
 
@@ -51,10 +190,34 @@
 * Fixed villagers being stuck in doors
 * Fixed villagers getting stuck on their way to a bed
 
+# 7.7.32-beta.2
+
+* Generic mprovements to floor system, should be more reliable
+* Change tooltip formatting
+* Improved Ground Floor detection
+* Fixed wrong building labelling
+
 # 7.7.32
 
 * Fixed Graveyard data loss issue
 * Fixed bug.
+
+# 7.7.31-beta.1
+
+* Completely reworked MCA's building system to better support multi-floor and irregular buildings.
+* Buildings can now have multiple floors and basements.
+* Rooms inside the same building are now detected separately, allowing different room types throughout one building.
+* Added a **Main Room** system, allowing other rooms in the same building to share building types (such as multi-floor inns).
+* Improved building scanning for stairs, ladders, trapdoors, doors, fence gates, furniture, and unusual layouts.
+* Buildings can now be expanded with additional floors, basements, and connected sections.
+* Reworked the **Blueprint Map**.
+
+  * Rooms and buildings now show their actual shape instead of simple rectangles.
+  * Added better floor handling, highlighting, icons, and tooltips.
+* Existing MCA 1.21.1 buildings are automatically migrated to the new system.
+* Improved building rescanning and editing so room and floor changes are preserved more reliably.
+* Lots of fixes and internal improvements to building detection.
+* Please report any issues on the GitHub Issues page or Discord, and remember that backing up your world is always recommended for beta versions.
 
 # 7.7.31
 
@@ -96,11 +259,11 @@
   * The World tab controls MCA's global ChatAI system prompt, so anything written here can influence every AI villager.
   * For information specific to one character or location, use the **Villager**, **Player**, or **Village** tabs instead.
 
-The effective AI context is layered together as **World → Villager → Player → Village**, alongside MCA's normal personality, traits, relationships, environment and other conversation information.
+The effective AI context is layered together as **World → Villager → Player → Village**, alongside MCA's normal personality, traits, relationships, environment, and other conversation information.
 
 ## Villagers
 
-* Added more varied automatically generated backgrounds for AI villagers, including personal history, skills, habits, preferences, keepsakes, goals and beliefs.
+* Added more varied automatically generated backgrounds for AI villagers, including personal history, skills, habits, preferences, keepsakes, goals, and beliefs.
 * Improved **Villager ↔ Zombie Villager conversion**.
 
   * MCA identity and persistent data are preserved more reliably through infection and curing.
@@ -205,7 +368,7 @@ Initial Release
 * Added Sirben female noises, thanks mintymacaron!
 * Improved guard behavior when players attack villagers.
     * Guards now keep chasing attackers long enough to deliver their warning hits.
-    * Guards now warn, attack and pardon more consistently based on the player's warning level.
+    * Guards now warn, attack, and pardon more consistently based on the player's warning level.
     * Guard warning dialogue no longer stacks with the normal "ouch" dialogue on the same hit.
 * Improved archer guards in combat.
     * Archers now draw and fire bows more reliably.
@@ -264,7 +427,7 @@ Initial Release
 * Villagers should stop floating in passenger seats such as boats.
 * Baby nametags are correctly adjusted
 * Villagers should be able to ride any entity that is rideable, including modded entities.
-* Fix Mood, Infection Progress and hearts not being editable due to recent modifications.
+* Fix Mood, Infection Progress, and hearts not being editable due to recent modifications.
 
 # 7.7.18-beta.7
 
@@ -348,7 +511,7 @@ Initial Release
 # 7.7.17
 
 * Fixed destiny status not being saved reliably
-* Fixed Hair buttons such as previous, next or random making you bald.
+* Fixed Hair buttons such as previous, next, or random making you bald.
 
 # 7.7.16
 
@@ -663,7 +826,7 @@ Initial Release
 
 # 7.5.0
 
-* Added experimental Skin library, editor and uploader
+* Added experimental Skin library, editor, and uploader
 * Added civil registry, a log writing down all events in a village
 * Added the villager tracker, a compass being able to track the last known position of villagers
 * Fixed baby growth command
@@ -707,7 +870,7 @@ Initial Release
 * You can now set the home properly when changing the village
 * Adventurers no longer move in
 * Cooldown for being hurt messages
-* Added rumors, destiny and spawning to threads, decreasing lag and potentially fixing some timeouts
+* Added rumors, destiny, and spawning to threads, decreasing lag and potentially fixing some timeouts
 * Added Armourers Workshop compatibility
 
 # 7.4.5
@@ -998,7 +1161,7 @@ Initial Release
 
 * Finished sounds
     * Normalized and denoised existing ones
-    * Added trading, hurt, snoring and coughing
+    * Added trading, hurt, snoring, and coughing
     * Added sounds for females
 * Reputation is now the sum of all hearts
     * Reputation has been renamed to hearts
@@ -1115,7 +1278,7 @@ Initial Release
 * Bounty hunter no longer attack while in creative
 * Gifting a golden apple to a child now properly reduces the stack
 * Fixed a few wrong buttons
-* Added a few more config flags to control destiny, teleportation and editor access
+* Added a few more config flags to control destiny, teleportation, and editor access
 * Sneaking no longer breaks the model
 * Editor offers a button to select player or villager skin
 * Fixed issues with resizing window while in editor
@@ -1128,7 +1291,7 @@ Initial Release
 * Massive dialogue overhaul with over 300 new phrases
     * Added Rumor dialogue
     * Added Time specific dialogues
-* Grumpy, Gloomy and Shy personalities
+* Grumpy, Gloomy, and Shy personalities
 
 # 7.2.0
 
@@ -1187,7 +1350,7 @@ Initial Release
 * Fixed letter author and creative mode usage
 * Strengthened Grim Reaper
 * Added mod support for atmospheric, autumity, berry good, buzzier bees, environmental, neopolitan, and upgrade aquatic
-* Villager now recognize and estimate the value of every (modded) armor, tool, sword, bow and food as a gift (accuracy
+* Villager now recognize and estimate the value of every (modded) armor, tool, sword, bow, and food as a gift (accuracy
   not guaranteed)
 
 # 7.0.7
@@ -1317,7 +1480,7 @@ Initial Release
 * Fixed greeting AI
 * Increase percentage of adult villagers
 * Fixed changing clothes of unemployed villagers
-* Increased frequency of marriage, births and guard spawns
+* Increased frequency of marriage, births, and guard spawns
 
 # 7.0.2
 
@@ -1342,7 +1505,7 @@ Initial Release
 
 * Giant initial update. This list may have missing parts.
 * Added mca villager and zombie villager
-* Added genetics, personality, traits and mood
+* Added genetics, personality, traits, and mood
 * Added dialogue engine
     * Ported classic interactions
     * Added adoption
@@ -1352,7 +1515,7 @@ Initial Release
     * Respects villagers specific needs
 * Added wedding ring and engagement ring
 * Added Grim Reaper
-* Added graves, resurrection, Staff of Life and the Scythe
+* Added graves, resurrection, Staff of Life, and the Scythe
 * Added guards and archers
 * Added blueprint
     * Added village management

@@ -28,6 +28,5 @@
     "recipes": [
       "mca:magenta_acacia_crib"
     ]
-  },
-  "sends_telemetry_event": false
+  }
 }

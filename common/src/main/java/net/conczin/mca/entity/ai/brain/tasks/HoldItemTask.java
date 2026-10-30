@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import com.google.common.collect.ImmutableMap;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.util.InventoryUtils;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.ai.behavior.Behavior;
@@ -25,6 +26,6 @@ public class HoldItemTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
-        villager.setItemInHand(hand, item);
+        villager.setItemInHand(hand, InventoryUtils.temporary(item.copy()));
     }
 }

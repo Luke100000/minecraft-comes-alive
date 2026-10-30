@@ -293,6 +293,7 @@
   "childp.interaction.sethome.success/8": "Is this all mine?!",
   "childp.interaction.sethome.success/9": "Can you help me decorate it more later!",
   "child.interaction.sethome.success/1": "This is cool I guess.",
+  "interaction.sethome.already_assigned/1": "This is already my home; I'll keep it as my assigned home.",
   "interaction.sethome.temporary/1": "Thanks, but I won't be here that long.",
   "interaction.sethome.temporary/2": "This place looks nice %1$s, but I'm just passing through.",
   "interaction.sethome.temporary/3": "I really can't stay too long, perhaps another time.",

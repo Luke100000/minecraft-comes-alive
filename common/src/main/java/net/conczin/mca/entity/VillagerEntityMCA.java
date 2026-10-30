@@ -9,9 +9,11 @@ import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
+import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.conczin.mca.entity.ai.chatAI.ChatAI;
 import net.conczin.mca.entity.ai.chatAI.ChatAIContext;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
+import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.conczin.mca.entity.ai.relationship.*;
 import net.conczin.mca.entity.interaction.VillagerCommandHandler;
 import net.conczin.mca.registry.*;
@@ -28,12 +30,15 @@ import net.conczin.mca.util.network.datasync.CDataParameter;
 import net.conczin.mca.util.network.datasync.CParameter;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.particles.ItemParticleOption;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -48,6 +53,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.*;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.*;
@@ -56,12 +62,17 @@ import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
 import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
+import net.minecraft.world.entity.ai.behavior.OneShot;
+import net.minecraft.world.entity.ai.behavior.SetWalkTargetAwayFrom;
+import net.minecraft.world.entity.ai.control.BodyRotationControl;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.entity.monster.CrossbowAttackMob;
+import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.monster.ZombieVillager;
 import net.minecraft.world.entity.npc.Villager;
@@ -72,6 +83,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
+import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ChestMenu;
@@ -83,22 +95,33 @@ import net.minecraft.world.item.ProjectileWeaponItem;
 import net.minecraft.world.item.trading.MerchantOffers;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ServerLevelAccessor;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.WeakHashMap;
+import java.util.function.BooleanSupplier;
 import java.util.function.Predicate;
 
 
+/**
+ * MCA villagers borrow inventory items for equipment and mark generated props with mca:temporary.
+ * Replacing equipment stores real items in inventory and discards props. Equipment saves and death
+ * drops exclude props and inventory references, so borrowed items are not counted a second time.
+ */
 public class VillagerEntityMCA extends Villager implements VillagerLike<VillagerEntityMCA>, MenuProvider, CompassionateEntity<BreedableRelationship>, CrossbowAttackMob {
+    private static final OneShot<PathfinderMob> CREEPER_ESCAPE = SetWalkTargetAwayFrom.entity(
+            MemoryModuleTypeMCA.NEAREST_IGNITED_CREEPER, 0.75F, 16, true);
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("InfectionProgress", 0.0f);
     private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -AgeState.getMaxAge());
     private static final float VEHICLE_ATTACHMENT_Y = 0.6F;
@@ -107,6 +130,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     static final String NICKNAMES_KEY = "nicknames";
     private static final CDataManager<VillagerEntityMCA> DATA = createTrackedData(VillagerEntityMCA.class).build();
     private static final int RECALCULATE_DIMENSIONS_EVERY_N_TICKS = 100;
+    private static final int PANIC_SCREAM_INTERVAL = 40;
+    private static final Map<Level, Long> LAST_PANIC_SCREAM = new WeakHashMap<>();
     public final ConversationManager conversationManager = new ConversationManager(this);
     private String chatAIPrompt = "";
     final ResourceLocation EXTRA_HEALTH_EFFECT_ID = MCA.locate("trait_health");
@@ -118,29 +143,31 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private final BreedableRelationship relations = new BreedableRelationship(this);
     private final VillagerCommandHandler interactions = new VillagerCommandHandler(this);
     private final UpdatableInventory inventory = new UpdatableInventory(27);
+    private final EnumSet<EquipmentSlot> borrowedEquipment = EnumSet.noneOf(EquipmentSlot.class);
     private final VillagerDimensions.Mutable dimensions = new VillagerDimensions.Mutable(AgeState.UNASSIGNED);
-    private final ArcherMoveControl archerMoveControl;
     long lastCooldown = 0L;
     private PlayerModel playerModel;
+    @Nullable
+    private MCAFishingBobberEntity fishingBobber;
     private int despawnDelay;
     private int burned;
+    private boolean loggedArcherPanic;
     private long lastHit = 0;
     private int prevGrowthAmount;
     private boolean interactedWith;
-    private int lastAppliedHealthLevel = Integer.MIN_VALUE;
+    private boolean wasPanicking;
     private double lastAppliedHealthBonus = Double.NaN;
     private boolean recoveryFoodUseActive;
-    private boolean completingRecoveryFoodUse;
-    private boolean recoveryFoodFromInventory;
     private int recoveryFoodUseTicks;
-    private ItemStack recoveryPreviousMainHand = ItemStack.EMPTY;
+    private int recoveryFoodSlot = -1;
+    private ItemStack recoveryFoodSource = ItemStack.EMPTY;
+    private BooleanSupplier melodyTick;
     private final Map<UUID, String> nicknames = new HashMap<>();
 
     public VillagerEntityMCA(EntityType<VillagerEntityMCA> type, Level w, Gender gender) {
         super(type, w);
         inventory.addListener(this::onInvChange);
-        this.archerMoveControl = new ArcherMoveControl(this);
-        this.moveControl = this.archerMoveControl;
+        this.moveControl = new MCAMoveControl(this);
         genetics.setGender(gender);
         this.setPathfindingMalus(PathType.WATER_BORDER, 16.0F);
         this.setPathfindingMalus(PathType.TRAPDOOR, 8.0F);
@@ -148,14 +175,20 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         this.setPathfindingMalus(PathType.WATER, 16.0F);
     }
 
-    public ArcherMoveControl getArcherMoveControl() {
-        return this.archerMoveControl;
-    }
-
     public static <E extends Entity> CDataManager.Builder<E> createTrackedData(Class<E> type) {
         return VillagerLike.createTrackedData(type).addAll(INFECTION_PROGRESS, GROWTH_AMOUNT)
                 .add(Residency::createTrackedData)
                 .add(BreedableRelationship::createTrackedData);
+    }
+
+    @Override
+    protected BodyRotationControl createBodyControl() {
+        return new MCABodyRotationControl(
+                this,
+                // Aggression is synchronized to clients and remains set through
+                // shot cooldowns; server-only Brain memories cannot drive pose.
+                () -> this.isAggressive() && RangedWeaponHelper.isHoldingSupportedWeapon(this)
+        );
     }
 
     private static boolean canEat(ItemStack i) {
@@ -173,24 +206,29 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     public Vec3 handleRelativeFrictionAndCalculateMovement(Vec3 input, float friction) {
         Vec3 movement = super.handleRelativeFrictionAndCalculateMovement(input, friction);
-        if (getNavigation() instanceof MCAGroundPathNavigation navigation) {
-            double controlledY = navigation.getControlledClimbableVelocity();
-            if (!Double.isNaN(controlledY)) {
-                return new Vec3(movement.x(), controlledY, movement.z());
-            }
-        }
-        return movement;
+        return getNavigation() instanceof MCAGroundPathNavigation navigation
+                ? navigation.adjustClimbableTravelMovement(movement)
+                : movement;
+    }
+
+    @Override
+    public boolean isDescending() {
+        return super.isDescending()
+                || getNavigation() instanceof MCAGroundPathNavigation navigation
+                && navigation.isDescendingThroughScaffolding();
     }
 
     @Override
     public void setJumping(boolean jumping) {
         boolean navigationControlsClimb = this.getNavigation() instanceof MCAGroundPathNavigation navigation
                 && navigation.isControllingClimbableMovement();
-        super.setJumping(jumping && !this.onClimbable() && !navigationControlsClimb);
+        boolean climbableSuppressesJump = this.onClimbable() && !this.getInBlockState().is(Blocks.SCAFFOLDING);
+        super.setJumping(jumping && !climbableSuppressesJump && !navigationControlsClimb);
     }
 
     public static AttributeSupplier.Builder createAttributes() {
         return Villager.createAttributes()
+                .add(Attributes.WATER_MOVEMENT_EFFICIENCY, 1.0D)
                 .add(Attributes.ATTACK_DAMAGE, 3.0f)
                 .add(Attributes.ATTACK_KNOCKBACK, 1.0f)
                 .add(Attributes.MAX_HEALTH, Config.getInstance().villagerMaxHealth)
@@ -205,6 +243,15 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     public PlayerModel getPlayerModel() {
         return playerModel;
+    }
+
+    @Nullable
+    public MCAFishingBobberEntity getFishingBobber() {
+        return fishingBobber;
+    }
+
+    void setFishingBobber(@Nullable MCAFishingBobberEntity fishingBobber) {
+        this.fishingBobber = fishingBobber;
     }
 
     @Override
@@ -281,6 +328,13 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     public Residency getResidency() {
         return residency;
+    }
+
+    @Override
+    public void releasePoi(MemoryModuleType<GlobalPos> memoryType) {
+        if (memoryType != MemoryModuleType.HOME || residency.mayReleaseHomePoi()) {
+            super.releasePoi(memoryType);
+        }
     }
 
     @Override
@@ -382,11 +436,54 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public boolean doHurtTarget(Entity target) {
+        if (target instanceof LivingEntity living && !canAttack(living)) {
+            return false;
+        }
         boolean hurt = super.doHurtTarget(target);
         if (hurt) {
             attackedEntity(target);
         }
         return hurt;
+    }
+
+    @Override
+    public boolean canAttack(LivingEntity target) {
+        return (!(target instanceof Creeper creeper) || GuardEnemiesSensor.canAttackCreeper(creeper))
+                && !hasIgnitedCreeperThreat() && super.canAttack(target);
+    }
+
+    private boolean hasIgnitedCreeperThreat() {
+        return getBrain().getMemoryInternal(MemoryModuleTypeMCA.NEAREST_IGNITED_CREEPER)
+                .filter(threat -> threat instanceof Creeper creeper && creeper.isIgnited()
+                        && threat.isAlive() && !threat.isRemoved() && threat.level() == level()
+                        && distanceToSqr(threat) < 16.0 * 16.0).isPresent();
+    }
+
+    @Override
+    protected void customServerAiStep() {
+        super.customServerAiStep();
+        if (hasIgnitedCreeperThreat()) {
+            if (isSleeping()) {
+                stopSleeping();
+            }
+            getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
+            stopUsingItem();
+            setAggressive(false);
+            var threat = getBrain().getMemory(MemoryModuleTypeMCA.NEAREST_IGNITED_CREEPER).orElseThrow();
+            var walk = getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
+            if (walk == null || walk.getTarget().currentPosition().subtract(position())
+                    .dot(threat.position().subtract(position())) >= 0) {
+                // Vanilla's escape sampler can fail without replacing WALK_TARGET.
+                // Retract conflicting intent first; retain an existing retreat.
+                getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+                getBrain().eraseMemory(MemoryModuleType.PATH);
+                getNavigation().stop();
+                getMoveControl().setWantedPosition(getX(), getY(), getZ(), 0);
+            }
+            // Run after ordinary Brain movement producers so emergency escape wins.
+            // Trigger the vanilla one-shot directly: it carries no per-villager state.
+            CREEPER_ESCAPE.trigger((ServerLevel) level(), this, level().getGameTime());
+        }
     }
 
     public void onRangedAttackLanded(Entity target) {
@@ -467,7 +564,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (getVehicle() != null && getVehicle().equals(player)) return InteractionResult.PASS;
 
         ItemStack stack = player.getItemInHand(hand);
-        if (!stack.is(TagsMCA.Items.VILLAGER_EGGS) && isAlive() && !isTrading() && !isSleeping() && canInteractWithItemStackInHand(stack) && !getVillagerBrain().isPanicking()) {
+        boolean isOnBlacklist = Config.getInstance().villagerInteractionItemBlacklist.contains(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
+        if (!isOnBlacklist && !stack.is(TagsMCA.Items.VILLAGER_EGGS) && isAlive() && !isTrading() && !isSleeping() && canInteractWithItemStackInHand(stack) && !getVillagerBrain().isPanicking()) {
             if (isBaby()) {
                 setUnhappy();
             } else if (!level().isClientSide) {
@@ -544,6 +642,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public final boolean hurt(DamageSource source, float damageAmount) {
+        if (isBaby() && source.is(DamageTypes.IN_WALL)) {
+            return false;
+        }
+
         // no baby squishes
         if (getVehicle() instanceof Player) {
             return super.hurt(source, 0.0f);
@@ -640,6 +742,15 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             damageAmount *= 0.0f;
         }
 
+        if (!level().isClientSide && MCA.platformHelper.isDevelopmentEnvironment() && getProfession() == ProfessionsMCA.ARCHER) {
+            Vec3 before = getDeltaMovement();
+            float healthBefore = getHealth();
+            boolean accepted = super.hurt(source, damageAmount);
+            MCA.LOGGER.info("[MCA Archer Damage] entity={} name=\"{}\" tick={} source={} accepted={} healthBefore={} healthAfter={} velocityBefore={} velocityAfter={} onGround={} pos={}",
+                    getStringUUID(), getName().getString(), tickCount, source.typeHolder().unwrapKey(), accepted,
+                    healthBefore, getHealth(), before, getDeltaMovement(), onGround(), position());
+            return accepted;
+        }
         return super.hurt(source, damageAmount);
     }
 
@@ -688,7 +799,23 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         if (!level().isClientSide) {
+            if (MCA.platformHelper.isDevelopmentEnvironment() && getProfession() == ProfessionsMCA.ARCHER) {
+                boolean panic = getBrain().isActive(Activity.PANIC);
+                if (panic != loggedArcherPanic || panic && tickCount % 20 == 0) {
+                    loggedArcherPanic = panic;
+                    var walk = getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+                    var path = getNavigation().getPath();
+                    MCA.LOGGER.info("[MCA Archer Panic] entity={} name=\"{}\" tick={} panic={} health={} pos={} velocity={} onGround={} collision={} walkTracker={} walkDestination={} navDone={} pathReachable={}",
+                            getStringUUID(), getName().getString(), tickCount, panic, getHealth(), position(), getDeltaMovement(), onGround(), horizontalCollision,
+                            walk == null ? "none" : walk.getTarget().getClass().getSimpleName(),
+                            walk == null ? null : walk.getTarget().currentPosition(), getNavigation().isDone(), path == null ? null : path.canReach());
+                }
+            }
             tickRecoveryFoodUse();
+
+            if (melodyTick != null && !melodyTick.getAsBoolean()) {
+                melodyTick = null;
+            }
 
             if (tickCount % 200 == 0
                 && getHealth() < getMaxHealth()
@@ -741,6 +868,69 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         return false;
     }
 
+    private void clearEquipment() {
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            setItemSlot(slot, ItemStack.EMPTY);
+        }
+    }
+
+    @Override
+    public void setItemSlot(EquipmentSlot slot, ItemStack stack) {
+        ItemStack previous = super.getItemBySlot(slot);
+        if (!level().isClientSide && MCA.platformHelper.isDevelopmentEnvironment()
+                && slot.getType() == EquipmentSlot.Type.HAND && previous != stack
+                && (previous.getItem() instanceof ProjectileWeaponItem || stack.getItem() instanceof ProjectileWeaponItem)) {
+            String callers = StackWalker.getInstance().walk(frames -> frames.skip(1).limit(5)
+                    .map(StackWalker.StackFrame::toString).collect(java.util.stream.Collectors.joining(" <- ")));
+            MCA.LOGGER.info("[MCA Archer Hand] entity={} name=\"{}\" tick={} slot={} old={} new={} using={} useTicks={} activity={} attackTarget={} callers={}",
+                    getStringUUID(), getName().getString(), tickCount, slot, previous, stack,
+                    isUsingItem(), getTicksUsingItem(), getBrain().getActiveNonCoreActivity(),
+                    getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).map(Entity::getStringUUID).orElse("none"), callers);
+        }
+        boolean borrowed = borrowedEquipment != null && borrowedEquipment.remove(slot);
+        if (inventory != null && !stack.isEmpty() && InventoryUtils.containsReference(inventory, stack)) {
+            borrowedEquipment.add(slot);
+        }
+
+        super.setItemSlot(slot, stack);
+
+        if (!level().isClientSide && inventory != null && previous != stack) {
+            if (!borrowed && !previous.isEmpty() && !InventoryUtils.isTemporary(previous)
+                && !InventoryUtils.containsReference(inventory, previous)) {
+                ItemStack leftover = inventory.addItem(previous.copyAndClear());
+                if (!leftover.isEmpty()) {
+                    spawnAtLocation(leftover, 0.0F);
+                }
+            }
+
+            if (recoveryFoodUseActive && slot == getDominantSlot() && stack != recoveryFoodSource) {
+                stopUsingItem();
+            }
+        }
+    }
+
+    @Override
+    public ItemStack equipItemIfPossible(ItemStack stack) {
+        EquipmentSlot slot = getEquipmentSlotForItem(stack);
+        ItemStack previous = getItemBySlot(slot);
+        boolean canReplace = canReplaceCurrentItem(stack, previous);
+        if (slot.isArmor() && !canReplace) {
+            slot = EquipmentSlot.MAINHAND;
+            canReplace = getItemBySlot(slot).isEmpty();
+        }
+
+        if (!canReplace || !canHoldItem(stack)) return ItemStack.EMPTY;
+
+        // The setter stores displaced equipment; vanilla would drop it before calling the setter.
+        ItemStack equipped = slot.limit(stack);
+        setItemSlotAndDropWhenKilled(slot, equipped);
+        return equipped;
+    }
+
+    public void setMelodyTick(BooleanSupplier tick) {
+        melodyTick = tick;
+    }
+
     public boolean isUsingRecoveryFood() {
         return recoveryFoodUseActive;
     }
@@ -786,69 +976,44 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     private boolean startRecoveryFoodUse() {
-        ItemStack mainHandFood = getMainHandItem();
-        FoodProperties mainHandFoodProperties = mainHandFood.get(DataComponents.FOOD);
-        if (canEat(mainHandFood)) {
-            return startRecoveryFoodUse(mainHandFoodProperties, false, ItemStack.EMPTY);
-        }
-
         int slot = InventoryUtils.getFirstSlotContainingItem(getInventory(), VillagerEntityMCA::canEat);
         if (slot < 0) {
             return false;
         }
 
         ItemStack food = getInventory().getItem(slot);
-        FoodProperties foodProperties = food.get(DataComponents.FOOD);
         if (!canEat(food)) {
             return false;
         }
 
-        ItemStack previousMainHand = getMainHandItem().copy();
-        ItemStack replacement = food.split(1);
-        if (replacement.isEmpty()) {
-            return false;
-        }
-
-        setItemInHand(getDominantHand(), replacement);
-        return startRecoveryFoodUse(foodProperties, true, previousMainHand);
-    }
-
-    private boolean startRecoveryFoodUse(FoodProperties foodProperties, boolean fromInventory, ItemStack previousMainHand) {
-        if (foodProperties == null) {
-            return false;
-        }
-
         recoveryFoodUseActive = true;
-        recoveryFoodFromInventory = fromInventory;
         recoveryFoodUseTicks = 0;
-        recoveryPreviousMainHand = previousMainHand;
+        recoveryFoodSlot = slot;
+        recoveryFoodSource = food;
+        setItemInHand(getDominantHand(), food);
         startUsingItem(getDominantHand());
 
         if (!isUsingItem()) {
-            finishRecoveryFoodUse();
+            endRecoveryFoodUse();
             return false;
         }
 
         return true;
     }
 
-    private void finishRecoveryFoodUse() {
-        if (recoveryFoodFromInventory) {
-            ItemStack remainder = getMainHandItem();
-            if (!remainder.isEmpty()) {
-                ItemStack leftover = getInventory().addItem(remainder);
-                if (!leftover.isEmpty()) {
-                    spawnAtLocation(leftover, 0.0F);
-                }
-            }
-            setItemInHand(getDominantHand(), recoveryPreviousMainHand);
+    private void endRecoveryFoodUse() {
+        if (!recoveryFoodUseActive) {
+            return;
         }
 
+        boolean stillHoldingFood = getItemInHand(getDominantHand()) == recoveryFoodSource;
         recoveryFoodUseActive = false;
-        completingRecoveryFoodUse = false;
-        recoveryFoodFromInventory = false;
         recoveryFoodUseTicks = 0;
-        recoveryPreviousMainHand = ItemStack.EMPTY;
+        recoveryFoodSlot = -1;
+        recoveryFoodSource = ItemStack.EMPTY;
+        if (stillHoldingFood) {
+            setItemInHand(getDominantHand(), ItemStack.EMPTY);
+        }
     }
 
     @Override
@@ -886,14 +1051,18 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
                 if (infection > 1.0f) {
                     convertTo(EntityType.ZOMBIE_VILLAGER, false);
-                    discard();
                 }
             }
 
-            // panic screams
-            if (this.tickCount % 90 == 0 && mcaBrain.isPanicking()) {
+            // one scream per villager per panic wave, at most one per level per PANIC_SCREAM_INTERVAL
+            boolean panicking = mcaBrain.isPanicking();
+            long now = level().getGameTime();
+            Long lastScream = LAST_PANIC_SCREAM.get(level());
+            if (panicking && !wasPanicking && (lastScream == null || now - lastScream > PANIC_SCREAM_INTERVAL)) {
+                LAST_PANIC_SCREAM.put(level(), now);
                 sendChatToAllAround("villager.scream");
             }
+            wasPanicking = panicking;
 
             // sirben noises
             if (this.tickCount % 60 == 0 && random.nextInt(50) == 0 && traits.hasTrait(Traits.SIRBEN)) {
@@ -915,11 +1084,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         int level = this.getVillagerData().getLevel() - 1;
         double bonus = Config.getInstance().villagerHealthBonusPerLevel * level;
 
-        if (level == lastAppliedHealthLevel && bonus == lastAppliedHealthBonus) {
+        if (bonus == lastAppliedHealthBonus) {
             return;
         }
 
-        lastAppliedHealthLevel = level;
         lastAppliedHealthBonus = bonus;
 
         AttributeInstance instance = this.getAttributes().getInstance(Attributes.MAX_HEALTH);
@@ -940,6 +1108,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void refreshDimensions() {
+        float oldWidth = getBbWidth();
+        float oldHeight = getBbHeight();
+
         AgeState current = getAgeState();
         AgeState next = current.getNext();
 
@@ -956,31 +1127,103 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         boolean oldOnGround = this.onGround();
         super.refreshDimensions();
         this.setOnGround(oldOnGround);
+
+        if ((getBbWidth() > oldWidth || getBbHeight() > oldHeight)
+                && isBaby()
+                && level() instanceof ServerLevel serverLevel
+                && serverLevel.getEntity(getUUID()) == this
+                && isInWall()) {
+            // Vanilla already attempts resize repositioning; rescue any remaining collision,
+            // including growth before the first tick when vanilla skips that search.
+            moveToSafePositionIfSuffocating();
+        }
+    }
+
+    /**
+     * Performs one bounded rescue when a young villager is spawned while suffocating,
+     * or when vanilla's resize repositioning cannot resolve a growth collision.
+     */
+    public boolean moveToSafePositionIfSuffocating() {
+        if (!isInWall()) {
+            return true;
+        }
+
+        BlockPos origin = blockPosition();
+        Vec3 currentPosition = position();
+        int[] verticalOffsets = {0, 1, -1};
+
+        for (int radius = 0; radius <= 2; radius++) {
+            for (int dy : verticalOffsets) {
+                for (int dx = -radius; dx <= radius; dx++) {
+                    for (int dz = -radius; dz <= radius; dz++) {
+                        if (Math.max(Math.abs(dx), Math.abs(dz)) != radius) {
+                            continue;
+                        }
+
+                        BlockPos candidate = origin.offset(dx, dy, dz);
+                        double floorHeight = level().getBlockFloorHeight(candidate);
+                        if (!Double.isFinite(floorHeight) || floorHeight >= 1.0D) {
+                            continue;
+                        }
+                        if (getType().isBlockDangerous(level().getBlockState(candidate))
+                                || floorHeight <= 0.0D && getType().isBlockDangerous(level().getBlockState(candidate.below()))) {
+                            continue;
+                        }
+
+                        Vec3 candidatePosition = Vec3.upFromBottomCenterOf(candidate, floorHeight);
+                        AABB candidateBox = getBoundingBox().move(candidatePosition.subtract(currentPosition));
+                        if (!level().noCollision(this, candidateBox)) {
+                            continue;
+                        }
+
+                        setPos(candidatePosition.x, candidatePosition.y, candidatePosition.z);
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     @Override
     protected void completeUsingItem() {
-        boolean completedRecoveryFoodUse = recoveryFoodUseActive
-                                           && isUsingItem()
-                                           && getUsedItemHand() == getDominantHand();
+        if (!recoveryFoodUseActive || !isUsingItem() || getUsedItemHand() != getDominantHand()) {
+            super.completeUsingItem();
+            return;
+        }
 
-        completingRecoveryFoodUse = completedRecoveryFoodUse;
-        super.completeUsingItem();
-        completingRecoveryFoodUse = false;
+        ItemStack held = getItemInHand(getDominantHand());
+        boolean valid = canContinueRecoveryFoodUse()
+                        && canEat(held)
+                        && held == recoveryFoodSource
+                        && getInventory().getItem(recoveryFoodSlot) == recoveryFoodSource;
 
-        if (completedRecoveryFoodUse) {
-            finishRecoveryFoodUse();
+        recoveryFoodUseActive = false;
+        recoveryFoodUseTicks = 0;
+        recoveryFoodSlot = -1;
+        recoveryFoodSource = ItemStack.EMPTY;
+
+        if (valid) {
+            // Consume exactly one, atomically: give vanilla a one-item stack so food effects and
+            // container items (bowls, bottles) behave, then stow the returned container.
+            ItemStack portion = held.split(1);
+            this.useItem = portion;
+            setItemInHand(getDominantHand(), portion);
+            super.completeUsingItem();
+
+            getInventory().setChanged();
+            setItemInHand(getDominantHand(), ItemStack.EMPTY);
+        } else {
+            super.stopUsingItem();
+            setItemInHand(getDominantHand(), ItemStack.EMPTY);
         }
     }
 
     @Override
     public void stopUsingItem() {
-        boolean interruptedRecoveryFoodUse = recoveryFoodUseActive && !completingRecoveryFoodUse;
         super.stopUsingItem();
-
-        if (interruptedRecoveryFoodUse) {
-            finishRecoveryFoodUse();
-        }
+        endRecoveryFoodUse();
     }
 
     private void spawnRecoveryFoodParticles(ServerLevel level, ItemStack food, int count) {
@@ -1040,16 +1283,18 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             boolean head = passengers.size() > 2 && passengers.get(2) == this;
 
             Vec3 offset = head ? new Vec3(0, 0.55f, 0) : new Vec3(left ? 0.4F : -0.4F, 0.05f, 0).yRot(yaw);
+            Vec3 pos = this.position();
 
-            // todo currently only client side
+            // Keep the physical carry position identical on both sides so the bounding box follows the passenger.
+            this.setPos(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
+
+            // Player genetics rendering is client-only. Preserve its original visual adjustment without moving the physical box.
             if (isClientSide() && MCAClient.useGeneticsRenderer(vehicle.getUUID())) {
-                float height = CommonVillagerModel.getVillager(vehicle).getRawVerticalScaleFactor();
+                float height = CommonVillagerModel.getVillager(vehicle).getVisualVerticalScaleFactor();
                 offset = offset.multiply(1.0f, height, 1.0f);
                 offset = offset.add(0, (height - 1) * 1.5 - 0.7, 0);
+                this.setPosRaw(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
             }
-
-            Vec3 pos = this.position();
-            this.setPosRaw(pos.x() + offset.x(), pos.y() + offset.y(), pos.z() + offset.z());
 
             if (vehicle.isShiftKeyDown()) {
                 stopRiding();
@@ -1076,6 +1321,31 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     @Override
+    public void travel(Vec3 input) {
+        if (isSleeping()) {
+            // SleepInBed can start between navigation and MoveControl ticks. Ignore remaining
+            // approach input and gravity while vanilla's sleeping position owns the anchor.
+            setDeltaMovement(Vec3.ZERO);
+            calculateEntityAnimation(false);
+            return;
+        }
+        super.travel(input);
+    }
+
+    @Override
+    public boolean isPushable() {
+        return !isSleeping() && super.isPushable();
+    }
+
+    @Override
+    protected void doPush(Entity entity) {
+        if (isSleeping() || (!Config.getServerConfig().enableVillagerCollisions && entity instanceof VillagerEntityMCA)) {
+            return;
+        }
+        super.doPush(entity);
+    }
+
+    @Override
     public EntityDimensions getDefaultDimensions(Pose pose) {
         Entity vehicle = getVehicle();
         if (vehicle instanceof Player) {
@@ -1086,30 +1356,42 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             return SLEEPING_DIMENSIONS;
         }
 
-        float height = getVerticalScaleFactor() * 2.0F;
-        float width = getHorizontalScaleFactor() * 0.6F;
+        float height = getPhysicalStandingHeight();
+        float width = getPhysicalHorizontalScaleFactor() * 0.6F;
 
-        return EntityDimensions.scalable(width, height).withAttachments(EntityAttachments.builder()
-                .attach(EntityAttachment.VEHICLE, 0.0F, getRawVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F));
+        return EntityDimensions.scalable(width, height).withEyeHeight(getPhysicalStandingEyeHeight()).withAttachments(EntityAttachments.builder()
+                .attach(EntityAttachment.VEHICLE, 0.0F, getVisualVerticalScaleFactor() * VEHICLE_ATTACHMENT_Y, 0.0F)
+                .attach(EntityAttachment.NAME_TAG, 0.0F, getVisualNameTagHeight(), 0.0F));
+    }
+
+    @Override
+    protected void dropCustomDeathLoot(ServerLevel serverLevel, DamageSource cause, boolean recentlyHit) {
+        // MCA owns villager equipment separately, so do not let Mob drop equipped items here.
     }
 
     @Override
     public void die(DamageSource cause) {
-        // deselect equipment as this messes with MobEntities equipment dropping
-        for (EquipmentSlot slot : EquipmentSlot.values()) {
-            this.setItemSlot(slot, ItemStack.EMPTY);
-        }
-
-        //death message
-        if (!level().isClientSide) {
-            getResidency().getHomeVillage().flatMap(Village::getCivilRegistry).ifPresent(r -> r.addText(getCombatTracker().getDeathMessage()));
+        if (dead) {
+            return;
         }
 
         super.die(cause);
 
+        // NeoForge can cancel LivingDeathEvent inside super.die(). Leave MCA's persistent
+        // death state untouched unless vanilla committed the death.
+        if (!dead) {
+            return;
+        }
+
+        // deselect equipment as this messes with MobEntities equipment dropping
+        clearEquipment();
+
         if (level().isClientSide) {
             return;
         }
+
+        //death message
+        getResidency().getHomeVillage().flatMap(Village::getCivilRegistry).ifPresent(r -> r.addText(getCombatTracker().getDeathMessage()));
 
         //drop stuff
         InventoryUtils.dropAllItems(this, inventory);
@@ -1127,14 +1409,12 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         //move out
-        residency.leaveHome();
+        residency.leaveVillage();
 
         if (interactedWith) {
             VillagerTrackerManager.update(this);
         }
     }
-
-
     @Override
     public void teleportTo(double destX, double destY, double destZ) {
         if (isPassenger()) {
@@ -1280,7 +1560,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public float getVoicePitch() {
         float r = (random.nextFloat() - 0.5f) * 0.05f;
         float g = (genetics.getGene(Genetics.VOICE) - 0.5f) * 0.3f;
-        float a = Mth.lerp(AgeState.getDelta(tickCount), getAgeState().getPitch(), getAgeState().getNext().getPitch());
+        float a = Mth.lerp(AgeState.getDelta(getTrackedValue(GROWTH_AMOUNT)), getAgeState().getPitch(), getAgeState().getNext().getPitch());
         return a + r + g;
     }
 
@@ -1409,6 +1689,24 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         this.lookAt(pos);
     }
 
+    public void moveTowardsPersistent(BlockPos pos, float speed, int closeEnoughDist) {
+        WalkTarget walkTarget = this.brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        if (walkTarget != null
+                && walkTarget.getTarget() instanceof PersistentPathTarget
+                && walkTarget.getTarget().currentBlockPosition().equals(pos)
+                && walkTarget.getSpeedModifier() == speed
+                && walkTarget.getCloseEnoughDist() == closeEnoughDist) {
+            // Chores repeat their intent each tick, but either sink can clear its
+            // memory independently. Retain the walk request and restore looking
+            // through its existing static tracker when needed.
+            if (this.brain.getMemoryInternal(MemoryModuleType.LOOK_TARGET).orElse(null) != walkTarget.getTarget()) {
+                this.brain.setMemory(MemoryModuleType.LOOK_TARGET, walkTarget.getTarget());
+            }
+            return;
+        }
+        BehaviorUtils.setWalkAndLookTargetMemories(this, new PersistentPathTarget(pos), speed, closeEnoughDist);
+    }
+
     public void moveTowards(BlockPos pos, float speed) {
         moveTowards(pos, speed, 1);
     }
@@ -1434,16 +1732,30 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     public void onInvChange(Container inventoryFromListener) {
-        //nop
+        if (level().isClientSide) return;
+
+        // Inventory transfers can move the actual stack object to a player; do not stow it again.
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            if (borrowedEquipment.contains(slot)
+                && !InventoryUtils.containsReference(inventory, getItemBySlot(slot))) {
+                setItemSlot(slot, ItemStack.EMPTY);
+            }
+        }
     }
 
     @SuppressWarnings("unchecked")
     @Override
     @Nullable
     public <T extends Mob> T convertTo(EntityType<T> type, boolean keepInventory) {
+        stopUsingItem();
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            if (InventoryUtils.isTemporary(getItemBySlot(slot))) {
+                setItemSlot(slot, ItemStack.EMPTY);
+            }
+        }
+
         T mob;
         if (!isRemoved() && type == EntityType.ZOMBIE_VILLAGER) {
-            residency.leaveHome();
             mob = (T) VillagerLike.convertPreservingUuid(this,
                     getGenetics().getGender().getZombieType(),
                     keepInventory,
@@ -1452,15 +1764,26 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             mob = super.convertTo(type, keepInventory);
         }
 
+        if (mob instanceof ZombieVillager zombie) {
+            ServerLevel serverLevel = (ServerLevel) level();
+            zombie.finalizeSpawn(serverLevel, serverLevel.getCurrentDifficultyAt(zombie.blockPosition()),
+                    MobSpawnType.CONVERSION, new Zombie.ZombieGroupData(false, true));
+            zombie.setVillagerData(getVillagerData());
+            zombie.setGossips(getGossips().store(NbtOps.INSTANCE));
+            zombie.setTradeOffers(getOffers().copy());
+            zombie.setVillagerXp(getVillagerXp());
+            zombie.setPersistenceRequired();
+            residency.leaveVillage();
+        }
+
         if (mob instanceof VillagerLike<?> zombie) {
+            // Restore MCA state after spawn initialization has chosen the vanilla zombie age.
             zombie.copyVillagerAttributesFrom(this);
         }
 
-        if (mob instanceof ZombieVillager zombie) {
-            zombie.setPersistenceRequired();
-        }
-
         if (mob instanceof ZombieVillagerEntityMCA zombie) {
+            // Preserve real items left behind when equipment transfer is disabled.
+            clearEquipment();
             zombie.setInventory(inventory);
         }
 
@@ -1471,20 +1794,38 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     public void writeAdditionalConversionData(CompoundTag output) {
         output.putString(CHAT_AI_PROMPT_KEY, getChatAIPrompt());
         writeNicknames(output);
+        longTermMemory.writeToNbt(output);
     }
 
     @Override
     public void readAdditionalConversionData(CompoundTag input) {
         chatAIPrompt = input.getString(CHAT_AI_PROMPT_KEY);
         readNicknames(input);
+        longTermMemory.readFromNbt(input);
     }
 
     @Override
     public void readAdditionalSaveData(CompoundTag nbt) {
         CompoundTag data = McaDataFixers.update(nbt);
+        stopUsingItem();
+        borrowedEquipment.clear();
         super.readAdditionalSaveData(data);
 
+        if (!level().isClientSide && isSleeping()) {
+            BedDebugLog.lifecycle(this, "load-sleeper", getSleepingPos().orElse(null));
+            boolean sleepingAtHome = getBrain().getMemory(MemoryModuleType.HOME)
+                    .filter(home -> home.dimension().equals(level().dimension()))
+                    .map(home -> home.pos())
+                    .equals(getSleepingPos());
+            if (!sleepingAtHome) {
+                // Vanilla persists SleepingPos independently from the Brain. Do not restore a stale
+                // sleeping pose when the saved villager no longer owns that position as HOME.
+                stopSleeping();
+            }
+        }
+
         getTypeDataManager().load(this, data);
+        relations.cancelInterruptedProcreationAfterLoad();
         relations.readFromNbt(data);
         longTermMemory.readFromNbt(data);
         readNicknames(data);
@@ -1511,6 +1852,47 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         if (getVillagerBrain().getPersonality() == Personality.UNASSIGNED) {
             getVillagerBrain().randomize();
+        }
+
+        ItemStack mourningFlower = getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_FLOWER)
+                .orElse(ItemStack.EMPTY);
+        boolean restoreMourningFlower = !mourningFlower.isEmpty()
+                && getBrain().hasMemoryValue(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND)
+                && (getMainHandItem().isEmpty() || ItemStack.matches(getMainHandItem(), mourningFlower));
+
+        // Older saves kept the displaced mourning item only in Brain memory.
+        // Migrate it into the inventory that now owns real equipment.
+        if (!data.getBoolean("EquipmentInventorySeparated") && restoreMourningFlower) {
+            getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND)
+                    .filter(stack -> !stack.isEmpty() && !InventoryUtils.isTemporary(stack))
+                    .filter(stack -> InventoryUtils.stream(inventory).noneMatch(item -> ItemStack.matches(item, stack)))
+                    .ifPresent(stack -> {
+                        ItemStack leftover = inventory.addItem(stack.copy());
+                        if (!leftover.isEmpty() && !level().isClientSide) {
+                            spawnAtLocation(leftover);
+                        }
+                    });
+        }
+        if (restoreMourningFlower && ItemStack.matches(getMainHandItem(), mourningFlower)) {
+            super.setItemSlot(EquipmentSlot.MAINHAND, ItemStack.EMPTY);
+        }
+
+        // Older saves also serialized borrowed inventory stacks as equipment.
+        if (!data.getBoolean("EquipmentInventorySeparated")) {
+            for (EquipmentSlot slot : EquipmentSlot.values()) {
+                ItemStack stack = getItemBySlot(slot);
+                if (InventoryUtils.getFirstSlotContainingItem(inventory, item -> ItemStack.matches(stack, item)) >= 0) {
+                    super.setItemSlot(slot, ItemStack.EMPTY);
+                }
+            }
+        }
+
+        // Rebuild equipment from inventory; the setter preserves equipment-only real items.
+        clearEquipment();
+        if (restoreMourningFlower) {
+            ItemStack flower = InventoryUtils.temporary(mourningFlower.copy());
+            getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_FLOWER, flower.copy());
+            setItemInHand(InteractionHand.MAIN_HAND, flower);
         }
     }
 
@@ -1556,6 +1938,21 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     public final void addAdditionalSaveData(CompoundTag nbt) {
         super.addAdditionalSaveData(nbt);
+        nbt.putBoolean("EquipmentInventorySeparated", true);
+
+        // Save equipment-only real items, but omit props and inventory references.
+        for (EquipmentSlot slot : EquipmentSlot.values()) {
+            ItemStack stack = getItemBySlot(slot);
+            if (!InventoryUtils.isTemporary(stack) && !borrowedEquipment.contains(slot)
+                && !InventoryUtils.containsReference(inventory, stack)) continue;
+
+            if (slot == EquipmentSlot.BODY) {
+                nbt.remove("body_armor_item");
+            } else {
+                ListTag items = nbt.getList(slot.getType() == EquipmentSlot.Type.HAND ? "HandItems" : "ArmorItems", 10);
+                items.set(slot.getIndex(), new CompoundTag());
+            }
+        }
 
         relations.writeToNbt(nbt);
         longTermMemory.writeToNbt(nbt);
@@ -1605,6 +2002,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void performRangedAttack(LivingEntity target, float pullProgress) {
+        if (!RangedWeaponHelper.isValidAttackTarget(this, target)) {
+            return;
+        }
         InteractionHand weaponHand = RangedWeaponHelper.getWeaponHoldingHand(this);
         if (weaponHand == null) {
             return;
@@ -1626,16 +2026,39 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         if (weaponStack.getItem() instanceof BowItem) {
-            ItemStack arrow = this.getProjectile(weaponStack);
-            AbstractArrow persistentProjectileEntity = ProjectileUtil.getMobArrow(this, arrow, pullProgress, weaponStack);
-            double x = target.getX() - this.getX();
-            double y = target.getY(0.3333333333333333D) - persistentProjectileEntity.getY();
-            double z = target.getZ() - this.getZ();
-            double vel = Math.sqrt(x * x + z * z);
-            persistentProjectileEntity.shoot(x, y + vel * 0.20000000298023224D, z, 1.6F, 3);
-            this.playSound(SoundEvents.SKELETON_SHOOT, 1.0F, 1.0F / (this.getRandom().nextFloat() * 0.4F + 0.8F));
-            this.level().addFreshEntity(persistentProjectileEntity);
+            tryPerformBowAttack(target, pullProgress);
         }
+    }
+
+    public boolean tryPerformBowAttack(LivingEntity target, float pullProgress) {
+        InteractionHand bowHand = RangedWeaponHelper.getBowHoldingHand(this);
+        if (bowHand == null || !RangedWeaponHelper.isValidAttackTarget(this, target)) {
+            return false;
+        }
+        ItemStack weapon = getItemInHand(bowHand);
+        ItemStack ammunition = getProjectile(weapon);
+        AbstractArrow projectile = ProjectileUtil.getMobArrow(this, ammunition, pullProgress, weapon);
+        boolean ordinaryArrow = projectile.getClass() == net.minecraft.world.entity.projectile.Arrow.class
+                || projectile.getClass() == net.minecraft.world.entity.projectile.SpectralArrow.class;
+        Vec3 direction;
+        if (ordinaryArrow && !projectile.isNoGravity()
+                && RangedWeaponHelper.canPredictBowTrajectory(this, weapon, ammunition)) {
+            var solution = RangedWeaponHelper.solveBowShot(projectile.position(), target.position(),
+                    target.getBbHeight(), RangedWeaponHelper.observedTargetVelocity(target));
+            if (solution.isEmpty() || !RangedWeaponHelper.hasClearBowTrajectory(this, projectile.position(), solution.get())) {
+                return false;
+            }
+            direction = solution.get().direction();
+        } else {
+            direction = RangedWeaponHelper.calculateBowShotVector(projectile.position(), target.position(), target.getBbHeight());
+        }
+        projectile.shoot(direction.x, direction.y, direction.z,
+                RangedWeaponHelper.BOW_PROJECTILE_SPEED, RangedWeaponHelper.BOW_INACCURACY);
+        if (!level().addFreshEntity(projectile)) {
+            return false;
+        }
+        playSound(SoundEvents.SKELETON_SHOOT, 1.0F, 1.0F / (getRandom().nextFloat() * 0.4F + 0.8F));
+        return true;
     }
 
     @Override
@@ -1648,6 +2071,28 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         } else {
             return ItemStack.EMPTY;
         }
+    }
+
+    @Override
+    public void startSleeping(BlockPos bed) {
+        super.startSleeping(bed);
+        BedDebugLog.lifecycle(this, "sleep-start", bed);
+    }
+
+    @Override
+    public void stopSleeping() {
+        BlockPos bed = getSleepingPos().orElse(null);
+        BedDebugLog.lifecycle(this, "wake-before", bed);
+        super.stopSleeping();
+        BedDebugLog.lifecycle(this, "wake-after", bed);
+    }
+
+    @Override
+    public void remove(RemovalReason reason) {
+        if (isSleeping()) {
+            BedDebugLog.lifecycle(this, "remove-sleeper/" + reason, getSleepingPos().orElse(null));
+        }
+        super.remove(reason);
     }
 
     private void tickDespawnDelay() {

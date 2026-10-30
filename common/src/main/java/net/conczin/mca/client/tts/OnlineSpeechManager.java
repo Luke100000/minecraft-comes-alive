@@ -73,6 +73,7 @@ public class OnlineSpeechManager {
         } else {
             int tone = Math.min(TOTAL_VOICES - 1, (int) Math.floor(gene * TOTAL_VOICES));
             String voice = gender + "_" + tone;
+            long request = SpeechManager.INSTANCE.beginVoiceRequest(entity.getUUID());
 
             CompletableFuture.runAsync(() -> {
                 String hash = language + "-" + voice + "/" + AudioCache.getHash(text) + ".ogg";
@@ -80,7 +81,7 @@ public class OnlineSpeechManager {
                     downloadAudio(output, language, voice, text);
                 })) {
                     ResourceLocation soundLocation = MCA.locate("tts_cache/" + hash);
-                    SpeechManager.INSTANCE.playSound(pitch, entity, soundLocation);
+                    SpeechManager.INSTANCE.playSound(pitch, entity, soundLocation, request);
                 } else if (!warningIssued) {
                     // Server queued the request but the audio is not ready yet
                     warningIssued = true;

@@ -58,10 +58,6 @@ public class CribRecipeDataProvider implements DataProvider {
         return MCA.MOD_ID.equals(id.getNamespace()) && id.getPath().endsWith("_crib");
     }
 
-    private static boolean isCribRecipeAdvancement(ResourceLocation id) {
-        return isCribPath(id) && id.getPath().startsWith("recipes/decorations/");
-    }
-
     private static final class CribRecipeOutput implements RecipeOutput {
         private final CachedOutput cache;
         private final RegistryOps<JsonElement> registryOps;
@@ -100,9 +96,6 @@ public class CribRecipeDataProvider implements DataProvider {
 
             if (advancement != null) {
                 JsonObject advancementJson = Advancement.CODEC.encodeStart(registryOps, advancement.value()).getOrThrow(IllegalStateException::new).getAsJsonObject();
-                if (isCribRecipeAdvancement(advancement.id())) {
-                    advancementJson.addProperty("sends_telemetry_event", false);
-                }
                 writes.add(DataProvider.saveStable(cache, advancementJson, advancementPaths.json(advancement.id())));
             }
         }

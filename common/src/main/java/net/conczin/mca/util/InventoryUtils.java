@@ -1,5 +1,6 @@
 package net.conczin.mca.util;
 
+import net.conczin.mca.registry.DataComponentsMCA;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
@@ -20,6 +21,21 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 public interface InventoryUtils {
+    static ItemStack temporary(ItemStack stack) {
+        if (!stack.isEmpty()) {
+            stack.set(DataComponentsMCA.TEMPORARY, true);
+        }
+        return stack;
+    }
+
+    static boolean isTemporary(ItemStack stack) {
+        return stack.getOrDefault(DataComponentsMCA.TEMPORARY, false);
+    }
+
+    static boolean containsReference(Container inventory, ItemStack stack) {
+        return getFirstSlotContainingItem(inventory, item -> item == stack) >= 0;
+    }
+
     static Stream<ItemStack> stream(Container inventory) {
         return IntStream.range(0, inventory.getContainerSize()).mapToObj(inventory::getItem);
     }
@@ -34,11 +50,13 @@ public interface InventoryUtils {
     }
 
     static boolean contains(Container inv, Class<?> clazz) {
+        return contains(inv, stack -> stack.getItem().getClass() == clazz);
+    }
+
+    static boolean contains(Container inv, Predicate<ItemStack> predicate) {
         for (int i = 0; i < inv.getContainerSize(); ++i) {
             final ItemStack stack = inv.getItem(i);
-            final Item item = stack.getItem();
-
-            if (item.getClass() == clazz) return true;
+            if (predicate.test(stack)) return true;
         }
         return false;
     }
