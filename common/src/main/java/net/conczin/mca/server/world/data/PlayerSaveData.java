@@ -172,8 +172,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     private CompoundTag normalizeEntityData(CompoundTag entityData) {
         CompoundTag normalized = McaDataFixers.update(entityData.copy());
         if (normalized.getInt(McaDataFixers.DATA_VERSION_KEY) > McaDataFixers.CURRENT_VERSION) return normalized;
-        CompoundTag eyes = EyeGenetics.initializeSavedPayload(normalized.getCompound(EyeGenetics.KEY), uuid,
-                EyeGenetics.parsePreset(Config.getInstance().eyePopulationPreset));
+        CompoundTag eyes = EyeGenetics.initializeSavedPayload(normalized.getCompound(EyeGenetics.KEY), uuid);
         normalized.put(EyeGenetics.KEY, EyeGenetics.finishSavedExpression(eyes,
                 normalized.getCompound("Traits").contains(Traits.HETEROCHROMIA.getId().toString()), EyeGenetics.seed(uuid, 0)));
         return normalized;

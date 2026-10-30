@@ -32,7 +32,6 @@ public final class EyeGenetics {
             {0xFFC0C0C0, 0xFF7A4D2B, 0xFFE887B0, 0xFFE887B0, 0xFFDB6F20, 0xFFCB90EE, 0xFFF3F0B3, 0xFF90A2EE, 0xFFE887E1, 0xFF91DEE8, 0xFFEA6769, 0xFFC0C0C0, 0xFF7A4D2B, 0xFFE886B0, 0xFFE886B0, 0xFFDB6F20, 0xFFCB91EE, 0xFFFFFD93, 0xFF91A2EE, 0xFFEA4EEA, 0xFF91DEE8, 0xFFEA6769}
     };
     private EyeGenetics() {}
-    public enum PopulationPreset { DIVERSE }
     public record Locus(int first, int second) {
         public Locus { checkAllele(first); checkAllele(second); }
         int sample(RandomSource random) { return random.nextBoolean() ? first : second; }
@@ -51,15 +50,10 @@ public final class EyeGenetics {
     private static void checkAllele(int value) {
         if (value < 0 || value > 2) throw new IllegalArgumentException("EyeGenetics allele must be an integer in [0,2]: " + value);
     }
-    public static PopulationPreset parsePreset(String value) {
-        if (!"DIVERSE".equals(value)) throw new IllegalArgumentException("Invalid eyePopulationPreset '" + value + "'; supported: DIVERSE. Config was not rewritten.");
-        return PopulationPreset.DIVERSE;
-    }
     public static long seed(UUID identity, long salt) {
         return identity.getMostSignificantBits() ^ Long.rotateLeft(identity.getLeastSignificantBits(), 21) ^ salt;
     }
-    public static Genotype founder(PopulationPreset preset, RandomSource random) {
-        Objects.requireNonNull(preset);
+    public static Genotype founder(RandomSource random) {
         // Diverse founders: pigmentation (55%, 22.5%, 22.5%), modifier (45%, 18%, 37%).
         // Each allele is drawn independently; offspring still inherit actual parental alleles.
         return new Genotype(new Locus(sample(random, 0.55, 0.775), sample(random, 0.55, 0.775)),
@@ -73,9 +67,9 @@ public final class EyeGenetics {
         return new Genotype(new Locus(mother.pigmentation.sample(random), father.pigmentation.sample(random)),
                 new Locus(mother.modifier.sample(random), father.modifier.sample(random)));
     }
-    public static Genotype inheritWithMissingParent(Genotype mother, Genotype father, PopulationPreset preset, RandomSource random) {
-        return inherit(mother == null ? founder(preset, random) : mother,
-                father == null ? founder(preset, random) : father, random);
+    public static Genotype inheritWithMissingParent(Genotype mother, Genotype father, RandomSource random) {
+        return inherit(mother == null ? founder(random) : mother,
+                father == null ? founder(random) : father, random);
     }
     private static float pigmentation(Genotype genotype) {
         Locus locus = genotype.pigmentation;
@@ -84,8 +78,7 @@ public final class EyeGenetics {
     private static float modifier(Genotype genotype) {
         return (genotype.modifier.first + genotype.modifier.second) / 4.0F;
     }
-    public static LocalExpression localExpression(Genotype genotype, RandomSource random) {
-        Objects.requireNonNull(genotype);
+    public static LocalExpression localExpression(RandomSource random) {
         float direction = random.nextBoolean() ? 1 : -1;
         return new LocalExpression(direction * (0.05F + 0.35F * random.nextFloat()), (random.nextFloat() - 0.5F) * 0.5F);
     }
@@ -153,13 +146,16 @@ public final class EyeGenetics {
         payload.putInt(ALLELES[2], genotype.modifier.first);
         payload.putInt(ALLELES[3], genotype.modifier.second);
         if (local != null) {
-            CompoundTag value = new CompoundTag();
-            value.putFloat("Pigment", local.pigmentationOffset);
-            value.putFloat("Modifier", local.appearanceOffset);
-            payload.put("Local", value);
+            payload.put("Local", encodeLocalExpression(local));
         }
         if (!legacy.isEmpty()) payload.put("LegacyNatural", legacy.copy());
         return payload;
+    }
+    private static CompoundTag encodeLocalExpression(LocalExpression local) {
+        CompoundTag value = new CompoundTag();
+        value.putFloat("Pigment", local.pigmentationOffset);
+        value.putFloat("Modifier", local.appearanceOffset);
+        return value;
     }
     public static boolean isSupported(CompoundTag payload) {
         return payload.contains("Format", Tag.TAG_INT) && payload.getInt("Format") == FORMAT;
@@ -190,14 +186,14 @@ public final class EyeGenetics {
         return new LocalExpression(local.getFloat("Pigment"), local.getFloat("Modifier"));
     }
     /** Pure server normalization. Unknown formats are opaque, never reinterpreted as missing. */
-    public static CompoundTag initializeSavedPayload(CompoundTag payload, UUID identity, PopulationPreset preset) {
+    public static CompoundTag initializeSavedPayload(CompoundTag payload, UUID identity) {
         if (!payload.isEmpty() && !isSupported(payload)) return payload.copy();
         CompoundTag result = payload.copy();
         result.putInt("Format", FORMAT);
         if (!hasGenotype(result)) {
             CompoundTag legacy = result.getCompound("LegacyNatural");
             Genotype genotype = !legacy.isEmpty() ? infer(legacy, result, identity)
-                    : founder(preset, RandomSource.create(seed(identity, FOUNDER_SALT)));
+                    : founder(RandomSource.create(seed(identity, FOUNDER_SALT)));
             CompoundTag encoded = encode(genotype, null, legacy);
             for (String key : ALLELES) {
                 if (!validAllele(result, key)) result.put(key, Objects.requireNonNull(encoded.get(key)).copy());
@@ -209,9 +205,8 @@ public final class EyeGenetics {
     public static CompoundTag finishSavedExpression(CompoundTag payload, boolean heterochromia, long seed) {
         CompoundTag result = payload.copy();
         if (isSupported(result) && heterochromia && !result.contains("LegacyNatural") && !result.contains("Local")) {
-            Genotype genotype = decodeGenotype(result);
-            result.put("Local", encode(genotype, localExpression(genotype, RandomSource.create(seed ^ LOCAL_SALT)),
-                    new CompoundTag()).getCompound("Local").copy());
+            decodeGenotype(result);
+            result.put("Local", encodeLocalExpression(localExpression(RandomSource.create(seed ^ LOCAL_SALT))));
         }
         return result;
     }

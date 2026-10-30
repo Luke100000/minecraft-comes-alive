@@ -234,7 +234,7 @@ public final class EyeGeneticsGameTests {
             helper.assertTrue(child.getGenetics().getEyePayload().contains("Local"), "natural child generated expression before inheriting trait");
             var stack = BabyItem.createItem(mother, father, 431);
             var dna = stack.get(DataComponentsMCA.BABY_NBT).copyTag().getCompound(EyeGenetics.KEY);
-            var expected = EyeGenetics.localExpression(EyeGenetics.decodeGenotype(dna), net.minecraft.util.RandomSource.create(431 ^ EyeGenetics.LOCAL_SALT));
+            var expected = EyeGenetics.localExpression(net.minecraft.util.RandomSource.create(431 ^ EyeGenetics.LOCAL_SALT));
             helper.assertTrue(expected.equals(EyeGenetics.decodeLocalExpression(dna)), "baby item local expression used wrong seed/order");
             helper.assertTrue(!dna.getCompound("Local").equals(mother.getGenetics().getEyePayload().getCompound("Local")), "child copied mother's somatic expression");
         } finally { Config.getInstance().traitInheritChance = prior; }

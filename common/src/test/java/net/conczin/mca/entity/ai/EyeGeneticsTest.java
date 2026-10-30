@@ -29,12 +29,10 @@ class EyeGeneticsTest {
         assertEquals(0xFF7B4E35, EyeGenetics.resolveNatural(genes(2, 2, 0, 0), null, false));
     }
     @Test void heterochromiaCanBeLighterOrDarkerAndSubtleOrPronounced() {
-        var light = genes(0, 0, 1, 1);
-        var dark = genes(2, 2, 1, 1);
         int lighter = 0, darker = 0, subtle = 0, pronounced = 0;
         RandomSource random = RandomSource.create(263);
         for (int i = 0; i < 1024; i++) {
-            var local = EyeGenetics.localExpression(light, random);
+            var local = EyeGenetics.localExpression(random);
             float offset = local.pigmentationOffset();
             assertTrue(Math.abs(offset) >= 0.05F && Math.abs(offset) <= 0.4F);
             assertTrue(Math.abs(local.appearanceOffset()) <= 0.25F);
@@ -44,16 +42,13 @@ class EyeGeneticsTest {
         }
         assertTrue(lighter > 0 && darker > 0, "Local pigment differences must allow both directions");
         assertTrue(subtle > 0 && pronounced > 0, "Local expression must include weak and strong differences");
-        assertEquals(EyeGenetics.localExpression(light, RandomSource.create(11)),
-                EyeGenetics.localExpression(dark, RandomSource.create(11)),
-                "The same local draw must not force opposite directions based on inherited pigment");
     }
     @Test void productionFoundersKeepDiverseAlleleWeightsAndNaturalShadeVariety() {
         int[] pigmentCounts = new int[3], modifierCounts = new int[3];
         var colours = new java.util.HashSet<Integer>();
         RandomSource random = RandomSource.create(557);
         for (int i = 0; i < 100_000; i++) {
-            var genotype = EyeGenetics.founder(EyeGenetics.PopulationPreset.DIVERSE, random);
+            var genotype = EyeGenetics.founder(random);
             pigmentCounts[genotype.pigmentation().first()]++;
             pigmentCounts[genotype.pigmentation().second()]++;
             modifierCounts[genotype.modifier().first()]++;

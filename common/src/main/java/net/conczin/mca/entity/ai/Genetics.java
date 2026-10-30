@@ -67,8 +67,7 @@ public class Genetics implements Iterable<Genetics.Gene> {
     public void initializeEyesIfMissing() {
         if (entity.asEntity().level().isClientSide) return;
         CompoundTag payload = getEyePayload();
-        setEyePayload(EyeGenetics.initializeSavedPayload(payload, entity.asEntity().getUUID(),
-                EyeGenetics.parsePreset(Config.getInstance().eyePopulationPreset)));
+        setEyePayload(EyeGenetics.initializeSavedPayload(payload, entity.asEntity().getUUID()));
     }
 
     public void finishEyeExpression(long seed) {
@@ -79,10 +78,10 @@ public class Genetics implements Iterable<Genetics.Gene> {
     }
 
     public int getNaturalEyeColor(boolean left) {
-        CompoundTag payload = getEyePayload();
         boolean heterochromia = entity.getTraits().hasTrait(Traits.HETEROCHROMIA);
         boolean albinism = entity.getTraits().hasTrait(Traits.ALBINISM);
         if (albinism) return 0xFFE8A0A0;
+        CompoundTag payload = entity.getTrackedValue(EYES);
         if (payload.contains("LegacyNatural")) return EyeGenetics.resolveLegacyNatural(payload.getCompound("LegacyNatural"), left, heterochromia, false);
         if (EyeGenetics.hasGenotype(payload)) {
             return EyeGenetics.resolveNatural(EyeGenetics.decodeGenotype(payload),
@@ -215,7 +214,7 @@ public class Genetics implements Iterable<Genetics.Gene> {
         entity.setEyeTexture(eyes == null ? inheritedEye : eyes.resolve(inheritedEye, getGender()));
         if (!entity.asEntity().level().isClientSide) {
             setEyePayload(EyeGenetics.encode(EyeGenetics.inheritWithMissingParent(maternalEyes, paternalEyes,
-                    EyeGenetics.parsePreset(Config.getInstance().eyePopulationPreset), RandomSource.create(eyeSeed)), null, new CompoundTag()));
+                    RandomSource.create(eyeSeed)), null, new CompoundTag()));
         }
     }
 
@@ -287,7 +286,7 @@ public class Genetics implements Iterable<Genetics.Gene> {
 
         public float get() {
             if (type == EYE_COLOR) {
-                CompoundTag payload = getEyePayload();
+                CompoundTag payload = entity.getTrackedValue(EYES);
                 if (EyeGenetics.hasGenotype(payload)) return EyeGenetics.compatibilityScalar(payload);
             }
             return entity.getTrackedValue(type.parameter);

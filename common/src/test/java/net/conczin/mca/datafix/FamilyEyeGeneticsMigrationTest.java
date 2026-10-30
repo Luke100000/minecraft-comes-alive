@@ -36,17 +36,17 @@ class FamilyEyeGeneticsMigrationTest {
         CompoundTag raw = new CompoundTag(); raw.putInt("EyeColor", 0xFF112233);
         raw.putString("GeneFace", "0.5");
         assertTrue(EyeGenetics.captureLegacyNatural(raw).isEmpty());
-        var normalized = EyeGenetics.initializeSavedPayload(McaDataFixers.update(raw).getCompound(EyeGenetics.KEY), ID, EyeGenetics.PopulationPreset.DIVERSE);
+        var normalized = EyeGenetics.initializeSavedPayload(McaDataFixers.update(raw).getCompound(EyeGenetics.KEY), ID);
         assertFalse(normalized.contains("LegacyNatural"));
-        assertEquals(normalized, EyeGenetics.initializeSavedPayload(normalized, UUID.randomUUID(), EyeGenetics.PopulationPreset.DIVERSE));
+        assertEquals(normalized, EyeGenetics.initializeSavedPayload(normalized, UUID.randomUUID()));
     }
     @Test void partialPayloadKeepsValidAlleles() {
         CompoundTag partial = new CompoundTag(); partial.putInt("Format", 1);
         partial.putInt("PigmentA", 2); partial.putInt("ModifierB", 0); partial.putString("PigmentB", "1");
-        CompoundTag result = EyeGenetics.initializeSavedPayload(partial, ID, EyeGenetics.PopulationPreset.DIVERSE);
+        CompoundTag result = EyeGenetics.initializeSavedPayload(partial, ID);
         assertEquals(2, EyeGenetics.decodeGenotype(result).pigmentation().first());
         assertEquals(0, EyeGenetics.decodeGenotype(result).modifier().second());
-        assertEquals(result, EyeGenetics.initializeSavedPayload(result, ID, EyeGenetics.PopulationPreset.DIVERSE));
+        assertEquals(result, EyeGenetics.initializeSavedPayload(result, ID));
     }
     @Test void partialPayloadWithoutNaturalColourSamplesMissingAllelesFromDiverse() {
         CompoundTag partial = new CompoundTag(); partial.putInt("Format", 1);
@@ -57,15 +57,15 @@ class FamilyEyeGeneticsMigrationTest {
         int population = 4096;
         for (int i = 0; i < population; i++) {
             UUID identity = new UUID(0, i);
-            CompoundTag result = EyeGenetics.initializeSavedPayload(partial, identity, EyeGenetics.PopulationPreset.DIVERSE);
+            CompoundTag result = EyeGenetics.initializeSavedPayload(partial, identity);
             var genotype = EyeGenetics.decodeGenotype(result);
             assertEquals(0, genotype.pigmentation().first());
             assertEquals(2, genotype.modifier().first());
             pigmentCounts[genotype.pigmentation().second()]++;
             modifierCounts[genotype.modifier().second()]++;
             assertFalse(result.contains("LegacyNatural"));
-            assertEquals(result, EyeGenetics.initializeSavedPayload(partial, identity, EyeGenetics.PopulationPreset.DIVERSE));
-            assertEquals(result, EyeGenetics.initializeSavedPayload(result, new UUID(1, i), EyeGenetics.PopulationPreset.DIVERSE));
+            assertEquals(result, EyeGenetics.initializeSavedPayload(partial, identity));
+            assertEquals(result, EyeGenetics.initializeSavedPayload(result, new UUID(1, i)));
         }
         assertEquals(before, partial);
         // Missing slots follow the founder weights even alongside known alleles.
@@ -82,7 +82,7 @@ class FamilyEyeGeneticsMigrationTest {
         partial.putInt("PigmentA", 2); partial.putInt("ModifierB", 0);
         CompoundTag legacy = new CompoundTag(); legacy.putInt("Argb", 0xFF7B4E35);
         partial.put("LegacyNatural", legacy);
-        CompoundTag result = EyeGenetics.initializeSavedPayload(partial, ID, EyeGenetics.PopulationPreset.DIVERSE);
+        CompoundTag result = EyeGenetics.initializeSavedPayload(partial, ID);
         var genotype = EyeGenetics.decodeGenotype(result);
         assertEquals(2, genotype.pigmentation().first());
         assertEquals(0, genotype.modifier().second());
@@ -93,7 +93,7 @@ class FamilyEyeGeneticsMigrationTest {
         CompoundTag future = new CompoundTag(); future.putInt("Format", 99); future.putString("FutureDna", "keep");
         CompoundTag raw = new CompoundTag(); raw.put(EyeGenetics.KEY, future);
         assertEquals(future, McaDataFixers.update(raw).getCompound(EyeGenetics.KEY));
-        assertEquals(future, EyeGenetics.initializeSavedPayload(future, ID, EyeGenetics.PopulationPreset.DIVERSE));
+        assertEquals(future, EyeGenetics.initializeSavedPayload(future, ID));
     }
     @Test void nestedSourceWinsConflictingFlatFields() {
         CompoundTag raw = new CompoundTag(); raw.putFloat("GeneEyeColor", 0.1F);

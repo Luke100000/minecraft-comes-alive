@@ -2,6 +2,15 @@
 
 Date: 2026-10-10
 
+Cleanup amendment (2026-10-27): the user selected removal of the single-choice
+`eyePopulationPreset` config and `PopulationPreset` plumbing. Diverse founder
+weights are now the fixed sampling policy. Old preset fields are ignored during
+normal config loading and removed by its existing rewrite; unrelated settings
+are retained. Historical preset requirements below describe the earlier contract.
+The allele/save formats, founder weights, random sequences, colour resolver and
+legacy appearance behavior remain unchanged. Internal colour reads avoid NBT
+copies; public payload and persistence boundaries retain defensive copies.
+
 Status: The user approved production integration of the calibrated two-pair,
 three-state model, DIVERSE only and no mutation. Production Tasks 2–6 are
 implemented locally; the integration checks listed in the plan passed. Historical staging
