@@ -310,7 +310,8 @@ public class FamilyTreeScreen extends Screen {
                     viewModel.nodes(),
                     viewModel.graves(),
                     worldX(mouseX),
-                    worldY(mouseY)
+                    worldY(mouseY),
+                    viewport.zoom()
             );
             if (target.isPresent()) {
                 Minecraft.getInstance().getSoundManager()
@@ -402,7 +403,8 @@ public class FamilyTreeScreen extends Screen {
                         viewModel.nodes(),
                         viewModel.graves(),
                         worldX(mouseX),
-                        worldY(mouseY)
+                        worldY(mouseY),
+                        viewport.zoom()
                 ).orElse(null)
                 : null;
 
@@ -440,10 +442,12 @@ public class FamilyTreeScreen extends Screen {
             if (from == null || to == null) {
                 continue;
             }
-            int x1 = from.bounds().centerX();
-            int y1 = from.bounds().centerY();
-            int x2 = to.bounds().centerX();
-            int y2 = to.bounds().centerY();
+            FamilyTreeLayout.Bounds fromBounds = displayCardBounds(from.bounds(), viewport.zoom());
+            FamilyTreeLayout.Bounds toBounds = displayCardBounds(to.bounds(), viewport.zoom());
+            int x1 = fromBounds.centerX();
+            int y1 = fromBounds.centerY();
+            int x2 = toBounds.centerX();
+            int y2 = toBounds.centerY();
             if (edge.type() == FamilyTreeLayout.EdgeType.PARTNER) {
                 FamilyTreeNode fromNode = nodes.get(edge.from());
                 FamilyTreeNode toNode = nodes.get(edge.to());
@@ -486,10 +490,10 @@ public class FamilyTreeScreen extends Screen {
                     FamilyTreeLayout.Card secondParent = card(edge.secondParent());
                     x1 = (x1 + secondParent.bounds().centerX()) / 2;
                 } else {
-                    y1 = from.bounds().bottom();
+                    y1 = fromBounds.bottom();
                 }
-                y2 = to.bounds().top();
-                int midY = (from.bounds().bottom() + y2) / 2;
+                y2 = toBounds.top();
+                int midY = (fromBounds.bottom() + y2) / 2;
                 context.vLine(x1, Math.min(y1, midY), Math.max(y1, midY), 0xFFB8B8B8);
                 context.hLine(Math.min(x1, x2), Math.max(x1, x2), midY, 0xFFB8B8B8);
                 context.vLine(x2, Math.min(midY, y2), Math.max(midY, y2), 0xFFB8B8B8);
@@ -512,12 +516,16 @@ public class FamilyTreeScreen extends Screen {
     private void renderCards(GuiGraphics context, Map<UUID, FamilyTreeNode> nodes) {
         UUID focusId = viewModel.focusId();
         Map<UUID, GlobalPos> graves = viewModel.graves();
+        // Keep sharp glyphs separated at distant zoom without dropping any labels.
+        float fontScale = textZoom() / viewport.zoom();
+        int textInset = Math.max(5, 1 + (int) Math.ceil(3 * fontScale));
+        int lineStep = Math.max(12, (int) Math.ceil((font.lineHeight + 1) * fontScale));
         for (FamilyTreeLayout.Card card : layout.cards()) {
             FamilyTreeNode node = nodes.get(card.uuid());
             if (node == null) {
                 continue;
             }
-            FamilyTreeLayout.Bounds bounds = card.bounds();
+            FamilyTreeLayout.Bounds bounds = displayCardBounds(card.bounds(), viewport.zoom());
             boolean isHovered = hovered instanceof PersonTarget target && target.uuid().equals(card.uuid());
             boolean focused = card.uuid().equals(focusId);
             int background = focused
@@ -540,45 +548,33 @@ public class FamilyTreeScreen extends Screen {
             if (presentation == null) {
                 continue;
             }
-            int textWidth = FamilyTreeLayout.CARD_WIDTH - 12;
+            int textWidth = bounds.right() - bounds.left() - 12;
             int nameTextWidth = node.isDeceased()
                     ? textWidth - (graves.containsKey(card.uuid()) ? DECEASED_WITH_GRAVE_TEXT_INSET : DECEASED_MARKER_TEXT_INSET)
                     : textWidth;
-            drawCenteredEllipsized(context, presentation.name(), bounds.centerX(), bounds.top() + 5, nameTextWidth, presentation.nameColor());
-            drawCenteredEllipsized(context, presentation.identity(), bounds.centerX(), bounds.top() + 17, textWidth, 0xFFBFC7CE);
-            drawCenteredEllipsized(context, presentation.relationship(), bounds.centerX(), bounds.top() + 29, textWidth, 0xFFD9E4EE);
 
-            int statusY = bounds.top() + 41;
+            int textY = bounds.top() + textInset;
+            drawCenteredEllipsized(context, presentation.name(), bounds.centerX(), textY, nameTextWidth, presentation.nameColor());
+            textY += lineStep;
+            drawCenteredEllipsized(context, presentation.identity(), bounds.centerX(), textY, textWidth, 0xFFBFC7CE);
+            textY += lineStep;
+            drawCenteredEllipsized(context, presentation.relationship(), bounds.centerX(), textY, textWidth, 0xFFD9E4EE);
+            textY += lineStep;
             if (presentation.relationshipState() != null) {
-                drawRelationshipStatus(
-                        context,
-                        presentation.relationshipState(),
-                        node.getRelationshipState(),
-                        bounds.centerX(),
-                        statusY,
-                        textWidth
-                );
-                statusY += 10;
+                drawRelationshipStatus(context, presentation.relationshipState(), node.getRelationshipState(),
+                        bounds.centerX(), textY, textWidth);
+                textY += lineStep;
             }
             if (presentation.orphan()) {
-                drawCenteredEllipsized(
-                        context,
-                        Component.translatable("gui.family_tree.label.orphan"),
-                        bounds.centerX(),
-                        statusY,
-                        textWidth,
-                        0xFFB0B0B0
-                );
+                drawCenteredEllipsized(context, Component.translatable("gui.family_tree.label.orphan"),
+                        bounds.centerX(), textY, textWidth, 0xFFB0B0B0);
             }
 
             if (node.isDeceased()) {
-                context.drawString(
-                        font,
-                        DECEASED_MARKER,
-                        bounds.left() + 4,
-                        bounds.top() + 4,
-                        DECEASED_MARKER_COLOR
-                );
+                // Keep both death indicators in card geometry; text quantization
+                // would enlarge the skull into the fixed-size grave icon.
+                context.drawString(font, DECEASED_MARKER, bounds.left() + 4, bounds.top() + 4,
+                        DECEASED_MARKER_COLOR);
                 if (graves.containsKey(card.uuid())) {
                     Icon icon = MCAScreens.getInstance().getIcon(GRAVE_ICON);
                     FamilyTreeLayout.Bounds graveBounds = graveIconBounds(bounds);
@@ -607,17 +603,18 @@ public class FamilyTreeScreen extends Screen {
             int y,
             int maxWidth
     ) {
-        int iconSize = 8;
+        float fontScale = textZoom() / viewport.zoom();
+        int iconSize = Math.round(8 * fontScale);
         int iconGap = 3;
-        String label = ellipsizedText(text, maxWidth - iconSize - iconGap);
-        int left = centerX - (iconSize + iconGap + font.width(label)) / 2;
+        String label = ellipsizedText(text, Math.max(0, (int) ((maxWidth - iconSize - iconGap) / fontScale)));
+        double left = centerX - (iconSize + iconGap + font.width(label) * fontScale) / 2.0;
         Icon icon = MCAScreens.getInstance().getIcon(state.getIcon());
         context.pose().pushPose();
         context.pose().translate(left, y, 0);
-        context.pose().scale(0.5F, 0.5F, 1.0F);
+        context.pose().scale(iconSize / 16.0F, iconSize / 16.0F, 1.0F);
         context.blit(InteractScreen.ICON_TEXTURES, 0, 0, 0, icon.u(), icon.v(), 16, 16, 256, 256);
         context.pose().popPose();
-        context.drawString(font, label, left + iconSize + iconGap, y, 0xFFD8C98C);
+        drawPixelAlignedText(context, label, left + iconSize + iconGap, y, 0xFFD8C98C);
     }
 
     private void drawCenteredEllipsized(
@@ -628,7 +625,38 @@ public class FamilyTreeScreen extends Screen {
             int maxWidth,
             int color
     ) {
-        context.drawCenteredString(font, ellipsizedText(text, maxWidth), centerX, y, color);
+        int fontWidth = (int) (maxWidth * viewport.zoom() / textZoom());
+        String label = ellipsizedText(text, fontWidth);
+        double fontScale = textZoom() / (double) viewport.zoom();
+        drawPixelAlignedText(context, label, centerX - font.width(label) * fontScale / 2.0, y, color);
+    }
+
+    private float textZoom() {
+        float zoom = viewport.zoom();
+        if (zoom >= 1.0F) {
+            return zoom;
+        }
+        double guiScale = minecraft.getWindow().getGuiScale();
+        return (float) (Math.max(1L, Math.round(zoom * guiScale)) / guiScale);
+    }
+
+    private void drawPixelAlignedText(GuiGraphics context, String text, double x, double y, int color) {
+        double guiScale = minecraft.getWindow().getGuiScale();
+        double zoom = viewport.zoom();
+        double fontScale = textZoom() / zoom;
+        double screenX = width / 2.0 + viewport.panX() + x * zoom;
+        double screenY = canvasCenterY() + viewport.panY() + y * zoom;
+
+        PoseStack pose = context.pose();
+        pose.pushPose();
+        pose.translate(
+                x + (Math.round(screenX * guiScale) / guiScale - screenX) / zoom,
+                y + (Math.round(screenY * guiScale) / guiScale - screenY) / zoom,
+                0.0
+        );
+        pose.scale((float) fontScale, (float) fontScale, 1.0F);
+        context.drawString(font, text, 0, 0, color);
+        pose.popPose();
     }
 
     private String ellipsizedText(Component text, int maxWidth) {
@@ -864,6 +892,16 @@ public class FamilyTreeScreen extends Screen {
         return Optional.empty();
     }
 
+    static FamilyTreeLayout.Bounds displayCardBounds(FamilyTreeLayout.Bounds bounds, float zoom) {
+        // Expanding five units per side leaves the 26-unit partner gap with
+        // enough room for its 16-unit icon.
+        int extra = Math.round(5.0F * Math.max(0.0F, 1.0F - zoom) / (1.0F - MIN_ZOOM));
+        return new FamilyTreeLayout.Bounds(
+                bounds.left() - extra, bounds.right() + extra,
+                bounds.top() - extra, bounds.bottom() + extra
+        );
+    }
+
     static FamilyTreeLayout.Bounds graveIconBounds(FamilyTreeLayout.Bounds cardBounds) {
         int left = cardBounds.left() + 14;
         int top = cardBounds.top() + 1;
@@ -1061,13 +1099,24 @@ public class FamilyTreeScreen extends Screen {
             int worldX,
             int worldY
     ) {
+        return hitTargetAt(result, nodes, graves, worldX, worldY, 1.0F);
+    }
+
+    static Optional<HitTarget> hitTargetAt(
+            FamilyTreeLayout.Result result,
+            Map<UUID, FamilyTreeNode> nodes,
+            Map<UUID, GlobalPos> graves,
+            int worldX,
+            int worldY,
+            float zoom
+    ) {
         for (FamilyTreeLayout.Card card : result.cards()) {
             FamilyTreeNode node = nodes.get(card.uuid());
             GlobalPos grave = graves.get(card.uuid());
             if (node != null
                     && node.isDeceased()
                     && grave != null
-                    && graveIconBounds(card.bounds()).contains(worldX, worldY)) {
+                    && graveIconBounds(displayCardBounds(card.bounds(), zoom)).contains(worldX, worldY)) {
                 return Optional.of(new GraveTarget(card.uuid(), grave));
             }
         }
@@ -1077,7 +1126,7 @@ public class FamilyTreeScreen extends Screen {
             }
         }
         for (FamilyTreeLayout.Card card : result.cards()) {
-            if (card.bounds().contains(worldX, worldY)) {
+            if (displayCardBounds(card.bounds(), zoom).contains(worldX, worldY)) {
                 return Optional.of(new PersonTarget(card.uuid()));
             }
         }

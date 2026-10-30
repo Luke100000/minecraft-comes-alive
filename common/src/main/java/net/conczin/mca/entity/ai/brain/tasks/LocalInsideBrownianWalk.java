@@ -8,6 +8,7 @@ import net.minecraft.world.entity.ai.behavior.BehaviorControl;
 import net.minecraft.world.entity.ai.behavior.declarative.BehaviorBuilder;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.level.levelgen.Heightmap;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,7 +28,13 @@ public final class LocalInsideBrownianWalk {
                     if (!(mob instanceof VillagerEntityMCA villager)) {
                         return false;
                     }
-                    if (!retryGate.canReserve(origin, origin, gameTime)) {
+                    var chunk = level.getChunkSource().getChunkNow(origin.getX() >> 4, origin.getZ() >> 4);
+                    if (chunk == null) return false;
+                    // A changed column (for example a newly added roof) permits an immediate retry.
+                    BlockPos retryKey = new BlockPos(origin.getX(),
+                            chunk.getHeight(Heightmap.Types.WORLD_SURFACE, origin.getX() & 15, origin.getZ() & 15),
+                            origin.getZ());
+                    if (!retryGate.tryReserve(retryKey, origin, gameTime)) {
                         PathRequestDiagnostics.recordDeferredProducerRetry(mob);
                         return false;
                     }
@@ -49,7 +56,6 @@ public final class LocalInsideBrownianWalk {
 
                     BlockPos preferred = candidates.get(level.getRandom().nextInt(candidates.size()));
                     walkTarget.set(new WalkTarget(preferred, speedModifier, 0));
-                    retryGate.tryReserve(origin, origin, gameTime);
                     return true;
                 }));
     }

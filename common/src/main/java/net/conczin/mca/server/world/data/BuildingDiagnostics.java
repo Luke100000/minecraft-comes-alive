@@ -57,8 +57,9 @@ public final class BuildingDiagnostics {
         Structure structureAt = village.getExactStructureAt(pos).orElse(null);
         Structure interactionStructure = village.getInteractionStructureAt(pos).orElse(null);
         Structure nearestStructure = nearestStructure(village, pos);
-        Structure inspected = interactionStructure != null
-                ? interactionStructure
+        Structure inspected = plan.mode() == Village.RoomScanMode.UPDATE_ROOM
+                ? village.getStructure(plan.targetStructureId()).orElse(null)
+                : interactionStructure != null ? interactionStructure
                 : structureAt != null ? structureAt : nearestStructure;
         List<Building> inspectedRooms = inspected == null
                 ? List.of()
@@ -73,6 +74,7 @@ public final class BuildingDiagnostics {
                 room == null ? "none" : room.getId(), room == null ? "none" : room.getFloorId());
 
         FloorGeometry refreshedPersistedFloor = null;
+        StructureScanner.Result refreshedPersistedScan = null;
         if (inspected != null) {
             boolean contains = inspected.containsPos(pos);
             Structure.InteractionPosition interaction = inspected
@@ -112,18 +114,24 @@ public final class BuildingDiagnostics {
                         resolved.effectivePoi().values().stream().mapToInt(List::size).sum(), sameColumn, elevatedWithinBand);
             }
 
-            StructureFloor selectedFloor = room != null
-                    ? inspected.getFloor(room.getFloorId()).orElse(null)
+            StructureFloor selectedFloor = plan.mode() == Village.RoomScanMode.UPDATE_ROOM
+                    ? inspected.getFloor(plan.targetFloorId()).orElse(null)
+                    : room != null ? inspected.getFloor(room.getFloorId()).orElse(null)
                     : inspected.resolveFloorAt(pos).orElse(null);
             StructureScanner.Result scan = selectedFloor == null
                     ? StructureScanner.Result.failure(Building.validationResult.NOT_IN_BUILDING, pos)
                     : StructureScanner.scanExistingFloor(
                     world, inspected, selectedFloor, pos, village.getStructures().values());
+            refreshedPersistedScan = scan;
             refreshedPersistedFloor = scan.result() == Building.validationResult.SUCCESS
                     ? scan.scannedFloor()
                     : null;
-            log(traceId, "freshFloorScan persistedFloor={} result={} scanSeed={} bounds={}..{} freshFloor={}",
-                    floor(selectedFloor), scan.result(), scan.source(), scan.min(), scan.max(),
+            log(traceId, "freshFloorScan requestedPosition={} persistedFloor={} result={} discoveryInput={} "
+                            + "selectedSeed={} traversalSeed={} interactionSource={} bounds={}..{} freshFloor={}",
+                    pos, floor(selectedFloor), scan.result(), value(scan.discoveryInput()),
+                    value(scan.scan() == null ? null : scan.scan().seed()),
+                    value(scan.scan() == null ? null : scan.scan().traversalSeed()),
+                    value(scan.result() == Building.validationResult.SUCCESS ? scan.source() : null), scan.min(), scan.max(),
                     floor(refreshedPersistedFloor));
             logFloorDifference(traceId, selectedFloor, scan.scannedFloor(), verbose);
         }
@@ -135,7 +143,7 @@ public final class BuildingDiagnostics {
                     village, planAttempt.analysis(), plan.targetBuildingId()).result();
             case UPDATE_ROOM -> room == null
                     ? Building.validationResult.NOT_IN_BUILDING
-                    : roomWorkflow.analyzeRegisteredRoomUpdate(village, room.getId(), pos).result();
+                    : roomWorkflow.analyzeRegisteredRoomUpdate(village, room.getId(), pos, refreshedPersistedScan).result();
         };
         log(traceId, "analysis action={} result={}", uiAction, analysis);
 

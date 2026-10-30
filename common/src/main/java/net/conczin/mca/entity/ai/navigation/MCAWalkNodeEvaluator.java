@@ -125,17 +125,18 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
 
         BlockPos mobPos = this.mob.blockPosition();
         AABB startBox = this.mob.getBoundingBox();
-        if ((selectedStart.type == PathType.BLOCKED
-                || selectedStart.type == PathType.TRAPDOOR
-                || selectedStart.type == PathType.DANGER_TRAPDOOR)
-                && selectedStart.asBlockPos().equals(mobPos)
+        if (selectedStart.asBlockPos().equals(mobPos)
                 && startBox.minY > mobPos.getY() + RAISED_START_EPSILON
-                && Math.abs(this.getFloorLevel(mobPos.above()) - startBox.minY) < RAISED_START_EPSILON) {
-            // Rounding can put the start inside a low support, such as an extinguished
-            // campfire or closed trapdoor. The lower floor rejects real exits and
-            // leaves movement aiming beneath the feet. Start on the actual surface.
+                && !hasBlockClearance(selectedStart)) {
+            // A blocked start can be on a partial surface or inside a hollow shape.
+            // Normalize to its top only when the live body can rise there; movement
+            // already uses the same surface height and vanilla's collision-triggered jump.
             Node supportedStart = this.getStartNode(mobPos.above());
-            if (supportedStart.costMalus >= 0.0F && hasBlockClearance(supportedStart)) {
+            AABB supportedBox = getMobBoxAt(supportedStart);
+            double riseToSurface = supportedBox.minY - FLOOR_EPSILON - startBox.minY;
+            if (riseToSurface >= -RAISED_START_EPSILON && riseToSurface <= this.getMobJumpHeight()
+                    && supportedStart.costMalus >= 0.0F && hasBlockClearance(supportedStart)
+                    && canSweepTo(startBox, supportedBox, this.currentContext.level())) {
                 return supportedStart;
             }
         }

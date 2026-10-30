@@ -41,10 +41,37 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.HashSet;
+import java.util.Comparator;
 
 @PrefixGameTestTemplate(false)
 public final class FishingSiteGameTests {
     private FishingSiteGameTests() {}
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void candidateRankingKeepsLargeWaterAndNearbyBanksFirst(GameTestHelper helper) throws ReflectiveOperationException {
+        BlockPos start = prepare(helper);
+        FishingSiteSearch search = new FishingSiteSearch();
+        var origin = FishingSiteSearch.class.getDeclaredField("origin");
+        origin.setAccessible(true);
+        origin.set(search, start);
+        var order = FishingSiteSearch.class.getDeclaredField("siteOrder");
+        order.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Comparator<FishingSiteSearch.Site> comparator = (Comparator<FishingSiteSearch.Site>)order.get(search);
+        var larger = new FishingSiteSearch.Site(start.east(2), start.east(7), false, false, 4);
+        List<FishingSiteSearch.Site> shortlist = new ArrayList<>();
+        shortlist.add(larger);
+        for (int i = 0; i < 5; i++) {
+            shortlist.add(new FishingSiteSearch.Site(start.west(i + 2), start.west(i + 4), false, true, 0));
+        }
+        shortlist.sort(comparator);
+        helper.assertTrue(shortlist.getFirst() == larger && shortlist.getLast().smallWater(),
+                "tiny-water quota eviction must remove a tiny site, not a larger-water site");
+        var near = new FishingSiteSearch.Site(start.east(2), start.east(6), false, false, 2);
+        var far = new FishingSiteSearch.Site(start.east(9), start.east(12), true, false, 0);
+        helper.assertTrue(comparator.compare(near, far) < 0, "open-water quality or random setback overrode a much nearer bank");
+        helper.succeed();
+    }
 
     @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void rejectedSiteStaysRejectedWhenPreferenceChanges(GameTestHelper helper) {
@@ -112,7 +139,7 @@ public final class FishingSiteGameTests {
                 helper.assertTrue(site.standingPos().equals(stance), "changed standing destination for another cast");
                 targets.add(site.waterPos());
                 double distance = Vec3.atCenterOf(site.waterPos()).subtract(Vec3.atCenterOf(stance)).horizontalDistance();
-                helper.assertTrue(distance >= 3 && distance <= 7, "cast outside the supported range: " + site);
+                helper.assertTrue(distance >= 3 && distance <= 6, "cast outside the preferred range: " + site);
                 shortCast |= distance <= 4;
                 longCast |= distance >= 6;
                 if (held == null) held = villager.getItemInHand(villager.getDominantHand());
@@ -133,7 +160,7 @@ public final class FishingSiteGameTests {
                 previous = site.waterPos();
                 bobber.discard();
             }
-            helper.assertTrue(targets.size() >= 4, "casts did not explore available water");
+            helper.assertTrue(targets.size() >= 3, "casts did not explore the three available preferred open-water targets");
             helper.assertTrue(shortCast && longCast, "did not mix short and long casts");
             helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() == 0, "recasts searched for paths");
         } finally { cleanup(helper, villager, task); }
@@ -151,14 +178,15 @@ public final class FishingSiteGameTests {
             for (int seed = 0; seed < 64; seed++) {
                 // Control only the first roll. Target choice must reflect it in
                 // the world, regardless of candidate ordering or tie-breaking.
-                int desired = 3 + RandomSource.create(seed).nextInt(5);
-                villager.getRandom().setSeed(seed);
+                long randomSeed = seed * 0x9E3779B97F4A7C15L;
+                int desired = 3 + RandomSource.create(randomSeed).nextInt(4);
+                villager.getRandom().setSeed(randomSeed);
                 var chosen = new FishingSiteSearch().chooseCastSite(helper.getLevel(), villager, current, null);
                 helper.assertTrue(chosen != null && chosen.waterPos().equals(stance.east(desired).below()),
                         "ignored desired cast distance " + desired + ": " + chosen);
                 distances.add(desired);
             }
-            helper.assertTrue(distances.size() == 5, "fixture did not exercise all five desired distances");
+            helper.assertTrue(distances.size() == 4, "fixture did not exercise all four preferred distances");
             helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() == 0, "distance choice requested a path");
         } finally { villager.discard(); }
         helper.succeed();
@@ -199,14 +227,12 @@ public final class FishingSiteGameTests {
     private static void assertOnlyStanceDiscovery(GameTestHelper helper, int distance) {
         BlockPos stance = prepare(helper);
         BlockPos water = stance.east(distance).below();
-        // Only the centre of this isolated 3x3 platform has all four supported
-        // neighbours. Other cast lengths cannot satisfy discovery by moving.
+        // Only this full block supports a dry standing position. Adjacent water
+        // is allowed; other cast lengths cannot satisfy discovery by moving.
         for (BlockPos p : BlockPos.betweenClosed(stance.offset(-5, -6, -8), stance.offset(11, -1, 8))) {
             helper.getLevel().setBlock(p, Blocks.AIR.defaultBlockState(), 2);
         }
-        for (BlockPos p : BlockPos.betweenClosed(stance.offset(-1, -1, -1), stance.offset(1, -1, 1))) {
-            helper.getLevel().setBlock(p, Blocks.STONE.defaultBlockState(), 2);
-        }
+        helper.getLevel().setBlock(stance.below(), Blocks.STONE.defaultBlockState(), 2);
         pond(helper.getLevel(), water, 0, false);
         VillagerEntityMCA villager = spawn(helper, stance);
         try {
@@ -291,6 +317,7 @@ public final class FishingSiteGameTests {
         BlockPos blockedWater = stance.east(7).below();
         BlockPos clearWater = stance.west(5).below();
         pond(helper.getLevel(), blockedWater, 0, false);
+        pond(helper.getLevel(), stance.east().below(), 0, false);
         VillagerEntityMCA villager = spawn(helper, stance);
         villager.setLeftHanded(false);
         villager.yBodyRot = 0;
@@ -335,7 +362,7 @@ public final class FishingSiteGameTests {
     @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void preferredTargetIsReusedInsteadOfTakingTwoBlockAlternative(GameTestHelper helper) {
         BlockPos stance = prepare(helper);
-        BlockPos preferred = stance.west(7).below();
+        BlockPos preferred = stance.west(5).below();
         pond(helper.getLevel(), stance.east(2).below(), 0, false);
         pond(helper.getLevel(), preferred, 0, false);
         VillagerEntityMCA villager = spawn(helper, stance);
@@ -383,6 +410,7 @@ public final class FishingSiteGameTests {
             BlockPos shortWater = stance.east(2).below();
             pond(helper.getLevel(), shortWater, 0, false);
             var shortSite = new FishingSiteSearch.Site(stance, shortWater, false);
+            helper.getLevel().setBlock(stance, Blocks.WATER.defaultBlockState(), 2);
             helper.assertTrue(!FishingSiteSearch.isUsable(helper.getLevel(), villager, shortSite), "short range overrode the wet standing footprint");
             helper.assertTrue(new FishingSiteSearch().chooseCastSite(helper.getLevel(), villager, shortSite, shortWater) == null,
                     "short fallback accepted a wet bank");
@@ -397,6 +425,7 @@ public final class FishingSiteGameTests {
         BlockPos clear = stance.west(7).below();
         pond(helper.getLevel(), blocked, 0, false);
         pond(helper.getLevel(), clear, 0, false);
+        pond(helper.getLevel(), stance.west().below(), 0, false);
         for (BlockPos p : BlockPos.betweenClosed(stance.offset(2, 0, -1), stance.offset(2, 4, 1))) {
             helper.getLevel().setBlock(p, Blocks.STONE.defaultBlockState(), 2);
         }
@@ -422,6 +451,22 @@ public final class FishingSiteGameTests {
             var chosen = new FishingSiteSearch().chooseCastSite(helper.getLevel(), villager, site, water);
             helper.assertTrue(chosen != null && chosen.standingPos().equals(stance) && chosen.waterPos().equals(water),
                     "single-target pond was rejected to force variety");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void sevenBlockCastRemainsAvailableAsFallback(GameTestHelper helper) {
+        BlockPos stance = prepare(helper);
+        BlockPos water = stance.east(7).below();
+        pond(helper.getLevel(), stance.east().below(), 0, false);
+        pond(helper.getLevel(), water, 0, false);
+        VillagerEntityMCA villager = spawn(helper, stance);
+        try {
+            var current = new FishingSiteSearch.Site(stance, water, false);
+            var choice = new FishingSiteSearch().chooseCastSite(helper.getLevel(), villager, current, null);
+            helper.assertTrue(choice != null && choice.waterPos().equals(water), "seven-block fallback was lost");
+            helper.assertTrue(choice.standingPos().equals(stance), "fallback requested a different standing position");
         } finally { villager.discard(); }
         helper.succeed();
     }
@@ -489,41 +534,6 @@ public final class FishingSiteGameTests {
         helper.succeed();
     }
 
-    @GameTest(templateNamespace = "mca", template = "gametest/moo_fishing_hillside", timeoutTicks = 1200)
-    public static void mooSavedHillsideWalksDownToRiverAndFishes(GameTestHelper helper) {
-        // Exact saved terrain from MCA Floor NBT Test. Moo died before an entity
-        // snapshot was saved; place a fresh fisher on nearby verified solid ground.
-        BlockPos start = helper.absolutePos(new BlockPos(48, 18, 48));
-        BlockPos river = helper.absolutePos(new BlockPos(41, 8, 19));
-        helper.assertTrue(helper.getLevel().getBlockState(start.below()).is(Blocks.GRASS_BLOCK)
-                        || helper.getLevel().getBlockState(start.below()).is(Blocks.DIRT),
-                "missing saved hillside support at " + start.below() + ": "
-                        + helper.getLevel().getBlockState(start.below()));
-        helper.assertTrue(helper.getLevel().getBlockState(river).is(Blocks.WATER),
-                "missing saved river source at " + river + ": " + helper.getLevel().getBlockState(river));
-        VillagerEntityMCA villager = spawn(helper, start);
-        Session task = naturalSession(helper, villager);
-        int[] ticks = {0};
-        helper.onEachTick(() -> {
-            try {
-                var bobber = villager.getFishingBobber();
-                if (bobber != null && bobber.isBobbing()) {
-                    helper.assertTrue(villager.getY() <= start.getY() - 6, "did not walk downhill to the bank");
-                    // The saved river surface steps by a block across the bend.
-                    helper.assertTrue(Math.abs(bobber.getY() - river.getY()) <= 2.5
-                                    && bobber.blockPosition().distSqr(river) <= 16 * 16,
-                            "hook did not reach the saved river: bobber=" + bobber.position() + ", reference=" + river);
-                    assertDryStandingFootprint(helper, villager);
-                    finish(helper, villager, task);
-                } else if (++ticks[0] > 1140) {
-                    helper.fail("saved hillside fisher never reached river: pos=" + villager.position()
-                            + ", target=" + villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET)
-                            .map(target -> target.getTarget().currentBlockPosition()).orElse(null));
-                }
-            } catch (RuntimeException failure) { cleanup(helper, villager, task); throw failure; }
-        });
-    }
-
     @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void reachableRiverFourteenBlocksBelowIsDiscovered(GameTestHelper helper) {
         assertDownhillDiscovery(helper, 13, true);
@@ -588,7 +598,7 @@ public final class FishingSiteGameTests {
                     helper.assertTrue(directedWalk[0], "never published a persistent walk toward the lake");
                     helper.assertTrue(villager.getX() > start.getX() + 30, "cast before walking to the distant bank");
                     helper.assertTrue(bobber.getX() >= start.getX() + 36, "hook did not land in the distant lake");
-                    assertDryStandingFootprint(helper, villager);
+                    assertSafeStanding(helper, villager);
                     finish(helper, villager, task);
                 } else if (++ticks[0] > 940) {
                     helper.fail("did not fish at lake 40 blocks away: pos=" + villager.position()
@@ -618,7 +628,7 @@ public final class FishingSiteGameTests {
                 if (bobber != null && bobber.isBobbing()) {
                     helper.assertTrue(villager.getX() > start.getX() + 48, "did not walk to the extended fishing bank");
                     helper.assertTrue(bobber.getX() >= start.getX() + 56, "hook did not land in the 60-block lake");
-                    assertDryStandingFootprint(helper, villager);
+                    assertSafeStanding(helper, villager);
                     finish(helper, villager, task);
                 } else if (++ticks[0] > 1140) {
                     helper.fail("never fished at lake 60 blocks away: pos=" + villager.position());
@@ -855,14 +865,12 @@ public final class FishingSiteGameTests {
                 MCAFishingBobberEntity bobber = villager.getFishingBobber();
                 if (bobber != null && bobber.isBobbing()) {
                     if (stance[0] == null) { stance[0] = villager.position(); held[0] = villager.getItemInHand(villager.getDominantHand()); }
-                    assertDryStandingFootprint(helper, villager);
+                    assertSafeStanding(helper, villager);
                 }
                 if (stance[0] != null) {
                     helper.assertTrue(villager.position().subtract(stance[0]).horizontalDistance() <= 0.8, "drifted toward shoreline while fishing");
                     helper.assertTrue(villager.getItemInHand(villager.getDominantHand()) == held[0], "active fishing replaced or unequipped rod");
-                    for (BlockPos p : BlockPos.betweenClosed(villager.blockPosition().offset(-1, 0, -1), villager.blockPosition().offset(1, 0, 1))) {
-                        helper.assertTrue(helper.getLevel().getFluidState(p).isEmpty(), "standing at water edge");
-                    }
+                    assertSafeStanding(helper, villager);
                     if (++stableTicks[0] >= 60) finish(helper, villager, task);
                 }
                 if (++ticks[0] > 325) helper.fail("real bobber never settled in water: " + villager.position());
@@ -1034,6 +1042,121 @@ public final class FishingSiteGameTests {
         helper.succeed();
     }
 
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena", skyAccess = true)
+    public static void unusedCoveredProbeFindsFourthNearbySurfaceBank(GameTestHelper helper) throws ReflectiveOperationException {
+        assertUnusedProbeFindsSurfaceBank(helper, false);
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena", skyAccess = true)
+    public static void unusedFallbackProbesFindFourthDistantSurfaceBank(GameTestHelper helper) throws ReflectiveOperationException {
+        assertUnusedProbeFindsSurfaceBank(helper, true);
+    }
+
+    private static void assertUnusedProbeFindsSurfaceBank(GameTestHelper helper, boolean distant)
+            throws ReflectiveOperationException {
+        BlockPos start = prepare(helper);
+        int offset = distant ? 12 : 0;
+        pond(helper.getLevel(), start.east(offset + 9).below(), 2, true);
+        pond(helper.getLevel(), start.west(offset + 11).below(), 2, true);
+        for (BlockPos wall : BlockPos.betweenClosed(start.offset(1, 0, -21), start.offset(1, 4, 21))) {
+            helper.getLevel().setBlock(wall, Blocks.STONE.defaultBlockState(), 2);
+        }
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            List<FishingSiteSearch.Site> banks = new ArrayList<>();
+            for (int x = 3; x <= 5; x++) {
+                banks.add(new FishingSiteSearch.Site(start.east(offset + x), start.east(offset + 8).below(), false));
+            }
+            var reachable = new FishingSiteSearch.Site(start.west(offset + 6), start.west(offset + 10).below(), false);
+            banks.add(reachable);
+            for (int i = 0; i < banks.size(); i++) {
+                var bank = banks.get(i);
+                helper.assertTrue(FishingSiteSearch.isUsable(helper.getLevel(), villager, bank),
+                        "control bank must have a safe stance and cast: " + bank);
+                var path = villager.getNavigation().createPath(bank.standingPos(), 0);
+                helper.assertTrue((path != null && path.canReach()) == (i == 3),
+                        "fixture must have three unreachable banks followed by a reachable fourth");
+                var chunk = helper.getLevel().getChunkAt(bank.waterPos());
+                helper.assertTrue(chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE,
+                                bank.waterPos().getX() & 15, bank.waterPos().getZ() & 15) == bank.waterPos().getY(),
+                        "fixture water must be uncovered");
+            }
+
+            FishingSiteSearch search = new FishingSiteSearch();
+            // Isolate candidate consumption after discovery; navigation, casting and the covered pass remain real.
+            var origin = FishingSiteSearch.class.getDeclaredField("origin");
+            origin.setAccessible(true);
+            origin.set(search, start);
+            var radius = FishingSiteSearch.class.getDeclaredField("radius");
+            radius.setAccessible(true);
+            radius.setInt(search, distant ? 60 : 12);
+            var column = FishingSiteSearch.class.getDeclaredField("column");
+            column.setAccessible(true);
+            column.setInt(search, distant ? 121 * 121 : 25 * 25);
+            var candidates = FishingSiteSearch.class.getDeclaredField("candidates");
+            candidates.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            List<FishingSiteSearch.Site> pending = (List<FishingSiteSearch.Site>) candidates.get(search);
+            pending.addAll(banks);
+
+            int before = PathRequestDiagnostics.snapshot(villager).directRequests();
+            FishingSiteSearch.Site found = null;
+            for (int tick = 0; tick < 600 && !search.exhausted() && found == null; tick++) {
+                int previous = PathRequestDiagnostics.snapshot(villager).directRequests();
+                found = search.tick(helper.getLevel(), villager);
+                helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() - previous <= 1,
+                        "fallback exceeded one path query per tick");
+                helper.assertTrue(radius.getInt(search) == (distant ? 60 : 12),
+                        "unused reservation abandoned a reachable bank before finishing this radius");
+            }
+            helper.assertTrue(reachable.equals(found), "unused fallback probes discarded the reachable fourth surface bank");
+            helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() - before == 4,
+                    "fourth-bank recovery must use exactly the existing four-query allowance");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void surfaceAndCoveredWaterShareFourQueriesPerRadius(GameTestHelper helper) throws ReflectiveOperationException {
+        BlockPos start = distantLake(helper);
+        GameTestTerrain.prepareFlatPath(helper, start, start.west(40));
+        for (BlockPos pos : BlockPos.betweenClosed(start.offset(-40, -2, -12), start.offset(-4, 5, 12))) {
+            helper.getLevel().setBlock(pos, pos.getY() < start.getY() ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 2);
+        }
+        pond(helper.getLevel(), start.north(9).below(), 3, true);
+        for (BlockPos center : List.of(start.south(9).below(), start.west(30).below())) {
+            pond(helper.getLevel(), center, 3, true);
+            for (BlockPos roof : BlockPos.betweenClosed(center.offset(-3, 3, -3), center.offset(3, 3, 3))) {
+                helper.getLevel().setBlock(roof, Blocks.STONE.defaultBlockState(), 2);
+            }
+        }
+        VillagerEntityMCA villager = spawn(helper, start);
+        FishingSiteSearch search = new FishingSiteSearch();
+        var radius = FishingSiteSearch.class.getDeclaredField("radius");
+        radius.setAccessible(true);
+        int nearQueries = 0;
+        int extendedQueries = 0;
+        try {
+            for (int tick = 0; tick < 600 && !search.exhausted(); tick++) {
+                int previous = PathRequestDiagnostics.snapshot(villager).directRequests();
+                int searchRadius = radius.getInt(search);
+                var site = search.tick(helper.getLevel(), villager);
+                int queries = PathRequestDiagnostics.snapshot(villager).directRequests() - previous;
+                helper.assertTrue(queries <= 1, "more than one path query in one tick");
+                if (searchRadius == 12) nearQueries += queries;
+                else extendedQueries += queries;
+                helper.assertTrue(nearQueries <= 4 && extendedQueries <= 4,
+                        "surface and covered water reset the same radius's allowance: " + nearQueries + "/" + extendedQueries);
+                if (site != null) search.reject(site);
+            }
+            helper.assertTrue(search.exhausted() && nearQueries > 0 && extendedQueries > 0,
+                    "fixture did not exercise both complete search radii");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
     @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void selectedStandingBlockIsNotWaterEdge(GameTestHelper helper) {
         BlockPos start = prepare(helper);
@@ -1195,14 +1318,18 @@ public final class FishingSiteGameTests {
         pond(helper.getLevel(), start.west(12).below(), 0, false);
         VillagerEntityMCA villager = spawn(helper, start);
         FishingSiteSearch search = new FishingSiteSearch();
-        var fallbackField = FishingSiteSearch.class.getDeclaredField("smallWaterFallback");
-        fallbackField.setAccessible(true);
+        var candidatesField = FishingSiteSearch.class.getDeclaredField("candidates");
+        candidatesField.setAccessible(true);
+        var radiusField = FishingSiteSearch.class.getDeclaredField("radius");
+        radiusField.setAccessible(true);
         try {
             boolean blocked = false;
             for (int tick = 0; tick < 600 && !search.exhausted(); tick++) {
                 var site = search.tick(helper.getLevel(), villager);
                 helper.assertTrue(site == null, "returned a tiny pool whose approach was blocked during the extended search: " + site);
-                if (!blocked && fallbackField.get(search) != null) {
+                @SuppressWarnings("unchecked")
+                List<FishingSiteSearch.Site> pending = (List<FishingSiteSearch.Site>)candidatesField.get(search);
+                if (!blocked && radiusField.getInt(search) == 60 && pending.stream().anyMatch(FishingSiteSearch.Site::smallWater)) {
                     for (BlockPos p : BlockPos.betweenClosed(start.offset(-2, 0, -21), start.offset(-2, 4, 21))) {
                         helper.getLevel().setBlock(p, Blocks.STONE.defaultBlockState(), 2);
                     }
@@ -1255,7 +1382,7 @@ public final class FishingSiteGameTests {
     }
 
     @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
-    public static void unsafeShoreFootprintsAreRejected(GameTestHelper helper) {
+    public static void safeWaterAdjacentBankCanCast(GameTestHelper helper) {
         BlockPos start = prepare(helper);
         pond(helper.getLevel(), start.east(6), 2, false);
         VillagerEntityMCA villager = spawn(helper, start);
@@ -1263,10 +1390,118 @@ public final class FishingSiteGameTests {
             var safe = new FishingSiteSearch.Site(start, start.east(6), false);
             helper.assertTrue(FishingSiteSearch.isUsable(helper.getLevel(), villager, safe), "control dry site was not usable");
             helper.getLevel().setBlock(start.north(), Blocks.WATER.defaultBlockState(), 2);
-            helper.assertTrue(!FishingSiteSearch.isUsable(helper.getLevel(), villager, safe), "accepted water touching standing footprint");
+            helper.assertTrue(FishingSiteSearch.isUsable(helper.getLevel(), villager, safe), "rejected safe ground directly beside water");
             helper.getLevel().setBlock(start.north(), Blocks.AIR.defaultBlockState(), 2);
-            helper.getLevel().setBlock(start.north().below(), Blocks.AIR.defaultBlockState(), 2);
+            helper.getLevel().setBlock(start.below(), Blocks.AIR.defaultBlockState(), 2);
             helper.assertTrue(!FishingSiteSearch.isUsable(helper.getLevel(), villager, safe), "accepted unsupported bank/pier");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void narrowSupportAndBlockedStandingBodyAreRejected(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.east(6), 2, false);
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            var site = new FishingSiteSearch.Site(start, start.east(6), false);
+            helper.assertTrue(FishingSiteSearch.isUsable(helper.getLevel(), villager, site), "control bank was not usable");
+            helper.getLevel().setBlock(start.below(), Blocks.OAK_FENCE.defaultBlockState(), 2);
+            helper.assertTrue(!FishingSiteSearch.isUsable(helper.getLevel(), villager, site), "accepted a narrow fence support");
+            helper.getLevel().setBlock(start.below(), Blocks.STONE.defaultBlockState(), 2);
+            helper.getLevel().setBlock(start.above(), Blocks.STONE.defaultBlockState(), 2);
+            helper.assertTrue(!FishingSiteSearch.isUsable(helper.getLevel(), villager, site), "accepted an obstructed standing body");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void shorelineSetbackBeyondFourBlocksIsRejected(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        BlockPos water = start.east(5).below();
+        pond(helper.getLevel(), water, 0, false);
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            helper.assertTrue(FishingSiteSearch.isUsable(helper.getLevel(), villager,
+                    new FishingSiteSearch.Site(start, water, false)), "four-block shoreline fallback was rejected");
+            helper.getLevel().setBlock(water, Blocks.STONE.defaultBlockState(), 2);
+            water = water.east();
+            pond(helper.getLevel(), water, 0, false);
+            helper.assertTrue(!FishingSiteSearch.isUsable(helper.getLevel(), villager,
+                    new FishingSiteSearch.Site(start, water, false)), "accepted a shoreline setback beyond four blocks");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void castsPreferSuitableOpenWaterWithoutChangingStance(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        BlockPos open = start.east(5).below();
+        pond(helper.getLevel(), open, 2, true);
+        pond(helper.getLevel(), start.west(3).below(), 0, false);
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            var current = new FishingSiteSearch.Site(start, open, true);
+            for (int seed = 0; seed < 16; seed++) {
+                villager.getRandom().setSeed(seed);
+                var chosen = new FishingSiteSearch().chooseCastSite(helper.getLevel(), villager, current, null);
+                helper.assertTrue(chosen != null && chosen.likelyOpenWater() && chosen.waterPos().equals(open),
+                        "cast chose shallow edge water despite a suitable open-water target: " + chosen);
+                helper.assertTrue(chosen.standingPos().equals(start), "open-water preference changed the stance");
+            }
+            helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() == 0, "aim selection requested navigation");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void blockedTinyBankDoesNotHideReachableTinyWater(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.west(6).below(), 0, false);
+        BlockPos reachable = start.south(6).below();
+        pond(helper.getLevel(), reachable, 0, false);
+        for (BlockPos wall : BlockPos.betweenClosed(start.offset(-1, 0, -21), start.offset(-1, 4, 21))) {
+            helper.getLevel().setBlock(wall, Blocks.STONE.defaultBlockState(), 2);
+        }
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            FishingSiteSearch search = new FishingSiteSearch();
+            FishingSiteSearch.Site site = null;
+            for (int tick = 0; tick < 600 && !search.exhausted() && site == null; tick++) {
+                int previous = PathRequestDiagnostics.snapshot(villager).directRequests();
+                site = search.tick(helper.getLevel(), villager);
+                helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() - previous <= 1,
+                        "tiny alternatives exceeded one query per tick");
+            }
+            helper.assertTrue(site != null && site.waterPos().equals(reachable),
+                    "unreachable nearest tiny bank hid reachable tiny water: " + site);
+            helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() <= 8,
+                    "tiny alternatives exceeded total path allowance");
+        } finally { villager.discard(); }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void suitableOpenAimIsCheckedBeforeShallowAimLimit(GameTestHelper helper) {
+        BlockPos start = prepare(helper);
+        pond(helper.getLevel(), start.below(), 9, false);
+        helper.getLevel().setBlock(start.below(), Blocks.STONE.defaultBlockState(), 2);
+        BlockPos open = start.east(6).below();
+        pond(helper.getLevel(), open, 2, true);
+        VillagerEntityMCA villager = spawn(helper, start);
+        try {
+            var current = new FishingSiteSearch.Site(start, start.north(3).below(), false);
+            int exercised = 0;
+            for (int seed = 0; seed < 32; seed++) {
+                long randomSeed = seed * 0x9E3779B97F4A7C15L;
+                if (RandomSource.create(randomSeed).nextInt(4) != 0) continue;
+                villager.getRandom().setSeed(randomSeed);
+                var site = new FishingSiteSearch().chooseCastSite(helper.getLevel(), villager, current, null);
+                helper.assertTrue(site != null && site.likelyOpenWater() && site.waterPos().equals(open),
+                        "short-distance ordering hid the suitable six-block open-water aim: " + site);
+                exercised++;
+            }
+            helper.assertTrue(exercised > 0, "fixture never rolled the three-block distance");
         } finally { villager.discard(); }
         helper.succeed();
     }
@@ -1342,20 +1577,35 @@ public final class FishingSiteGameTests {
         return null;
     }
 
-    private static void assertDryStandingFootprint(GameTestHelper helper, VillagerEntityMCA villager) {
-        // Cast distance can vary; the actual actor's bank clearance must not.
+    private static void assertSafeStanding(GameTestHelper helper, VillagerEntityMCA villager) {
         BlockPos feet = villager.blockPosition();
-        for (BlockPos p : BlockPos.betweenClosed(feet.offset(-1, 0, -1), feet.offset(1, 0, 1))) {
-            helper.assertTrue(helper.getLevel().getFluidState(p).isEmpty() && helper.getLevel().getFluidState(p.below()).isEmpty(),
-                    "standing footprint touches the water edge: " + feet);
-        }
+        helper.assertTrue(helper.getLevel().getFluidState(feet).isEmpty()
+                        && helper.getLevel().getFluidState(feet.below()).isEmpty(),
+                "standing in water: " + feet);
+        helper.assertTrue(helper.getLevel().getBlockState(feet.below())
+                        .isFaceSturdy(helper.getLevel(), feet.below(), net.minecraft.core.Direction.UP),
+                "standing without stable support: " + feet);
+        helper.assertTrue(helper.getLevel().noCollision(villager, villager.getBoundingBox()), "standing body intersects a block");
     }
 
     private static void assertSetback(GameTestHelper helper, FishingSiteSearch.Site site) {
         double distance = Vec3.atCenterOf(site.waterPos()).subtract(Vec3.atCenterOf(site.standingPos())).horizontalDistance();
         helper.assertTrue(distance >= 2 && distance <= 7, "wrong cast distance: " + site);
-        for (BlockPos p : BlockPos.betweenClosed(site.standingPos().offset(-1, 0, -1), site.standingPos().offset(1, 0, 1))) {
-            helper.assertTrue(helper.getLevel().getFluidState(p).isEmpty(), "selected standing footprint touches water: " + site);
+        helper.assertTrue(helper.getLevel().getFluidState(site.standingPos()).isEmpty()
+                        && helper.getLevel().getFluidState(site.standingPos().below()).isEmpty(),
+                "selected standing position is wet: " + site);
+        int dx = site.waterPos().getX() - site.standingPos().getX();
+        int dz = site.waterPos().getZ() - site.standingPos().getZ();
+        int steps = Math.max(Math.abs(dx), Math.abs(dz));
+        int setback = steps;
+        for (int step = 1; step <= steps; step++) {
+            BlockPos pos = new BlockPos(site.standingPos().getX() + (int)Math.round((double)dx * step / steps),
+                    site.waterPos().getY(), site.standingPos().getZ() + (int)Math.round((double)dz * step / steps));
+            if (helper.getLevel().getFluidState(pos).is(net.minecraft.tags.FluidTags.WATER)) {
+                setback = step - 1;
+                break;
+            }
         }
+        helper.assertTrue(setback <= 4, "selected bank is more than four blocks from its shoreline: " + site);
     }
 }

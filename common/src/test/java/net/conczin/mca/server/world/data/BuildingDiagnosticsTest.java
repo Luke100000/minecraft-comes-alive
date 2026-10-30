@@ -13,6 +13,39 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class BuildingDiagnosticsTest {
     @Test
+    void compatibilityScanConstructorsLeaveUnknownProvenanceUnknown() {
+        BlockPos source = new BlockPos(10, 65, 20);
+        BlockPos selected = new BlockPos(10, 64, 20);
+        FloorGeometry floor = new FloorGeometry(Set.of(new FloorGeometry.Cell(selected, 68)), List.of());
+        SelectedFloorScanner.Result physical = new SelectedFloorScanner.Result(Building.validationResult.SUCCESS,
+                floor, selected, source, 64, selected, selected.above(3), Set.of(), Set.of(), Set.of());
+        StructureScanner.Result structure = new StructureScanner.Result(Building.validationResult.SUCCESS, source, physical);
+
+        assertNull(physical.traversalSeed());
+        assertNull(structure.discoveryInput());
+        assertEquals(source, structure.source());
+        assertEquals(selected, physical.seed());
+    }
+
+    @Test
+    void scanProvenanceSnapshotsMutableInputPositions() {
+        BlockPos selected = new BlockPos(10, 64, 20);
+        BlockPos.MutableBlockPos discovery = selected.mutable();
+        BlockPos.MutableBlockPos traversal = new BlockPos.MutableBlockPos(0, 64, 0);
+        FloorGeometry floor = new FloorGeometry(Set.of(new FloorGeometry.Cell(selected, 68)), List.of());
+        SelectedFloorScanner.Result physical = new SelectedFloorScanner.Result(Building.validationResult.SUCCESS,
+                floor, selected, selected, 64, selected, selected.above(3), Set.of(), Set.of(), Set.of(), traversal);
+        StructureScanner.Result structure = new StructureScanner.Result(Building.validationResult.SUCCESS,
+                selected, physical, discovery);
+        discovery.set(99, 99, 99);
+        traversal.set(99, 99, 99);
+
+        assertEquals(new BlockPos(10, 64, 20), structure.discoveryInput());
+        assertEquals(new BlockPos(0, 64, 0), physical.traversalSeed());
+        assertEquals(selected, physical.seed());
+    }
+
+    @Test
     void refreshedPersistedFloorAnchorDoesNotProveASeparateUpperFloor() throws Exception {
         BlockPos source = new BlockPos(0, 76, 0);
         FloorGeometry geometry = new FloorGeometry(Set.of(new FloorGeometry.Cell(source.above(), 88)), List.of());

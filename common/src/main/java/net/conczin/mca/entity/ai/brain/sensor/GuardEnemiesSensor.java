@@ -19,7 +19,9 @@ import net.minecraft.world.entity.ai.memory.NearestVisibleLivingEntities;
 import net.minecraft.world.entity.ai.sensing.Sensor;
 import net.minecraft.world.entity.ai.targeting.TargetingConditions;
 import net.minecraft.world.entity.monster.Enemy;
+import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.phys.AABB;
 
 import java.util.ArrayList;
@@ -173,6 +175,9 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             Optional<Player> followedPlayer,
             Optional<Integer> configuredPriority
     ) {
+        if (entity instanceof Creeper) {
+            return canAttackCreeper((Creeper) entity) ? 9 : -1;
+        }
         if (entity instanceof VillagerEntityMCA villager) {
             return villager.isHostile() ? 10 : -1;
         }
@@ -197,6 +202,10 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             return 3;
         }
         return -1;
+    }
+
+    public static boolean canAttackCreeper(Creeper creeper) {
+        return creeper.getTarget() instanceof Villager;
     }
 
     private AABB getGuardScanBounds(VillagerEntityMCA guard, Optional<Player> followedPlayer) {

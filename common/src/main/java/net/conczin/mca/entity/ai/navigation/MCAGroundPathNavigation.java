@@ -16,6 +16,11 @@ import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.ai.navigation.GroundPathNavigation;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.PathNavigationRegion;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.FenceGateBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathFinder;
@@ -23,6 +28,11 @@ import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.shapes.BooleanOp;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Set;
 
@@ -420,6 +430,10 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
     @Override
     public boolean shouldRecomputePath(BlockPos changed) {
+        return shouldRecomputePath(changed, null, null);
+    }
+
+    public boolean shouldRecomputePath(BlockPos changed, @Nullable BlockState before, @Nullable BlockState after) {
         recordRetryInvalidation(changed);
         if (!super.shouldRecomputePath(changed)) {
             return false;
@@ -430,9 +444,8 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (activePath == null || !activePath.canReach()) {
             // A change outside a partial path can make its destination reachable.
             shouldRecompute = true;
-        } else if (PathingBlockInteraction.canInteractWithFenceGate(this.level.getBlockState(changed))) {
-            // MCA's evaluator accepts a closed, hand-operated fence gate as a door,
-            // so toggling one cannot invalidate an already-reachable route.
+        } else if (before != null && after != null && isOnlyOpenToggle(before, after)
+                && togglePreservesRoute(changed, before, after, activePath)) {
             shouldRecompute = false;
         } else {
             // Vanilla's remaining-node-count radius can include blocks many blocks
@@ -462,6 +475,68 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             PathRequestDiagnostics.recordBlockRecompute(this.mob, changed, activePath);
         }
         return shouldRecompute;
+    }
+
+    private static boolean isOnlyOpenToggle(BlockState before, BlockState after) {
+        return before.is(after.getBlock()) && before.hasProperty(BlockStateProperties.OPEN)
+                && after.hasProperty(BlockStateProperties.OPEN)
+                && before.getValue(BlockStateProperties.OPEN) != after.getValue(BlockStateProperties.OPEN)
+                && before.setValue(BlockStateProperties.OPEN, after.getValue(BlockStateProperties.OPEN)).equals(after);
+    }
+
+    private boolean togglePreservesRoute(BlockPos changed, BlockState before, BlockState after, Path route) {
+        if (PathingBlockInteraction.isHandOpenableTrapDoor(after)) {
+            return trapdoorIsClearOfRoute(changed, before, after, route);
+        }
+        boolean door = after.getBlock().getClass() == DoorBlock.class
+                && PathingBlockInteraction.canInteractWithDoor(after);
+        boolean gate = after.getBlock().getClass() == FenceGateBlock.class
+                && PathingBlockInteraction.canInteractWithFenceGate(after);
+        if ((!door && !gate) || this.mob.getBbWidth() >= 1.0F) return false;
+
+        BlockPos base = door && after.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.UPPER
+                ? changed.below() : changed;
+        boolean crosses = false;
+        for (int i = Math.max(0, route.getNextNodeIndex() - 1); i < route.getNodeCount(); i++) {
+            Node node = route.getNode(i);
+            if (node.x != base.getX() || node.z != base.getZ()) continue;
+            // A block underneath a node may be supporting it. Turns and vertical
+            // transitions also need the ordinary geometry invalidation.
+            if ((door && node.y != base.getY())
+                    || (gate && (base.getY() < node.y || base.getY() - node.y >= Mth.ceil(this.mob.getBbHeight())))
+                    || i == 0 || i == route.getNodeCount() - 1) return false;
+            Node previous = route.getNode(i - 1);
+            Node next = route.getNode(i + 1);
+            if (previous.y != node.y || next.y != node.y
+                    || previous.x + next.x != 2 * node.x || previous.z + next.z != 2 * node.z) return false;
+            if (!(Math.abs(next.x - previous.x) == 2 && next.z == previous.z)
+                    && !(Math.abs(next.z - previous.z) == 2 && next.x == previous.x)) return false;
+            if (door && !PathingBlockInteraction.shouldBeOpenForMovement(after,
+                    previous.x == next.x ? Direction.Axis.Z : Direction.Axis.X)) return false;
+            crosses = true;
+        }
+        return crosses;
+    }
+
+    private boolean trapdoorIsClearOfRoute(BlockPos changed, BlockState before, BlockState after, Path route) {
+        CollisionContext context = CollisionContext.of(this.mob);
+        VoxelShape changedShape = Shapes.or(before.getCollisionShape(this.level, changed, context),
+                after.getCollisionShape(this.level, changed, context)).move(changed.getX(), changed.getY(), changed.getZ());
+        // Include step clearance and raised standing poses; uncertain hatches retain
+        // replanning. In particular, never exempt support blocks or ladder exits.
+        double clearance = this.mob.maxUpStep() + 0.5D;
+        AABB previous = this.mob.getBoundingBox().expandTowards(0, clearance, 0);
+        for (int i = Math.max(0, route.getNextNodeIndex() - 1); i < route.getNodeCount(); i++) {
+            AABB next = PathNodeGeometry.bodyAt(this.mob, Vec3.atBottomCenterOf(route.getNode(i).asBlockPos()))
+                    .expandTowards(0, clearance, 0);
+            AABB sweep = previous.minmax(next);
+            if (sweep.maxX > changed.getX() && sweep.minX < changed.getX() + 1
+                    && sweep.maxZ > changed.getZ() && sweep.minZ < changed.getZ() + 1
+                    && changed.getY() <= Math.max(previous.minY, next.minY)) return false;
+            if (Shapes.joinIsNotEmpty(Shapes.create(sweep), changedShape, BooleanOp.AND)) return false;
+            previous = next;
+        }
+        return true;
     }
 
     private void recordRetryInvalidation(BlockPos changed) {

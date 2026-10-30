@@ -31,7 +31,7 @@ public class ExtendedMeleeAttackTask extends Behavior<Mob> {
     @Override
     protected boolean checkExtraStartConditions(ServerLevel world, Mob attacker) {
         LivingEntity target = getTarget(attacker);
-        return BehaviorUtils.canSee(attacker, target) && withinRange(attacker, target);
+        return attacker.canAttack(target) && BehaviorUtils.canSee(attacker, target) && withinRange(attacker, target);
     }
 
     @Override

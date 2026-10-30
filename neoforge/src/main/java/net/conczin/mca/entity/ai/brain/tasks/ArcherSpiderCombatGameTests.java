@@ -279,6 +279,9 @@ public final class ArcherSpiderCombatGameTests {
         helper.onEachTick(() -> {
             ticks[0]++;
             bowTask.tick(helper.getLevel(), archer, startTime + ticks[0]);
+            // NoAI skips native controllers; the manual BowTask fixture still
+            // needs LookControl to turn toward the spider before release.
+            archer.getLookControl().tick();
             if (!archer.isAlive()) {
                 helper.fail("archer died before killing the " + targetName);
                 return;

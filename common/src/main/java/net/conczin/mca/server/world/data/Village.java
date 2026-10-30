@@ -561,6 +561,20 @@ public class Village implements Iterable<Building> {
         return getBuildingsOfType(type).findAny().isPresent();
     }
 
+    /** Snapshot for a group of requirement checks, with each effective room type resolved once. */
+    public Set<String> getPresentBuildingTypes() {
+        Set<String> types = new HashSet<>();
+        RoomTypeResolver resolver = RoomTypeResolver.create(this);
+        getRooms().forEach(room -> {
+            BuildingType effective = resolver.effectiveType(room);
+            if (effective != null && !effective.grouped()) types.add(effective.name());
+        });
+        getExternalBuildings().filter(Building::isComplete).forEach(building -> {
+            if (building.getBuildingType().grouped()) types.add(building.getType());
+        });
+        return Set.copyOf(types);
+    }
+
     List<BuildingType> getMatchingRoomTypes(Building candidate) {
         return candidate == null ? List.of() : List.copyOf(candidate.getVisibleMatchingTypes());
     }

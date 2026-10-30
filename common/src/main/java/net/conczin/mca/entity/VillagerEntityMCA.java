@@ -9,6 +9,7 @@ import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
+import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.conczin.mca.entity.ai.chatAI.ChatAI;
 import net.conczin.mca.entity.ai.chatAI.ChatAIContext;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
@@ -63,12 +64,15 @@ import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
 import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
+import net.minecraft.world.entity.ai.behavior.OneShot;
+import net.minecraft.world.entity.ai.behavior.SetWalkTargetAwayFrom;
 import net.minecraft.world.entity.ai.control.BodyRotationControl;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.entity.monster.CrossbowAttackMob;
+import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.monster.ZombieVillager;
 import net.minecraft.world.entity.npc.Villager;
@@ -116,6 +120,8 @@ import java.util.function.Predicate;
  * drops exclude props and inventory references, so borrowed items are not counted a second time.
  */
 public class VillagerEntityMCA extends Villager implements VillagerLike<VillagerEntityMCA>, MenuProvider, CompassionateEntity<BreedableRelationship>, CrossbowAttackMob {
+    private static final OneShot<PathfinderMob> CREEPER_ESCAPE = SetWalkTargetAwayFrom.entity(
+            MemoryModuleTypeMCA.NEAREST_IGNITED_CREEPER, 0.75F, 16, true);
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("InfectionProgress", 0.0f);
     private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -AgeState.getMaxAge());
     private static final float VEHICLE_ATTACHMENT_Y = 0.6F;
@@ -179,7 +185,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     protected BodyRotationControl createBodyControl() {
         return new MCABodyRotationControl(
                 this,
-                () -> this.isUsingItem() && this.getUseItem().getItem() instanceof ProjectileWeaponItem
+                // Aggression is synchronized to clients and remains set through
+                // shot cooldowns; server-only Brain memories cannot drive pose.
+                () -> this.isAggressive() && RangedWeaponHelper.isHoldingSupportedWeapon(this)
         );
     }
 
@@ -428,11 +436,54 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public boolean doHurtTarget(Entity target) {
+        if (target instanceof LivingEntity living && !canAttack(living)) {
+            return false;
+        }
         boolean hurt = super.doHurtTarget(target);
         if (hurt) {
             attackedEntity(target);
         }
         return hurt;
+    }
+
+    @Override
+    public boolean canAttack(LivingEntity target) {
+        return (!(target instanceof Creeper creeper) || GuardEnemiesSensor.canAttackCreeper(creeper))
+                && !hasIgnitedCreeperThreat() && super.canAttack(target);
+    }
+
+    private boolean hasIgnitedCreeperThreat() {
+        return getBrain().getMemoryInternal(MemoryModuleTypeMCA.NEAREST_IGNITED_CREEPER)
+                .filter(threat -> threat instanceof Creeper creeper && creeper.isIgnited()
+                        && threat.isAlive() && !threat.isRemoved() && threat.level() == level()
+                        && distanceToSqr(threat) < 16.0 * 16.0).isPresent();
+    }
+
+    @Override
+    protected void customServerAiStep() {
+        super.customServerAiStep();
+        if (hasIgnitedCreeperThreat()) {
+            if (isSleeping()) {
+                stopSleeping();
+            }
+            getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
+            stopUsingItem();
+            setAggressive(false);
+            var threat = getBrain().getMemory(MemoryModuleTypeMCA.NEAREST_IGNITED_CREEPER).orElseThrow();
+            var walk = getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
+            if (walk == null || walk.getTarget().currentPosition().subtract(position())
+                    .dot(threat.position().subtract(position())) >= 0) {
+                // Vanilla's escape sampler can fail without replacing WALK_TARGET.
+                // Retract conflicting intent first; retain an existing retreat.
+                getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+                getBrain().eraseMemory(MemoryModuleType.PATH);
+                getNavigation().stop();
+                getMoveControl().setWantedPosition(getX(), getY(), getZ(), 0);
+            }
+            // Run after ordinary Brain movement producers so emergency escape wins.
+            // Trigger the vanilla one-shot directly: it carries no per-villager state.
+            CREEPER_ESCAPE.trigger((ServerLevel) level(), this, level().getGameTime());
+        }
     }
 
     public void onRangedAttackLanded(Entity target) {

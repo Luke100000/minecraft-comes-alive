@@ -38,6 +38,182 @@ public final class ArcherCombatStabilityGameTests {
 
     private ArcherCombatStabilityGameTests() { }
 
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 180)
+    public static void naturalRetreatFacesEnemyThroughDrawAndCooldown(GameTestHelper helper) {
+        Fixture f = fixture(helper, false);
+        f.target().absMoveTo(f.archer().getX() + 5, f.archer().getY(), f.archer().getZ());
+        f.target().setTarget(f.archer());
+        int[] walkingTicks = {0};
+        boolean[] drawing = {false}, cooldown = {false};
+        boolean[] previouslyDrew = {false};
+        helper.onEachTick(() -> {
+            previouslyDrew[0] |= f.archer().isUsingItem();
+            if (RangedCombatState.current(f.archer()).orElse(null) == RangedCombatState.KITE
+                    && !f.archer().getNavigation().isDone()) {
+                walkingTicks[0]++;
+                if (f.archer().isUsingItem()) drawing[0] = true;
+                else if (previouslyDrew[0]) cooldown[0] = true;
+                if (walkingTicks[0] > 12) {
+                    double targetYaw = Math.toDegrees(Math.atan2(f.target().getZ() - f.archer().getZ(),
+                            f.target().getX() - f.archer().getX())) - 90;
+                    helper.assertTrue(Math.abs(net.minecraft.util.Mth.wrapDegrees(targetYaw - f.archer().yBodyRot)) < 20,
+                            "ordinary retreat body faces away from its enemy while "
+                                    + (f.archer().isUsingItem() ? "drawing" : "between shots"));
+                }
+            }
+            if (helper.getTick() == 130) {
+                helper.assertTrue(walkingTicks[0] > 20 && drawing[0] && cooldown[0],
+                        "fixture did not exercise drawing/cooldown during native retreat: ticks="
+                                + walkingTicks[0] + ", drawing=" + drawing[0] + ", cooldown=" + cooldown[0]);
+                helper.assertTrue(f.archer().position().distanceToSqr(Vec3.atBottomCenterOf(f.start())) > 4,
+                        "facing correction stopped native escape movement");
+                helper.succeed();
+            }
+        });
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 100)
+    public static void movingArcherTurnsBeforeReleasingBehindItsBody(GameTestHelper helper) {
+        Fixture f = fixture(helper, true);
+        BowTask<VillagerEntityMCA> bow = startBow(helper, f);
+        helper.runAfterDelay(22, () -> {
+            helper.assertTrue(f.archer().getTicksUsingItem() >= 20, "fixture did not complete its bow draw");
+            f.archer().getBrain().setMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE, RangedCombatState.KITE);
+            helper.assertTrue(f.archer().getNavigation().moveTo(f.archer().getX() - 8, f.archer().getY(), f.archer().getZ(), 0.75),
+                    "fixture could not start native retreat");
+            var retreat = f.archer().getNavigation().getPath();
+            f.archer().setYRot(90);
+            f.archer().yBodyRot = f.archer().yHeadRot = 90;
+            bow.tick(helper.getLevel(), f.archer(), f.now() + 23);
+            helper.assertTrue(ownedArrows(helper, f).isEmpty(), "archer released an arrow behind its displayed body");
+            helper.assertTrue(f.archer().isUsingItem(), "turning to aim unnecessarily discarded a completed draw");
+            f.archer().yHeadRot = f.archer().yBodyRot = 270;
+            bow.tick(helper.getLevel(), f.archer(), f.now() + 24);
+            helper.assertTrue(ownedArrows(helper, f).size() == 1, "aligned retreat did not release exactly one arrow");
+            helper.assertTrue(f.archer().getNavigation().getPath() == retreat && !f.archer().getNavigation().isDone(),
+                    "shooting replaced or stopped the native escape route");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 100)
+    public static void movingArcherCanShootDirectlyAboveWithoutArbitraryYaw(GameTestHelper helper) {
+        Fixture f = fixture(helper, true);
+        BowTask<VillagerEntityMCA> bow = startBow(helper, f);
+        f.target().setNoGravity(true);
+        f.target().setDeltaMovement(Vec3.ZERO);
+        f.target().setPos(f.archer().position().add(0, 8, 0));
+        f.archer().setYRot(90);
+        f.archer().yHeadRot = f.archer().yBodyRot = 90;
+        f.archer().setXRot(-90);
+        helper.assertTrue(f.archer().getNavigation().moveTo(f.archer().getX() - 8, f.archer().getY(), f.archer().getZ(), 0.75),
+                "fixture could not begin native movement");
+        helper.runAfterDelay(22, () -> {
+            helper.assertTrue(f.archer().getTicksUsingItem() >= 20, "vertical-shot fixture did not complete its draw");
+            helper.assertTrue(RangedWeaponHelper.canShootBowFrom(f.archer(), f.archer().position(), f.target()),
+                    "vertical target has no clear ballistic shot");
+            bow.tick(helper.getLevel(), f.archer(), f.now() + 23);
+            helper.assertTrue(ownedArrows(helper, f).size() == 1,
+                    "moving shot at a target directly above was rejected for horizontal facing");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 100)
+    public static void raisedRetreatKeepsBowWithoutStoppingItsRoute(GameTestHelper helper) {
+        Fixture f = fixture(helper, true);
+        BowTask<VillagerEntityMCA> bow = startBow(helper, f);
+        for (int x = -9; x < 0; x++) {
+            for (int z = -2; z <= 2; z++) helper.getLevel().setBlock(f.start().offset(x, 0, z), Blocks.STONE.defaultBlockState(), 3);
+        }
+        helper.assertTrue(f.archer().getNavigation().moveTo(f.archer().getX() - 8, f.archer().getY() + 1, f.archer().getZ(), 0.75),
+                "fixture could not start its one-block ascent");
+        f.archer().getNavigation().tick();
+        var retreat = f.archer().getNavigation().getPath();
+        helper.assertTrue(retreat != null && retreat.getNextNodePos().getY() > f.archer().getY(),
+                "fixture's next native step is not raised");
+        f.archer().getBrain().setMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE, RangedCombatState.KITE);
+        bow.tick(helper.getLevel(), f.archer(), f.now() + 2);
+        helper.assertTrue(f.archer().isUsingItem() && f.archer().isAggressive(),
+                "one-block retreat discarded the bow draw or combat facing");
+        helper.assertTrue(f.archer().getNavigation().getPath() == retreat && !f.archer().getNavigation().isDone(),
+                "keeping the bow drawn stopped its climb-out route");
+        helper.succeed();
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 100)
+    public static void raisedRetreatKeepsCrossbowWithoutStoppingItsRoute(GameTestHelper helper) {
+        Fixture f = fixture(helper, true);
+        f.target().absMoveTo(f.archer().getX() + 7, f.archer().getY(), f.archer().getZ());
+        f.archer().setItemSlot(EquipmentSlot.MAINHAND, Items.CROSSBOW.getDefaultInstance());
+        f.archer().getBrain().setMemory(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES,
+                new net.minecraft.world.entity.ai.memory.NearestVisibleLivingEntities(f.archer(), List.of(f.target())));
+        ExtendedCrossbowAttackTask<VillagerEntityMCA, Zombie> crossbow = new ExtendedCrossbowAttackTask<>();
+        helper.assertTrue(crossbow.tryStart(helper.getLevel(), f.archer(), f.now()), "fixture could not start crossbow combat");
+        crossbow.crossbowAttack(f.archer(), f.target());
+        helper.assertTrue(f.archer().isUsingItem(), "fixture did not begin a crossbow charge");
+        for (int x = -9; x < 0; x++) {
+            for (int z = -2; z <= 2; z++) helper.getLevel().setBlock(f.start().offset(x, 0, z), Blocks.STONE.defaultBlockState(), 3);
+        }
+        helper.assertTrue(f.archer().getNavigation().moveTo(f.archer().getX() - 8, f.archer().getY() + 1, f.archer().getZ(), 0.75),
+                "fixture could not start its one-block ascent");
+        f.archer().getNavigation().tick();
+        var retreat = f.archer().getNavigation().getPath();
+        helper.assertTrue(retreat != null && retreat.getNextNodePos().getY() > f.archer().getY(),
+                "fixture's next native step is not raised");
+        f.archer().getBrain().setMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE, RangedCombatState.KITE);
+        crossbow.crossbowAttack(f.archer(), f.target());
+        helper.assertTrue(f.archer().isUsingItem(), "one-block retreat discarded its crossbow charge");
+        helper.assertTrue(f.archer().getNavigation().getPath() == retreat && !f.archer().getNavigation().isDone(),
+                "keeping its crossbow charge stopped native escape navigation");
+        helper.succeed();
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 100)
+    public static void panicWithoutMovementStateLowersCrossbow(GameTestHelper helper) {
+        Fixture f = fixture(helper, true);
+        f.target().absMoveTo(f.archer().getX() + 7, f.archer().getY(), f.archer().getZ());
+        f.archer().setItemSlot(EquipmentSlot.MAINHAND, Items.CROSSBOW.getDefaultInstance());
+        f.archer().getBrain().setMemory(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES,
+                new net.minecraft.world.entity.ai.memory.NearestVisibleLivingEntities(f.archer(), List.of(f.target())));
+        ExtendedCrossbowAttackTask<VillagerEntityMCA, Zombie> crossbow = new ExtendedCrossbowAttackTask<>();
+        helper.assertTrue(crossbow.tryStart(helper.getLevel(), f.archer(), f.now()),
+                "idle control could not start crossbow combat");
+        crossbow.crossbowAttack(f.archer(), f.target());
+        helper.assertTrue(f.archer().isUsingItem(), "idle control did not charge its crossbow");
+        f.archer().getBrain().eraseMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE);
+        f.archer().getBrain().setActiveActivityIfPossible(Activity.PANIC);
+        helper.assertTrue(f.archer().getBrain().isActive(Activity.PANIC), "fixture could not enter panic");
+        crossbow.tickOrStop(helper.getLevel(), f.archer(), f.now() + 1);
+        helper.assertTrue(!f.archer().isUsingItem(),
+                "panic with no movement state retained its crossbow charge");
+        helper.assertTrue(!crossbow.tryStart(helper.getLevel(), f.archer(), f.now() + 2),
+                "panic with no movement state restarted crossbow combat");
+        helper.succeed();
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 100)
+    public static void repositionSuppressesNewAndExistingCrossbowCharges(GameTestHelper helper) {
+        Fixture f = fixture(helper, true);
+        f.target().absMoveTo(f.archer().getX() + 7, f.archer().getY(), f.archer().getZ());
+        f.archer().setItemSlot(EquipmentSlot.MAINHAND, Items.CROSSBOW.getDefaultInstance());
+        f.archer().getBrain().setMemory(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES,
+                new net.minecraft.world.entity.ai.memory.NearestVisibleLivingEntities(f.archer(), List.of(f.target())));
+        ExtendedCrossbowAttackTask<VillagerEntityMCA, Zombie> crossbow = new ExtendedCrossbowAttackTask<>();
+        f.archer().getBrain().setMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE, RangedCombatState.REPOSITION);
+        helper.assertTrue(!crossbow.tryStart(helper.getLevel(), f.archer(), f.now()),
+                "reposition admitted a new crossbow charge");
+        f.archer().getBrain().setMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE, RangedCombatState.HOLD);
+        helper.assertTrue(crossbow.tryStart(helper.getLevel(), f.archer(), f.now() + 1),
+                "hold control could not start crossbow combat");
+        crossbow.crossbowAttack(f.archer(), f.target());
+        helper.assertTrue(f.archer().isUsingItem(), "hold control did not charge its crossbow");
+        f.archer().getBrain().setMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE, RangedCombatState.REPOSITION);
+        crossbow.tickOrStop(helper.getLevel(), f.archer(), f.now() + 2);
+        helper.assertTrue(!f.archer().isUsingItem(), "reposition retained its existing crossbow charge");
+        helper.succeed();
+    }
+
     @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 100)
     public static void combatAcquisitionReleasesOrdinaryStroll(GameTestHelper helper) {
         Fixture f = fixture(helper, false);
@@ -103,7 +279,7 @@ public final class ArcherCombatStabilityGameTests {
     }
 
     @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 200)
-    public static void healthyArcherLeavesCornerWithNoUsableSidestep(GameTestHelper helper) {
+    public static void healthyArcherStrafesOutOfOneBlockCorner(GameTestHelper helper) {
         Fixture f = fixture(helper, false);
         for (int x = -8; x <= 8; x++) {
             for (int z = -8; z <= 8; z++) {
@@ -114,8 +290,8 @@ public final class ArcherCombatStabilityGameTests {
         f.target().setTarget(f.archer());
         f.archer().setYRot(-45);
         helper.assertTrue(f.archer().hasLineOfSight(f.target()), "corner must leave the enemy visible");
-        helper.assertTrue(RangedCombatPositioning.findBestStrafeDirection(f.archer(), f.target(), List.of()) == 0,
-                "corner must block both ordinary strafe sides");
+        helper.assertTrue(RangedCombatPositioning.findBestStrafeDirection(f.archer(), f.target(), List.of()) != 0,
+                "climbable corner has no usable terrain strafe side");
         helper.onEachTick(() -> {
             if (f.archer().getY() >= f.start().getY() + 0.95
                     && f.archer().position().distanceToSqr(Vec3.atBottomCenterOf(f.start())) >= 4) helper.succeed();

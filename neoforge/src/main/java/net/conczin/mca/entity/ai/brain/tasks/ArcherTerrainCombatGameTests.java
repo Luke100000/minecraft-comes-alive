@@ -142,6 +142,29 @@ public final class ArcherTerrainCombatGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "archer_terrain_review", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 60)
+    public static void recoveryCanSelectNativeExitBelowRaisedFloor(GameTestHelper helper) {
+        BlockPos ground = helper.absolutePos(new BlockPos(56, 3, 56));
+        prepareFlatArea(helper, ground, 16, 7);
+        helper.getLevel().setBlock(ground, Blocks.STONE.defaultBlockState(), 3);
+        VillagerEntityMCA archer = spawnArcher(helper, ground.above());
+        archer.setNoAi(true);
+        archer.setOnGround(true);
+        Zombie target = spawnTarget(helper, ground.east(12));
+        for (int y = 0; y <= 3; y++) {
+            helper.getLevel().setBlock(ground.east(3).above(y), Blocks.STONE.defaultBlockState(), 3);
+        }
+        helper.assertTrue(!archer.hasLineOfSight(target), "raised block must begin with an obstructed shot");
+        var threats = new RangedCombatPositioning.ThreatContext(List.of(), List.of(), null);
+        var exit = RangedCombatPositioning.findRecoveryTarget(archer, target, threats, 225);
+        helper.assertTrue(exit.isPresent(), "raised-floor recovery rejected every reachable downward exit");
+        var path = archer.getNavigation().createPath(exit.orElseThrow().currentBlockPosition(), 0);
+        helper.assertTrue(path != null && path.canReach(), "downward recovery endpoint is not natively reachable");
+        helper.assertTrue(path.getEndNode().y == ground.getY(), "recovery did not choose the lower surrounding floor");
+        helper.succeed();
+    }
+
     @GameTest(batch = "archer_terrain_lost_contact", templateNamespace = "mca",
             template = "gametest/isolated_ai_arena", timeoutTicks = 500)
     public static void unreachableUnseenTargetDoesNotKeepCombatForever(GameTestHelper helper) {
@@ -233,6 +256,8 @@ public final class ArcherTerrainCombatGameTests {
                 "ordinary escape rejected the level alternative");
         helper.assertTrue(!RangedCombatPositioning.isEscapePathSafe(archer, dropPath, context, false),
                 "ordinary escape accepted a drop with no return step despite a level alternative");
+        helper.assertTrue(!RangedCombatPositioning.isEscapePathSafe(archer, dropPath, context, true),
+                "emergency clearance fallback accepted a trapping two-block drop");
         helper.succeed();
     }
 
@@ -439,10 +464,69 @@ public final class ArcherTerrainCombatGameTests {
     @GameTest(batch = "archer_terrain_recovery", templateNamespace = "mca",
             template = "gametest/isolated_ai_arena", timeoutTicks = 300)
     public static void archerRecoversFromTwoBlockDepressionWhileTargetRemainsInRange(GameTestHelper helper) {
+        BlockPos start = prepareTwoStepExit(helper);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        helper.getLevel().setBlock(start.east(13).above(3), Blocks.STONE.defaultBlockState(), 3);
+        Zombie target = spawnTarget(helper, start.east(13).above(4));
+        target.getAttribute(Attributes.KNOCKBACK_RESISTANCE).setBaseValue(1);
+        archer.setOnGround(true);
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+        helper.assertTrue(!archer.hasLineOfSight(target), "recovery fixture must start without LOS");
+        var exitPath = archer.getNavigation().createPath(start.east(6).above(2), 0);
+        helper.assertTrue(exitPath != null && exitPath.canReach(), "stepped exit must be navigable");
+        Vec3 exit = Vec3.atBottomCenterOf(start.east(7).above(2));
+        helper.assertTrue(exit.distanceToSqr(target.position()) >= ArcherMovementTask.KITE_ENTER_DISTANCE_SQUARED,
+                "stepped exit must preserve combat spacing");
+        helper.assertTrue(net.conczin.mca.entity.ai.RangedWeaponHelper.canShootBowFrom(archer, exit, target),
+                "stepped exit must offer a clear arrow trajectory");
+        helper.assertTrue(!net.conczin.mca.entity.ai.RangedWeaponHelper.canShootBowFrom(archer,
+                        Vec3.atBottomCenterOf(start.offset(3, 1, 1)), target),
+                "first step must not already satisfy the shooting objective");
+        int[] hits = {0};
+        float[] previousHealth = {target.getHealth()};
+        helper.onEachTick(() -> {
+            if (target.getHealth() < previousHealth[0]) {
+                hits[0]++;
+                previousHealth[0] = target.getHealth();
+            }
+            if (hits[0] >= 2 && archer.getY() >= start.getY() + 1.9
+                    && archer.position().distanceToSqr(Vec3.atBottomCenterOf(start)) >= 9) {
+                helper.succeed();
+            } else if (helper.getTick() >= 240) {
+                helper.fail("archer did not regain a shooting lane on its depression exit: hits=" + hits[0]
+                        + ", pos=" + archer.position() + ", state=" + RangedCombatState.current(archer)
+                        + ", walk=" + archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET));
+            }
+        });
+    }
+
+    @GameTest(batch = "archer_terrain_review", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 60)
+    public static void firingCellArrivalRequiresActualClearShot(GameTestHelper helper) {
+        BlockPos start = prepareTwoStepExit(helper);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        archer.setNoAi(true);
+        helper.getLevel().setBlock(start.east(11).above(3), Blocks.STONE.defaultBlockState(), 3);
+        Zombie target = spawnTarget(helper, start.east(11).above(4));
+        var firing = RangedCombatPositioning.findFiringTarget(archer, target, List.of(), 225).orElseThrow();
+        BlockPos cell = start.offset(3, 1, 1);
+        helper.assertTrue(firing.getPathTargets(archer).contains(cell), "fixture needs the narrow first-step firing cell");
+        Vec3 centre = Vec3.atBottomCenterOf(cell);
+        archer.setPos(centre.add(0, 0, -0.35));
+        helper.assertTrue(!archer.hasLineOfSight(target), "edge of firing block must still be obscured by the column");
+        helper.assertTrue(!firing.isReached(archer, 0), "firing arrival accepted the obscured edge of a shootable cell");
+        archer.setPos(centre);
+        helper.assertTrue(archer.hasLineOfSight(target)
+                        && net.conczin.mca.entity.ai.RangedWeaponHelper.canShootBowFrom(archer, centre, target),
+                "centre must provide an actual usable shot");
+        helper.assertTrue(firing.isReached(archer, 0), "usable shooting pose did not complete the firing route");
+        helper.succeed();
+    }
+
+    private static BlockPos prepareTwoStepExit(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(56, 3, 56));
         prepareFlatArea(helper, start, 16, 7);
-        // A low rear chamber has a normal two-step exit toward the enemy. Every
-        // useful shooting position beyond the exit is closer than the old rule allows.
+        // A low rear chamber has a normal two-step exit toward the enemy.
         for (int x = -4; x <= 12; x++) {
             for (int y = 0; y <= 5; y++) {
                 helper.getLevel().setBlock(start.offset(x, y, -1), Blocks.STONE.defaultBlockState(), 3);
@@ -456,6 +540,16 @@ public final class ArcherTerrainCombatGameTests {
                 helper.getLevel().setBlock(start.offset(x, 1, 0), Blocks.STONE.defaultBlockState(), 3);
             }
         }
+        // The surrounding terrain is genuinely two blocks higher. A flat
+        // unbounded outside arena would offer an unrelated walk around the pit.
+        for (int x = -16; x <= 16; x++) {
+            for (int z = -16; z <= 16; z++) {
+                if (Math.abs(z) >= 2) {
+                    helper.getLevel().setBlock(start.offset(x, 0, z), Blocks.STONE.defaultBlockState(), 3);
+                    helper.getLevel().setBlock(start.offset(x, 1, z), Blocks.STONE.defaultBlockState(), 3);
+                }
+            }
+        }
         // A column blocks the direct shot; a supported side passage goes around it.
         for (int y = 2; y <= 5; y++) {
             helper.getLevel().setBlock(start.offset(5, y, 0), Blocks.STONE.defaultBlockState(), 3);
@@ -466,27 +560,7 @@ public final class ArcherTerrainCombatGameTests {
             }
             helper.getLevel().setBlock(start.offset(x, x < 5 ? 0 : 1, 1), Blocks.STONE.defaultBlockState(), 3);
         }
-        VillagerEntityMCA archer = spawnArcher(helper, start);
-        helper.getLevel().setBlock(start.east(11).above(3), Blocks.STONE.defaultBlockState(), 3);
-        Zombie target = spawnTarget(helper, start.east(11).above(4));
-        archer.setOnGround(true);
-        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
-        helper.assertTrue(!archer.hasLineOfSight(target), "recovery fixture must start without LOS");
-        var exitPath = archer.getNavigation().createPath(start.east(6).above(2), 0);
-        helper.assertTrue(exitPath != null && exitPath.canReach(), "stepped exit must be navigable");
-        helper.onEachTick(() -> {
-            if (archer.getX() >= start.getX() + 4.9 && archer.getY() >= start.getY() + 1.9) {
-                archer.discard();
-                target.discard();
-                helper.succeed();
-            } else if (helper.getTick() >= 240) {
-                String details = "pos=" + archer.position() + ", state=" + RangedCombatState.current(archer)
-                        + ", walk=" + archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET);
-                archer.discard();
-                target.discard();
-                helper.fail("archer did not leave an accessible two-block depression: " + details);
-            }
-        });
+        return start;
     }
 
     @GameTest(batch = "archer_terrain_blocked_arrow", templateNamespace = "mca",

@@ -48,8 +48,8 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
     private static final double EMERGENCY_EXIT_DISTANCE_SQUARED = 25.0D;
     static final double KITE_ENTER_DISTANCE_SQUARED = 36.0D;
     private static final double KITE_EXIT_DISTANCE_SQUARED = 81.0D;
-    private static final double RANGED_THREAT_ENTER_DISTANCE_SQUARED = 196.0D;
-    private static final double RANGED_THREAT_EXIT_DISTANCE_SQUARED = 225.0D;
+    private static final double RANGED_THREAT_ENTER_DISTANCE_SQUARED = 64.0D;
+    private static final double RANGED_THREAT_EXIT_DISTANCE_SQUARED = 121.0D;
     static final double CLOSE_RANGE_VERTICAL_THREAT_DISTANCE = 2.5D;
     private static final double KITE_SAFE_DISTANCE = 9.0D;
     private static final double EMERGENCY_SAFE_DISTANCE = 6.0D;
@@ -156,7 +156,6 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
     private int lostContactTicks;
     private int walkTargetRetryCooldown;
     private WalkTarget combatWalkTarget;
-    private List<LivingEntity> lastRouteThreats = List.of();
     private long lastEscapeRouteCheck = Long.MIN_VALUE;
 
     private int holdTicks;
@@ -219,7 +218,6 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         WalkTarget previousWalk = entity.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
         if (previousWalk != null && previousWalk.getTarget() instanceof BlockPosTracker
                 && !(previousWalk.getTarget() instanceof PersistentPathTarget)
-                && !entity.getBrain().hasMemoryValue(MemoryModuleType.PATH)
                 && !entity.getBrain().hasMemoryValue(MemoryModuleTypeMCA.PLAYER_FOLLOWING)
                 && !entity.getBrain().hasMemoryValue(MemoryModuleTypeMCA.STAYING)) {
             // Ordinary stroll/patrol intent predates combat. Release it once;
@@ -284,7 +282,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
 
         RangedCombatPositioning.ThreatContext threatContext =
                 RangedCombatPositioning.collectThreatContext(entity, target);
-        revalidateOwnedEscape(entity, gameTime, threatContext);
+        revalidateOwnedEscape(entity, gameTime);
         LivingEntity movementThreat = threatContext.nearestEscapeThreat();
         if (movementThreat == null) {
             movementThreat = target;
@@ -313,13 +311,14 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         // Melee spacing is too late against an archer already being aimed at.
         // Only retreat early from a ranged mob that is actually targeting us;
         // nearby passive ranged mobs should not force constant kiting.
-        if (baseState != RangedCombatState.EMERGENCY_FLEE
+        boolean evadingRangedAttacker = baseState != RangedCombatState.EMERGENCY_FLEE
                 && movementThreat instanceof RangedAttackMob
                 && movementThreat instanceof Mob rangedMob
                 && (rangedMob.getTarget() == entity || entity.getLastHurtByMob() == movementThreat)
                 && (threatDistanceSquared < RANGED_THREAT_ENTER_DISTANCE_SQUARED
                     || isRetreatState(currentState)
-                    && threatDistanceSquared < RANGED_THREAT_EXIT_DISTANCE_SQUARED)) {
+                    && threatDistanceSquared < RANGED_THREAT_EXIT_DISTANCE_SQUARED);
+        if (evadingRangedAttacker) {
             baseState = RangedCombatState.KITE;
             baseDecision = new BaseStateDecision(baseState, "evade_active_ranged_attacker");
         }
@@ -384,7 +383,8 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
                 }
                 case KITE -> {
                     trackTarget(entity, target);
-                    publishKiteAway(entity, threatContext);
+                    publishKiteAway(entity, threatContext, target, attackRangeSquared,
+                            evadingRangedAttacker && threatDistanceSquared >= KITE_EXIT_DISTANCE_SQUARED);
                 }
                 case EMERGENCY_FLEE -> {
                     publishEmergencyAway(entity, threatContext);
@@ -401,7 +401,8 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
                     visible,
                     inRange,
                     closeThreat,
-                    threatContext.hazards()
+                    threatContext,
+                    attackRangeSquared
             );
         }
 
@@ -433,8 +434,10 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             boolean visible,
             boolean inRange,
             boolean closeThreat,
-            List<? extends LivingEntity> hazards
+            RangedCombatPositioning.ThreatContext threats,
+            double attackRangeSquared
     ) {
+        List<? extends LivingEntity> hazards = threats.hazards();
         if (targetChanged || (currentState != RangedCombatState.HOLD && currentState != RangedCombatState.STRAFE)) {
             clearCombatWalkTarget(entity);
         }
@@ -455,6 +458,10 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             return;
         }
 
+        if (this.blockedStrafeAttempts >= 2 && publishRecovery(entity, target,
+                threats, attackRangeSquared, "leave_blocked_corner")) {
+            return;
+        }
         setState(entity, RangedCombatState.HOLD);
         if (entity.getNavigation().isDone()) {
             // LookControl turns the head, but a stationary mob's movement yaw
@@ -491,21 +498,10 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         if (direction == 0.0F) {
             this.strafeCooldown = nextStrafeCooldown(entity);
             logMovementIntent(entity, "strafe_skip", "no_safe_side", null);
-            if (++this.blockedStrafeAttempts >= 2 && canPublishCombatWalkTarget(entity) && entity.onGround()) {
-                var threats = RangedCombatPositioning.collectThreatContext(entity, target);
-                RangedCombatPositioning.findRecoveryTarget(entity, target, threats, this.maximumRangeSquared)
-                        .ifPresent(exit -> {
-                            setState(entity, RangedCombatState.RECOVER);
-                            WalkTarget walk = new WalkTarget(exit, (float) SPEED_MODIFIER, 0);
-                            setCombatWalkTarget(entity, walk);
-                            this.blockedStrafeAttempts = 0;
-                            logMovementIntent(entity, "walk", "leave_blocked_corner", walk);
-                        });
-            }
+            this.blockedStrafeAttempts++;
             return;
         }
 
-        this.blockedStrafeAttempts = 0;
         this.holdTicks = 0;
         this.strafeDirection = direction;
         this.strafeTicksRemaining = MIN_STRAFE_TICKS
@@ -536,20 +532,24 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             entity.lookAt(target, LOOK_SPEED, LOOK_SPEED);
         }
 
-        boolean sideBlocked = !RangedCombatPositioning.isImmediateStrafeStepSafe(
+        Vec3 landing = RangedCombatPositioning.findSafeStrafeLanding(
                 entity,
                 this.strafeDirection,
                 hazards
         );
-        boolean collided = this.strafeTicksElapsed > 0 && (entity.horizontalCollision || entity.minorHorizontalCollision);
+        boolean sideBlocked = landing == null;
+        boolean changingHeight = landing != null && (!entity.onGround() || Math.abs(landing.y - entity.getY()) > 0.05);
+        boolean collided = this.strafeTicksElapsed > 0 && !changingHeight
+                && (entity.horizontalCollision || entity.minorHorizontalCollision);
         boolean stalled = this.strafeTicksElapsed > 3
+                && !changingHeight
                 && entity.onGround()
                 && entity.getDeltaMovement().horizontalDistanceSqr() < STUCK_HORIZONTAL_SPEED_SQUARED;
         String cancelReason = strafeCancelReason(visible || this.seeTime >= -STRAFE_LOST_SIGHT_GRACE,
                 inRange, closeThreat, collided, stalled);
         if (sideBlocked) {
             cancelReason = "unsafe_side_step";
-        } else if (visible && !RangedCombatPositioning.hasVisibleStrafeStep(entity, target, this.strafeDirection)) {
+        } else if (visible && !RangedCombatPositioning.hasVisibleStrafeStep(entity, target, landing)) {
             // Grace covers an unexpected brief occlusion, not a deliberate step
             // out of the only known firing slit while the current ray is clear.
             cancelReason = "firing_lane_edge";
@@ -572,6 +572,12 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         if (this.strafeDirection != 0.0F || this.strafeTicksElapsed > 0 || this.strafeTicksRemaining > 0) {
             ((MCAMoveControl) entity.getMoveControl()).stopStrafing();
             this.strafeCooldown = nextStrafeCooldown(entity);
+            if ("duration_complete".equals(reason)) {
+                this.blockedStrafeAttempts = 0;
+            } else if ("unsafe_side_step".equals(reason) || "firing_lane_edge".equals(reason)
+                    || "physical_collision".equals(reason) || "stalled".equals(reason)) {
+                this.blockedStrafeAttempts++;
+            }
             logMovementIntent(entity, "strafe_stop", reason, null);
         }
         this.strafeDirection = 0.0F;
@@ -606,27 +612,39 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             return;
         }
 
-        Optional<MultiTargetPositionTracker> firingTarget = RangedCombatPositioning.findFiringTarget(
-                entity,
-                target,
-                threats.hazards(),
-                attackRangeSquared
-        );
-        if (firingTarget.isEmpty()) {
-            firingTarget = RangedCombatPositioning.findRecoveryTarget(entity, target, threats, attackRangeSquared);
-            if (firingTarget.isPresent()) {
-                setState(entity, RangedCombatState.RECOVER);
-            }
-        }
+        Optional<MultiTargetPositionTracker> firingTarget = RangedCombatPositioning.findRepositionTarget(
+                entity, target, threats, attackRangeSquared);
         if (firingTarget.isEmpty()) {
             scheduleWalkTargetRetry(entity);
             logMovementIntent(entity, "hold", "no_safe_firing_position", null);
             return;
         }
 
+        if (firingTarget.orElseThrow() instanceof CombatEscapePositionTracker) {
+            setState(entity, RangedCombatState.RECOVER);
+        }
         WalkTarget walkTarget = new WalkTarget(firingTarget.orElseThrow(), (float)SPEED_MODIFIER, 0);
         setCombatWalkTarget(entity, walkTarget);
         logMovementIntent(entity, "walk", "reposition_firing_position", walkTarget);
+    }
+
+    private boolean publishRecovery(E entity, LivingEntity target,
+                                    RangedCombatPositioning.ThreatContext threats,
+                                    double attackRangeSquared, String reason) {
+        // Seeking more room is optional; finish a usable draw before leaving.
+        if (!entity.onGround() || entity.isUsingItem() || !canPublishCombatWalkTarget(entity)) {
+            return false;
+        }
+        var recovery = RangedCombatPositioning.findRoomierTarget(entity, target, threats, attackRangeSquared);
+        if (recovery.isEmpty()) {
+            scheduleWalkTargetRetry(entity);
+            return false;
+        }
+        setState(entity, RangedCombatState.RECOVER);
+        WalkTarget walk = new WalkTarget(recovery.orElseThrow(), (float) SPEED_MODIFIER, 0);
+        setCombatWalkTarget(entity, walk);
+        logMovementIntent(entity, "walk", reason, walk);
+        return true;
     }
 
     private void publishApproachTarget(
@@ -658,14 +676,20 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
 
     private void publishKiteAway(
             E entity,
-            RangedCombatPositioning.ThreatContext threatContext
+            RangedCombatPositioning.ThreatContext threatContext,
+            LivingEntity target,
+            double attackRangeSquared,
+            boolean rangedEvasion
     ) {
         if (!canPublishCombatWalkTarget(entity)) {
             return;
         }
         publishGroupAway(
                 entity,
-                RangedCombatPositioning.findGroupEscapeTarget(
+                rangedEvasion
+                        ? RangedCombatPositioning.findRangedEvasionTarget(
+                                entity, target, threatContext, KITE_SAFE_DISTANCE, attackRangeSquared)
+                        : RangedCombatPositioning.findGroupEscapeTarget(
                         entity,
                         threatContext.escapeThreats(),
                         threatContext.hazards(),
@@ -734,12 +758,12 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
     private void setCombatWalkTarget(E entity, WalkTarget walkTarget) {
         entity.getBrain().setMemory(MemoryModuleType.WALK_TARGET, walkTarget);
         this.combatWalkTarget = walkTarget;
-        this.lastRouteThreats = List.of();
+        this.blockedStrafeAttempts = 0;
         this.lastEscapeRouteCheck = Long.MIN_VALUE;
         scheduleWalkTargetRetry(entity);
     }
 
-    private void revalidateOwnedEscape(E entity, long gameTime, RangedCombatPositioning.ThreatContext threats) {
+    private void revalidateOwnedEscape(E entity, long gameTime) {
         if (!ownsCombatWalkTarget(entity)
                 || !(this.combatWalkTarget.getTarget() instanceof CombatEscapePositionTracker escape)) {
             return;
@@ -751,21 +775,11 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             return;
         }
 
-        boolean newThreats = !this.lastRouteThreats.equals(threats.escapeThreats());
-        if (!newThreats && gameTime - this.lastEscapeRouteCheck < 5) {
+        if (this.lastEscapeRouteCheck != Long.MIN_VALUE && gameTime - this.lastEscapeRouteCheck < 5) {
             return;
         }
-        this.lastRouteThreats = List.copyOf(threats.escapeThreats());
         this.lastEscapeRouteCheck = gameTime;
-        if (escape.isPathSafe(entity, path)) {
-            return;
-        }
-
-        // A pursuer can close the gap while both mobs move along the same escape
-        // corridor. Revalidating against its new position must not discard a
-        // still-useful emergency retreat on every fifth tick. A newly active
-        // attacker is different: preserve strict clearance checking for it.
-        if (!newThreats && escape.isDegradedEmergencyPathSafe(entity, path)) {
+        if (escape.isPathSafe(entity, path) || escape.isDegradedEmergencyPathSafe(entity, path)) {
             return;
         }
 
@@ -798,7 +812,6 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
         }
         this.combatWalkTarget = null;
-        this.lastRouteThreats = List.of();
         this.lastEscapeRouteCheck = Long.MIN_VALUE;
         this.walkTargetRetryCooldown = 0;
     }
@@ -811,7 +824,6 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         WalkTarget current = entity.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
         if (current != this.combatWalkTarget) {
             this.combatWalkTarget = null;
-            this.lastRouteThreats = List.of();
             this.lastEscapeRouteCheck = Long.MIN_VALUE;
         }
     }
@@ -862,7 +874,10 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             ((MCAMoveControl) entity.getMoveControl()).stopStrafing();
         }
         clearCombatWalkTarget(entity);
-        entity.getBrain().eraseMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE);
+        if (entity.getBrain().hasMemoryValue(MemoryModuleTypeMCA.RANGED_COMBAT_STATE)) {
+            entity.getBrain().eraseMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE);
+            entity.setAggressive(false);
+        }
         this.strafeDirection = 0.0F;
         this.strafeTicksElapsed = 0;
         this.strafeTicksRemaining = 0;
@@ -872,7 +887,6 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         this.lastTarget = null;
         this.walkTargetRetryCooldown = 0;
         this.combatWalkTarget = null;
-        this.lastRouteThreats = List.of();
         this.lastEscapeRouteCheck = Long.MIN_VALUE;
         resetTacticalTimers();
         this.lastDebugState = "";
@@ -897,6 +911,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         if (RangedCombatState.current(entity).orElse(null) != state) {
             entity.getBrain().setMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE, state);
         }
+        entity.setAggressive(state.permitsAiming(entity));
     }
 
     private void trackTarget(E entity, LivingEntity target) {

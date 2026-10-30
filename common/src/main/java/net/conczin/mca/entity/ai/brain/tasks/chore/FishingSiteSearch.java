@@ -10,6 +10,8 @@ import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.pathfinder.PathType;
+import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
@@ -32,52 +34,59 @@ final class FishingSiteSearch {
     private static final int PATH_PROBES_PER_RADIUS = 4;
     private static final int MIN_CAST_DISTANCE = 2;
     private static final int PREFERRED_MIN_CAST_DISTANCE = 3;
+    private static final int PREFERRED_MAX_CAST_DISTANCE = 6;
     private static final int MAX_CAST_DISTANCE = 7;
+    private static final int PREFERRED_MAX_SETBACK = 3;
+    private static final int MAX_SETBACK = 4;
     private static final int[][] DIRECTIONS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1},
             {1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
 
-    record Site(BlockPos standingPos, BlockPos waterPos, boolean likelyOpenWater, boolean smallWater) {
+    record Site(BlockPos standingPos, BlockPos waterPos, boolean likelyOpenWater, boolean smallWater, int setback) {
         Site {
             standingPos = standingPos.immutable();
             waterPos = waterPos.immutable();
         }
 
         Site(BlockPos standingPos, BlockPos waterPos, boolean likelyOpenWater) {
-            this(standingPos, waterPos, likelyOpenWater, false);
+            this(standingPos, waterPos, likelyOpenWater, false, 0);
         }
 
         private SiteKey key() { return new SiteKey(standingPos, waterPos); }
     }
 
-    // Water-quality metadata ranks a site; it must not change its rejection identity.
+    // Metadata is for ranking; a rejected cast is identified only by its block positions.
     private record SiteKey(BlockPos standingPos, BlockPos waterPos) { }
 
     private final List<Site> candidates = new ArrayList<>(MAX_CANDIDATES);
     private final List<Site> remainingSurface = new ArrayList<>(MAX_CANDIDATES);
     private final Set<SiteKey> rejected = new HashSet<>();
     private BlockPos origin;
-    private final Comparator<Site> siteOrder = Comparator.comparing(Site::smallWater)
+    private int preferredSetback;
+    private final Comparator<Site> siteOrder = Comparator
+            .comparing(Site::smallWater)
+            .thenComparing(site -> site.setback() > PREFERRED_MAX_SETBACK)
             .thenComparingDouble(site -> site.standingPos().distSqr(origin))
-            .thenComparing(site -> castDistance(site) < PREFERRED_MIN_CAST_DISTANCE)
-            .thenComparing(Comparator.comparing(Site::likelyOpenWater).reversed())
-            .thenComparingDouble(site -> Math.abs(castDistance(site) - 5.0))
+            .thenComparingInt(site -> Math.abs(site.setback() - preferredSetback))
+            .thenComparing(site -> !preferredCastDistance(site))
+            .thenComparingDouble(site -> Math.abs(castDistance(site) - 4.5))
             .thenComparing(Site::standingPos, BlockPos::compareTo)
             .thenComparing(Site::waterPos, BlockPos::compareTo);
     private int radius = NEARBY_RADIUS;
     private int column;
     private boolean covered;
-    private boolean validated;
     private boolean done;
     private int pathProbes;
     private int geometryBudget;
-    private Site smallWaterFallback;
 
-    /** Offers the next site on the server tick thread; the chore owns the selected site. */
+    /** Scan incrementally, then try one reachable candidate per tick. */
     @Nullable
     Site tick(ServerLevel world, VillagerEntityMCA villager) {
         geometryBudget = GEOMETRY_CHECKS_PER_TICK;
         if (done) return null;
-        if (origin == null) origin = villager.blockPosition().immutable();
+        if (origin == null) {
+            origin = villager.blockPosition().immutable();
+            preferredSetback = villager.getRandom().nextInt(PREFERRED_MAX_SETBACK + 1);
+        }
         int width = radius * 2 + 1;
         if (column < width * width) {
             int end = Math.min(column + COLUMNS_PER_TICK, width * width);
@@ -94,7 +103,7 @@ final class FishingSiteSearch {
                     BlockPos water = new BlockPos(x, y, z);
                     if (waterSurface(world, water)) offerWater(world, water);
                 } else {
-                    // At most one exposed water surface per fallback column.
+                    // Only examine covered water when the ordinary surface search failed.
                     for (int dy = DISCOVERY_VERTICAL_RADIUS; dy >= -DISCOVERY_VERTICAL_RADIUS; dy--) {
                         BlockPos water = new BlockPos(x, origin.getY() + dy, z);
                         if (water.getY() != y && waterSurface(world, water)) {
@@ -106,91 +115,61 @@ final class FishingSiteSearch {
             }
             return null;
         }
-        if (!validated) {
-            List<Site> usable = new ArrayList<>(MAX_CANDIDATES);
-            for (Site site : candidates) {
-                geometryBudget--;
-                if (isUsable(world, villager, site)) {
-                    usable.add(new Site(site.standingPos(), site.waterPos(), likelyOpenWater(world, site.waterPos()), site.smallWater()));
-                }
-            }
-            candidates.clear();
-            candidates.addAll(usable);
-            candidates.sort(siteOrder);
-            validated = true;
-            return null;
+
+        // Reserve discovery opportunities, retaining surface banks if those alternatives are absent.
+        int probeLimit = covered ? PATH_PROBES_PER_RADIUS
+                : PATH_PROBES_PER_RADIUS - 1 - (radius == SEARCH_RADIUS ? 1 : 0);
+        if (covered && radius == SEARCH_RADIUS && pathProbes == PATH_PROBES_PER_RADIUS - 1) {
+            // Spend the final query on tiny water only when an actual candidate exists.
+            candidates.sort(Comparator.comparing(Site::smallWater).reversed());
         }
-        boolean reserveFallbackQuery = radius == SEARCH_RADIUS && smallWaterFallback != null;
-        int probeLimit = PATH_PROBES_PER_RADIUS - (reserveFallbackQuery ? 1 : 0);
-        if (pathProbes >= probeLimit && (!reserveFallbackQuery || covered)) {
-            if (radius < SEARCH_RADIUS) {
-                // Near-bank failures must not consume the distant search's
-                // separate, still bounded pathfinding allowance.
-                beginSearch(SEARCH_RADIUS);
-                return null;
-            }
-            return finishSearch(world, villager);
-        }
-        // Reserve a covered-water probe as well as the saved fallback's final recheck.
-        if (!covered && pathProbes >= probeLimit - 1) {
-            remainingSurface.addAll(candidates);
-            candidates.clear();
-        }
-        if (covered && pathProbes == PATH_PROBES_PER_RADIUS - 1 && smallWaterFallback == null) {
-            // Reserve the last probe for a tiny-pool fallback when larger banks fail.
-            Site fallback = null;
-            for (Site site : candidates) {
-                if (site.smallWater() && (fallback == null || siteOrder.compare(site, fallback) < 0)) fallback = site;
-            }
-            for (Site site : remainingSurface) {
-                if (site.smallWater() && (fallback == null || siteOrder.compare(site, fallback) < 0)) fallback = site;
-            }
-            if (fallback != null) {
-                candidates.remove(fallback);
-                remainingSurface.remove(fallback);
-                candidates.addFirst(fallback);
-            }
-        }
-        while (!candidates.isEmpty()) {
-            if (geometryBudget == 0) return null;
+        while (!candidates.isEmpty() && !candidates.getFirst().smallWater() && geometryBudget > 0) {
             Site site = candidates.removeFirst();
             if (rejected.contains(site.key())) continue;
-            if (site.smallWater() && smallWaterFallback != null && siteOrder.compare(site, smallWaterFallback) >= 0) continue;
+            if (pathProbes >= probeLimit) {
+                if (!covered) remainingSurface.add(site);
+                continue;
+            }
             geometryBudget--;
             if (!isUsable(world, villager, site)) continue;
-            // Even a failed query consumes this tick's one-query allowance.
-            return canReachSite(villager, site) ? offerReachable(site) : null;
+            // A failed query also consumes this tick's one-query allowance.
+            return canReachSite(villager, site) ? site : null;
         }
+        if (!candidates.isEmpty() && !candidates.getFirst().smallWater()) return null;
+
+        int surfaceLimit = PATH_PROBES_PER_RADIUS
+                - (radius == SEARCH_RADIUS && candidates.stream().anyMatch(Site::smallWater) ? 1 : 0);
+        while (covered && !remainingSurface.isEmpty() && pathProbes < surfaceLimit) {
+            if (geometryBudget == 0) return null;
+            Site site = remainingSurface.removeFirst();
+            if (rejected.contains(site.key())) continue;
+            geometryBudget--;
+            if (isUsable(world, villager, site)) return canReachSite(villager, site) ? site : null;
+        }
+
         if (!covered) {
             covered = true;
             column = 0;
-            validated = false;
-        } else if (!remainingSurface.isEmpty() && pathProbes < PATH_PROBES_PER_RADIUS) {
-            candidates.addAll(remainingSurface);
-            remainingSurface.clear();
         } else if (radius < SEARCH_RADIUS) {
-            // Keep nearby fishing responsive, then look farther before entering
-            // the failed-chore cooldown that permits random wandering.
             beginSearch(SEARCH_RADIUS);
         } else {
-            return finishSearch(world, villager);
+            // Tiny alternatives stay at the end of the same bounded shortlist
+            // through discovery. Recheck geometry and reachability now; a blocked
+            // nearest bank must not hide another tiny bank within the allowance.
+            while ((!candidates.isEmpty() || !remainingSurface.isEmpty()) && pathProbes < PATH_PROBES_PER_RADIUS) {
+                if (geometryBudget == 0) return null;
+                Site fallback = candidates.isEmpty() ? remainingSurface.removeFirst() : candidates.removeFirst();
+                if (rejected.contains(fallback.key())) continue;
+                geometryBudget--;
+                if (!isUsable(world, villager, fallback)) continue;
+                return canReachSite(villager, fallback) ? fallback : null;
+            }
+            done = true;
         }
         return null;
     }
 
     boolean exhausted() { return done; }
-
-    @Nullable
-    private Site offerReachable(Site site) {
-        if (!site.smallWater()) return site;
-        if (radius == SEARCH_RADIUS && pathProbes == PATH_PROBES_PER_RADIUS) {
-            done = true;
-            smallWaterFallback = null;
-            return site;
-        }
-        if (smallWaterFallback == null || siteOrder.compare(site, smallWaterFallback) < 0) smallWaterFallback = site;
-        return null;
-    }
 
     private boolean canReachSite(VillagerEntityMCA villager, Site site) {
         Vec3 delta = villager.position().subtract(Vec3.atBottomCenterOf(site.standingPos()));
@@ -205,44 +184,32 @@ final class FishingSiteSearch {
                 && path.getEndNode().asBlockPos().equals(site.standingPos());
     }
 
-    @Nullable
-    private Site finishSearch(ServerLevel world, VillagerEntityMCA villager) {
-        if (smallWaterFallback != null && geometryBudget == 0) return null;
-        done = true;
-        Site fallback = smallWaterFallback;
-        smallWaterFallback = null;
-        if (fallback == null || rejected.contains(fallback.key())) return null;
-        geometryBudget--;
-        return isUsable(world, villager, fallback) && canReachSite(villager, fallback) ? fallback : null;
-    }
-
     void reset() {
         rejected.clear();
         origin = null;
-        smallWaterFallback = null;
+        candidates.clear();
+        remainingSurface.clear();
         done = false;
         beginSearch(NEARBY_RADIUS);
     }
 
     private void beginSearch(int searchRadius) {
-        candidates.clear();
+        candidates.removeIf(site -> !site.smallWater());
         remainingSurface.clear();
         radius = searchRadius;
         column = 0;
         covered = false;
-        validated = false;
         pathProbes = 0;
     }
 
     void reject(Site site) {
         rejected.add(site.key());
-        if (smallWaterFallback != null && smallWaterFallback.key().equals(site.key())) smallWaterFallback = null;
     }
 
     /** A bounded new aim from the existing bank; never requests another path. */
     @Nullable
     Site chooseCastSite(ServerLevel world, VillagerEntityMCA villager, Site current, @Nullable BlockPos previousWater) {
-        int desiredDistance = villager.getRandom().nextIntBetweenInclusive(PREFERRED_MIN_CAST_DISTANCE, MAX_CAST_DISTANCE);
+        int desiredDistance = villager.getRandom().nextIntBetweenInclusive(PREFERRED_MIN_CAST_DISTANCE, PREFERRED_MAX_CAST_DISTANCE);
         List<Site> options = new ArrayList<>(48);
         Set<BlockPos> offeredWater = new HashSet<>();
         BlockPos feet = current.standingPos();
@@ -254,7 +221,7 @@ final class FishingSiteSearch {
                 for (int y = feet.getY() + 3; y >= feet.getY() - 3; y--) {
                     BlockPos water = new BlockPos(x, y, z);
                     if (!waterSurface(world, water)) continue;
-                    Site option = new Site(feet, water, false);
+                    Site option = new Site(feet, water, openWaterHint(world, water));
                     if (!rejected.contains(option.key())
                             && castDistance(option) >= MIN_CAST_DISTANCE && castDistance(option) <= MAX_CAST_DISTANCE && offeredWater.add(water)) {
                         options.add(option);
@@ -272,34 +239,35 @@ final class FishingSiteSearch {
             Collections.swap(options, i, villager.getRandom().nextInt(i + 1));
         }
         // Keep all normal-range casts ahead of short fallbacks, even a repeat.
-        // Within each range, prefer variety and then the rolled distance.
-        options.sort(Comparator.comparing((Site site) -> castDistance(site) < PREFERRED_MIN_CAST_DISTANCE)
+        // Potential open water must reach the bounded geometry checks before
+        // random distance preferences can fill them with shallow-water aims.
+        Comparator<Site> castOrder = Comparator.comparing((Site site) -> !preferredCastDistance(site))
+                .thenComparing(Comparator.comparing(Site::likelyOpenWater).reversed())
                 .thenComparing(site -> site.waterPos().equals(previousWater))
-                .thenComparingDouble(site -> Math.abs(castDistance(site) - desiredDistance)));
+                .thenComparingDouble(site -> Math.abs(castDistance(site) - desiredDistance));
+        options.sort(castOrder);
         Site choice = null;
-        // Arrival permits an off-centre pose. Check the arc that will actually be
-        // launched this tick, while discovery keeps its centred planning pose.
+        boolean currentChecked = false;
+        // Validate the actual cast trajectory, not only the planned standing centre.
         Vec3 castPosition = villager.position();
-        // Try the desired distance first, then nearby alternatives for small or
-        // obstructed ponds. Reserve one full check for reusing the original aim.
         for (int i = 0; i < Math.min(GEOMETRY_CHECKS_PER_TICK - 1, options.size()); i++) {
             Site option = options.get(i);
-            if (isUsable(world, villager, option, castPosition)) {
-                choice = option;
-                break;
-            }
+            currentChecked |= option.waterPos().equals(current.waterPos());
+            if (!isUsable(world, villager, option, castPosition)) continue;
+            Site valid = new Site(feet, option.waterPos(), likelyOpenWater(world, option.waterPos()));
+            if (preferredCastDistance(valid) && valid.likelyOpenWater()) return valid;
+            if (choice == null || castOrder.compare(valid, choice) < 0) choice = valid;
         }
-        if (choice == null && !currentRejected && isUsable(world, villager, current, castPosition)) choice = current;
-        if (choice == null) return null;
-        return new Site(feet, choice.waterPos(), likelyOpenWater(world, choice.waterPos()));
+        if (!currentRejected && !currentChecked && isUsable(world, villager, current, castPosition)) {
+            Site valid = new Site(feet, current.waterPos(), likelyOpenWater(world, current.waterPos()));
+            if (choice == null || castOrder.compare(valid, choice) < 0) choice = valid;
+        }
+        return choice;
     }
 
     private void offerWater(ServerLevel world, BlockPos water) {
         boolean smallWater = !hasEnoughSurfaceWater(world, water);
-        // Cheap depth/neighbour hint; the full vanilla-shaped check follows on the shortlist.
-        boolean openHint = sourceWater(world, water.below())
-                && sourceWater(world, water.east(2)) && sourceWater(world, water.west(2))
-                && sourceWater(world, water.north(2)) && sourceWater(world, water.south(2));
+        boolean openHint = openWaterHint(world, water);
         for (int[] direction : DIRECTIONS) {
             double length = Math.hypot(direction[0], direction[1]);
             for (int distance = MIN_CAST_DISTANCE; distance <= MAX_CAST_DISTANCE; distance++) {
@@ -309,7 +277,9 @@ final class FishingSiteSearch {
                 if (bank == null || Math.abs(x - origin.getX()) > radius || Math.abs(z - origin.getZ()) > radius) continue;
                 BlockPos standing = standingCentre(world, bank, x, z, water.getY());
                 if (standing == null) continue;
-                Site site = new Site(standing, water, openHint, smallWater);
+                int setback = shorelineSetback(world, standing, water);
+                if (setback > MAX_SETBACK) continue;
+                Site site = new Site(standing, water, openHint, smallWater, setback);
                 if (castDistance(site) < MIN_CAST_DISTANCE || castDistance(site) > MAX_CAST_DISTANCE) continue;
                 // Keep distinct standing destinations, rather than sixteen targets for the same bank.
                 int sameStanding = -1;
@@ -352,7 +322,7 @@ final class FishingSiteSearch {
     @Nullable
     private static BlockPos standingCentre(ServerLevel world, LevelChunk bank, int x, int z, int waterY) {
         // WORLD_SURFACE includes plants and roofs. Resolve only the centre column here;
-        // the bounded shortlist phase checks the full footprint and entity clearance.
+        // the bounded shortlist phase checks path type and entity clearance.
         int top = Math.min(bank.getHeight(Heightmap.Types.WORLD_SURFACE, x & 15, z & 15) + 1, waterY + 3);
         for (int y = top; y >= waterY - 3; y--) {
             BlockPos feet = new BlockPos(x, y, z);
@@ -371,33 +341,24 @@ final class FishingSiteSearch {
 
     private static boolean isUsable(ServerLevel world, VillagerEntityMCA villager, Site site, Vec3 castPosition) {
         BlockPos feet = site.standingPos();
-        if (!waterSurface(world, site.waterPos()) || castDistance(site) < MIN_CAST_DISTANCE || castDistance(site) > MAX_CAST_DISTANCE
-                || Math.abs(feet.getY() - site.waterPos().getY()) > 3 || !dryFootprint(world, feet)) return false;
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dz = -1; dz <= 1; dz++) {
-                BlockPos neighbour = feet.offset(dx, 0, dz);
-                boolean hasSupport = supported(world, neighbour);
-                if ((dx == 0 || dz == 0) && !hasSupport) return false;
-                if (!hasSupport && !supported(world, neighbour.below())) return false;
-            }
-        }
+        double distance = castDistance(site);
+        if (!waterSurface(world, site.waterPos()) || distance < MIN_CAST_DISTANCE || distance > MAX_CAST_DISTANCE
+                || Math.abs(feet.getY() - site.waterPos().getY()) > 3
+                || feet.getY() < world.getMinBuildHeight() + 2 || feet.getY() + 3 >= world.getMaxBuildHeight()
+                || !loaded(world, feet) || !world.getFluidState(feet).isEmpty()
+                || !world.getFluidState(feet.below()).isEmpty() || !supported(world, feet)
+                || shorelineSetback(world, feet, site.waterPos()) > MAX_SETBACK) return false;
+        // Vanilla examines adjacent blocks for hazards. Check chunk availability
+        // first, without requiring those neighbours to be dry or supported.
+        if (!loaded(world, feet.offset(-1, 0, -1)) || !loaded(world, feet.offset(1, 0, -1))
+                || !loaded(world, feet.offset(-1, 0, 1)) || !loaded(world, feet.offset(1, 0, 1))) return false;
+        PathType type = WalkNodeEvaluator.getPathTypeStatic(villager, feet);
+        if (type != PathType.WALKABLE && type != PathType.WATER_BORDER) return false;
         Vec3 standing = Vec3.atBottomCenterOf(feet);
         return world.noCollision(villager, villager.getBoundingBox().move(standing.subtract(villager.position())))
                 && MCAFishingBobberEntity.isTrajectoryClear(world, villager, standing, site.waterPos())
                 && (castPosition.equals(standing)
                 || MCAFishingBobberEntity.isTrajectoryClear(world, villager, castPosition, site.waterPos()));
-    }
-
-    private static boolean dryFootprint(ServerLevel world, BlockPos feet) {
-        if (feet.getY() < world.getMinBuildHeight() + 2 || feet.getY() + 3 >= world.getMaxBuildHeight()) return false;
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dz = -1; dz <= 1; dz++) {
-                BlockPos pos = feet.offset(dx, 0, dz);
-                if (!loaded(world, pos) || !world.getFluidState(pos).isEmpty()
-                        || !world.getFluidState(pos.below()).isEmpty()) return false;
-            }
-        }
-        return true;
     }
 
     private static boolean supported(ServerLevel world, BlockPos feet) {
@@ -435,8 +396,34 @@ final class FishingSiteSearch {
         return true;
     }
 
+    private static boolean openWaterHint(ServerLevel world, BlockPos water) {
+        // A cheap necessary condition; casting confirms the full water volume.
+        return sourceWater(world, water.below())
+                && sourceWater(world, water.east(2)) && sourceWater(world, water.west(2))
+                && sourceWater(world, water.north(2)) && sourceWater(world, water.south(2));
+    }
+
+    private static boolean preferredCastDistance(Site site) {
+        double distance = castDistance(site);
+        return distance >= PREFERRED_MIN_CAST_DISTANCE && distance <= PREFERRED_MAX_CAST_DISTANCE;
+    }
+
     private static double castDistance(Site site) {
         return Math.hypot(site.standingPos().getX() - site.waterPos().getX(), site.standingPos().getZ() - site.waterPos().getZ());
+    }
+
+    // Walk the cast ray towards the water. The first surface-water column
+    // marks the shoreline; adjacent land is a setback of zero.
+    private static int shorelineSetback(ServerLevel world, BlockPos feet, BlockPos water) {
+        int dx = water.getX() - feet.getX();
+        int dz = water.getZ() - feet.getZ();
+        int steps = Math.max(Math.abs(dx), Math.abs(dz));
+        for (int step = 1; step <= steps; step++) {
+            int x = feet.getX() + (int) Math.round((double) dx * step / steps);
+            int z = feet.getZ() + (int) Math.round((double) dz * step / steps);
+            if (waterSurface(world, new BlockPos(x, water.getY(), z))) return step - 1;
+        }
+        return MAX_CAST_DISTANCE;
     }
 
     private static boolean loaded(ServerLevel world, BlockPos pos) { return chunk(world, pos.getX(), pos.getZ()) != null; }

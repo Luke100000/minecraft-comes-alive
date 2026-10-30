@@ -41,6 +41,7 @@ import net.minecraft.world.entity.ai.sensing.Sensor;
 import net.minecraft.world.entity.ai.sensing.SensorType;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.entity.monster.RangedAttackMob;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.schedule.Activity;
@@ -92,6 +93,7 @@ public class VillagerTasksMCA {
             MemoryModuleTypeMCA.PLAYER_FOLLOWING,
             MemoryModuleTypeMCA.STAYING,
             MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY,
+            MemoryModuleTypeMCA.NEAREST_IGNITED_CREEPER,
             MemoryModuleTypeMCA.WEARS_ARMOR,
             MemoryModuleTypeMCA.SMALL_BOUNTY,
             MemoryModuleTypeMCA.HIT_BY_PLAYER,
@@ -111,12 +113,12 @@ public class VillagerTasksMCA {
 
     public static final ImmutableList<SensorType<? extends Sensor<? super Villager>>> SENSOR_TYPES = ImmutableList.of(
             SensorType.NEAREST_PLAYERS,
-            SensorType.NEAREST_ITEMS,
-            SensorType.NEAREST_BED,
+            SensorsMCA.SLEEP_AWARE_ITEMS,
+            SensorsMCA.SLEEP_AWARE_BED,
             SensorType.HURT_BY,
             SensorType.VILLAGER_HOSTILES,
-            SensorType.SECONDARY_POIS,
-            SensorType.GOLEM_DETECTED,
+            SensorsMCA.SLEEP_AWARE_SECONDARY_POIS,
+            SensorsMCA.SLEEP_AWARE_GOLEM,
             SensorsMCA.VILLAGER_BABIES,
             SensorsMCA.EXPLODING_CREEPER,
             SensorsMCA.GUARD_ENEMIES
@@ -177,7 +179,8 @@ public class VillagerTasksMCA {
             brain.addActivity(Activity.PLAY, VillagerTasksMCA.getPlayPackage(1.0F));
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage());
         } else if (villager.isGuard()) {
-            brain.setSchedule(SchedulesMCA.getTypeSchedule(villager, SchedulesMCA.GUARD, SchedulesMCA.GUARD_NIGHT));
+            brain.setSchedule(SchedulesMCA.getTypeSchedule(villager,
+                    SchedulesMCA.GUARD, SchedulesMCA.GUARD_NIGHT));
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getGuardCorePackage(villager));
             brain.addActivity(Activity.WORK, VillagerTasksMCA.getGuardWorkPackage());
             brain.addActivity(Activity.PANIC, VillagerTasksMCA.getGuardPanicPackage(0.5f));
@@ -283,7 +286,7 @@ public class VillagerTasksMCA {
                 Pair.of(2, PoiCompetitorScan.create()),
                 Pair.of(3, new LookAndFollowTradingPlayerSink(speedModifier)),
                 Pair.of(6, LazyFindPointOfInterestTask.create(profession.acquirableJobSite(), MemoryModuleType.JOB_SITE, MemoryModuleType.POTENTIAL_JOB_SITE, true, Optional.empty())),
-                Pair.of(7, new GoToPotentialJobSite(speedModifier)),
+                Pair.of(7, new ScheduledGoToPotentialJobSiteTask(speedModifier)),
                 Pair.of(8, YieldJobSite.create(speedModifier)),
                 Pair.of(10, AssignProfessionFromJobSite.create()),
                 Pair.of(10, LoseUnimportantJobTask.create())
@@ -364,7 +367,10 @@ public class VillagerTasksMCA {
                         UpdateActivityFromSchedule.create(),
                         villager -> !guardTooHurt(villager)
                 )),
-                Pair.of(1, VillagerCalmDown.create()),
+                Pair.of(1, new ConditionalTask<>(
+                        VillagerCalmDown.create(),
+                        VillagerTasksMCA::shouldCalmDown
+                )),
                 Pair.of(2, SetWalkTargetAwayFrom.entity(MemoryModuleType.NEAREST_HOSTILE, f, 6, false)),
                 Pair.of(2, SetWalkTargetAwayFrom.entity(MemoryModuleType.HURT_BY_ENTITY, f, 6, false)),
                 Pair.of(3, VillageBoundRandomStroll.create(f, 2, 2)),
@@ -374,6 +380,24 @@ public class VillagerTasksMCA {
 
     private static boolean guardTooHurt(VillagerEntityMCA villager) {
         return villager.getHealth() < villager.getMaxHealth() * 0.25;
+    }
+
+    private static boolean shouldCalmDown(VillagerEntityMCA villager) {
+        return !villager.isGuard() || !guardTooHurt(villager) || !hasActiveRangedPressure(villager);
+    }
+
+    private static boolean hasActiveRangedPressure(VillagerEntityMCA villager) {
+        // HurtBySensor remembers an actual attacker beyond LivingEntity's 100-tick
+        // hurt reference. Current targeting, range and LOS bound that memory's
+        // relevance; low health or an old injury alone cannot prolong panic.
+        LivingEntity attacker = villager.getBrain().getMemoryInternal(MemoryModuleType.HURT_BY_ENTITY)
+                .orElseGet(villager::getLastHurtByMob);
+        return attacker instanceof RangedAttackMob && attacker instanceof Mob mob
+                && mob.getTarget() == villager
+                && RangedWeaponHelper.isValidAttackTarget(villager, attacker)
+                && !attacker.isRemoved()
+                && villager.distanceToSqr(attacker) <= 256.0D
+                && villager.getSensing().hasLineOfSight(attacker);
     }
 
     private static Optional<? extends LivingEntity> getPreferredTarget(VillagerEntityMCA villager) {
@@ -457,7 +481,8 @@ public class VillagerTasksMCA {
         return isFollowingPlayer(villager)
                || getActivity(villager) == Activity.WORK
                || villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isPresent()
-               || getPreferredTarget(villager).isPresent();
+               || getPreferredTarget(villager).isPresent()
+               || villager.isGuard() && guardTooHurt(villager) && hasActiveRangedPressure(villager);
     }
 
     private static boolean isHoldingRangedWeapon(VillagerEntityMCA villager) {
@@ -653,7 +678,12 @@ public class VillagerTasksMCA {
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getPanicPackage(float speedModifier) {
         float f = speedModifier * 1.5F;
         return ImmutableList.of(
-                Pair.of(0, VillagerCalmDown.create()),
+                // Adult guards also receive this generic package. Both registrations
+                // must respect the same danger gate; Brain.addActivity accumulates them.
+                Pair.of(0, new ConditionalTask<>(
+                        VillagerCalmDown.create(),
+                        VillagerTasksMCA::shouldCalmDown
+                )),
                 Pair.of(1, SetWalkTargetAwayFrom.entity(MemoryModuleType.NEAREST_HOSTILE, f, 6, false)),
                 Pair.of(1, SetWalkTargetAwayFrom.entity(MemoryModuleType.HURT_BY_ENTITY, f, 6, false)),
                 Pair.of(3, VillageBoundRandomStroll.create(f, 2, 2)),

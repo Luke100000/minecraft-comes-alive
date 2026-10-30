@@ -52,7 +52,8 @@ final class BuildingRoomScanner {
         return materialize(source, maxSize, RoomPoiEvidence.index(components), component);
     }
 
-    private static Result materialize(
+    /** Reuses whole-partition POI ownership evidence when materializing a batch. */
+    static Result materialize(
             BlockPos source,
             int maxSize,
             RoomPoiEvidence.Index evidence,

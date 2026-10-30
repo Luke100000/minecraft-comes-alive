@@ -22,6 +22,7 @@ import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.state.properties.BedPart;
@@ -37,6 +38,7 @@ import java.util.Optional;
 @PrefixGameTestTemplate(false)
 public final class GuardEnemiesSensorGameTests {
     private static final List<Entity> TEST_ENTITIES = new ArrayList<>();
+    private static final List<ChunkPos> BEDTIME_FORCED_CHUNKS = new ArrayList<>();
     private static Long originalBedtimeDayTime;
 
     private GuardEnemiesSensorGameTests() {
@@ -72,10 +74,16 @@ public final class GuardEnemiesSensorGameTests {
         level.setBlock(foot, bed, 3);
         level.setBlock(head, bed.setValue(BedBlock.PART, BedPart.HEAD), 3);
 
-        // A GameTest block fixture can place blocks before its chunks are
-        // entity-ticking. Ensure both spawned actors join loaded chunks.
-        level.getChunk(guardPos);
-        level.getChunk(enemyPos);
+        // The one-block air template only forces its own chunk. Actor offsets
+        // can cross that boundary; getChunk alone does not enable entity ticks.
+        for (BlockPos actorPos : List.of(guardPos, enemyPos, foot, head)) {
+            ChunkPos chunk = new ChunkPos(actorPos);
+            if (!level.getForcedChunks().contains(chunk.toLong())) {
+                BEDTIME_FORCED_CHUNKS.add(chunk);
+                level.setChunkForced(chunk.x, chunk.z, true);
+            }
+            level.getChunk(actorPos);
+        }
         VillagerEntityMCA guard = VillagerFactory.newVillager(level)
                 .withAge(0)
                 .withProfession(ProfessionsMCA.GUARD)
@@ -207,6 +215,8 @@ public final class GuardEnemiesSensorGameTests {
     @AfterBatch(batch = "mca_guard_bedtime_far_enemy")
     public static void restoreBedtimeGameTest(net.minecraft.server.level.ServerLevel level) {
         cleanupTestEntities();
+        BEDTIME_FORCED_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x, chunk.z, false));
+        BEDTIME_FORCED_CHUNKS.clear();
         if (originalBedtimeDayTime != null) {
             level.setDayTime(originalBedtimeDayTime);
             originalBedtimeDayTime = null;

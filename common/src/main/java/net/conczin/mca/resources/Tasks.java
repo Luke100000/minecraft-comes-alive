@@ -39,9 +39,10 @@ public class Tasks extends SimpleJsonResourceReloadListener {
         if (player != null && PlayerSaveData.get(player).isOverrideVillageRequirements()) {
             return Rank.MONARCH;
         }
+        Task.CompletionContext context = new Task.CompletionContext(village, player);
         Rank[] ranks = Rank.values();
         for (int i = ranks.length - 1; i >= 0; i--) {
-            if (getInstance().tasks.get(ranks[i]).stream().allMatch(t -> !t.isRequired() || t.isCompleted(village, player))) {
+            if (getInstance().tasks.get(ranks[i]).stream().allMatch(t -> !t.isRequired() || t.isCompleted(context))) {
                 return ranks[i];
             }
         }

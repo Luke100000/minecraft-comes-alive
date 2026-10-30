@@ -1,6 +1,7 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.ai.RangedWeaponHelper;
+import net.conczin.mca.entity.ai.StrafeTerrain;
 import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.minecraft.core.BlockPos;
@@ -9,13 +10,14 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
-import net.minecraft.world.entity.ai.util.LandRandomPos;
+import net.minecraft.world.entity.monster.RangedAttackMob;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.pathfinder.NodeEvaluator;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -30,7 +32,6 @@ import java.util.Optional;
 import java.util.Set;
 
 final class RangedCombatPositioning {
-    private static final int FIRING_CANDIDATE_ATTEMPTS = 8;
     private static final int FIRING_HORIZONTAL_RANGE = 8;
     private static final int FIRING_VERTICAL_RANGE = 4;
     private static final double FIRING_LATERAL_STEP = 2.0D;
@@ -137,12 +138,35 @@ final class RangedCombatPositioning {
         return findEscapeTarget(entity, escapeThreats, hazards, desiredDistance, true);
     }
 
+    static Optional<MultiTargetPositionTracker> findRangedEvasionTarget(
+            PathfinderMob entity,
+            LivingEntity target,
+            ThreatContext threats,
+            double desiredDistance,
+            double attackRangeSquared
+    ) {
+        return findEscapeTarget(entity, threats.escapeThreats(), threats.hazards(), desiredDistance,
+                false, target, attackRangeSquared);
+    }
+
     private static Optional<MultiTargetPositionTracker> findEscapeTarget(
             PathfinderMob entity,
             List<? extends LivingEntity> escapeThreats,
             List<? extends LivingEntity> hazards,
             double desiredDistance,
             boolean emergency
+    ) {
+        return findEscapeTarget(entity, escapeThreats, hazards, desiredDistance, emergency, null, Double.POSITIVE_INFINITY);
+    }
+
+    private static Optional<MultiTargetPositionTracker> findEscapeTarget(
+            PathfinderMob entity,
+            List<? extends LivingEntity> escapeThreats,
+            List<? extends LivingEntity> hazards,
+            double desiredDistance,
+            boolean emergency,
+            LivingEntity firingTarget,
+            double attackRangeSquared
     ) {
         if (escapeThreats.isEmpty()) {
             return Optional.empty();
@@ -170,6 +194,14 @@ final class RangedCombatPositioning {
             // through a closed hand-operable door/gate, but a collision-blocked transit node
             // must never become the final escape target.
             if (!hasStandingSpace(entity, candidatePosition)) {
+                continue;
+            }
+            // Ranged evasion must preserve a usable shot rather than buy melee
+            // spacing by leaving range and immediately having to approach again.
+            if (firingTarget != null && (candidatePosition.distanceToSqr(firingTarget.position()) > attackRangeSquared
+                    || !hasLineOfSight(entity, candidatePosition, firingTarget)
+                    || RangedWeaponHelper.getBowHoldingHand(entity) != null
+                    && !RangedWeaponHelper.canShootBowFrom(entity, candidatePosition, firingTarget))) {
                 continue;
             }
             double candidateMinimumDistanceSquared = minimumDistanceSquared(candidatePosition, escapeThreats);
@@ -437,8 +469,8 @@ final class RangedCombatPositioning {
             this.ranked = ranked;
             this.degraded = degraded;
             this.emergency = emergency;
-            this.originalDrivers = new ArrayList<>(drivers);
-            this.originalHazards = new ArrayList<>(hazards);
+            this.originalDrivers = List.copyOf(drivers);
+            this.originalHazards = List.copyOf(hazards);
         }
 
         @Override
@@ -464,7 +496,36 @@ final class RangedCombatPositioning {
             if (current.escapeThreats().isEmpty()) {
                 current = new ThreatContext(originalHazards, originalDrivers, null);
             }
-            return isEscapePathSafe(mob, path, current, degradedSafety);
+            // Clearance may relax for the admitted pursuers, never for a newly
+            // active attacker. This policy belongs to the route, including its
+            // first validation and native path admission.
+            return (!degradedSafety || originalDrivers.containsAll(current.escapeThreats()))
+                    && isEscapePathSafe(mob, path, current, degradedSafety);
+        }
+    }
+
+    private static final class FiringPositionTarget extends CandidatePositionTarget {
+        private final LivingEntity target;
+        private final double attackRangeSquared;
+
+        private FiringPositionTarget(BlockPos preferred, Set<BlockPos> positions,
+                                     LivingEntity target, double attackRangeSquared) {
+            super(preferred, positions);
+            this.target = target;
+            this.attackRangeSquared = attackRangeSquared;
+        }
+
+        @Override
+        public boolean isReached(Mob mob, int closeEnoughDistance) {
+            // Native waypoint tolerance may enter the right block while a lip or
+            // column still obscures the shot. Its navigation owner already keeps
+            // following the final node until this semantic arrival predicate holds.
+            return super.isReached(mob, closeEnoughDistance)
+                    && mob instanceof PathfinderMob archer
+                    && RangedWeaponHelper.isValidAttackTarget(mob, target)
+                    && mob.distanceToSqr(target) <= attackRangeSquared
+                    && mob.hasLineOfSight(target)
+                    && RangedWeaponHelper.canShootBowFrom(archer, mob.position(), target);
         }
     }
 
@@ -487,8 +548,7 @@ final class RangedCombatPositioning {
             if (index == path.getNextNodeIndex() && BlockPos.containing(next).equals(mob.blockPosition())) {
                 continue;
             }
-            if (!degraded && (trappingDrop
-                    || !preservesHazardClearance(origin, next, threats.hazards())
+            if (trappingDrop || !degraded && (!preservesHazardClearance(origin, next, threats.hazards())
                     || !preservesHazardClearanceAlongSegment(previous, next, threats.hazards()))) {
                 return false;
             }
@@ -504,6 +564,21 @@ final class RangedCombatPositioning {
             List<? extends LivingEntity> hazards,
             double attackRangeSquared
     ) {
+        return findFiringTarget(entity, target, hazards, attackRangeSquared,
+                collectReachableEscapePositions(entity, entity.blockPosition()));
+    }
+
+    static Optional<MultiTargetPositionTracker> findRepositionTarget(
+            PathfinderMob entity, LivingEntity target, ThreatContext threats, double attackRangeSquared) {
+        EscapeGraph graph = collectReachableEscapePositions(entity, entity.blockPosition());
+        Optional<MultiTargetPositionTracker> firing = findFiringTarget(
+                entity, target, threats.hazards(), attackRangeSquared, graph);
+        return firing.isPresent() ? firing : findRecoveryTarget(entity, target, threats, attackRangeSquared, graph, false);
+    }
+
+    private static Optional<MultiTargetPositionTracker> findFiringTarget(
+            PathfinderMob entity, LivingEntity target, List<? extends LivingEntity> hazards,
+            double attackRangeSquared, EscapeGraph graph) {
         double minimumTargetDistance = Math.min(entity.distanceTo(target), Math.sqrt(ArcherMovementTask.KITE_ENTER_DISTANCE_SQUARED));
         double minimumTargetDistanceSquared = minimumTargetDistance * minimumTargetDistance;
         Set<BlockPos> candidates = new LinkedHashSet<>();
@@ -516,7 +591,8 @@ final class RangedCombatPositioning {
                 minimumTargetDistanceSquared,
                 candidates
         );
-        Optional<MultiTargetPositionTracker> preferred = createCandidateTarget(candidates);
+        candidates.retainAll(graph.travelSteps().keySet());
+        Optional<MultiTargetPositionTracker> preferred = createFiringTarget(candidates, target, attackRangeSquared);
         if (preferred.isPresent()) {
             return preferred;
         }
@@ -526,67 +602,108 @@ final class RangedCombatPositioning {
         Vec3 toward = target.position().subtract(entity.position()).multiply(1, 0, 1).normalize();
         for (int distance = 2; distance <= FIRING_HORIZONTAL_RANGE; distance += 2) {
             Vec3 feet = findWalkableCandidateNear(entity, entity.position().add(toward.scale(distance)));
-            if (feet != null && isValidFiringPosition(entity, target, hazards, attackRangeSquared,
+            if (feet != null && graph.travelSteps().containsKey(BlockPos.containing(feet))
+                    && isValidFiringPosition(entity, target, hazards, attackRangeSquared,
                     minimumTargetDistanceSquared, feet)) {
                 candidates.add(BlockPos.containing(feet));
             }
         }
         if (!candidates.isEmpty()) {
-            return createCandidateTarget(candidates);
+            return createFiringTarget(candidates, target, attackRangeSquared);
         }
 
-        for (int i = 0; i < FIRING_CANDIDATE_ATTEMPTS; i++) {
-            Vec3 candidate = LandRandomPos.getPos(entity, FIRING_HORIZONTAL_RANGE, FIRING_VERTICAL_RANGE);
-            if (candidate == null
-                    || !isValidFiringPosition(
-                    entity,
-                    target,
-                    hazards,
-                    attackRangeSquared,
-                    minimumTargetDistanceSquared,
-                    candidate
-            )) {
-                continue;
-            }
-            candidates.add(BlockPos.containing(candidate));
-        }
-
-        return createCandidateTarget(candidates);
-    }
-
-    static Optional<MultiTargetPositionTracker> findRecoveryTarget(
-            PathfinderMob entity, LivingEntity target, ThreatContext threats, double attackRangeSquared) {
+        // The reachable graph is already available. Search its actual standing
+        // positions instead of sampling points that can miss a narrow firing slit
+        // or climb through solid terrain onto an unreachable roof.
         BlockPos origin = entity.blockPosition();
-        EscapeGraph graph = collectReachableEscapePositions(entity, origin);
-        // Recovery may close distance to get out of a depression, but it must not
-        // turn a blocked shot into an unqualified charge into melee range.
-        List<BlockPos> candidates = graph.travelSteps().keySet().stream()
-                .filter(position -> position.getY() > origin.getY())
-                .filter(position -> horizontalDistanceSquared(origin, position) <= ESCAPE_SEARCH_RADIUS * ESCAPE_SEARCH_RADIUS)
-                .filter(position -> {
-                    Vec3 feet = Vec3.atBottomCenterOf(position);
-                    double distance = feet.distanceToSqr(target.position());
-                    return distance >= ArcherMovementTask.KITE_ENTER_DISTANCE_SQUARED
-                            && distance <= attackRangeSquared && hasStandingSpace(entity, feet)
-                            && preservesHazardClearance(entity.position(), feet, threats.hazards())
-                            && preservesHazardClearanceAlongSegment(entity.position(), feet, threats.hazards());
-                })
-                .sorted(Comparator.<BlockPos>comparingInt(BlockPos::getY).reversed()
-                        .thenComparingInt(graph.travelSteps()::get))
+        List<BlockPos> nearby = graph.travelSteps().keySet().stream()
+                .filter(position -> !position.equals(origin)
+                        && horizontalDistanceSquared(origin, position) <= FIRING_HORIZONTAL_RANGE * FIRING_HORIZONTAL_RANGE
+                        && Math.abs(position.getY() - origin.getY()) <= FIRING_VERTICAL_RANGE)
+                .sorted(Comparator.comparingInt(graph.travelSteps()::get))
                 .toList();
-        Set<BlockPos> exits = new LinkedHashSet<>();
-        for (BlockPos position : candidates) {
-            if (hasLineOfSight(entity, Vec3.atBottomCenterOf(position), target)) {
-                exits.add(position);
-                if (exits.size() >= ESCAPE_TARGET_LIMIT) {
+        for (BlockPos position : nearby) {
+            if (isValidFiringPosition(entity, target, hazards, attackRangeSquared,
+                    minimumTargetDistanceSquared, Vec3.atBottomCenterOf(position))) {
+                candidates.add(position);
+                if (candidates.size() >= ESCAPE_TARGET_LIMIT) {
                     break;
                 }
             }
         }
-        // A useful rising route can have an intermediate step still behind cover.
-        // No rising terrain means this is a sealed/flat case, not a hole exit.
-        if (exits.isEmpty() && !candidates.isEmpty()) {
-            exits.add(candidates.getFirst());
+
+        return createFiringTarget(candidates, target, attackRangeSquared);
+    }
+
+    static Optional<MultiTargetPositionTracker> findRecoveryTarget(
+            PathfinderMob entity, LivingEntity target, ThreatContext threats, double attackRangeSquared) {
+        return findRecoveryTarget(entity, target, threats, attackRangeSquared,
+                collectReachableEscapePositions(entity, entity.blockPosition()), false);
+    }
+
+    static Optional<MultiTargetPositionTracker> findRoomierTarget(
+            PathfinderMob entity, LivingEntity target, ThreatContext threats, double attackRangeSquared) {
+        return findRecoveryTarget(entity, target, threats, attackRangeSquared,
+                collectReachableEscapePositions(entity, entity.blockPosition()), true);
+    }
+
+    private static Optional<MultiTargetPositionTracker> findRecoveryTarget(
+            PathfinderMob entity, LivingEntity target, ThreatContext threats, double attackRangeSquared,
+            EscapeGraph graph, boolean requireMoreRoom) {
+        BlockPos origin = entity.blockPosition();
+        // The body may still be supported while its centre overhangs a ledge.
+        // The graph seed then is not a standing cell; measure the actual footing
+        // beside it rather than mistaking the same narrow ledge for more room.
+        BlockPos standingOrigin = origin;
+        if (!isSafeEscapePosition(entity, origin, new HashMap<>())) {
+            standingOrigin = graph.travelSteps().entrySet().stream()
+                    .filter(entry -> entry.getValue() == 1)
+                    .min(Comparator.comparingDouble(entry ->
+                            Vec3.atBottomCenterOf(entry.getKey()).distanceToSqr(entity.position())))
+                    .map(Map.Entry::getKey).orElse(origin);
+        }
+        int originSpace = measureOnwardReachability(standingOrigin, standingOrigin, graph.edges()).space();
+        boolean originHasShot = isValidFiringPosition(entity, target, threats.hazards(), attackRangeSquared,
+                ArcherMovementTask.KITE_ENTER_DISTANCE_SQUARED, entity.position());
+        List<RecoveryCandidate> candidates = new ArrayList<>();
+        for (var entry : graph.travelSteps().entrySet()) {
+            BlockPos position = entry.getKey();
+            int distance = horizontalDistanceSquared(origin, position);
+            if (distance < 4 || distance > ESCAPE_SEARCH_RADIUS * ESCAPE_SEARCH_RADIUS) {
+                continue;
+            }
+            Vec3 feet = Vec3.atBottomCenterOf(position);
+            double targetDistance = feet.distanceToSqr(target.position());
+            if (targetDistance < ArcherMovementTask.KITE_ENTER_DISTANCE_SQUARED
+                    || targetDistance > attackRangeSquared || !hasStandingSpace(entity, feet)
+                    || !preservesHazardClearance(entity.position(), feet, threats.hazards())
+                    || !preservesHazardClearanceAlongSegment(entity.position(), feet, threats.hazards())) {
+                continue;
+            }
+            boolean usableShot = isValidFiringPosition(entity, target, threats.hazards(), attackRangeSquared,
+                    ArcherMovementTask.KITE_ENTER_DISTANCE_SQUARED, feet);
+            OnwardReachability onward = measureOnwardReachability(position, position, graph.edges());
+            // A covered waypoint must lead out of the depression or toward more
+            // room. Merely walking along another sealed corridor is not recovery.
+            if (requireMoreRoom && onward.space() <= originSpace) {
+                continue;
+            }
+            boolean gainsShot = usableShot && !originHasShot;
+            if (!gainsShot && (!onward.demonstratedContinuation()
+                    || position.getY() <= origin.getY() && onward.space() <= originSpace)) {
+                continue;
+            }
+            candidates.add(new RecoveryCandidate(position, usableShot, onward.space(), entry.getValue()));
+        }
+        candidates.sort(Comparator.comparing(RecoveryCandidate::usableShot).reversed()
+                .thenComparing(Comparator.comparingInt(RecoveryCandidate::onwardSpace).reversed())
+                .thenComparingInt(RecoveryCandidate::travelSteps));
+        Set<BlockPos> exits = new LinkedHashSet<>();
+        for (RecoveryCandidate candidate : candidates) {
+            exits.add(candidate.position());
+            if (exits.size() >= ESCAPE_TARGET_LIMIT) {
+                break;
+            }
         }
         if (exits.isEmpty()) {
             return Optional.empty();
@@ -598,11 +715,12 @@ final class RangedCombatPositioning {
                 false, false, threats.escapeThreats(), threats.hazards()));
     }
 
-    private static Optional<MultiTargetPositionTracker> createCandidateTarget(Set<BlockPos> candidates) {
+    private static Optional<MultiTargetPositionTracker> createFiringTarget(
+            Set<BlockPos> candidates, LivingEntity target, double attackRangeSquared) {
         if (candidates.isEmpty()) {
             return Optional.empty();
         }
-        return Optional.of(new CandidatePositionTarget(candidates.iterator().next(), Set.copyOf(candidates)));
+        return Optional.of(new FiringPositionTarget(candidates.iterator().next(), Set.copyOf(candidates), target, attackRangeSquared));
     }
 
     private static void collectPreferredLateralFiringPositions(
@@ -743,18 +861,13 @@ final class RangedCombatPositioning {
         return null;
     }
 
-    static boolean isImmediateStrafeStepSafe(
-            PathfinderMob entity,
-            float lateralDirection,
-            List<? extends LivingEntity> hazards
-    ) {
+    @Nullable
+    static Vec3 findSafeStrafeLanding(PathfinderMob entity, float lateralDirection,
+                                      List<? extends LivingEntity> hazards) {
         float sign = Math.signum(lateralDirection);
-        if (sign == 0.0F) {
-            return false;
-        }
-        Vec3 origin = entity.position();
-        Vec3 candidate = origin.add(strafeOffset(entity, sign, STRAFE_PROBE_STEP));
-        return isSafeStrafePosition(entity, origin, candidate, hazards);
+        if (sign == 0) return null;
+        Vec3 landing = StrafeTerrain.findLanding(entity, strafeOffset(entity, sign, STRAFE_PROBE_STEP));
+        return landing != null && preservesHazardClearance(entity.position(), landing, hazards) ? landing : null;
     }
 
     static float findBestStrafeDirection(
@@ -781,9 +894,8 @@ final class RangedCombatPositioning {
         return (entity.getUUID().getLeastSignificantBits() & 1L) == 0L ? 1.0F : -1.0F;
     }
 
-    static boolean hasVisibleStrafeStep(PathfinderMob entity, LivingEntity target, float lateralDirection) {
-        return hasLineOfSight(entity,
-                entity.position().add(strafeOffset(entity, Math.signum(lateralDirection), STRAFE_PROBE_STEP)), target);
+    static boolean hasVisibleStrafeStep(PathfinderMob entity, LivingEntity target, Vec3 landing) {
+        return hasLineOfSight(entity, landing, target);
     }
 
     private static StrafeCandidate scoreStrafeSide(
@@ -804,8 +916,8 @@ final class RangedCombatPositioning {
         for (double distance = STRAFE_PROBE_STEP;
              distance <= MAX_STRAFE_CLEARANCE + 1.0E-6D;
              distance += STRAFE_PROBE_STEP) {
-            Vec3 candidate = origin.add(strafeOffset(entity, sign, distance));
-            if (!isSafeStrafePosition(entity, origin, candidate, hazards)
+            Vec3 candidate = StrafeTerrain.findLanding(entity, strafeOffset(entity, sign, distance));
+            if (candidate == null || !preservesHazardClearance(origin, candidate, hazards)
                     || !hasLineOfSight(entity, candidate, target)) {
                 break;
             }
@@ -825,17 +937,6 @@ final class RangedCombatPositioning {
         );
     }
 
-    private static boolean isSafeStrafePosition(
-            PathfinderMob entity,
-            Vec3 origin,
-            Vec3 candidate,
-            List<? extends LivingEntity> hazards
-    ) {
-        return isWalkableDestination(entity, candidate)
-                && hasStandingSpace(entity, candidate)
-                && preservesHazardClearance(origin, candidate, hazards);
-    }
-
     private static Vec3 strafeOffset(PathfinderMob entity, float sign, double distance) {
         float yawRadians = entity.getYRot() * (float)(Math.PI / 180.0D);
         // LivingEntity travels with lateral input in X and forward input in Z.
@@ -849,8 +950,15 @@ final class RangedCombatPositioning {
     private static boolean isNearbyMovementThreat(Mob entity, LivingEntity candidate) {
         return candidate != entity
                 && RangedWeaponHelper.isValidAttackTarget(entity, candidate)
-                && isCloseRangeMovementThreat(entity, candidate)
+                && (isCloseRangeMovementThreat(entity, candidate) || isActiveRangedMovementThreat(entity, candidate))
                 && !candidate.isRemoved();
+    }
+
+    private static boolean isActiveRangedMovementThreat(Mob entity, LivingEntity candidate) {
+        return candidate instanceof RangedAttackMob && candidate instanceof Mob attacker
+                && attacker.getTarget() == entity
+                && entity.distanceToSqr(candidate) <= NEARBY_THREAT_RANGE_SQUARED
+                && entity.getSensing().hasLineOfSight(candidate);
     }
 
     static boolean isCloseRangeMovementThreat(Mob entity, LivingEntity candidate) {
@@ -956,7 +1064,8 @@ final class RangedCombatPositioning {
     }
 
     private static boolean isTraversablePathType(PathType pathType) {
-        return pathType == null || pathType == PathType.WALKABLE || pathType == PathType.WALKABLE_DOOR;
+        return pathType == null || pathType == PathType.WALKABLE
+                || pathType == PathType.WALKABLE_DOOR || pathType == PathType.DOOR_OPEN;
     }
 
     private static boolean hasStandingSpace(PathfinderMob entity, Vec3 candidate) {
@@ -985,6 +1094,9 @@ final class RangedCombatPositioning {
             boolean demonstratedContinuation,
             int elevationGain
     ) {
+    }
+
+    private record RecoveryCandidate(BlockPos position, boolean usableShot, int onwardSpace, int travelSteps) {
     }
 
     private record OnwardReachability(int progress, int space, boolean demonstratedContinuation) {

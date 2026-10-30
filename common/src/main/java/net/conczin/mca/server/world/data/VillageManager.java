@@ -553,29 +553,39 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return RoomTypeResolver.resolveTypeChoice(scan.matchingTypes(), forcedType, "building");
     }
 
-    static List<Integer> fullScanRoomIds(Village village) {
-        if (village == null) return List.of();
-        return village.getRooms().map(Building::getId).sorted().toList();
+    static Map<Integer, List<Integer>> fullScanFloorIds(Village village) {
+        if (village == null) return Map.of();
+        Map<Integer, SortedSet<Integer>> grouped = new TreeMap<>();
+        village.getRooms().forEach(room -> grouped.computeIfAbsent(room.getStructureId(), ignored -> new TreeSet<>())
+                .add(room.getFloorId()));
+        Map<Integer, List<Integer>> floors = new LinkedHashMap<>();
+        grouped.forEach((structureId, floorIds) -> floors.put(structureId, List.copyOf(floorIds)));
+        return Collections.unmodifiableMap(floors);
     }
 
     public Building.validationResult fullScan(Village village) {
         if (village == null) return Building.validationResult.NOT_IN_BUILDING;
         Village.BuildingStateSnapshot snapshot = village.snapshotBuildingState();
 
-        for (int roomId : fullScanRoomIds(village)) {
-            Building room = village.getBuilding(roomId).orElse(null);
-            if (room == null) continue;
-            RegisteredRoomUpdate update = new RoomWorkflow(this, world).analyzeRegisteredRoomUpdate(
-                    village, roomId, room.getSourceBlock());
-            if (update.result() != Building.validationResult.SUCCESS) {
-                village.restoreBuildingState(snapshot);
-                return update.result();
+        try {
+            RoomWorkflow workflow = new RoomWorkflow(this, world);
+            for (var entry : fullScanFloorIds(village).entrySet()) {
+                for (int floorId : entry.getValue()) {
+                    RoomWorkflow.RegisteredFloorUpdate update = workflow.analyzeRegisteredFloorUpdate(
+                            village, entry.getKey(), floorId);
+                    if (update.result() != Building.validationResult.SUCCESS) {
+                        village.restoreBuildingState(snapshot);
+                        return update.result();
+                    }
+                    if (!village.publishFloorRefresh(update.refreshedStructure(), floorId, update.replacementRooms())) {
+                        village.restoreBuildingState(snapshot);
+                        return Building.validationResult.OVERLAP;
+                    }
+                }
             }
-            Building.validationResult result = applyRegisteredRoomUpdate(update, null, false);
-            if (result == Building.validationResult.SUCCESS) continue;
-
+        } catch (RuntimeException exception) {
             village.restoreBuildingState(snapshot);
-            return result;
+            throw exception;
         }
         finalizeVillageMutation(village);
         return Building.validationResult.SUCCESS;

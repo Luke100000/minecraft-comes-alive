@@ -28,6 +28,9 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
     @Override
     protected boolean checkExtraStartConditions(ServerLevel world, Mob entity) {
         WalkTarget target = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        if (clearInactiveActivityTarget(entity, target)) {
+            return false;
+        }
         // Durable intent survives a jump; unavailable native search must not begin its failure episode.
         if (target != null && target.getTarget() instanceof PersistentPathTarget
                 && entity.getNavigation() instanceof MCAGroundPathNavigation navigation
@@ -59,6 +62,10 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
 
     @Override
     protected boolean canStillUse(ServerLevel world, Mob entity, long gameTime) {
+        WalkTarget walkTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        if (clearInactiveActivityTarget(entity, walkTarget)) {
+            return false;
+        }
         if (shouldYieldToCombat(entity)) {
             return false;
         }
@@ -68,7 +75,6 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
             return true;
         }
 
-        WalkTarget walkTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
         Path path = entity.getNavigation().getPath();
         if (walkTarget != null
                 && path != null
@@ -135,6 +141,19 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
                 && !(walkTarget.getTarget() instanceof PersistentPathTarget)
                 && !entity.getBrain().hasMemoryValue(MemoryModuleTypeMCA.PLAYER_FOLLOWING)
                 && !entity.getBrain().hasMemoryValue(MemoryModuleTypeMCA.STAYING);
+    }
+
+    private static boolean clearInactiveActivityTarget(Mob entity, WalkTarget target) {
+        if (target == null || !(target.getTarget() instanceof PersistentPathTarget persistent)
+                || !persistent.isInactiveFor(entity)) {
+            return false;
+        }
+        // Validate at the movement consumer, including when no HOME/other POI is remembered.
+        entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        if (entity.getBrain().getMemoryInternal(MemoryModuleType.LOOK_TARGET).orElse(null) == persistent) {
+            entity.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
+        }
+        return true;
     }
 
     private static boolean walkTargetReached(Mob entity, WalkTarget walkTarget) {
