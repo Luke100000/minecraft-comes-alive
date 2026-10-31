@@ -46,6 +46,34 @@ class SelectedFloorScannerLandingTest {
     }
 
     @Test
+    void turnOwnershipDoesNotDependOnObservationQueryOrder() {
+        BlockGetter world = new TurningStairs();
+        BlockPos[] seeds = {
+                new BlockPos(1, 60, -4), new BlockPos(1, 62, 0),
+                new BlockPos(2, 62, 0), new BlockPos(7, 65, 0)
+        };
+        for (boolean lowerFirst : new boolean[]{true, false}) {
+            var observation = new SelectedFloorScanner.Observation(world, 2048, 64);
+            var selected = new SelectedFloorScanner.Result[seeds.length];
+            for (int query = 0; query < seeds.length; query++) {
+                int index = lowerFirst ? query : seeds.length - 1 - query;
+                selected[index] = observation.selected(seeds[index]);
+                assertEquals(Building.validationResult.SUCCESS, selected[index].result());
+            }
+            assertEquals(60, selected[0].anchorY());
+            assertEquals(60, selected[1].anchorY());
+            assertEquals(60, selected[2].anchorY());
+            assertEquals(65, selected[3].anchorY());
+            assertTrue(selected[0].floor().sameExactGeometry(selected[1].floor()),
+                    "the first turn must retain the exact lower geometry in either query order");
+            assertTrue(selected[0].floor().sameExactGeometry(selected[2].floor()),
+                    "the second turn must retain the exact lower geometry in either query order");
+            assertFalse(selected[0].floor().sameCellPositions(selected[3].floor()),
+                    "the upper deck must retain its distinct floor in either query order");
+        }
+    }
+
+    @Test
     void narrowSlabRoomBetweenFlightsKeepsItsOwnStorey() {
         SlabFlights world = new SlabFlights(2, 4);
         var lower = SelectedFloorScanner.scan(world, new BlockPos(0, 60, -9), 2048, 64);
@@ -63,28 +91,21 @@ class SelectedFloorScannerLandingTest {
     }
 
     @Test
-    void truncatedLandingProofDoesNotPoisonOtherSeeds() throws ReflectiveOperationException {
+    void truncatedLandingProofDoesNotPoisonOtherSeeds() {
         SlabFlights world = new SlabFlights(40, 2);
         var ceilings = new FloorCeilingResolver(world);
         var end = SelectedFloorScanner.inspectSurfaceCell(world, new BlockPos(0, 64, 0), ceilings).orElseThrow();
         var middle = SelectedFloorScanner.inspectSurfaceCell(world, new BlockPos(20, 64, 0), ceilings).orElseThrow();
-        Class<?> providerType = Class.forName(SelectedFloorScanner.class.getName() + "$StepProvider");
-        var through = providerType.getDeclaredMethod("throughLanding", SelectedFloorScanner.SurfaceCell.class);
-        through.setAccessible(true);
-        var stable = providerType.getDeclaredMethod("stableLanding", SelectedFloorScanner.SurfaceCell.class);
-        stable.setAccessible(true);
-        var providerField = SelectedFloorScanner.Observation.class.getDeclaredField("provider");
-        providerField.setAccessible(true);
         for (boolean endFirst : new boolean[]{true, false}) {
-            Object provider = providerField.get(new SelectedFloorScanner.Observation(world, 2048, 32));
-            if (endFirst) stable.invoke(provider, end);
-            assertEquals(true, through.invoke(provider, middle),
+            var observation = new SelectedFloorScanner.Observation(world, 2048, 32);
+            if (endFirst) observation.stableLanding(end);
+            assertEquals(true, observation.throughLanding(middle),
                     "a seed-relative radius cutoff was cached as a physical landing boundary");
-            assertEquals(false, stable.invoke(provider, middle),
+            assertEquals(false, observation.stableLanding(middle),
                     "a complete through-flight proof retained a stale stable-landing result");
-            assertEquals(false, stable.invoke(provider, end),
+            assertEquals(false, observation.stableLanding(end),
                     "a previous incomplete proof froze the end as another storey");
-            assertEquals(true, through.invoke(provider, middle));
+            assertEquals(true, observation.throughLanding(middle));
         }
     }
 

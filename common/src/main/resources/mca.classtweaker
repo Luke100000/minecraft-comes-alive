@@ -1,7 +1,13 @@
 classTweaker v1 named
 
+# Check native collision stepping before requesting an AI jump, without applying movement.
+accessible method net/minecraft/world/entity/Entity collide (Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/phys/Vec3;
+
 # Reuse vanilla's live partial-collision transition guard for raised navigation starts.
 accessible method net/minecraft/world/level/pathfinder/WalkNodeEvaluator canReachWithoutCollision (Lnet/minecraft/world/level/pathfinder/Node;)Z
+
+# Bound collision-surface start normalization by vanilla's native jump reach.
+accessible method net/minecraft/world/level/pathfinder/WalkNodeEvaluator getMobJumpHeight ()D
 
 # Reuse the vanilla live-hostile distance predicate for shelter overflow.
 accessible method net/minecraft/world/entity/ai/sensing/VillagerHostilesSensor isMatchingEntity (Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/entity/LivingEntity;)Z
@@ -32,6 +38,9 @@ mutable field net/minecraft/advancements/AdvancementRewards loot Ljava/util/List
 
 # Widen MoveControl.rotlerp for task usage
 accessible method net/minecraft/world/entity/ai/control/MoveControl rotlerp (FFF)F
+
+# Keep native STRAFE inputs while admitting safe local steps and drops.
+extendable method net/minecraft/world/entity/ai/control/MoveControl isWalkable (FF)Z
 
 # Widen the vanilla action-bar renderer so BlueprintScreen can place it above its blur.
 accessible method net/minecraft/client/gui/Gui renderOverlayMessage (Lnet/minecraft/client/gui/GuiGraphics;Lnet/minecraft/client/DeltaTracker;)V

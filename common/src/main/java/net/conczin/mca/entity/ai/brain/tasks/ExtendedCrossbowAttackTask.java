@@ -15,7 +15,7 @@ public final class ExtendedCrossbowAttackTask<E extends Mob & CrossbowAttackMob,
     protected boolean checkExtraStartConditions(ServerLevel level, E entity) {
         LivingEntity target = getAttackTarget(entity);
         InteractionHand hand = RangedWeaponHelper.getCrossbowHoldingHand(entity);
-        return !isEmergencyFleeing(entity)
+        return !shouldLowerWeapon(entity)
                && RangedWeaponHelper.isValidAttackTarget(entity, target)
                && hand != null
                && BehaviorUtils.canSee(entity, target)
@@ -24,7 +24,7 @@ public final class ExtendedCrossbowAttackTask<E extends Mob & CrossbowAttackMob,
 
     @Override
     public void crossbowAttack(E entity, LivingEntity target) {
-        if (isEmergencyFleeing(entity)) {
+        if (shouldLowerWeapon(entity)) {
             if (entity.isUsingItem()) {
                 entity.stopUsingItem();
             }
@@ -57,9 +57,8 @@ public final class ExtendedCrossbowAttackTask<E extends Mob & CrossbowAttackMob,
         return entity.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).orElse(null);
     }
 
-    private static boolean isEmergencyFleeing(Mob entity) {
-        return RangedCombatState.current(entity)
-                .map(RangedCombatState::suppressesRangedAttack)
-                .orElse(false);
+    private static boolean shouldLowerWeapon(Mob entity) {
+        RangedCombatState state = RangedCombatState.current(entity).orElse(RangedCombatState.HOLD);
+        return state.suppressesRangedAttack() || !state.permitsAiming(entity);
     }
 }

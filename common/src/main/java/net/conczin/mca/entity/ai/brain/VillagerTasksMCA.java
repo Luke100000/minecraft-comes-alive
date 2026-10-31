@@ -30,6 +30,7 @@ import net.conczin.mca.server.world.data.villageComponents.VillageGuardsManager;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.ai.Brain;
 import net.minecraft.world.entity.ai.behavior.*;
@@ -40,6 +41,7 @@ import net.minecraft.world.entity.ai.sensing.Sensor;
 import net.minecraft.world.entity.ai.sensing.SensorType;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.entity.monster.RangedAttackMob;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.schedule.Activity;
@@ -91,6 +93,7 @@ public class VillagerTasksMCA {
             MemoryModuleTypeMCA.PLAYER_FOLLOWING,
             MemoryModuleTypeMCA.STAYING,
             MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY,
+            MemoryModuleTypeMCA.NEAREST_IGNITED_CREEPER,
             MemoryModuleTypeMCA.WEARS_ARMOR,
             MemoryModuleTypeMCA.SMALL_BOUNTY,
             MemoryModuleTypeMCA.HIT_BY_PLAYER,
@@ -103,18 +106,19 @@ public class VillagerTasksMCA {
             MemoryModuleTypeMCA.MOURNING_FLOWER,
             MemoryModuleTypeMCA.FORCED_HOME,
             MemoryModuleTypeMCA.RANGED_COMBAT_STATE,
+            MemoryModuleTypeMCA.UNREACHABLE_COMBAT_TARGETS,
             MemoryModuleTypeMCA.CANT_REACH_WALK_TARGET,
             MemoryModuleTypeMCA.SHELTER_BED
     );
 
     public static final ImmutableList<SensorType<? extends Sensor<? super Villager>>> SENSOR_TYPES = ImmutableList.of(
             SensorType.NEAREST_PLAYERS,
-            SensorType.NEAREST_ITEMS,
-            SensorType.NEAREST_BED,
+            SensorsMCA.SLEEP_AWARE_ITEMS,
+            SensorsMCA.SLEEP_AWARE_BED,
             SensorType.HURT_BY,
             SensorType.VILLAGER_HOSTILES,
-            SensorType.SECONDARY_POIS,
-            SensorType.GOLEM_DETECTED,
+            SensorsMCA.SLEEP_AWARE_SECONDARY_POIS,
+            SensorsMCA.SLEEP_AWARE_GOLEM,
             SensorsMCA.VILLAGER_BABIES,
             SensorsMCA.EXPLODING_CREEPER,
             SensorsMCA.GUARD_ENEMIES
@@ -175,7 +179,8 @@ public class VillagerTasksMCA {
             brain.addActivity(Activity.PLAY, VillagerTasksMCA.getPlayPackage(1.0F));
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getSelfDefencePackage());
         } else if (villager.isGuard()) {
-            brain.setSchedule(SchedulesMCA.getTypeSchedule(villager, SchedulesMCA.GUARD, SchedulesMCA.GUARD_NIGHT));
+            brain.setSchedule(SchedulesMCA.getTypeSchedule(villager,
+                    SchedulesMCA.GUARD, SchedulesMCA.GUARD_NIGHT));
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getGuardCorePackage(villager));
             brain.addActivity(Activity.WORK, VillagerTasksMCA.getGuardWorkPackage());
             brain.addActivity(Activity.PANIC, VillagerTasksMCA.getGuardPanicPackage(0.5f));
@@ -281,7 +286,7 @@ public class VillagerTasksMCA {
                 Pair.of(2, PoiCompetitorScan.create()),
                 Pair.of(3, new LookAndFollowTradingPlayerSink(speedModifier)),
                 Pair.of(6, LazyFindPointOfInterestTask.create(profession.acquirableJobSite(), MemoryModuleType.JOB_SITE, MemoryModuleType.POTENTIAL_JOB_SITE, true, Optional.empty())),
-                Pair.of(7, new GoToPotentialJobSite(speedModifier)),
+                Pair.of(7, new ScheduledGoToPotentialJobSiteTask(speedModifier)),
                 Pair.of(8, YieldJobSite.create(speedModifier)),
                 Pair.of(10, AssignProfessionFromJobSite.create()),
                 Pair.of(10, LoseUnimportantJobTask.create())
@@ -362,7 +367,10 @@ public class VillagerTasksMCA {
                         UpdateActivityFromSchedule.create(),
                         villager -> !guardTooHurt(villager)
                 )),
-                Pair.of(1, VillagerCalmDown.create()),
+                Pair.of(1, new ConditionalTask<>(
+                        VillagerCalmDown.create(),
+                        VillagerTasksMCA::shouldCalmDown
+                )),
                 Pair.of(2, SetWalkTargetAwayFrom.entity(MemoryModuleType.NEAREST_HOSTILE, f, 6, false)),
                 Pair.of(2, SetWalkTargetAwayFrom.entity(MemoryModuleType.HURT_BY_ENTITY, f, 6, false)),
                 Pair.of(3, VillageBoundRandomStroll.create(f, 2, 2)),
@@ -374,10 +382,35 @@ public class VillagerTasksMCA {
         return villager.getHealth() < villager.getMaxHealth() * 0.25;
     }
 
+    private static boolean shouldCalmDown(VillagerEntityMCA villager) {
+        return !villager.isGuard() || !guardTooHurt(villager) || !hasActiveRangedPressure(villager);
+    }
+
+    private static boolean hasActiveRangedPressure(VillagerEntityMCA villager) {
+        // HurtBySensor remembers an actual attacker beyond LivingEntity's 100-tick
+        // hurt reference. Current targeting, range and LOS bound that memory's
+        // relevance; low health or an old injury alone cannot prolong panic.
+        LivingEntity attacker = villager.getBrain().getMemoryInternal(MemoryModuleType.HURT_BY_ENTITY)
+                .orElseGet(villager::getLastHurtByMob);
+        return attacker instanceof RangedAttackMob && attacker instanceof Mob mob
+                && mob.getTarget() == villager
+                && RangedWeaponHelper.isValidAttackTarget(villager, attacker)
+                && !attacker.isRemoved()
+                && villager.distanceToSqr(attacker) <= 256.0D
+                && villager.getSensing().hasLineOfSight(attacker);
+    }
+
     private static Optional<? extends LivingEntity> getPreferredTarget(VillagerEntityMCA villager) {
         if (guardTooHurt(villager)) {
             return Optional.empty();
         } else {
+            if (villager.getProfession() == ProfessionsMCA.ARCHER && RangedWeaponHelper.isHoldingSupportedWeapon(villager)) {
+                Optional<LivingEntity> immediate = ArcherMovementTask.findImmediateArcherAttacker(villager)
+                        .filter(attacker -> shouldRespondToGuardEnemy(villager, attacker));
+                if (immediate.isPresent()) {
+                    return immediate;
+                }
+            }
             Optional<LivingEntity> current = villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET);
             if (current.isPresent() && shouldKeepAttackTarget(villager, current.get())) {
                 return current;
@@ -397,7 +430,12 @@ public class VillagerTasksMCA {
                && !target.isRemoved()
                && target.level() == villager.level()
                && villager.canAttack(target)
-               && (getActivity(villager) != Activity.REST || shouldDefendDuringRest(villager, target));
+               && !UnreachableCombatTargets.contains(villager, target)
+               // Finish an already-started nearby fight after the shift ends,
+               // but do not let a long-range pursuit prevent scheduled sleep.
+               && (getActivity(villager) != Activity.REST
+                   || target.distanceToSqr(villager) < 24.0D * 24.0D
+                   || shouldDefendDuringRest(villager, target));
     }
 
     private static boolean shouldRespondToGuardEnemy(VillagerEntityMCA villager, LivingEntity target) {
@@ -413,6 +451,10 @@ public class VillagerTasksMCA {
     private static boolean shouldDefendDuringRest(VillagerEntityMCA villager, LivingEntity target) {
         return isFollowingPlayer(villager)
                || target.distanceTo(villager) < 8.0
+               // A village guard must not go off duty while a nearby monster
+               // is actively attacking one of its neighbours during REST.
+               || (target.distanceToSqr(villager) < 16.0 * 16.0
+                   && target instanceof Mob mob && mob.getTarget() instanceof Villager)
                // Homeless guards away from a village still defend themselves at range.
                // Once a bed is claimed, a distant enemy must not prevent scheduled REST.
                || (villager.getBrain().getMemoryInternal(MemoryModuleType.HOME).isEmpty()
@@ -439,7 +481,8 @@ public class VillagerTasksMCA {
         return isFollowingPlayer(villager)
                || getActivity(villager) == Activity.WORK
                || villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).isPresent()
-               || getPreferredTarget(villager).isPresent();
+               || getPreferredTarget(villager).isPresent()
+               || villager.isGuard() && guardTooHurt(villager) && hasActiveRangedPressure(villager);
     }
 
     private static boolean isHoldingRangedWeapon(VillagerEntityMCA villager) {
@@ -579,7 +622,11 @@ public class VillagerTasksMCA {
 
         return ImmutableList.of(
                 Pair.of(2, new RunOne<>(socializingTasks.build())),
-                Pair.of(10, new ShowTradesToPlayer(400, 1600)),
+                // Vanilla's trade-display task unconditionally clears MAINHAND
+                // when it stops, including while guard CORE is actively using
+                // that hand for a bow. Guards retain their combat equipment.
+                Pair.of(10, new ConditionalTask<>(new ShowTradesToPlayer(400, 1600),
+                        (VillagerEntityMCA v) -> !v.isGuard())),
                 Pair.of(10, SetLookAndInteract.create(EntityType.PLAYER, 4)),
                 Pair.of(2, SetWalkTargetFromBlockMemory.create(MemoryModuleType.MEETING_POINT, speedModifier, 6, 100, 200)),
                 Pair.of(3, new GiveGiftToHero(100)),
@@ -613,7 +660,8 @@ public class VillagerTasksMCA {
                 )),
                 Pair.of(3, new GiveGiftToHero(100)),
                 Pair.of(3, SetLookAndInteract.create(EntityType.PLAYER, 4)),
-                Pair.of(3, new ShowTradesToPlayer(400, 1600)),
+                Pair.of(3, new ConditionalTask<>(new ShowTradesToPlayer(400, 1600),
+                        (VillagerEntityMCA v) -> !v.isGuard())),
                 Pair.of(3, new GrieveTask()),
                 Pair.of(3, new GateBehavior<>(ImmutableMap.of(),
                         ImmutableSet.of(MemoryModuleType.INTERACTION_TARGET),
@@ -630,7 +678,12 @@ public class VillagerTasksMCA {
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getPanicPackage(float speedModifier) {
         float f = speedModifier * 1.5F;
         return ImmutableList.of(
-                Pair.of(0, VillagerCalmDown.create()),
+                // Adult guards also receive this generic package. Both registrations
+                // must respect the same danger gate; Brain.addActivity accumulates them.
+                Pair.of(0, new ConditionalTask<>(
+                        VillagerCalmDown.create(),
+                        VillagerTasksMCA::shouldCalmDown
+                )),
                 Pair.of(1, SetWalkTargetAwayFrom.entity(MemoryModuleType.NEAREST_HOSTILE, f, 6, false)),
                 Pair.of(1, SetWalkTargetAwayFrom.entity(MemoryModuleType.HURT_BY_ENTITY, f, 6, false)),
                 Pair.of(3, VillageBoundRandomStroll.create(f, 2, 2)),

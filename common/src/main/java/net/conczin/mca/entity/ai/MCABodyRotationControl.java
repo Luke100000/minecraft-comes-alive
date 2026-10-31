@@ -20,6 +20,8 @@ public class MCABodyRotationControl extends BodyRotationControl {
 
     @Override
     public void clientTick() {
+        // Combat stance owns presentation through both draw and cooldown.
+        // Native navigation retains movement yaw, path following and jumping.
         if (this.faceLookDirection.getAsBoolean()) {
             this.mob.yBodyRot = this.mob.yHeadRot;
             return;

@@ -863,7 +863,7 @@ class VillageFloorSystemTest {
         registerStructure(village, structure, room(100, 10, 7, true));
 
         assertTrue(structure.replaceFloorGeometry(7,
-                TestStructureFloors.create(0, 75, 82, region(75))));
+                TestStructureFloors.create(0, 75, 82, region(75)).geometry()));
 
         assertEquals(-1, structure.getFloor(3).orElseThrow().floorNumber());
         assertEquals(0, structure.getFloor(7).orElseThrow().floorNumber());
@@ -990,10 +990,28 @@ class VillageFloorSystemTest {
     }
 
     @Test
-    void fullMaintenanceTargetsRegisteredRoomsInStableIdOrder() {
-        Village village = populatedVillage();
-
-        assertEquals(List.of(1, 2, 3), VillageManager.fullScanRoomIds(village));
+    void fullMaintenanceTargetsUniquePhysicalFloorsInStableOrder() {
+        assertEquals(Map.of(), VillageManager.fullScanFloorIds(null));
+        assertEquals(Map.of(), VillageManager.fullScanFloorIds(new Village(1, null)));
+        List<Map.Entry<Integer, List<Integer>>> expected = List.of(
+                Map.entry(10, List.of(2, 7)), Map.entry(20, List.of(2)));
+        for (boolean reverse : List.of(false, true)) {
+            Village village = new Village(1, null);
+            Structure first = structure(10, 10, floor(7, 64).withFloorNumber(3), floor(2, 72).withFloorNumber(3),
+                    floor(9, 80).withFloorNumber(3));
+            Structure second = structure(20, 20, floor(2, 64).withFloorNumber(3));
+            if (reverse) {
+                registerStructure(village, second, room(200, 20, 2, true));
+                registerStructure(village, first, room(101, 10, 7, true));
+                registerRoom(village, room(100, 10, 2, true));
+            } else {
+                registerStructure(village, first, room(100, 10, 2, true));
+                registerRoom(village, room(101, 10, 7, true));
+                registerStructure(village, second, room(200, 20, 2, true));
+            }
+            registerRoom(village, room(102, 10, 2, true));
+            assertEquals(expected, List.copyOf(VillageManager.fullScanFloorIds(village).entrySet()));
+        }
     }
 
     @Test
@@ -1012,7 +1030,7 @@ class VillageFloorSystemTest {
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
         Structure refreshed = current.copy();
         assertTrue(refreshed.replaceFloorGeometry(0,
-                TestStructureFloors.create(0, 64, 68, 0, freshRegion)));
+                TestStructureFloors.create(0, 64, 68, 0, freshRegion).geometry()));
 
         Building added = room(101, 10, 0, true);
         TestFloorFootprint addedRegion = TestFloorFootprint.fromFootprint(64, Set.of(
@@ -1040,7 +1058,7 @@ class VillageFloorSystemTest {
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));
         Structure refreshed = current.copy();
         assertTrue(refreshed.replaceFloorGeometry(0,
-                TestStructureFloors.create(0, 64, 68, 0, freshRegion)));
+                TestStructureFloors.create(0, 64, 68, 0, freshRegion).geometry()));
         Building added = room(101, 10, 0, true);
         TestFloorFootprint addedRegion = TestFloorFootprint.fromFootprint(64, Set.of(
                 new BlockPos(2, 64, 0), new BlockPos(3, 64, 0)));

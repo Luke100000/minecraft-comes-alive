@@ -9,6 +9,7 @@ import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
+import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.conczin.mca.entity.ai.chatAI.ChatAI;
 import net.conczin.mca.entity.ai.chatAI.ChatAIContext;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
@@ -63,12 +64,15 @@ import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
 import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
+import net.minecraft.world.entity.ai.behavior.OneShot;
+import net.minecraft.world.entity.ai.behavior.SetWalkTargetAwayFrom;
 import net.minecraft.world.entity.ai.control.BodyRotationControl;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.entity.monster.CrossbowAttackMob;
+import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.monster.ZombieVillager;
 import net.minecraft.world.entity.npc.Villager;
@@ -79,6 +83,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
+import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ChestMenu;
@@ -115,6 +120,8 @@ import java.util.function.Predicate;
  * drops exclude props and inventory references, so borrowed items are not counted a second time.
  */
 public class VillagerEntityMCA extends Villager implements VillagerLike<VillagerEntityMCA>, MenuProvider, CompassionateEntity<BreedableRelationship>, CrossbowAttackMob {
+    private static final OneShot<PathfinderMob> CREEPER_ESCAPE = SetWalkTargetAwayFrom.entity(
+            MemoryModuleTypeMCA.NEAREST_IGNITED_CREEPER, 0.75F, 16, true);
     private static final CDataParameter<Float> INFECTION_PROGRESS = CParameter.create("InfectionProgress", 0.0f);
     private static final CDataParameter<Integer> GROWTH_AMOUNT = CParameter.create("GrowthAmount", -AgeState.getMaxAge());
     private static final float VEHICLE_ATTACHMENT_Y = 0.6F;
@@ -144,6 +151,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     private MCAFishingBobberEntity fishingBobber;
     private int despawnDelay;
     private int burned;
+    private boolean loggedArcherPanic;
     private long lastHit = 0;
     private int prevGrowthAmount;
     private boolean interactedWith;
@@ -177,7 +185,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     protected BodyRotationControl createBodyControl() {
         return new MCABodyRotationControl(
                 this,
-                () -> this.isUsingItem() && this.getUseItem().getItem() instanceof ProjectileWeaponItem
+                // Aggression is synchronized to clients and remains set through
+                // shot cooldowns; server-only Brain memories cannot drive pose.
+                () -> this.isAggressive() && RangedWeaponHelper.isHoldingSupportedWeapon(this)
         );
     }
 
@@ -426,11 +436,54 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public boolean doHurtTarget(Entity target) {
+        if (target instanceof LivingEntity living && !canAttack(living)) {
+            return false;
+        }
         boolean hurt = super.doHurtTarget(target);
         if (hurt) {
             attackedEntity(target);
         }
         return hurt;
+    }
+
+    @Override
+    public boolean canAttack(LivingEntity target) {
+        return (!(target instanceof Creeper creeper) || GuardEnemiesSensor.canAttackCreeper(creeper))
+                && !hasIgnitedCreeperThreat() && super.canAttack(target);
+    }
+
+    private boolean hasIgnitedCreeperThreat() {
+        return getBrain().getMemoryInternal(MemoryModuleTypeMCA.NEAREST_IGNITED_CREEPER)
+                .filter(threat -> threat instanceof Creeper creeper && creeper.isIgnited()
+                        && threat.isAlive() && !threat.isRemoved() && threat.level() == level()
+                        && distanceToSqr(threat) < 16.0 * 16.0).isPresent();
+    }
+
+    @Override
+    protected void customServerAiStep() {
+        super.customServerAiStep();
+        if (hasIgnitedCreeperThreat()) {
+            if (isSleeping()) {
+                stopSleeping();
+            }
+            getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
+            stopUsingItem();
+            setAggressive(false);
+            var threat = getBrain().getMemory(MemoryModuleTypeMCA.NEAREST_IGNITED_CREEPER).orElseThrow();
+            var walk = getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
+            if (walk == null || walk.getTarget().currentPosition().subtract(position())
+                    .dot(threat.position().subtract(position())) >= 0) {
+                // Vanilla's escape sampler can fail without replacing WALK_TARGET.
+                // Retract conflicting intent first; retain an existing retreat.
+                getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+                getBrain().eraseMemory(MemoryModuleType.PATH);
+                getNavigation().stop();
+                getMoveControl().setWantedPosition(getX(), getY(), getZ(), 0);
+            }
+            // Run after ordinary Brain movement producers so emergency escape wins.
+            // Trigger the vanilla one-shot directly: it carries no per-villager state.
+            CREEPER_ESCAPE.trigger((ServerLevel) level(), this, level().getGameTime());
+        }
     }
 
     public void onRangedAttackLanded(Entity target) {
@@ -689,6 +742,15 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
             damageAmount *= 0.0f;
         }
 
+        if (!level().isClientSide && MCA.platformHelper.isDevelopmentEnvironment() && getProfession() == ProfessionsMCA.ARCHER) {
+            Vec3 before = getDeltaMovement();
+            float healthBefore = getHealth();
+            boolean accepted = super.hurt(source, damageAmount);
+            MCA.LOGGER.info("[MCA Archer Damage] entity={} name=\"{}\" tick={} source={} accepted={} healthBefore={} healthAfter={} velocityBefore={} velocityAfter={} onGround={} pos={}",
+                    getStringUUID(), getName().getString(), tickCount, source.typeHolder().unwrapKey(), accepted,
+                    healthBefore, getHealth(), before, getDeltaMovement(), onGround(), position());
+            return accepted;
+        }
         return super.hurt(source, damageAmount);
     }
 
@@ -737,6 +799,18 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         if (!level().isClientSide) {
+            if (MCA.platformHelper.isDevelopmentEnvironment() && getProfession() == ProfessionsMCA.ARCHER) {
+                boolean panic = getBrain().isActive(Activity.PANIC);
+                if (panic != loggedArcherPanic || panic && tickCount % 20 == 0) {
+                    loggedArcherPanic = panic;
+                    var walk = getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+                    var path = getNavigation().getPath();
+                    MCA.LOGGER.info("[MCA Archer Panic] entity={} name=\"{}\" tick={} panic={} health={} pos={} velocity={} onGround={} collision={} walkTracker={} walkDestination={} navDone={} pathReachable={}",
+                            getStringUUID(), getName().getString(), tickCount, panic, getHealth(), position(), getDeltaMovement(), onGround(), horizontalCollision,
+                            walk == null ? "none" : walk.getTarget().getClass().getSimpleName(),
+                            walk == null ? null : walk.getTarget().currentPosition(), getNavigation().isDone(), path == null ? null : path.canReach());
+                }
+            }
             tickRecoveryFoodUse();
 
             if (melodyTick != null && !melodyTick.getAsBoolean()) {
@@ -803,6 +877,16 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     public void setItemSlot(EquipmentSlot slot, ItemStack stack) {
         ItemStack previous = super.getItemBySlot(slot);
+        if (!level().isClientSide && MCA.platformHelper.isDevelopmentEnvironment()
+                && slot.getType() == EquipmentSlot.Type.HAND && previous != stack
+                && (previous.getItem() instanceof ProjectileWeaponItem || stack.getItem() instanceof ProjectileWeaponItem)) {
+            String callers = StackWalker.getInstance().walk(frames -> frames.skip(1).limit(5)
+                    .map(StackWalker.StackFrame::toString).collect(java.util.stream.Collectors.joining(" <- ")));
+            MCA.LOGGER.info("[MCA Archer Hand] entity={} name=\"{}\" tick={} slot={} old={} new={} using={} useTicks={} activity={} attackTarget={} callers={}",
+                    getStringUUID(), getName().getString(), tickCount, slot, previous, stack,
+                    isUsingItem(), getTicksUsingItem(), getBrain().getActiveNonCoreActivity(),
+                    getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET).map(Entity::getStringUUID).orElse("none"), callers);
+        }
         boolean borrowed = borrowedEquipment != null && borrowedEquipment.remove(slot);
         if (inventory != null && !stack.isEmpty() && InventoryUtils.containsReference(inventory, stack)) {
             borrowedEquipment.add(slot);
@@ -1918,6 +2002,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     @Override
     public void performRangedAttack(LivingEntity target, float pullProgress) {
+        if (!RangedWeaponHelper.isValidAttackTarget(this, target)) {
+            return;
+        }
         InteractionHand weaponHand = RangedWeaponHelper.getWeaponHoldingHand(this);
         if (weaponHand == null) {
             return;
@@ -1939,17 +2026,39 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         }
 
         if (weaponStack.getItem() instanceof BowItem) {
-            ItemStack arrow = this.getProjectile(weaponStack);
-            AbstractArrow persistentProjectileEntity = ProjectileUtil.getMobArrow(this, arrow, pullProgress, weaponStack);
-            Vec3 shot = RangedWeaponHelper.calculateBowShotVector(
-                    persistentProjectileEntity.position(),
-                    target.position(),
-                    target.getBbHeight()
-            );
-            persistentProjectileEntity.shoot(shot.x, shot.y, shot.z, 1.6F, 3.0F);
-            this.playSound(SoundEvents.SKELETON_SHOOT, 1.0F, 1.0F / (this.getRandom().nextFloat() * 0.4F + 0.8F));
-            this.level().addFreshEntity(persistentProjectileEntity);
+            tryPerformBowAttack(target, pullProgress);
         }
+    }
+
+    public boolean tryPerformBowAttack(LivingEntity target, float pullProgress) {
+        InteractionHand bowHand = RangedWeaponHelper.getBowHoldingHand(this);
+        if (bowHand == null || !RangedWeaponHelper.isValidAttackTarget(this, target)) {
+            return false;
+        }
+        ItemStack weapon = getItemInHand(bowHand);
+        ItemStack ammunition = getProjectile(weapon);
+        AbstractArrow projectile = ProjectileUtil.getMobArrow(this, ammunition, pullProgress, weapon);
+        boolean ordinaryArrow = projectile.getClass() == net.minecraft.world.entity.projectile.Arrow.class
+                || projectile.getClass() == net.minecraft.world.entity.projectile.SpectralArrow.class;
+        Vec3 direction;
+        if (ordinaryArrow && !projectile.isNoGravity()
+                && RangedWeaponHelper.canPredictBowTrajectory(this, weapon, ammunition)) {
+            var solution = RangedWeaponHelper.solveBowShot(projectile.position(), target.position(),
+                    target.getBbHeight(), RangedWeaponHelper.observedTargetVelocity(target));
+            if (solution.isEmpty() || !RangedWeaponHelper.hasClearBowTrajectory(this, projectile.position(), solution.get())) {
+                return false;
+            }
+            direction = solution.get().direction();
+        } else {
+            direction = RangedWeaponHelper.calculateBowShotVector(projectile.position(), target.position(), target.getBbHeight());
+        }
+        projectile.shoot(direction.x, direction.y, direction.z,
+                RangedWeaponHelper.BOW_PROJECTILE_SPEED, RangedWeaponHelper.BOW_INACCURACY);
+        if (!level().addFreshEntity(projectile)) {
+            return false;
+        }
+        playSound(SoundEvents.SKELETON_SHOOT, 1.0F, 1.0F / (getRandom().nextFloat() * 0.4F + 0.8F));
+        return true;
     }
 
     @Override

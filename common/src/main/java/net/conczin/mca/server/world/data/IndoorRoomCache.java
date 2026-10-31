@@ -11,6 +11,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.material.FluidState;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
@@ -51,13 +52,19 @@ public final class IndoorRoomCache {
     }
 
     public Optional<Room> resolve(BlockPos bed) {
+        return resolveRoom(bed, bed);
+    }
+
+    /** Resolve the occupant's actual room on a bed's discovered floor, including bedless subrooms. */
+    public Optional<Room> resolveRoom(BlockPos bed, BlockPos occupant) {
         if (!isLoaded(bed) || !BedPoiCompatibility.isHomePoiState(level.getBlockState(bed))) {
             entries.remove(bed);
             return Optional.empty();
         }
         Entry entry = resolveFloor(bed, new ScanBudget());
-        return entry == null ? Optional.empty() : entry.rooms.stream()
-                .filter(room -> room.floorCells().contains(bed)).findFirst();
+        return entry == null || entry.rooms.stream().noneMatch(room -> room.floorCells().contains(bed))
+                ? Optional.empty() : entry.rooms.stream()
+                .filter(room -> room.floorCells().contains(occupant)).findFirst();
     }
 
     public Optional<House> resolveHouse(BlockPos bed) {
@@ -298,10 +305,11 @@ public final class IndoorRoomCache {
     }
 
     /** Operation-local read view: never load chunks, and never accept missing evidence as air. */
-    private final class LoadedBlocks implements SelectedFloorScanner.LoadedColumns {
+    private final class LoadedBlocks implements SelectedFloorScanner.LoadedColumns, FloorCeilingResolver.ColumnHeight {
         private BlockPos firstMissingBlock;
         private final Map<BlockPos, BlockState> observed = new HashMap<>();
         private final Map<Long, Boolean> columns = new HashMap<>();
+        private final Map<Long, Integer> ceilingHeights = new HashMap<>();
         private final Set<BlockPos> collisionStates = new HashSet<>();
         private boolean complete;
 
@@ -314,11 +322,12 @@ public final class IndoorRoomCache {
         }
 
         private void boundDependencies() {
-            if (observed.size() + columns.size() + collisionStates.size() <= MAX_OBSERVED_BLOCKS) return;
+            if (observed.size() + columns.size() + ceilingHeights.size() + collisionStates.size() <= MAX_OBSERVED_BLOCKS) return;
             // Geometry is valid now, but a truncated proof cannot certify future cache hits.
             complete = false;
             observed.clear();
             columns.clear();
+            ceilingHeights.clear();
             collisionStates.clear();
         }
 
@@ -333,6 +342,22 @@ public final class IndoorRoomCache {
             boolean loaded = isLoaded(pos);
             observeColumn(pos, loaded);
             return loaded;
+        }
+
+        @Override
+        public int highestBlockY(BlockPos pos) {
+            var chunk = level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
+            observeColumn(pos, chunk != null);
+            if (chunk == null) {
+                markMissing(pos);
+                return level.getMinBuildHeight() - 1;
+            }
+            int height = chunk.getHeight(Heightmap.Types.WORLD_SURFACE, pos.getX() & 15, pos.getZ() & 15);
+            if (complete) {
+                ceilingHeights.putIfAbsent(ChunkPos.asLong(pos.getX(), pos.getZ()), height);
+                boundDependencies();
+            }
+            return height;
         }
 
         @Override
@@ -463,6 +488,7 @@ public final class IndoorRoomCache {
         private final List<Room> rooms;
         private final Map<BlockPos, BlockState> observed;
         private final Map<Long, Boolean> columns;
+        private final Map<Long, Integer> ceilingHeights;
         private final Set<BlockPos> collisionStates;
         private final boolean completeDependencies;
         private final Building.validationResult failure;
@@ -479,9 +505,11 @@ public final class IndoorRoomCache {
             Map<BlockPos, BlockState> dependencies = new HashMap<>(observed);
             if (blocks != null && blocks.complete) dependencies.putAll(blocks.observed);
             completeDependencies = blocks != null && blocks.complete
-                    && dependencies.size() + blocks.columns.size() + blocks.collisionStates.size() <= MAX_OBSERVED_BLOCKS;
+                    && dependencies.size() + blocks.columns.size() + blocks.ceilingHeights.size()
+                    + blocks.collisionStates.size() <= MAX_OBSERVED_BLOCKS;
             this.observed = completeDependencies ? Map.copyOf(dependencies) : Map.of();
             this.columns = completeDependencies ? Map.copyOf(blocks.columns) : Map.of();
+            this.ceilingHeights = completeDependencies ? Map.copyOf(blocks.ceilingHeights) : Map.of();
             this.collisionStates = completeDependencies ? Set.copyOf(blocks.collisionStates) : Set.of();
             this.failure = failure;
             this.created = now;
@@ -490,7 +518,7 @@ public final class IndoorRoomCache {
         }
 
         private int observedCount() {
-            return observed.size() + columns.size() + collisionStates.size();
+            return observed.size() + columns.size() + ceilingHeights.size() + collisionStates.size();
         }
 
         private boolean isCurrent(long now) {
@@ -502,6 +530,12 @@ public final class IndoorRoomCache {
                 long key = column.getKey();
                 boolean loaded = level.getChunkSource().getChunkNow(ChunkPos.getX(key), ChunkPos.getZ(key)) != null;
                 if (loaded != column.getValue()) return false;
+            }
+            for (var column : ceilingHeights.entrySet()) {
+                int x = ChunkPos.getX(column.getKey()), z = ChunkPos.getZ(column.getKey());
+                var chunk = level.getChunkSource().getChunkNow(x >> 4, z >> 4);
+                if (chunk == null || chunk.getHeight(Heightmap.Types.WORLD_SURFACE, x & 15, z & 15)
+                        != column.getValue()) return false;
             }
             for (var block : observed.entrySet()) {
                 if (!isLoaded(block.getKey())) return false;

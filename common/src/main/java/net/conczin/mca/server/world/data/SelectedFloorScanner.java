@@ -67,76 +67,69 @@ final class SelectedFloorScanner {
     }
 
     /** All discovery evidence lives for one operation; none is retained across world changes. */
-    static final class Observation {
+    static final class Observation implements StepProvider {
         private final BlockGetter world;
         private final int maxSize;
         private final int maxRadius;
         private final FloorCeilingResolver ceilings;
-        private final StepProvider provider;
         private final TransitionOwnership transitionsOwner;
         private final RegionDiscovery regions;
         private final Map<BlockPos, Result> resolutions = new HashMap<>();
         private final Map<BlockPos, OptionalDouble> surfaces = new HashMap<>();
         private final Map<FrameKey, Optional<FramedDoorway>> frames = new HashMap<>();
+        private final Map<BlockPos, List<HorizontalStep>> steps = new HashMap<>();
+        private final Map<BlockPos, Optional<BlockPos>> boundaries = new HashMap<>();
+        private final Map<BlockPos, Boolean> stairCells = new HashMap<>();
+        private final Map<BlockPos, Boolean> throughLandings = new HashMap<>();
 
         Observation(BlockGetter world, int maxSize, int maxRadius) {
             this.world = world;
             this.maxSize = maxSize;
             this.maxRadius = maxRadius;
             this.ceilings = new FloorCeilingResolver(world);
-            Map<BlockPos, List<HorizontalStep>> steps = new HashMap<>();
-            Map<BlockPos, Optional<BlockPos>> boundaries = new HashMap<>();
-            Map<BlockPos, Boolean> stairCells = new HashMap<>();
-            Map<BlockPos, Boolean> throughLandings = new HashMap<>();
-            this.provider = new StepProvider() {
-                @Override
-                public List<HorizontalStep> steps(SurfaceCell cell) {
-                    return steps.computeIfAbsent(cell.feet(),
-                            ignored -> worldSteps(world, cell, ceilings, this));
-                }
-
-                @Override
-                public Optional<FramedDoorway> framedDoorway(BlockPos feet, Direction.Axis normalAxis) {
-                    return Observation.this.framedDoorway(feet, normalAxis);
-                }
-
-                @Override
-                public OptionalDouble surfaceY(BlockGetter world, BlockPos feet) {
-                    if (!isLoadedColumn(world, feet)) return OptionalDouble.empty();
-                    // Candidate support/headroom does not depend on the approaching
-                    // cell. Cache it only for this observation, not its directional edge.
-                    return surfaces.computeIfAbsent(feet.immutable(), pos -> floorSurfaceY(world, pos));
-                }
-
-                @Override
-                public BlockPos horizontalConnector(BlockGetter world, BlockPos horizontal) {
-                    if (!isLoadedColumn(world, horizontal)) return null;
-                    return boundaries.computeIfAbsent(horizontal.immutable(),
-                            pos -> Optional.ofNullable(SelectedFloorScanner.horizontalConnector(world, pos)))
-                            .orElse(null);
-                }
-
-                @Override
-                public boolean explicitStairCell(BlockGetter world, BlockPos feet) {
-                    return stairCells.computeIfAbsent(feet.immutable(),
-                            pos -> StepProvider.super.explicitStairCell(world, pos));
-                }
-
-                @Override
-                public boolean stableLanding(SurfaceCell cell) {
-                    return StepProvider.super.stableLanding(cell) && !throughLanding(cell);
-                }
-
-                @Override
-                public boolean throughLanding(SurfaceCell cell) {
-                    return isThroughStairLanding(world, cell, this, maxSize, maxRadius, throughLandings);
-                }
-            };
-            this.regions = new RegionDiscovery(world, ceilings, provider, maxSize, maxRadius);
+            this.regions = new RegionDiscovery(world, ceilings, this, maxSize, maxRadius);
             // Proving a transition observes both floor halves. Only the selected half is
             // materialized and charged against maxSize by scanSelectedFloor.
             int maxTransitionSize = (int) Math.min(2L * maxSize, Integer.MAX_VALUE);
-            this.transitionsOwner = new TransitionOwnership(world, provider, regions, maxTransitionSize, maxRadius);
+            this.transitionsOwner = new TransitionOwnership(world, this, regions, maxTransitionSize, maxRadius);
+        }
+
+        @Override
+        public List<HorizontalStep> steps(SurfaceCell cell) {
+            return steps.computeIfAbsent(cell.feet(),
+                    ignored -> worldSteps(world, cell, ceilings, this));
+        }
+
+        @Override
+        public OptionalDouble surfaceY(BlockGetter world, BlockPos feet) {
+            if (!isLoadedColumn(world, feet)) return OptionalDouble.empty();
+            // Candidate support/headroom does not depend on the approaching
+            // cell. Cache it only for this observation, not its directional edge.
+            return surfaces.computeIfAbsent(feet.immutable(), pos -> floorSurfaceY(world, pos));
+        }
+
+        @Override
+        public BlockPos horizontalConnector(BlockGetter world, BlockPos horizontal) {
+            if (!isLoadedColumn(world, horizontal)) return null;
+            return boundaries.computeIfAbsent(horizontal.immutable(),
+                    pos -> Optional.ofNullable(SelectedFloorScanner.horizontalConnector(world, pos)))
+                    .orElse(null);
+        }
+
+        @Override
+        public boolean explicitStairCell(BlockGetter world, BlockPos feet) {
+            return stairCells.computeIfAbsent(feet.immutable(),
+                    pos -> StepProvider.super.explicitStairCell(world, pos));
+        }
+
+        @Override
+        public boolean stableLanding(SurfaceCell cell) {
+            return StepProvider.super.stableLanding(cell) && !throughLanding(cell);
+        }
+
+        @Override
+        public boolean throughLanding(SurfaceCell cell) {
+            return isThroughStairLanding(world, cell, this, maxSize, maxRadius, throughLandings);
         }
 
         private Result resolve(BlockPos seed) {
@@ -146,14 +139,14 @@ final class SelectedFloorScanner {
                 }
                 SurfaceCell supported = resolveSeedCell(world, requested, ceilings).orElse(null);
                 SurfaceCell traversalSeed = supported == null
-                        ? adjacentTraversalSeed(world, requested, ceilings, provider).orElse(null) : supported;
+                        ? adjacentTraversalSeed(world, requested, ceilings, this).orElse(null) : supported;
                 if (traversalSeed == null) {
                     return Result.failure(Building.validationResult.NOT_IN_BUILDING, requested);
                 }
 
                 return resolveSelectedFloor(
                         world, traversalSeed, supported == null ? null : requested,
-                        ceilings, provider, transitionsOwner, regions, maxSize, maxRadius);
+                        ceilings, this, transitionsOwner, regions, maxSize, maxRadius);
             });
         }
 
@@ -171,10 +164,11 @@ final class SelectedFloorScanner {
         }
 
         boolean explicitStairCell(BlockPos feet) {
-            return provider.explicitStairCell(world, feet);
+            return explicitStairCell(world, feet);
         }
 
-        Optional<FramedDoorway> framedDoorway(BlockPos feet, Direction.Axis normalAxis) {
+        @Override
+        public Optional<FramedDoorway> framedDoorway(BlockPos feet, Direction.Axis normalAxis) {
             FrameKey key = new FrameKey(feet.immutable(), normalAxis);
             Optional<FramedDoorway> known = frames.get(key);
             if (known != null) return known;
@@ -220,7 +214,7 @@ final class SelectedFloorScanner {
                         || !hasInteriorHeadroom(world, cell.relative(normal))
                         || !isTraversalOccupancyAllowed(world, cell.relative(normal.getOpposite()))
                         || !hasInteriorHeadroom(world, cell.relative(normal.getOpposite()))
-                        || provider.surfaceY(world, cell).isEmpty()
+                        || surfaceY(world, cell).isEmpty()
                         || !fullFrameFace(cell.above(2), Direction.DOWN)) return Optional.empty();
                 cells.add(cell.immutable());
             }
@@ -329,7 +323,7 @@ final class SelectedFloorScanner {
         BlockPos selectedCell = floor.cellAt(requestedSurface.feet()).isPresent()
                 ? requestedSurface.feet() : traversalSeed.feet();
         // Owned stair rows extend below a landing; they must not move its storey anchor.
-        return success(selectedCell, supportedSource, selectedRegion.anchorY(), floor,
+        return success(selectedCell, supportedSource, traversalSeed.feet(), selectedRegion.anchorY(), floor,
                 materialized.transitions(), traversal.verticalBoundaryCells(), traversal.adjacentFloorSeeds());
     }
 
@@ -1291,6 +1285,7 @@ final class SelectedFloorScanner {
 
     private static Result success(BlockPos seed,
                                   BlockPos supportedSource,
+                                  BlockPos traversalSeed,
                                   int anchorY,
                                   FloorGeometry geometry,
                                   Set<Transition> transitions,
@@ -1299,7 +1294,7 @@ final class SelectedFloorScanner {
         FloorGeometry.Bounds bounds = FloorGeometry.bounds(geometry.cells(), -1);
         return new Result(Building.validationResult.SUCCESS, geometry, seed, supportedSource, anchorY,
                 bounds.min(), bounds.max(),
-                transitions, verticalBoundaryCells, adjacentFloorSeeds);
+                transitions, verticalBoundaryCells, adjacentFloorSeeds, traversalSeed);
     }
 
     record SurfaceCell(BlockPos feet, double surfaceY, int ceilingY) {
@@ -1710,13 +1705,22 @@ final class SelectedFloorScanner {
                   BlockPos max,
                   Set<Transition> transitions,
                   Set<BlockPos> verticalBoundaryCells,
-                  Set<BlockPos> adjacentFloorSeeds) {
+                  Set<BlockPos> adjacentFloorSeeds,
+                  BlockPos traversalSeed) {
         Result {
             seed = seed.immutable();
             supportedSource = supportedSource == null ? null : supportedSource.immutable();
+            traversalSeed = traversalSeed == null ? null : traversalSeed.immutable();
             transitions = transitions == null ? Set.of() : Set.copyOf(transitions);
             verticalBoundaryCells = verticalBoundaryCells == null ? Set.of() : Set.copyOf(verticalBoundaryCells);
             adjacentFloorSeeds = adjacentFloorSeeds == null ? Set.of() : Set.copyOf(adjacentFloorSeeds);
+        }
+
+        Result(Building.validationResult result, FloorGeometry floor, BlockPos seed, BlockPos supportedSource,
+               int anchorY, BlockPos min, BlockPos max, Set<Transition> transitions,
+               Set<BlockPos> verticalBoundaryCells, Set<BlockPos> adjacentFloorSeeds) {
+            this(result, floor, seed, supportedSource, anchorY, min, max, transitions,
+                    verticalBoundaryCells, adjacentFloorSeeds, null);
         }
 
         static Result failure(Building.validationResult result, BlockPos source) {

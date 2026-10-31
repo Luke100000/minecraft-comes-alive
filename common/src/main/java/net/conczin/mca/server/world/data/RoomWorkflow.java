@@ -261,7 +261,99 @@ public final class RoomWorkflow {
                 plan.scanSeed(), observation.scan(), existing, -1, plan.targetBuildingId());
     }
 
+    RegisteredFloorUpdate analyzeRegisteredFloorUpdate(Village village, int structureId, int floorId) {
+        Structure structure = village == null ? null : village.getStructure(structureId).orElse(null);
+        StructureFloor floor = structure == null ? null : structure.getFloor(floorId).orElse(null);
+        if (floor == null) {
+            return RegisteredFloorUpdate.failure(Building.validationResult.NOT_IN_BUILDING, structureId, floorId);
+        }
+        List<Building> rooms = village.getRooms()
+                .filter(room -> room.getStructureId() == structureId && room.getFloorId() == floorId)
+                .sorted(Comparator.comparingInt(Building::getId)).toList();
+        if (rooms.isEmpty()) {
+            return RegisteredFloorUpdate.failure(Building.validationResult.NOT_IN_BUILDING, structureId, floorId);
+        }
+        StructureScanner.Result fresh = StructureScanner.scanExistingFloor(world, structure, floor,
+                rooms.getFirst().getSourceBlock(), village.getStructures().values());
+        if (fresh.result() != Building.validationResult.SUCCESS) {
+            return RegisteredFloorUpdate.failure(fresh.result(), structureId, floorId);
+        }
+        List<RoomPartitioner.Component> components = BuildingRoomScanner.components(world, fresh.scan());
+        Structure refreshed = refreshedStructure(structure, floorId, fresh.scannedFloor());
+        if (refreshed == null) {
+            return RegisteredFloorUpdate.failure(Building.validationResult.OVERLAP, structureId, floorId);
+        }
+        StructureFloor refreshedFloor = refreshed.getFloor(floorId).orElseThrow();
+        RoomPoiEvidence.Index evidence = RoomPoiEvidence.index(components);
+        boolean[] matched = new boolean[components.size()];
+        List<Building> replacements = new ArrayList<>(rooms.size());
+        for (Building room : rooms) {
+            int match = -1;
+            for (int i = 0; i < components.size(); i++) {
+                if (fresh.scannedFloor().roomIdentityOverlapCount(
+                        room.getFloorCells(), components.get(i).floorCells()) == 0) continue;
+                if (match >= 0 || matched[i]) {
+                    return RegisteredFloorUpdate.failure(Building.validationResult.OVERLAP, structureId, floorId);
+                }
+                match = i;
+            }
+            if (match < 0) {
+                return RegisteredFloorUpdate.failure(Building.validationResult.OVERLAP, structureId, floorId);
+            }
+            matched[match] = true;
+            BuildingRoomScanner.Result geometry = BuildingRoomScanner.materialize(
+                    room.getSourceBlock(), Config.getInstance().maxBuildingSize, evidence, components.get(match));
+            BuildingScanResult selected = materializeRoom(village, refreshed, refreshedFloor, geometry);
+            if (selected.result() != Building.validationResult.SUCCESS) {
+                return RegisteredFloorUpdate.failure(selected.result(), structureId, floorId);
+            }
+            Building replacement = selected.building();
+            replacement.setId(room.getId());
+            replacement.setType(room.getType());
+            replacement.setTypeForced(room.isTypeForced());
+            replacement.setContributesToMain(room.contributesToMain());
+            replacements.add(replacement);
+        }
+        List<Building> prospective = village.getRooms()
+                .filter(room -> room.getStructureId() != structureId || room.getFloorId() != floorId)
+                .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
+        prospective.addAll(replacements);
+        RoomTypeResolver resolver = RoomTypeResolver.create(village, prospective);
+        for (Building replacement : replacements) {
+            if (replacement.isTypeForced()) continue;
+            String type = resolver.resolve(replacement).updatedType(null);
+            if (type == null) {
+                return RegisteredFloorUpdate.failure(Building.validationResult.INVALID_TYPE, structureId, floorId);
+            }
+            replacement.setType(type);
+        }
+        return new RegisteredFloorUpdate(Building.validationResult.SUCCESS, structureId, floorId,
+                refreshed, replacements);
+    }
+
+    record RegisteredFloorUpdate(Building.validationResult result, int structureId, int floorId,
+                                 Structure refreshedStructure, List<Building> replacementRooms) {
+        RegisteredFloorUpdate {
+            if (result != Building.validationResult.SUCCESS) {
+                refreshedStructure = null;
+                replacementRooms = List.of();
+            } else {
+                replacementRooms = List.copyOf(replacementRooms);
+            }
+        }
+
+        static RegisteredFloorUpdate failure(Building.validationResult result, int structureId, int floorId) {
+            return new RegisteredFloorUpdate(result, structureId, floorId, null, List.of());
+        }
+    }
+
     RegisteredRoomUpdate analyzeRegisteredRoomUpdate(Village village, int roomId, BlockPos source) {
+        return analyzeRegisteredRoomUpdate(village, roomId, source, null);
+    }
+
+    /** Consumes a validated Floor observation produced synchronously by this operation. */
+    RegisteredRoomUpdate analyzeRegisteredRoomUpdate(Village village, int roomId, BlockPos source,
+                                                     StructureScanner.Result observed) {
         Building expected = village == null ? null : village.getBuilding(roomId).orElse(null);
         if (expected == null || !expected.isFunctionalRoom()) {
             return RegisteredRoomUpdate.failure(Building.validationResult.NOT_IN_BUILDING, source, village);
@@ -270,20 +362,21 @@ public final class RoomWorkflow {
         if (structure == null) {
             return RegisteredRoomUpdate.failure(Building.validationResult.NOT_IN_BUILDING, source, village);
         }
-        return analyzeRegisteredFloor(village, structure, expected, source);
+        return analyzeRegisteredFloor(village, structure, expected, source, observed);
     }
 
     private RegisteredRoomUpdate analyzeRegisteredFloor(Village village,
                                                         Structure structure,
                                                         Building expected,
-                                                        BlockPos source) {
+                                                        BlockPos source,
+                                                        StructureScanner.Result observed) {
         StructureFloor persistedFloor = structure.getFloor(expected.getFloorId()).orElse(null);
         if (persistedFloor == null) {
             return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, source, village);
         }
 
-        StructureScanner.Result fresh = StructureScanner.scanExistingFloor(
-                world, structure, persistedFloor, source, village.getStructures().values());
+        StructureScanner.Result fresh = observed == null ? StructureScanner.scanExistingFloor(
+                world, structure, persistedFloor, source, village.getStructures().values()) : observed;
         if (fresh.result() != Building.validationResult.SUCCESS) {
             return RegisteredRoomUpdate.failure(fresh.result(), source, village);
         }

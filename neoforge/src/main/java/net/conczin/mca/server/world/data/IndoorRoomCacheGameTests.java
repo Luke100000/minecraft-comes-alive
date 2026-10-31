@@ -23,6 +23,29 @@ public final class IndoorRoomCacheGameTests {
     private static final String BATCH = "mca_indoor_exterior_dependencies";
     private static final Map<BlockPos, BlockState> CHANGED = new LinkedHashMap<>();
 
+    @GameTest(batch = BATCH, templateNamespace = "mca", skyAccess = true,
+            template = "gametest/isolated_ai_arena", timeoutTicks = 160)
+    public static void newRoofInPreviouslySkippedSkyInvalidatesCachedMembership(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos min = room(helper);
+        BlockPos bed = min.offset(2, 0, 1), balcony = min.offset(5, 0, 1);
+        put(level, balcony.below(), Blocks.STONE.defaultBlockState());
+        IndoorRoomCache cache = new IndoorRoomCache(level);
+        var initial = cache.resolve(bed).orElseThrow();
+        helper.assertTrue(!initial.floorCells().contains(balcony), "uncovered balcony was already inside");
+        helper.startSequence().thenIdle(41).thenExecute(() -> {
+            helper.assertTrue(cache.resolve(bed).orElseThrow() == initial,
+                    "unchanged small house could not retain a complete bounded dependency proof");
+            put(level, balcony.above(4), Blocks.STONE.defaultBlockState());
+            helper.assertTrue(new IndoorRoomCache(level).resolve(bed).orElseThrow().floorCells().contains(balcony),
+                    "new roof did not admit the balcony in fresh discovery");
+        }).thenIdle(41).thenExecute(() -> {
+            var refreshed = cache.resolve(bed).orElseThrow();
+            helper.assertTrue(refreshed != initial && refreshed.floorCells().contains(balcony),
+                    "new roof in formerly skipped sky did not invalidate cached membership");
+        }).thenSucceed();
+    }
+
     @GameTest(batch = BATCH, templateNamespace = "mca",
             template = "gametest/isolated_ai_arena", timeoutTicks = 120)
     public static void openingAFrameLintelInvalidatesCachedShelter(GameTestHelper helper) {

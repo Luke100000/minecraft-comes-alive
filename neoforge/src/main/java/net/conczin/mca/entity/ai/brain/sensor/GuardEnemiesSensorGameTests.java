@@ -22,6 +22,7 @@ import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.state.properties.BedPart;
@@ -37,6 +38,7 @@ import java.util.Optional;
 @PrefixGameTestTemplate(false)
 public final class GuardEnemiesSensorGameTests {
     private static final List<Entity> TEST_ENTITIES = new ArrayList<>();
+    private static final List<ChunkPos> BEDTIME_FORCED_CHUNKS = new ArrayList<>();
     private static Long originalBedtimeDayTime;
 
     private GuardEnemiesSensorGameTests() {
@@ -72,6 +74,16 @@ public final class GuardEnemiesSensorGameTests {
         level.setBlock(foot, bed, 3);
         level.setBlock(head, bed.setValue(BedBlock.PART, BedPart.HEAD), 3);
 
+        // The one-block air template only forces its own chunk. Actor offsets
+        // can cross that boundary; getChunk alone does not enable entity ticks.
+        for (BlockPos actorPos : List.of(guardPos, enemyPos, foot, head)) {
+            ChunkPos chunk = new ChunkPos(actorPos);
+            if (!level.getForcedChunks().contains(chunk.toLong())) {
+                BEDTIME_FORCED_CHUNKS.add(chunk);
+                level.setChunkForced(chunk.x, chunk.z, true);
+            }
+            level.getChunk(actorPos);
+        }
         VillagerEntityMCA guard = VillagerFactory.newVillager(level)
                 .withAge(0)
                 .withProfession(ProfessionsMCA.GUARD)
@@ -79,6 +91,8 @@ public final class GuardEnemiesSensorGameTests {
                 .withName("Guard Bedtime Combat Probe")
                 .spawn(MobSpawnType.STRUCTURE);
         TEST_ENTITIES.add(guard);
+        helper.assertTrue(level.getEntity(guard.getId()) == guard,
+                "bedtime guard fixture was not added to the world");
         guard.refreshBrain(level);
         guard.getBrain().setSchedule(SchedulesMCA.GUARD);
         guard.getBrain().updateActivityFromSchedule(level.getDayTime(), level.getGameTime());
@@ -100,10 +114,17 @@ public final class GuardEnemiesSensorGameTests {
         helper.assertTrue(guard.getBrain().getMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY)
                         .orElse(null) == target,
                 "fixture guard failed to detect the 24-block enemy while on duty");
-        guard.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
-
+        // A distant monster detected by the guard sensor is not, by itself,
+        // an ongoing fight. Do not seed ATTACK_TARGET: combat already underway
+        // is covered by the separate REST target-continuity regression.
+        guard.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
         level.setDayTime(15010);
-        guard.getBrain().updateActivityFromSchedule(level.getDayTime(), level.getGameTime());
+        // The fixture jumps the time-of-day forward by 20 ticks without
+        // advancing game time. Vanilla throttles schedule updates by 20 game
+        // ticks; simulate that elapsed interval for this controlled handoff.
+        guard.getBrain().updateActivityFromSchedule(level.getDayTime(), level.getGameTime() + 21L);
+        helper.assertTrue(guard.getBrain().isActive(Activity.REST),
+                "guard did not enter its scheduled REST activity with no attack target");
         long started = level.getGameTime();
         helper.onEachTick(() -> {
             if (guard.isSleeping()) {
@@ -115,9 +136,17 @@ public final class GuardEnemiesSensorGameTests {
                         "guard kept the distant enemy while sleeping");
                 helper.succeed();
             } else if (level.getGameTime() - started >= 180) {
+                helper.assertTrue(guard.tickCount > 0,
+                        "bedtime guard never ticked after being spawned into the world");
                 helper.fail("guard stayed awake at bedtime with a 24-block enemy: activity="
                         + guard.getBrain().getActiveNonCoreActivity() + ", attackTarget="
                         + guard.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET)
+                        + ", daytime=" + level.getDayTime()
+                        + ", scheduled=" + guard.getBrain().getSchedule()
+                                .getActivityAt((int) (level.getDayTime() % 24000L))
+                        + ", enemyDistance=" + guard.distanceTo(target)
+                        + ", bedState=" + level.getBlockState(head)
+                        + ", entityTicks=" + guard.tickCount
                         + ", home=" + guard.getBrain().getMemory(MemoryModuleType.HOME)
                         + ", walk=" + guard.getBrain().getMemory(MemoryModuleType.WALK_TARGET)
                         + ", path=" + guard.getNavigation().getPath()
@@ -186,6 +215,8 @@ public final class GuardEnemiesSensorGameTests {
     @AfterBatch(batch = "mca_guard_bedtime_far_enemy")
     public static void restoreBedtimeGameTest(net.minecraft.server.level.ServerLevel level) {
         cleanupTestEntities();
+        BEDTIME_FORCED_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x, chunk.z, false));
+        BEDTIME_FORCED_CHUNKS.clear();
         if (originalBedtimeDayTime != null) {
             level.setDayTime(originalBedtimeDayTime);
             originalBedtimeDayTime = null;

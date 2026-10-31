@@ -34,7 +34,7 @@ class VillageManagerExpandedRoomCommitTest {
         TestFloorFootprint freshRegion = region(64, 0, 3);
         Structure refreshed = current.copy();
         assertTrue(refreshed.replaceFloorGeometry(0,
-                TestStructureFloors.create(0, 64, 68, 0, freshRegion)));
+                TestStructureFloors.create(0, 64, 68, 0, freshRegion).geometry()));
 
         TestFloorFootprint newRoomRegion = region(64, 2, 3);
         Building added = room(-1, 10, 0, newRoomRegion);
@@ -134,7 +134,7 @@ class VillageManagerExpandedRoomCommitTest {
 
         Structure refreshed = current.copy();
         assertTrue(refreshed.replaceFloorGeometry(0,
-                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 3))));
+                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 3)).geometry()));
         Building invalidReplacement = room(100, 10, 0,
                 TestFloorFootprint.fromFootprint(64, Set.of(
                         new BlockPos(0, 64, 0), new BlockPos(4, 64, 0))));
@@ -156,7 +156,7 @@ class VillageManagerExpandedRoomCommitTest {
 
         Structure refreshed = current.copy();
         assertTrue(refreshed.replaceFloorGeometry(0,
-                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 3))));
+                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 3)).geometry()));
 
         assertTrue(village.publishFloorRefresh(refreshed, 0, List.of(main)),
                 "fresh Floor cells may remain unregistered until the player adds those Rooms");
