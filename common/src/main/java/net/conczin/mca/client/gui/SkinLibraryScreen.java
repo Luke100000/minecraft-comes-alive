@@ -31,14 +31,17 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.screens.ConfirmLinkScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
@@ -1427,13 +1430,12 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             return;
         }
 
-        if (page == Page.LOGIN) {
-            if (!Auth.hasToken()) {
-                isBrowserOpen = true;
-                Auth.authenticate(getPlayerName());
-            } else {
-                isBrowserOpen = false;
-            }
+        if (page == Page.LOGIN && !Auth.hasToken()) {
+            String authUrl = Auth.authenticate(getPlayerName());
+            isBrowserOpen = true;
+            this.page = page;
+            Minecraft.getInstance().setScreen(new AuthLinkScreen(authUrl));
+            return;
         }
 
         if (page == Page.LOGOUT) {
@@ -1530,6 +1532,42 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         invalidateRemotePage();
         page = Page.LIBRARY;
         Minecraft.getInstance().setScreen(this);
+    }
+
+    private class AuthLinkScreen extends ConfirmLinkScreen {
+        private final String authUrl;
+
+        private AuthLinkScreen(String authUrl) {
+            super(confirmed -> {
+                    }, Component.translatable("gui.skin_library.auth_link.title"),
+                    Component.translatable("gui.skin_library.auth_link.message"),
+                    authUrl,
+                    CommonComponents.GUI_CANCEL,
+                    true);
+            this.authUrl = authUrl;
+        }
+
+        @Override
+        protected void addButtons(int y) {
+            addRenderableWidget(Button.builder(Component.translatable("chat.link.open"), button -> {
+                Util.getPlatform().openUri(authUrl);
+                Minecraft.getInstance().setScreen(SkinLibraryScreen.this);
+            }).bounds(width / 2 - 50 - 105, y, 100, 20).build());
+            addRenderableWidget(Button.builder(Component.translatable("chat.copy"), button -> {
+                copyToClipboard();
+                Minecraft.getInstance().setScreen(SkinLibraryScreen.this);
+            }).bounds(width / 2 - 50, y, 100, 20).build());
+            addRenderableWidget(Button.builder(CommonComponents.GUI_CANCEL, button -> cancelAuthentication()).bounds(width / 2 - 50 + 105, y, 100, 20).build());
+        }
+
+        @Override
+        public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+            if (keyCode == 256) {
+                cancelAuthentication();
+                return true;
+            }
+            return super.keyPressed(keyCode, scanCode, modifiers);
+        }
     }
 
     private void openHelp() {
