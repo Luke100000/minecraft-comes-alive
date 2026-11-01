@@ -384,6 +384,7 @@
   "gui.skin_library.sort_hot": "Hot right now",
   "gui.skin_library.sort_popular": "Popular lately",
   "gui.skin_library.similar": "Show similar",
+  "gui.skin_library.website": "Open the Immersive Library website",
   "gui.skin_library.similar_to": "Similar to %s",
   "gui.skin_library.similar_to.tooltip": "Click to show the whole library again.",
   "gui.skin_library.filter_invalid": "Hide invalid content",

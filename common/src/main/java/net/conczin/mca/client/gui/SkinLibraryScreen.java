@@ -786,7 +786,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 addSortingButton(iconX + 22 * 3, 9 * 16, 16, SortingMode.HOT, "gui.skin_library.sort_hot");
                 addSortingButton(iconX + 22 * 4, 10 * 16, 16, SortingMode.POPULAR, "gui.skin_library.sort_popular");
 
-                iconX = width / 2 + 50;
+                iconX = width / 2 + 42;
                 if (subscriptionFilter != SubscriptionFilter.GLOBAL) {
                     //filter
                     addRenderableWidget(new ToggleableTooltipIconButtonWidget(iconX + 22 * 2, height / 2 + 82, 9 * 16, 3 * 16,
@@ -815,6 +815,12 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                                 refreshContentList();
                             }));
                 }
+
+                //website
+                addRenderableWidget(new ToggleableTooltipIconButtonWidget(width / 2 + 172, height / 2 + 82, 11 * 16, 16,
+                        true,
+                        Component.translatable("gui.skin_library.website"),
+                        v -> openUri(Config.getInstance().immersiveLibraryUrl + "/mca")));
 
                 //search, or the asset whose similar assets are listed
                 if (similarTo != null) {
@@ -1527,8 +1533,12 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     private void openHelp() {
+        openUri("https://github.com/Luke100000/minecraft-comes-alive/wiki/Skin-Editor");
+    }
+
+    private void openUri(String uri) {
         try {
-            Util.getPlatform().openUri(URI.create("https://github.com/Luke100000/minecraft-comes-alive/wiki/Skin-Editor"));
+            Util.getPlatform().openUri(URI.create(uri));
         } catch (Exception e) {
             MCA.LOGGER.error(e);
         }
