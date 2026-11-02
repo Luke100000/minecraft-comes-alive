@@ -329,8 +329,8 @@ public class VillagerTasksMCA {
                         VillagerTasksMCA::onGuardTargetErased,
                         false
                 )),
-                Pair.of(4, new ArcherMovementTask<>(15)),
-                Pair.of(5, new BowTask<>(20, 15)),
+                Pair.of(4, new ArcherMovementTask<>(RangedWeaponHelper.GUARD_ATTACK_RANGE)),
+                Pair.of(5, new BowTask<>(20, RangedWeaponHelper.GUARD_ATTACK_RANGE)),
                 Pair.of(7, new ConditionalTask<>(
                         SetWalkTargetFromAttackTargetIfTargetOutOfReach.create(0.75F),
                         (VillagerEntityMCA v) -> !VillagerTasksMCA.isHoldingRangedWeapon(v)
@@ -400,7 +400,7 @@ public class VillagerTasksMCA {
                 && villager.getSensing().hasLineOfSight(attacker);
     }
 
-    private static Optional<? extends LivingEntity> getPreferredTarget(VillagerEntityMCA villager) {
+    private static Optional<LivingEntity> getPreferredTarget(VillagerEntityMCA villager) {
         if (guardTooHurt(villager)) {
             return Optional.empty();
         } else {
@@ -412,16 +412,45 @@ public class VillagerTasksMCA {
                 }
             }
             Optional<LivingEntity> current = villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET);
+            Optional<LivingEntity> primary = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY);
             if (current.isPresent() && shouldKeepAttackTarget(villager, current.get())) {
+                double rangeSquared = RangedWeaponHelper.getAttackRangeSquared(villager,
+                        RangedWeaponHelper.GUARD_ATTACK_RANGE * RangedWeaponHelper.GUARD_ATTACK_RANGE);
+                if (villager.getProfession() == ProfessionsMCA.ARCHER
+                        && RangedWeaponHelper.isFlyingTargetAboveRange(villager, current.get(), rangeSquared)
+                        && primary.isPresent() && primary.get() != current.get()
+                        && shouldRespondToGuardEnemy(villager, primary.get())
+                        && villager.distanceToSqr(primary.get()) <= rangeSquared
+                        && villager.getSensing().hasLineOfSight(primary.get())
+                        && RangedWeaponHelper.canShootBowFrom(villager, villager.position(), primary.get())) {
+                    return primary;
+                }
                 return current;
             }
 
-            Optional<LivingEntity> primary = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY);
             if (primary.isPresent() && shouldRespondToGuardEnemy(villager, primary.get())) {
                 return primary;
             } else {
                 return Optional.empty();
             }
+        }
+    }
+
+    public static void respondToGuardAlarm(VillagerEntityMCA guard, LivingEntity attacker) {
+        LivingEntity current = guard.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).orElse(null);
+        LivingEntity selected = attacker;
+        if (guard.getProfession() == ProfessionsMCA.ARCHER && current != null) {
+            // Neighbour damage must use the same fight retention and immediate
+            // self-defence policy as Brain, rather than overwrite it out of band.
+            selected = getPreferredTarget(guard).orElse(attacker);
+        }
+        if (selected != current) {
+            guard.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, selected);
+        }
+        if (MCA.platformHelper.isDevelopmentEnvironment() && guard.getProfession() == ProfessionsMCA.ARCHER) {
+            MCA.LOGGER.info("[MCA Archer Target] entity={} action=alarm reason={} previous={} attacker={} selected={}",
+                    guard.getStringUUID(), selected == current ? "keep_current_fight" : "guard_alarm",
+                    current == null ? "none" : current.getStringUUID(), attacker.getStringUUID(), selected.getStringUUID());
         }
     }
 
@@ -467,6 +496,19 @@ public class VillagerTasksMCA {
     }
 
     private static void onGuardTargetErased(VillagerEntityMCA villager, LivingEntity target) {
+        if (MCA.platformHelper.isDevelopmentEnvironment() && villager.getProfession() == ProfessionsMCA.ARCHER) {
+            var preferred = getPreferredTarget(villager);
+            String reason = !target.isAlive() ? "target_dead"
+                    : target.isRemoved() ? "target_removed"
+                    : target.level() != villager.level() ? "different_level"
+                    : !villager.canAttack(target) ? "cannot_attack"
+                    : guardTooHurt(villager) ? "critical_health"
+                    : UnreachableCombatTargets.contains(villager, target) ? "unreachable"
+                    : preferred.isPresent() ? "preferred_target_changed" : "off_duty_or_no_preferred_target";
+            MCA.LOGGER.info("[MCA Archer Target] entity={} action=erase reason={} previous={} preferred={} health={} activity={}",
+                    villager.getStringUUID(), reason, target.getStringUUID(),
+                    preferred.map(LivingEntity::getStringUUID).orElse("none"), villager.getHealth(), getActivity(villager));
+        }
         if (target instanceof Player && !target.isAlive()) {
             villager.pardonPlayers(Integer.MAX_VALUE);
         }

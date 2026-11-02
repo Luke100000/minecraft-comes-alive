@@ -23,6 +23,64 @@ public final class IndoorRoomCacheGameTests {
     private static final String BATCH = "mca_indoor_exterior_dependencies";
     private static final Map<BlockPos, BlockState> CHANGED = new LinkedHashMap<>();
 
+    @GameTest(batch = BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 120)
+    public static void closedTwelveBlockRoomRemainsAvailableToNpcDiscovery(GameTestHelper helper) {
+        BlockPos min = helper.absolutePos(new BlockPos(40, 8, 40));
+        closedRoom(helper, min, 12);
+        BlockPos bed = min.offset(7, 0, 6);
+        var manual = SelectedFloorScanner.scan(helper.getLevel(), bed, 8192, 320);
+        helper.assertTrue(manual.result() == Building.validationResult.SUCCESS,
+                "closed house was rejected by manual discovery: " + manual.result());
+        IndoorRoomCache cache = new IndoorRoomCache(helper.getLevel());
+        var room = cache.resolve(bed).orElse(null);
+        helper.assertTrue(room != null, "NPC discovery rejected a manually accepted 12x12 closed room");
+        helper.assertTrue(room.floorCells().size() == 144, "bed changed NPC room area");
+        helper.assertTrue(cache.resolveRoom(bed, min).orElse(null) == room,
+                "an occupant elsewhere in the same room did not reuse the discovered geometry");
+        helper.succeed();
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 120)
+    public static void npcRadiusRetryStillRejectsAnOversizedFloor(GameTestHelper helper) {
+        BlockPos min = helper.absolutePos(new BlockPos(40, 8, 40));
+        closedRoom(helper, min, 24);
+        BlockPos bed = min.offset(13, 0, 12);
+        helper.assertTrue(SelectedFloorScanner.scan(helper.getLevel(), bed, 8192, 320).result()
+                        == Building.validationResult.SUCCESS,
+                "oversized negative fixture was not a valid manual floor");
+        helper.assertTrue(new IndoorRoomCache(helper.getLevel()).resolve(bed).isEmpty(),
+                "NPC discovery exceeded its bounded floor budget");
+        helper.succeed();
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 120)
+    public static void expandingASmallRoofHoleInvalidatesItsCachedCover(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos min = room(helper), bed = min.offset(2, 0, 1), gap = min.offset(1, 2, 2);
+        for (int z = 0; z < 3; z++) {
+            put(level, min.offset(4, 0, z), Blocks.STONE.defaultBlockState());
+            put(level, min.offset(4, 1, z), Blocks.STONE.defaultBlockState());
+        }
+        put(level, gap, Blocks.AIR.defaultBlockState());
+        put(level, gap.east(), Blocks.AIR.defaultBlockState());
+        IndoorRoomCache cache = new IndoorRoomCache(level);
+        var initial = cache.resolve(bed).orElseThrow();
+        helper.assertTrue(initial.floorCells().contains(gap.below(2)),
+                "two-cell roof hole lost its supported indoor column");
+        put(level, gap.east(2), Blocks.AIR.defaultBlockState());
+        var fresh = new IndoorRoomCache(level).resolve(bed).orElseThrow();
+        helper.assertTrue(!fresh.floorCells().contains(gap.below(2)),
+                "three-cell roof hole retained inferred cover in fresh discovery");
+        helper.startSequence().thenIdle(41).thenExecute(() -> {
+            var refreshed = cache.resolve(bed).orElseThrow();
+            helper.assertTrue(refreshed != initial && refreshed.floorCells().equals(fresh.floorCells()),
+                    "roof-hole expansion retained stale inferred cover in the room cache");
+        }).thenSucceed();
+    }
+
     @GameTest(batch = BATCH, templateNamespace = "mca", skyAccess = true,
             template = "gametest/isolated_ai_arena", timeoutTicks = 160)
     public static void newRoofInPreviouslySkippedSkyInvalidatesCachedMembership(GameTestHelper helper) {
@@ -177,6 +235,19 @@ public final class IndoorRoomCacheGameTests {
                 "72-cell exterior did not fail fresh discovery");
         helper.startSequence().thenIdle(41).thenExecute(() -> helper.assertTrue(cache.resolve(bed).isEmpty(),
                 "oversized dependency proof silently retained stale cached shelter")).thenSucceed();
+    }
+
+    private static void closedRoom(GameTestHelper helper, BlockPos min, int size) {
+        ServerLevel level = helper.getLevel();
+        for (BlockPos pos : BlockPos.betweenClosed(min.offset(-1, -1, -1), min.offset(size, 4, size))) {
+            int x = pos.getX() - min.getX(), y = pos.getY() - min.getY(), z = pos.getZ() - min.getZ();
+            put(level, pos, y == -1 || y == 4 || x == -1 || x == size || z == -1 || z == size
+                    ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState());
+        }
+        BlockPos bed = min.offset(size / 2, 0, size / 2);
+        var state = Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.EAST);
+        put(level, bed, state.setValue(BedBlock.PART, BedPart.FOOT));
+        put(level, bed.east(), state.setValue(BedBlock.PART, BedPart.HEAD));
     }
 
     private static BlockPos room(GameTestHelper helper) {

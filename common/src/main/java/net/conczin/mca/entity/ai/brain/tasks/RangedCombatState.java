@@ -25,13 +25,13 @@ public enum RangedCombatState {
     }
 
     public boolean permitsBowDrawContinuation() {
-        return this != EMERGENCY_FLEE && this != RECOVER;
+        return this != RECOVER;
     }
 
     public boolean permitsAiming(Mob entity) {
         // Navigation owns movement yaw and jumping independently of bow use.
         // Ordinary steps must not reset a draw or switch combat-facing policy.
-        return permitsBowDrawContinuation() && !entity.getBrain().isActive(Activity.PANIC);
+        return this != EMERGENCY_FLEE && permitsBowDrawContinuation() && !entity.getBrain().isActive(Activity.PANIC);
     }
 
     public static Optional<RangedCombatState> current(LivingEntity entity) {

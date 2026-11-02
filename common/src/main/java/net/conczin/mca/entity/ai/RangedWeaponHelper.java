@@ -1,6 +1,7 @@
 package net.conczin.mca.entity.ai;
 
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.FlyingMob;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.PathfinderMob;
@@ -18,6 +19,7 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Optional;
 
 public final class RangedWeaponHelper {
+    public static final int GUARD_ATTACK_RANGE = 15;
     private static final double BOW_TARGET_HEIGHT_FRACTION = 0.5D;
     public static final float BOW_PROJECTILE_SPEED = 1.6F;
     public static final float BOW_INACCURACY = 3.0F;
@@ -157,6 +159,12 @@ public final class RangedWeaponHelper {
 
     public static double getAttackRangeSquared(LivingEntity entity, InteractionHand hand, double maximumRangeSquared) {
         return Math.min(maximumRangeSquared, getAttackRangeSquared(entity, hand));
+    }
+
+    public static boolean isFlyingTargetAboveRange(Mob shooter, LivingEntity target, double attackRangeSquared) {
+        double height = target.getY() - shooter.getY();
+        return attackRangeSquared > 0 && target instanceof FlyingMob
+                && height > 0 && height * height > attackRangeSquared;
     }
 
     public static boolean isValidAttackTarget(Mob entity, @Nullable LivingEntity target) {

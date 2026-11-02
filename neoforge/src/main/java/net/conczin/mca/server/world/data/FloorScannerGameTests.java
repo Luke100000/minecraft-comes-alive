@@ -18,6 +18,7 @@ import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.block.state.properties.DoorHingeSide;
 import net.minecraft.world.level.block.state.properties.SlabType;
@@ -34,6 +35,76 @@ public final class FloorScannerGameTests {
             Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST
     };
     private static final Map<BlockPos, BlockState> FRAMED_CACHE_ORIGINAL = new java.util.LinkedHashMap<>();
+
+    @GameTest(batch = "mca_floor_small_shell_holes", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 120)
+    public static void smallWallAndRoofHolesPreserveTheSameIndoorFloor(GameTestHelper helper) {
+        // Keep the arena's barrier ceiling below the fixture, out of its roof evidence.
+        BlockPos min = helper.absolutePos(new BlockPos(5, 8, 5));
+        buildClosedRoom(helper, min, 5, 5);
+        raiseClosedRoomRoof(helper, min, 5, 5, 3);
+        var level = helper.getLevel();
+        for (BlockPos pos : BlockPos.betweenClosed(min.offset(6, -1, -2), min.offset(14, -1, 7))) {
+            level.setBlock(pos, Blocks.STONE.defaultBlockState(), 2);
+        }
+        BlockState pane = Blocks.GLASS_PANE.defaultBlockState()
+                .setValue(BlockStateProperties.NORTH, true).setValue(BlockStateProperties.SOUTH, true);
+        BlockPos opening = min.offset(5, 0, 2), skylight = min.offset(2, 3, 2);
+        for (int dy = 0; dy < 3; dy++) {
+            level.setBlock(opening.above(dy), Blocks.AIR.defaultBlockState(), 2);
+            level.setBlock(opening.north().above(dy), pane, 2);
+        }
+        level.setBlock(skylight, Blocks.AIR.defaultBlockState(), 2);
+        level.setBlock(skylight.east(), Blocks.AIR.defaultBlockState(), 2);
+        BlockPos source = skylight.below(3);
+        var selected = SelectedFloorScanner.scan(level, source, 512, 24);
+        helper.assertTrue(selected.result() == Building.validationResult.SUCCESS,
+                "small shell holes rejected a supported indoor selection: " + selected.result());
+        helper.assertTrue(selected.floor().cells().size() == 26
+                        && selected.floor().cellAt(opening).isPresent()
+                        && selected.floor().cellAt(opening.east()).isEmpty(),
+                "hole tolerance lost indoor columns or admitted exterior terrain: area=" + selected.floor().cells().size()
+                        + " opening=" + selected.floor().cellAt(opening) + " exterior=" + selected.floor().cellAt(opening.east()));
+        var covered = SelectedFloorScanner.scan(level, min.offset(1, 0, 1), 512, 24);
+        helper.assertTrue(covered.result() == Building.validationResult.SUCCESS
+                        && covered.floor().sameExactGeometry(selected.floor()),
+                "selection beneath a roof gap changed the floor geometry");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_overhead_furniture", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 120)
+    public static void selectingBelowWallMountedFurnitureRegistersTheOwnedRoom(GameTestHelper helper) {
+        BlockPos min = helper.absolutePos(new BlockPos(5, 2, 5));
+        buildClosedRoom(helper, min, 5, 5);
+        BlockPos source = min.offset(0, 0, 2);
+        var level = helper.getLevel();
+        level.setBlock(source.above(), Blocks.LADDER.defaultBlockState()
+                .setValue(LadderBlock.FACING, Direction.EAST), 3);
+        helper.assertTrue(level.getBlockState(source.above()).is(Blocks.LADDER),
+                "wall-mounted obstruction did not survive fixture placement");
+        var adjacent = SelectedFloorScanner.scan(level, source.east(), 256, 24);
+        helper.assertTrue(adjacent.result() == Building.validationResult.SUCCESS
+                        && adjacent.floor().cellAt(source).isPresent(),
+                "adjacent scan did not own the obstructed floor column");
+
+        VillageManager manager = new VillageManager(level);
+        RoomWorkflow workflow = new RoomWorkflow(manager, level);
+        BuildingScanResult analysis = workflow.analyzeBuildingAddition(source);
+        helper.assertTrue(analysis.result() == Building.validationResult.SUCCESS,
+                "selecting below wall-mounted furniture rejected the room: " + analysis.result());
+        helper.assertTrue(workflow.commitAddition(analysis,
+                        analysis.isAmbiguous() ? analysis.matchingTypes().getFirst() : null).status()
+                        == RoomWorkflow.Status.COMMITTED,
+                "room selected below wall-mounted furniture did not register");
+        Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElseThrow();
+        Building room = village.findInteractionRoomAt(source).orElseThrow();
+        RoomScanPlan plan = RoomScanPlanner.analyze(village, level, source).plan();
+        helper.assertTrue(plan.mode() == Village.RoomScanMode.UPDATE_ROOM
+                        && plan.currentRoom().map(Building::getId).orElse(-1) == room.getId(),
+                "registered-room selection below furniture changed its owner");
+        helper.succeed();
+    }
 
     @GameTest(batch = "mca_physical_room_failure", templateNamespace = "mca",
             template = "gametest/isolated_ai_arena", timeoutTicks = 120)
@@ -3396,15 +3467,16 @@ public final class FloorScannerGameTests {
     public static void highSourceStillFindsExteriorThroughUnevenDescent(GameTestHelper helper) {
         BlockPos origin = helper.absolutePos(new BlockPos(40, 8, 40));
         buildUnevenRoofedPassage(helper, origin);
-        // Keep this an unframed exposure guard: a two-high, one-wide passage is
-        // intentionally eligible for framed-entrance admission now.
+        // Keep this an unframed exposure guard, beyond the small-opening height bound.
         int[] heights = {0, 0, 1, 1, 2, 2};
         for (int x = 0; x < heights.length; x++) {
             BlockPos feet = origin.offset(x, heights[x], 0);
-            helper.getLevel().setBlock(feet.above(2), Blocks.AIR.defaultBlockState(), 2);
-            helper.getLevel().setBlock(feet.above(3), Blocks.STONE.defaultBlockState(), 2);
-            helper.getLevel().setBlock(feet.north().above(2), Blocks.STONE.defaultBlockState(), 2);
-            helper.getLevel().setBlock(feet.south().above(2), Blocks.STONE.defaultBlockState(), 2);
+            for (int dy = 2; dy < 5; dy++) {
+                helper.getLevel().setBlock(feet.above(dy), Blocks.AIR.defaultBlockState(), 2);
+                helper.getLevel().setBlock(feet.north().above(dy), Blocks.STONE.defaultBlockState(), 2);
+                helper.getLevel().setBlock(feet.south().above(dy), Blocks.STONE.defaultBlockState(), 2);
+            }
+            helper.getLevel().setBlock(feet.above(5), Blocks.STONE.defaultBlockState(), 2);
         }
         BlockPos exterior = origin.west();
         helper.getLevel().setBlock(exterior.below(), Blocks.STONE.defaultBlockState(), 3);

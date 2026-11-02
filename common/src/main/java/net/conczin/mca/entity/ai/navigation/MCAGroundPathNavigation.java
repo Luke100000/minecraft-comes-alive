@@ -23,6 +23,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.level.pathfinder.PathFinder;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
@@ -104,6 +105,11 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         return this.climbTraversal.isDescendingScaffolding(this.path, this.tick);
     }
 
+    /** Keeps a reached, suspended follow pose stable for this tick after its walk path ends. */
+    public void holdClimbablePosition() {
+        this.climbTraversal.holdPosition(this.tick);
+    }
+
     /**
      * Vanilla owns friction and horizontal travel. When climb traversal moved this tick,
      * preserve only its chosen vertical velocity for the next travel step.
@@ -122,9 +128,9 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 && walkTarget.getTarget() instanceof MultiTargetPositionTracker multiTarget) {
             // Brain retains the logical target and can refresh endpoints after a
             // block change; vanilla navigation remembers only its last chosen one.
-            return this.createPath(multiTarget.getPathTargets(this.mob), 8, false, reachRange);
+            return multiTarget.createPath(this, this.mob, reachRange);
         }
-        if (isExactStaticAirWalkTarget(target, walkTarget)) {
+        if (isExactStaticWalkTarget(target, walkTarget)) {
             return this.createPath(Set.of(target), 8, false, reachRange);
         }
         return super.createPath(target, reachRange);
@@ -304,13 +310,21 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         this.failedExtendedSearch = null;
     }
 
-    private boolean isExactStaticAirWalkTarget(BlockPos target, WalkTarget walkTarget) {
-        return walkTarget != null
-                && walkTarget.getCloseEnoughDist() == 0
-                && walkTarget.getTarget() instanceof BlockPosTracker
-                && walkTarget.getTarget().currentBlockPosition().equals(target)
-                && this.level.isLoaded(target)
-                && this.level.getBlockState(target).isAir();
+    private boolean isExactStaticWalkTarget(BlockPos target, WalkTarget walkTarget) {
+        if (walkTarget == null
+                || walkTarget.getCloseEnoughDist() != 0
+                || !(walkTarget.getTarget() instanceof BlockPosTracker)
+                || !walkTarget.getTarget().currentBlockPosition().equals(target)
+                || !this.level.isLoaded(target)) {
+            return false;
+        }
+
+        BlockState state = this.level.getBlockState(target);
+        // GroundPathNavigation raises solid destinations above the block. An open
+        // panel can be solid while still admitting the requested standing pose.
+        return state.isAir() || state.isPathfindable(PathComputationType.LAND)
+                && this.level.noBlockCollision(this.mob,
+                        PathNodeGeometry.bodyAt(this.mob, Vec3.atBottomCenterOf(target)));
     }
 
     private boolean hasFailureEvidenceFor(BlockPos target) {

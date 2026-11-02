@@ -5,9 +5,11 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.material.FluidState;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -22,6 +24,104 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 class SelectedFloorScannerConnectorTest {
+    @Test
+    void aBedInATallRoomDoesNotCreateAdditionalSurfaceCells() {
+        TallRoom world = new TallRoom();
+        BlockPos source = new BlockPos(8, 64, 8);
+        var before = SelectedFloorScanner.scan(world, source, 2048, 64);
+        assertEquals(Building.validationResult.SUCCESS, before.result());
+        var bed = Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING, net.minecraft.core.Direction.EAST);
+        world.put(source, bed.setValue(BedBlock.PART, BedPart.FOOT));
+        world.put(source.east(), bed.setValue(BedBlock.PART, BedPart.HEAD));
+
+        for (BlockPos selected : new BlockPos[]{source, source.above(), source.north()}) {
+            var after = SelectedFloorScanner.scan(world, selected, 2048, 64);
+            assertEquals(Building.validationResult.SUCCESS, after.result());
+            assertTrue(before.floor().sameExactGeometry(after.floor()),
+                    "a bed created duplicate cells for the same walking surface");
+            var component = RoomPartitioner.select(after.seed(), after.floor(), BuildingRoomScanner.components(world, after));
+            assertEquals(256, component.area());
+        }
+    }
+
+    @Test
+    void aFloatingBottomSlabFloorRetainsItsOnlySupportedSurface() {
+        TallRoom world = new TallRoom();
+        for (int x = 1; x <= 16; x++) {
+            for (int z = 1; z <= 16; z++) {
+                world.put(new BlockPos(x, 63, z), Blocks.STONE_SLAB.defaultBlockState());
+            }
+        }
+        var scan = SelectedFloorScanner.scan(world, new BlockPos(8, 64, 8), 2048, 64);
+        assertEquals(Building.validationResult.SUCCESS, scan.result());
+        assertEquals(256, scan.floor().cells().size());
+        assertTrue(scan.floor().cells().stream().allMatch(cell -> cell.feet().getY() == 64));
+    }
+
+    @Test
+    void selectingBelowWallMountedFurnitureRetainsTheEnclosedFloor() {
+        TallRoom world = new TallRoom();
+        BlockPos source = new BlockPos(8, 64, 8);
+        // A thin wall-mounted collision occupies the head block, as with the reported shelf.
+        world.put(source.above(), Blocks.LADDER.defaultBlockState());
+        var adjacent = SelectedFloorScanner.scan(world, source.east(), 2048, 64);
+        assertEquals(Building.validationResult.SUCCESS, adjacent.result());
+        assertTrue(adjacent.floor().cellAt(source).isPresent(), "fixture must own the obstructed column");
+
+        var selected = SelectedFloorScanner.scan(world, source, 2048, 64);
+
+        assertEquals(Building.validationResult.SUCCESS, selected.result());
+        assertTrue(adjacent.floor().sameExactGeometry(selected.floor()));
+        assertEquals(source, selected.seed(), "interaction must stay in the selected floor column");
+
+        var addition = StructureScanner.scanNewStructure(world, source, java.util.List.of(),
+                new SelectedFloorScanner.Observation(world, 2048, 64));
+        assertEquals(Building.validationResult.SUCCESS, addition.result());
+        assertEquals(source, addition.source());
+    }
+
+    @Test
+    void partialHeadObstructionCannotBorrowTheAdjacentFloorAtAnotherHeight() {
+        TallRoom world = new TallRoom();
+        BlockPos source = new BlockPos(8, 65, 8);
+        world.put(source.below(), Blocks.STONE.defaultBlockState());
+        world.put(source.above(), Blocks.LADDER.defaultBlockState());
+
+        assertEquals(Building.validationResult.NOT_IN_BUILDING,
+                SelectedFloorScanner.scan(world, source, 2048, 64).result());
+    }
+
+    @Test
+    void rejectedObstructionDoesNotRepeatedlyDiscoverTheSameAdjacentFloor() {
+        BlockPos source = new BlockPos(8, 65, 8);
+        TallRoom ordinary = new TallRoom();
+        ordinary.put(source.below(), Blocks.STONE.defaultBlockState());
+        ordinary.put(source.above(), Blocks.LADDER.defaultBlockState());
+        assertEquals(Building.validationResult.SUCCESS,
+                SelectedFloorScanner.scan(ordinary, source.east().below(), 2048, 64).result());
+
+        TallRoom rejected = new TallRoom();
+        rejected.put(source.below(), Blocks.STONE.defaultBlockState());
+        rejected.put(source.above(), Blocks.LADDER.defaultBlockState());
+        assertEquals(Building.validationResult.NOT_IN_BUILDING,
+                SelectedFloorScanner.scan(rejected, source, 2048, 64).result());
+        assertTrue(rejected.totalBlockReads <= ordinary.totalBlockReads * 3 / 2,
+                "rejected obstruction repeated floor discovery: ordinary=" + ordinary.totalBlockReads
+                        + " rejected=" + rejected.totalBlockReads);
+    }
+
+    @Test
+    void solidOrFloodedHeadroomCannotBorrowTheAdjacentRoom() {
+        for (BlockState obstruction : new BlockState[]{Blocks.STONE.defaultBlockState(), Blocks.WATER.defaultBlockState()}) {
+            TallRoom world = new TallRoom();
+            BlockPos source = new BlockPos(8, 64, 8);
+            world.put(source.above(), obstruction);
+
+            assertEquals(Building.validationResult.NOT_IN_BUILDING,
+                    SelectedFloorScanner.scan(world, source, 2048, 64).result());
+        }
+    }
+
     @Test
     void buildingFallbackReusesDiscoveryButTheNextOperationReadsFreshBlocks() {
         TallRoom world = new TallRoom();
@@ -234,6 +334,7 @@ class SelectedFloorScannerConnectorTest {
         private final Map<BlockPos, BlockState> overrides = new HashMap<>();
         private int middleLayerReads;
         private int feetLayerReads;
+        private int totalBlockReads;
 
         private void put(BlockPos pos, BlockState state) {
             overrides.put(pos.immutable(), state);
@@ -241,6 +342,7 @@ class SelectedFloorScannerConnectorTest {
 
         @Override
         public BlockState getBlockState(BlockPos pos) {
+            totalBlockReads++;
             if (pos.getY() == 80) middleLayerReads++;
             if (pos.getY() == 64) feetLayerReads++;
             BlockState override = overrides.get(pos);

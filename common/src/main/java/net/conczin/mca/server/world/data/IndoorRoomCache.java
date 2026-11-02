@@ -36,6 +36,7 @@ public final class IndoorRoomCache {
     private static final int MAX_ENTRIES = 128;
     private static final int MAX_SCAN_CELLS = 512;
     private static final int MAX_SCAN_RADIUS = 16;
+    private static final int RETRY_SCAN_RADIUS = 32;
     private static final int MAX_OBSERVED_BLOCKS = 8192;
     private static final int MAX_TOTAL_OBSERVED_BLOCKS = 65536;
     private static final int MAX_HOUSE_FLOORS = 8;
@@ -215,7 +216,8 @@ public final class IndoorRoomCache {
             budget.remaining = 0;
             return null;
         }
-        entry = discover(source, now);
+        entry = discover(source, now, budget);
+        if (entry == null) return null;
         int observedCount = entries.values().stream().mapToInt(Entry::observedCount).sum();
         while (!entries.isEmpty() && (entries.size() >= MAX_ENTRIES
                 || observedCount + entry.observedCount() > MAX_TOTAL_OBSERVED_BLOCKS)) {
@@ -231,18 +233,27 @@ public final class IndoorRoomCache {
         }
     }
 
-    private Entry discover(BlockPos source, long now) {
+    private Entry discover(BlockPos source, long now, ScanBudget budget) {
         LoadedBlocks blocks = new LoadedBlocks(true);
-        SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(blocks, source, MAX_SCAN_CELLS, MAX_SCAN_RADIUS);
+        int scanRadius = MAX_SCAN_RADIUS;
+        SelectedFloorScanner.Result scan = SelectedFloorScanner.scan(blocks, source, MAX_SCAN_CELLS, scanRadius);
+        if (scan.result() == Building.validationResult.SIZE_LIMIT && blocks.firstMissingBlock == null) {
+            // A stable traversal anchor can be near a room's edge. Retry radius failures
+            // once, keeping the cell/dependency caps and charging the shared admission budget.
+            if (budget.remaining == 0) return null;
+            budget.remaining--;
+            scanRadius = RETRY_SCAN_RADIUS;
+            scan = SelectedFloorScanner.scan(blocks, source, MAX_SCAN_CELLS, scanRadius);
+        }
         if (blocks.firstMissingBlock != null) return failed(source, now, Building.validationResult.BLOCK_LIMIT,
-                "FLOOR_SCAN", blocks.firstMissingBlock, 0);
+                "FLOOR_SCAN", blocks.firstMissingBlock, 0, scanRadius);
         if (scan.result() != Building.validationResult.SUCCESS || scan.floor() == null) {
-            return failed(source, now, scan.result(), "FLOOR_SCAN", null, 0);
+            return failed(source, now, scan.result(), "FLOOR_SCAN", null, 0, scanRadius);
         }
         List<RoomPartitioner.Component> components = BuildingRoomScanner.components(blocks, scan).stream()
                 .filter(room -> room.area() >= RoomPartitioner.MIN_ROOM_AREA).toList();
         if (blocks.firstMissingBlock != null) return failed(source, now, Building.validationResult.BLOCK_LIMIT,
-                "ROOM_PARTITION", blocks.firstMissingBlock, 0);
+                "ROOM_PARTITION", blocks.firstMissingBlock, 0, scanRadius);
         List<Room> rooms = components.stream().map(room -> new Room(room.floorCells())).toList();
         Map<BlockPos, BlockState> observed = new HashMap<>();
         if (observe(scan.floor().cells(), observed, blocks)) {
@@ -260,11 +271,11 @@ public final class IndoorRoomCache {
             }
         }
         return failed(source, now, Building.validationResult.BLOCK_LIMIT, "OBSERVATION",
-                blocks.firstMissingBlock, observed.size());
+                blocks.firstMissingBlock, observed.size(), scanRadius);
     }
 
     private Entry failed(BlockPos source, long now, Building.validationResult result,
-                         String phase, BlockPos missingBlock, int observedBlocks) {
+                         String phase, BlockPos missingBlock, int observedBlocks, int scanRadius) {
         if (BedDebugLog.SHELTER_ENABLED) {
             String reason = missingBlock != null ? "UNLOADED_CHUNK"
                     : result == Building.validationResult.BLOCK_LIMIT
@@ -272,7 +283,7 @@ public final class IndoorRoomCache {
             MCA.LOGGER.info("[MCA-SHELTER][discovery] gameTime={} source={} result={} reason={} phase={} firstMissingBlock={} missingChunk={} observedBlocks={} maxObservedBlocks={} maxFloorCells={} maxScanRadius={} retryAfterTicks={}",
                     now, source, result, reason, phase, missingBlock,
                     missingBlock == null ? null : new ChunkPos(missingBlock),
-                    observedBlocks, MAX_OBSERVED_BLOCKS, MAX_SCAN_CELLS, MAX_SCAN_RADIUS, FAILED_RETRY_TICKS);
+                    observedBlocks, MAX_OBSERVED_BLOCKS, MAX_SCAN_CELLS, scanRadius, FAILED_RETRY_TICKS);
         }
         return new Entry(source, null, List.of(), Map.of(), null, now, result);
     }

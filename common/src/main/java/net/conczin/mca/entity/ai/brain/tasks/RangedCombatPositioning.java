@@ -454,7 +454,7 @@ final class RangedCombatPositioning {
         }
     }
 
-    private static final class EscapePositionTarget extends CandidatePositionTarget implements CombatEscapePositionTracker {
+    private static class EscapePositionTarget extends CandidatePositionTarget implements CombatEscapePositionTracker {
         private final List<Set<BlockPos>> ranked;
         private final boolean degraded;
         private final boolean emergency;
@@ -521,22 +521,49 @@ final class RangedCombatPositioning {
             // column still obscures the shot. Its navigation owner already keeps
             // following the final node until this semantic arrival predicate holds.
             return super.isReached(mob, closeEnoughDistance)
-                    && mob instanceof PathfinderMob archer
-                    && RangedWeaponHelper.isValidAttackTarget(mob, target)
-                    && mob.distanceToSqr(target) <= attackRangeSquared
-                    && mob.hasLineOfSight(target)
-                    && RangedWeaponHelper.canShootBowFrom(archer, mob.position(), target);
+                    && hasUsableShot(mob, target, attackRangeSquared);
         }
     }
 
+    private static final class CoveredFiringTarget extends EscapePositionTarget {
+        private final LivingEntity target;
+        private final double attackRangeSquared;
+
+        private CoveredFiringTarget(BlockPos preferred, Set<BlockPos> positions, List<Set<BlockPos>> ranked,
+                                    LivingEntity target, double attackRangeSquared, ThreatContext threats) {
+            super(preferred, positions, ranked, false, false, threats.escapeThreats(), threats.hazards());
+            this.target = target;
+            this.attackRangeSquared = attackRangeSquared;
+        }
+
+        @Override
+        public boolean isReached(Mob mob, int closeEnoughDistance) {
+            return super.isReached(mob, closeEnoughDistance)
+                    && hasUsableShot(mob, target, attackRangeSquared);
+        }
+    }
+
+    private static boolean hasUsableShot(Mob mob, LivingEntity target, double attackRangeSquared) {
+        return mob instanceof PathfinderMob archer
+                && RangedWeaponHelper.isValidAttackTarget(mob, target)
+                && mob.distanceToSqr(target) <= attackRangeSquared
+                && mob.hasLineOfSight(target)
+                && RangedWeaponHelper.canShootBowFrom(archer, mob.position(), target);
+    }
+
     static boolean isEscapePathSafe(Mob mob, Path path, ThreatContext threats, boolean degraded) {
+        return isEscapePathSafe(mob, path, threats, degraded, path.getNodeCount());
+    }
+
+    private static boolean isEscapePathSafe(Mob mob, Path path, ThreatContext threats,
+                                            boolean degraded, int nodeLimit) {
         if (path.getNodeCount() == 0 || path.getNextNodeIndex() >= path.getNodeCount()) {
             return false;
         }
         Vec3 origin = mob.position();
         Vec3 previous = origin;
         double previousFloorY = path.getEntityPosAtNode(mob, Math.max(0, path.getNextNodeIndex() - 1)).y;
-        for (int index = path.getNextNodeIndex(); index < path.getNodeCount(); index++) {
+        for (int index = path.getNextNodeIndex(); index < nodeLimit; index++) {
             Vec3 next = path.getEntityPosAtNode(mob, index);
             // A jump changes the mob's physical height, not the terrain transition
             // already described by the native path's consecutive floor nodes.
@@ -573,7 +600,34 @@ final class RangedCombatPositioning {
         EscapeGraph graph = collectReachableEscapePositions(entity, entity.blockPosition());
         Optional<MultiTargetPositionTracker> firing = findFiringTarget(
                 entity, target, threats.hazards(), attackRangeSquared, graph);
-        return firing.isPresent() ? firing : findRecoveryTarget(entity, target, threats, attackRangeSquared, graph, false);
+        if (firing.isPresent()) return firing;
+        Optional<MultiTargetPositionTracker> recovery = findRecoveryTarget(
+                entity, target, threats, attackRangeSquared, graph, false);
+        return recovery.isPresent() ? recovery : findFiringTargetOnNativeRoute(entity, target, threats, attackRangeSquared);
+    }
+
+    private static Optional<MultiTargetPositionTracker> findFiringTargetOnNativeRoute(
+            PathfinderMob entity, LivingEntity target, ThreatContext threats, double attackRangeSquared) {
+        // Straight-line range can be short while the route around cover is long.
+        // Let the native pathfinder find that detour; do not widen the local graph
+        // repeatedly or publish blind pursuit toward an unreachable enemy.
+        Path route = entity.getNavigation().createPath(target.blockPosition(), 0);
+        if (route == null || !route.canReach()) return Optional.empty();
+        double minimumDistanceSquared = Math.min(entity.distanceToSqr(target),
+                ArcherMovementTask.KITE_ENTER_DISTANCE_SQUARED);
+        for (int index = route.getNextNodeIndex(); index < route.getNodeCount(); index++) {
+            Vec3 feet = route.getEntityPosAtNode(entity, index);
+            if (BlockPos.containing(feet).equals(entity.blockPosition())
+                    || !isValidFiringPosition(entity, target, threats.hazards(), attackRangeSquared,
+                    minimumDistanceSquared, feet)
+                    || !isEscapePathSafe(entity, route, threats, false, index + 1)) {
+                continue;
+            }
+            BlockPos destination = BlockPos.containing(feet);
+            return Optional.of(new CoveredFiringTarget(destination, Set.of(destination), List.of(Set.of(destination)),
+                    target, attackRangeSquared, threats));
+        }
+        return Optional.empty();
     }
 
     private static Optional<MultiTargetPositionTracker> findFiringTarget(
@@ -662,14 +716,13 @@ final class RangedCombatPositioning {
                             Vec3.atBottomCenterOf(entry.getKey()).distanceToSqr(entity.position())))
                     .map(Map.Entry::getKey).orElse(origin);
         }
-        int originSpace = measureOnwardReachability(standingOrigin, standingOrigin, graph.edges()).space();
-        boolean originHasShot = isValidFiringPosition(entity, target, threats.hazards(), attackRangeSquared,
-                ArcherMovementTask.KITE_ENTER_DISTANCE_SQUARED, entity.position());
+        int originSpace = requireMoreRoom
+                ? measureOnwardReachability(standingOrigin, standingOrigin, graph.edges()).space() : 0;
         List<RecoveryCandidate> candidates = new ArrayList<>();
         for (var entry : graph.travelSteps().entrySet()) {
             BlockPos position = entry.getKey();
             int distance = horizontalDistanceSquared(origin, position);
-            if (distance < 4 || distance > ESCAPE_SEARCH_RADIUS * ESCAPE_SEARCH_RADIUS) {
+            if (distance < 4 || distance > ESCAPE_GRAPH_RADIUS * ESCAPE_GRAPH_RADIUS) {
                 continue;
             }
             Vec3 feet = Vec3.atBottomCenterOf(position);
@@ -682,18 +735,20 @@ final class RangedCombatPositioning {
             }
             boolean usableShot = isValidFiringPosition(entity, target, threats.hazards(), attackRangeSquared,
                     ArcherMovementTask.KITE_ENTER_DISTANCE_SQUARED, feet);
-            OnwardReachability onward = measureOnwardReachability(position, position, graph.edges());
-            // A covered waypoint must lead out of the depression or toward more
-            // room. Merely walking along another sealed corridor is not recovery.
-            if (requireMoreRoom && onward.space() <= originSpace) {
+            // Covered travel needs a real shooting destination. A higher cell
+            // alone can alternate forever with the next supposedly roomier cell.
+            // The graph already includes the lookahead beyond the local firing
+            // radius, allowing a route around a corner before sight improves.
+            if (!requireMoreRoom && !usableShot) {
                 continue;
             }
-            boolean gainsShot = usableShot && !originHasShot;
-            if (!gainsShot && (!onward.demonstratedContinuation()
-                    || position.getY() <= origin.getY() && onward.space() <= originSpace)) {
+            OnwardReachability onward = requireMoreRoom
+                    ? measureOnwardReachability(position, position, graph.edges()) : null;
+            if (onward != null && (!onward.demonstratedContinuation() || onward.space() <= originSpace)) {
                 continue;
             }
-            candidates.add(new RecoveryCandidate(position, usableShot, onward.space(), entry.getValue()));
+            candidates.add(new RecoveryCandidate(position, usableShot,
+                    onward == null ? 0 : onward.space(), entry.getValue()));
         }
         candidates.sort(Comparator.comparing(RecoveryCandidate::usableShot).reversed()
                 .thenComparing(Comparator.comparingInt(RecoveryCandidate::onwardSpace).reversed())
@@ -711,6 +766,10 @@ final class RangedCombatPositioning {
         // Recovery shares admission and revalidation of the actual native route
         // with strict escapes, without permitting degraded emergency clearance.
         List<Set<BlockPos>> ranked = exits.stream().map(Set::of).toList();
+        if (!requireMoreRoom) {
+            return Optional.of(new CoveredFiringTarget(exits.iterator().next(), Set.copyOf(exits), ranked,
+                    target, attackRangeSquared, threats));
+        }
         return Optional.of(new EscapePositionTarget(exits.iterator().next(), Set.copyOf(exits), ranked,
                 false, false, threats.escapeThreats(), threats.hazards()));
     }
@@ -875,6 +934,15 @@ final class RangedCombatPositioning {
             LivingEntity target,
             List<? extends LivingEntity> hazards
     ) {
+        return findBestStrafeDirection(entity, target, hazards, 0.0F);
+    }
+
+    static float findBestStrafeDirection(
+            PathfinderMob entity,
+            LivingEntity target,
+            List<? extends LivingEntity> hazards,
+            float preferredDirection
+    ) {
         StrafeCandidate left = scoreStrafeSide(entity, target, -1.0F, hazards);
         StrafeCandidate right = scoreStrafeSide(entity, target, 1.0F, hazards);
         if (left == null) {
@@ -882,6 +950,15 @@ final class RangedCombatPositioning {
         }
         if (right == null) {
             return left.direction();
+        }
+        // Keep a usable previous side when terrain offers at least as much
+        // room; hazard-distance tie noise should not reverse every new burst.
+        if (preferredDirection != 0.0F) {
+            StrafeCandidate preferred = preferredDirection > 0.0F ? right : left;
+            StrafeCandidate other = preferredDirection > 0.0F ? left : right;
+            if (preferred.clearance() >= other.clearance()) {
+                return preferred.direction();
+            }
         }
         if (left.clearance() != right.clearance()) {
             return left.clearance() > right.clearance() ? left.direction() : right.direction();
@@ -954,14 +1031,24 @@ final class RangedCombatPositioning {
                 && !candidate.isRemoved();
     }
 
-    private static boolean isActiveRangedMovementThreat(Mob entity, LivingEntity candidate) {
+    static boolean isRangedAttacker(Mob entity, LivingEntity candidate) {
         return candidate instanceof RangedAttackMob && candidate instanceof Mob attacker
-                && attacker.getTarget() == entity
+                && (attacker.getTarget() == entity || entity.getLastHurtByMob() == candidate);
+    }
+
+    static boolean isActiveRangedMovementThreat(Mob entity, LivingEntity candidate) {
+        return isRangedAttacker(entity, candidate)
                 && entity.distanceToSqr(candidate) <= NEARBY_THREAT_RANGE_SQUARED
                 && entity.getSensing().hasLineOfSight(candidate);
     }
 
     static boolean isCloseRangeMovementThreat(Mob entity, LivingEntity candidate) {
+        // An armed ranged mob hidden by terrain must not re-enter evasion via
+        // the generic nearby-melee rule after its firing line was ruled out.
+        if (candidate instanceof RangedAttackMob && RangedWeaponHelper.isHoldingSupportedWeapon(candidate)
+                && !entity.getSensing().hasLineOfSight(candidate)) {
+            return false;
+        }
         double separation = Math.abs(entity.getY() - candidate.getY());
         if (separation <= ArcherMovementTask.CLOSE_RANGE_VERTICAL_THREAT_DISTANCE) {
             return true;

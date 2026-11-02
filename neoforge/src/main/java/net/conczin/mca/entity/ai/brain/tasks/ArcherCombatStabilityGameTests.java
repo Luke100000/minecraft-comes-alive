@@ -43,6 +43,8 @@ public final class ArcherCombatStabilityGameTests {
         Fixture f = fixture(helper, false);
         f.target().absMoveTo(f.archer().getX() + 5, f.archer().getY(), f.archer().getZ());
         f.target().setTarget(f.archer());
+        // Sustained retreat needs a pursuer now that safe shots can end a walk.
+        f.target().setNoAi(false);
         int[] walkingTicks = {0};
         boolean[] drawing = {false}, cooldown = {false};
         boolean[] previouslyDrew = {false};
@@ -684,18 +686,35 @@ public final class ArcherCombatStabilityGameTests {
     }
 
     @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 80)
-    public static void recoveryAndEmergencyCancelExistingBowDrawImmediately(GameTestHelper helper) {
-        for (RangedCombatState state : List.of(RangedCombatState.RECOVER, RangedCombatState.EMERGENCY_FLEE)) {
-            Fixture f = fixture(helper, true);
-            BowTask<VillagerEntityMCA> bow = startBow(helper, f);
-            f.archer().getBrain().setMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE, state);
-            bow.tick(helper.getLevel(), f.archer(), f.now() + 2);
-            helper.assertTrue(!f.archer().isUsingItem() && ownedArrows(helper, f).isEmpty(),
-                    state + " failed to cancel the draw immediately");
-            f.archer().discard();
-            f.target().discard();
-        }
-        helper.succeed();
+    public static void recoveryCancelsDrawButEmergencyCarriesItWithoutFiring(GameTestHelper helper) {
+        Fixture recovery = fixture(helper, true);
+        BowTask<VillagerEntityMCA> recoveryBow = startBow(helper, recovery);
+        recovery.archer().getBrain().setMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE, RangedCombatState.RECOVER);
+        recoveryBow.tick(helper.getLevel(), recovery.archer(), recovery.now() + 2);
+        helper.assertTrue(!recovery.archer().isUsingItem() && ownedArrows(helper, recovery).isEmpty(),
+                "recovery failed to cancel the draw");
+        recovery.archer().discard();
+        recovery.target().discard();
+
+        Fixture fleeing = fixture(helper, true);
+        BowTask<VillagerEntityMCA> bow = startBow(helper, fleeing);
+        fleeing.archer().getBrain().setMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE, RangedCombatState.EMERGENCY_FLEE);
+        bow.tick(helper.getLevel(), fleeing.archer(), fleeing.now() + 2);
+        helper.assertTrue(fleeing.archer().isUsingItem(), "emergency discarded the unfinished draw");
+        helper.runAfterDelay(24, () -> {
+            helper.assertTrue(fleeing.archer().getTicksUsingItem() >= 20, "fixture did not retain a fully charged bow");
+            bow.tick(helper.getLevel(), fleeing.archer(), fleeing.now() + 25);
+            helper.assertTrue(fleeing.archer().isUsingItem() && ownedArrows(helper, fleeing).isEmpty(),
+                    "emergency released its fully charged bow");
+            fleeing.target().absMoveTo(fleeing.archer().getX() + 130, fleeing.archer().getY(), fleeing.archer().getZ());
+            for (int tick = 1; tick <= 21; tick++) {
+                fleeing.archer().getSensing().tick();
+                bow.tick(helper.getLevel(), fleeing.archer(), fleeing.now() + 25 + tick);
+            }
+            helper.assertTrue(!fleeing.archer().isUsingItem() && ownedArrows(helper, fleeing).isEmpty(),
+                    "emergency retained its draw beyond lost-sight grace or fired it");
+            helper.succeed();
+        });
     }
 
     private static List<AbstractArrow> ownedArrows(GameTestHelper helper, Fixture f) {

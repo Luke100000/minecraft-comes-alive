@@ -57,13 +57,17 @@ public class MCAMoveControl extends MoveControl {
             if (this.operation == Operation.MOVE_TO) {
                 tickMoveTo();
             } else {
-                if (this.operation == Operation.STRAFE && this.mob.onGround()) {
-                    Vec3 landing = StrafeTerrain.findLanding(this.mob, strafeProbe(0.5));
-                    if (landing != null && landing.y - this.mob.getY() > this.mob.maxUpStep() + MOVEMENT_EPSILON) {
-                        this.mob.getJumpControl().jump();
+                if (this.operation == Operation.STRAFE) {
+                    if (this.mob.onGround()) {
+                        Vec3 landing = StrafeTerrain.findLanding(this.mob, strafeProbe(0.5));
+                        if (landing != null && landing.y - this.mob.getY() > this.mob.maxUpStep() + MOVEMENT_EPSILON) {
+                            this.mob.getJumpControl().jump();
+                        }
                     }
+                    tickStrafe();
+                } else {
+                    super.tick();
                 }
-                super.tick();
             }
             return;
         }
@@ -88,6 +92,19 @@ public class MCAMoveControl extends MoveControl {
         // Use the same input heading as LivingEntity travel and the tactical
         // probe, preserving vanilla's probe length without its rotated bearing.
         return StrafeTerrain.findLanding(this.mob, strafeProbe(Math.hypot(x, z))) != null;
+    }
+
+    private void tickStrafe() {
+        float speed = (float) (this.speedModifier * this.mob.getAttributeValue(Attributes.MOVEMENT_SPEED));
+        double probe = speed * Math.min(1.0D, Math.hypot(this.strafeForwards, this.strafeRight));
+        boolean walkable = probe <= MOVEMENT_EPSILON
+                || isWalkable((float) probe, 0.0F);
+        // Keep vanilla's strafe inputs and travel, but release a blocked step
+        // instead of substituting full forward input toward the enemy.
+        this.mob.setSpeed(speed);
+        this.mob.setZza(walkable ? this.strafeForwards : 0.0F);
+        this.mob.setXxa(walkable ? this.strafeRight : 0.0F);
+        this.operation = Operation.WAIT;
     }
 
     private Vec3 strafeProbe(double distance) {

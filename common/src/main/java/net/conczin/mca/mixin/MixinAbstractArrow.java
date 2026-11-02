@@ -22,6 +22,7 @@ abstract class MixinAbstractArrow {
     private boolean mca$ignoreVillagersForArcherArrows(boolean original, Entity target) {
         return original && !(Config.getServerConfig().archerArrowsIgnoreVillagers
                 && (target instanceof Villager || target instanceof IronGolem)
+                && (!(target instanceof VillagerEntityMCA villager) || !villager.isHostile())
                 && mca$getMcaArcherOwner() != null);
     }
 

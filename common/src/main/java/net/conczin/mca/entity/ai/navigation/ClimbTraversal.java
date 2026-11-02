@@ -1,14 +1,11 @@
 package net.conczin.mca.entity.ai.navigation;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.LadderBlock;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
@@ -23,7 +20,6 @@ final class ClimbTraversal {
     private static final double VERTICAL_SPEED = 0.16D;
     private static final double HORIZONTAL_SPEED = 0.12D;
     private static final double HORIZONTAL_GAIN = 0.35D;
-    private static final double LADDER_ENTRY_OFFSET = 0.1D;
     private static final double ASCENT_NODE_TOLERANCE = 0.20D;
     private static final double DESCENT_NODE_TOLERANCE = 0.08D;
     private static final double EXIT_HEIGHT_TOLERANCE = 0.25D;
@@ -69,6 +65,18 @@ final class ClimbTraversal {
         Context context = resolve(path);
         return context != null
                 && this.level.getBlockState(context.climbableNode().asBlockPos()).is(Blocks.SCAFFOLDING);
+    }
+
+    void holdPosition(int navigationTick) {
+        if (!this.mob.onClimbable()) {
+            return;
+        }
+        // The brain runs after navigation and before travel. Claim this travel step
+        // immediately; a queued request would be consumed one navigation tick late.
+        this.lastMovementControlTick = navigationTick;
+        this.lastControlledVerticalVelocity = 0.0D;
+        Vec3 movement = this.mob.getDeltaMovement();
+        this.mob.setDeltaMovement(movement.x, 0.0D, movement.z);
     }
 
     void tick(@Nullable Path path, double speedModifier, int navigationTick) {
@@ -235,7 +243,7 @@ final class ClimbTraversal {
     }
 
     private void applyMotion(Context context, double controlledY, double speedModifier) {
-        Vec3 anchor = getClimbableAnchor(context.climbableNode().asBlockPos());
+        Vec3 anchor = PathNodeGeometry.climbingPosition(context.climbableNode().asBlockPos());
         double targetY = context.targetNode().y;
         boolean continuingExit = isContinuingExit(context);
 
@@ -431,20 +439,6 @@ final class ClimbTraversal {
                 && context.verticalDirection() < 0
                 && (progressTowardExit(context) > 0.0D
                 || isLowerExit(context) && isAtExitHeight(context, context.targetNode().y));
-    }
-
-    private Vec3 getClimbableAnchor(BlockPos pos) {
-        BlockState state = this.level.getBlockState(pos);
-        Vec3 center = Vec3.atCenterOf(pos);
-        if (state.getBlock() instanceof LadderBlock) {
-            Direction facing = state.getValue(LadderBlock.FACING);
-            return center.add(
-                    facing.getStepX() * LADDER_ENTRY_OFFSET,
-                    0.0D,
-                    facing.getStepZ() * LADDER_ENTRY_OFFSET
-            );
-        }
-        return center;
     }
 
     private static double horizontalVelocity(double delta) {

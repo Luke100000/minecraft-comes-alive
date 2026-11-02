@@ -27,13 +27,6 @@ final class WalkTargetRetryGate {
         this.immediateRetries = immediateRetries;
     }
 
-    /** Checks eligibility without consuming a retry or changing its failure age. */
-    boolean canReserve(BlockPos destination, BlockPos origin, long gameTime) {
-        return !isSameStalledAttempt(destination, origin, gameTime)
-                || gameTime - previousAttemptTime >= retryIntervalTicks
-                || immediateRetriesRemaining > 0;
-    }
-
     boolean tryReserve(BlockPos destination, BlockPos origin, long gameTime) {
         long elapsed = gameTime - previousAttemptTime;
         boolean unchanged = isSameStalledAttempt(destination, origin, gameTime);
@@ -80,10 +73,6 @@ final class WalkTargetRetryGate {
         stalledSince = gameTime;
         immediateRetriesRemaining = immediateRetries;
         return true;
-    }
-
-    long previousAttemptTime() {
-        return previousAttemptTime;
     }
 
     long stalledSince() {

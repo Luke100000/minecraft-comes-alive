@@ -2,7 +2,6 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
-import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
@@ -13,7 +12,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.behavior.MoveToTargetSink;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
@@ -79,7 +77,7 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         if (walkTarget != null
                 && path != null
                 && entity.getNavigation().isDone()
-                && !walkTargetReached(entity, walkTarget)
+                && !MultiTargetPositionTracker.isReached(entity, walkTarget.getTarget(), walkTarget.getCloseEnoughDist())
                 && !entity.getBrain().hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)) {
             if (entity instanceof VillagerEntityMCA villager) {
                 WalkTargetFailureMemory.record(villager, walkTarget.getTarget().currentBlockPosition(), gameTime);
@@ -136,11 +134,8 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         if (combat == RangedCombatState.EMERGENCY_FLEE) {
             return !(walkTarget.getTarget() instanceof CombatEscapePositionTracker);
         }
-        return (combat == RangedCombatState.HOLD || combat == RangedCombatState.STRAFE)
-                && walkTarget.getTarget() instanceof BlockPosTracker
-                && !(walkTarget.getTarget() instanceof PersistentPathTarget)
-                && !entity.getBrain().hasMemoryValue(MemoryModuleTypeMCA.PLAYER_FOLLOWING)
-                && !entity.getBrain().hasMemoryValue(MemoryModuleTypeMCA.STAYING);
+        return combat != null && entity.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)
+                && !(walkTarget instanceof ArcherMovementTask.CombatWalkTarget);
     }
 
     private static boolean clearInactiveActivityTarget(Mob entity, WalkTarget target) {
@@ -154,14 +149,6 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
             entity.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
         }
         return true;
-    }
-
-    private static boolean walkTargetReached(Mob entity, WalkTarget walkTarget) {
-        if (walkTarget.getTarget() instanceof MultiTargetPositionTracker multiTarget) {
-            return multiTarget.isReached(entity, walkTarget.getCloseEnoughDist());
-        }
-        return walkTarget.getTarget().currentBlockPosition().distManhattan(entity.blockPosition())
-                <= walkTarget.getCloseEnoughDist();
     }
 
     @Override

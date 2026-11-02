@@ -32,7 +32,7 @@ class RangedCombatStateTest {
             } else {
                 assertFalse(state.suppressesRangedAttack(), state.name());
             }
-            if (state == RangedCombatState.EMERGENCY_FLEE || state == RangedCombatState.RECOVER) {
+            if (state == RangedCombatState.RECOVER) {
                 assertFalse(state.permitsBowDrawContinuation());
             } else {
                 assertTrue(state.permitsBowDrawContinuation());
