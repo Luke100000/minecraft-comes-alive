@@ -25,6 +25,54 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 class SelectedFloorScannerConnectorTest {
     @Test
+    void equivalentInteriorSourcesKeepCanonicalFloorAndAction() {
+        TallRoom world = new TallRoom();
+        BlockPos ordinary = new BlockPos(2, 64, 2);
+        BlockPos slab = new BlockPos(4, 64, 4);
+        BlockPos shelf = new BlockPos(6, 64, 6);
+        BlockPos bed = new BlockPos(8, 64, 8);
+        world.put(slab.below(), Blocks.STONE_SLAB.defaultBlockState());
+        world.put(shelf.above(), Blocks.LADDER.defaultBlockState());
+        var bedState = Blocks.WHITE_BED.defaultBlockState()
+                .setValue(BedBlock.FACING, net.minecraft.core.Direction.EAST);
+        world.put(bed, bedState.setValue(BedBlock.PART, BedPart.FOOT));
+        world.put(bed.east(), bedState.setValue(BedBlock.PART, BedPart.HEAD));
+        var baseline = SelectedFloorScanner.scan(world, ordinary, 2048, 64);
+        assertEquals(Building.validationResult.SUCCESS, baseline.result());
+        var roomCells = baseline.floor().cells().stream().map(FloorGeometry.Cell::feet).collect(Collectors.toSet());
+        Village registered = new Village(1, null);
+        Building room = new Building(ordinary);
+        room.setId(42);
+        room.setStructureId(10);
+        room.setFloorId(0);
+        var bounds = FloorGeometry.bounds(baseline.floor().cells(), 0);
+        room.setGeometry(bounds.min(), bounds.max(), roomCells);
+        registered.registerStructure(new Structure(10, ordinary,
+                java.util.List.of(new StructureFloor(0, 0, baseline.anchorY(), baseline.floor()))), room);
+        BlockPos[] sources = {ordinary, slab, shelf, bed, bed.above()};
+        for (boolean reverse : new boolean[]{false, true}) {
+            var observation = new SelectedFloorScanner.Observation(world, 2048, 64);
+            for (int i = 0; i < sources.length; i++) {
+                BlockPos source = sources[reverse ? sources.length - 1 - i : i];
+                var scan = observation.selected(source);
+                assertEquals(Building.validationResult.SUCCESS, scan.result(), source.toString());
+                assertTrue(baseline.floor().sameExactGeometry(scan.floor()), source.toString());
+                assertEquals(baseline.anchorY(), scan.anchorY());
+                assertEquals(roomCells, RoomPartitioner.select(scan.seed(), scan.floor(),
+                        BuildingRoomScanner.components(world, scan)).floorCells());
+                var fresh = new StructureScanner.FloorObservation(scan, Set.of(), Set.of());
+                assertEquals(Village.RoomScanMode.ADD_BUILDING,
+                        RoomScanPlanner.analyzeFresh(new Village(2, null), source, fresh).plan().mode());
+                var plan = RoomScanPlanner.analyzeFresh(registered, source, fresh).plan();
+                assertEquals(Village.RoomScanMode.UPDATE_ROOM, plan.mode(), source.toString());
+                assertEquals(42, plan.currentRoom().orElseThrow().getId());
+                assertEquals(10, plan.targetStructureId());
+                assertEquals(0, plan.targetFloorId());
+            }
+        }
+    }
+
+    @Test
     void aBedInATallRoomDoesNotCreateAdditionalSurfaceCells() {
         TallRoom world = new TallRoom();
         BlockPos source = new BlockPos(8, 64, 8);
