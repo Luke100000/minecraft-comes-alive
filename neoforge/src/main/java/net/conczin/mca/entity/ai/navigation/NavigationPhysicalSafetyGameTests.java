@@ -16,6 +16,8 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
@@ -198,6 +200,151 @@ public final class NavigationPhysicalSafetyGameTests {
                     .setValue(LadderBlock.FACING, Direction.NORTH), 3);
         }
         return base;
+    }
+
+    @GameTest(batch = CLIMB_SAFETY_BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 180)
+    public static void groundedPartialFloorEntersLadderAndCompletesExit(GameTestHelper helper) {
+        BlockPos base = prepareClimbSafetyFixture(helper);
+        ServerLevel level = helper.getLevel();
+        level.setBlock(base, Blocks.FARMLAND.defaultBlockState(), 3);
+        BlockPos target = base.east().above(3);
+        level.setBlock(target.below(), Blocks.STONE.defaultBlockState(), 3);
+        VillagerEntityMCA villager = spawnClimbSafetyVillager(level, base);
+        villager.setPos(villager.getX(), base.getY() + 0.9375D, villager.getZ());
+        villager.setOnGround(true);
+        helper.assertTrue(!villager.onClimbable()
+                        && level.noBlockCollision(villager, villager.getBoundingBox()),
+                "partial-floor entry must begin grounded below the first ladder rung");
+        runClimbTransition(helper, villager, List.of(base.above(), base.above(2), target), 0, target);
+    }
+
+    @GameTest(batch = CLIMB_SAFETY_BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 180)
+    public static void ladderCompletesTwoBlockUpperPlatformExit(GameTestHelper helper) {
+        BlockPos base = prepareClimbSafetyFixture(helper);
+        BlockPos target = base.east().above(4);
+        helper.getLevel().setBlock(target.below(), Blocks.STONE.defaultBlockState(), 3);
+        VillagerEntityMCA villager = spawnClimbSafetyVillager(helper.getLevel(), base.above());
+        runClimbTransition(helper, villager, List.of(base.above(), base.above(2), target), 0, target);
+    }
+
+    @GameTest(batch = CLIMB_SAFETY_BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 180)
+    public static void descendingLadderClearsItsColumnBeforeSameHeightPlatformExit(GameTestHelper helper) {
+        BlockPos base = prepareClimbSafetyFixture(helper);
+        ServerLevel level = helper.getLevel();
+        for (int y = 3; y <= 4; y++) {
+            level.setBlock(base.above(y), Blocks.LADDER.defaultBlockState()
+                    .setValue(LadderBlock.FACING, Direction.NORTH), 3);
+        }
+        BlockPos target = base.east().above(3);
+        level.setBlock(target.below(), Blocks.STONE.defaultBlockState(), 3);
+        VillagerEntityMCA villager = spawnClimbSafetyVillager(level, base.above(3));
+        villager.setPos(villager.getX(), villager.getY() + 0.6D, villager.getZ());
+        runClimbTransition(helper, villager, List.of(base.above(4), base.above(3), target), 1, target);
+    }
+
+    @GameTest(batch = CLIMB_SAFETY_BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 180)
+    public static void descendingLadderLeavesSupportBeforeLowerPlatformExit(GameTestHelper helper) {
+        BlockPos base = prepareClimbSafetyFixture(helper);
+        ServerLevel level = helper.getLevel();
+        level.setBlock(base.above(2), Blocks.STONE.defaultBlockState(), 3);
+        for (int y = 3; y <= 4; y++) {
+            level.setBlock(base.above(y), Blocks.LADDER.defaultBlockState()
+                    .setValue(LadderBlock.FACING, Direction.NORTH), 3);
+        }
+        BlockPos target = base.east().above();
+        BlockState previous = level.getBlockState(target.below());
+        CLIMB_SAFETY_BLOCKS.putIfAbsent(target.below(), previous);
+        level.setBlock(target.below(), Blocks.STONE.defaultBlockState(), 3);
+        VillagerEntityMCA villager = spawnClimbSafetyVillager(level, base.above(3));
+        villager.setPos(villager.getX(), villager.getY() + 0.6D, villager.getZ());
+        runClimbTransition(helper, villager, List.of(base.above(4), base.above(3), target), 1, target);
+    }
+
+    @GameTest(batch = CLIMB_SAFETY_BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 100)
+    public static void completedUnreachableClimbReleasesSuspendedVillager(GameTestHelper helper) {
+        BlockPos base = prepareClimbSafetyFixture(helper);
+        VillagerEntityMCA villager = spawnClimbSafetyVillager(helper.getLevel(), base.above(2));
+        villager.setPos(villager.getX(), villager.getY() + 0.1D, villager.getZ());
+        Path partial = new Path(List.of(new Node(base.getX(), base.getY() + 2, base.getZ())), base.above(4), false);
+        helper.assertTrue(villager.getNavigation().moveTo(partial, 0.5D),
+                "unreachable climb fixture did not start its partial route");
+        double initialY = villager.getY();
+        helper.succeedWhen(() -> helper.assertTrue(villager.getY() < initialY - 0.5D,
+                "completed partial climb kept its suspended endpoint forever: pos=" + villager.position()
+                        + "; path=" + villager.getNavigation().getPath()));
+    }
+
+    @GameTest(batch = CLIMB_SAFETY_BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 100)
+    public static void completedReachableClimbKeepsItsSuspendedEndpoint(GameTestHelper helper) {
+        BlockPos base = prepareClimbSafetyFixture(helper);
+        BlockPos target = base.above(2);
+        VillagerEntityMCA villager = spawnClimbSafetyVillager(helper.getLevel(), target);
+        villager.setPos(villager.getX(), villager.getY() + 0.1D, villager.getZ());
+        Path path = new Path(List.of(new Node(target.getX(), target.getY(), target.getZ())), target, true);
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "reachable climb endpoint did not start");
+        long startedAt = helper.getLevel().getGameTime();
+        helper.onEachTick(() -> {
+            helper.assertTrue(villager.getY() >= target.getY() - 0.05D,
+                    "completed reachable climb lost its suspended endpoint: pos=" + villager.position());
+            if (helper.getLevel().getGameTime() - startedAt >= 60L) helper.succeed();
+        });
+    }
+
+    @GameTest(batch = CLIMB_SAFETY_BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 40)
+    public static void heldLadderPoseSuppressesNativeWallCollisionBoost(GameTestHelper helper) {
+        BlockPos base = prepareClimbSafetyFixture(helper);
+        BlockPos rung = base.above();
+        ServerLevel level = helper.getLevel();
+        CLIMB_SAFETY_BLOCKS.putIfAbsent(rung.east(), level.getBlockState(rung.east()));
+        level.setBlock(rung.east(), Blocks.STONE.defaultBlockState(), 3);
+
+        Villager vanilla = EntityType.VILLAGER.create(level);
+        helper.assertTrue(vanilla != null, "native collision-boost control could not be created");
+        try {
+            vanilla.setNoAi(true);
+            vanilla.setPos(rung.getX() + 1.0D - vanilla.getBbWidth() / 2.0D - 1.0E-5D,
+                    rung.getY(), rung.getZ() + 0.5D);
+            vanilla.setOnGround(false);
+            helper.assertTrue(level.noBlockCollision(vanilla, vanilla.getBoundingBox()),
+                    "native boost control must begin outside the wall");
+            vanilla.setDeltaMovement(0.15D, 0.0D, 0.0D);
+            Vec3 nativeMovement = vanilla.handleRelativeFrictionAndCalculateMovement(Vec3.ZERO, 0.6F);
+            helper.assertTrue(vanilla.horizontalCollision && Math.abs(nativeMovement.y - 0.2D) < 1.0E-6D,
+                    "native wall contact did not produce the automatic ladder boost: " + nativeMovement);
+        } finally {
+            vanilla.discard();
+        }
+
+        VillagerEntityMCA villager = spawnClimbSafetyVillager(level, rung);
+        villager.setNoAi(true);
+        villager.setPos(rung.getX() + 1.0D - villager.getBbWidth() / 2.0D - 1.0E-5D,
+                rung.getY(), rung.getZ() + 0.5D);
+        ((MCAGroundPathNavigation) villager.getNavigation()).holdClimbablePosition();
+        villager.setDeltaMovement(0.15D, 0.0D, 0.0D);
+        Vec3 heldMovement = villager.handleRelativeFrictionAndCalculateMovement(Vec3.ZERO, 0.6F);
+        helper.assertTrue(villager.horizontalCollision && Math.abs(heldMovement.y) < 1.0E-6D,
+                "native collision boost overrode the controller's stationary ladder pose: " + heldMovement);
+        helper.succeed();
+    }
+
+    private static void runClimbTransition(GameTestHelper helper, VillagerEntityMCA villager,
+                                           List<BlockPos> positions, int nextNode, BlockPos target) {
+        Path path = new Path(positions.stream().map(pos -> new Node(pos.getX(), pos.getY(), pos.getZ())).toList(),
+                target, true);
+        path.setNextNodeIndex(nextNode);
+        // Exercise traversal and native entity physics independently of graph construction.
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "climb transition path did not start");
+        helper.succeedWhen(() -> helper.assertTrue(villager.blockPosition().equals(target) && villager.onGround()
+                        && villager.getNavigation().isDone(),
+                "climb transition did not reach supported platform: pos=" + villager.position()
+                        + "; target=" + target + "; path=" + villager.getNavigation().getPath()));
     }
 
     private static VillagerEntityMCA spawnClimbSafetyVillager(ServerLevel level, BlockPos start) {
