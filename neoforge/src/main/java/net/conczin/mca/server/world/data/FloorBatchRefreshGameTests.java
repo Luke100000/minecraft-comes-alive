@@ -176,12 +176,19 @@ public final class FloorBatchRefreshGameTests {
         try (Fixture fixture = new Fixture(helper)) {
             Village village = fixture.siblings();
             CompoundTag before = village.save();
+            Building first = village.getBuilding(100).orElseThrow();
+            var selected = fixture.workflow.analyzeRegisteredRoomUpdate(village, first.getId(), first.getSourceBlock());
+            helper.assertTrue(selected.result() == Building.validationResult.SUCCESS,
+                    "selected-room preparation failed before batch comparison");
+            assertRoomMetadata(helper, first, selected.replacementRoom());
             fixture.shrinkSecond();
             RoomWorkflow.RegisteredFloorUpdate update = fixture.workflow.analyzeRegisteredFloorUpdate(village, 10, 0);
             helper.assertTrue(update.result() == Building.validationResult.SUCCESS
                             && update.structureId() == 10 && update.floorId() == 0
                             && update.replacementRooms().stream().map(Building::getId).toList().equals(List.of(100, 101)),
                     "detached analysis did not account for every saved Room in stable order");
+            update.replacementRooms().forEach(room ->
+                    assertRoomMetadata(helper, village.getBuilding(room.getId()).orElseThrow(), room));
             helper.assertTrue(before.equals(village.save()), "successful detached analysis changed saved state");
             update.refreshedStructure().setFloorNumber(0, 99);
             update.replacementRooms().forEach(room -> {
@@ -191,6 +198,16 @@ public final class FloorBatchRefreshGameTests {
             helper.assertTrue(before.equals(village.save()), "batch payload aliases registered mutable state");
         }
         helper.succeed();
+    }
+
+    private static void assertRoomMetadata(GameTestHelper helper, Building original, Building replacement) {
+        helper.assertTrue(replacement.getId() == original.getId()
+                        && replacement.getStructureId() == original.getStructureId()
+                        && replacement.getFloorId() == original.getFloorId()
+                        && replacement.isTypeForced() == original.isTypeForced()
+                        && replacement.contributesToMain() == original.contributesToMain()
+                        && (!original.isTypeForced() || replacement.getType().equals(original.getType())),
+                "registered room reconstruction lost identity, forced type or contribution metadata");
     }
 
     @GameTest(batch = "mca_floor_batch_multiple", templateNamespace = "mca",

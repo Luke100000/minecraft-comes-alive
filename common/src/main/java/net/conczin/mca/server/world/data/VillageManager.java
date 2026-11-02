@@ -365,12 +365,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return switch (plan.mode()) {
             case ADD_ROOM -> pending.getId() == plan.targetStructureId() && room.getFloorId() == plan.targetFloorId()
                     ? commitExpandedRoom(scan, forcedType) : Building.validationResult.NOT_IN_BUILDING;
-            case ADD_BUILDING, ADD_ATTACHMENT -> pending.getId() < 0 && pending.getFloors().size() == 1
-                    && pending.getLogicalBuildingId() == (plan.mode() == Village.RoomScanMode.ADD_BUILDING
-                    ? pending.getId() : plan.targetBuildingId())
-                    && pending.getFloors().getFirst().floorNumber() == (plan.mode() == Village.RoomScanMode.ADD_BUILDING
-                    ? 0 : plan.prospectiveFloorNumber())
-                    ? commitInitialRoom(scan, forcedType) : Building.validationResult.NOT_IN_BUILDING;
+            case ADD_BUILDING, ADD_ATTACHMENT -> commitInitialRoom(scan, forcedType);
             case UPDATE_ROOM -> Building.validationResult.NOT_IN_BUILDING;
         };
     }
@@ -408,10 +403,17 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     private Building.validationResult commitInitialRoom(BuildingScanResult scan, String forcedType) {
+        Structure structure = scan.pendingStructure();
+        int targetBuildingId = scan.targetBuildingId();
+        int expectedOwner = targetBuildingId < 0 ? structure.getId() : targetBuildingId;
+        int expectedNumber = targetBuildingId < 0 ? 0 : scan.plan().prospectiveFloorNumber();
+        if (structure.getId() >= 0 || structure.getFloors().size() != 1
+                || structure.getLogicalBuildingId() != expectedOwner
+                || structure.getFloors().getFirst().floorNumber() != expectedNumber
+                || targetBuildingId >= 0 && scan.village() == null) return Building.validationResult.NOT_IN_BUILDING;
         Village village = scan.village();
         if (village == null) village = new Village(lastVillageId++, world);
 
-        Structure structure = scan.pendingStructure();
         if (village.hasRegisteredFloorOverlap(structure)) {
             return Building.validationResult.IDENTICAL;
         }
@@ -420,7 +422,6 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         String category = chooseRoomCategory(scan, forcedType);
         if (category == null) return Building.validationResult.INVALID_TYPE;
 
-        int targetBuildingId = scan.targetBuildingId();
         if (targetBuildingId >= 0 && village.getBuildingStructures(targetBuildingId).isEmpty()) {
             return Building.validationResult.NOT_IN_BUILDING;
         }

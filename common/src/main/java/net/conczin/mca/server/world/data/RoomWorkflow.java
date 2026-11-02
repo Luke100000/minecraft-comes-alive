@@ -68,8 +68,7 @@ public final class RoomWorkflow {
             return Outcome.failed(Building.validationResult.IDENTICAL, source, expectedRoomId);
         }
         return switch (plan.mode()) {
-            case ADD_ROOM -> withExpectedTargetId(
-                    commitAddition(analyzeRoom(village, analysis), selectedType), -1);
+            case ADD_ROOM -> commitAddition(analyzeRoom(village, analysis), selectedType);
             case UPDATE_ROOM -> updateRoom(
                     village, analysis, selectedType);
             default -> Outcome.failed(Building.validationResult.NOT_IN_BUILDING, source, expectedRoomId);
@@ -129,8 +128,7 @@ public final class RoomWorkflow {
         if (analysis.result() != Building.validationResult.SUCCESS) {
             return failedRoom(analysis.result(), source, village);
         }
-        if (plan.mode() != Village.RoomScanMode.ADD_ROOM
-                || plan.targetStructureId() < 0 || plan.targetFloorId() < 0) {
+        if (plan.mode() != Village.RoomScanMode.ADD_ROOM) {
             return failedRoom(plan.mode() == Village.RoomScanMode.UPDATE_ROOM
                     ? Building.validationResult.IDENTICAL
                     : Building.validationResult.NOT_IN_BUILDING, source, village);
@@ -223,7 +221,9 @@ public final class RoomWorkflow {
             return failedRoom(Building.validationResult.NOT_IN_BUILDING, source, village);
         }
 
-        StructureScanner.Result structureScan = resolvePlannedAttachmentScan(village, analysis);
+        if (analysis.observation() == null) return failedRoom(Building.validationResult.NOT_IN_BUILDING, source, village);
+        StructureScanner.Result structureScan = StructureScanner.resultFromObservedFloor(
+                plan.scanSeed(), analysis.observation().scan(), village.getStructures().values(), -1, plan.targetBuildingId());
         if (structureScan.result() != Building.validationResult.SUCCESS) {
             return failedRoom(structureScan.result(), source, village);
         }
@@ -245,20 +245,6 @@ public final class RoomWorkflow {
         return roomResultFromGeometry(village, candidate, attachmentFloor, geometry, plan)
                 .withSource(source)
                 .withPendingStructure(candidate);
-    }
-
-    private StructureScanner.Result resolvePlannedAttachmentScan(Village village, RoomScanPlanner.Analysis analysis) {
-        RoomScanPlan plan = analysis.plan();
-        Collection<Structure> existing = village.getStructures().values();
-        StructureScanner.FloorObservation observation = analysis.observation();
-        if (observation == null) {
-            return StructureScanner.Result.failure(
-                    Building.validationResult.NOT_IN_BUILDING, plan.interactionSource());
-        }
-
-        // Planning and materialization consume the same selected-Floor observation.
-        return StructureScanner.resultFromObservedFloor(
-                plan.scanSeed(), observation.scan(), existing, -1, plan.targetBuildingId());
     }
 
     RegisteredFloorUpdate analyzeRegisteredFloorUpdate(Village village, int structureId, int floorId) {
@@ -301,18 +287,12 @@ public final class RoomWorkflow {
                 return RegisteredFloorUpdate.failure(Building.validationResult.OVERLAP, structureId, floorId);
             }
             matched[match] = true;
-            BuildingRoomScanner.Result geometry = BuildingRoomScanner.materialize(
-                    room.getSourceBlock(), Config.getInstance().maxBuildingSize, evidence, components.get(match));
-            BuildingScanResult selected = materializeRoom(village, refreshed, refreshedFloor, geometry,
-                    RoomScanPlan.updateRoom(room, room.getSourceBlock()));
+            BuildingScanResult selected = materializeRegisteredRoom(village, refreshed, refreshedFloor,
+                    RoomScanPlan.updateRoom(room, room.getSourceBlock()), evidence, components.get(match));
             if (selected.result() != Building.validationResult.SUCCESS) {
                 return RegisteredFloorUpdate.failure(selected.result(), structureId, floorId);
             }
             Building replacement = selected.building();
-            replacement.setId(room.getId());
-            replacement.setType(room.getType());
-            replacement.setTypeForced(room.isTypeForced());
-            replacement.setContributesToMain(room.contributesToMain());
             replacements.add(replacement);
         }
         List<Building> prospective = village.getRooms()
@@ -415,9 +395,8 @@ public final class RoomWorkflow {
             return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, source, village);
         }
 
-        BuildingRoomScanner.Result geometry = BuildingRoomScanner.materialize(
-                fresh.source(), Config.getInstance().maxBuildingSize, components, selectedComponent);
-        BuildingScanResult selected = materializeRoom(village, refreshed, refreshedFloor, geometry, plan);
+        BuildingScanResult selected = materializeRegisteredRoom(village, refreshed, refreshedFloor, plan,
+                RoomPoiEvidence.index(components), selectedComponent);
         if (selected.result() != Building.validationResult.SUCCESS) {
             return RegisteredRoomUpdate.failure(selected.result(), source, village);
         }
@@ -437,17 +416,27 @@ public final class RoomWorkflow {
             return RegisteredRoomUpdate.failure(Building.validationResult.OVERLAP, source, village);
         }
 
-        replacement.setId(expected.getId());
-        replacement.setStructureId(expected.getStructureId());
-        replacement.setFloorId(expected.getFloorId());
-        replacement.setType(expected.getType());
-        replacement.setTypeForced(expected.isTypeForced());
-        replacement.setContributesToMain(expected.contributesToMain());
         List<String> matchingTypes = village.getMatchingRoomTypes(replacement).stream()
                 .map(BuildingType::name)
                 .toList();
         return new RegisteredRoomUpdate(Building.validationResult.SUCCESS, source, village,
                 refreshed, expected.getId(), replacement, matchingTypes);
+    }
+
+    private BuildingScanResult materializeRegisteredRoom(Village village, Structure refreshed, StructureFloor floor,
+                                                         RoomScanPlan plan, RoomPoiEvidence.Index evidence,
+                                                         RoomPartitioner.Component component) {
+        Building original = plan.currentRoom().orElseThrow();
+        BuildingRoomScanner.Result geometry = BuildingRoomScanner.materialize(
+                plan.scanSeed(), Config.getInstance().maxBuildingSize, evidence, component);
+        BuildingScanResult selected = materializeRoom(village, refreshed, floor, geometry, plan);
+        if (selected.result() != Building.validationResult.SUCCESS) return selected;
+        Building replacement = selected.building();
+        replacement.setId(original.getId());
+        replacement.setType(original.getType());
+        replacement.setTypeForced(original.isTypeForced());
+        replacement.setContributesToMain(original.contributesToMain());
+        return selected;
     }
 
     private static boolean hasRegisteredRoomConflict(
@@ -583,11 +572,6 @@ public final class RoomWorkflow {
         return result == Building.validationResult.SUCCESS
                 ? Outcome.committed(source, expectedTargetId)
                 : Outcome.failed(result, source, expectedTargetId);
-    }
-
-    private static Outcome withExpectedTargetId(Outcome outcome, int expectedTargetId) {
-        return new Outcome(outcome.status(), outcome.result(), outcome.source(),
-                outcome.matchingTypes(), expectedTargetId, outcome.prospectiveFloorNumber());
     }
 
     private static Outcome withProspectiveFloorNumber(Outcome outcome, int prospectiveFloorNumber) {

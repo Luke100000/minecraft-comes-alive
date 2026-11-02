@@ -17,6 +17,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VillageManagerExpandedRoomCommitTest {
     @Test
+    void attachmentWithoutItsVillageDoesNotConsumeAnId() {
+        BlockPos source = new BlockPos(0, 64, 0);
+        Structure prepared = new Structure(-1, source, List.of(
+                TestStructureFloors.create(0, 64, 68, 1, region(64, 0, 3))));
+        prepared.setLogicalBuildingId(10);
+        var scan = new BuildingScanResult(Building.validationResult.SUCCESS, source,
+                room(-1, -1, 0, region(64, 0, 3)), List.of("building"), null,
+                RoomScanPlan.attachment(10, 1, source, source)).withPendingStructure(prepared);
+        VillageManager manager = new VillageManager(null);
+        var before = manager.save(new net.minecraft.nbt.CompoundTag(), null);
+        assertEquals(Building.validationResult.NOT_IN_BUILDING, manager.commitRoomAddition(scan, "building"));
+        assertEquals(before, manager.save(new net.minecraft.nbt.CompoundTag(), null));
+    }
+
+    @Test
     void commitRejectsPayloadThatDisagreesWithPlan() {
         Village village = new Village(1, null);
         for (int id : new int[]{10, 11}) {
