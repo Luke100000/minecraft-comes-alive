@@ -3,6 +3,7 @@ package net.conczin.mca.server.world.data;
 import net.minecraft.core.BlockPos;
 
 import java.util.List;
+import java.util.Objects;
 
 public record BuildingScanResult(
         Building.validationResult result,
@@ -10,18 +11,21 @@ public record BuildingScanResult(
         Building building,
         List<String> matchingTypes,
         Village village,
-        Structure pendingStructure
+        Structure pendingStructure,
+        RoomScanPlan plan
 ) {
     public BuildingScanResult(Building.validationResult result,
                               BlockPos source,
                               Building building,
                               List<String> matchingTypes,
-                              Village village) {
-        this(result, source, building, matchingTypes, village, null);
+                              Village village,
+                              RoomScanPlan plan) {
+        this(result, source, building, matchingTypes, village, null, plan);
     }
 
     public BuildingScanResult {
         matchingTypes = matchingTypes == null ? List.of() : List.copyOf(matchingTypes);
+        if (result == Building.validationResult.SUCCESS) Objects.requireNonNull(plan, "plan");
     }
 
     public boolean isAmbiguous() {
@@ -34,16 +38,15 @@ public record BuildingScanResult(
 
     BuildingScanResult withPendingStructure(Structure structure) {
         return new BuildingScanResult(result, source, building, matchingTypes,
-                village, structure);
+                village, structure, plan);
     }
 
     BuildingScanResult withSource(BlockPos source) {
         return new BuildingScanResult(result, source, building, matchingTypes,
-                village, pendingStructure);
+                village, pendingStructure, plan);
     }
 
     public int targetBuildingId() {
-        if (pendingStructure == null || pendingStructure.getLogicalBuildingId() == pendingStructure.getId()) return -1;
-        return pendingStructure.getLogicalBuildingId();
+        return plan != null && plan.mode() == Village.RoomScanMode.ADD_ATTACHMENT ? plan.targetBuildingId() : -1;
     }
 }

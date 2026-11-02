@@ -358,31 +358,21 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (forcedType != null && !scan.matchesType(forcedType)) return Building.validationResult.INVALID_TYPE;
         if (forcedType == null && scan.isAmbiguous()) return Building.validationResult.INVALID_TYPE;
         Structure pending = scan.pendingStructure();
-        if (pending != null) {
-            Village village = scan.village();
-            if (pending.getId() >= 0) {
-                return village != null && village.getStructure(pending.getId()).isPresent()
-                        ? commitExpandedRoom(scan, forcedType)
-                        : Building.validationResult.NOT_IN_BUILDING;
-            }
-            return commitInitialRoom(scan, forcedType);
-        }
-        if (scan.building().getId() >= 0) return Building.validationResult.OVERLAP;
-
-        Village village = scan.village();
-        Structure structure = village == null ? null : village.getStructureFor(scan.building()).orElse(null);
-        if (village == null || structure == null) return Building.validationResult.NOT_IN_BUILDING;
-
-        Building room = scan.building().copy();
-        String category = chooseRoomCategory(scan, forcedType);
-        if (category == null) return Building.validationResult.INVALID_TYPE;
-        room.setId(lastBuildingId);
-        room.setType(category);
-        room.setTypeForced(forcedType != null);
-        village.publishBuildingMutation(() -> village.registerRoom(room));
-        lastBuildingId++;
-        finalizeVillageMutation(village);
-        return Building.validationResult.SUCCESS;
+        Building room = scan.building();
+        if (pending == null || room == null || room.getStructureId() != pending.getId()
+                || pending.getFloor(room.getFloorId()).isEmpty()) return Building.validationResult.NOT_IN_BUILDING;
+        RoomScanPlan plan = scan.plan();
+        return switch (plan.mode()) {
+            case ADD_ROOM -> pending.getId() == plan.targetStructureId() && room.getFloorId() == plan.targetFloorId()
+                    ? commitExpandedRoom(scan, forcedType) : Building.validationResult.NOT_IN_BUILDING;
+            case ADD_BUILDING, ADD_ATTACHMENT -> pending.getId() < 0 && pending.getFloors().size() == 1
+                    && pending.getLogicalBuildingId() == (plan.mode() == Village.RoomScanMode.ADD_BUILDING
+                    ? pending.getId() : plan.targetBuildingId())
+                    && pending.getFloors().getFirst().floorNumber() == (plan.mode() == Village.RoomScanMode.ADD_BUILDING
+                    ? 0 : plan.prospectiveFloorNumber())
+                    ? commitInitialRoom(scan, forcedType) : Building.validationResult.NOT_IN_BUILDING;
+            case UPDATE_ROOM -> Building.validationResult.NOT_IN_BUILDING;
+        };
     }
 
     private Building.validationResult commitExpandedRoom(BuildingScanResult scan, String forcedType) {
@@ -394,7 +384,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         }
 
         Structure current = village.getStructure(refreshed.getId()).orElse(null);
-        if (current == null || current.getLogicalBuildingId() != refreshed.getLogicalBuildingId()) {
+        if (current == null || current.getFloor(scan.plan().targetFloorId()).isEmpty()
+                || current.getLogicalBuildingId() != refreshed.getLogicalBuildingId()) {
             return Building.validationResult.NOT_IN_BUILDING;
         }
         if (room.getId() >= 0) {
@@ -429,14 +420,13 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         String category = chooseRoomCategory(scan, forcedType);
         if (category == null) return Building.validationResult.INVALID_TYPE;
 
-        int targetBuildingId = structure.getLogicalBuildingId();
-        if (targetBuildingId != structure.getId()
-                && village.getBuildingStructures(targetBuildingId).isEmpty()) {
+        int targetBuildingId = scan.targetBuildingId();
+        if (targetBuildingId >= 0 && village.getBuildingStructures(targetBuildingId).isEmpty()) {
             return Building.validationResult.NOT_IN_BUILDING;
         }
 
         StructureFloor candidateFloor = structure.getFloors().getFirst();
-        FloorGrouping.NumberDecision numbering = targetBuildingId == structure.getId() ? null
+        FloorGrouping.NumberDecision numbering = targetBuildingId < 0 ? null
                 : RoomScanPlanner.prospectiveNumber(village, targetBuildingId, candidateFloor);
         if (numbering != null) {
             if (numbering.result() != Building.validationResult.SUCCESS) return numbering.result();
