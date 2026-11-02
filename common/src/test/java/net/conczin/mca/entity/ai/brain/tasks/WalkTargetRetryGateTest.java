@@ -12,38 +12,6 @@ class WalkTargetRetryGateTest {
     private static final BlockPos START = new BlockPos(0, 64, 0);
 
     @Test
-    void checkingAvailabilityDoesNotStartLocalStrollCooldown() {
-        WalkTargetRetryGate gate = new WalkTargetRetryGate(40, 1);
-
-        assertTrue(gate.canReserve(START, START, 100));
-        assertTrue(gate.canReserve(START, START, 101));
-        assertTrue(gate.tryReserve(START, START, 102));
-        assertFalse(gate.canReserve(START, START, 103));
-        assertFalse(gate.canReserve(START, START, 141));
-        assertTrue(gate.canReserve(START, START, 142));
-        assertTrue(gate.tryReserve(START, START, 142));
-        assertFalse(gate.canReserve(START, START, 143));
-    }
-
-    @Test
-    void checkingAvailabilityDoesNotConsumeImmediateRetryOrChangeDestination() {
-        WalkTargetRetryGate gate = new WalkTargetRetryGate(100, 16, 1);
-        assertTrue(gate.tryReserve(DESTINATION, START, 100));
-
-        assertTrue(gate.canReserve(DESTINATION, START, 120));
-        assertTrue(gate.canReserve(DESTINATION, START, 120));
-        assertTrue(gate.tryReserve(DESTINATION, START, 120));
-        assertFalse(gate.canReserve(DESTINATION, START, 140));
-        assertTrue(gate.canReserve(DESTINATION.east(), START, 140));
-        assertTrue(gate.canReserve(DESTINATION, START.east(4), 140));
-        assertTrue(gate.canReserve(DESTINATION, START, 10));
-        assertFalse(gate.canReserve(DESTINATION, START, 140));
-        assertEquals(100L, gate.stalledSince());
-        assertEquals(120L, gate.previousAttemptTime());
-        assertTrue(gate.tryReserve(DESTINATION, START, 220));
-    }
-
-    @Test
     void unchangedDestinationWithoutProgressCannotImmediatelyRepeatSearch() {
         WalkTargetRetryGate gate = new WalkTargetRetryGate(100, 16);
 

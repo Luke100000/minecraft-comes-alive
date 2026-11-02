@@ -23,8 +23,6 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import java.util.Set;
-
 @Mixin(MoveToTargetSink.class)
 abstract class MixinMoveToTargetSink {
     @Unique
@@ -87,44 +85,9 @@ abstract class MixinMoveToTargetSink {
                 return original.call(navigation, target, reachRange);
             }
 
-            if (multiTarget instanceof CombatEscapePositionTracker combatEscape) {
-                Path partial = null;
-                Path emergency = null;
-                int attempts = 0;
-                for (Set<BlockPos> tier : combatEscape.getRankedPathTargets(mob)) {
-                    if (tier.isEmpty() || attempts >= 12) {
-                        continue;
-                    }
-                    attempts++;
-                    Path candidate = navigation.createPath(tier, reachRange);
-                    if (candidate == null) {
-                        continue;
-                    }
-                    if (!combatEscape.isPathSafe(mob, candidate)) {
-                        if (emergency == null && candidate.canReach()
-                                && combatEscape.isDegradedEmergencyPathSafe(mob, candidate)) {
-                            emergency = candidate;
-                        }
-                        continue;
-                    }
-                    if (candidate.canReach()) {
-                        return candidate;
-                    }
-                    if (partial == null) {
-                        partial = candidate;
-                    }
-                }
-                return emergency != null ? emergency : partial;
-            }
-
-            Set<BlockPos> pathTargets = multiTarget.getPathTargets(mob);
-            if (pathTargets.isEmpty()) {
-                return null;
-            }
-
             // Preserve vanilla MoveToTargetSink semantics: a non-null partial path is still
             // useful progress, while vanilla tracks CANT_REACH_WALK_TARGET_SINCE separately.
-            return navigation.createPath(pathTargets, reachRange);
+            return multiTarget.createPath(navigation, mob, reachRange);
         } finally {
             PathRequestDiagnostics.endSinkRequest();
         }

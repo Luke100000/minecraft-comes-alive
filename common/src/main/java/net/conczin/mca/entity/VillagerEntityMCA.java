@@ -375,8 +375,22 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     }
 
     public final void setProfession(VillagerProfession profession) {
+        VillagerProfession previous = getProfession();
         setVillagerData(getVillagerData().setProfession(profession));
-        refreshBrain((ServerLevel) level());
+        ServerLevel world = (ServerLevel) level();
+        refreshBrain(world);
+        // Factories also assign professions before spawning/positioning. Only
+        // an already registered villager needs this live conversion handoff.
+        if (previous != ProfessionsMCA.ARCHER && profession == ProfessionsMCA.ARCHER
+                && world.getEntity(getId()) == this) {
+            GuardEnemiesSensor.refreshNearbyEntities(world, this);
+            if (MCA.platformHelper.isDevelopmentEnvironment()) {
+                MCA.LOGGER.info("[MCA Archer Startup] entity={} name=\"{}\" tick={} action=profession_change previous={} nearestEnemy={}",
+                        getStringUUID(), getName().getString(), tickCount, previous,
+                        getBrain().getMemoryInternal(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY)
+                                .map(Entity::getStringUUID).orElse("none"));
+            }
+        }
     }
 
     @Override
@@ -730,7 +744,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                         }
                     } else if (v.isGuard()) {
                         // non players get attacked straight away
-                        v.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, livingEntity);
+                        VillagerTasksMCA.respondToGuardAlarm(v, livingEntity);
                     }
                 }
             });

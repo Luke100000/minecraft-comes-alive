@@ -4,7 +4,9 @@ import com.google.common.collect.ImmutableSet;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
+import net.conczin.mca.entity.ai.RangedWeaponHelper;
 import net.conczin.mca.entity.ai.brain.UnreachableCombatTargets;
+import net.conczin.mca.registry.ProfessionsMCA;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
@@ -44,7 +46,7 @@ import java.util.Set;
  */
 public class GuardEnemiesSensor extends Sensor<LivingEntity> {
     private static final double VANILLA_NEARBY_RANGE = 16.0;
-    private static final double GUARD_ENEMY_RANGE = 48.0;
+    private static final double GUARD_ENEMY_RANGE = 30.0;
     private static final double GUARD_ENEMY_RANGE_SQR = GUARD_ENEMY_RANGE * GUARD_ENEMY_RANGE;
     // LivingEntity.hasLineOfSight stops checking targets beyond 128 blocks.
     private static final double MAX_FOLLOWED_PLAYER_SCAN_DISTANCE_SQR = (128.0 + GUARD_ENEMY_RANGE)
@@ -72,10 +74,13 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
 
     @Override
     protected void doTick(ServerLevel world, LivingEntity entity) {
-        if (!(entity instanceof VillagerEntityMCA villager)) {
-            return;
+        if (entity instanceof VillagerEntityMCA villager) {
+            refreshNearbyEntities(world, villager);
         }
+    }
 
+    /** Uses the normal sensor query once when a live villager becomes an archer. */
+    public static void refreshNearbyEntities(ServerLevel world, VillagerEntityMCA villager) {
         Optional<Player> followedPlayer = getFollowedPlayer(villager)
                 .filter(player -> player.level() == world && player.isAlive());
         boolean shouldScan = villager.isGuard()
@@ -125,11 +130,11 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
 
         villager.getBrain().setMemory(
                 MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY,
-                this.selectBestGuardEnemy(villager, candidates, followedPlayer)
+                selectBestGuardEnemy(villager, candidates, followedPlayer)
         );
     }
 
-    private Optional<LivingEntity> selectBestGuardEnemy(
+    private static Optional<LivingEntity> selectBestGuardEnemy(
             VillagerEntityMCA entity,
             List<LivingEntity> candidates,
             Optional<Player> followedPlayer
@@ -139,6 +144,11 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
         LivingEntity best = null;
         int bestPriority = Integer.MIN_VALUE;
         double bestDistanceSquared = Double.POSITIVE_INFINITY;
+        boolean bestWaitingForFlyer = false;
+        double attackRangeSquared = entity.getProfession() == ProfessionsMCA.ARCHER
+                ? RangedWeaponHelper.getAttackRangeSquared(entity,
+                        RangedWeaponHelper.GUARD_ATTACK_RANGE * RangedWeaponHelper.GUARD_ATTACK_RANGE)
+                : 0;
         for (LivingEntity target : candidates) {
             EntityType<?> type = target.getType();
             Optional<Integer> configuredPriority = configuredPriorityByType.computeIfAbsent(
@@ -159,11 +169,14 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
             }
 
             double distanceSquared = target.distanceToSqr(entity);
-            if (priority > bestPriority
-                    || priority == bestPriority && distanceSquared < bestDistanceSquared) {
+            boolean waitingForFlyer = RangedWeaponHelper.isFlyingTargetAboveRange(entity, target, attackRangeSquared);
+            if (best == null || bestWaitingForFlyer && !waitingForFlyer
+                    || bestWaitingForFlyer == waitingForFlyer && (priority > bestPriority
+                        || priority == bestPriority && distanceSquared < bestDistanceSquared)) {
                 best = target;
                 bestPriority = priority;
                 bestDistanceSquared = distanceSquared;
+                bestWaitingForFlyer = waitingForFlyer;
             }
         }
         return Optional.ofNullable(best);
@@ -208,7 +221,7 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
         return creeper.getTarget() instanceof Villager;
     }
 
-    private AABB getGuardScanBounds(VillagerEntityMCA guard, Optional<Player> followedPlayer) {
+    private static AABB getGuardScanBounds(VillagerEntityMCA guard, Optional<Player> followedPlayer) {
         AABB bounds = guard.getBoundingBox().inflate(GUARD_ENEMY_RANGE);
         if (followedPlayer.isPresent()) {
             AABB combined = bounds.minmax(followedPlayer.get().getBoundingBox().inflate(GUARD_ENEMY_RANGE));
@@ -221,7 +234,7 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
         return bounds;
     }
 
-    private boolean isWithinGuardEnemyRange(
+    private static boolean isWithinGuardEnemyRange(
             VillagerEntityMCA guard,
             LivingEntity target,
             Optional<Player> followedPlayer
@@ -234,7 +247,7 @@ public class GuardEnemiesSensor extends Sensor<LivingEntity> {
                 .isPresent();
     }
 
-    private boolean isVisibleToGuard(
+    private static boolean isVisibleToGuard(
             VillagerEntityMCA guard,
             LivingEntity target,
             Optional<Player> followedPlayer

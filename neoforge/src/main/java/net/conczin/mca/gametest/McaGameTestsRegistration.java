@@ -32,6 +32,7 @@ import net.conczin.mca.entity.ai.brain.tasks.ShelterLookupGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ShelterDistributionGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ExtendedFindPointOfInterestTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTaskGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.FollowTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ValidateNearbyPoiGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.WanderOrTeleportToTargetTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.AbstractChoreTaskGameTests;
@@ -51,6 +52,7 @@ import net.conczin.mca.entity.ai.navigation.MCAWalkNodeEvaluatorLookupGameTests;
 import net.conczin.mca.entity.ai.navigation.McaSparkFullBrainProfileGameTests;
 import net.conczin.mca.entity.ai.navigation.McaSparkPathProfileGameTests;
 import net.conczin.mca.entity.ai.navigation.NavigationRecoveryGameTests;
+import net.conczin.mca.entity.ai.navigation.NavigationOutcomeGameTests;
 import net.conczin.mca.entity.ai.navigation.NavigationPhysicalSafetyGameTests;
 import net.conczin.mca.entity.ai.navigation.PathRetryLifecycleGameTests;
 import net.conczin.mca.entity.ai.navigation.StairWallPathfindingGameTests;
@@ -114,6 +116,7 @@ public final class McaGameTestsRegistration {
             ShelterDistributionGameTests.class,
             ExtendedFindPointOfInterestTaskGameTests.class,
             ExtendedWalkTowardsTaskGameTests.class,
+            FollowTaskGameTests.class,
             ValidateNearbyPoiGameTests.class,
             WanderOrTeleportToTargetTaskGameTests.class,
             AbstractChoreTaskGameTests.class,
@@ -134,6 +137,7 @@ public final class McaGameTestsRegistration {
             McaSparkFullBrainProfileGameTests.class,
             McaSparkPathProfileGameTests.class,
             NavigationRecoveryGameTests.class,
+            NavigationOutcomeGameTests.class,
             NavigationPhysicalSafetyGameTests.class,
             PathRetryLifecycleGameTests.class,
             StairWallPathfindingGameTests.class,

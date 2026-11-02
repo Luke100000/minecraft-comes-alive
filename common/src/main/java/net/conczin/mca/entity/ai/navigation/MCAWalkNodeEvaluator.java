@@ -484,10 +484,30 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         // Unlike a walking node, a suspended climb node has no supporting floor:
         // the mob's feet must actually reach this node's Y, not the last ground
         // surface reported by getFloorLevel below it.
-        if (!node.closed && hasClimbableBodyClearance(node) && nodeCount < nodes.length) {
+        if (!node.closed && nodeCount < nodes.length && hasClimbableBodyClearance(node)) {
+            AABB body = PathNodeGeometry.bodyAt(this.mob, PathNodeGeometry.climbingPosition(pos));
+            if (bodyTouchesFire(body)) {
+                float malus = this.mob.getPathfindingMalus(PathType.DAMAGE_FIRE);
+                if (malus < 0.0F) return nodeCount;
+                node.type = PathType.DAMAGE_FIRE;
+                node.costMalus = Math.max(node.costMalus, malus);
+            }
             nodes[nodeCount++] = node;
         }
         return nodeCount;
+    }
+
+    private boolean bodyTouchesFire(AABB body) {
+        // Read raw occupied cells: walking path types also inspect supporting and
+        // neighboring blocks, which can be safe below a suspended climber.
+        for (int x = floorMin(body.minX); x <= floorMax(body.maxX); x++) {
+            for (int y = floorMin(body.minY); y <= floorMax(body.maxY); y++) {
+                for (int z = floorMin(body.minZ); z <= floorMax(body.maxZ); z++) {
+                    if (this.currentContext.getPathTypeFromState(x, y, z) == PathType.DAMAGE_FIRE) return true;
+                }
+            }
+        }
+        return false;
     }
 
     private boolean hasClimbableBodyClearance(Node node) {

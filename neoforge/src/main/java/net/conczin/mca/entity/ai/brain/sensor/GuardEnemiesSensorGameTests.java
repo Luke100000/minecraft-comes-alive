@@ -244,14 +244,14 @@ public final class GuardEnemiesSensorGameTests {
                 "getGuardScanBounds", VillagerEntityMCA.class, Optional.class);
         getBounds.setAccessible(true);
         try {
-            AABB guardOnly = guard.getBoundingBox().inflate(48.0D);
+            AABB guardOnly = guard.getBoundingBox().inflate(30.0D);
 
             followedPlayer.absMoveTo(guard.getX() + 24.0D, guard.getY(), guard.getZ());
             AABB nearbyFollowBounds = (AABB) getBounds.invoke(new GuardEnemiesSensor(),
                     guard, Optional.of(followedPlayer));
             helper.assertTrue(nearbyFollowBounds.equals(
-                            guardOnly.minmax(followedPlayer.getBoundingBox().inflate(48.0D))),
-                    "nearby followed players should retain both 48-block defense areas");
+                            guardOnly.minmax(followedPlayer.getBoundingBox().inflate(30.0D))),
+                    "nearby followed players should retain both 30-block defense areas");
 
             followedPlayer.absMoveTo(guard.getX() + 320.0D, guard.getY(), guard.getZ());
             AABB distantFollowBounds = (AABB) getBounds.invoke(new GuardEnemiesSensor(),
@@ -297,13 +297,13 @@ public final class GuardEnemiesSensorGameTests {
             helper.getLevel().addFreshEntity(enemy);
             guard.getBrain().setMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING, followedPlayer);
 
-            helper.assertTrue(guard.distanceToSqr(enemy) > 48.0D * 48.0D,
-                    "fixture enemy must be outside guard's own 48-block scan");
-            helper.assertTrue(followedPlayer.distanceToSqr(enemy) < 48.0D * 48.0D,
+            helper.assertTrue(guard.distanceToSqr(enemy) > 30.0D * 30.0D,
+                    "fixture enemy must be outside guard's own 30-block scan");
+            helper.assertTrue(followedPlayer.distanceToSqr(enemy) < 30.0D * 30.0D,
                     "fixture enemy must be in followed player's defense range");
             helper.assertTrue(helper.getLevel().getEntitiesOfClass(
                             LivingEntity.class,
-                            followedPlayer.getBoundingBox().inflate(48.0D),
+                            followedPlayer.getBoundingBox().inflate(30.0D),
                             candidate -> candidate == enemy).contains(enemy),
                     "fixture enemy must be queryable in the test's loaded area");
             helper.assertTrue(guard.getSensing().hasLineOfSight(enemy),
@@ -321,6 +321,38 @@ public final class GuardEnemiesSensorGameTests {
             enemy.discard();
             guard.discard();
             followedPlayer.discard();
+        }
+    }
+
+    @GameTest(batch = "mca_guard_enemy_range", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void guardSearchStopsAtThirtyBlocks(GameTestHelper helper) {
+        cleanupTestEntities();
+        try {
+            BlockPos guardPos = helper.absolutePos(new BlockPos(3, 2, 3));
+            prepareClearLane(helper, guardPos, guardPos.east(31));
+            VillagerEntityMCA guard = VillagerFactory.newVillager(helper.getLevel())
+                    .withAge(0).withProfession(ProfessionsMCA.GUARD)
+                    .withPosition(Vec3.atBottomCenterOf(guardPos)).spawn(MobSpawnType.STRUCTURE);
+            guard.setNoAi(true);
+            guard.refreshBrain(helper.getLevel());
+            TEST_ENTITIES.add(guard);
+            Zombie enemy = EntityType.ZOMBIE.create(helper.getLevel());
+            if (enemy == null) throw new IllegalStateException("No zombie for guard range regression");
+            enemy.setNoAi(true);
+            enemy.absMoveTo(guard.getX() + 30, guard.getY(), guard.getZ());
+            helper.getLevel().addFreshEntity(enemy);
+            TEST_ENTITIES.add(enemy);
+            GuardEnemiesSensor sensor = new GuardEnemiesSensor();
+            sensor.doTick(helper.getLevel(), guard);
+            helper.assertTrue(guard.getBrain().isMemoryValue(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY, enemy),
+                    "melee guard failed to acquire a visible enemy at the 30-block boundary");
+            enemy.absMoveTo(guard.getX() + 31, guard.getY(), guard.getZ());
+            sensor.doTick(helper.getLevel(), guard);
+            helper.assertTrue(guard.getBrain().getMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY).isEmpty(),
+                    "melee guard acquired a new enemy beyond the 30-block boundary");
+            helper.succeed();
+        } finally {
+            cleanupTestEntities();
         }
     }
 
@@ -369,7 +401,7 @@ public final class GuardEnemiesSensorGameTests {
                     .orElse(List.of());
             boolean targetInScan = helper.getLevel().getEntitiesOfClass(
                     LivingEntity.class,
-                    guard.getBoundingBox().inflate(48.0D),
+                    guard.getBoundingBox().inflate(30.0D),
                     candidate -> candidate == target
             ).contains(target);
             boolean lineOfSight = guard.getSensing().hasLineOfSight(target);

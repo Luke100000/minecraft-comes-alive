@@ -503,12 +503,25 @@ public final class ArcherTerrainCombatGameTests {
     @GameTest(batch = "archer_terrain_review", templateNamespace = "mca",
             template = "gametest/isolated_ai_arena", timeoutTicks = 60)
     public static void firingCellArrivalRequiresActualClearShot(GameTestHelper helper) {
+        actualShotAtArrival(helper, false);
+    }
+
+    @GameTest(batch = "archer_terrain_review", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 60)
+    public static void recoveryCellArrivalRequiresActualClearShot(GameTestHelper helper) {
+        actualShotAtArrival(helper, true);
+    }
+
+    private static void actualShotAtArrival(GameTestHelper helper, boolean recovery) {
         BlockPos start = prepareTwoStepExit(helper);
         VillagerEntityMCA archer = spawnArcher(helper, start);
         archer.setNoAi(true);
         helper.getLevel().setBlock(start.east(11).above(3), Blocks.STONE.defaultBlockState(), 3);
         Zombie target = spawnTarget(helper, start.east(11).above(4));
-        var firing = RangedCombatPositioning.findFiringTarget(archer, target, List.of(), 225).orElseThrow();
+        var firing = (recovery
+                ? RangedCombatPositioning.findRecoveryTarget(archer, target,
+                new RangedCombatPositioning.ThreatContext(List.of(), List.of(), null), 225)
+                : RangedCombatPositioning.findFiringTarget(archer, target, List.of(), 225)).orElseThrow();
         BlockPos cell = start.offset(3, 1, 1);
         helper.assertTrue(firing.getPathTargets(archer).contains(cell), "fixture needs the narrow first-step firing cell");
         Vec3 centre = Vec3.atBottomCenterOf(cell);

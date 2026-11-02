@@ -17,7 +17,6 @@ import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.entity.schedule.ScheduleBuilder;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -387,23 +386,7 @@ public final class ArcherSpiderCombatGameTests {
     }
 
     private static void prepareFlatArea(GameTestHelper helper, BlockPos center, int radius) {
-        ChunkPos minChunk = new ChunkPos(center.offset(-radius, 0, -radius));
-        ChunkPos maxChunk = new ChunkPos(center.offset(radius, 0, radius));
-        for (int chunkX = minChunk.x; chunkX <= maxChunk.x; chunkX++) {
-            for (int chunkZ = minChunk.z; chunkZ <= maxChunk.z; chunkZ++) {
-                helper.getLevel().setChunkForced(chunkX, chunkZ, true);
-            }
-        }
-
-        for (int x = -radius; x <= radius; x++) {
-            for (int z = -radius; z <= radius; z++) {
-                BlockPos feet = center.offset(x, 0, z);
-                helper.getLevel().setBlock(feet.below(), Blocks.STONE.defaultBlockState(), 3);
-                helper.getLevel().setBlock(feet, Blocks.AIR.defaultBlockState(), 3);
-                helper.getLevel().setBlock(feet.above(), Blocks.AIR.defaultBlockState(), 3);
-                helper.getLevel().setBlock(feet.above(2), Blocks.AIR.defaultBlockState(), 3);
-            }
-        }
+        net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea(helper, center, radius, 3);
     }
 
     private static void cleanupTestEntities() {

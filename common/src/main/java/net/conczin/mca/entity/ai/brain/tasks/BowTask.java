@@ -74,9 +74,11 @@ public class BowTask<E extends VillagerEntityMCA> extends Behavior<E> {
         }
 
         RangedCombatState state = RangedCombatState.current(entity).orElse(RangedCombatState.HOLD);
-        boolean aiming = state.permitsAiming(entity) && !entity.getVillagerBrain().isPanicking();
+        boolean panicking = entity.getVillagerBrain().isPanicking();
+        boolean aiming = state.permitsAiming(entity) && !panicking;
         entity.setAggressive(aiming);
-        if (!aiming) {
+        if (!aiming && (!state.permitsBowDrawContinuation() || panicking
+                || entity.getBrain().isActive(net.minecraft.world.entity.schedule.Activity.PANIC))) {
             if (entity.isUsingItem()) {
                 logAction(entity, target, false, entity.distanceToSqr(target), "stop_using",
                         state == RangedCombatState.KITE ? "terrain_escape" : state.name().toLowerCase(java.util.Locale.ROOT));
@@ -101,13 +103,26 @@ public class BowTask<E extends VillagerEntityMCA> extends Behavior<E> {
         double distanceSquared = entity.distanceToSqr(target);
         double attackRangeSquared = RangedWeaponHelper.getAttackRangeSquared(entity, bowHand, this.rangeSquared);
 
-        entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
-        entity.getLookControl().setLookAt(target, LOOK_SPEED, LOOK_SPEED);
+        if (aiming) {
+            entity.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, new EntityTracker(target, true));
+            entity.getLookControl().setLookAt(target, LOOK_SPEED, LOOK_SPEED);
+        }
 
         if (visible) {
             this.lostSightTicks = 0;
         } else {
             this.lostSightTicks++;
+        }
+
+        // Carry the existing draw through a short emergency without aiming at
+        // or firing behind us. The same sight grace still bounds a hidden draw.
+        if (!aiming) {
+            if (entity.isUsingItem() && this.lostSightTicks > LOST_SIGHT_CANCEL_TICKS) {
+                logAction(entity, target, visible, distanceSquared, "stop_using", "draw_grace_expired");
+                entity.stopUsingItem();
+            }
+            this.blockedReleaseTicks = 0;
+            return;
         }
 
         if (this.attackCooldown > 0) {
@@ -190,9 +205,10 @@ public class BowTask<E extends VillagerEntityMCA> extends Behavior<E> {
         }
 
         MCA.LOGGER.info(
-                "[MCA Archer BowTask] entity={} entityName=\"{}\" target={} targetName=\"{}\" action={} reason={} distSqr={} rangeSqr={} los={} lostSightTicks={} attackCooldown={} usingItem={} ticksUsingItem={} mainHand={} offHand={} bowHand={} movement={} headYaw={} bodyYaw={} navDone={}",
+                "[MCA Archer BowTask] entity={} entityName=\"{}\" tick={} target={} targetName=\"{}\" action={} reason={} distSqr={} rangeSqr={} los={} lostSightTicks={} attackCooldown={} usingItem={} ticksUsingItem={} mainHand={} offHand={} bowHand={} movement={} headYaw={} bodyYaw={} navDone={}",
                 entity.getStringUUID(),
                 entity.getName().getString(),
+                entity.tickCount,
                 target == null ? "none" : target.getStringUUID(),
                 target == null ? "none" : target.getName().getString(),
                 action,

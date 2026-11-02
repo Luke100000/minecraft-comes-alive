@@ -12,8 +12,10 @@ import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.behavior.EntityTracker;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -36,10 +38,16 @@ import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath;
 @PrefixGameTestTemplate(false)
 public final class WanderOrTeleportToTargetTaskGameTests {
+    private static final List<ChunkPos> REST_WALK_OWNED_CHUNKS = new ArrayList<>();
+    private static VillagerEntityMCA restWalkVillager;
+
     private WanderOrTeleportToTargetTaskGameTests() {
     }
 
@@ -627,6 +635,16 @@ public final class WanderOrTeleportToTargetTaskGameTests {
             template = "bastion/blocks/air", timeoutTicks = 900)
     public static void normalRestWithoutHomeDoesNotPauseAndResumeBetweenWalkLegs(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(40, 1, 40));
+        ChunkPos minChunk = new ChunkPos(start.offset(-64, 0, -64));
+        ChunkPos maxChunk = new ChunkPos(start.offset(64, 0, 64));
+        for (int x = minChunk.x; x <= maxChunk.x; x++) {
+            for (int z = minChunk.z; z <= maxChunk.z; z++) {
+                ChunkPos chunk = new ChunkPos(x, z);
+                if (!helper.getLevel().getForcedChunks().contains(chunk.toLong())) {
+                    REST_WALK_OWNED_CHUNKS.add(chunk);
+                }
+            }
+        }
         prepareFlatArea(helper, start, 64, 2);
 
         VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
@@ -634,8 +652,11 @@ public final class WanderOrTeleportToTargetTaskGameTests {
                 .withPosition(Vec3.atBottomCenterOf(start))
                 .withName("Normal Brain No Home Pause Probe")
                 .spawn(MobSpawnType.STRUCTURE);
+        restWalkVillager = villager;
         villager.refreshBrain(helper.getLevel());
         villager.setOnGround(true);
+        // Keep vanilla random village-seeking targets within the prepared terrain.
+        villager.restrictTo(start, 48);
 
         var brain = villager.getBrain();
         brain.setSchedule(new ScheduleBuilder(new Schedule())
@@ -652,6 +673,7 @@ public final class WanderOrTeleportToTargetTaskGameTests {
         Vec3[] pausePosition = {null};
         WalkTarget[] lastWalkTarget = {null};
         int[] stationaryTicks = {0};
+        int[] stationaryStartEntityTick = {0};
         int[] walkLegs = {0};
         boolean[] hasWalked = {false};
         String[] pauseSnapshot = {null};
@@ -659,6 +681,11 @@ public final class WanderOrTeleportToTargetTaskGameTests {
         helper.onEachTick(() -> {
             long elapsed = helper.getLevel().getGameTime() - startedAt;
             Vec3 position = villager.position();
+            helper.assertTrue(Math.abs(villager.blockPosition().getX() - start.getX()) <= 64
+                            && Math.abs(villager.blockPosition().getZ() - start.getZ()) <= 64,
+                    "homeless REST fixture left its prepared terrain: " + villager.blockPosition());
+            helper.assertTrue(helper.getLevel().isPositionEntityTicking(villager.blockPosition()),
+                    "homeless REST fixture left entity-ticking chunks: " + villager.blockPosition());
             WalkTarget walkTarget = brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
             if (walkTarget != null && walkTarget != lastWalkTarget[0]) {
                 lastWalkTarget[0] = walkTarget;
@@ -670,6 +697,9 @@ public final class WanderOrTeleportToTargetTaskGameTests {
             }
 
             if (hasWalked[0] && tickMovement < 1.0E-6D) {
+                if (stationaryTicks[0] == 0) {
+                    stationaryStartEntityTick[0] = villager.tickCount;
+                }
                 stationaryTicks[0]++;
             } else {
                 stationaryTicks[0] = 0;
@@ -678,7 +708,12 @@ public final class WanderOrTeleportToTargetTaskGameTests {
             if (pausePosition[0] == null && stationaryTicks[0] >= 20) {
                 pausePosition[0] = position;
                 pauseSnapshot[0] = "elapsed=" + elapsed
+                        + "; start=" + start
                         + "; pos=" + villager.blockPosition()
+                        + "; entityTicking=" + helper.getLevel().isPositionEntityTicking(villager.blockPosition())
+                        + "; entityTicksDuringPause=" + (villager.tickCount - stationaryStartEntityTick[0])
+                        + "; onGround=" + villager.onGround()
+                        + "; velocity=" + villager.getDeltaMovement()
                         + "; navDone=" + villager.getNavigation().isDone()
                         + "; navStuck=" + villager.getNavigation().isStuck()
                         + "; activity=" + brain.getActiveNonCoreActivity()
@@ -707,6 +742,16 @@ public final class WanderOrTeleportToTargetTaskGameTests {
                 helper.succeed();
             }
         });
+    }
+
+    @AfterBatch(batch = "mca_normal_brain_no_home_walk")
+    public static void cleanupNormalRestWalkFixture(ServerLevel level) {
+        if (restWalkVillager != null) {
+            restWalkVillager.discard();
+            restWalkVillager = null;
+        }
+        REST_WALK_OWNED_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x, chunk.z, false));
+        REST_WALK_OWNED_CHUNKS.clear();
     }
 
     @GameTest(batch = "mca_normal_night_sleep", templateNamespace = "mca",

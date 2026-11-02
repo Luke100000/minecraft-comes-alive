@@ -11,6 +11,7 @@ import net.conczin.mca.gametest.GameTestTerrain;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
@@ -20,14 +21,17 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.PathNavigationRegion;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FenceBlock;
+import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
@@ -44,15 +48,172 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import net.neoforged.neoforge.registries.RegisterEvent;
 
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /** Physical-navigation regressions for ordinary MCA villagers, without Builder-specific behavior. */
 @PrefixGameTestTemplate(false)
 @EventBusSubscriber(modid = MCA.MOD_ID)
 public final class NavigationPhysicalSafetyGameTests {
     private static Block halfDepthShelf;
+    private static final String CLIMB_SAFETY_BATCH = "mca_climb_pose_hazards";
+    private static final Set<ChunkPos> CLIMB_SAFETY_CHUNKS = new HashSet<>();
+    private static final List<VillagerEntityMCA> CLIMB_SAFETY_ACTORS = new ArrayList<>();
+    private static final Map<BlockPos, BlockState> CLIMB_SAFETY_BLOCKS = new HashMap<>();
 
     private NavigationPhysicalSafetyGameTests() {
+    }
+
+    @AfterBatch(batch = CLIMB_SAFETY_BATCH)
+    public static void cleanupClimbSafetyFixtures(ServerLevel level) {
+        CLIMB_SAFETY_ACTORS.forEach(VillagerEntityMCA::discard);
+        CLIMB_SAFETY_ACTORS.clear();
+        CLIMB_SAFETY_BLOCKS.forEach((pos, state) -> level.setBlock(pos, state, 3));
+        CLIMB_SAFETY_BLOCKS.clear();
+        CLIMB_SAFETY_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x, chunk.z, false));
+        CLIMB_SAFETY_CHUNKS.clear();
+    }
+
+    @GameTest(batch = CLIMB_SAFETY_BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 180)
+    public static void openPanelDoesNotTrapTheActualLadderClimb(GameTestHelper helper) {
+        BlockPos base = prepareClimbSafetyFixture(helper);
+        ServerLevel level = helper.getLevel();
+        BlockPos panel = base.above(3);
+        level.setBlock(panel, Blocks.OAK_TRAPDOOR.defaultBlockState()
+                .setValue(BlockStateProperties.OPEN, true)
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.SOUTH), 3);
+        BlockPos target = base.east().above(3);
+        level.setBlock(target.below(), Blocks.STONE.defaultBlockState(), 3);
+        VillagerEntityMCA villager = spawnClimbSafetyVillager(level, base.above());
+        AABB center = villager.getBoundingBox().move(0.0D, 1.0D, 0.0D);
+        helper.assertTrue(level.noBlockCollision(villager, center), "centered ladder pose is blocked");
+        helper.assertTrue(!level.noBlockCollision(villager, center.move(0.0D, 0.0D, -0.1D)),
+                "panel does not intersect the ladder controller's offset pose");
+        Path path = villager.getNavigation().createPath(Set.of(target), 0);
+        helper.assertTrue(path != null && path.canReach(), "fixture cannot search to the upper platform");
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "fixture path did not start");
+        helper.succeedWhen(() -> helper.assertTrue(villager.blockPosition().equals(target),
+                "follower could not climb through the centered clearance: pos=" + villager.position()
+                        + "; box=" + villager.getBoundingBox() + "; path=" + villager.getNavigation().getPath()
+                        + "; next=" + (villager.getNavigation().getPath() == null ? "none"
+                        : villager.getNavigation().getPath().getNextNodeIndex())));
+    }
+
+    @GameTest(batch = CLIMB_SAFETY_BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 180)
+    public static void ladderRouteDoesNotClimbThroughFire(GameTestHelper helper) {
+        BlockPos base = prepareClimbSafetyFixture(helper);
+        ServerLevel level = helper.getLevel();
+        BlockPos fire = base.above(3);
+        level.setBlock(fire.south(), Blocks.OAK_PLANKS.defaultBlockState(), 3);
+        level.setBlock(fire, Blocks.FIRE.defaultBlockState(), 3);
+        BlockPos target = base.east().above(3);
+        level.setBlock(target.below(), Blocks.STONE.defaultBlockState(), 3);
+        VillagerEntityMCA villager = spawnClimbSafetyVillager(level, base.above());
+        villager.setPathfindingMalus(PathType.DAMAGE_FIRE, -1.0F);
+        helper.assertTrue(level.getBlockState(fire).is(Blocks.FIRE), "fire fixture was not placed");
+        Path path = villager.getNavigation().createPath(Set.of(target), 0);
+        if (path == null || !path.canReach()) {
+            helper.succeed();
+            return;
+        }
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "fixture path did not start");
+        long startedAt = level.getGameTime();
+        float initialHealth = villager.getHealth();
+        helper.onEachTick(() -> {
+            helper.assertTrue(villager.getHealth() >= initialHealth && !villager.isOnFire(),
+                    "ladder path sent the villager through fire at "
+                    + villager.position() + "; fire=" + fire + "; path=" + villager.getNavigation().getPath());
+            if (villager.blockPosition().equals(target)) helper.succeed();
+            helper.assertTrue(level.getGameTime() - startedAt < 120L,
+                    "advertised reachable ladder route did not reach its destination: " + villager.position());
+        });
+    }
+
+    @GameTest(batch = CLIMB_SAFETY_BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 180)
+    public static void suspendedLadderClimbAboveMagmaRemainsUsable(GameTestHelper helper) {
+        BlockPos base = prepareClimbSafetyFixture(helper);
+        ServerLevel level = helper.getLevel();
+        level.setBlock(base.below(), Blocks.MAGMA_BLOCK.defaultBlockState(), 3);
+        level.setBlock(base.above(3), Blocks.LADDER.defaultBlockState()
+                .setValue(LadderBlock.FACING, Direction.NORTH), 3);
+        VillagerEntityMCA villager = spawnClimbSafetyVillager(level, base.above());
+        BlockPos target = base.above(3);
+        Path path = villager.getNavigation().createPath(Set.of(target), 0);
+        helper.assertTrue(path != null && path.canReach(), "safe suspended climb above magma has no path");
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "safe suspended climb did not start");
+        long startedAt = level.getGameTime();
+        float initialHealth = villager.getHealth();
+        helper.onEachTick(() -> {
+            helper.assertTrue(villager.getHealth() >= initialHealth,
+                    "safe suspended climb took damage above the magma: " + villager.position());
+            if (villager.blockPosition().equals(target)) helper.succeed();
+            helper.assertTrue(level.getGameTime() - startedAt < 140L,
+                    "villager did not complete safe suspended climb: pos=" + villager.position()
+                            + "; path=" + villager.getNavigation().getPath());
+        });
+    }
+
+    @GameTest(batch = CLIMB_SAFETY_BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 180)
+    public static void climberAlreadyTouchingFireCanDescendToSafety(GameTestHelper helper) {
+        BlockPos base = prepareClimbSafetyFixture(helper);
+        ServerLevel level = helper.getLevel();
+        BlockPos fire = base.above(3);
+        level.setBlock(fire.south(), Blocks.OAK_PLANKS.defaultBlockState(), 3);
+        level.setBlock(fire, Blocks.FIRE.defaultBlockState(), 3);
+        helper.assertTrue(level.getBlockState(fire).is(Blocks.FIRE), "fire fixture was not placed");
+        VillagerEntityMCA villager = spawnClimbSafetyVillager(level, base.above(2));
+        villager.setPathfindingMalus(PathType.DAMAGE_FIRE, -1.0F);
+        Path path = villager.getNavigation().createPath(Set.of(base), 0);
+        helper.assertTrue(path != null && path.canReach(), "climber in fire could not find a safe downward path");
+        helper.assertTrue(villager.getNavigation().moveTo(path, 0.5D), "safe downward path did not start");
+        helper.succeedWhen(() -> helper.assertTrue(villager.blockPosition().equals(base),
+                "climber did not descend away from fire: pos=" + villager.position()));
+    }
+
+    private static BlockPos prepareClimbSafetyFixture(GameTestHelper helper) {
+        BlockPos base = helper.absolutePos(new BlockPos(16, 1, 16));
+        ChunkPos min = new ChunkPos(base.offset(-4, 0, -4));
+        ChunkPos max = new ChunkPos(base.offset(4, 0, 4));
+        for (int x = min.x; x <= max.x; x++) {
+            for (int z = min.z; z <= max.z; z++) {
+                ChunkPos chunk = new ChunkPos(x, z);
+                if (!helper.getLevel().getForcedChunks().contains(chunk.toLong())) CLIMB_SAFETY_CHUNKS.add(chunk);
+            }
+        }
+        GameTestTerrain.prepareFlatArea(helper, base, 4, 8);
+        CLIMB_SAFETY_BLOCKS.put(base.below(), helper.getLevel().getBlockState(base.below()));
+        CLIMB_SAFETY_BLOCKS.put(base.east().above(2), helper.getLevel().getBlockState(base.east().above(2)));
+        for (int y = 0; y <= 4; y++) {
+            CLIMB_SAFETY_BLOCKS.put(base.above(y), helper.getLevel().getBlockState(base.above(y)));
+            CLIMB_SAFETY_BLOCKS.put(base.above(y).south(), helper.getLevel().getBlockState(base.above(y).south()));
+            helper.getLevel().setBlock(base.above(y).south(), Blocks.STONE.defaultBlockState(), 3);
+            if (y <= 2) helper.getLevel().setBlock(base.above(y), Blocks.LADDER.defaultBlockState()
+                    .setValue(LadderBlock.FACING, Direction.NORTH), 3);
+        }
+        return base;
+    }
+
+    private static VillagerEntityMCA spawnClimbSafetyVillager(ServerLevel level, BlockPos start) {
+        VillagerEntityMCA villager = VillagerFactory.newVillager(level).withAge(0).withGender(Gender.MALE)
+                .withPosition(Vec3.atBottomCenterOf(start)).spawn(MobSpawnType.STRUCTURE);
+        CLIMB_SAFETY_ACTORS.add(villager);
+        villager.getGenetics().setGene(Genetics.SIZE, 0.5F);
+        villager.getGenetics().setGene(Genetics.WIDTH, 0.5F);
+        villager.getTraits().removeTrait(Traits.DWARFISM);
+        villager.getTraits().removeTrait(Traits.TOUGH);
+        villager.getTraits().removeTrait(Traits.WEAK);
+        villager.refreshDimensions();
+        villager.refreshBrain(level);
+        villager.getBrain().removeAllBehaviors();
+        villager.setOnGround(false);
+        return villager;
     }
 
     @SubscribeEvent
@@ -540,6 +701,62 @@ public final class NavigationPhysicalSafetyGameTests {
             villager.discard();
         }
         helper.succeed();
+    }
+
+    @GameTest(batch = "mca_exact_trapdoor_target", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 40)
+    public static void exactWalkTargetInsideOpenTrapdoorKeepsRequestedHeight(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos grass = helper.absolutePos(new BlockPos(8, 2, 8));
+        prepareGround(level, grass);
+        level.setBlock(grass, Blocks.GRASS_BLOCK.defaultBlockState(), 3);
+        BlockPos target = grass.south();
+        level.setBlock(target, Blocks.OAK_TRAPDOOR.defaultBlockState()
+                .setValue(TrapDoorBlock.FACING, Direction.SOUTH)
+                .setValue(TrapDoorBlock.HALF, Half.TOP)
+                .setValue(TrapDoorBlock.OPEN, true), 3);
+        VillagerEntityMCA villager = spawn(level, Vec3.atBottomCenterOf(grass.above()));
+        villager.getTraits().removeTrait(Traits.DWARFISM);
+        villager.getTraits().removeTrait(Traits.TOUGH);
+        villager.getTraits().removeTrait(Traits.WEAK);
+        villager.getGenetics().setGene(Genetics.SIZE, 0.5F);
+        villager.getGenetics().setGene(Genetics.WIDTH, 0.5F);
+        villager.refreshDimensions();
+        try {
+            helper.assertTrue(level.noBlockCollision(villager,
+                            villager.getBoundingBox().move(Vec3.atBottomCenterOf(target).subtract(villager.position()))),
+                    "the requested destination must fit beside the upright panel");
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+            Path path = villager.getNavigation().createPath(target, 0);
+            helper.assertTrue(path != null && path.canReach(), "open trapdoor destination must have a route");
+            helper.assertTrue(path.getTarget().equals(target),
+                    "navigation raised a clear exact destination above its upright trapdoor: requested="
+                            + target + ", path target=" + path.getTarget());
+            helper.succeed();
+        } finally {
+            villager.discard();
+        }
+    }
+
+    @GameTest(batch = "mca_solid_block_exact_target", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 40)
+    public static void exactWalkTargetInsideFullBlockStillUsesItsTop(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos target = helper.absolutePos(new BlockPos(8, 2, 8));
+        prepareGround(level, target);
+        level.setBlock(target, Blocks.STONE.defaultBlockState(), 3);
+        VillagerEntityMCA villager = spawn(level, Vec3.atBottomCenterOf(target.south(2)));
+        try {
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+            Path path = villager.getNavigation().createPath(target, 0);
+            helper.assertTrue(path != null && path.canReach() && path.getTarget().equals(target.above()),
+                    "solid block destination must still resolve to its supporting surface");
+            helper.succeed();
+        } finally {
+            villager.discard();
+        }
     }
 
     @GameTest(batch = "mca_fence_diagonal", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
