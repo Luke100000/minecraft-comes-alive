@@ -1,6 +1,6 @@
 # Blueprint and Floor Consistency Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task in the existing checkout. Steps use checkbox (`- [ ]`) syntax for tracking. Do not create worktrees or delegate implementation without authorization.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task in the existing checkout. Steps use checkbox (`- [x]`) syntax for tracking. Do not create worktrees or delegate implementation without authorization.
 
 **Goal:** Reduce competing Blueprint/floor decisions by retaining one shared selection policy and explicit target through server execution, while sharing repeated room reconstruction.
 
@@ -35,7 +35,7 @@ User approved execution natively and related commits on 2026-11-02. Implement in
 
 Repository root: `C:/Users/Mik/Downloads/MCA/minecraft-comes-alive-1.21.1-floor-clean-squash`.
 
-Baseline inspected while writing: `37a2a9fde`. Recheck HEAD and dirty work before execution. The earlier common-suite count was 684; do not hard-code it as the expected final count. The docs directory is currently git-ignored: these are local planning artifacts until explicitly included in a requested commit.
+Baseline inspected while writing: `37a2a9fde`. Recheck HEAD and dirty work before execution. The earlier common-suite count was 684; do not hard-code it as the expected final count. These two planning documents were explicitly committed at user request in `6800cddd5`; other ignored planning artifacts remain unrelated.
 
 | Existing production file | Planned responsibility/change |
 | --- | --- |
@@ -61,12 +61,12 @@ Baseline inspected while writing: `37a2a9fde`. Recheck HEAD and dirty work befor
 
 **Interfaces:** Consume existing `RoomScanPlanner.analyze(...)`, `analyzeFresh(...)`, `SelectedFloorScanner.Observation.selected(BlockPos)`, `RoomScanPlan`, and village save/load. Produce reusable fixtures/assertions in these existing test classes; no new production interface.
 
-- [ ] Record branch/HEAD, scoped diff, and current test baseline. Read this spec alongside the September 17 selected-room and September 25 publication constraints; use current source for actual APIs.
-- [ ] Add `equivalentInteriorSourcesKeepCanonicalFloorAndAction`: independent observations of ordinary/slab/bed/shelf positions in one unchanged enclosed-room fixture must have equal `sameExactGeometry`, `anchorY`, selected component cell set, mode, structure/floor target, and room ID where registered. Test unregistered and registered copies separately so one successful addition does not change the next input's state. Run both query orders with a shared observation too.
-- [ ] Add `snapshotAndServerPlannerAgreeForIdenticalEvidence` to the snapshot suite: encode/decode the existing village response, then run the same shared planner against both village instances with identical fresh evidence. Compare `mode`, selected room ID, structure/floor IDs, attachment target and prospective floor number. Obtain real door orientation through the world-aware path for the door case rather than passing `null` and assuming it proves live boundary parity.
-- [ ] Keep explicit negatives for wrong-height cells, unregistered expansion, unsupported handoffs, door-only overlap, stairs, and ambiguous floors. Existing tests named in R1 remain authoritative; do not replace their expectations with broad overlap-based ownership.
-- [ ] Add/extend the existing runtime fixture to cover equivalent interior source selection after village registration and save/load. Use the fixture's physical roof, with assertions on setup; do not let the arena ceiling close an intentionally open roof.
-- [ ] Run focused tests:
+- [x] Record branch/HEAD, scoped diff, and current test baseline. Read this spec alongside the September 17 selected-room and September 25 publication constraints; use current source for actual APIs.
+- [x] Add `equivalentInteriorSourcesKeepCanonicalFloorAndAction`: independent observations of ordinary/slab/bed/shelf positions in one unchanged enclosed-room fixture must have equal `sameExactGeometry`, `anchorY`, selected component cell set, mode, structure/floor target, and room ID where registered. Test unregistered and registered copies separately so one successful addition does not change the next input's state. Run both query orders with a shared observation too.
+- [x] Add `snapshotAndServerPlannerAgreeForIdenticalEvidence` to the snapshot suite: encode/decode the existing village response, then run the same shared planner against both village instances with identical fresh evidence. Compare `mode`, selected room ID, structure/floor IDs, attachment target and prospective floor number. Obtain real door orientation through the world-aware path for the door case rather than passing `null` and assuming it proves live boundary parity.
+- [x] Keep explicit negatives for wrong-height cells, unregistered expansion, unsupported handoffs, door-only overlap, stairs, and ambiguous floors. Existing tests named in R1 remain authoritative; do not replace their expectations with broad overlap-based ownership.
+- [x] Add/extend the existing runtime fixture to cover equivalent interior source selection after village registration and save/load. Use the fixture's physical roof, with assertions on setup; do not let the arena ceiling close an intentionally open roof.
+- [x] Run focused tests:
 
 ```powershell
 .\gradlew.bat :common:test --tests '*RoomScanPlannerTest' --tests '*BlueprintSnapshotProtocolTest' --tests '*SelectedFloorScannerConnectorTest' --console=plain --no-configuration-cache --no-parallel --no-daemon '-Dorg.gradle.jvmargs=-Xmx2G'
@@ -85,10 +85,10 @@ Existing behavior may already pass characterization tests. For any actual select
 
 **Interfaces:** Replace `structureScanMessage(Village.RoomScanMode, RoomScanPlan)` with package-private `static ReportBuildingMessage structureScanMessage(RoomScanPlan plan)`. Replace the private sending helper with `sendStructureScan(RoomScanPlan plan)`. No packet fields change.
 
-- [ ] Extend existing message projection tests to cover the spec's four-row action/expected-target matrix. Assert both action and expected ID; an attachment's logical-building ID must not become a structure/floor/room ID.
-- [ ] Remove the independent mode parameter and update all call sites/tests. The primary button, label and packet projection read the same plan mode. Keep projection-to-translation switches local to Blueprint.
-- [ ] Preserve `setVillage` invalidation, position-based caching, floor-selection UI, removal controls and inheritance controls. Do not add timers, listeners, preview requests or a new cache.
-- [ ] Run `:common:test --tests '*BlueprintScreenMapInteractionTest' --tests '*BlueprintSnapshotProtocolTest' --tests '*ReportBuildingMessageCodecTest'` with the common command flags from Task 1. Confirm existing packet round trips and UI target-selection tests pass.
+- [x] Extend existing message projection tests to cover the spec's four-row action/expected-target matrix. Assert both action and expected ID; an attachment's logical-building ID must not become a structure/floor/room ID.
+- [x] Remove the independent mode parameter and update all call sites/tests. The primary button, label and packet projection read the same plan mode. Keep projection-to-translation switches local to Blueprint.
+- [x] Preserve `setVillage` invalidation, position-based caching, floor-selection UI, removal controls and inheritance controls. Do not add timers, listeners, preview requests or a new cache.
+- [x] Run `:common:test --tests '*BlueprintScreenMapInteractionTest' --tests '*BlueprintSnapshotProtocolTest' --tests '*ReportBuildingMessageCodecTest'` with the common command flags from Task 1. Confirm existing packet round trips and UI target-selection tests pass.
 
 **Checkpoint:** There is no scan-message API that can pair one plan with another mode; unrelated edit actions retain their current behavior.
 
@@ -104,12 +104,12 @@ Existing behavior may already pass characterization tests. For any actual select
 
 **Interfaces:** Add private `RegisteredRoomUpdate analyzePlannedRoomUpdate(Village village, RoomScanPlanner.Analysis analysis)`. Change private `updateRoom` to accept `(Village village, RoomScanPlanner.Analysis analysis, int expectedRoomId, String selectedType)` instead of a separately selected `Building` and source. Extend private `analyzeRegisteredFloor` to `(Village village, Structure structure, Building expected, BlockPos source, StructureScanner.Result observed, List<RoomPartitioner.Component> observedComponents)`, with `null` components meaning partition the validated fresh scan here. Preserve the existing package-private `analyzeRegisteredRoomUpdate(..., StructureScanner.Result observed)` diagnostic entry point.
 
-- [ ] Extend workflow tests with `recoveredUpdateConsumesPlannedSeedAndObservation` and `registeredFastPathScansOnlyWhenExecutionNeedsFreshEvidence`. Assert selected room/seed and unchanged state on failure; reuse the existing diagnostic observation-reuse runtime fixture for attributable scan work. Count actual world/discovery work at the established seam rather than inventing a new public counter API.
-- [ ] Route the `UPDATE_ROOM` case through its existing `Analysis`. If it contains fresh evidence, validate it using `StructureScanner.resultFromObservedFloor` with the plan's exact structure/floor and existing ignored-structure/logical-building rules. Use `plan.scanSeed()` for component selection and retain `plan.interactionSource()` for feedback/continuation provenance.
-- [ ] Allow the private registered-floor analysis helper to accept the already-computed component list alongside validated observed evidence. When none exists, retain the current `scanExistingFloor` and world-aware partition path. Never supply a partition from another scan or from a rejected fresh plan.
-- [ ] Keep the cheap no-observation registered-room preview path. Preserve explicit request policy: `SCAN_ROOM` with a nonnegative expected room requires that room or returns `TARGET_CHANGED`; with `-1`, an already registered room yields `IDENTICAL`. `ADD_BUILDING` retains its established attachment compatibility and overlap rejection; `ADD_ATTACHMENT` requires the expected logical building. Do not execute another action merely because replanning suggests it.
-- [ ] Confirm type-choice continuation re-enters the same request path with fresh evidence, retains the existing source-position check, and makes no mutation for movement, changed transmitted expected IDs, physical rejection or an invalid current type choice. Add Room confirmation has expected ID `-1` and therefore replans the current component rather than pinning the earlier one; attachment pins its logical building and recomputes its floor number. Do not add tests promising identity information the packet never sent. Keep existing feedback categories; physical scan failure must not be relabeled `TARGET_CHANGED`.
-- [ ] Run `:common:test --tests '*RoomWorkflowTest' --tests '*BuildingScanContinuationTest' --tests '*RoomScanPlannerTest'` with Task 1 flags. Run the existing diagnostic observation-reuse fixture as part of the Task 6 refresh suite.
+- [x] Extend workflow tests with `recoveredUpdateConsumesPlannedSeedAndObservation` and `registeredFastPathScansOnlyWhenExecutionNeedsFreshEvidence`. Assert selected room/seed and unchanged state on failure; reuse the existing diagnostic observation-reuse runtime fixture for attributable scan work. Count actual world/discovery work at the established seam rather than inventing a new public counter API.
+- [x] Route the `UPDATE_ROOM` case through its existing `Analysis`. If it contains fresh evidence, validate it using `StructureScanner.resultFromObservedFloor` with the plan's exact structure/floor and existing ignored-structure/logical-building rules. Use `plan.scanSeed()` for component selection and retain `plan.interactionSource()` for feedback/continuation provenance.
+- [x] Allow the private registered-floor analysis helper to accept the already-computed component list alongside validated observed evidence. When none exists, retain the current `scanExistingFloor` and world-aware partition path. Never supply a partition from another scan or from a rejected fresh plan.
+- [x] Keep the cheap no-observation registered-room preview path. Preserve explicit request policy: `SCAN_ROOM` with a nonnegative expected room requires that room or returns `TARGET_CHANGED`; with `-1`, an already registered room yields `IDENTICAL`. `ADD_BUILDING` retains its established attachment compatibility and overlap rejection; `ADD_ATTACHMENT` requires the expected logical building. Do not execute another action merely because replanning suggests it.
+- [x] Confirm type-choice continuation re-enters the same request path with fresh evidence, retains the existing source-position check, and makes no mutation for movement, changed transmitted expected IDs, physical rejection or an invalid current type choice. Add Room confirmation has expected ID `-1` and therefore replans the current component rather than pinning the earlier one; attachment pins its logical building and recomputes its floor number. Do not add tests promising identity information the packet never sent. Keep existing feedback categories; physical scan failure must not be relabeled `TARGET_CHANGED`.
+- [x] Run `:common:test --tests '*RoomWorkflowTest' --tests '*BuildingScanContinuationTest' --tests '*RoomScanPlannerTest'` with Task 1 flags. Run the existing diagnostic observation-reuse fixture as part of the Task 6 refresh suite.
 
 **Checkpoint:** An operation reuses valid evidence it already owns; a later network request/confirmation obtains fresh evidence. Seed, anchor and requested source retain distinct meanings.
 
@@ -127,13 +127,13 @@ Existing behavior may already pass characterization tests. For any actual select
 
 **Interfaces:** Append `RoomScanPlan plan` to the canonical `BuildingScanResult` record constructor. Provide a six-argument convenience constructor `(result, source, building, matchingTypes, village, plan)` delegating to `pendingStructure = null`; remove the old constructors lacking a plan. Success requires a non-null plan. Failures may have no resolved plan and remain non-committable. Existing `source()` feedback semantics remain unchanged. Add a `RoomScanPlan plan` parameter to the private `materializeRoom` and `roomResultFromGeometry` methods; callers pass the selected plan, including `UPDATE_ROOM` for intermediate registered-room materialization.
 
-- [ ] Add `commitRejectsPayloadThatDisagreesWithPlan` and `successfulAdditionRequiresExplicitPlanAndPreparedStructure`. For a selected structure 10/floor 0, a payload for structure 11 must fail without room publication or ID consumption; changing the pending ID cannot turn `ADD_ROOM` into `ADD_BUILDING`. Assert a successful result cannot be built without a plan. Reuse existing publication-failure tests to prove prepared results remain reusable after rollback.
-- [ ] Thread the existing plan through materialization. For explicit new-building/reporting operations where no selection plan exists, create `RoomScanPlan.addBuilding(originalInteractionSource)` from that known operation; never infer it from the prepared structure. Preserve intentional report-neighbor discovery behavior.
-- [ ] Make `withSource` and `withPendingStructure` preserve the plan. Derive `targetBuildingId()` solely from an attachment plan, otherwise `-1`; failures without a plan return `-1`.
-- [ ] Switch `VillageManager.commitRoomAddition` on `scan.plan().mode()`. Require a valid prepared structure at this boundary. `ADD_ROOM` validates the existing structure/floor target and uses `commitExpandedRoom`; `ADD_BUILDING`/`ADD_ATTACHMENT` use `commitInitialRoom` with existing ground/attachment and numbering checks. Reject an `UPDATE_ROOM` result here with `NOT_IN_BUILDING` and no mutation; registered-room commits retain their own existing entry point.
-- [ ] Remove the bare-room/no-prepared-structure addition branch and negative-ID-based action dispatch. Negative provisional IDs may still be validated/allocated as persistence mechanics, not interpreted as an alternate operation plan.
-- [ ] Preserve expected target checks, forced-type validation, floor-number revalidation, atomic publication and rollback. Search every `new BuildingScanResult` and every `commitRoomAddition` caller to confirm no production path is silently dropped.
-- [ ] Run `:common:test --tests '*RoomWorkflowTest' --tests '*VillageManagerExpandedRoomCommitTest' --tests '*RoomTypeResolverTest' --tests '*BuildingScanContinuationTest'` with Task 1 flags. For behavior fixes, demonstrate the relevant assertion failing before the fix; constructor/projection consolidation may use passing characterization tests.
+- [x] Add `commitRejectsPayloadThatDisagreesWithPlan` and `successfulAdditionRequiresExplicitPlanAndPreparedStructure`. For a selected structure 10/floor 0, a payload for structure 11 must fail without room publication or ID consumption; changing the pending ID cannot turn `ADD_ROOM` into `ADD_BUILDING`. Assert a successful result cannot be built without a plan. Reuse existing publication-failure tests to prove prepared results remain reusable after rollback.
+- [x] Thread the existing plan through materialization. For explicit new-building/reporting operations where no selection plan exists, create `RoomScanPlan.addBuilding(originalInteractionSource)` from that known operation; never infer it from the prepared structure. Preserve intentional report-neighbor discovery behavior.
+- [x] Make `withSource` and `withPendingStructure` preserve the plan. Derive `targetBuildingId()` solely from an attachment plan, otherwise `-1`; failures without a plan return `-1`.
+- [x] Switch `VillageManager.commitRoomAddition` on `scan.plan().mode()`. Require a valid prepared structure at this boundary. `ADD_ROOM` validates the existing structure/floor target and uses `commitExpandedRoom`; `ADD_BUILDING`/`ADD_ATTACHMENT` use `commitInitialRoom` with existing ground/attachment and numbering checks. Reject an `UPDATE_ROOM` result here with `NOT_IN_BUILDING` and no mutation; registered-room commits retain their own existing entry point.
+- [x] Remove the bare-room/no-prepared-structure addition branch and negative-ID-based action dispatch. Negative provisional IDs may still be validated/allocated as persistence mechanics, not interpreted as an alternate operation plan.
+- [x] Preserve expected target checks, forced-type validation, floor-number revalidation, atomic publication and rollback. Search every `new BuildingScanResult` and every `commitRoomAddition` caller to confirm no production path is silently dropped.
+- [x] Run `:common:test --tests '*RoomWorkflowTest' --tests '*VillageManagerExpandedRoomCommitTest' --tests '*RoomTypeResolverTest' --tests '*BuildingScanContinuationTest'` with Task 1 flags. For behavior fixes, demonstrate the relevant assertion failing before the fix; constructor/projection consolidation may use passing characterization tests.
 
 **Checkpoint:** The manager validates a named operation and its payload; it does not choose an operation from absent fields. The packet/save formats remain untouched.
 
@@ -148,11 +148,11 @@ Existing behavior may already pass characterization tests. For any actual select
 
 **Interfaces:** Add one private `BuildingScanResult materializeRegisteredRoom(Village village, Structure refreshed, StructureFloor floor, RoomScanPlan plan, RoomPoiEvidence.Index evidence, RoomPartitioner.Component component)` inside `RoomWorkflow`. Require `plan.mode() == UPDATE_ROOM`; obtain the original room from `plan.currentRoom()`. Reuse existing materialization and detached result types; add no new result/context class.
 
-- [ ] Extend existing selected-update and batch tests to assert equal reconstruction rules for IDs, structure/floor ownership, forced type, automatic type behavior and `contributesToMain`. Compare persisted sibling-room data before/after an individual update.
-- [ ] Move common component materialization and stable metadata copying into the private helper. Both single-room and full-floor paths call it. The single path passes its real plan; the batch creates an update plan for each matched registered room using that room's source.
-- [ ] Reuse `RoomPoiEvidence.Index` once per partition. Keep full-floor one-to-one matching and prospective batch type resolution in the batch caller; keep single-room overlap/sibling checks and type choice in its caller. Do not add flags to combine those policies.
-- [ ] Retain existing `refreshedStructure`, `BuildingRoomScanner.components`, and `StructureScanner.scanExistingFloor` helpers instead of adding another preparation layer. All materialization remains detached until existing publication succeeds.
-- [ ] Run the selected-update tests from Task 4 plus `*RegisteredRoomUpdateTest`. Exercise full-floor merge/split/lost-identity/unregistered-component and rollback behavior in the native suite below.
+- [x] Extend existing selected-update and batch tests to assert equal reconstruction rules for IDs, structure/floor ownership, forced type, automatic type behavior and `contributesToMain`. Compare persisted sibling-room data before/after an individual update.
+- [x] Move common component materialization and stable metadata copying into the private helper. Both single-room and full-floor paths call it. The single path passes its real plan; the batch creates an update plan for each matched registered room using that room's source.
+- [x] Reuse `RoomPoiEvidence.Index` once per partition. Keep full-floor one-to-one matching and prospective batch type resolution in the batch caller; keep single-room overlap/sibling checks and type choice in its caller. Do not add flags to combine those policies.
+- [x] Retain existing `refreshedStructure`, `BuildingRoomScanner.components`, and `StructureScanner.scanExistingFloor` helpers instead of adding another preparation layer. All materialization remains detached until existing publication succeeds.
+- [x] Run the selected-update tests from Task 4 plus `*RegisteredRoomUpdateTest`. Exercise full-floor merge/split/lost-identity/unregistered-component and rollback behavior in the native suite below.
 
 **Checkpoint:** Shared reconstruction has one implementation; an individual edit still changes only its selected room. Full scan still handles the registered floor atomically and preserves rollback.
 
@@ -160,13 +160,13 @@ Existing behavior may already pass characterization tests. For any actual select
 
 **Files:** Existing test suites above, plus `ReportedFloorInteractionGameTests`, `IndoorRoomCacheGameTests`, and existing scanner hole/performance tests. Update this plan with actual results when implemented.
 
-- [ ] Run all common tests and both loader compilations:
+- [x] Run all common tests and both loader compilations:
 
 ```powershell
 .\gradlew.bat :common:test :fabric:compileJava :neoforge:compileJava --console=plain --no-configuration-cache --no-parallel --no-daemon '-Dorg.gradle.jvmargs=-Xmx2G'
 ```
 
-- [ ] Run each focused native class sequentially. Use this command with each exact class name: `FloorScannerGameTests`, `FloorBatchRefreshGameTests`, `ReportedFloorInteractionGameTests`, `IndoorRoomCacheGameTests`.
+- [x] Run each focused native class sequentially. Use this command with each exact class name: `FloorScannerGameTests`, `FloorBatchRefreshGameTests`, `ReportedFloorInteractionGameTests`, `IndoorRoomCacheGameTests`.
 
 ```powershell
 .\gradlew.bat :neoforge:runGameTestServer '-PmcaGameTest=FloorScannerGameTests' -I neoforge/shelf-collision-gametest.init.gradle --console=plain --no-configuration-cache --no-parallel --no-daemon '-Dorg.gradle.jvmargs=-Xmx2G'
@@ -174,21 +174,31 @@ Existing behavior may already pass characterization tests. For any actual select
 
 Expected: exit 0, zero required test failures, and the intended class registered. Record actual counts for every run. Inspect named full-suite failures instead of treating focused passes as a substitute. Avoid concurrent Gradle runs; if another task owns the output/runtime directories, coordinate or isolate outputs with the existing supported mechanism, not a new worktree.
 
-- [ ] Review the scoped production diff for reuse, quality, correctness and efficiency. Trace the client button → packet action/expected ID → server planner → selected component → commit → returned snapshot. Check normal boundaries, type confirmation, attachment numbering, failed publication, and cheap registered lookup. Fix material findings and rerun affected checks only.
-- [ ] Run `git diff --check` and scoped production `git diff --numstat`; report net production reduction separately from tests. Confirm no new top-level production classes, packet/save fields, preview protocol, cache layer, or geometry fallback appeared. Preserve unrelated work and do not stage/commit it.
-- [ ] If a normal client/server instance is available for authorized testing, compare two ordinary positions and the original shelf/window positions before and after registration, then after response refresh and save/reload. Use a separate test world; do not alter the user's source schematic or saves. Otherwise report that ordinary gameplay remains unverified. A schematic replay using substitute mod blocks is supplementary evidence with explicit limitations.
+- [x] Review the scoped production diff for reuse, quality, correctness and efficiency. Trace the client button → packet action/expected ID → server planner → selected component → commit → returned snapshot. Check normal boundaries, type confirmation, attachment numbering, failed publication, and cheap registered lookup. Fix material findings and rerun affected checks only.
+- [x] Run `git diff --check` and scoped production `git diff --numstat`; report net production reduction separately from tests. Confirm no new top-level production classes, packet/save fields, preview protocol, cache layer, or geometry fallback appeared. Preserve unrelated work and do not stage/commit it.
+- [x] If a normal client/server instance is available for authorized testing, compare two ordinary positions and the original shelf/window positions before and after registration, then after response refresh and save/reload. Use a separate test world; do not alter the user's source schematic or saves. Otherwise report that ordinary gameplay remains unverified. A schematic replay using substitute mod blocks is supplementary evidence with explicit limitations.
 
 ## Completion record
 
-Fill this section during execution, not while planning:
+Completed 2026-11-02, natively in the existing checkout.
 
-- Implemented source HEAD / scoped dirty files:
-- Reproduced failures and preserved characterization cases:
-- Common suite result / count:
-- Floor, batch-refresh, reported-interaction and cache GameTest results / counts:
-- Fabric and NeoForge compile results:
-- Scoped production additions/deletions and new-class/packet/save audit:
-- Ordinary client/server or schematic replay evidence and limitations:
-- Remaining material issues, if any:
+- Reviewed implementation HEAD: `28220d932`, following `1c958ac94` (position/snapshot characterization), `4859ecf1d` (Blueprint projection), `3c106a80f` (planned update evidence), and `38d49427a` (explicit commit plan). The unrelated dirty AI/navigation work was excluded from all related commits.
+- RED/GREEN evidence: the new one-argument projection contract initially failed compilation; the captured-update native regression initially lacked its evidence-consumption path; two commit regressions returned `SUCCESS` for an inconsistent/unprepared payload before the fix; attachment-without-village rejection initially consumed a village ID. All now pass. Existing geometric ownership negatives remain intact.
+- Full common suite: **690 tests, zero failures/errors/skips**.
+- Native suites: **FloorScanner 106/106; FloorBatchRefresh 15/15; ReportedFloorInteraction 2/2; IndoorRoomCache 10/10; ReportedStairHouse 9/9**. Total **142/142**; each Gradle run exited 0 and registered the intended focused class.
+- Fabric and NeoForge `compileJava`: both successful. Existing deprecation warnings remain.
+- Scoped production Java against `37a2a9fde`: **106 additions, 113 deletions; net -7 lines**, across four existing classes. No new top-level production classes, packet fields, save fields, preview protocol, executor, or cache layer.
+- Fresh independent read-only review of all twelve owned source/test files and relevant callers: **APPROVE; no Critical, Important, or Minor findings**. Reviewer inspected verification artifacts without rerunning them.
+- Ordinary client/server gameplay and the original schematic in its full modded instance were not rerun; automated results do not establish those outcomes. Unrelated dirty AI/navigation changes were explicitly outside this review.
+- Remaining material issues in this scoped implementation: none identified.
+
+### Execution decisions
+
+- Validation of expected room identity stays in `scanRoom`; its private update helper consumes the already-validated analysis instead of checking another independently supplied room ID.
+- Registered-floor preparation now accepts the actual `RoomScanPlan`, replacing separate expected-room/source parameters. Diagnostic entry points build an explicit update plan from their known operation.
+- The prior bare-room rollback fixture now supplies a prepared structure copy and verifies the same publication/ID rollback invariant through the production contract.
+- Existing cheap persisted lookup/snapshot tests and the native physical-rejection test cover the fast-preview/fresh-execution distinction; no duplicate test-only production seam was added.
+- Redundant expected-ID retagging and the single-consumer attachment-validation wrapper were removed. Attachment payload validation occurs beside initial-operation checks, before allocation.
+- Type confirmation retains the packet-bounded guarantees in R4; no untransmitted component/floor identity is promised across requests.
 
 There is no requirement to perform cosmetic cleanup outside these seams. Stop once the shared decision and reconstruction contracts are satisfied, relevant checks pass, and production complexity has decreased.

@@ -2,7 +2,7 @@
 
 Date: 2026-11-02. Target: `dev/1.21.1`, Minecraft 1.21.1, Java 21.
 
-Status: approved for native implementation and related commits on 2026-11-02. Source baseline: `37a2a9fde`.
+Status: implemented and independently reviewed on 2026-11-02; reviewed code HEAD `28220d932`. Source baseline: `37a2a9fde`. See the implementation plan for verification and limitations.
 
 ## Purpose
 
