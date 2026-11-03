@@ -401,6 +401,10 @@ public class VillagerTasksMCA {
     }
 
     private static Optional<LivingEntity> getPreferredTarget(VillagerEntityMCA villager) {
+        return getPreferredTarget(villager, villager.getLastHurtByMob());
+    }
+
+    private static Optional<LivingEntity> getPreferredTarget(VillagerEntityMCA villager, LivingEntity selfAttacker) {
         if (guardTooHurt(villager)) {
             return Optional.empty();
         } else {
@@ -414,6 +418,12 @@ public class VillagerTasksMCA {
             Optional<LivingEntity> current = villager.getBrain().getMemoryInternal(MemoryModuleType.ATTACK_TARGET);
             Optional<LivingEntity> primary = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY);
             if (current.isPresent() && shouldKeepAttackTarget(villager, current.get())) {
+                if (selfAttacker != null && selfAttacker != current.get()
+                        && shouldRespondToGuardEnemy(villager, selfAttacker)
+                        && !canEngageTarget(villager, current.get())
+                        && canEngageTarget(villager, selfAttacker)) {
+                    return Optional.of(selfAttacker);
+                }
                 double rangeSquared = RangedWeaponHelper.getAttackRangeSquared(villager,
                         RangedWeaponHelper.GUARD_ATTACK_RANGE * RangedWeaponHelper.GUARD_ATTACK_RANGE);
                 if (villager.getProfession() == ProfessionsMCA.ARCHER
@@ -436,21 +446,38 @@ public class VillagerTasksMCA {
         }
     }
 
-    public static void respondToGuardAlarm(VillagerEntityMCA guard, LivingEntity attacker) {
+    private static boolean canEngageTarget(VillagerEntityMCA guard, LivingEntity target) {
+        if (!guard.getSensing().hasLineOfSight(target)) {
+            return false;
+        }
+        if (!RangedWeaponHelper.isHoldingSupportedWeapon(guard)) {
+            return guard.isWithinMeleeAttackRange(target);
+        }
+        double rangeSquared = RangedWeaponHelper.getAttackRangeSquared(guard,
+                RangedWeaponHelper.GUARD_ATTACK_RANGE * RangedWeaponHelper.GUARD_ATTACK_RANGE);
+        return guard.distanceToSqr(target) <= rangeSquared
+                && (RangedWeaponHelper.getBowHoldingHand(guard) == null
+                    || RangedWeaponHelper.canShootBowFrom(guard, guard.position(), target));
+    }
+
+    public static void respondToGuardAlarm(VillagerEntityMCA guard, LivingEntity victim, LivingEntity attacker) {
         LivingEntity current = guard.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).orElse(null);
         LivingEntity selected = attacker;
-        if (guard.getProfession() == ProfessionsMCA.ARCHER && current != null) {
-            // Neighbour damage must use the same fight retention and immediate
-            // self-defence policy as Brain, rather than overwrite it out of band.
-            selected = getPreferredTarget(guard).orElse(attacker);
+        if (current != null) {
+            // Damage notification precedes LivingEntity.hurt recording its attacker.
+            // Use the actual victim here; Brain then uses vanilla's hurt reference.
+            selected = getPreferredTarget(guard, guard == victim ? attacker : guard.getLastHurtByMob())
+                    .orElse(attacker);
         }
         if (selected != current) {
             guard.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, selected);
         }
         if (MCA.platformHelper.isDevelopmentEnvironment() && guard.getProfession() == ProfessionsMCA.ARCHER) {
-            MCA.LOGGER.info("[MCA Archer Target] entity={} action=alarm reason={} previous={} attacker={} selected={}",
-                    guard.getStringUUID(), selected == current ? "keep_current_fight" : "guard_alarm",
-                    current == null ? "none" : current.getStringUUID(), attacker.getStringUUID(), selected.getStringUUID());
+            MCA.LOGGER.info("[MCA Archer Target] entity={} action=alarm reason={} previous={} victim={} attacker={} selected={}",
+                    guard.getStringUUID(), selected == current ? "keep_current_fight"
+                            : guard == victim ? "self_defence" : "guard_alarm",
+                    current == null ? "none" : current.getStringUUID(), victim.getStringUUID(),
+                    attacker.getStringUUID(), selected.getStringUUID());
         }
     }
 

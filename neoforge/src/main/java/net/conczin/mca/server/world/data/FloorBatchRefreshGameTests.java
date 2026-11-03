@@ -133,18 +133,153 @@ public final class FloorBatchRefreshGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_floor_planned_update_reuse", templateNamespace = "mca",
+            template = "gametest/isolated_shelter_lookup", timeoutTicks = 180)
+    public static void recoveredUpdateConsumesPlannedSeedAndObservation(GameTestHelper helper) throws Exception {
+        try (Fixture fixture = new Fixture(helper)) {
+            Village village = fixture.diagnosticsVillage();
+            Building room = village.getRooms().findFirst().orElseThrow();
+            Structure structure = village.getStructureFor(room).orElseThrow();
+            StructureFloor floor = structure.getFloor(room.getFloorId()).orElseThrow();
+            BlockPos seed = fixture.min.offset(2, 0, 2);
+            var fresh = StructureScanner.scanExistingFloor(helper.getLevel(), structure, floor,
+                    seed, village.getStructures().values());
+            helper.assertTrue(fresh.result() == Building.validationResult.SUCCESS, "fixture scan failed");
+            BlockPos requested = seed.above();
+            var plan = RoomScanPlan.updateRoom(room, requested, fresh.source());
+            var analysis = new RoomScanPlanner.Analysis(plan,
+                    new StructureScanner.FloorObservation(fresh.scan(), java.util.Set.of(), java.util.Set.of()),
+                    BuildingRoomScanner.components(helper.getLevel(), fresh.scan()));
+            CompoundTag before = village.save();
+            floor.geometry().cells().forEach(cell -> fixture.set(cell.feet().below(), Blocks.AIR.defaultBlockState()));
+            helper.assertTrue(StructureScanner.scanExistingFloor(helper.getLevel(), structure, floor,
+                            seed, village.getStructures().values()).result() != Building.validationResult.SUCCESS,
+                    "fixture must invalidate rediscovery");
+            var method = RoomWorkflow.class.getDeclaredMethod("analyzePlannedRoomUpdate",
+                    Village.class, RoomScanPlanner.Analysis.class);
+            method.setAccessible(true);
+            var update = (RegisteredRoomUpdate) method.invoke(fixture.workflow, village, analysis);
+            helper.assertTrue(update.result() == Building.validationResult.SUCCESS,
+                    "planned update discarded valid operation evidence: " + update.result());
+            helper.assertTrue(update.source().equals(requested)
+                            && update.replacementRoom().getSourceBlock().equals(fresh.source())
+                            && update.replacementRoom().getFloorCells().equals(room.getFloorCells()),
+                    "planned seed, requested source or owned room changed during reconstruction");
+            helper.assertTrue(before.equals(village.save()), "planned analysis published state");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_new_building_reuse", templateNamespace = "mca",
+            template = "gametest/isolated_shelter_lookup", timeoutTicks = 180)
+    public static void exactPlannedBuildingAdditionAvoidsEnteringDiscoveryAgain(GameTestHelper helper) {
+        try (Fixture fixture = new Fixture(helper)) {
+            Village village = fixture.siblings();
+            fixture.closedRoom(fixture.min.above(5), 4, 4);
+            BlockPos source = fixture.min.offset(1, 5, 1);
+            var plan = RoomScanPlanner.analyze(village, helper.getLevel(), source);
+            helper.assertTrue(plan.plan().mode() == Village.RoomScanMode.ADD_BUILDING
+                            && plan.observation() != null, "fixture must select a separate new building");
+            var manual = StructureScanner.scanNewStructure(helper.getLevel(), source, village.getStructures().values());
+            helper.assertTrue(manual.result() == Building.validationResult.SUCCESS, "manual reference scan failed");
+            int[] lookups = {0};
+            BuildingScanResult[] captured = {null};
+            VillageManager manager = new VillageManager(helper.getLevel()) {
+                @Override
+                public java.util.Optional<Village> findNearestVillage(BlockPos pos, int margin) {
+                    lookups[0]++;
+                    return java.util.Optional.of(village);
+                }
+
+                @Override
+                public Building.validationResult commitRoomAddition(BuildingScanResult scan, String forcedType) {
+                    captured[0] = scan;
+                    return Building.validationResult.SUCCESS;
+                }
+            };
+            CompoundTag before = village.save();
+            var outcome = new RoomWorkflow(manager, helper.getLevel()).addBuilding(source, null);
+            helper.assertTrue(outcome.status() == RoomWorkflow.Status.COMMITTED && captured[0] != null,
+                    "exact planned building did not reach commit preparation");
+            helper.assertTrue(lookups[0] == 1, "planned building re-entered the independent discovery path");
+            helper.assertTrue(captured[0].pendingStructure().getFloor(0).orElseThrow().geometry()
+                            .sameExactGeometry(manual.scannedFloor())
+                            && captured[0].building().getFloorCells().equals(RoomPartitioner.select(manual.source(),
+                            manual.scannedFloor(), BuildingRoomScanner.components(helper.getLevel(), manual.scan())).floorCells()),
+                    "reusing exact planned evidence changed manual selection");
+            helper.assertTrue(before.equals(village.save()), "preparation changed saved state");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_addition_preparation", templateNamespace = "mca",
+            template = "gametest/isolated_shelter_lookup", timeoutTicks = 180)
+    public static void additionPreparationKeepsCapturedSelectionAndBuildsCompleteDetachedResults(GameTestHelper helper)
+            throws Exception {
+        try (Fixture fixture = new Fixture(helper)) {
+            Village registered = fixture.siblings();
+            Structure current = registered.getStructure(10).orElseThrow();
+            Village partial = new Village(2, helper.getLevel());
+            partial.registerStructure(current.copy(), registered.getBuilding(100).orElseThrow().copy());
+            BlockPos ordinary = fixture.min.offset(1, 0, 1), sibling = fixture.min.offset(7, 0, 2);
+            BlockPos upper = fixture.min.above(5);
+            fixture.closedRoom(upper, 4, 4);
+            upper = upper.offset(1, 0, 1);
+            BlockPos[] seeds = {ordinary, sibling, upper};
+            RoomScanPlan[] plans = {RoomScanPlan.addBuilding(ordinary.above()),
+                    RoomScanPlan.addRoom(10, 0, sibling.above(), sibling),
+                    RoomScanPlan.attachment(10, 1, upper.above(), upper)};
+            var prepare = RoomWorkflow.class.getDeclaredMethod("prepareAddition", Village.class, RoomScanPlan.class,
+                    StructureScanner.Result.class, List.class);
+            prepare.setAccessible(true);
+            CompoundTag before = partial.save();
+            for (int i = 0; i < plans.length; i++) {
+                RoomScanPlan plan = plans[i];
+                var scan = SelectedFloorScanner.scan(helper.getLevel(), seeds[i], 256, 24);
+                helper.assertTrue(scan.result() == Building.validationResult.SUCCESS, "preparation fixture did not scan");
+                Village village = i == 0 ? null : partial;
+                var validated = StructureScanner.resultFromObservedFloor(seeds[i], scan,
+                        village == null ? List.of() : village.getStructures().values(),
+                        i == 1 ? 10 : -1, i == 0 ? -1 : 10);
+                helper.assertTrue(validated.result() == Building.validationResult.SUCCESS, "captured scan did not validate");
+                var components = BuildingRoomScanner.components(helper.getLevel(), scan);
+                var expected = RoomPartitioner.select(seeds[i], scan.floor(), components);
+                var result = (BuildingScanResult) prepare.invoke(fixture.workflow, village, plan, validated, components);
+                helper.assertTrue(result.result() == Building.validationResult.SUCCESS
+                                && result.plan() == plan && result.source().equals(plan.interactionSource())
+                                && result.pendingStructure() != null
+                                && result.building().getFloorCells().equals(expected.floorCells())
+                                && result.building().getSourceBlock().equals(seeds[i]),
+                        "addition preparation changed selected component, source or complete payload for " + plan.mode());
+                helper.assertTrue(result.pendingStructure().getId() == (i == 1 ? 10 : -1)
+                                && result.pendingStructure().getLogicalBuildingId() == (i == 0 ? -1 : 10)
+                                && result.building().getStructureId() == result.pendingStructure().getId(),
+                        "addition preparation changed target identity for " + plan.mode());
+                helper.assertTrue(before.equals(partial.save()), "addition preparation published state");
+            }
+        }
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_floor_batch_detached", templateNamespace = "mca",
             template = "gametest/isolated_shelter_lookup", timeoutTicks = 180)
     public static void floorBatchAnalysisIsDetachedUntilPublication(GameTestHelper helper) {
         try (Fixture fixture = new Fixture(helper)) {
             Village village = fixture.siblings();
             CompoundTag before = village.save();
+            Building first = village.getBuilding(100).orElseThrow();
+            var selected = fixture.workflow.analyzeRegisteredRoomUpdate(village, first.getId(), first.getSourceBlock());
+            helper.assertTrue(selected.result() == Building.validationResult.SUCCESS,
+                    "selected-room preparation failed before batch comparison");
+            assertRoomMetadata(helper, first, selected.replacementRoom());
             fixture.shrinkSecond();
             RoomWorkflow.RegisteredFloorUpdate update = fixture.workflow.analyzeRegisteredFloorUpdate(village, 10, 0);
             helper.assertTrue(update.result() == Building.validationResult.SUCCESS
                             && update.structureId() == 10 && update.floorId() == 0
                             && update.replacementRooms().stream().map(Building::getId).toList().equals(List.of(100, 101)),
                     "detached analysis did not account for every saved Room in stable order");
+            update.replacementRooms().forEach(room ->
+                    assertRoomMetadata(helper, village.getBuilding(room.getId()).orElseThrow(), room));
             helper.assertTrue(before.equals(village.save()), "successful detached analysis changed saved state");
             update.refreshedStructure().setFloorNumber(0, 99);
             update.replacementRooms().forEach(room -> {
@@ -154,6 +289,16 @@ public final class FloorBatchRefreshGameTests {
             helper.assertTrue(before.equals(village.save()), "batch payload aliases registered mutable state");
         }
         helper.succeed();
+    }
+
+    private static void assertRoomMetadata(GameTestHelper helper, Building original, Building replacement) {
+        helper.assertTrue(replacement.getId() == original.getId()
+                        && replacement.getStructureId() == original.getStructureId()
+                        && replacement.getFloorId() == original.getFloorId()
+                        && replacement.isTypeForced() == original.isTypeForced()
+                        && replacement.contributesToMain() == original.contributesToMain()
+                        && (!original.isTypeForced() || replacement.getType().equals(original.getType())),
+                "registered room reconstruction lost identity, forced type or contribution metadata");
     }
 
     @GameTest(batch = "mca_floor_batch_multiple", templateNamespace = "mca",

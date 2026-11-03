@@ -8,6 +8,7 @@ import net.conczin.mca.entity.VillagerChildSuffocationGameTests;
 import net.conczin.mca.entity.VillagerVoicePitchGameTests;
 import net.conczin.mca.entity.VillagerEquipmentOwnershipGameTests;
 import net.conczin.mca.entity.ai.ProcreationInventoryGameTests;
+import net.conczin.mca.entity.ai.MemoriesGameTests;
 import net.conczin.mca.entity.ai.BedOccupancyLifecycleGameTests;
 import net.conczin.mca.entity.ai.ResidencyGoHomeGameTests;
 import net.conczin.mca.entity.ai.ResidencySetHomeGameTests;
@@ -23,6 +24,7 @@ import net.conczin.mca.entity.ai.brain.tasks.ArcherCombatStabilityGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherLiveRegressionGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherRetreatSafetyGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherCombatMovementGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ArcherCombatPolicyGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherSpiderCombatGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.DoorInteractionGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.EnterBuildingGameTests;
@@ -92,6 +94,7 @@ public final class McaGameTestsRegistration {
             VillagerVoicePitchGameTests.class,
             VillagerEquipmentOwnershipGameTests.class,
             ProcreationInventoryGameTests.class,
+            MemoriesGameTests.class,
             BedOccupancyLifecycleGameTests.class,
             ResidencyGoHomeGameTests.class,
             ResidencySetHomeGameTests.class,
@@ -107,6 +110,7 @@ public final class McaGameTestsRegistration {
             ArcherLiveRegressionGameTests.class,
             ArcherRetreatSafetyGameTests.class,
             ArcherCombatMovementGameTests.class,
+            ArcherCombatPolicyGameTests.class,
             ArcherSpiderCombatGameTests.class,
             DoorInteractionGameTests.class,
             EnterBuildingGameTests.class,

@@ -103,6 +103,21 @@ public final class FloorScannerGameTests {
         helper.assertTrue(plan.mode() == Village.RoomScanMode.UPDATE_ROOM
                         && plan.currentRoom().map(Building::getId).orElse(-1) == room.getId(),
                 "registered-room selection below furniture changed its owner");
+        Village snapshot = new Village(village.save(), null);
+        for (BlockPos candidate : List.of(source, source.east(), min.offset(2, 0, 2))) {
+            var selected = SelectedFloorScanner.scan(level, candidate, 256, 24);
+            helper.assertTrue(selected.result() == Building.validationResult.SUCCESS
+                            && adjacent.floor().sameExactGeometry(selected.floor()),
+                    "equivalent room positions changed floor geometry at " + candidate);
+            for (Village view : List.of(village, snapshot)) {
+                var selectedPlan = RoomScanPlanner.analyze(view, level, candidate).plan();
+                helper.assertTrue(selectedPlan.mode() == Village.RoomScanMode.UPDATE_ROOM
+                                && selectedPlan.currentRoom().orElseThrow().getId() == room.getId()
+                                && selectedPlan.targetStructureId() == room.getStructureId()
+                                && selectedPlan.targetFloorId() == room.getFloorId(),
+                        "registered/snapshot selection changed target at " + candidate);
+            }
+        }
         helper.succeed();
     }
 

@@ -276,10 +276,18 @@ public final class ArcherTerrainCombatGameTests {
         movement.start(helper.getLevel(), archer, now);
         movement.tick(helper.getLevel(), archer, now + 1);
         var escape = archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElseThrow();
+        var destination = (net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker) escape.getTarget();
+        var path = destination.createPath(archer.getNavigation(), archer, 0);
+        helper.assertTrue(path != null && path.canReach(), "fixture needs a usable native retreat path");
+        archer.getNavigation().moveTo(path, escape.getSpeedModifier());
+        archer.getBrain().setMemory(MemoryModuleType.PATH, path);
         target.absMoveTo(start.getX() + 10.5, start.getY(), start.getZ() + 0.5);
         movement.tick(helper.getLevel(), archer, now + 2);
-        helper.assertTrue(archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null) == escape,
+        var continued = archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElseThrow();
+        helper.assertTrue(continued.getTarget() == destination && archer.getNavigation().getPath() == path,
                 "spacing threshold discarded owned retreat before its safe waypoint");
+        helper.assertTrue(continued.getSpeedModifier() == 0.75F,
+                "spacing exit retained emergency sprint speed");
         helper.succeed();
     }
 

@@ -70,9 +70,7 @@ final class RoomPartitioner {
         List<Component> openComponents = new ArrayList<>();
 
         List<FloorGeometry.Cell> seeds = geometry.cells().stream()
-                .sorted(Comparator.comparingInt((FloorGeometry.Cell cell) -> cell.feet().getX())
-                        .thenComparingInt(cell -> cell.feet().getZ())
-                        .thenComparingInt(cell -> cell.feet().getY()))
+                .sorted(Comparator.comparing(FloorGeometry.Cell::feet, CELL_ORDER))
                 .toList();
         for (FloorGeometry.Cell seed : seeds) {
             Set<FloorGeometry.Cell> component = connectedCells(

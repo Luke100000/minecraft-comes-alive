@@ -744,7 +744,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                         }
                     } else if (v.isGuard()) {
                         // non players get attacked straight away
-                        VillagerTasksMCA.respondToGuardAlarm(v, livingEntity);
+                        VillagerTasksMCA.respondToGuardAlarm(v, this, livingEntity);
                     }
                 }
             });

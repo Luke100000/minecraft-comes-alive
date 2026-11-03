@@ -101,11 +101,6 @@ final class ClimbTraversal {
             return false;
         }
 
-        if (hasReachedPartialHeightClimbable(context)) {
-            path.advance();
-            return true;
-        }
-
         if (!ownsMotion(context)) {
             return false;
         }
@@ -227,56 +222,25 @@ final class ClimbTraversal {
         return Integer.compare(path.getTarget().getY(), climbableNode.y);
     }
 
-    private boolean hasReachedPartialHeightClimbable(Context context) {
-        if (this.mob.onClimbable() || !this.mob.onGround()) {
-            return false;
-        }
-
-        Node climbableNode = context.climbableNode();
-        if (this.mob.blockPosition().getY() >= climbableNode.y
-                || Mth.floor(this.mob.getY() + 0.5D) != climbableNode.y
-                || Math.abs(this.mob.getY() - climbableNode.y) >= 1.0D) {
-            return false;
-        }
-
-        return isHorizontallyAlignedWithClimbable(climbableNode);
-    }
-
     private void applyMotion(Context context, double controlledY, double speedModifier) {
         Vec3 anchor = PathNodeGeometry.climbingPosition(context.climbableNode().asBlockPos());
-        double targetY = context.targetNode().y;
-        boolean continuingExit = isContinuingExit(context);
-
-        if (!this.mob.onClimbable() && !continuingExit) {
-            this.mob.getMoveControl().setWantedPosition(
-                    anchor.x(),
-                    context.climbableNode().y,
-                    anchor.z(),
-                    speedModifier
-            );
-            this.mob.setDeltaMovement(
-                    horizontalVelocity(anchor.x() - this.mob.getX()),
-                    controlledY,
-                    horizontalVelocity(anchor.z() - this.mob.getZ())
-            );
-            return;
-        }
-
-        boolean readyForHorizontalExit = isReadyForHorizontalExit(context, targetY);
-        boolean needsEarlyDownwardClearance = isLowerExit(context);
+        boolean entering = !this.mob.onClimbable() && !isContinuingExit(context);
+        double targetY = entering ? context.climbableNode().y : context.targetNode().y;
         double targetX = anchor.x();
         double targetZ = anchor.z();
-        if (context.exitsClimbable()
+        if (!entering && context.exitsClimbable()
                 && (!context.pathTargetsClimbable()
-                || readyForHorizontalExit
-                || needsEarlyDownwardClearance)) {
+                || isReadyForHorizontalExit(context, targetY)
+                || isLowerExit(context))) {
             targetX = context.targetNode().x + 0.5D;
             targetZ = context.targetNode().z + 0.5D;
         }
 
         this.mob.getMoveControl().setWantedPosition(targetX, targetY, targetZ, speedModifier);
-        this.mob.setXxa(0.0F);
-        this.mob.setZza(0.0F);
+        if (!entering) {
+            this.mob.setXxa(0.0F);
+            this.mob.setZza(0.0F);
+        }
         this.mob.setDeltaMovement(
                 horizontalVelocity(targetX - this.mob.getX()),
                 controlledY,

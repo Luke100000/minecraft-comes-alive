@@ -1166,7 +1166,7 @@ class VillageFloorSystemTest {
         Building room = room(-1, -1, 0, true);
         ensureRoomOwnership(pending, room);
         return new BuildingScanResult(Building.validationResult.SUCCESS, room.getSourceBlock(), room,
-                List.of(), village, pending);
+                List.of(), village, pending, RoomScanPlan.attachment(10, direction, room.getSourceBlock(), room.getSourceBlock()));
     }
 
     private static Structure structure(int id, int logicalId, StructureFloor... floors) {

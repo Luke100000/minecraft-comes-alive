@@ -16,6 +16,65 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VillageManagerExpandedRoomCommitTest {
+    @Test
+    void attachmentWithoutItsVillageDoesNotConsumeAnId() {
+        BlockPos source = new BlockPos(0, 64, 0);
+        Structure prepared = new Structure(-1, source, List.of(
+                TestStructureFloors.create(0, 64, 68, 1, region(64, 0, 3))));
+        prepared.setLogicalBuildingId(10);
+        var scan = new BuildingScanResult(Building.validationResult.SUCCESS, source,
+                room(-1, -1, 0, region(64, 0, 3)), List.of("building"), null,
+                prepared, RoomScanPlan.attachment(10, 1, source, source));
+        VillageManager manager = new VillageManager(null);
+        var before = manager.save(new net.minecraft.nbt.CompoundTag(), null);
+        assertEquals(Building.validationResult.NOT_IN_BUILDING, manager.commitRoomAddition(scan, "building"));
+        assertEquals(before, manager.save(new net.minecraft.nbt.CompoundTag(), null));
+    }
+
+    @Test
+    void commitRejectsPayloadThatDisagreesWithPlan() {
+        Village village = new Village(1, null);
+        for (int id : new int[]{10, 11}) {
+            int minX = (id - 10) * 4;
+            Structure structure = new Structure(id, BlockPos.ZERO, List.of(
+                    TestStructureFloors.create(0, 64, 68, 0, region(64, minX, minX + 1))));
+            village.registerStructure(structure, room(id + 90, id, 0, region(64, minX, minX + 1)));
+        }
+        Structure prepared = village.getStructure(11).orElseThrow().copy();
+        prepared.replaceFloorGeometry(0, TestStructureFloors.create(0, 64, 68, 0, region(64, 4, 7)).geometry());
+        BlockPos source = new BlockPos(6, 64, 0);
+        BuildingScanResult scan = new BuildingScanResult(Building.validationResult.SUCCESS, source,
+                room(-1, 11, 0, region(64, 6, 7)), List.of("building"), village,
+                prepared, RoomScanPlan.addRoom(10, 0, source));
+        var before = village.save();
+
+        assertEquals(Building.validationResult.NOT_IN_BUILDING,
+                new VillageManager(null).commitRoomAddition(scan, "building"));
+        assertEquals(before, village.save());
+    }
+
+    @Test
+    void successfulAdditionRequiresExplicitPlanAndPreparedStructure() {
+        BlockPos source = new BlockPos(2, 64, 0);
+        Building added = room(-1, 10, 0, region(64, 2, 3));
+        assertThrows(NullPointerException.class, () -> new BuildingScanResult(
+                Building.validationResult.SUCCESS, source, added, List.of(), null, (RoomScanPlan) null));
+        Village village = new Village(1, null);
+        Structure structure = new Structure(10, source, List.of(
+                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 3))));
+        Building existing = room(100, 10, 0, region(64, 0, 1));
+        village.registerStructure(structure, existing);
+        var before = village.save();
+        var unprepared = new BuildingScanResult(Building.validationResult.SUCCESS, source, added,
+                List.of("building"), village, RoomScanPlan.addRoom(10, 0, source));
+        var update = new BuildingScanResult(Building.validationResult.SUCCESS, source, existing,
+                List.of("building"), village, structure.copy(), RoomScanPlan.updateRoom(existing, source));
+        VillageManager manager = new VillageManager(null);
+        assertEquals(Building.validationResult.NOT_IN_BUILDING, manager.commitRoomAddition(unprepared, "building"));
+        assertEquals(Building.validationResult.NOT_IN_BUILDING, manager.commitRoomAddition(update, "building"));
+        assertEquals(before, village.save());
+    }
+
     @BeforeAll
     static void bootstrapMinecraft() {
         SharedConstants.tryDetectVersion();
@@ -43,7 +102,7 @@ class VillageManagerExpandedRoomCommitTest {
                 new BlockPos(2, 64, 0),
                 added,
                 List.of("building"),
-                village).withPendingStructure(refreshed);
+                village, refreshed, RoomScanPlan.addRoom(10, 0, new BlockPos(2, 64, 0)));
         VillageManager manager = new VillageManager(null);
 
         assertEquals(Building.validationResult.SUCCESS,
@@ -69,7 +128,7 @@ class VillageManagerExpandedRoomCommitTest {
                 new BlockPos(2, 64, 0),
                 added,
                 List.of("building"),
-                village);
+                village, structure.copy(), RoomScanPlan.addRoom(10, 0, new BlockPos(2, 64, 0)));
         VillageManager manager = new VillageManager(null);
         village.failNextMarkDirty();
 
@@ -96,7 +155,7 @@ class VillageManagerExpandedRoomCommitTest {
                 BlockPos.ZERO,
                 added,
                 List.of("building"),
-                village).withPendingStructure(pending);
+                village, pending, RoomScanPlan.addBuilding(BlockPos.ZERO));
         VillageManager manager = new VillageManager(null);
         village.failNextMarkDirty();
 
@@ -178,7 +237,7 @@ class VillageManagerExpandedRoomCommitTest {
                 new BlockPos(2, 64, 0),
                 added,
                 List.of("building"),
-                village).withPendingStructure(refreshed);
+                village, refreshed, RoomScanPlan.addRoom(10, 0, new BlockPos(2, 64, 0)));
         VillageManager manager = new VillageManager(null);
 
         Building.validationResult result = assertDoesNotThrow(
