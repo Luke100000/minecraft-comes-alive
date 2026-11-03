@@ -170,6 +170,97 @@ public final class FloorBatchRefreshGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_floor_new_building_reuse", templateNamespace = "mca",
+            template = "gametest/isolated_shelter_lookup", timeoutTicks = 180)
+    public static void exactPlannedBuildingAdditionAvoidsEnteringDiscoveryAgain(GameTestHelper helper) {
+        try (Fixture fixture = new Fixture(helper)) {
+            Village village = fixture.siblings();
+            fixture.closedRoom(fixture.min.above(5), 4, 4);
+            BlockPos source = fixture.min.offset(1, 5, 1);
+            var plan = RoomScanPlanner.analyze(village, helper.getLevel(), source);
+            helper.assertTrue(plan.plan().mode() == Village.RoomScanMode.ADD_BUILDING
+                            && plan.observation() != null, "fixture must select a separate new building");
+            var manual = StructureScanner.scanNewStructure(helper.getLevel(), source, village.getStructures().values());
+            helper.assertTrue(manual.result() == Building.validationResult.SUCCESS, "manual reference scan failed");
+            int[] lookups = {0};
+            BuildingScanResult[] captured = {null};
+            VillageManager manager = new VillageManager(helper.getLevel()) {
+                @Override
+                public java.util.Optional<Village> findNearestVillage(BlockPos pos, int margin) {
+                    lookups[0]++;
+                    return java.util.Optional.of(village);
+                }
+
+                @Override
+                public Building.validationResult commitRoomAddition(BuildingScanResult scan, String forcedType) {
+                    captured[0] = scan;
+                    return Building.validationResult.SUCCESS;
+                }
+            };
+            CompoundTag before = village.save();
+            var outcome = new RoomWorkflow(manager, helper.getLevel()).addBuilding(source, null);
+            helper.assertTrue(outcome.status() == RoomWorkflow.Status.COMMITTED && captured[0] != null,
+                    "exact planned building did not reach commit preparation");
+            helper.assertTrue(lookups[0] == 1, "planned building re-entered the independent discovery path");
+            helper.assertTrue(captured[0].pendingStructure().getFloor(0).orElseThrow().geometry()
+                            .sameExactGeometry(manual.scannedFloor())
+                            && captured[0].building().getFloorCells().equals(RoomPartitioner.select(manual.source(),
+                            manual.scannedFloor(), BuildingRoomScanner.components(helper.getLevel(), manual.scan())).floorCells()),
+                    "reusing exact planned evidence changed manual selection");
+            helper.assertTrue(before.equals(village.save()), "preparation changed saved state");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_floor_addition_preparation", templateNamespace = "mca",
+            template = "gametest/isolated_shelter_lookup", timeoutTicks = 180)
+    public static void additionPreparationKeepsCapturedSelectionAndBuildsCompleteDetachedResults(GameTestHelper helper)
+            throws Exception {
+        try (Fixture fixture = new Fixture(helper)) {
+            Village registered = fixture.siblings();
+            Structure current = registered.getStructure(10).orElseThrow();
+            Village partial = new Village(2, helper.getLevel());
+            partial.registerStructure(current.copy(), registered.getBuilding(100).orElseThrow().copy());
+            BlockPos ordinary = fixture.min.offset(1, 0, 1), sibling = fixture.min.offset(7, 0, 2);
+            BlockPos upper = fixture.min.above(5);
+            fixture.closedRoom(upper, 4, 4);
+            upper = upper.offset(1, 0, 1);
+            BlockPos[] seeds = {ordinary, sibling, upper};
+            RoomScanPlan[] plans = {RoomScanPlan.addBuilding(ordinary.above()),
+                    RoomScanPlan.addRoom(10, 0, sibling.above(), sibling),
+                    RoomScanPlan.attachment(10, 1, upper.above(), upper)};
+            var prepare = RoomWorkflow.class.getDeclaredMethod("prepareAddition", Village.class, RoomScanPlan.class,
+                    StructureScanner.Result.class, List.class);
+            prepare.setAccessible(true);
+            CompoundTag before = partial.save();
+            for (int i = 0; i < plans.length; i++) {
+                RoomScanPlan plan = plans[i];
+                var scan = SelectedFloorScanner.scan(helper.getLevel(), seeds[i], 256, 24);
+                helper.assertTrue(scan.result() == Building.validationResult.SUCCESS, "preparation fixture did not scan");
+                Village village = i == 0 ? null : partial;
+                var validated = StructureScanner.resultFromObservedFloor(seeds[i], scan,
+                        village == null ? List.of() : village.getStructures().values(),
+                        i == 1 ? 10 : -1, i == 0 ? -1 : 10);
+                helper.assertTrue(validated.result() == Building.validationResult.SUCCESS, "captured scan did not validate");
+                var components = BuildingRoomScanner.components(helper.getLevel(), scan);
+                var expected = RoomPartitioner.select(seeds[i], scan.floor(), components);
+                var result = (BuildingScanResult) prepare.invoke(fixture.workflow, village, plan, validated, components);
+                helper.assertTrue(result.result() == Building.validationResult.SUCCESS
+                                && result.plan() == plan && result.source().equals(plan.interactionSource())
+                                && result.pendingStructure() != null
+                                && result.building().getFloorCells().equals(expected.floorCells())
+                                && result.building().getSourceBlock().equals(seeds[i]),
+                        "addition preparation changed selected component, source or complete payload for " + plan.mode());
+                helper.assertTrue(result.pendingStructure().getId() == (i == 1 ? 10 : -1)
+                                && result.pendingStructure().getLogicalBuildingId() == (i == 0 ? -1 : 10)
+                                && result.building().getStructureId() == result.pendingStructure().getId(),
+                        "addition preparation changed target identity for " + plan.mode());
+                helper.assertTrue(before.equals(partial.save()), "addition preparation published state");
+            }
+        }
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_floor_batch_detached", templateNamespace = "mca",
             template = "gametest/isolated_shelter_lookup", timeoutTicks = 180)
     public static void floorBatchAnalysisIsDetachedUntilPublication(GameTestHelper helper) {

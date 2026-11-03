@@ -202,3 +202,14 @@ Completed 2026-11-02, natively in the existing checkout.
 - Type confirmation retains the packet-bounded guarantees in R4; no untransmitted component/floor identity is promised across requests.
 
 There is no requirement to perform cosmetic cleanup outside these seams. Stop once the shared decision and reconstruction contracts are satisfied, relevant checks pass, and production complexity has decreased.
+
+## Follow-up consolidation — 2026-11-03
+
+User requested the remaining three simplifications after reviewing the first pass. Implemented natively in the existing classes:
+
+- New building, existing-floor room, and attachment preparation share `prepareAddition`; selection, registered-room conflict checks, numbering and publication policies remain distinct where required.
+- Each successful addition constructs its complete result once. Removed both result-copy helpers; existing tests construct complete payloads directly.
+- Manual addition reuses an identical exact planner observation and its partition after the original ownership/validation guards. Alternate manual handoffs and reported-building discovery retain their existing priority and fallbacks.
+- Follow-up production diff: **63 additions / 107 deletions; net -44 lines**, two existing production classes. No new framework, classes, packets, save fields or geometry/budget changes.
+- Verification: **690 common JVM tests; both loader compilations; 144 native GameTests** (refresh/preparation17, scanner106, reported interaction2, cache10, stair house9), all passing. Preparation and reuse regressions have observed RED/GREEN evidence.
+- Fresh independent read-only review: **APPROVE, no actionable findings**. Ordinary client/server and full modded-schematic gameplay were not replayed.

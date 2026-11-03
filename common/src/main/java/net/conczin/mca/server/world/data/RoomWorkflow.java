@@ -24,9 +24,8 @@ public final class RoomWorkflow {
     public Outcome addBuilding(BlockPos source, int expectedTargetBuildingId, String selectedType) {
         SelectedFloorScanner.Observation operation = StructureScanner.newObservation(world);
         Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
-        RoomScanPlanner.Analysis analysis = null;
         if (village != null) {
-            analysis = RoomScanPlanner.analyze(village, world, source, operation);
+            RoomScanPlanner.Analysis analysis = RoomScanPlanner.analyze(village, world, source, operation);
             RoomScanPlan plan = analysis.plan();
             if (analysis.result() != Building.validationResult.SUCCESS) {
                 return Outcome.failed(analysis.result(), source, expectedTargetBuildingId);
@@ -45,8 +44,18 @@ public final class RoomWorkflow {
                 return Outcome.failed(
                         Building.validationResult.NOT_IN_BUILDING, source, expectedTargetBuildingId);
             }
+            // Manual discovery tries this exact scan first. Other handoffs retain their selection policy.
+            if (plan.mode() == Village.RoomScanMode.ADD_BUILDING && analysis.observation() != null
+                    && operation.selected(source) == analysis.observation().scan()
+                    && village.getInteractionStructureAt(source).isEmpty()) {
+                StructureScanner.Result exact = StructureScanner.resultFromObservedFloor(
+                        source, analysis.observation().scan(), village.getStructures().values(), -1, -1);
+                if (exact.result() == Building.validationResult.SUCCESS) {
+                    return commitAddition(prepareAddition(village, plan, exact, analysis.components()), selectedType);
+                }
+            }
         }
-        return commitAddition(analyzeBuildingAddition(source, false, operation, analysis), selectedType);
+        return commitAddition(analyzeBuildingAddition(source, false, operation), selectedType);
     }
 
     public Outcome scanRoom(BlockPos source, int expectedRoomId, String selectedType) {
@@ -76,16 +85,15 @@ public final class RoomWorkflow {
     }
 
     BuildingScanResult analyzeBuildingAddition(BlockPos source) {
-        return analyzeBuildingAddition(source, false, StructureScanner.newObservation(world), null);
+        return analyzeBuildingAddition(source, false, StructureScanner.newObservation(world));
     }
 
     BuildingScanResult analyzeReportedBuildingAddition(BlockPos source) {
-        return analyzeBuildingAddition(source, true, null, null);
+        return analyzeBuildingAddition(source, true, null);
     }
 
     private BuildingScanResult analyzeBuildingAddition(BlockPos source, boolean reportedSource,
-                                                       SelectedFloorScanner.Observation operation,
-                                                       RoomScanPlanner.Analysis preliminary) {
+                                                       SelectedFloorScanner.Observation operation) {
         Village village = manager.findNearestVillage(source, Village.MERGE_MARGIN).orElse(null);
         Collection<Structure> existing = village == null ? List.of() : village.getStructures().values();
         if (village != null && village.getInteractionStructureAt(source).isPresent()) {
@@ -95,24 +103,7 @@ public final class RoomWorkflow {
         StructureScanner.Result structureScan = reportedSource
                 ? StructureScanner.scanReportedStructure(world, source, existing)
                 : StructureScanner.scanNewStructure(world, source, existing, operation);
-        if (structureScan.result() != Building.validationResult.SUCCESS) {
-            return failedRoom(structureScan.result(), source, village);
-        }
-
-        Structure candidate = structureScan.toStructure(-1);
-        StructureFloor floor = candidate.getFloors().getFirst();
-        SelectedFloorScanner.Result floorScan = structureScan.scan();
-        // Selection policies differ. Reuse a partition only when both selected the same observation result.
-        List<RoomPartitioner.Component> components = preliminary != null && preliminary.observation() != null
-                && preliminary.observation().scan() == floorScan
-                ? preliminary.components() : BuildingRoomScanner.components(world, floorScan);
-        BuildingRoomScanner.Result selectedGeometry = BuildingRoomScanner.materializeSelected(
-                structureScan.source(), Config.getInstance().maxBuildingSize,
-                floorScan.floor(), components);
-        BuildingScanResult selected = roomResultFromGeometry(
-                village, candidate, floor, selectedGeometry, RoomScanPlan.addBuilding(source));
-        if (selected.result() != Building.validationResult.SUCCESS) return selected;
-        return selected.withSource(source).withPendingStructure(candidate);
+        return prepareAddition(village, RoomScanPlan.addBuilding(source), structureScan, null);
     }
 
     BuildingScanResult analyzeRoom(BlockPos source) {
@@ -145,38 +136,8 @@ public final class RoomWorkflow {
                 ? StructureScanner.scanExistingFloor(world, structure, floor, scanSeed, village.getStructures().values())
                 : StructureScanner.resultFromObservedFloor(scanSeed, analysis.observation().scan(),
                         village.getStructures().values(), structure.getId(), structure.getLogicalBuildingId());
-        if (fresh.result() != Building.validationResult.SUCCESS) {
-            return failedRoom(fresh.result(), source, village);
-        }
-
-        Structure refreshed = refreshedStructure(structure, floor.id(), fresh.scannedFloor());
-        if (refreshed == null) {
-            return failedRoom(Building.validationResult.OVERLAP, source, village);
-        }
-        StructureFloor refreshedFloor = refreshed.getFloor(floor.id()).orElse(null);
-        if (refreshedFloor == null) {
-            return failedRoom(Building.validationResult.OVERLAP, source, village);
-        }
-        List<RoomPartitioner.Component> components = analysis.observation() == null
-                ? BuildingRoomScanner.components(world, fresh.scan()) : analysis.components();
-        BuildingRoomScanner.Result selected = BuildingRoomScanner.materializeSelected(
-                scanSeed, Config.getInstance().maxBuildingSize,
-                fresh.scannedFloor(), components);
-        BuildingScanResult addition = roomResultFromGeometry(
-                village, refreshed, refreshedFloor, selected, plan);
-        if (addition.result() != Building.validationResult.SUCCESS) {
-            return addition.withSource(source);
-        }
-
-        List<Building> existingRooms = village.getRooms()
-                .filter(room -> room.getStructureId() == structure.getId())
-                .filter(room -> room.getFloorId() == floor.id())
-                .toList();
-        if (hasRegisteredRoomConflict(
-                fresh.scannedFloor(), addition.building(), existingRooms)) {
-            return failedRoom(Building.validationResult.OVERLAP, source, village);
-        }
-        return addition.withSource(source).withPendingStructure(refreshed);
+        return prepareAddition(village, plan, fresh,
+                analysis.observation() == null ? null : analysis.components());
     }
 
     BuildingScanResult analyzeAttachedRoom(BlockPos source,
@@ -215,7 +176,7 @@ public final class RoomWorkflow {
         if (analysis.result() != Building.validationResult.SUCCESS) {
             return failedRoom(analysis.result(), source, village);
         }
-        if (plan.mode() != Village.RoomScanMode.ADD_ATTACHMENT || plan.targetBuildingId() < 0
+        if (plan.mode() != Village.RoomScanMode.ADD_ATTACHMENT
                 || (expectedTargetBuildingId >= 0
                 && plan.targetBuildingId() != expectedTargetBuildingId)) {
             return failedRoom(Building.validationResult.NOT_IN_BUILDING, source, village);
@@ -224,27 +185,45 @@ public final class RoomWorkflow {
         if (analysis.observation() == null) return failedRoom(Building.validationResult.NOT_IN_BUILDING, source, village);
         StructureScanner.Result structureScan = StructureScanner.resultFromObservedFloor(
                 plan.scanSeed(), analysis.observation().scan(), village.getStructures().values(), -1, plan.targetBuildingId());
-        if (structureScan.result() != Building.validationResult.SUCCESS) {
-            return failedRoom(structureScan.result(), source, village);
-        }
+        return prepareAddition(village, plan, structureScan, analysis.components());
+    }
 
-        if (structureScan.scannedFloor() == null) {
-            return failedRoom(Building.validationResult.AMBIGUOUS_STRUCTURE, source, village);
-        }
-
-        Structure candidate = structureScan.toStructure(-1, plan.prospectiveFloorNumber());
-        StructureFloor attachmentFloor = candidate.getFloor(0).orElse(null);
-        if (attachmentFloor == null) {
+    private BuildingScanResult prepareAddition(Village village, RoomScanPlan plan, StructureScanner.Result scan,
+                                              List<RoomPartitioner.Component> components) {
+        BlockPos source = plan.interactionSource();
+        if (scan.result() != Building.validationResult.SUCCESS) return failedRoom(scan.result(), source, village);
+        Structure prepared;
+        int floorId = 0;
+        if (plan.mode() == Village.RoomScanMode.ADD_ROOM) {
+            Structure current = village == null ? null : village.getStructure(plan.targetStructureId()).orElse(null);
+            if (current == null || current.getFloor(plan.targetFloorId()).isEmpty()) {
+                return failedRoom(Building.validationResult.NOT_IN_BUILDING, source, village);
+            }
+            floorId = plan.targetFloorId();
+            prepared = refreshedStructure(current, floorId, scan.scannedFloor());
+            if (prepared == null) return failedRoom(Building.validationResult.OVERLAP, source, village);
+        } else if (plan.mode() == Village.RoomScanMode.ADD_BUILDING
+                || plan.mode() == Village.RoomScanMode.ADD_ATTACHMENT) {
+            prepared = scan.toStructure(-1, plan.mode() == Village.RoomScanMode.ADD_ATTACHMENT
+                    ? plan.prospectiveFloorNumber() : 0);
+            if (plan.mode() == Village.RoomScanMode.ADD_ATTACHMENT) prepared.setLogicalBuildingId(plan.targetBuildingId());
+        } else {
             return failedRoom(Building.validationResult.NOT_IN_BUILDING, source, village);
         }
-
-        candidate.setLogicalBuildingId(plan.targetBuildingId());
+        if (components == null) components = BuildingRoomScanner.components(world, scan.scan());
+        BlockPos selected = plan.mode() == Village.RoomScanMode.ADD_BUILDING ? scan.source() : plan.scanSeed();
         BuildingRoomScanner.Result geometry = BuildingRoomScanner.materializeSelected(
-                plan.scanSeed(), Config.getInstance().maxBuildingSize,
-                structureScan.scannedFloor(), analysis.components());
-        return roomResultFromGeometry(village, candidate, attachmentFloor, geometry, plan)
-                .withSource(source)
-                .withPendingStructure(candidate);
+                selected, Config.getInstance().maxBuildingSize, scan.scannedFloor(), components);
+        BuildingScanResult addition = materializeRoom(village, prepared, prepared.getFloor(floorId).orElseThrow(), geometry, plan);
+        if (addition.result() == Building.validationResult.SUCCESS && plan.mode() == Village.RoomScanMode.ADD_ROOM) {
+            List<Building> registered = village.getRooms()
+                    .filter(room -> room.getStructureId() == plan.targetStructureId() && room.getFloorId() == plan.targetFloorId())
+                    .toList();
+            if (hasRegisteredRoomConflict(scan.scannedFloor(), addition.building(), registered)) {
+                return failedRoom(Building.validationResult.OVERLAP, source, village);
+            }
+        }
+        return addition;
     }
 
     RegisteredFloorUpdate analyzeRegisteredFloorUpdate(Village village, int structureId, int floorId) {
@@ -454,33 +433,20 @@ public final class RoomWorkflow {
         return refreshed.replaceFloorGeometry(floorId, floor) ? refreshed : null;
     }
 
-    private BuildingScanResult roomResultFromGeometry(Village village,
-                                                      Structure structure,
-                                                      StructureFloor floor,
-                                                      BuildingRoomScanner.Result geometry, RoomScanPlan plan) {
-        BuildingScanResult materialized = materializeRoom(
-                village, structure, floor, geometry, plan);
-        if (materialized.result() != Building.validationResult.SUCCESS) return materialized;
-
-        Building room = materialized.building();
-        List<String> types = village == null
-                ? room.getVisibleMatchingTypes().stream().map(BuildingType::name).toList()
-                : village.getMatchingRoomTypes(room).stream().map(BuildingType::name).toList();
-        return new BuildingScanResult(Building.validationResult.SUCCESS, room.getSourceBlock(), room,
-                types, village, plan);
-    }
-
-    private BuildingScanResult materializeRoom(Village village,
-                                               Structure structure,
-                                               StructureFloor floor,
+    private BuildingScanResult materializeRoom(Village village, Structure structure, StructureFloor floor,
                                                BuildingRoomScanner.Result geometry, RoomScanPlan plan) {
         Building room = new Building(geometry.seed());
         Building.validationResult result = room.applyRoomScan(world, geometry);
-        if (result != Building.validationResult.SUCCESS) return failedRoom(result, geometry.seed(), village);
+        if (result != Building.validationResult.SUCCESS) return failedRoom(result, plan.interactionSource(), village);
         room.setStructureId(structure.getId());
         room.setFloorId(floor.id());
-        return new BuildingScanResult(Building.validationResult.SUCCESS, room.getSourceBlock(), room,
-                List.of(), village, plan);
+        if (plan.mode() == Village.RoomScanMode.UPDATE_ROOM) {
+            return new BuildingScanResult(result, room.getSourceBlock(), room, List.of(), village, plan);
+        }
+        List<String> types = village == null
+                ? room.getVisibleMatchingTypes().stream().map(BuildingType::name).toList()
+                : village.getMatchingRoomTypes(room).stream().map(BuildingType::name).toList();
+        return new BuildingScanResult(result, plan.interactionSource(), room, types, village, structure, plan);
     }
 
     private static BuildingScanResult failedRoom(

@@ -24,7 +24,7 @@ class VillageManagerExpandedRoomCommitTest {
         prepared.setLogicalBuildingId(10);
         var scan = new BuildingScanResult(Building.validationResult.SUCCESS, source,
                 room(-1, -1, 0, region(64, 0, 3)), List.of("building"), null,
-                RoomScanPlan.attachment(10, 1, source, source)).withPendingStructure(prepared);
+                prepared, RoomScanPlan.attachment(10, 1, source, source));
         VillageManager manager = new VillageManager(null);
         var before = manager.save(new net.minecraft.nbt.CompoundTag(), null);
         assertEquals(Building.validationResult.NOT_IN_BUILDING, manager.commitRoomAddition(scan, "building"));
@@ -45,7 +45,7 @@ class VillageManagerExpandedRoomCommitTest {
         BlockPos source = new BlockPos(6, 64, 0);
         BuildingScanResult scan = new BuildingScanResult(Building.validationResult.SUCCESS, source,
                 room(-1, 11, 0, region(64, 6, 7)), List.of("building"), village,
-                RoomScanPlan.addRoom(10, 0, source)).withPendingStructure(prepared);
+                prepared, RoomScanPlan.addRoom(10, 0, source));
         var before = village.save();
 
         assertEquals(Building.validationResult.NOT_IN_BUILDING,
@@ -68,8 +68,7 @@ class VillageManagerExpandedRoomCommitTest {
         var unprepared = new BuildingScanResult(Building.validationResult.SUCCESS, source, added,
                 List.of("building"), village, RoomScanPlan.addRoom(10, 0, source));
         var update = new BuildingScanResult(Building.validationResult.SUCCESS, source, existing,
-                List.of("building"), village, RoomScanPlan.updateRoom(existing, source))
-                .withPendingStructure(structure.copy());
+                List.of("building"), village, structure.copy(), RoomScanPlan.updateRoom(existing, source));
         VillageManager manager = new VillageManager(null);
         assertEquals(Building.validationResult.NOT_IN_BUILDING, manager.commitRoomAddition(unprepared, "building"));
         assertEquals(Building.validationResult.NOT_IN_BUILDING, manager.commitRoomAddition(update, "building"));
@@ -103,7 +102,7 @@ class VillageManagerExpandedRoomCommitTest {
                 new BlockPos(2, 64, 0),
                 added,
                 List.of("building"),
-                village, RoomScanPlan.addRoom(10, 0, new BlockPos(2, 64, 0))).withPendingStructure(refreshed);
+                village, refreshed, RoomScanPlan.addRoom(10, 0, new BlockPos(2, 64, 0)));
         VillageManager manager = new VillageManager(null);
 
         assertEquals(Building.validationResult.SUCCESS,
@@ -129,8 +128,7 @@ class VillageManagerExpandedRoomCommitTest {
                 new BlockPos(2, 64, 0),
                 added,
                 List.of("building"),
-                village, RoomScanPlan.addRoom(10, 0, new BlockPos(2, 64, 0)))
-                .withPendingStructure(structure.copy());
+                village, structure.copy(), RoomScanPlan.addRoom(10, 0, new BlockPos(2, 64, 0)));
         VillageManager manager = new VillageManager(null);
         village.failNextMarkDirty();
 
@@ -157,7 +155,7 @@ class VillageManagerExpandedRoomCommitTest {
                 BlockPos.ZERO,
                 added,
                 List.of("building"),
-                village, RoomScanPlan.addBuilding(BlockPos.ZERO)).withPendingStructure(pending);
+                village, pending, RoomScanPlan.addBuilding(BlockPos.ZERO));
         VillageManager manager = new VillageManager(null);
         village.failNextMarkDirty();
 
@@ -239,7 +237,7 @@ class VillageManagerExpandedRoomCommitTest {
                 new BlockPos(2, 64, 0),
                 added,
                 List.of("building"),
-                village, RoomScanPlan.addRoom(10, 0, new BlockPos(2, 64, 0))).withPendingStructure(refreshed);
+                village, refreshed, RoomScanPlan.addRoom(10, 0, new BlockPos(2, 64, 0)));
         VillageManager manager = new VillageManager(null);
 
         Building.validationResult result = assertDoesNotThrow(

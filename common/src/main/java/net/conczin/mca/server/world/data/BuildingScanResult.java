@@ -36,16 +36,6 @@ public record BuildingScanResult(
         return RoomTypeResolver.matchesTypeChoice(matchingTypes, type);
     }
 
-    BuildingScanResult withPendingStructure(Structure structure) {
-        return new BuildingScanResult(result, source, building, matchingTypes,
-                village, structure, plan);
-    }
-
-    BuildingScanResult withSource(BlockPos source) {
-        return new BuildingScanResult(result, source, building, matchingTypes,
-                village, pendingStructure, plan);
-    }
-
     public int targetBuildingId() {
         return plan != null && plan.mode() == Village.RoomScanMode.ADD_ATTACHMENT ? plan.targetBuildingId() : -1;
     }
