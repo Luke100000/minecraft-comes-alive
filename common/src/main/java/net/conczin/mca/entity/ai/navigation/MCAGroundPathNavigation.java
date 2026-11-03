@@ -370,11 +370,15 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (path == null
                 || path.canReach()
                 || path.getNodeCount() < 2
-                || !path.getTarget().equals(destination)
+                || path.getTarget().getX() != destination.getX()
+                || path.getTarget().getZ() != destination.getZ()
                 || path.getEndNode() == null) {
             return false;
         }
-        return path.getDistToTarget() < path.getNodePos(0).distManhattan(destination);
+        // GroundPathNavigation can move the requested Y to the surface or above
+        // a solid destination, including a bed. Measure against the pathfinder's
+        // actual target, while keeping a flank waypoint distinct by its column.
+        return path.getDistToTarget() < path.getNodePos(0).distManhattan(path.getTarget());
     }
 
     @Override
@@ -710,6 +714,8 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         double flankX = -dz / horizontalDistance * probeDistance;
         double flankZ = dx / horizontalDistance * probeDistance;
         int preferredSide = ((destination.getX() ^ destination.getZ() ^ this.mob.getId()) & 1) == 0 ? 1 : -1;
+        Path partialPath = null;
+        BlockPos partialCandidate = null;
         for (int side : new int[]{preferredSide, -preferredSide}) {
             BlockPos candidate = BlockPos.containing(
                     this.mob.getX() + flankX * side,
@@ -717,11 +723,30 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                     this.mob.getZ() + flankZ * side
             );
             Path path = this.createPath(candidate, 0);
-            if (path != null && path.canReach() && path.getNodeCount() > 1) {
-                this.detour = new Detour(destination, candidate.subtract(origin), horizontalDistance(origin, candidate));
-                this.moveTo(path, walkTarget.getSpeedModifier());
-                return true;
+            if (path != null && path.getNodeCount() > 1 && path.getEndNode() != null
+                    && (path.canReach() || isUsefulPartialPath(path, candidate))) {
+                double progress = horizontalDistance(origin, path.getEndNode().asBlockPos());
+                if (progress < 1.0D) {
+                    continue;
+                }
+                if (path.canReach()) {
+                    this.detour = new Detour(destination, candidate.subtract(origin), progress);
+                    this.moveTo(path, walkTarget.getSpeedModifier());
+                    return true;
+                }
+                if (partialPath == null) {
+                    partialPath = path;
+                    partialCandidate = candidate;
+                }
             }
+        }
+        // Keep the opposite side's complete route preferable to a bounded
+        // partial search, but retain useful progress when neither side finishes.
+        if (partialPath != null) {
+            this.detour = new Detour(destination, partialCandidate.subtract(origin),
+                    horizontalDistance(origin, partialPath.getEndNode().asBlockPos()));
+            this.moveTo(partialPath, walkTarget.getSpeedModifier());
+            return true;
         }
         return false;
     }

@@ -61,6 +61,7 @@ import java.util.Set;
 @EventBusSubscriber(modid = MCA.MOD_ID)
 public final class NavigationPhysicalSafetyGameTests {
     private static Block halfDepthShelf;
+    private static Block westFacingShelf;
     private static final String CLIMB_SAFETY_BATCH = "mca_climb_pose_hazards";
     private static final Set<ChunkPos> CLIMB_SAFETY_CHUNKS = new HashSet<>();
     private static final List<VillagerEntityMCA> CLIMB_SAFETY_ACTORS = new ArrayList<>();
@@ -378,6 +379,26 @@ public final class NavigationPhysicalSafetyGameTests {
             };
             return halfDepthShelf;
         });
+        event.register(Registries.BLOCK, MCA.locate("gametest_west_facing_shelf"), () -> {
+            westFacingShelf = new Block(BlockBehaviour.Properties.of().strength(1.0F).noOcclusion()) {
+                @Override
+                public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+                    // Vanilla 26.3 ShelfBlock's west-facing collision shape, in sixteenths.
+                    return Shapes.or(Block.box(11, 12, 0, 13, 16, 16),
+                            Block.box(13, 0, 0, 16, 16, 16), Block.box(11, 0, 0, 13, 4, 16));
+                }
+
+                @Override
+                protected boolean isPathfindable(BlockState state, net.minecraft.world.level.pathfinder.PathComputationType type) {
+                    return false;
+                }
+            };
+            return westFacingShelf;
+        });
+    }
+
+    static BlockState westFacingShelfState() {
+        return westFacingShelf.defaultBlockState();
     }
 
     /** A full-height, half-depth shelf is not a full cube: the villager must still reach the far side. */
