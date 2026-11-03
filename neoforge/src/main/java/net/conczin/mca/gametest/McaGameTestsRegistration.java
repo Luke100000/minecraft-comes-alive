@@ -23,6 +23,7 @@ import net.conczin.mca.entity.ai.brain.tasks.ArcherCombatStabilityGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherLiveRegressionGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherRetreatSafetyGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherCombatMovementGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ArcherCombatPolicyGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.ArcherSpiderCombatGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.DoorInteractionGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.EnterBuildingGameTests;
@@ -107,6 +108,7 @@ public final class McaGameTestsRegistration {
             ArcherLiveRegressionGameTests.class,
             ArcherRetreatSafetyGameTests.class,
             ArcherCombatMovementGameTests.class,
+            ArcherCombatPolicyGameTests.class,
             ArcherSpiderCombatGameTests.class,
             DoorInteractionGameTests.class,
             EnterBuildingGameTests.class,
