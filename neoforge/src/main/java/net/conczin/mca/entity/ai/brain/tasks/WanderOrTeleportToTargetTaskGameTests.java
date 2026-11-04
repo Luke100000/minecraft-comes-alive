@@ -459,7 +459,7 @@ public final class WanderOrTeleportToTargetTaskGameTests {
 
     @GameTest(batch = "mca_failed_path_retry_cadence", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 40)
-    public static void failedNearbyPathRetryIsNotThrottledInsideMovementSink(GameTestHelper helper) {
+    public static void airborneNearbyWalkWaitsUntilNavigationCanSearch(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(10, 2, 10));
         BlockPos destination = start.east(6);
         prepareFlatArea(helper, start, 10, 2);
@@ -479,26 +479,25 @@ public final class WanderOrTeleportToTargetTaskGameTests {
         brain.eraseMemory(MemoryModuleType.PATH);
         brain.eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
         WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
-        brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(destination, 0.5F, 0));
-        long firstFailureAt = helper.getLevel().getGameTime();
-        helper.assertTrue(!sink.tryStart(helper.getLevel(), villager, firstFailureAt),
-                "airborne initial attempt unexpectedly created a path");
-        helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty(),
-                "initial failed path did not erase its WALK_TARGET");
-        helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
-                        .filter(since -> since == firstFailureAt)
-                        .isPresent(),
-                "initial failed path did not establish the canonical failure timestamp");
-
-        brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(destination, 0.5F, 0));
-        helper.assertTrue(!sink.tryStart(helper.getLevel(), villager, firstFailureAt + 1L),
-                "airborne retry unexpectedly created a path");
-        helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty(),
-                "movement sink throttled the retry instead of letting its producer own retry cadence");
-        helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
-                        .filter(since -> since == firstFailureAt)
-                        .isPresent(),
-                "failed retry rewrote the canonical failure-since timestamp");
+        WalkTarget target = new WalkTarget(destination, 0.5F, 0);
+        brain.setMemory(MemoryModuleType.WALK_TARGET, target);
+        long now = helper.getLevel().getGameTime();
+        for (int attempt = 0; attempt < 2; attempt++) {
+            helper.assertTrue(!sink.tryStart(helper.getLevel(), villager, now + attempt),
+                    "airborne navigation unexpectedly started searching");
+            helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null) == target,
+                    "airborne search deferral lost the original walk target");
+            helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
+                    "airborne search deferral recorded a false path failure");
+        }
+        villager.setPos(start.getX() + 0.5D, start.getY(), start.getZ() + 0.5D);
+        villager.setNoGravity(false);
+        villager.setOnGround(true);
+        helper.assertTrue(sink.tryStart(helper.getLevel(), villager, now + 2L),
+                "the preserved target did not start immediately after landing");
+        helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
+                "successful search after landing retained a failure timestamp");
+        sink.doStop(helper.getLevel(), villager, now + 2L);
 
         villager.discard();
         helper.succeed();
