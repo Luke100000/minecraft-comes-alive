@@ -57,6 +57,7 @@ import java.net.URI;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static net.conczin.mca.client.gui.immersive_library.Api.request;
@@ -69,12 +70,15 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private static final ResourceLocation EMPTY_IDENTIFIER = MCA.locate("skins/empty.png");
     private static final ResourceLocation CANVAS_IDENTIFIER = MCA.locate("temp");
     private static final float CANVAS_SCALE = 2.35f;
+    private static final long SEARCH_DEBOUNCE_MILLIS = 400;
     protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level)));
     private final List<LiteContent> serverContent = new ArrayList<>();
     private final ColorSelector color = new ColorSelector();
     private final VillagerEditorScreen previousScreen;
     private final List<LiteContent> contents = new ArrayList<>();
     private String filteredString = "";
+    private EditBox searchWidget;
+    private long searchDueAt;
     private SortingMode sortingMode = SortingMode.RECOMMENDATIONS;
     private boolean filterInvalidSkins = true;
     private boolean filterHair = false;
@@ -109,7 +113,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private boolean isBrowserOpen = false;
     private boolean uploading = false;
     private Thread thread;
-    private EditBox textFieldWidget;
     private boolean skipHairWarning;
     private final List<LiteContent> remoteContents = new ArrayList<>();
     private final CompoundTag basePreviewData;
@@ -550,13 +553,20 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (keyCode == GLFW.GLFW_KEY_ENTER && searchWidget != null && getFocused() == searchWidget) {
+            applySearch();
+            return true;
+        }
+
+        boolean typing = getFocused() instanceof EditBox;
+
         // Pan
-        if (keyCode == GLFW.GLFW_KEY_SPACE && (textFieldWidget == null || !textFieldWidget.isFocused())) {
+        if (keyCode == GLFW.GLFW_KEY_SPACE && !typing) {
             isPanning = true;
             return true;
         }
 
-        if (page == Page.EDITOR && (textFieldWidget == null || !textFieldWidget.isFocused())) {
+        if (page == Page.EDITOR && !typing) {
             // Reset viewport
             if (keyCode == GLFW.GLFW_KEY_R) {
                 x0 = 0.0f;
@@ -632,6 +642,30 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         super.tick();
 
         timeSinceLastRebuild++;
+
+        if (searchDueAt != 0 && Util.getMillis() >= searchDueAt) {
+            applySearch();
+        }
+    }
+
+    private void applySearch() {
+        searchDueAt = 0;
+        String search = normalizeSearch(searchWidget.getValue());
+        if (!search.equals(filteredString)) {
+            filteredString = search;
+            selectionPage = 0;
+            refreshContentList();
+        }
+    }
+
+    /**
+     * Drops empty and prefix-only terms like "#" or "-", which are most likely still being typed.
+     */
+    private static String normalizeSearch(String search) {
+        return Arrays.stream(search.split(","))
+                .map(String::strip)
+                .filter(term -> term.codePoints().anyMatch(Character::isLetterOrDigit))
+                .collect(Collectors.joining(","));
     }
 
     @Override
@@ -836,19 +870,17 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                                 refreshContentList();
                             }));
                 } else if (subscriptionFilter != SubscriptionFilter.GLOBAL) {
-                    EditBox textFieldWidget = addRenderableWidget(new EditBox(this.font, width / 2 - 200 + 65, height / 2 - 110 + 2, 110, 16,
-                            Component.translatable("gui.skin_library.search")));
-                    textFieldWidget.setMaxLength(64);
-                    textFieldWidget.setValue(filteredString);
-                    if (filteredString.isEmpty()) {
-                        textFieldWidget.setSuggestion("Search");
+                    // Kept across rebuilds, so it stays focused and keeps its cursor and selection
+                    if (searchWidget == null) {
+                        searchWidget = new EditBox(this.font, 0, 0, 110, 16, Component.translatable("gui.skin_library.search"));
+                        searchWidget.setMaxLength(64);
+                        searchWidget.setValue(filteredString);
+                        searchWidget.setHint(Component.translatable("gui.skin_library.search"));
+                        searchWidget.setTooltip(Tooltip.create(Component.translatable("gui.skin_library.search.tooltip")));
+                        searchWidget.setResponder(s -> searchDueAt = Util.getMillis() + SEARCH_DEBOUNCE_MILLIS);
                     }
-                    textFieldWidget.setResponder(s -> {
-                        filteredString = s;
-                        selectionPage = 0;
-                        refreshContentList();
-                        textFieldWidget.setSuggestion(null);
-                    });
+                    searchWidget.setPosition(width / 2 - 200 + 65, height / 2 - 110 + 2);
+                    addRenderableWidget(searchWidget);
                 }
 
                 //group
@@ -1005,7 +1037,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             }
             case EDITOR -> {
                 // name
-                textFieldWidget = addRenderableWidget(new EditBox(this.font, width / 2 - 60, height / 2 - 105, 120, 20,
+                EditBox textFieldWidget = addRenderableWidget(new EditBox(this.font, width / 2 - 60, height / 2 - 105, 120, 20,
                         Component.translatable("gui.skin_library.name")));
                 textFieldWidget.setMaxLength(1024);
                 textFieldWidget.setValue(workspace.title);
@@ -1224,6 +1256,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                             publish();
                         }));
             }
+        }
+
+        // clearWidgets() keeps the focus, which would leave keys going to a widget no longer shown
+        if (getFocused() != null && !children().contains(getFocused())) {
+            setFocused(null);
         }
     }
 
