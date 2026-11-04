@@ -73,6 +73,10 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private static final long SEARCH_DEBOUNCE_MILLIS = 400;
     private static final String LIBRARY_NAMESPACE = "immersive_library:";
 
+    private static final int PROFESSION_AREA_WIDTH = 105;
+    private static final int PROFESSION_AREA_HEIGHT = 110;
+    private static final int PROFESSION_CELL = 21;
+
     // Screen
     private final VillagerEditorScreen previousScreen;
     private Page page;
@@ -120,6 +124,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     // Editor
     private Workspace workspace;
+    private EditBox professionSearchWidget;
     private final ColorSelector color = new ColorSelector();
     private boolean uploading = false;
     private boolean skipHairWarning;
@@ -700,6 +705,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             return false;
         }
 
+        // Clicking elsewhere leaves the text box
+        if (getFocused() instanceof EditBox box && !box.isMouseOver(mouseX, mouseY)) {
+            setFocused(null);
+        }
+
         if (page == Page.EDITOR) {
             if (button == 0 || button == 1) {
                 activeMouseButton = button;
@@ -1109,13 +1119,37 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 () -> Component.translatable("gui.skin_library.temperature.tooltip")
         ));
 
-        // profession, in rows of five
+        buildProfessionPicker();
+    }
+
+    private void buildProfessionPicker() {
+        List<VillagerProfession> professions = BuiltInRegistries.VILLAGER_PROFESSION.stream().toList();
+        int x = width / 2 - 200;
+        int y = height / 2 - 30;
+        int columns = (PROFESSION_AREA_WIDTH + 1) / PROFESSION_CELL;
+        int rows = (PROFESSION_AREA_HEIGHT + 1) / PROFESSION_CELL;
+
+        if (professions.size() > columns * rows) {
+            // Kept across rebuilds, so it stays focused while typing
+            if (professionSearchWidget == null) {
+                professionSearchWidget = new EditBox(this.font, 0, 0, PROFESSION_AREA_WIDTH, 16, Component.translatable("gui.skin_library.search"));
+                professionSearchWidget.setHint(Component.translatable("gui.skin_library.search"));
+                professionSearchWidget.setResponder(v -> rebuild());
+            }
+            professionSearchWidget.setPosition(x, y);
+            addRenderableWidget(professionSearchWidget);
+
+            y += 18;
+            rows = (PROFESSION_AREA_HEIGHT - 18 + 1) / PROFESSION_CELL;
+            professions = findProfessions(professions, professionSearchWidget.getValue(), columns * rows);
+        }
+
         List<ItemButtonWidget> widgets = new ArrayList<>();
-        for (VillagerProfession profession : BuiltInRegistries.VILLAGER_PROFESSION) {
-            String professionName = profession == VillagerProfession.NONE ? null : profession.name();
-            int ox = widgets.size() % 5;
-            int oy = widgets.size() / 5;
-            ItemButtonWidget widget = addRenderableWidget(new ItemButtonWidget(width / 2 - 200 + ox * 21, height / 2 - 30 + oy * 21, 20,
+        for (VillagerProfession profession : professions) {
+            String professionName = getProfessionName(profession);
+            int ox = widgets.size() % columns;
+            int oy = widgets.size() / columns;
+            ItemButtonWidget widget = addRenderableWidget(new ItemButtonWidget(x + ox * PROFESSION_CELL, y + oy * PROFESSION_CELL, PROFESSION_CELL - 1,
                     getProfessionText(profession.name()),
                     ProfessionIcons.ICONS.getOrDefault(profession.name(), Items.OAK_SAPLING.getDefaultInstance()),
                     v -> {
@@ -1126,6 +1160,29 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             widget.active = !Objects.equals(workspace.profession, professionName);
             widgets.add(widget);
         }
+    }
+
+    private List<VillagerProfession> findProfessions(List<VillagerProfession> professions, String query, int limit) {
+        String needle = query.strip().toLowerCase(Locale.ROOT);
+        List<VillagerProfession> matches = professions.stream()
+                .filter(p -> p.name().contains(needle) || getProfessionText(p.name()).getString().toLowerCase(Locale.ROOT).contains(needle))
+                .limit(limit)
+                .collect(Collectors.toCollection(ArrayList::new));
+
+        professions.stream()
+                .filter(p -> Objects.equals(workspace.profession, getProfessionName(p)) && !matches.contains(p))
+                .findFirst()
+                .ifPresent(selected -> {
+                    if (matches.size() == limit) {
+                        matches.removeLast();
+                    }
+                    matches.addFirst(selected);
+                });
+        return matches;
+    }
+
+    private static String getProfessionName(VillagerProfession profession) {
+        return profession == VillagerProfession.NONE ? null : profession.name();
     }
 
     private void buildColorTools(int y) {
@@ -1430,6 +1487,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             y0 = 0.0f;
             y1 = 1.0f;
             uploading = false;
+            professionSearchWidget = null;
         }
 
         if (page == Page.LIBRARY) {
