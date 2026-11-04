@@ -238,6 +238,206 @@ public final class ArcherCombatPolicyGameTests {
         });
     }
 
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 420)
+    public static void crossbowRetreatSettlesWithinItsOwnRangeAndKeepsHitting(GameTestHelper helper) {
+        crossbowSpacing(helper, false);
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 420)
+    public static void crossbowLeavesSmallHillWithoutRetreatApproachLoop(GameTestHelper helper) {
+        crossbowSpacing(helper, true);
+    }
+
+    private static void crossbowSpacing(GameTestHelper helper, boolean hill) {
+        Arena a = new Arena(helper);
+        if (hill) {
+            for (int x = -2; x <= 2; x++) {
+                for (int z = -2; z <= 2; z++) {
+                    helper.getLevel().setBlock(a.start.offset(x, 0, z), Blocks.STONE.defaultBlockState(), 3);
+                }
+            }
+            a.guard.setPos(a.guard.getX(), a.start.getY() + 1, a.guard.getZ());
+        }
+        Skeleton target = a.skeleton(a.start.east(5));
+        target.setPos(a.guard.getX() + 4.5, target.getY(), a.guard.getZ());
+        target.getAttribute(Attributes.MAX_HEALTH).setBaseValue(100);
+        target.setHealth(100);
+        target.setTarget(a.guard);
+        a.guard.getInventory().addItem(Items.CROSSBOW.getDefaultInstance());
+        a.guard.setItemSlot(a.guard.getDominantSlot(), Items.CROSSBOW.getDefaultInstance());
+        a.guard.setNoAi(false);
+        a.guard.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+        a.guard.getRandom().setSeed(42);
+        int[] hits = {0};
+        boolean[] retreated = {false};
+        boolean[] descended = {!hill};
+        float[] health = {target.getHealth()};
+        helper.onEachTick(() -> {
+            if (a.closed) return;
+            helper.assertTrue(net.conczin.mca.entity.ai.RangedWeaponHelper.getCrossbowHoldingHand(a.guard) != null,
+                    "fixture equipment refresh replaced the crossbow");
+            retreated[0] |= RangedCombatState.current(a.guard).orElse(null) == RangedCombatState.KITE
+                    && a.guard.position().subtract(Vec3.atBottomCenterOf(a.start)).horizontalDistanceSqr() > 1;
+            descended[0] |= a.guard.onGround() && Math.abs(a.guard.getY() - a.start.getY()) < 0.1;
+            helper.assertTrue(a.guard.distanceToSqr(target) <= 64,
+                    "crossbow retreated beyond its own eight-block firing range; distance=" + a.guard.distanceTo(target)
+                            + ", state=" + RangedCombatState.current(a.guard));
+            if (target.getHealth() < health[0]) {
+                var source = target.getLastDamageSource();
+                helper.assertTrue(source != null && source.getEntity() == a.guard
+                                && source.getDirectEntity() instanceof AbstractArrow,
+                        "crossbow target damage must come from actual archer arrows");
+                hits[0]++;
+                health[0] = target.getHealth();
+            }
+            if (helper.getTick() == 360) {
+                helper.assertTrue(retreated[0] && descended[0] && hits[0] >= 2,
+                        "crossbow failed to retreat, finish its descent and resume repeated damaging shots; hits="
+                                + hits[0] + ", descended=" + descended[0]);
+                net.conczin.mca.MCA.LOGGER.info("[MCA Archer Spacing] hill={} hits={} distance={} health={}",
+                        hill, hits[0], a.guard.distanceTo(target), a.guard.getHealth());
+                a.succeed();
+            }
+        });
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 60)
+    public static void risingStrafeDoesNotTreatJumpHeightAsLostThreatClearance(GameTestHelper helper) {
+        Arena a = new Arena(helper);
+        // The next half-block step is a supported one-block terrace. A mob near
+        // its jump apex must not compare that landing against airborne height.
+        helper.getLevel().setBlock(a.start.south(), Blocks.STONE.defaultBlockState(), 3);
+        a.guard.setPos(a.start.getX() + 0.5, a.start.getY() + 1.2, a.start.getZ() + 0.6);
+        a.guard.setOnGround(false);
+        a.guard.setYRot(90);
+        a.guard.setDeltaMovement(0, 0.08, 0.06);
+        Skeleton target = a.skeleton(a.start.east(12));
+        Vec3 offset = new Vec3(0, 0, 0.5);
+        Vec3 physical = net.conczin.mca.entity.ai.StrafeTerrain.findLanding(a.guard, offset);
+        helper.assertTrue(physical != null && Math.abs(physical.y - a.start.getY() - 1) < 0.01,
+                "fixture must offer a physically supported one-block landing");
+        helper.assertTrue(RangedCombatPositioning.findSafeStrafeLanding(a.guard, 1, List.of(target)) != null,
+                "safe uphill strafe rejected because landing is below the transient jump apex");
+        a.succeed();
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 180)
+    public static void crossbowStrafesInItsWeaponAwareHoldingBand(GameTestHelper helper) {
+        Arena a = new Arena(helper);
+        Skeleton target = a.skeleton(a.start.east(6));
+        target.setPos(a.guard.getX() + 5.5, a.guard.getY(), a.guard.getZ());
+        target.setTarget(a.guard);
+        target.getAttribute(Attributes.MAX_HEALTH).setBaseValue(100);
+        target.setHealth(100);
+        a.guard.getInventory().addItem(Items.CROSSBOW.getDefaultInstance());
+        a.guard.setItemSlot(a.guard.getDominantSlot(), Items.CROSSBOW.getDefaultInstance());
+        a.guard.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+        a.guard.setNoAi(false);
+        int[] strafeTicks = {0};
+        helper.onEachTick(() -> {
+            if (a.closed) return;
+            if (RangedCombatState.current(a.guard).orElse(null) == RangedCombatState.STRAFE) strafeTicks[0]++;
+            if (helper.getTick() == 140) {
+                helper.assertTrue(strafeTicks[0] >= 20,
+                        "crossbow movement permits holding but its strafe gate still rejects the same distance; strafeTicks="
+                                + strafeTicks[0]);
+                helper.assertTrue(target.getHealth() < 100, "holding-band crossbow never landed an arrow");
+                a.succeed();
+            }
+        });
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 300)
+    public static void archerStrafesFromPathFloorOntoNativeReachableRaisedBlock(GameTestHelper helper) {
+        partialFloorAscent(helper, Blocks.DIRT_PATH.defaultBlockState());
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 300)
+    public static void archerStrafesFromFarmlandOntoNativeReachableRaisedBlock(GameTestHelper helper) {
+        partialFloorAscent(helper, Blocks.FARMLAND.defaultBlockState());
+    }
+
+    private static void partialFloorAscent(GameTestHelper helper, BlockState floor) {
+        Arena a = new Arena(helper);
+        for (int x = -20; x <= 20; x++) {
+            for (int z = -20; z <= 20; z++) {
+                helper.getLevel().setBlock(a.start.offset(x, -1, z), floor, 3);
+                if (Math.abs(z) >= 1) {
+                    helper.getLevel().setBlock(a.start.offset(x, -1, z), Blocks.STONE.defaultBlockState(), 3);
+                    helper.getLevel().setBlock(a.start.offset(x, 0, z), Blocks.STONE.defaultBlockState(), 3);
+                }
+            }
+        }
+        a.guard.setPos(a.guard.getX(), a.start.getY() - 0.0625, a.guard.getZ());
+        a.guard.setYRot(270);
+        a.guard.yHeadRot = a.guard.yBodyRot = 270;
+        Skeleton target = a.skeleton(a.start.east(12));
+        target.getAttribute(Attributes.MAX_HEALTH).setBaseValue(100);
+        target.setHealth(100);
+        target.setTarget(a.guard);
+        Path nativePath = a.guard.getNavigation().createPath(a.start.south(3).above(), 0);
+        helper.assertTrue(nativePath != null && nativePath.canReach(),
+                "MCA navigation must accept the rise from a partial floor to the raised block");
+        Vec3 landing = net.conczin.mca.entity.ai.StrafeTerrain.findLanding(a.guard, new Vec3(0, 0, 0.5));
+        helper.assertTrue(landing != null && Math.abs(landing.y - a.start.getY() - 1) < 0.01,
+                "strafe rejected a partial-floor rise that native navigation can jump");
+        a.guard.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+        a.guard.setNoAi(false);
+        boolean[] airborne = {false}, arrived = {false};
+        int[] hits = {0};
+        float[] previousHealth = {target.getHealth()};
+        helper.onEachTick(() -> {
+            if (a.closed) return;
+            if (target.getHealth() < previousHealth[0]) {
+                var damage = target.getLastDamageSource();
+                helper.assertTrue(damage != null && damage.getEntity() == a.guard
+                                && damage.getDirectEntity() instanceof AbstractArrow,
+                        "partial-floor shooting damage did not come from archer-owned arrows");
+                hits[0]++;
+                previousHealth[0] = target.getHealth();
+            }
+            airborne[0] |= !a.guard.onGround() && a.guard.getDeltaMovement().y > 0.1;
+            arrived[0] |= a.guard.onGround() && Math.abs(a.guard.getY() - a.start.getY() - 1) < 0.02
+                    && Math.abs(a.guard.getZ() - a.start.getZ() - 0.5) >= 1;
+            if (airborne[0] && arrived[0] && hits[0] >= 2) {
+                a.succeed();
+            } else if (helper.getTick() == 260) {
+                helper.fail("archer failed its partial-floor strafe ascent and sustained shooting; takeoff="
+                        + airborne[0] + ", arrived=" + arrived[0] + ", arrowHits=" + hits[0]);
+            }
+        });
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 320)
+    public static void approachReleasesNativePathBeforeStartingDirectStrafe(GameTestHelper helper) {
+        Arena a = new Arena(helper);
+        Skeleton target = a.skeleton(a.start.east(20));
+        target.setTarget(a.guard);
+        target.getAttribute(Attributes.MAX_HEALTH).setBaseValue(100);
+        target.setHealth(100);
+        a.guard.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+        a.guard.setNoAi(false);
+        boolean[] approached = {false};
+        int[] strafed = {0};
+        helper.onEachTick(() -> {
+            if (a.closed) return;
+            var state = RangedCombatState.current(a.guard).orElse(null);
+            approached[0] |= state == RangedCombatState.APPROACH && !a.guard.getNavigation().isDone();
+            if (state == RangedCombatState.STRAFE) {
+                strafed[0]++;
+                helper.assertTrue(a.guard.getNavigation().isDone()
+                                && !a.guard.getBrain().hasMemoryValue(MemoryModuleType.PATH)
+                                && !a.guard.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET),
+                        "direct strafe started while the native approach path still owned movement");
+            }
+            if (helper.getTick() == 280) {
+                helper.assertTrue(approached[0] && strafed[0] >= 20 && target.getHealth() < 100,
+                        "approach-to-strafe handoff did not resume moving and shooting");
+                a.succeed();
+            }
+        });
+    }
+
     private static void assertTarget(GameTestHelper helper, VillagerEntityMCA guard, Mob expected) {
         helper.assertTrue(guard.getBrain().isMemoryValue(MemoryModuleType.ATTACK_TARGET, expected),
                 "guard did not retain the expected self-defence target");

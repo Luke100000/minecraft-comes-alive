@@ -1,5 +1,6 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
+import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.RangedWeaponHelper;
 import net.conczin.mca.entity.ai.StrafeTerrain;
 import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
@@ -197,6 +198,10 @@ final class RangedCombatPositioning {
             if (!hasStandingSpace(entity, candidatePosition)) {
                 continue;
             }
+            double candidateMinimumDistanceSquared = minimumDistanceSquared(candidatePosition, escapeThreats);
+            if (candidateMinimumDistanceSquared <= currentMinimumDistanceSquared + MIN_USEFUL_DISTANCE_GAIN) {
+                continue;
+            }
             // Ranged evasion must preserve a usable shot rather than buy melee
             // spacing by leaving range and immediately having to approach again.
             if (firingTarget != null && (candidatePosition.distanceToSqr(firingTarget.position()) > attackRangeSquared
@@ -205,11 +210,6 @@ final class RangedCombatPositioning {
                     && !RangedWeaponHelper.canShootBowFrom(entity, candidatePosition, firingTarget))) {
                 continue;
             }
-            double candidateMinimumDistanceSquared = minimumDistanceSquared(candidatePosition, escapeThreats);
-            if (candidateMinimumDistanceSquared <= currentMinimumDistanceSquared + MIN_USEFUL_DISTANCE_GAIN) {
-                continue;
-            }
-
             boolean opensEveryThreat = opensDistanceFromEveryThreat(origin, candidatePosition, escapeThreats);
             OnwardReachability onward = measureOnwardReachability(originBlock, position, graph.edges());
             EscapeCandidate candidate = new EscapeCandidate(
@@ -919,7 +919,16 @@ final class RangedCombatPositioning {
         float sign = Math.signum(lateralDirection);
         if (sign == 0) return null;
         Vec3 landing = StrafeTerrain.findLanding(entity, strafeOffset(entity, sign, STRAFE_PROBE_STEP));
-        return landing != null && preservesHazardClearance(entity.position(), landing, hazards) ? landing : null;
+        if (landing != null && preservesHazardClearance(entity.position(), landing, hazards)) {
+            return landing;
+        }
+        if (MCA.platformHelper.isDevelopmentEnvironment()) {
+            MCA.LOGGER.info("[MCA Archer Strafe Safety] entity={} reason={} pos={} body={} onGround={} velocity={} yaw={} direction={} landing={} hazards={}",
+                    entity.getStringUUID(), landing == null ? "terrain_or_collision" : "threat_clearance",
+                    entity.position(), entity.getBoundingBox(), entity.onGround(), entity.getDeltaMovement(),
+                    entity.getYRot(), sign, landing, hazards.stream().map(LivingEntity::position).toList());
+        }
+        return null;
     }
 
     static float findBestStrafeDirection(
@@ -965,7 +974,11 @@ final class RangedCombatPositioning {
     }
 
     static boolean hasVisibleStrafeStep(PathfinderMob entity, LivingEntity target, Vec3 landing) {
-        return hasLineOfSight(entity, landing, target);
+        double rangeSquared = RangedWeaponHelper.getAttackRangeSquared(entity,
+                RangedWeaponHelper.GUARD_ATTACK_RANGE * RangedWeaponHelper.GUARD_ATTACK_RANGE);
+        // Admit the next step before raw strafe input can cross the firing boundary.
+        return landing.distanceToSqr(target.position()) <= rangeSquared
+                && hasLineOfSight(entity, landing, target);
     }
 
     private static StrafeCandidate scoreStrafeSide(
@@ -988,7 +1001,7 @@ final class RangedCombatPositioning {
              distance += STRAFE_PROBE_STEP) {
             Vec3 candidate = StrafeTerrain.findLanding(entity, strafeOffset(entity, sign, distance));
             if (candidate == null || !preservesHazardClearance(origin, candidate, hazards)
-                    || !hasLineOfSight(entity, candidate, target)) {
+                    || !hasVisibleStrafeStep(entity, target, candidate)) {
                 break;
             }
             clearance = distance;

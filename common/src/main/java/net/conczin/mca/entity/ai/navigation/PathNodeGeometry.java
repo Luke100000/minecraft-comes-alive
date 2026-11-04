@@ -20,6 +20,11 @@ public final class PathNodeGeometry {
 
     private PathNodeGeometry() { }
 
+    /** Matches 1.21.1 WalkNodeEvaluator without requiring an active search context. */
+    public static double jumpHeight(Mob mob) {
+        return Math.max(1.125D, mob.maxUpStep());
+    }
+
     public static Vec3 walkingPosition(BlockGetter level, BlockPos node, Mob mob) {
         return walkingPosition(level, node, mob, WalkNodeEvaluator.getFloorLevel(level, node));
     }
