@@ -59,6 +59,9 @@ final class SelectedFloorScanner {
     interface LoadedColumns extends BlockGetter {
         boolean hasColumn(BlockPos pos);
 
+        /** Records an unloaded boundary that prevents a complete selected floor. */
+        default void recordUnknownBoundary(BlockPos pos) { }
+
         /** Frame collision proof may depend on state normally ignored by geometry caching. */
         default void observeFrameState(BlockPos pos, Direction face) { }
     }
@@ -71,6 +74,7 @@ final class SelectedFloorScanner {
     /** All discovery evidence lives for one operation; none is retained across world changes. */
     static final class Observation {
         private final BlockGetter world;
+        private final Map<BlockPos, BlockPos> unknownExteriorStarts = new HashMap<>();
         private final int maxSize;
         private final int maxRadius;
         private final FloorCeilingResolver ceilings;
@@ -626,7 +630,21 @@ final class SelectedFloorScanner {
             if (cluster.isEmpty()) continue;
             boolean acceptedSide = cluster.stream().anyMatch(pos -> neighbors.getOrDefault(pos, List.of()).stream()
                     .anyMatch(next -> !boundaryCells.contains(next) && !exteriorCells.contains(next)));
-            if (acceptedSide) continue;
+            if (acceptedSide) {
+                // Inferred frames can inherit an enclosed side while hiding a pruned
+                // side whose enclosure could not be decided without another chunk.
+                // Real doors remain boundaries; their exterior need not be scanned.
+                BlockPos unknown = cluster.stream().map(traversal.cells()::get)
+                        .flatMap(cell -> provider.steps(cell).stream())
+                        .filter(step -> step.connector() == null)
+                        .map(step -> provider.unknownExteriorStarts.get(step.landing().feet()))
+                        .filter(java.util.Objects::nonNull).findFirst().orElse(null);
+                if (unknown != null) {
+                    if (world instanceof LoadedColumns loaded) loaded.recordUnknownBoundary(unknown);
+                    return TraversalScan.failure(Building.validationResult.BLOCK_LIMIT);
+                }
+                continue;
+            }
             SurfaceCell fragment = traversal.cells().get(cluster.stream().min(CELL_ORDER).orElseThrow());
             if (!hasBoundedExteriorSurface(world, fragment, seed.feet(), ceilings,
                     maxSize, maxRadius, provider, classifier, false)
@@ -1081,6 +1099,7 @@ final class SelectedFloorScanner {
                     BlockPos next = open.relative(direction);
                     if (framedBoundaries && provider.frameCrossing(open, next)) continue;
                     if (!isLoadedColumn(world, next)) {
+                        provider.unknownExteriorStarts.putIfAbsent(start.feet(), next.immutable());
                         exterior.put(start.feet(), true);
                         return true;
                     }
@@ -1107,6 +1126,7 @@ final class SelectedFloorScanner {
                 BlockPos opening = current.feet().relative(direction);
                 if (framedBoundaries && provider.frameCrossing(current.feet(), opening)) continue;
                 if (!isLoadedColumn(world, opening)) {
+                    provider.unknownExteriorStarts.putIfAbsent(start.feet(), opening.immutable());
                     exterior.put(start.feet(), true);
                     return true;
                 }

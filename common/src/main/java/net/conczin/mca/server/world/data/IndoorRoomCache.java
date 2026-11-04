@@ -356,6 +356,11 @@ public final class IndoorRoomCache {
         }
 
         @Override
+        public void recordUnknownBoundary(BlockPos pos) {
+            markMissing(pos);
+        }
+
+        @Override
         public int highestBlockY(BlockPos pos) {
             var chunk = level.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
             observeColumn(pos, chunk != null);

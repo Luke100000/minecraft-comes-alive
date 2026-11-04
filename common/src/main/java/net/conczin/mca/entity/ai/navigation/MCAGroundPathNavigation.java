@@ -57,12 +57,14 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
     private static final class Detour {
         private final BlockPos destination;
+        private final BlockPos origin;
         private final BlockPos step;
         private double distance;
         private DetourPhase phase = DetourPhase.FLANKING;
 
-        private Detour(BlockPos destination, BlockPos step, double distance) {
+        private Detour(BlockPos destination, BlockPos origin, BlockPos step, double distance) {
             this.destination = destination.immutable();
+            this.origin = origin.immutable();
             this.step = step.immutable();
             this.distance = distance;
         }
@@ -657,14 +659,22 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         boolean routeChanged = consumeRetryInvalidation(destination);
         // Short flank legs deliberately move sideways, so immediately searching
         // HOME again often just returns the route back to the obstacle's start.
-        // Re-probe after enough lateral travel to attempt a crossing, or a route change.
+        // At completed flank legs, a partial path may already cross the old
+        // blocked frontier. Otherwise keep flanking or use the bounded crossing.
         Path destinationPath = this.detour.phase == DetourPhase.CROSSING || routeChanged
-                || this.detour.distance >= getOrdinaryPathLength(this.mob)
+                || this.detour.distance >= getOrdinaryPathLength(this.mob) * 0.25D
                 ? this.createPath(destination, 0)
                 : null;
         if (destinationPath != null && destinationPath.canReach()) {
             clearDetour();
             clearFailure(this.mob);
+            this.moveTo(destinationPath, walkTarget.getSpeedModifier());
+            return true;
+        }
+
+        if (this.detour.phase == DetourPhase.FLANKING
+                && isUsefulPartialBeyondDetourOrigin(destinationPath, this.detour.origin, destination)) {
+            this.detour.phase = DetourPhase.CROSSING;
             this.moveTo(destinationPath, walkTarget.getSpeedModifier());
             return true;
         }
@@ -695,6 +705,20 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
         this.moveTo(continuation, walkTarget.getSpeedModifier());
         return true;
+    }
+
+    static boolean isUsefulPartialBeyondDetourOrigin(@Nullable Path path, BlockPos origin, BlockPos destination) {
+        if (!isUsefulPartialPath(path, destination)) return false;
+        BlockPos end = path.getEndNode().asBlockPos();
+        double goalX = (double) destination.getX() - origin.getX();
+        double goalZ = (double) destination.getZ() - origin.getZ();
+        double forward = ((double) end.getX() - origin.getX()) * goalX
+                + ((double) end.getZ() - origin.getZ()) * goalZ;
+        // Cross the old frontier and end closer to the destination than it was.
+        double remainingX = (double) destination.getX() - end.getX();
+        double remainingZ = (double) destination.getZ() - end.getZ();
+        return forward > 0.0D && forward >= Math.sqrt(goalX * goalX + goalZ * goalZ)
+                && remainingX * remainingX + remainingZ * remainingZ < goalX * goalX + goalZ * goalZ;
     }
 
     private boolean beginDetour(WalkTarget walkTarget, BlockPos destination) {
@@ -730,7 +754,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                     continue;
                 }
                 if (path.canReach()) {
-                    this.detour = new Detour(destination, candidate.subtract(origin), progress);
+                    this.detour = new Detour(destination, origin, candidate.subtract(origin), progress);
                     this.moveTo(path, walkTarget.getSpeedModifier());
                     return true;
                 }
@@ -743,7 +767,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         // Keep the opposite side's complete route preferable to a bounded
         // partial search, but retain useful progress when neither side finishes.
         if (partialPath != null) {
-            this.detour = new Detour(destination, partialCandidate.subtract(origin),
+            this.detour = new Detour(destination, origin, partialCandidate.subtract(origin),
                     horizontalDistance(origin, partialPath.getEndNode().asBlockPos()));
             this.moveTo(partialPath, walkTarget.getSpeedModifier());
             return true;

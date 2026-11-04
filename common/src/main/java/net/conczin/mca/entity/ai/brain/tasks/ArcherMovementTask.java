@@ -109,10 +109,10 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
 
         if (closeRangeThreat) {
             if ((currentState == RangedCombatState.EMERGENCY_FLEE || currentState == RangedCombatState.KITE)
-                    && threatDistanceSquared < KITE_EXIT_DISTANCE_SQUARED) {
+                    && threatDistanceSquared < spacingDistanceSquared(KITE_EXIT_DISTANCE_SQUARED, attackRangeSquared, 1)) {
                 return new BaseStateDecision(RangedCombatState.KITE, "kite_hysteresis");
             }
-            if (threatDistanceSquared < KITE_ENTER_DISTANCE_SQUARED) {
+            if (isCloseThreat(threatDistanceSquared, threatVerticalDistance, attackRangeSquared)) {
                 return new BaseStateDecision(RangedCombatState.KITE, "kite_close_threat");
             }
         }
@@ -138,6 +138,17 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             }
         }
         return new BaseStateDecision(RangedCombatState.HOLD, "hold");
+    }
+
+    private static double spacingDistanceSquared(double desiredSquared, double attackRangeSquared, double buffer) {
+        // Short-range weapons need a spacing band inside their own firing range.
+        double distance = Math.max(0, Math.sqrt(attackRangeSquared) - buffer);
+        return Math.min(desiredSquared, distance * distance);
+    }
+
+    private static boolean isCloseThreat(double distanceSquared, double verticalDistance, double attackRangeSquared) {
+        return verticalDistance <= CLOSE_RANGE_VERTICAL_THREAT_DISTANCE
+                && distanceSquared < spacingDistanceSquared(KITE_ENTER_DISTANCE_SQUARED, attackRangeSquared, 3);
     }
 
     static boolean shouldStartStrafe(int holdTicks, int strafeCooldown) {
@@ -305,8 +316,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         }
         RangedCombatState baseState = decision.state();
 
-        boolean closeThreat = tacticalVerticalDistance <= CLOSE_RANGE_VERTICAL_THREAT_DISTANCE
-                && threatDistanceSquared < KITE_ENTER_DISTANCE_SQUARED;
+        boolean closeThreat = isCloseThreat(threatDistanceSquared, tacticalVerticalDistance, attackRangeSquared);
         boolean inRange = targetDistanceSquared <= attackRangeSquared;
 
         if (baseState != RangedCombatState.HOLD) {
@@ -397,13 +407,15 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             return decision;
         }
         if (RangedCombatPositioning.isActiveRangedMovementThreat(entity, threat)
-                && (threatDistanceSquared < RANGED_THREAT_ENTER_DISTANCE_SQUARED
-                    || isRetreatState(currentState) && threatDistanceSquared < RANGED_THREAT_EXIT_DISTANCE_SQUARED)) {
+                && (threatDistanceSquared < spacingDistanceSquared(RANGED_THREAT_ENTER_DISTANCE_SQUARED, attackRangeSquared, 3)
+                    || isRetreatState(currentState) && threatDistanceSquared
+                        < spacingDistanceSquared(RANGED_THREAT_EXIT_DISTANCE_SQUARED, attackRangeSquared, 1))) {
             return new BaseStateDecision(RangedCombatState.KITE, "evade_active_ranged_attacker",
                     targetDistanceSquared <= attackRangeSquared && this.seeTime > 0);
         }
         if (isRetreatState(decision.state())) {
-            return decision;
+            return new BaseStateDecision(decision.state(), decision.reason(),
+                    targetDistanceSquared <= attackRangeSquared && this.seeTime > 0);
         }
         boolean settledShot = entity.onGround() && this.clearShotTicks >= CLEAR_SHOT_BEFORE_HOLD;
         if (isRetreatState(currentState) && !settledShot
@@ -457,7 +469,11 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
         }
         trackTarget(entity, target);
 
-        if (entity.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET)) {
+        // MoveToTargetSink releases PATH and navigation on its next tick after
+        // WALK_TARGET is cleared. Direct strafing must wait for that handoff.
+        if (entity.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                || entity.getBrain().hasMemoryValue(MemoryModuleType.PATH)
+                || !entity.getNavigation().isDone()) {
             if (currentState == RangedCombatState.STRAFE) {
                 finishStrafe(entity, "walk_target_preempted");
             } else {
@@ -728,7 +744,9 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
                 entity,
                 rangedEvasion
                         ? RangedCombatPositioning.findRangedEvasionTarget(
-                                entity, target, threatContext, KITE_SAFE_DISTANCE, attackRangeSquared)
+                                entity, target, threatContext,
+                                Math.sqrt(spacingDistanceSquared(KITE_SAFE_DISTANCE * KITE_SAFE_DISTANCE, attackRangeSquared, 1)),
+                                attackRangeSquared)
                         : RangedCombatPositioning.findGroupEscapeTarget(
                         entity,
                         threatContext.escapeThreats(),

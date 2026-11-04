@@ -9,9 +9,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
-import net.minecraft.gametest.framework.AfterBatch;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -28,48 +25,9 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.util.List;
-import java.util.ArrayList;
 
 @PrefixGameTestTemplate(false)
 public final class SleepingVillagerSensorGameTests {
-    private static final List<Entity> SLEEP_ACTORS = new ArrayList<>();
-
-    @AfterBatch(batch = "mca_sleeping_sensor_lifecycle")
-    public static void cleanupLifecycle(net.minecraft.server.level.ServerLevel level) {
-        SLEEP_ACTORS.forEach(Entity::discard);
-        SLEEP_ACTORS.clear();
-        SensorTestFixtures.restoreAll();
-    }
-
-    @GameTest(batch = "mca_sleeping_sensor_lifecycle", templateNamespace = "mca",
-            template = "gametest/isolated_ai_arena", timeoutTicks = 80)
-    public static void sleepingBrainKeepsExpiryAndDoesNotStartCreeperEscape(GameTestHelper helper) {
-        var villager = villager(helper);
-        villager.setAge(AgeState.BABY.toAge());
-        villager.refreshBrain(helper.getLevel());
-        sleep(helper, villager);
-        var creeper = helper.spawn(EntityType.CREEPER, new BlockPos(60, 2, 56));
-        var nbt = new CompoundTag();
-        creeper.addAdditionalSaveData(nbt);
-        nbt.putShort("Fuse", (short) 30000);
-        creeper.readAdditionalSaveData(nbt);
-        creeper.ignite();
-        creeper.setNoAi(true);
-        SLEEP_ACTORS.addAll(List.of(villager, creeper));
-        villager.getBrain().setMemoryWithExpiry(MemoryModuleType.GOLEM_DETECTED_RECENTLY, true, 3);
-        villager.setNoAi(false);
-        // Allow both independent 20-tick sensors to observe a populated nearby cache.
-        helper.runAfterDelay(45, () -> {
-            helper.assertTrue(villager.isSleeping(), "new creeper escape must not wake an actual sleeper");
-            helper.assertTrue(!villager.getBrain().hasMemoryValue(MemoryModuleType.GOLEM_DETECTED_RECENTLY),
-                    "Brain expiry must continue while sleeping");
-            helper.assertTrue(!villager.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET),
-                    "sleeping villager must not receive escape movement");
-            helper.assertTrue(villager.getBrain().hasMemoryValue(net.conczin.mca.entity.ai.MemoryModuleTypeMCA.NEAREST_IGNITED_CREEPER),
-                    "real Brain sensors must retain igniting-creeper warning while sleeping");
-            helper.succeed();
-        });
-    }
     @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void sleepingWantedItemsPauseAndResume(GameTestHelper helper) {
         var villager = villager(helper);

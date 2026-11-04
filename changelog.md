@@ -27,6 +27,7 @@
 
 * Villagers now keep useful routes when possible, retry stalled destinations, and recover better during long walks.
 * Improved movement around beds, stairs, ladders, doors, fence gates, walls, and between floors.
+* Villagers following a player can hold their position on a ladder when they reach them.
 * Improved pathfinding on slabs, snow layers and other partial-height blocks, with safer clearance checks under low ceilings and around open trapdoors.
 * Villagers can open hand-openable Dramatic Doors and doors included in Dramatic Doors' mob-interaction tags, including tall and short variants.
 * Added `villagersInteractWithAnyDoor` to optionally let villagers operate all vanilla-style doors instead of only mob-interactable ones.
@@ -46,6 +47,7 @@
   * Work, chores, rest, follow/stay orders, and danger take priority over ambient mourning.
   * Mourning prefers villagers who have not mourned recently and only checks occupied graves in loaded areas.
   * Close family members can still mourn together at the deceased villager's grave.
+  * Villagers look for another place to stand when their preferred spot at a grave is blocked.
   * Villagers stop ambient mourning visits when the grave cannot be reached, allowing them to return to other activities.
   * Mourning flowers no longer replace a villager's real equipment, including when loading older saves.
 
@@ -65,6 +67,7 @@
 
 ## Combat
 
+* Crossbow archers aim for half a second after loading instead of waiting an additional random one to two seconds. Quick Charge still speeds up loading.
 * Improved archer movement and aiming when approaching, holding position, keeping distance, repositioning, or retreating.
 * Archers lead moving targets and check the arrow's path before shooting, including shots uphill and downhill.
 * Archers can seek a clear shot around ledges and climb accessible steps out of depressions instead of waiting for the enemy to move out of range.
@@ -85,6 +88,8 @@
 * Guards and archers keep their weapons and armour while peacefully following a player.
 * MCA archer arrows can pass through villagers and iron golems. This is controlled by `archerArrowsIgnoreVillagers`.
 * Guards can spot visible threats from farther away.
+* Guards can stay focused on a current fight when another villager raises an alarm.
+* Following archers pause their route to fight and remember who they were following.
 * Guards can still go to bed when enemies are far away, while responding to nearby threats.
 
 ## Family Tree, ChatAI, Destiny, and villager tools

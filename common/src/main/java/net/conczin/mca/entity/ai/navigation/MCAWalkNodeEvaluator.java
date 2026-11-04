@@ -134,7 +134,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             Node supportedStart = this.getStartNode(mobPos.above());
             AABB supportedBox = getMobBoxAt(supportedStart);
             double riseToSurface = supportedBox.minY - FLOOR_EPSILON - startBox.minY;
-            if (riseToSurface >= -RAISED_START_EPSILON && riseToSurface <= this.getMobJumpHeight()
+            if (riseToSurface >= -RAISED_START_EPSILON && riseToSurface <= PathNodeGeometry.jumpHeight(this.mob)
                     && supportedStart.costMalus >= 0.0F && hasBlockClearance(supportedStart)
                     && canSweepTo(startBox, supportedBox, this.currentContext.level())) {
                 return supportedStart;

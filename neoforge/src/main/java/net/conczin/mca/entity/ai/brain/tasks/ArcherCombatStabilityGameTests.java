@@ -6,6 +6,7 @@ import net.conczin.mca.entity.ai.RangedWeaponHelper;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.registry.ProfessionsMCA;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -22,6 +23,8 @@ import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.entity.schedule.ScheduleBuilder;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.CrossbowItem;
+import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -782,6 +785,60 @@ public final class ArcherCombatStabilityGameTests {
         helper.assertTrue(RangedWeaponHelper.canShootBowFrom(f.archer(), f.archer().position(), f.target()),
                 "friendly entity occluded the nominal block-only trajectory");
         helper.succeed();
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 160)
+    public static void crossbowRepeatsShotsAfterShortAim(GameTestHelper helper) {
+        assertCrossbowShotTiming(helper, 0, 25);
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 100)
+    public static void quickChargeCrossbowKeepsShortAim(GameTestHelper helper) {
+        assertCrossbowShotTiming(helper, 3, 10);
+    }
+
+    private static void assertCrossbowShotTiming(GameTestHelper helper, int quickCharge, int chargeTicks) {
+        Fixture f = fixture(helper, true);
+        f.target().absMoveTo(f.archer().getX() + 7, f.archer().getY(), f.archer().getZ());
+        var weapon = Items.CROSSBOW.getDefaultInstance();
+        if (quickCharge > 0) {
+            weapon.enchant(helper.getLevel().registryAccess().lookupOrThrow(Registries.ENCHANTMENT)
+                    .getOrThrow(Enchantments.QUICK_CHARGE), quickCharge);
+        }
+        f.archer().setItemSlot(EquipmentSlot.MAINHAND, weapon);
+        f.archer().getBrain().setMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE, RangedCombatState.HOLD);
+        f.archer().getBrain().setMemory(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES,
+                new net.minecraft.world.entity.ai.memory.NearestVisibleLivingEntities(f.archer(), List.of(f.target())));
+        ExtendedCrossbowAttackTask<VillagerEntityMCA, Zombie> crossbow = new ExtendedCrossbowAttackTask<>();
+        helper.assertTrue(crossbow.tryStart(helper.getLevel(), f.archer(), f.now()),
+                "fixture could not start crossbow combat");
+        long[] loadedAt = {-1};
+        int[] shots = {0};
+        helper.onEachTick(() -> {
+            boolean loadedBefore = CrossbowItem.isCharged(weapon);
+            int usingTicks = f.archer().getTicksUsingItem();
+            long now = helper.getLevel().getGameTime();
+            crossbow.tickOrStop(helper.getLevel(), f.archer(), now);
+            boolean loadedAfter = CrossbowItem.isCharged(weapon);
+            if (!loadedBefore && loadedAfter) {
+                helper.assertTrue(usingTicks == chargeTicks,
+                        "crossbow changed its normal loading duration: " + usingTicks + " ticks");
+                loadedAt[0] = now;
+            } else if (loadedBefore && !loadedAfter) {
+                long aimTicks = now - loadedAt[0];
+                helper.assertTrue(aimTicks >= 10 && aimTicks <= 12,
+                        "crossbow fired outside its half-second aiming window: " + aimTicks + " ticks");
+                helper.assertTrue(!helper.getLevel().getEntitiesOfClass(AbstractArrow.class,
+                                f.archer().getBoundingBox().inflate(2),
+                                arrow -> arrow.getOwner() == f.archer() && arrow.tickCount == 0).isEmpty(),
+                        "crossbow consumed its loaded arrow without firing a projectile");
+                if (++shots[0] == 2) helper.succeed();
+            }
+            if (loadedAfter) {
+                helper.assertTrue(now - loadedAt[0] <= 12,
+                        "loaded crossbow waited longer than half a second before firing");
+            }
+        });
     }
 
     private static Fixture fixture(GameTestHelper helper, boolean manualMovement) {

@@ -11,6 +11,8 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.CrossbowAttackMob;
 
 public final class ExtendedCrossbowAttackTask<E extends Mob & CrossbowAttackMob, T extends LivingEntity> extends CrossbowAttack<E, T> {
+    private static final int AIM_TICKS = 10;
+
     @Override
     protected boolean checkExtraStartConditions(ServerLevel level, E entity) {
         LivingEntity target = getAttackTarget(entity);
@@ -44,7 +46,11 @@ public final class ExtendedCrossbowAttackTask<E extends Mob & CrossbowAttackMob,
             return;
         }
 
+        CrossbowState previousState = this.crossbowState;
         super.crossbowAttack(entity, target);
+        if (previousState == CrossbowState.CHARGING && this.crossbowState == CrossbowState.CHARGED) {
+            this.attackDelay = AIM_TICKS;
+        }
     }
 
     @Override

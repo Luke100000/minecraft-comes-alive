@@ -5,6 +5,11 @@ import net.minecraft.world.entity.FlyingMob;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.ai.navigation.FlyingPathNavigation;
+import net.minecraft.world.entity.ambient.Bat;
+import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
+import net.minecraft.world.entity.monster.Blaze;
+import net.minecraft.world.entity.monster.Vex;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.HitResult;
@@ -163,7 +168,10 @@ public final class RangedWeaponHelper {
 
     public static boolean isFlyingTargetAboveRange(Mob shooter, LivingEntity target, double attackRangeSquared) {
         double height = target.getY() - shooter.getY();
-        return attackRangeSquared > 0 && target instanceof FlyingMob
+        boolean flying = target instanceof FlyingMob || target instanceof Bat || target instanceof Blaze
+                || target instanceof Vex || target instanceof EnderDragon
+                || target instanceof Mob mob && mob.getNavigation() instanceof FlyingPathNavigation;
+        return attackRangeSquared > 0 && flying
                 && height > 0 && height * height > attackRangeSquared;
     }
 

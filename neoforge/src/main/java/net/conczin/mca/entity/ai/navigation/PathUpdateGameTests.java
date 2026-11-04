@@ -151,6 +151,14 @@ public final class PathUpdateGameTests {
         helper.assertTrue(villager.getNavigation().moveTo(activePath, 0), "fixture did not activate its route");
         helper.runAfterDelay(21, () -> {
             try {
+                // Other fixtures can trigger a real recomputation while this test
+                // waits for the navigator cooldown. Clear it before restoring the
+                // intended path: vanilla compares node lists, not reachability.
+                villager.getNavigation().stop();
+                helper.assertTrue(villager.getNavigation().moveTo(activePath, 0)
+                                && villager.getNavigation().getPath() == activePath
+                                && activePath.canReach() != partial,
+                        "fixture lost its intended reachable or partial route");
                 var initial = PathRequestDiagnostics.recomputeSnapshot(villager);
                 helper.getLevel().setBlock(changed, after, 3);
                 var updated = PathRequestDiagnostics.recomputeSnapshot(villager);

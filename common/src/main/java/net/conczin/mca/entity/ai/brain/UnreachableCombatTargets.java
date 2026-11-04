@@ -20,10 +20,14 @@ public final class UnreachableCombatTargets {
 
     public static boolean contains(VillagerEntityMCA guard, LivingEntity target) {
         long now = guard.level().getGameTime();
-        return guard.getBrain().getMemoryInternal(MemoryModuleTypeMCA.UNREACHABLE_COMBAT_TARGETS).orElse(List.of()).stream()
-                .anyMatch(failure -> failure.retryAt() > now && failure.target().equals(target.getUUID())
-                        && failure.targetPosition().distanceToSqr(target.position()) < 4.0
-                        && failure.guardPosition().distanceToSqr(guard.position()) < 64.0);
+        for (Failure failure : guard.getBrain().getMemoryInternal(MemoryModuleTypeMCA.UNREACHABLE_COMBAT_TARGETS).orElse(List.of())) {
+            if (failure.retryAt() > now && failure.target().equals(target.getUUID())
+                    && failure.targetPosition().distanceToSqr(target.position()) < 4.0
+                    && failure.guardPosition().distanceToSqr(guard.position()) < 64.0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static void remember(VillagerEntityMCA guard, LivingEntity target, long now) {

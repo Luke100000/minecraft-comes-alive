@@ -124,6 +124,9 @@ public final class ArcherRetreatSafetyGameTests {
     @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 190)
     public static void criticalPanicRetainsCombatEquipmentPastRefreshCooldown(GameTestHelper helper) {
         Arena arena = criticalFixture(helper);
+        // Keep native movement active while the attacker remains in the tested range.
+        arena.archer.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(0.005D);
+        arena.skeletonSpeed = 0.005D;
         arena.tick(() -> {
             if (helper.getTick() == 100) arena.arrowHit();
             if (helper.getTick() == 150) {
