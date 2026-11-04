@@ -125,17 +125,18 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
 
         BlockPos mobPos = this.mob.blockPosition();
         AABB startBox = this.mob.getBoundingBox();
-        if ((selectedStart.type == PathType.BLOCKED
-                || selectedStart.type == PathType.TRAPDOOR
-                || selectedStart.type == PathType.ON_TOP_OF_TRAPDOOR)
-                && selectedStart.asBlockPos().equals(mobPos)
+        if (selectedStart.asBlockPos().equals(mobPos)
                 && startBox.minY > mobPos.getY() + RAISED_START_EPSILON
-                && Math.abs(this.getFloorLevel(mobPos.above()) - startBox.minY) < RAISED_START_EPSILON) {
-            // Rounding can put the start inside a low support, such as an extinguished
-            // campfire or closed trapdoor. The lower floor rejects real exits and
-            // leaves movement aiming beneath the feet. Start on the actual surface.
+                && !hasBlockClearance(selectedStart)) {
+            // A blocked start can be on a partial surface or inside a hollow shape.
+            // Normalize to its top only when the live body can rise there; movement
+            // already uses the same surface height and vanilla's collision-triggered jump.
             Node supportedStart = this.getStartNode(mobPos.above());
-            if (supportedStart.costMalus >= 0.0F && hasBlockClearance(supportedStart)) {
+            AABB supportedBox = getMobBoxAt(supportedStart);
+            double riseToSurface = supportedBox.minY - FLOOR_EPSILON - startBox.minY;
+            if (riseToSurface >= -RAISED_START_EPSILON && riseToSurface <= this.getMobJumpHeight()
+                    && supportedStart.costMalus >= 0.0F && hasBlockClearance(supportedStart)
+                    && canSweepTo(startBox, supportedBox, this.currentContext.level())) {
                 return supportedStart;
             }
         }
@@ -483,10 +484,30 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         // Unlike a walking node, a suspended climb node has no supporting floor:
         // the mob's feet must actually reach this node's Y, not the last ground
         // surface reported by getFloorLevel below it.
-        if (!node.closed && hasClimbableBodyClearance(node) && nodeCount < nodes.length) {
+        if (!node.closed && nodeCount < nodes.length && hasClimbableBodyClearance(node)) {
+            AABB body = PathNodeGeometry.bodyAt(this.mob, PathNodeGeometry.climbingPosition(pos));
+            if (bodyTouchesFire(body)) {
+                float malus = this.mob.getPathfindingMalus(PathType.FIRE);
+                if (malus < 0.0F) return nodeCount;
+                node.type = PathType.FIRE;
+                node.costMalus = Math.max(node.costMalus, malus);
+            }
             nodes[nodeCount++] = node;
         }
         return nodeCount;
+    }
+
+    private boolean bodyTouchesFire(AABB body) {
+        // Read raw occupied cells: walking path types also inspect supporting and
+        // neighboring blocks, which can be safe below a suspended climber.
+        for (int x = floorMin(body.minX); x <= floorMax(body.maxX); x++) {
+            for (int y = floorMin(body.minY); y <= floorMax(body.maxY); y++) {
+                for (int z = floorMin(body.minZ); z <= floorMax(body.maxZ); z++) {
+                    if (this.currentContext.getPathTypeFromState(x, y, z) == PathType.FIRE) return true;
+                }
+            }
+        }
+        return false;
     }
 
     private boolean hasClimbableBodyClearance(Node node) {

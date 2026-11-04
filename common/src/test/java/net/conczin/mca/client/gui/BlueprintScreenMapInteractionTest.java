@@ -227,12 +227,30 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
+    void scanMessagesProjectOnlyThePlansActionAndTarget() {
+        RoomScanPlan[] plans = {
+                RoomScanPlan.addBuilding(BlockPos.ZERO),
+                RoomScanPlan.addRoom(7, 3, BlockPos.ZERO),
+                RoomScanPlan.updateRoom(room(42), BlockPos.ZERO),
+                RoomScanPlan.attachment(91, -1, BlockPos.ZERO, BlockPos.ZERO)
+        };
+        var actions = new ReportBuildingMessage.Action[]{ReportBuildingMessage.Action.ADD_BUILDING,
+                ReportBuildingMessage.Action.SCAN_ROOM, ReportBuildingMessage.Action.SCAN_ROOM,
+                ReportBuildingMessage.Action.ADD_ATTACHMENT};
+        int[] targets = {-1, -1, 42, 91};
+        for (int i = 0; i < plans.length; i++) {
+            var message = BlueprintScreen.structureScanMessage(plans[i]);
+            assertEquals(actions[i], message.action());
+            assertEquals(targets[i], message.expectedTargetId());
+        }
+    }
+
+    @Test
     void registeredRoomScanCarriesExpectedRoomId() {
         Building room = room(42);
         RoomScanPlan plan = RoomScanPlan.updateRoom(room, BlockPos.ZERO);
 
-        ReportBuildingMessage message = BlueprintScreen.structureScanMessage(
-                Village.RoomScanMode.UPDATE_ROOM, plan);
+        ReportBuildingMessage message = BlueprintScreen.structureScanMessage(plan);
 
         assertEquals(ReportBuildingMessage.Action.SCAN_ROOM, message.action());
         assertEquals(42, message.expectedTargetId());
@@ -295,7 +313,7 @@ class BlueprintScreenMapInteractionTest {
             assertEquals(Component.translatable(plan.hasProspectiveFloor() && floorNumber < 0
                     ? "gui.blueprint.addBasement" : "gui.blueprint.addFloor"), button.getMessage());
             assertEquals(ReportBuildingMessage.Action.ADD_ATTACHMENT,
-                    BlueprintScreen.structureScanMessage(plan.mode(), plan).action());
+                    BlueprintScreen.structureScanMessage(plan).action());
         }
     }
 

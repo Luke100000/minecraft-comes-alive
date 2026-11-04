@@ -10,6 +10,8 @@ import net.conczin.mca.entity.ai.PathingBlockInteraction;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.brain.tasks.LocalInsideBrownianWalk;
+import net.conczin.mca.entity.ai.brain.tasks.WanderOrTeleportToTargetTask;
+import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.registry.BlocksMCA;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -19,6 +21,8 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.behavior.InsideBrownianWalk;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -43,6 +47,7 @@ import net.conczin.mca.neoforge.gametest.PrefixGameTestTemplate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath;
@@ -52,8 +57,121 @@ import static net.conczin.mca.gametest.GameTestTerrain.whenSkyLightBlocked;
 @PrefixGameTestTemplate(false)
 public final class MCAGroundPathNavigationGameTests {
     private static final Set<ChunkPos> PROGRESSIVE_FORCED_CHUNKS = new HashSet<>();
+    private static final Set<ChunkPos> REPLAN_FORCED_CHUNKS = new HashSet<>();
+    private static final Set<VillagerEntityMCA> REPLAN_ACTORS = new HashSet<>();
 
     private MCAGroundPathNavigationGameTests() {
+    }
+
+    @AfterBatch(batch = "mca_semantic_replan_admission")
+    public static void cleanupSemanticReplans(ServerLevel level) {
+        REPLAN_ACTORS.forEach(VillagerEntityMCA::discard);
+        REPLAN_ACTORS.clear();
+        REPLAN_FORCED_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x(), chunk.z(), false));
+        REPLAN_FORCED_CHUNKS.clear();
+    }
+
+    @GameTest(batch = "mca_semantic_replan_admission", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 80)
+    public static void recomputedCombatEscapeRejectsUnsafeNativeRoute(GameTestHelper helper) {
+        VillagerEntityMCA villager = prepareSemanticReplan(helper);
+        BlockPos destination = villager.blockPosition().west(6);
+        boolean[] safe = {true};
+        CombatEscapePositionTracker target = semanticReplanTarget(destination,
+                List.of(Set.of(destination)), () -> safe[0]);
+        startSemanticReplan(helper, villager, target);
+
+        helper.runAfterDelay(21, () -> {
+            safe[0] = false;
+            villager.getNavigation().recomputePath();
+            helper.assertTrue(villager.getNavigation().getPath() == null,
+                    "native recomputation admitted an escape route rejected by its target: "
+                            + villager.getNavigation().getPath());
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "mca_semantic_replan_admission", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 80)
+    public static void recomputedCombatEscapePreservesTacticalTierPreference(GameTestHelper helper) {
+        VillagerEntityMCA villager = prepareSemanticReplan(helper);
+        BlockPos preferred = villager.blockPosition().west(7);
+        BlockPos shorter = villager.blockPosition().west(3);
+        CombatEscapePositionTracker target = semanticReplanTarget(preferred,
+                List.of(Set.of(preferred), Set.of(shorter)), () -> true);
+        startSemanticReplan(helper, villager, target);
+        helper.assertTrue(villager.getNavigation().getPath().getTarget().equals(preferred),
+                "initial semantic search did not honor its tactical preference");
+
+        helper.runAfterDelay(21, () -> {
+            villager.getNavigation().recomputePath();
+            Path replanned = villager.getNavigation().getPath();
+            helper.assertTrue(replanned != null && replanned.getTarget().equals(preferred),
+                    "native recomputation replaced tactical preference with the shortest endpoint: "
+                            + (replanned == null ? null : replanned.getTarget()));
+            helper.succeed();
+        });
+    }
+
+    private static VillagerEntityMCA prepareSemanticReplan(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(16, 1, 16));
+        ChunkPos min = ChunkPos.containing(start.offset(-10, 0, -10));
+        ChunkPos max = ChunkPos.containing(start.offset(10, 0, 10));
+        for (int x = min.x(); x <= max.x(); x++) {
+            for (int z = min.z(); z <= max.z(); z++) {
+                ChunkPos chunk = new ChunkPos(x, z);
+                if (!helper.getLevel().getForceLoadedChunks().contains(chunk.pack())) {
+                    REPLAN_FORCED_CHUNKS.add(chunk);
+                }
+            }
+        }
+        prepareFlatArea(helper, start, 10, 3);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel()).withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(start)).spawn(EntitySpawnReason.STRUCTURE);
+        REPLAN_ACTORS.add(villager);
+        // Exercise native sink/recompute admission while keeping the original route unconsumed.
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+        return villager;
+    }
+
+    private static void startSemanticReplan(GameTestHelper helper, VillagerEntityMCA villager,
+                                            CombatEscapePositionTracker target) {
+        villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.9F, 0));
+        WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
+        helper.assertTrue(sink.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime()),
+                "semantic recomputation fixture could not start its initially accepted native path");
+        helper.assertTrue(villager.getNavigation().getPath() != null
+                        && villager.getNavigation().getPath().canReach(),
+                "semantic recomputation fixture must begin with a reachable path");
+    }
+
+    private static CombatEscapePositionTracker semanticReplanTarget(BlockPos preferred,
+            List<Set<BlockPos>> tiers, BooleanSupplier safe) {
+        Set<BlockPos> targets = new HashSet<>();
+        tiers.forEach(targets::addAll);
+        return new CombatEscapePositionTracker() {
+            @Override
+            public Set<BlockPos> getPathTargets(Mob mob) { return targets; }
+
+            @Override
+            public List<Set<BlockPos>> getRankedPathTargets(Mob mob) { return tiers; }
+
+            @Override
+            public boolean isPathSafe(Mob mob, Path path) { return safe.getAsBoolean(); }
+
+            @Override
+            public boolean isReached(Mob mob, int closeEnoughDistance) { return false; }
+
+            @Override
+            public Vec3 currentPosition() { return Vec3.atBottomCenterOf(preferred); }
+
+            @Override
+            public BlockPos currentBlockPosition() { return preferred; }
+
+            @Override
+            public boolean isVisibleBy(LivingEntity entity) { return true; }
+        };
     }
 
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 40)
@@ -1009,14 +1127,17 @@ public final class MCAGroundPathNavigationGameTests {
         // Randomly small/weak villagers can legitimately squeeze beside it.
         villager.getTraits().removeTrait(Traits.WEAK);
         villager.getTraits().removeTrait(Traits.DWARFISM);
+          villager.getTraits().removeTrait(Traits.TOUGH);
+          villager.getGenetics().setGene(Genetics.SIZE, 0.5F);
         villager.getGenetics().setGene(Genetics.WIDTH, 1.0F);
         villager.refreshDimensions();
         villager.setNoAi(true);
         villager.setOnGround(true);
 
-        helper.assertTrue(helper.getLevel().getBlockState(grave).is(BlocksMCA.CROSS_HEADSTONE)
-                        && villager.getBbWidth() > 0.55F,
-                "collision fixture lost its cross headstone or spawned a narrow resident");
+        helper.assertTrue(!helper.getLevel().noBlockCollision(villager,
+                        villager.getBoundingBox().move(Vec3.atBottomCenterOf(grave)
+                                .subtract(villager.position()).add(0.0D, 0.001D, 0.0D))),
+                "fixture villager does not intersect the cross headstone; width=" + villager.getBbWidth());
 
         Path path = villager.getNavigation().createPath(target, 0);
 
@@ -1956,10 +2077,7 @@ public final class MCAGroundPathNavigationGameTests {
                     "sealed target was unexpectedly reachable");
             helper.assertTrue(ordinaryNodes > 1_024,
                     "fixture did not exceed the small extended search cap: " + ordinaryNodes);
-            // A different path horizon can change a few frontier expansions
-            // without reducing the search budget. Reject meaningful regressions,
-            // not small path-graph ordering differences (e.g. 1535 vs 1538).
-            helper.assertTrue(extendedNodes + Math.max(16, ordinaryNodes / 100) >= ordinaryNodes,
+            helper.assertTrue(extendedNodes >= ordinaryNodes,
                     "extended search expanded fewer nodes than ordinary: " + extendedNodes + " vs " + ordinaryNodes);
         } finally {
             config.villagerPathfindingDistance = originalPathfindingDistance;

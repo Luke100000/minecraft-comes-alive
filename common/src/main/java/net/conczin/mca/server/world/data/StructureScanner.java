@@ -109,11 +109,13 @@ final class StructureScanner {
         SelectedFloorScanner.Result selected = observation.selected(seed);
         Result validated = resultFromObservedFloor(source, selected, existing,
                 structure.getId(), structure.getLogicalBuildingId());
-        if (validated.result() != Building.validationResult.SUCCESS) return validated;
+        if (validated.result() != Building.validationResult.SUCCESS) {
+            return new Result(validated.result(), validated.source(), validated.scan(), seed);
+        }
         // The Floor's traversal anchor and the requested Room cell have different roles.
         BlockPos interactionCell = selected.floor().interactionCellAt(
                 source.getX(), source.getY(), source.getZ()).map(FloorGeometry.Cell::feet).orElse(validated.source());
-        return new Result(Building.validationResult.SUCCESS, interactionCell, selected);
+        return new Result(Building.validationResult.SUCCESS, interactionCell, selected, seed);
     }
 
     private static Optional<SelectedFloorScanner.Result> resolveAttachmentSeed(
@@ -378,7 +380,16 @@ final class StructureScanner {
 
     record Result(Building.validationResult result,
                   BlockPos source,
-                  SelectedFloorScanner.Result scan) {
+                  SelectedFloorScanner.Result scan,
+                  BlockPos discoveryInput) {
+        Result {
+            discoveryInput = discoveryInput == null ? null : discoveryInput.immutable();
+        }
+
+        Result(Building.validationResult result, BlockPos source, SelectedFloorScanner.Result scan) {
+            this(result, source, scan, null);
+        }
+
         FloorGeometry scannedFloor() {
             return scan == null ? null : scan.floor();
         }

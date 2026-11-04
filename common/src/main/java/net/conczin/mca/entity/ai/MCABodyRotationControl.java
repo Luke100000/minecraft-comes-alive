@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai;
 
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.control.BodyRotationControl;
+import net.minecraft.util.Mth;
 
 import java.util.function.BooleanSupplier;
 
@@ -20,10 +21,19 @@ public class MCABodyRotationControl extends BodyRotationControl {
 
     @Override
     public void clientTick() {
+        // Combat stance owns presentation through both draw and cooldown.
+        // Native navigation retains movement yaw, path following and jumping.
         if (this.faceLookDirection.getAsBoolean()) {
-            this.mob.yBodyRot = this.mob.yHeadRot;
+            this.mob.yBodyRot = Mth.approachDegrees(this.mob.yBodyRot, this.mob.yHeadRot, 30.0F);
             return;
         }
+        float previousBody = this.mob.yBodyRot;
         super.clientTick();
+        if (RangedWeaponHelper.isHoldingSupportedWeapon(this.mob)) {
+            // Releasing combat presentation must not snap a retreating archer
+            // straight from the enemy bearing to the opposite travel bearing.
+            this.mob.yBodyRot = Mth.approachDegrees(previousBody, this.mob.yBodyRot, 30.0F);
+            this.mob.yHeadRot = Mth.rotateIfNecessary(this.mob.yHeadRot, this.mob.yBodyRot, this.mob.getMaxHeadYRot());
+        }
     }
 }

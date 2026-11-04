@@ -73,6 +73,7 @@ public final class AutonomousPathfindingGameTests {
     private static final String BOUNDED_DETOUR_BATCH = "mca_autonomous_bounded_detour";
     private static final String LONG_CORRIDOR_BATCH = "mca_autonomous_long_corridor";
     private static final String FLOWING_WATER_BATCH = "mca_autonomous_flowing_water";
+    private static final String SHELF_HOME_BATCH = "mca_autonomous_shelf_home";
     private static final Set<VillagerEntityMCA> VILLAGERS = new HashSet<>();
     private static final Map<BlockPos, BlockState> ORIGINAL_BLOCKS = new LinkedHashMap<>();
     private static final Set<ChunkPos> FORCED_CHUNKS = new HashSet<>();
@@ -135,6 +136,80 @@ public final class AutonomousPathfindingGameTests {
     }
 
     private AutonomousPathfindingGameTests() {
+    }
+
+    @GameTest(batch = SHELF_HOME_BATCH, templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 1_500)
+    public static void goHomeLeavesShelfBuildingForDistantBed(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(8, 1, 8));
+        BlockPos bed = start.east(70);
+        BlockPos center = start.east(34);
+        ServerLevel level = helper.getLevel();
+        rememberArea(level, center, 42);
+        prepareFlatArea(helper, center, 42, 3);
+        for (int i = -6; i <= 6; i++) {
+            for (int y = 0; y < 3; y++) {
+                level.setBlock(start.offset(i, y, -6), Blocks.QUARTZ_BLOCK.defaultBlockState(), 3);
+                level.setBlock(start.offset(i, y, 6), Blocks.QUARTZ_BLOCK.defaultBlockState(), 3);
+                level.setBlock(start.offset(6, y, i), Blocks.QUARTZ_BLOCK.defaultBlockState(), 3);
+                if (i != 0 || y == 2) {
+                    level.setBlock(start.offset(-6, y, i), Blocks.QUARTZ_BLOCK.defaultBlockState(), 3);
+                }
+            }
+        }
+        level.setBlock(start.offset(5, 0, 0), NavigationPhysicalSafetyGameTests.westFacingShelfState(), 3);
+        level.setBlock(start.offset(5, 1, 0), Blocks.FLOWERING_AZALEA_LEAVES.defaultBlockState(), 3);
+        level.setBlock(bed, Blocks.RED_BED.defaultBlockState()
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST)
+                .setValue(BlockStateProperties.BED_PART, net.minecraft.world.level.block.state.properties.BedPart.HEAD), 3);
+        level.setBlock(bed.west(), Blocks.RED_BED.defaultBlockState()
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST)
+                .setValue(BlockStateProperties.BED_PART, net.minecraft.world.level.block.state.properties.BedPart.FOOT), 3);
+
+        originalTeleportConfig = Config.getInstance().allowVillagerTeleporting;
+        Config.getInstance().allowVillagerTeleporting = false;
+        VillagerEntityMCA villager = spawnAutonomousVillager(helper, start, bed, 0.5F, false);
+        helper.assertTrue(villager.getNavigation().getMaxPathLength() >= 48.0F,
+                "ordinary navigation must retain the source branch's minimum search range");
+        @SuppressWarnings("unchecked")
+        Brain<VillagerEntityMCA> brain = (Brain<VillagerEntityMCA>) (Brain<?>) villager.getBrain();
+        brain.stopAll(level, villager);
+        brain.removeAllBehaviors();
+        GameTestBrain.addActivity(brain, Activity.CORE, 1, ImmutableList.of(new WanderOrTeleportToTargetTask()));
+        villager.moveTowardsPersistent(bed, 0.5F, 1);
+        boolean[] exited = {false};
+        int[] returns = {0};
+        boolean[] wasInside = {true};
+        boolean[] partialFlank = {false};
+        Vec3[] previous = {villager.position()};
+        long started = level.getGameTime();
+        helper.onEachTick(() -> {
+            long elapsed = level.getGameTime() - started;
+            Path current = villager.getNavigation().getPath();
+            partialFlank[0] |= current != null && !current.canReach()
+                    && ((MCAGroundPathNavigation) villager.getNavigation()).isTakingDetourTo(bed);
+            helper.assertTrue(villager.position().distanceTo(previous[0]) < 3.0D, "villager teleported");
+            previous[0] = villager.position();
+            boolean inside = Math.abs(villager.getX() - (start.getX() + 0.5D)) < 5.5D
+                    && Math.abs(villager.getZ() - (start.getZ() + 0.5D)) < 5.5D;
+            if (!inside) exited[0] = true;
+            if (inside && !wasInside[0]) returns[0]++;
+            wasInside[0] = inside;
+            if (villager.blockPosition().distManhattan(bed) <= 1) {
+                helper.assertTrue(exited[0], "villager reached home without leaving the building");
+                helper.assertTrue(partialFlank[0], "fixture did not exercise a partial flank route");
+                helper.assertTrue(returns[0] <= 1, "villager repeatedly returned to the building");
+                helper.succeed();
+            } else if (elapsed > 2 && !brain.hasMemoryValue(MemoryModuleType.WALK_TARGET)) {
+                helper.fail("Go Home target disappeared before arrival: pos=" + villager.position()
+                        + ", exited=" + exited[0] + ", returns=" + returns[0]);
+            } else if (elapsed >= 1_400L) {
+                helper.fail("Go Home did not reach the bed: pos=" + villager.position()
+                        + ", exited=" + exited[0] + ", returns=" + returns[0]
+                        + ", target=" + brain.getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                        + ", path=" + villager.getNavigation().getPath());
+            }
+        });
     }
 
     @GameTest(batch = FLOWING_WATER_BATCH, templateNamespace = "minecraft",
@@ -868,6 +943,11 @@ public final class AutonomousPathfindingGameTests {
 
     @AfterBatch(batch = FLOWING_WATER_BATCH)
     public static void cleanupFlowingWater(ServerLevel level) {
+        cleanup(level);
+    }
+
+    @AfterBatch(batch = SHELF_HOME_BATCH)
+    public static void cleanupShelfHome(ServerLevel level) {
         cleanup(level);
     }
 

@@ -11,6 +11,7 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
+import net.minecraft.world.entity.ai.behavior.EntityTracker;
 import net.minecraft.world.entity.ai.behavior.OneShot;
 import net.minecraft.world.entity.ai.behavior.SetWalkTargetFromBlockMemory;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -307,6 +308,7 @@ public final class ExtendedWalkTowardsTaskGameTests {
         BlockPos start = villager.blockPosition();
         BlockPos home = start.east(80);
         BlockPos finalApproach = home.west(2);
+        BlockPosTracker semanticFinalTarget = new BlockPosTracker(finalApproach);
         setHome(villager, home);
 
         OneShot<VillagerEntityMCA> task = ExtendedWalkTowardsTask.createWithFinalTarget(
@@ -316,7 +318,7 @@ public final class ExtendedWalkTowardsTaskGameTests {
                 TEST_TIMEOUT,
                 ignored -> false,
                 ignored -> { },
-                (world, entity, destination) -> Optional.of(new BlockPosTracker(finalApproach))
+                (world, entity, destination) -> Optional.of(semanticFinalTarget)
         );
         long gameTime = helper.getLevel().getGameTime();
         task.tryStart(helper.getLevel(), villager, gameTime);
@@ -335,8 +337,16 @@ public final class ExtendedWalkTowardsTaskGameTests {
                 .orElseThrow(() -> new AssertionError("semantic final target was not published after transit handoff"));
         helper.assertTrue(!(finalTarget.getTarget() instanceof PersistentPathTarget),
                 "semantic final target was replaced by persistent transit state");
+        helper.assertTrue(finalTarget.getTarget() == semanticFinalTarget,
+                "destination ownership replaced the resolver's semantic PositionTracker object");
         helper.assertTrue(finalTarget.getTarget().currentBlockPosition().equals(finalApproach),
                 "semantic final target did not retain its resolved approach position");
+
+        WalkTargetFailureMemory.record(villager, home, gameTime);
+        villager.setPos(Vec3.atBottomCenterOf(finalApproach));
+        task.tryStart(helper.getLevel(), villager, gameTime + 3L);
+        helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE).isEmpty(),
+                "reaching the owned semantic final target did not complete the journey and clear failure state");
 
         villager.discard();
         helper.succeed();
@@ -379,6 +389,70 @@ public final class ExtendedWalkTowardsTaskGameTests {
                 "real progress under the owned semantic final target retained stale failure age");
         villager.discard();
         helper.succeed();
+    }
+
+    @GameTest(batch = "mca_persistent_final_handoff", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void entityTrackedFinalArrivalClearsFailureWithoutFourBlocksOfMovement(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        BlockPos start = villager.blockPosition();
+        VillagerEntityMCA anchor = VillagerFactory.newVillager(helper.getLevel()).withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(start.east(2))).spawn(EntitySpawnReason.STRUCTURE);
+        anchor.setNoAi(true);
+        try {
+            BlockPos home = start.east(6);
+            setHome(villager, home);
+            OneShot<VillagerEntityMCA> task = ExtendedWalkTowardsTask.createWithFinalTarget(
+                    MemoryModuleType.HOME, 0.5F, 0, TEST_TIMEOUT, ignored -> false, ignored -> { },
+                    (world, entity, destination) -> Optional.of(new EntityTracker(anchor, false)));
+            long time = helper.getLevel().getGameTime();
+            task.tryStart(helper.getLevel(), villager, time);
+            helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                            .map(target -> target.getTarget() instanceof EntityTracker).orElse(false),
+                    "fixture did not publish its ordinary entity-tracked final target");
+            WalkTargetFailureMemory.record(villager, home, time - 100L);
+
+            // This short arrival cannot pass the producer's separate four-block progress threshold.
+            villager.setPos(anchor.position());
+            task.tryStart(helper.getLevel(), villager, time + 1L);
+            helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE).isEmpty(),
+                    "producer rejected an ordinary entity-tracked arrival that the movement sink accepts");
+            helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.HOME).isPresent(),
+                    "successful final arrival must retain HOME");
+            helper.succeed();
+        } finally {
+            anchor.discard();
+            villager.discard();
+        }
+    }
+
+    @GameTest(batch = "mca_persistent_final_handoff", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void entityTrackedFinalArrivalDoesNotRepublishMovement(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        BlockPos home = villager.blockPosition().east(6);
+        VillagerEntityMCA anchor = VillagerFactory.newVillager(helper.getLevel()).withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(villager.blockPosition().east(2))).spawn(EntitySpawnReason.STRUCTURE);
+        anchor.setNoAi(true);
+        try {
+            setHome(villager, home);
+            OneShot<VillagerEntityMCA> task = ExtendedWalkTowardsTask.createWithFinalTarget(
+                    MemoryModuleType.HOME, 0.5F, 0, TEST_TIMEOUT, ignored -> false, ignored -> { },
+                    (world, entity, destination) -> Optional.of(new EntityTracker(anchor, false)));
+            long time = helper.getLevel().getGameTime();
+            WalkTargetFailureMemory.record(villager, home, time - 100L);
+            villager.setPos(anchor.position());
+            task.tryStart(helper.getLevel(), villager, time);
+
+            helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty(),
+                    "producer republished movement after the resolved final target had already been reached");
+            helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE).isEmpty(),
+                    "arrival before target publication retained stale failure age");
+            helper.succeed();
+        } finally {
+            anchor.discard();
+            villager.discard();
+        }
     }
 
     @GameTest(batch = "mca_persistent_final_handoff", templateNamespace = "minecraft",

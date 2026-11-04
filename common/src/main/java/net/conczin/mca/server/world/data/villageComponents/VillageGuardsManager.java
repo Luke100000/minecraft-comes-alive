@@ -6,6 +6,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.registry.ProfessionsMCA;
 import net.conczin.mca.server.world.data.Village;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.npc.villager.VillagerProfession;
 
 import java.util.LinkedList;
@@ -19,20 +20,24 @@ public class VillageGuardsManager {
         this.village = village;
     }
 
-    public static EquipmentSet getGuardEquipmentForLevel(int level) {
+    public static EquipmentSet getEquipmentFor(InteractionHand dominantHand, EquipmentSet rightSet, EquipmentSet leftSet) {
+        return dominantHand == InteractionHand.OFF_HAND && leftSet != null ? leftSet : rightSet;
+    }
+
+    public static EquipmentSet getGuardEquipmentForLevel(int level, InteractionHand dominantHand) {
         EquipmentSet fallback = switch (Math.clamp(level, 0, 2)) {
             case 2 -> EquipmentSet.GUARD_2;
             case 1 -> EquipmentSet.GUARD_1;
-            default -> EquipmentSet.GUARD_0;
+            default -> getEquipmentFor(dominantHand, EquipmentSet.GUARD_0, EquipmentSet.GUARD_0_LEFT);
         };
         return getConfiguredEquipment(Config.getInstance().guardEquipment, level, fallback);
     }
 
-    public static EquipmentSet getArcherEquipmentForLevel(int level) {
+    public static EquipmentSet getArcherEquipmentForLevel(int level, InteractionHand dominantHand) {
         EquipmentSet fallback = switch (Math.clamp(level, 0, 2)) {
-            case 2 -> EquipmentSet.ARCHER_2;
-            case 1 -> EquipmentSet.ARCHER_1;
-            default -> EquipmentSet.ARCHER_0;
+            case 2 -> getEquipmentFor(dominantHand, EquipmentSet.ARCHER_2, EquipmentSet.ARCHER_2_LEFT);
+            case 1 -> getEquipmentFor(dominantHand, EquipmentSet.ARCHER_1, EquipmentSet.ARCHER_1_LEFT);
+            default -> getEquipmentFor(dominantHand, EquipmentSet.ARCHER_0, EquipmentSet.ARCHER_0_LEFT);
         };
         return getConfiguredEquipment(Config.getInstance().archerEquipment, level, fallback);
     }
@@ -67,12 +72,12 @@ public class VillageGuardsManager {
         }
     }
 
-    public EquipmentSet getGuardEquipment(VillagerProfession profession) {
+    public EquipmentSet getGuardEquipment(VillagerProfession profession, InteractionHand dominantHand) {
         int villageLevel = getVillageEquipmentLevel();
         if (profession == ProfessionsMCA.ARCHER) {
-            return getArcherEquipmentForLevel(villageLevel);
+            return getArcherEquipmentForLevel(villageLevel, dominantHand);
         } else {
-            return getGuardEquipmentForLevel(villageLevel);
+            return getGuardEquipmentForLevel(villageLevel, dominantHand);
         }
     }
 

@@ -60,6 +60,20 @@ import net.conczin.mca.server.world.data.ReportedFloorInteractionGameTests;
 import net.conczin.mca.server.world.data.ReportedStairHouseGameTests;
 import net.conczin.mca.server.world.data.VillageMourningGameTests;
 import net.conczin.mca.server.world.data.MourningFailureGameTests;
+import net.conczin.mca.entity.ai.brain.sensor.CreeperSafetyGameTests;
+import net.conczin.mca.entity.ai.brain.sensor.SleepingVillagerSensorGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ArcherTerrainCombatGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ArcherCombatStabilityGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ArcherLiveRegressionGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ArcherRetreatSafetyGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ArcherCombatPolicyGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.ShelterLookupGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.FollowTaskGameTests;
+import net.conczin.mca.entity.ai.navigation.HollowBlockNavigationGameTests;
+import net.conczin.mca.entity.ai.navigation.NavigationOutcomeGameTests;
+import net.conczin.mca.entity.ai.navigation.StairSteppingGameTests;
+import net.conczin.mca.entity.ai.navigation.PathUpdateGameTests;
+import net.conczin.mca.server.world.data.FloorBatchRefreshGameTests;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.FunctionGameTestInstance;
@@ -96,6 +110,20 @@ public final class McaGameTestRegistration {
     private static final Identifier LEGACY_AIR_TEMPLATE = Identifier.withDefaultNamespace("bastion/blocks/air");
     private static final Identifier ISOLATED_AIR_TEMPLATE = MCA.locate("ported_1_21_1/isolated_air");
     private static final List<Class<?>> TEST_CLASSES = List.of(
+            CreeperSafetyGameTests.class,
+            SleepingVillagerSensorGameTests.class,
+            ArcherTerrainCombatGameTests.class,
+            ArcherCombatStabilityGameTests.class,
+            ArcherLiveRegressionGameTests.class,
+            ArcherRetreatSafetyGameTests.class,
+            ArcherCombatPolicyGameTests.class,
+            ShelterLookupGameTests.class,
+            FollowTaskGameTests.class,
+            HollowBlockNavigationGameTests.class,
+            NavigationOutcomeGameTests.class,
+            StairSteppingGameTests.class,
+            PathUpdateGameTests.class,
+            FloorBatchRefreshGameTests.class,
             DestinyLocationResolverGameTests.class,
             TombstoneBlockGameTests.class,
             VillagerBedAlignmentGameTests.class,

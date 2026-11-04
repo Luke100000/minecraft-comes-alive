@@ -9,7 +9,6 @@ import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.behavior.OneShot;
 import net.minecraft.world.entity.ai.behavior.PositionTracker;
 import net.minecraft.world.entity.ai.behavior.declarative.BehaviorBuilder;
@@ -190,7 +189,7 @@ public final class ExtendedWalkTowardsTask {
             if (!ownedFinalTarget.destination().equals(destination)) {
                 return false;
             }
-            if (isReached(entity, currentTarget)) {
+            if (MultiTargetPositionTracker.isReached(entity, currentTarget.getTarget(), currentTarget.getCloseEnoughDist())) {
                 completeJourney(entity, retryGate, destination.pos());
             }
             return !(currentTarget.getTarget() instanceof PersistentPathTarget)
@@ -214,7 +213,7 @@ public final class ExtendedWalkTowardsTask {
         Optional<? extends PositionTracker> finalTarget = policy.finalTargetResolver().resolve(world, entity, destination);
         if (finalTarget.isPresent()) {
             PositionTracker tracker = finalTarget.orElseThrow();
-            return tracker instanceof MultiTargetPositionTracker multiTarget && multiTarget.isReached(entity, 0)
+            return MultiTargetPositionTracker.isReached(entity, tracker, 0)
                     ? null
                     : new DestinationOwnedWalkTarget(destinationMemory, destination, tracker, speed, 0);
         }
@@ -222,14 +221,6 @@ public final class ExtendedWalkTowardsTask {
                 ? null
                 : new DestinationOwnedWalkTarget(destinationMemory, destination,
                 new PersistentPathTarget(targetPos), speed, completionRange);
-    }
-
-    private static boolean isReached(VillagerEntityMCA entity, WalkTarget target) {
-        if (target.getTarget() instanceof MultiTargetPositionTracker multiTarget) {
-            return multiTarget.isReached(entity, target.getCloseEnoughDist());
-        }
-        return target.getTarget() instanceof BlockPosTracker tracker
-                && tracker.currentBlockPosition().distManhattan(entity.blockPosition()) <= target.getCloseEnoughDist();
     }
 
     private static void completeJourney(VillagerEntityMCA entity, WalkTargetRetryGate retryGate, BlockPos destination) {

@@ -511,6 +511,7 @@ public class BlueprintScreen extends ExtendedScreen {
             case "rules" -> renderRules(context);
         }
 
+        minecraft.gui.extractOverlayMessage(context, minecraft.getDeltaTracker());
     }
 
     private static ReportBuildingMessage.Action getStructureScanAction(Village.RoomScanMode mode) {
@@ -523,21 +524,21 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private void requestPrimaryStructureScan() {
         RoomScanPlan plan = getPlayerRoomScanPlan();
-        sendStructureScan(plan.mode(), plan);
+        sendStructureScan(plan);
     }
 
-    private void sendStructureScan(Village.RoomScanMode mode, RoomScanPlan plan) {
+    private void sendStructureScan(RoomScanPlan plan) {
         selectPlayerFloorOnNextVillageResponse = true;
-        Network.sendToServer(structureScanMessage(mode, plan));
+        Network.sendToServer(structureScanMessage(plan));
     }
 
-    static ReportBuildingMessage structureScanMessage(Village.RoomScanMode mode, RoomScanPlan plan) {
-        int expectedTargetId = switch (mode) {
+    static ReportBuildingMessage structureScanMessage(RoomScanPlan plan) {
+        int expectedTargetId = switch (plan.mode()) {
             case UPDATE_ROOM -> plan.currentRoom().map(Building::getId).orElse(-1);
             case ADD_ATTACHMENT -> plan.targetBuildingId();
             default -> -1;
         };
-        return new ReportBuildingMessage(getStructureScanAction(mode), null, expectedTargetId);
+        return new ReportBuildingMessage(getStructureScanAction(plan.mode()), null, expectedTargetId);
     }
 
     static Optional<ReportBuildingMessage> targetedEditMessage(ReportBuildingMessage.Action action,

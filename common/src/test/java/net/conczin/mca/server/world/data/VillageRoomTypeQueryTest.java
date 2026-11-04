@@ -2,6 +2,10 @@ package net.conczin.mca.server.world.data;
 
 import com.google.gson.JsonObject;
 import net.conczin.mca.resources.BuildingTypes;
+import net.conczin.mca.resources.Rank;
+import net.conczin.mca.resources.Tasks;
+import net.conczin.mca.resources.data.tasks.BlockingTask;
+import net.conczin.mca.resources.data.tasks.BuildingTask;
 import net.conczin.mca.resources.data.BuildingType;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
@@ -14,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -23,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class VillageRoomTypeQueryTest {
     private Map<String, BuildingType> previousTypes;
+    private Tasks previousTasks;
 
     @BeforeAll
     static void bootstrapMinecraft() {
@@ -32,6 +38,7 @@ class VillageRoomTypeQueryTest {
 
     @BeforeEach
     void installTypes() {
+        previousTasks = Tasks.getInstance();
         previousTypes = BuildingTypes.getInstance().getBuildingTypes();
         BuildingTypes.getInstance().setBuildingTypes(Map.of(
                 "house", type("house", 0, 0),
@@ -41,8 +48,87 @@ class VillageRoomTypeQueryTest {
     }
 
     @AfterEach
-    void restoreTypes() {
+    void restoreTypes() throws ReflectiveOperationException {
         BuildingTypes.getInstance().setBuildingTypes(previousTypes);
+        var instance = Tasks.class.getDeclaredField("INSTANCE");
+        instance.setAccessible(true);
+        instance.set(null, previousTasks);
+    }
+
+    @Test
+    void rankRequirementsClassifyInheritedRoomsOncePerEvaluation() {
+        PoiCountingRoom main = room(1, "house");
+        PoiCountingRoom child = room(2, "building");
+        Village village = village(main, child);
+        Tasks tasks = rankTasks();
+        tasks.tasks.put(Rank.MONARCH, List.of(new BuildingTask("armory"), new BuildingTask("building")));
+        main.poiReads = 0;
+
+        assertEquals(Rank.MONARCH, Tasks.getRank(village, null));
+        assertEquals(1, main.poiReads, "each building requirement reclassified the same main room");
+
+        child.setContributesToMain(false);
+        assertEquals(Rank.OUTLAW, Tasks.getRank(village, null), "next rank check reused stale room contributions");
+        child.setContributesToMain(true);
+        assertEquals(Rank.MONARCH, Tasks.getRank(village, null));
+        BuildingTypes.getInstance().setBuildingTypes(Map.of(
+                "house", type("house", 0, 0), "building", type("building", 0, 0),
+                "armory", type("armory", 10, 3)));
+        assertEquals(Rank.OUTLAW, Tasks.getRank(village, null), "next rank check ignored reloaded definitions");
+    }
+
+    @Test
+    void failedEarlierRequirementDoesNotClassifyRooms() {
+        PoiCountingRoom main = room(1, "house");
+        Village village = village(main, room(2, "building"));
+        Tasks tasks = rankTasks();
+        tasks.tasks.put(Rank.MONARCH, List.of(blockingTask(), new BuildingTask("armory")));
+        main.poiReads = 0;
+
+        assertEquals(Rank.OUTLAW, Tasks.getRank(village, null));
+        assertEquals(0, main.poiReads, "building classification ran before a failing prerequisite");
+    }
+
+    @Test
+    void rankRequirementsKeepGroupedSiteCompletionAndRoomSemantics() {
+        Map<String, BuildingType> types = new HashMap<>(BuildingTypes.getInstance().getBuildingTypes());
+        JsonObject grouped = new JsonObject();
+        grouped.addProperty("grouped", true);
+        JsonObject blocks = new JsonObject();
+        blocks.addProperty("minecraft:bell", 2);
+        grouped.add("blocks", blocks);
+        types.put("graveyard", new BuildingType("graveyard", grouped));
+        BuildingTypes.getInstance().setBuildingTypes(types);
+        PoiCountingRoom main = room(1, "graveyard");
+        main.setTypeForced(true);
+        Village village = village(main);
+        Tasks tasks = rankTasks();
+        tasks.tasks.put(Rank.MONARCH, List.of(new BuildingTask("graveyard")));
+        assertEquals(Rank.OUTLAW, Tasks.getRank(village, null), "a functional room satisfied a grouped requirement");
+
+        ExternalBuilding site = new ExternalBuilding(BlockPos.ZERO);
+        site.setId(20);
+        site.setType("graveyard");
+        site.addBlock(Blocks.BELL, new BlockPos(20, 64, 0));
+        village.registerExternalBuilding(site);
+        assertEquals(Rank.OUTLAW, Tasks.getRank(village, null), "an incomplete external site satisfied its requirement");
+        site.addBlock(Blocks.BELL, new BlockPos(21, 64, 0));
+        assertEquals(Rank.MONARCH, Tasks.getRank(village, null));
+        site.setType("armory");
+        tasks.tasks.put(Rank.MONARCH, List.of(new BuildingTask("armory")));
+        assertEquals(Rank.OUTLAW, Tasks.getRank(village, null), "an external site satisfied a functional-room requirement");
+    }
+
+    private static Tasks rankTasks() {
+        Tasks tasks = new Tasks();
+        for (Rank rank : Rank.values()) tasks.tasks.put(rank, List.of(blockingTask()));
+        return tasks;
+    }
+
+    private static BlockingTask blockingTask() {
+        JsonObject json = new JsonObject();
+        json.addProperty("id", "unmet");
+        return new BlockingTask(json);
     }
 
     @Test

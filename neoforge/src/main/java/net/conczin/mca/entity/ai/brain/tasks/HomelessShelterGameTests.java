@@ -772,7 +772,7 @@ public final class HomelessShelterGameTests {
                 "stroll selected the bed or its underlying support: " + target);
         helper.assertTrue(!helper.getLevel().canSeeSky(target) && villager.getNavigation().isStableDestination(target)
                         && state.getCollisionShape(helper.getLevel(), target).isEmpty(),
-                "stroll selected a support block instead of a covered standing position: " + target);
+                "stroll selected a support block instead of a covered standing position: " + target + "; state=" + state + ", support=" + support + ", sky=" + helper.getLevel().canSeeSky(target) + ", stable=" + villager.getNavigation().isStableDestination(target) + ", actor=" + villager.blockPosition());
     }
 
     private static void prepareStrollRoom(GameTestHelper helper, BlockPos center) {
@@ -951,6 +951,7 @@ public final class HomelessShelterGameTests {
         IndoorRoomCache.Room[] original = {null};
         IndoorRoomCache.Room[] openedRoof = {null};
         BlockPos roof = center.north().above(3);
+        List<BlockPos> breach = List.of(roof.west(), roof, roof.east());
         helper.runAfterDelay(10, () -> {
             if (registered) registerStrollHouse(helper, center);
             original[0] = cache.resolve(head).orElseThrow();
@@ -966,7 +967,7 @@ public final class HomelessShelterGameTests {
         helper.runAfterDelay(60, () -> {
             helper.assertTrue(cache.resolve(head).orElseThrow() == original[0],
                     "bed occupancy or door/gate movement unnecessarily rescanned the room");
-            level.setBlock(roof, Blocks.AIR.defaultBlockState(), 3);
+            breach.forEach(pos -> level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3));
         });
         helper.runAfterDelay(110, () -> {
             openedRoof[0] = cache.resolve(head).orElseThrow();
@@ -978,7 +979,7 @@ public final class HomelessShelterGameTests {
         helper.runAfterDelay(320, () -> {
             helper.assertTrue(cache.resolve(head).orElseThrow().floorCells().equals(openedRoof[0].floorCells()),
                     "unchanged roof opening altered the cached room on retry");
-            level.setBlock(roof, Blocks.STONE.defaultBlockState(), 3);
+            breach.forEach(pos -> level.setBlock(pos, Blocks.STONE.defaultBlockState(), 3));
         });
         helper.runAfterDelay(525, () -> {
             IndoorRoomCache.Room repaired = cache.resolve(head).orElseThrow();

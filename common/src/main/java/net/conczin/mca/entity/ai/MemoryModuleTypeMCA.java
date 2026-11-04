@@ -3,6 +3,7 @@ package net.conczin.mca.entity.ai;
 import com.mojang.serialization.Codec;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.brain.tasks.RangedCombatState;
+import net.conczin.mca.entity.ai.brain.UnreachableCombatTargets;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.resources.Identifier;
@@ -12,6 +13,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -22,6 +24,7 @@ public interface MemoryModuleTypeMCA {
     MemoryModuleType<Player> PLAYER_FOLLOWING = register("player_following_memory", Optional.empty());
     MemoryModuleType<Boolean> STAYING = register("staying_memory", Optional.of(Codec.BOOL));
     MemoryModuleType<LivingEntity> NEAREST_GUARD_ENEMY = register("nearest_guard_enemy", Optional.empty());
+    MemoryModuleType<LivingEntity> NEAREST_IGNITED_CREEPER = register("nearest_ignited_creeper", Optional.empty());
     MemoryModuleType<Boolean> WEARS_ARMOR = register("wears_armor", Optional.of(Codec.BOOL));
     MemoryModuleType<Integer> SMALL_BOUNTY = register("small_bounty", Optional.of(Codec.INT));
     MemoryModuleType<LivingEntity> HIT_BY_PLAYER = register("hit_by_player", Optional.empty());
@@ -36,6 +39,7 @@ public interface MemoryModuleTypeMCA {
     MemoryModuleType<ItemStack> MOURNING_FLOWER = register("mourning_flower", Optional.of(ItemStack.CODEC));
     MemoryModuleType<Boolean> FORCED_HOME = register("forced_home", Optional.of(Codec.BOOL));
     MemoryModuleType<RangedCombatState> RANGED_COMBAT_STATE = register("ranged_combat_state", Optional.empty());
+    MemoryModuleType<List<UnreachableCombatTargets.Failure>> UNREACHABLE_COMBAT_TARGETS = register("unreachable_combat_targets", Optional.empty());
     MemoryModuleType<GlobalPos> CANT_REACH_WALK_TARGET = register("cant_reach_walk_target", Optional.empty());
     MemoryModuleType<GlobalPos> SHELTER_BED = register("shelter_bed", Optional.empty());
 

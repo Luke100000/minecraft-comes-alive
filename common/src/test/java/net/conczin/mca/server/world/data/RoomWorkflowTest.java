@@ -76,7 +76,7 @@ class RoomWorkflowTest {
                 source,
                 new Building(source),
                 List.of("library", "music_store"),
-                null));
+                null, RoomScanPlan.addBuilding(source)));
 
         RoomWorkflow workflow = new RoomWorkflow(manager, null);
 
@@ -166,7 +166,7 @@ class RoomWorkflowTest {
                 source,
                 new Building(source),
                 types,
-                null);
+                null, RoomScanPlan.addBuilding(source));
     }
 
     private static final class StubManager extends VillageManager {

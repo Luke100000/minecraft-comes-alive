@@ -76,7 +76,7 @@ public final class SeekIndoorShelterTask extends EnterBuildingTask {
         var selected = villager.getBrain().getMemory(MemoryModuleTypeMCA.SHELTER_BED)
                 .filter(bed -> bed.dimension().equals(level.dimension())).map(GlobalPos::pos);
         if (selected.isPresent()) {
-            var room = cache.resolve(selected.orElseThrow());
+            var room = cache.resolveRoom(selected.orElseThrow(), villager.blockPosition());
             if (room.isPresent() && room.orElseThrow().floorCells().contains(villager.blockPosition())) return room;
         }
         var beds = Stream.concat(selected.stream(), nearbyBeds(level, villager)).distinct().toList();

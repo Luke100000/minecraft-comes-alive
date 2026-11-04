@@ -106,11 +106,11 @@ final class FloorGeometry {
     }
 
     int maxPhysicalCeilingY() {
-        return cells.stream().mapToInt(Cell::ceilingY).max().orElse(anchorY() + 2);
+        return cells.stream().mapToInt(Cell::ceilingY).max().orElse(2);
     }
 
     int minFeetY() {
-        return cells.stream().mapToInt(cell -> cell.feet().getY()).min().orElse(anchorY());
+        return cells.stream().mapToInt(cell -> cell.feet().getY()).min().orElse(0);
     }
 
     static Bounds bounds(Collection<Cell> cells, int minYOffset) {
