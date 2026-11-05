@@ -38,6 +38,7 @@ import net.conczin.mca.entity.ai.brain.tasks.ValidateNearbyPoiGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.WanderOrTeleportToTargetTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.AbstractChoreTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.ChoppingTaskGameTests;
+import net.conczin.mca.entity.ai.brain.tasks.chore.ChoreCombatHandoffGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.ChorePathfindingGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.FishingTaskGameTests;
 import net.conczin.mca.entity.ai.brain.tasks.chore.FishingSiteGameTests;
@@ -123,6 +124,7 @@ public final class McaGameTestsRegistration {
             WanderOrTeleportToTargetTaskGameTests.class,
             AbstractChoreTaskGameTests.class,
             ChoppingTaskGameTests.class,
+            ChoreCombatHandoffGameTests.class,
             ChorePathfindingGameTests.class,
             FishingTaskGameTests.class,
             FishingSiteGameTests.class,

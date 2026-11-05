@@ -412,6 +412,7 @@ public class FishingTask extends AbstractChoreTask {
     private boolean equipFishingRod(VillagerEntityMCA villager) {
         ItemStack heldStack = villager.getItemInHand(villager.getDominantHand());
         if (Chore.FISH.matchesTool(heldStack)) {
+            rememberChoreHand(heldStack);
             return true;
         }
 
@@ -421,7 +422,9 @@ public class FishingTask extends AbstractChoreTask {
             return false;
         }
 
-        villager.setItemInHand(villager.getDominantHand(), villager.getInventory().getItem(slot));
+        ItemStack rod = villager.getInventory().getItem(slot);
+        villager.setItemInHand(villager.getDominantHand(), rod);
+        rememberChoreHand(rod);
         MCA.LOGGER.debug(
                 "[MCA Fishing Debug] rod-equipped villager={} slot={} held={} inventoryRods={}",
                 villager.getUUID(), slot, villager.getItemInHand(villager.getDominantHand()),
@@ -477,9 +480,6 @@ public class FishingTask extends AbstractChoreTask {
             villager.stopUsingItem();
         }
 
-        ItemStack stack = villager.getItemInHand(villager.getDominantHand());
-        if (Chore.FISH.matchesTool(stack)) {
-            villager.setItemInHand(villager.getDominantHand(), ItemStack.EMPTY);
-        }
+        releaseChoreHand(villager, Chore.FISH);
     }
 }

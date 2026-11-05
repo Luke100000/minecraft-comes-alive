@@ -917,6 +917,9 @@ public final class HomelessShelterGameTests {
         IndoorRoomCache.Room[] original = {null};
         IndoorRoomCache.Room[] openedRoof = {null};
         BlockPos roof = center.north().above(3);
+        // The floor scanner tolerates up to two adjacent missing roof blocks.
+        // Open three to verify that a genuinely exposed column is invalidated.
+        List<BlockPos> breach = List.of(roof.west(), roof, roof.east());
         helper.runAfterDelay(10, () -> {
             if (registered) registerStrollHouse(helper, center);
             original[0] = cache.resolve(head).orElseThrow();
@@ -932,7 +935,10 @@ public final class HomelessShelterGameTests {
         helper.runAfterDelay(60, () -> {
             helper.assertTrue(cache.resolve(head).orElseThrow() == original[0],
                     "bed occupancy or door/gate movement unnecessarily rescanned the room");
-            level.setBlock(roof, Blocks.AIR.defaultBlockState(), 3);
+            for (BlockPos pos : breach) {
+                helper.assertTrue(level.getBlockState(pos).is(Blocks.STONE), "fixture roof block was missing: " + pos);
+                level.setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
+            }
         });
         helper.runAfterDelay(110, () -> {
             openedRoof[0] = cache.resolve(head).orElseThrow();
@@ -944,7 +950,7 @@ public final class HomelessShelterGameTests {
         helper.runAfterDelay(320, () -> {
             helper.assertTrue(cache.resolve(head).orElseThrow().floorCells().equals(openedRoof[0].floorCells()),
                     "unchanged roof opening altered the cached room on retry");
-            level.setBlock(roof, Blocks.STONE.defaultBlockState(), 3);
+            for (BlockPos pos : breach) level.setBlock(pos, Blocks.STONE.defaultBlockState(), 3);
         });
         helper.runAfterDelay(525, () -> {
             IndoorRoomCache.Room repaired = cache.resolve(head).orElseThrow();

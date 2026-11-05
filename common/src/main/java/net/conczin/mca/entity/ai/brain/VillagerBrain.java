@@ -64,7 +64,7 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         // When you relog, it should continue doing the chores.
         // Chore saves but Activity doesn't, so this checks if the activity is not on there and puts it on there.
 
-        if (entity.getTrackedValue(ACTIVE_CHORE) != Chore.NONE) {
+        if (entity.getTrackedValue(ACTIVE_CHORE) != Chore.NONE && !entity.getBrain().isActive(Activity.PANIC)) {
             // find something to do
             //todo here switch between rest and chore
             entity.getBrain().getActiveNonCoreActivity().ifPresent(activity -> {

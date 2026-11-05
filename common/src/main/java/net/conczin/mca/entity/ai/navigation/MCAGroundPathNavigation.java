@@ -771,8 +771,14 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     }
 
     private boolean hasWalkableApproach(BlockPos destination) {
+        // Recovery eligibility must agree with the evaluator used for real paths:
+        // MCA can traverse operable closed gates and doors as WALKABLE_DOOR.
+        MCAWalkNodeEvaluator evaluator = new MCAWalkNodeEvaluator();
+        PathfindingContext context = new PathfindingContext(this.level, this.mob);
         for (Direction direction : Direction.Plane.HORIZONTAL) {
-            if (WalkNodeEvaluator.getPathTypeStatic(this.mob, destination.relative(direction).mutable()) == PathType.WALKABLE) {
+            BlockPos approach = destination.relative(direction);
+            PathType type = evaluator.getPathType(context, approach.getX(), approach.getY(), approach.getZ());
+            if (type == PathType.WALKABLE || type == PathType.WALKABLE_DOOR) {
                 return true;
             }
         }
