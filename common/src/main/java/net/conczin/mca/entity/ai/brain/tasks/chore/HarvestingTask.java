@@ -62,7 +62,7 @@ public class HarvestingTask extends AbstractChoreTask {
 
     @Override
     protected void stop(ServerLevel world, VillagerEntityMCA villager, long time) {
-        clearChoreItem(villager);
+        releaseChoreHand(villager, Chore.HARVEST);
 
         workingTick = 0;
 
@@ -78,28 +78,7 @@ public class HarvestingTask extends AbstractChoreTask {
     protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.start(world, villager, time);
 
-        if (!villager.hasItemInSlot(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), Chore.HARVEST::matchesTool);
-            if (i == -1) {
-                abandonJobWithMessage("chore.harvesting.nohoe");
-            } else {
-                ItemStack stack = villager.getInventory().getItem(i);
-                villager.setItemInHand(villager.getDominantHand(), stack);
-            }
-        }
-
-        if (this.villager == null) {
-            this.villager = villager;
-        }
-
-        // equip hoe
-        if (!InventoryUtils.contains(villager.getInventory(), Chore.HARVEST::matchesTool) && !villager.hasItemInSlot(villager.getDominantSlot())) {
-            abandonJobWithMessage("chore.harvesting.nohoe");
-        } else if (!villager.hasItemInSlot(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), Chore.HARVEST::matchesTool);
-            ItemStack stack = villager.getInventory().getItem(i);
-            villager.setItemInHand(villager.getDominantHand(), stack);
-        }
+        if (!equipChoreTool(villager, Chore.HARVEST, "chore.harvesting.nohoe")) return;
 
         // search for farmland
         if (plantable.isEmpty() && villager.tickCount - lastLandScan > 1200) {
@@ -222,6 +201,7 @@ public class HarvestingTask extends AbstractChoreTask {
     private int swapItem(Predicate<ItemStack> find) {
         ItemStack stack = villager.getMainHandItem();
         if (find.test(stack)) {
+            rememberChoreHand(stack);
             return ITEM_READY;
         }
         Container inventory = villager.getInventory();
@@ -229,7 +209,9 @@ public class HarvestingTask extends AbstractChoreTask {
         if (slot < 0) {
             return ITEM_MISSING;
         }
-        villager.setItemInHand(villager.getDominantHand(), inventory.getItem(slot));
+        ItemStack selected = inventory.getItem(slot);
+        villager.setItemInHand(villager.getDominantHand(), selected);
+        rememberChoreHand(selected);
         return ITEM_FOUND;
     }
 
