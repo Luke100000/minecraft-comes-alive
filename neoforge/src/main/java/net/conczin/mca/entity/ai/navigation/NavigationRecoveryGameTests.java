@@ -6,15 +6,19 @@ import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTask;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.ai.behavior.OneShot;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.Vec3;
@@ -84,6 +88,149 @@ public final class NavigationRecoveryGameTests {
                     "The short climb's continuation lost forward progress toward its logical destination");
             helper.assertTrue(!WalkTargetFailureMemory.hasFailureFor(villager, target),
                     "A usable short-climb continuation was marked terminally unreachable");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_owned_bedside_partial_continuation", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void completedOwnedBedsidePartialContinuesToPhysicalApproach(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(16, 1, 16));
+        BlockPos bedHead = start.east(8);
+        prepareFlatArea(helper, start, 16, 3);
+        var bed = Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.EAST);
+        helper.getLevel().setBlock(bedHead.west(), bed.setValue(BedBlock.PART, BedPart.FOOT), 3);
+        helper.getLevel().setBlock(bedHead, bed.setValue(BedBlock.PART, BedPart.HEAD), 3);
+
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        try {
+            villager.getBrain().setMemory(MemoryModuleType.HOME,
+                    GlobalPos.of(helper.getLevel().dimension(), bedHead));
+            OneShot<VillagerEntityMCA> producer = ExtendedWalkTowardsTask.createWithFinalTarget(
+                    MemoryModuleType.HOME, 0.5F, 0, 1_000,
+                    ignored -> false, ignored -> { },
+                    (world, entity, destination) -> BedApproachTarget.create(world, destination.pos()));
+            producer.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime());
+            WalkTarget walkTarget = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                    .orElseThrow(() -> new AssertionError("HOME producer did not publish its bedside target"));
+            helper.assertTrue(walkTarget instanceof WalkTargetFailureMemory.TargetIdentityOwner
+                            && walkTarget.getTarget() instanceof BedApproachTarget,
+                    "fixture did not publish a producer-owned semantic bedside target");
+
+            BlockPos approach = start.east(6);
+            helper.assertTrue(((BedApproachTarget) walkTarget.getTarget()).getPathTargets(villager).contains(approach),
+                    "fixture lacks a physical bedside endpoint");
+            BlockPos endpoint = start.east();
+            Path completed = new Path(List.of(node(start), node(endpoint)), approach, false);
+            helper.assertTrue(MCAGroundPathNavigation.isUsefulPartialPath(completed, approach),
+                    "fixture must represent useful progress toward the physical approach");
+            villager.getNavigation().moveTo(completed, 0.5D);
+            villager.setPos(Vec3.atBottomCenterOf(endpoint));
+            while (!completed.isDone()) completed.advance();
+            villager.getNavigation().tick();
+
+            Path continuation = villager.getNavigation().getPath();
+            helper.assertTrue(continuation != null && continuation != completed
+                            && !continuation.isDone() && continuation.canReach()
+                            && ((BedApproachTarget) walkTarget.getTarget()).getPathTargets(villager)
+                            .contains(continuation.getTarget()),
+                    "completed owned partial failed to continue toward a physical bedside endpoint: " + continuation);
+            helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                            .filter(current -> current == walkTarget).isPresent(),
+                    "partial continuation replaced the producer's logical HOME ownership");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_failed_short_partial_progress", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void priorFailureDoesNotBlockPhysicallyCompletedUsefulShortPartial(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(8, 1, 8));
+        BlockPos endpoint = start.east().above();
+        BlockPos target = start.east(100).above();
+        net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath(helper, start, target);
+        helper.getLevel().setBlock(endpoint.below(), Blocks.STONE.defaultBlockState(), 3);
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        try {
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+            long failedAt = helper.getLevel().getGameTime();
+            WalkTargetFailureMemory.record(villager, target, failedAt);
+            Path completed = new Path(List.of(node(start), node(endpoint)), target, false);
+            helper.assertTrue(MCAGroundPathNavigation.isUsefulPartialPath(completed, target),
+                    "fixture is not a useful partial path");
+            villager.getNavigation().moveTo(completed, 0.5D);
+            villager.setPos(Vec3.atBottomCenterOf(endpoint));
+            while (!completed.isDone()) completed.advance();
+            villager.getNavigation().tick();
+            Path continuation = villager.getNavigation().getPath();
+            helper.assertTrue(continuation != null && continuation != completed && !continuation.isDone(),
+                    "prior destination failure prevented real short-partial progress from chaining");
+            helper.assertTrue(continuation.getTarget().equals(target)
+                            && continuation.getEndNode().asBlockPos().distManhattan(target) < endpoint.distManhattan(target),
+                    "continuation did not advance toward the original destination");
+            helper.assertTrue(WalkTargetFailureMemory.hasFailureFor(villager, target),
+                    "a merely useful partial path erased terminal-failure history prematurely");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_failed_short_partial_progress", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void priorFailureDoesNotTriggerStationaryShortPartialLoop(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(8, 1, 8));
+        BlockPos endpoint = start.east();
+        BlockPos target = start.east(100);
+        net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath(helper, start, target);
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        try {
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+            WalkTargetFailureMemory.record(villager, target, helper.getLevel().getGameTime());
+            Path completed = new Path(List.of(node(start), node(endpoint)), target, false);
+            villager.getNavigation().moveTo(completed, 0.5D);
+            while (!completed.isDone()) completed.advance();
+            long before = PathRequestDiagnostics.snapshot(villager).directRequests();
+            villager.getNavigation().tick();
+            helper.assertTrue(PathRequestDiagnostics.snapshot(villager).directRequests() == before,
+                    "stationary short partial retried without physical progress");
+            helper.assertTrue(WalkTargetFailureMemory.hasFailureFor(villager, target),
+                    "stationary partial lost its destination failure age");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_failed_short_partial_success", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void completedShortPartialClearsPriorFailureWhenFullRouteOpens(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(8, 1, 8));
+        BlockPos endpoint = start.east();
+        BlockPos target = start.east(5);
+        net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath(helper, start, target);
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        try {
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+            WalkTargetFailureMemory.record(villager, target, helper.getLevel().getGameTime());
+            Path completed = new Path(List.of(node(start), node(endpoint)), target, false);
+            villager.getNavigation().moveTo(completed, 0.5D);
+            villager.setPos(Vec3.atBottomCenterOf(endpoint));
+            while (!completed.isDone()) completed.advance();
+            villager.getNavigation().tick();
+            Path continuation = villager.getNavigation().getPath();
+            helper.assertTrue(continuation != null && continuation != completed
+                            && continuation.canReach() && continuation.getTarget().equals(target),
+                    "reachable continuation was not chained after the prior short-partial failure");
+            helper.assertTrue(!WalkTargetFailureMemory.hasFailureFor(villager, target),
+                    "fully reachable continuation retained an obsolete terminal-failure clock");
         } finally {
             villager.discard();
         }
@@ -677,6 +824,59 @@ public final class NavigationRecoveryGameTests {
                     "route opening retained the failed extended-search suppression");
         } finally {
             config.villagerPathfindingDistance = previousHorizon;
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_navigation_review_reopen", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 50)
+    public static void nativeRecomputationUsesInvalidationAndStillWakesProducer(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(35, 1, 35));
+        BlockPos target = start.east(2);
+        prepareFlatArea(helper, start, 30, 3);
+        for (int z = -23; z <= 23; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (dx == 0 && dz == 0) continue;
+                for (int y = 0; y < 3; y++) {
+                    helper.getLevel().setBlock(target.offset(dx, y, dz), Blocks.STONE.defaultBlockState(), 3);
+                }
+            }
+        }
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        Config config = Config.getInstance();
+        int previousDistance = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 160;
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+            NavigationProbe navigation = new NavigationProbe(villager);
+            Path blocked = navigation.createPath(target, 0);
+            helper.assertTrue(blocked != null && !blocked.canReach(), "failed-search fixture was reachable");
+            helper.assertTrue(navigation.moveTo(blocked, 0.5D), "failed-search fixture was not accepted");
+            WalkTargetFailureMemory.record(villager, target, helper.getLevel().getGameTime());
+            long before = PathRequestDiagnostics.snapshot(villager).extendedSearches();
+            BlockPos gap = target.east();
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(gap.above(y), Blocks.AIR.defaultBlockState(), 3);
+            }
+            navigation.shouldRecomputePath(gap);
+            navigation.recomputeNow();
+            Path reopened = navigation.getPath();
+            helper.assertTrue(PathRequestDiagnostics.snapshot(villager).extendedSearches() > before
+                            && reopened != null && reopened.canReach(),
+                    "native recompute kept the stale failed extended-search backoff");
+            helper.assertTrue(navigation.consumeRetryInvalidation(target),
+                    "native recompute consumed the producer's one-shot wake-up");
+            helper.assertTrue(!navigation.consumeRetryInvalidation(target),
+                    "producer invalidation was delivered more than once");
+        } finally {
+            config.villagerPathfindingDistance = previousDistance;
             villager.discard();
         }
         helper.succeed();

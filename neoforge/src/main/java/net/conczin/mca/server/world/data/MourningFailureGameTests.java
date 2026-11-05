@@ -108,7 +108,17 @@ public final class MourningFailureGameTests {
                     helper.succeed();
                 });
             } else if (now - began > 1_700L) {
-                helper.fail("unreachable ambient mourning retained its grave instead of ending the assignment");
+                helper.fail("unreachable ambient mourning retained its grave instead of ending the assignment"
+                        + ", ambientPos=" + ambient.position()
+                        + ", ambientDestination=" + ambient.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_POSITION)
+                        + ", ambientWalk=" + ambient.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                        + ", ambientFailure=" + ambient.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                        + ", ambientPath=" + ambient.getNavigation().getPath()
+                        + ", personalPos=" + personal.position()
+                        + ", personalDestination=" + personal.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_POSITION)
+                        + ", personalWalk=" + personal.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                        + ", personalFailure=" + personal.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                        + ", personalRetry=" + personalRetry);
             }
         });
     }

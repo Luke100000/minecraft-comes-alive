@@ -29,6 +29,7 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
     @Nullable
     private Node pathNode;
     private int ticks;
+    private final Map<GlobalPos, BlockState> foldedUprightTrapdoors = new HashMap<>();
 
     public SmarterOpenDoorsTask() {
         super(ImmutableMap.of(MemoryModuleType.PATH, MemoryStatus.VALUE_PRESENT, MemoryModuleType.DOORS_TO_CLOSE, MemoryStatus.REGISTERED));
@@ -119,6 +120,40 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
         return false;
     }
 
+    private void restoreFoldedUprightTrapdoors(ServerLevel world, LivingEntity entity,
+                                                @Nullable Node lastNode, @Nullable Node currentNode) {
+        Iterator<Map.Entry<GlobalPos, BlockState>> iterator = this.foldedUprightTrapdoors.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<GlobalPos, BlockState> entry = iterator.next();
+            GlobalPos globalPos = entry.getKey();
+            BlockPos pos = globalPos.pos();
+            if ((lastNode != null && lastNode.asBlockPos().equals(pos))
+                    || (currentNode != null && currentNode.asBlockPos().equals(pos))) {
+                continue;
+            }
+            if (!globalPos.dimension().equals(world.dimension())
+                    || world.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4) == null) {
+                iterator.remove();
+                continue;
+            }
+            BlockState state = world.getBlockState(pos);
+            // Only restore the recorded post-fold state. If the state changes,
+            // another actor may have taken over this panel.
+            if (state != entry.getValue()) {
+                iterator.remove();
+                continue;
+            }
+            if (entity.getBoundingBox().intersects(
+                    pos.getX(), pos.getY(), pos.getZ(),
+                    pos.getX() + 1.0D, pos.getY() + 1.0D, pos.getZ() + 1.0D)
+                    || hasOtherMobReachedToggleable(entity, pos)) {
+                continue;
+            }
+            PathingBlockInteraction.setOpen(entity, world, state, pos, true);
+            iterator.remove();
+        }
+    }
+
     private static boolean hasReached(LivingEntity entity, BlockPos pos) {
         Optional<Path> pathMemory = entity.getBrain().getMemoryInternal(MemoryModuleType.PATH);
         if (pathMemory.isEmpty()) {
@@ -175,7 +210,9 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
             return;
         }
         if (PathingBlockInteraction.isHandOpenableTrapDoor(blockState)
-                && !isVerticalSameColumnTransition(pathNode, adjacentNode)) {
+                && !isVerticalSameColumnTransition(pathNode, adjacentNode)
+                && !PathingBlockInteraction.canFoldUprightTrapdoor(blockState, blockPos,
+                        adjacentNode == null ? null : adjacentNode.asBlockPos())) {
             // A trapdoor is a hatch only when the path actually crosses its column
             // vertically. A stair or other raised path beside a decorative trapdoor
             // must not cause the villager to operate it.
@@ -191,6 +228,10 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
                 && blockState.hasProperty(BlockStateProperties.OPEN)
                 && blockState.getValue(BlockStateProperties.OPEN);
         boolean changed = PathingBlockInteraction.setOpen(entity, world, blockState, blockPos, shouldBeOpen);
+        if (changed && !shouldBeOpen && PathingBlockInteraction.isHandOpenableTrapDoor(blockState)) {
+            this.foldedUprightTrapdoors.put(GlobalPos.of(world.dimension(), blockPos),
+                    blockState.setValue(BlockStateProperties.OPEN, false));
+        }
         boolean rememberExistingOpenState = rememberIfAlreadyOpen
                 && wasAlreadyOpen
                 && !PathingBlockInteraction.isHandOpenableTrapDoor(blockState);
@@ -218,22 +259,30 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
             return;
         }
 
+        boolean sameColumn = firstNode.x == secondNode.x && firstNode.z == secondNode.z;
+
         for (int y = minY; y < maxY; y++) {
-            openToggleableAt(world, entity, new BlockPos(firstNode.x, y, firstNode.z));
-            if (firstNode.x != secondNode.x || firstNode.z != secondNode.z) {
-                openToggleableAt(world, entity, new BlockPos(secondNode.x, y, secondNode.z));
+            openToggleableAt(world, entity, new BlockPos(firstNode.x, y, firstNode.z), sameColumn);
+            if (!sameColumn) {
+                openToggleableAt(world, entity, new BlockPos(secondNode.x, y, secondNode.z), false);
             }
         }
     }
 
     private void openTrapdoorAboveClimbableTransition(ServerLevel world, LivingEntity entity,
                                                       @Nullable Node firstNode, @Nullable Node secondNode) {
-        if (firstNode == null || secondNode == null || Math.abs(firstNode.y - secondNode.y) != 1) {
+        if (firstNode == null || secondNode == null) {
             return;
         }
 
         Node lowerNode = firstNode.y < secondNode.y ? firstNode : secondNode;
         Node upperNode = lowerNode == firstNode ? secondNode : firstNode;
+        // A ladder can exit directly onto an adjacent upper floor two blocks
+        // above its last climbable node. The hatch is between those nodes.
+        int rise = upperNode.y - lowerNode.y;
+        if (rise < 1 || rise > 2) {
+            return;
+        }
         int horizontalDistance = Math.abs(lowerNode.x - upperNode.x) + Math.abs(lowerNode.z - upperNode.z);
         if (horizontalDistance > 1) {
             return;
@@ -251,7 +300,12 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
     }
 
     private void openToggleableAt(ServerLevel world, LivingEntity entity, BlockPos pos) {
+        openToggleableAt(world, entity, pos, true);
+    }
+
+    private void openToggleableAt(ServerLevel world, LivingEntity entity, BlockPos pos, boolean verticalRoute) {
         BlockState state = world.getBlockState(pos);
+        if (!verticalRoute && PathingBlockInteraction.isHandOpenableTrapDoor(state)) return;
         if (PathingBlockInteraction.setOpen(entity, world, state, pos, true)) {
             this.rememberToCloseToggleable(world, entity, pos);
         }
@@ -290,6 +344,7 @@ public class SmarterOpenDoorsTask extends Behavior<LivingEntity> {
         // anything needed by the current transition. Otherwise a lookahead hatch
         // can be opened and immediately closed again in this same invocation.
         closeDoors(world, entity, previousNode, nextNode);
+        restoreFoldedUprightTrapdoors(world, entity, previousNode, nextNode);
 
         // Vanilla remembers a door after the mob has passed through it even when
         // that door was already open. It only remembers the upcoming door when it

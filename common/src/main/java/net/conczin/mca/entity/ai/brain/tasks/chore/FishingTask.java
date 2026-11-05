@@ -14,6 +14,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -445,7 +446,8 @@ public class FishingTask extends AbstractChoreTask {
                 .withParameter(LootContextParams.ORIGIN, bobber.position())
                 .withParameter(LootContextParams.TOOL, fishingRod)
                 .withParameter(LootContextParams.THIS_ENTITY, bobber)
-                .withLuck(EnchantmentHelper.getFishingLuckBonus(world, fishingRod, villager));
+                .withLuck(EnchantmentHelper.getFishingLuckBonus(world, fishingRod, villager)
+                        + (float) villager.getAttributeValue(Attributes.LUCK));
         return lootTable.getRandomItems(builder.create(LootContextParamSets.FISHING));
     }
 

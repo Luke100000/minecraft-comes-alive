@@ -30,7 +30,8 @@ public class EnterFavoredBuildingTask extends EnterBuildingTask {
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel level, VillagerEntityMCA villager) {
-        return level.getGameTime() >= nextMissingBuildingRetryTick;
+        return super.checkExtraStartConditions(level, villager)
+                && level.getGameTime() >= nextMissingBuildingRetryTick;
     }
 
     @Override

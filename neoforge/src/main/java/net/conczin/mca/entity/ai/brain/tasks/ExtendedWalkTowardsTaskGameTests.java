@@ -105,6 +105,75 @@ public final class ExtendedWalkTowardsTaskGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_poi_owned_active", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void jobSiteProducerTracksProgressWhileItsOwnWalkTargetIsActive(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        try {
+            BlockPos start = villager.blockPosition();
+            BlockPos jobSite = start.east(12);
+            long time = helper.getLevel().getGameTime();
+            villager.getBrain().setMemory(MemoryModuleType.JOB_SITE,
+                    GlobalPos.of(helper.getLevel().dimension(), jobSite));
+            OneShot<Villager> task = SetWalkTargetFromBlockMemory.create(
+                    MemoryModuleType.JOB_SITE, 0.5F, 1, 100, TEST_TIMEOUT);
+            helper.assertTrue(task.tryStart(helper.getLevel(), villager, time),
+                    "JOB_SITE producer never published its movement");
+            WalkTarget original = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElseThrow();
+
+            WalkTargetFailureMemory.record(villager, jobSite, time - 20);
+            villager.setPos(Vec3.atBottomCenterOf(start.east(5)));
+            helper.assertTrue(task.tryStart(helper.getLevel(), villager, time + 1L),
+                    "JOB_SITE producer did not inspect its own active walk target");
+            helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                            .filter(target -> target == original).isPresent(),
+                    "JOB_SITE progress replaced its existing owned walk target");
+            helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE).isEmpty(),
+                    "walking five blocks toward JOB_SITE did not clear the destination failure");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_poi_owned_active", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void meetingPointProducerRetractsActiveWalkTargetOnPoiErasureOrChange(GameTestHelper helper) {
+        VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);
+        try {
+            BlockPos start = villager.blockPosition();
+            BlockPos oldMeetingPoint = start.east(12);
+            BlockPos newMeetingPoint = start.north(12);
+            long time = helper.getLevel().getGameTime();
+            villager.getBrain().setMemory(MemoryModuleType.MEETING_POINT,
+                    GlobalPos.of(helper.getLevel().dimension(), oldMeetingPoint));
+            OneShot<Villager> task = SetWalkTargetFromBlockMemory.create(
+                    MemoryModuleType.MEETING_POINT, 0.5F, 1, 100, TEST_TIMEOUT);
+            task.tryStart(helper.getLevel(), villager, time);
+            helper.assertTrue(villager.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET),
+                    "MEETING_POINT producer did not publish its movement");
+
+            villager.getBrain().setMemory(MemoryModuleType.MEETING_POINT,
+                    GlobalPos.of(helper.getLevel().dimension(), newMeetingPoint));
+            helper.assertTrue(task.tryStart(helper.getLevel(), villager, time + 1L),
+                    "MEETING_POINT producer did not inspect its changed POI");
+            helper.assertTrue(!villager.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET),
+                    "changing MEETING_POINT left the obsolete owned movement active");
+
+            task.tryStart(helper.getLevel(), villager, time + 2L);
+            helper.assertTrue(villager.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET),
+                    "MEETING_POINT failed to publish movement for the replacement POI");
+            villager.getBrain().eraseMemory(MemoryModuleType.MEETING_POINT);
+            helper.assertTrue(task.tryStart(helper.getLevel(), villager, time + 3L),
+                    "MEETING_POINT producer did not process erased POI memory");
+            helper.assertTrue(!villager.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET),
+                    "erasing MEETING_POINT left its owned movement active");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
     public static void targetBeyondFollowRangeKeepsRealDestination(GameTestHelper helper) {
         VillagerEntityMCA villager = spawnVillagerOnFlatArea(helper);

@@ -35,6 +35,7 @@ import org.jetbrains.annotations.Nullable;
 
 public final class MCAFishingBobberEntity extends Projectile {
     private static final int MAX_FLYING_TICKS = 40;
+    private static final int MAX_OUT_OF_WATER_TICKS = 10;
     private static final double MAX_OWNER_DISTANCE_SQR = 32.0 * 32.0;
     private static final double FLYING_DRAG = 0.92;
     private static final double FLYING_GRAVITY = 0.03;
@@ -247,7 +248,7 @@ public final class MCAFishingBobberEntity extends Projectile {
             if (nibble <= 0 && timeUntilHooked <= 0) {
                 openWater = true;
             } else {
-                openWater = openWater && outOfWaterTime < 10 && calculateOpenWater(pos);
+                openWater = openWater && outOfWaterTime < MAX_OUT_OF_WATER_TICKS && calculateOpenWater(pos);
             }
 
             if (inWater) {
@@ -256,7 +257,15 @@ public final class MCAFishingBobberEntity extends Projectile {
                     catchingFish();
                 }
             } else {
-                outOfWaterTime = Math.min(10, outOfWaterTime + 1);
+                outOfWaterTime = Math.min(MAX_OUT_OF_WATER_TICKS, outOfWaterTime + 1);
+                if (outOfWaterTime >= MAX_OUT_OF_WATER_TICKS && !level().isClientSide) {
+                    MCA.LOGGER.debug(
+                            "[MCA Fishing Debug] discard-stranded-bobber bobber={} pos={}",
+                            getId(), position()
+                    );
+                    discard();
+                    return;
+                }
             }
         }
 

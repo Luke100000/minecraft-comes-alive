@@ -58,6 +58,17 @@ public final class PathingBlockInteraction {
                 && trapDoor.getType().canOpenByHand();
     }
 
+    /** An upright panel is a doorway only while crossing its own path node, along its blocking axis. */
+    public static boolean canFoldUprightTrapdoor(BlockState state, BlockPos node, @Nullable BlockPos adjacent) {
+        if (!isHandOpenableTrapDoor(state) || !state.getValue(TrapDoorBlock.OPEN)
+                || state.getValue(TrapDoorBlock.POWERED)
+                || adjacent == null || adjacent.getY() != node.getY()) return false;
+        int dx = Math.abs(node.getX() - adjacent.getX());
+        int dz = Math.abs(node.getZ() - adjacent.getZ());
+        return dx + dz == 1 && state.getValue(TrapDoorBlock.FACING).getAxis()
+                == (dx == 1 ? Direction.Axis.X : Direction.Axis.Z);
+    }
+
     public static boolean isFenceGate(BlockState state) {
         return state.is(BlockTags.FENCE_GATES, candidate -> candidate.getBlock() instanceof FenceGateBlock);
     }
@@ -101,6 +112,11 @@ public final class PathingBlockInteraction {
     public static boolean shouldBeOpenForMovement(BlockState state, @Nullable Direction.Axis movementAxis) {
         if (movementAxis == null) {
             return true;
+        }
+        if (isHandOpenableTrapDoor(state)) {
+            // An open trapdoor stands upright. Across its facing axis the panel
+            // blocks a doorway, so the villager must fold it down to walk past.
+            return state.getValue(TrapDoorBlock.FACING).getAxis() != movementAxis;
         }
         if (state.getBlock() instanceof DoorBlock) {
             return state.getValue(DoorBlock.FACING).getAxis() == movementAxis;

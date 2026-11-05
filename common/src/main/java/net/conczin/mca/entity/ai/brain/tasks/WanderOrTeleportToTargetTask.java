@@ -51,7 +51,7 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         // still end the journey. Preserve the timeout-scope and intent-change tests.
         WalkTarget walkTarget = this.movingEntity.getBrain()
                 .getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
-        return walkTarget == null || !(walkTarget.getTarget() instanceof PersistentPathTarget);
+        return !ExtendedWalkTowardsTask.isPersistentJourney(walkTarget);
     }
 
     @Override
@@ -92,11 +92,11 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         super.start(world, entity, gameTime);
         Path path = entity.getNavigation().getPath();
         if (walkTarget != null
-                && walkTarget.getTarget() instanceof PersistentPathTarget
+                && ExtendedWalkTowardsTask.isPersistentJourney(walkTarget)
                 && path != null
                 && !entity.getNavigation().isStuck()
                 && MCAGroundPathNavigation.isUsefulPartialPath(
-                        path, walkTarget.getTarget().currentBlockPosition()
+                        path, entity, walkTarget
                 )) {
             if (entity instanceof VillagerEntityMCA villager) {
                 // A fresh useful segment is optimistic progress and must be able

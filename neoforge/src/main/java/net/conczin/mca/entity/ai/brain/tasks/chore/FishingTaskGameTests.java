@@ -1,5 +1,6 @@
 package net.conczin.mca.entity.ai.brain.tasks.chore;
 
+import com.mojang.authlib.GameProfile;
 import net.minecraft.advancements.critereon.FishingHookPredicate;
 import net.conczin.mca.entity.MCAFishingBobberEntity;
 import net.conczin.mca.entity.VillagerEntityMCA;
@@ -16,6 +17,8 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.ai.behavior.LookAtTargetSink;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -34,12 +37,14 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.storage.ServerLevelData;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+import net.neoforged.neoforge.common.util.FakePlayer;
 
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -120,6 +125,34 @@ public final class FishingTaskGameTests {
 
         second.discard();
         helper.assertTrue(villager.getFishingBobber() == null, "removing the current bobber did not clear the owner reference");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_fishing_water_recovery", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void bobberStuckOutOfWaterExpiresSoVillagerCanRecast(GameTestHelper helper) {
+        BlockPos feet = biteCycleVillagerPos(helper);
+        BlockPos water = feet.east(2);
+        prepareBiteWater(helper, water);
+        VillagerEntityMCA villager = spawnFisher(helper, feet);
+        MCAFishingBobberEntity bobber = MCAFishingBobberEntity.cast(helper.getLevel(), villager, water);
+        try {
+            tickUntilBobbing(helper, bobber);
+            BlockPos dry = feet.west(3);
+            helper.assertTrue(helper.getLevel().getFluidState(dry).isEmpty(),
+                    "water-recovery fixture selected wet ground");
+            bobber.setPos(Vec3.atBottomCenterOf(dry));
+            bobber.setDeltaMovement(Vec3.ZERO);
+            for (int i = 0; i < 15 && !bobber.isRemoved(); i++) {
+                bobber.tick();
+            }
+            helper.assertTrue(bobber.isRemoved(),
+                    "bobber remained alive after 15 dry ticks with its fishing countdown stalled");
+            helper.assertTrue(villager.getFishingBobber() == null,
+                    "stranded bobber kept the owner reference and prevented recasting");
+        } finally {
+            bobber.discard();
+            villager.discard();
+        }
         helper.succeed();
     }
 
@@ -243,6 +276,122 @@ public final class FishingTaskGameTests {
                     villager.getItemInHand(villager.getDominantHand()).getDamageValue() == startingRodDamage + 1,
                     "one delivered bite did not damage the fishing rod exactly once"
             );
+        });
+    }
+
+    @GameTest(
+            batch = "mca_fishing_repeated_catches",
+            templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena",
+            timeoutTicks = 650
+    )
+    public static void enchantedFishingRodKeepsCatchingAfterFirstReel(GameTestHelper helper) {
+        BlockPos villagerPos = biteCycleVillagerPos(helper);
+        prepareBiteWater(helper, villagerPos.east(2));
+        VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
+        ItemStack enchantedRod = new ItemStack(Items.FISHING_ROD);
+        var enchantments = helper.getLevel().registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
+        enchantedRod.enchant(enchantments.getOrThrow(Enchantments.LURE), 3);
+        enchantedRod.enchant(enchantments.getOrThrow(Enchantments.LUCK_OF_THE_SEA), 3);
+        villager.setItemInHand(villager.getDominantHand(), enchantedRod);
+        villager.addEffect(new MobEffectInstance(MobEffects.LUCK, 1200, 1));
+
+        TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL), true)
+                .withFishingLoot(List.of(new ItemStack(Items.COD)));
+        int startingFish = villager.getInventory().countItem(Items.COD);
+        long now = helper.getLevel().getGameTime();
+        task.start(helper.getLevel(), villager, now);
+        AtomicReference<MCAFishingBobberEntity> accelerated = new AtomicReference<>();
+
+        helper.onEachTick(() -> {
+            MCAFishingBobberEntity bobber = villager.getFishingBobber();
+            if (bobber != null && bobber.isBobbing() && accelerated.get() != bobber) {
+                setFishingCountdown(bobber, "timeUntilLured", 0);
+                setFishingCountdown(bobber, "timeUntilHooked", 2);
+                accelerated.set(bobber);
+            }
+            task.tick(helper.getLevel(), villager, helper.getLevel().getGameTime());
+        });
+        helper.succeedWhen(() -> helper.assertTrue(
+                villager.getInventory().countItem(Items.COD) >= startingFish + 3,
+                "enchanted villager stopped fishing after its first reel; catches="
+                        + (villager.getInventory().countItem(Items.COD) - startingFish)
+                        + ", bites=" + task.getBiteRollCount()
+                        + ", bobber=" + villager.getFishingBobber()
+                        + ", job=" + villager.getVillagerBrain().getCurrentJob()
+        ));
+    }
+
+    @GameTest(
+            batch = "mca_fishing_natural_brain",
+            templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena",
+            timeoutTicks = 6000
+    )
+    public static void assignedFisherKeepsCatchingWithNaturalBrain(GameTestHelper helper) {
+        BlockPos feet = biteCycleVillagerPos(helper);
+        prepareBiteWater(helper, feet.east(2));
+        VillagerEntityMCA villager = spawnFisher(helper, feet);
+        ItemStack rod = new ItemStack(Items.FISHING_ROD);
+        var enchantments = helper.getLevel().registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
+        rod.enchant(enchantments.getOrThrow(Enchantments.LURE), 3);
+        rod.enchant(enchantments.getOrThrow(Enchantments.LUCK_OF_THE_SEA), 3);
+        villager.setItemInHand(villager.getDominantHand(), rod);
+        villager.addEffect(new MobEffectInstance(MobEffects.LUCK, 7000, 1));
+
+        FakePlayer assigner = new FakePlayer(helper.getLevel(),
+                new GameProfile(UUID.randomUUID(), "FishingAssigner"));
+        assigner.setGameMode(GameType.SURVIVAL);
+        assigner.absMoveTo(feet.getX() + 1.5, feet.getY(), feet.getZ() + 6.5);
+        helper.getLevel().addNewPlayer(assigner);
+        villager.getVillagerBrain().assignJob(Chore.FISH, assigner);
+        helper.assertTrue(villager.getVillagerBrain().getJobAssigner().isPresent(),
+                "natural AI fishing fixture has no online job assigner");
+        villager.setNoAi(false);
+
+        AtomicReference<MCAFishingBobberEntity> seenBobber = new AtomicReference<>();
+        AtomicInteger runningFishingTicks = new AtomicInteger();
+        AtomicInteger observedBobbers = new AtomicInteger();
+        AtomicInteger blockedByWalkTicks = new AtomicInteger();
+        helper.onEachTick(() -> {
+            if (villager.getBrain().getRunningBehaviors().stream()
+                    .anyMatch(b -> FishingTask.class.isAssignableFrom(b.getClass()))) {
+                runningFishingTicks.incrementAndGet();
+            }
+            if (villager.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET)) {
+                blockedByWalkTicks.incrementAndGet();
+            }
+            MCAFishingBobberEntity bobber = villager.getFishingBobber();
+            if (bobber != null && bobber.isBobbing() && seenBobber.get() != bobber) {
+                seenBobber.set(bobber);
+                observedBobbers.incrementAndGet();
+            }
+        });
+
+        helper.succeedWhen(() -> {
+            int catches = countCaughtItems(villager);
+            int fish = villager.getInventory().countItem(Items.COD)
+                    + villager.getInventory().countItem(Items.SALMON)
+                    + villager.getInventory().countItem(Items.TROPICAL_FISH)
+                    + villager.getInventory().countItem(Items.PUFFERFISH);
+            if (fish >= 3) {
+                villager.discard();
+                assigner.discard();
+                return;
+            }
+            helper.assertTrue(false, "natural brain fishing did not deliver 3 fish; fish="
+                    + fish + ", loot=" + catches + ", job=" + villager.getVillagerBrain().getCurrentJob()
+                    + ", activity=" + villager.getBrain().getActiveNonCoreActivity()
+                    + ", bobber=" + villager.getFishingBobber()
+                    + ", held=" + villager.getItemInHand(villager.getDominantHand())
+                    + ", runningFishingTicks=" + runningFishingTicks.get()
+                    + ", observedBobbers=" + observedBobbers.get()
+                    + ", walkTargetTicks=" + blockedByWalkTicks.get()
+                    + ", walkTarget=" + villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET)
+                    + ", lookTarget=" + villager.getBrain().getMemory(MemoryModuleType.LOOK_TARGET)
+                    + ", pos=" + villager.position()
+                    + ", running=" + villager.getBrain().getRunningBehaviors().stream()
+                        .map(b -> b.getClass().getSimpleName()).toList());
         });
     }
 
@@ -484,6 +633,28 @@ public final class FishingTaskGameTests {
                 "Luck of the Sea III did not reduce junk through the fishing loot context; plain="
                         + plainJunk + ", lucky=" + luckyJunk
         );
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_fishing_potion_luck", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void luckPotionImprovesFishingLootForVillagers(GameTestHelper helper) {
+        BlockPos villagerPos = biteCycleVillagerPos(helper);
+        prepareBiteWater(helper, villagerPos.east(2));
+        VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
+        TestFishingTask task = new TestFishingTask(helper.makeMockPlayer(GameType.SURVIVAL));
+        long time = helper.getLevel().getGameTime();
+        task.start(helper.getLevel(), villager, time);
+        task.tick(helper.getLevel(), villager, time);
+        task.tick(helper.getLevel(), villager, time + 1);
+        helper.assertTrue(villager.getFishingBobber() != null, "potion loot test has no bobber context");
+
+        int noPotionJunk = sampleFishingJunk(task, helper, villager, 6000);
+        villager.addEffect(new MobEffectInstance(MobEffects.LUCK, 1200, 1));
+        int potionJunk = sampleFishingJunk(task, helper, villager, 6000);
+
+        helper.assertTrue(potionJunk <= noPotionJunk - 100,
+                "Luck II did not improve villager fishing loot; baselineJunk="
+                        + noPotionJunk + ", potionJunk=" + potionJunk);
         helper.succeed();
     }
 

@@ -540,6 +540,65 @@ public final class DoorInteractionGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_trapdoor_interaction", templateNamespace = "minecraft",
+            template = "bastion/blocks/air")
+    public static void villagerRestoresOnlyUprightDoorwayAfterPassing(GameTestHelper helper) {
+        BlockPos beforeDoorway = helper.absolutePos(new BlockPos(4, 2, 4));
+        BlockPos doorway = beforeDoorway.east();
+        BlockPos afterDoorway = doorway.east();
+        BlockPos finalNode = afterDoorway.east();
+        BlockPos beyondFinal = finalNode.east();
+        BlockPos decorative = doorway.south();
+        BlockState upright = Blocks.OAK_TRAPDOOR.defaultBlockState()
+                .setValue(TrapDoorBlock.OPEN, true)
+                .setValue(TrapDoorBlock.FACING, Direction.EAST);
+        helper.getLevel().setBlock(doorway, upright, 3);
+        helper.getLevel().setBlock(decorative, upright, 3);
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(beforeDoorway.west()))
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.setNoAi(true);
+        villager.refreshBrain(helper.getLevel());
+
+        Path path = new Path(List.of(
+                node(beforeDoorway), node(doorway), node(afterDoorway), node(finalNode), node(beyondFinal)
+        ), beyondFinal, true);
+        path.setNextNodeIndex(1);
+        villager.getBrain().setMemory(MemoryModuleType.PATH, path);
+
+        SmarterOpenDoorsTask task = new SmarterOpenDoorsTask();
+        long gameTime = helper.getLevel().getGameTime();
+        helper.assertTrue(task.tryStart(helper.getLevel(), villager, gameTime),
+                "door task did not run on the upright doorway transition");
+        helper.assertTrue(!helper.getLevel().getBlockState(doorway).getValue(TrapDoorBlock.OPEN),
+                "villager did not fold its upright doorway to pass");
+        helper.assertTrue(helper.getLevel().getBlockState(decorative).getValue(TrapDoorBlock.OPEN),
+                "villager disturbed the decorative trapdoor");
+
+        task.doStop(helper.getLevel(), villager, gameTime);
+        villager.setPos(Vec3.atBottomCenterOf(doorway));
+        path.setNextNodeIndex(3);
+        helper.assertTrue(task.tryStart(helper.getLevel(), villager, gameTime + 1),
+                "door task did not run after the doorway was cleared");
+        helper.assertTrue(!helper.getLevel().getBlockState(doorway).getValue(TrapDoorBlock.OPEN),
+                "villager restored its upright doorway before its body cleared the panel");
+
+        task.doStop(helper.getLevel(), villager, gameTime + 1);
+        villager.setPos(Vec3.atBottomCenterOf(finalNode));
+        path.setNextNodeIndex(4);
+        helper.assertTrue(task.tryStart(helper.getLevel(), villager, gameTime + 2),
+                "door task did not run after the villager cleared the panel");
+        helper.assertTrue(helper.getLevel().getBlockState(doorway).getValue(TrapDoorBlock.OPEN),
+                "villager left its originally upright doorway folded after passing");
+        helper.assertTrue(helper.getLevel().getBlockState(decorative).getValue(TrapDoorBlock.OPEN),
+                "villager disturbed the decorative trapdoor while restoring its doorway");
+
+        villager.discard();
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_stale_toggleable_memory", templateNamespace = "minecraft",
             template = "bastion/blocks/air")
     public static void distantRememberedToggleableDoesNotLoadChunk(GameTestHelper helper) {
