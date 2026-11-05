@@ -135,6 +135,56 @@ public final class NavigationRecoveryGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_short_partial_gate_detour", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void completedShortPartialDetoursWhenOnlyApproachIsOperableGate(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(65, 1, 65));
+        BlockPos endpoint = start.east();
+        BlockPos target = start.east(3);
+        prepareFlatArea(helper, start, 61, 3);
+        for (int z = -55; z <= 55; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(2, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        // The target has no vanilla WALKABLE neighbor. MCA can enter from the
+        // south through this closed, hand-operable gate after clearing the wall.
+        for (BlockPos blocked : List.of(target.east(), target.north())) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(blocked.above(y), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        helper.getLevel().setBlock(target.south(), Blocks.OAK_FENCE_GATE.defaultBlockState(), 3);
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        Config config = Config.getInstance();
+        int previousDistance = config.villagerPathfindingDistance;
+        boolean previousGates = config.villagersInteractWithFenceGates;
+        try {
+            config.villagersInteractWithFenceGates = true;
+            config.villagerPathfindingDistance = 160;
+            villager.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+            Path completed = new Path(List.of(node(start), node(endpoint)), target, false);
+            helper.assertTrue(MCAGroundPathNavigation.isUsefulPartialPath(completed, target),
+                    "fixture must have a useful completed partial route");
+            villager.getNavigation().moveTo(completed, 0.5D);
+            villager.setPos(Vec3.atBottomCenterOf(endpoint));
+            while (!completed.isDone()) completed.advance();
+            villager.getNavigation().tick();
+
+            Path flank = villager.getNavigation().getPath();
+            helper.assertTrue(flank != null && !flank.isDone() && flank.canReach()
+                            && !flank.getTarget().equals(target)
+                            && ((MCAGroundPathNavigation) villager.getNavigation()).isTakingDetourTo(target),
+                    "A target with an operable gate as its only approach was denied detour recovery");
+        } finally {
+            config.villagerPathfindingDistance = previousDistance;
+            config.villagersInteractWithFenceGates = previousGates;
+            villager.discard();
+        }
+        helper.succeed();
+    }
     @GameTest(batch = "mca_detour_failure_age", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 80)
     public static void sidewaysDetourDoesNotEraseDestinationFailure(GameTestHelper helper) {
