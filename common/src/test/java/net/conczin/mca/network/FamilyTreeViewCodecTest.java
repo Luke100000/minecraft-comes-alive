@@ -166,6 +166,37 @@ class FamilyTreeViewCodecTest {
     }
 
     @Test
+    void searchRequestRejectsOversizedOutboundQueries() {
+        String tooLong = "x".repeat(65);
+        assertThrows(RuntimeException.class, () -> roundTrip(
+                FamilyTreeUUIDLookup.STREAM_CODEC,
+                new FamilyTreeUUIDLookup(74L, tooLong)
+        ));
+    }
+
+    @Test
+    void searchRequestRejectsOversizedInboundQueries() {
+        FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
+        try {
+            ByteBufCodecs.VAR_LONG.encode(buffer, 75L);
+            ByteBufCodecs.STRING_UTF8.encode(buffer, "x".repeat(65));
+
+            assertThrows(RuntimeException.class, () -> FamilyTreeUUIDLookup.STREAM_CODEC.decode(buffer));
+        } finally {
+            buffer.release();
+        }
+    }
+
+    @Test
+    void searchRequestAcceptsQueriesAtTheLimit() {
+        String query = "x".repeat(64);
+        assertEquals(query, roundTrip(
+                FamilyTreeUUIDLookup.STREAM_CODEC,
+                new FamilyTreeUUIDLookup(76L, query)
+        ).search());
+    }
+
+    @Test
     void viewRejectsMoreThanTheWireNodeBudget() {
         Map<UUID, FamilyTreeNode> nodes = new LinkedHashMap<>();
         for (int index = 0; index < 257; index++) {

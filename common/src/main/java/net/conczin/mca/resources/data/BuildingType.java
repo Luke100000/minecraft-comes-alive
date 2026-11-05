@@ -16,6 +16,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class BuildingType {
     public static final StreamCodec<FriendlyByteBuf, BuildingType> STREAM_CODEC = StreamCodec.of(
@@ -74,9 +75,7 @@ public final class BuildingType {
     private final int iconV;
     private final boolean grouped;
     private final int mergeRange;
-    private transient Map<ResourceLocation, ResourceLocation> blockToGroup;
-    private transient Map<TagKey<Block>, ResourceLocation> tagToGroup;
-    private transient Map<ResourceLocation, Integer> groups;
+    private transient volatile BlockGrouping blockGrouping;
 
     // Private constructor for deserialization
     private BuildingType(String name, int margin, String color, int priority, boolean visible, boolean noBeds,
@@ -103,7 +102,6 @@ public final class BuildingType {
         this.visible = true;
         this.noBeds = false;
         this.blocks = Map.of("#minecraft:beds", 1000000000);
-        this.blockToGroup = null;
         this.icon = false;
         this.iconU = 0;
         this.iconV = 0;
@@ -136,17 +134,6 @@ public final class BuildingType {
                 );
             }
         }
-
-        this.groups = new HashMap<>();
-        if (GsonHelper.isObjectNode(value, "groups")) {
-            JsonObject blocks = GsonHelper.getAsJsonObject(value, "groups");
-            for (Map.Entry<String, JsonElement> entry : blocks.entrySet()) {
-                this.groups.put(
-                        ResourceLocation.parse(entry.getKey()),
-                        entry.getValue().getAsInt()
-                );
-            }
-        }
     }
 
     public String name() {
@@ -169,14 +156,26 @@ public final class BuildingType {
         return (int) Long.parseLong(color, 16);
     }
 
-    /**
-     * @return a mapping between block identifiers and groups (tags or individual blocks)
-     */
-    public Map<ResourceLocation, ResourceLocation> getBlockToGroup() {
-        if (blockToGroup == null) {
-            blockToGroup = new HashMap<>();
-            tagToGroup = new HashMap<>();
-            groups = new HashMap<>();
+    private record BlockGrouping(
+            Map<ResourceLocation, ResourceLocation> blockToGroup,
+            Map<TagKey<Block>, ResourceLocation> tagToGroup,
+            Map<ResourceLocation, Integer> groups
+    ) {
+    }
+
+    private BlockGrouping resolveBlockGrouping() {
+        BlockGrouping current = blockGrouping;
+        if (current != null) {
+            return current;
+        }
+        synchronized (this) {
+            current = blockGrouping;
+            if (current != null) {
+                return current;
+            }
+            Map<ResourceLocation, ResourceLocation> resolvedBlockToGroup = new ConcurrentHashMap<>();
+            Map<TagKey<Block>, ResourceLocation> resolvedTagToGroup = new HashMap<>();
+            Map<ResourceLocation, Integer> resolvedGroups = new HashMap<>();
             for (Map.Entry<String, Integer> requirement : blocks.entrySet()) {
                 ResourceLocation identifier;
                 if (requirement.getKey().startsWith("#")) {
@@ -185,21 +184,34 @@ public final class BuildingType {
                     if (RegistryHelper.isTagEmpty(tag)) {
                         MCA.LOGGER.error("Unknown building type tag {}", identifier);
                     }
-                    tagToGroup.put(tag, identifier);
+                    resolvedTagToGroup.put(tag, identifier);
                 } else {
                     identifier = ResourceLocation.parse(requirement.getKey());
-                    blockToGroup.put(identifier, identifier);
+                    resolvedBlockToGroup.put(identifier, identifier);
                 }
-                groups.put(identifier, requirement.getValue());
+                resolvedGroups.put(identifier, requirement.getValue());
             }
+            current = new BlockGrouping(
+                    resolvedBlockToGroup,
+                    Map.copyOf(resolvedTagToGroup),
+                    Map.copyOf(resolvedGroups)
+            );
+            blockGrouping = current;
+            return current;
         }
-        return blockToGroup;
+    }
+
+    /**
+     * @return a mapping between block identifiers and groups (tags or individual blocks)
+     */
+    public Map<ResourceLocation, ResourceLocation> getBlockToGroup() {
+        return resolveBlockGrouping().blockToGroup();
     }
 
     private Optional<ResourceLocation> getGroupForBlock(ResourceLocation blockId) {
-        getBlockToGroup();
+        BlockGrouping grouping = resolveBlockGrouping();
 
-        ResourceLocation directGroup = blockToGroup.get(blockId);
+        ResourceLocation directGroup = grouping.blockToGroup().get(blockId);
         if (directGroup != null) {
             return Optional.of(directGroup);
         }
@@ -209,7 +221,7 @@ public final class BuildingType {
             return Optional.empty();
         }
 
-        for (Map.Entry<TagKey<Block>, ResourceLocation> entry : tagToGroup.entrySet()) {
+        for (Map.Entry<TagKey<Block>, ResourceLocation> entry : grouping.tagToGroup().entrySet()) {
             if (holder.get().is(entry.getKey())) {
                 return Optional.of(entry.getValue());
             }
@@ -224,21 +236,21 @@ public final class BuildingType {
      * static tag data). Tag-matched blocks are cached into blockToGroup for determineType().
      */
     private Optional<ResourceLocation> getGroupForBlock(BlockState state) {
-        getBlockToGroup();
+        BlockGrouping grouping = resolveBlockGrouping();
 
         ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
 
         // Direct block ID match
-        ResourceLocation directGroup = blockToGroup.get(blockId);
+        ResourceLocation directGroup = grouping.blockToGroup().get(blockId);
         if (directGroup != null) {
             return Optional.of(directGroup);
         }
 
         // Tag match using blockState.is(tag) — uses live data-pack tag data
-        for (Map.Entry<TagKey<Block>, ResourceLocation> entry : tagToGroup.entrySet()) {
+        for (Map.Entry<TagKey<Block>, ResourceLocation> entry : grouping.tagToGroup().entrySet()) {
             if (state.is(entry.getKey())) {
                 // Cache so determineType() (ResourceLocation-based) finds it too
-                blockToGroup.put(blockId, entry.getValue());
+                grouping.blockToGroup().put(blockId, entry.getValue());
                 return Optional.of(entry.getValue());
             }
         }
@@ -258,8 +270,7 @@ public final class BuildingType {
     }
 
     public Map<ResourceLocation, Integer> getGroups() {
-        getBlockToGroup();
-        return groups;
+        return resolveBlockGrouping().groups();
     }
 
     /**

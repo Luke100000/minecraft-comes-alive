@@ -5,6 +5,7 @@ import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Mourning;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
+import net.conczin.mca.entity.ai.navigation.PathNodeGeometry;
 import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.core.BlockPos;
@@ -15,7 +16,6 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -215,6 +215,7 @@ public class EnterGraveyardTask extends Behavior<VillagerEntityMCA> {
 
     private static boolean isGoodWalkTarget(ServerLevel level, VillagerEntityMCA villager, BlockPos position) {
         return villager.getNavigation().isStableDestination(position)
-                && level.noCollision(villager, villager.getBoundingBox().move(Vec3.atBottomCenterOf(position).subtract(villager.position())));
+                && level.noCollision(villager, villager.getBoundingBox().move(
+                        PathNodeGeometry.walkingPosition(level, position, villager).subtract(villager.position())));
     }
 }

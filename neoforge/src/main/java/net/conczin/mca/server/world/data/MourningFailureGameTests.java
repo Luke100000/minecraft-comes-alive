@@ -208,6 +208,48 @@ public final class MourningFailureGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void carpetedGravesideStillProvidesStandingPosition(GameTestHelper helper) {
+        BlockPos grave = prepareArena(helper);
+        for (int x = -1; x <= 1; x++) {
+            for (int z = -1; z <= 1; z++) {
+                if (x != 0 || z != 0) {
+                    helper.getLevel().setBlock(grave.offset(x, 0, z), Blocks.WHITE_CARPET.defaultBlockState(), 3);
+                }
+            }
+        }
+        VillagerEntityMCA mourner = spawnVillager(helper, grave.east(6), "Carpeted Graveside Mourner");
+        mourner.setOnGround(true);
+        BlockPos entrance = grave.east();
+        helper.assertTrue(Mourning.isMournableTombstone(helper.getLevel(), grave)
+                        && Mourning.isSafeToMourn(helper.getLevel(), grave),
+                "carpet fixture did not provide a safe, occupied grave");
+        helper.assertTrue(mourner.getNavigation().isStableDestination(entrance),
+                "carpeted graveside position is not stable");
+        Vec3 standingPose = Vec3.atBottomCenterOf(entrance).add(0, 1.0D / 16.0D, 0);
+        helper.assertTrue(helper.getLevel().noBlockCollision(mourner,
+                        mourner.getBoundingBox().move(standingPose.subtract(mourner.position()))),
+                "carpeted graveside physically obstructs the standing villager");
+        var path = mourner.getNavigation().createPath(entrance, 0);
+        helper.assertTrue(path != null && path.canReach() && path.getTarget().equals(entrance),
+                "carpeted graveside fixture is not a reachable navigation target: " + path);
+
+        Mourning.start(mourner, grave);
+        helper.assertTrue(new EnterGraveyardTask().tryStart(helper.getLevel(), mourner, helper.getLevel().getGameTime()),
+                "mourning task did not start in carpeted graveside fixture");
+        helper.assertTrue(mourner.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_POSITION)
+                        .filter(selected -> selected.dimension().equals(helper.getLevel().dimension()))
+                        .map(GlobalPos::pos)
+                        .filter(pos -> pos.getY() == grave.getY()
+                                && !pos.equals(grave)
+                                && Math.abs(pos.getX() - grave.getX()) <= 1
+                                && Math.abs(pos.getZ() - grave.getZ()) <= 1
+                                && helper.getLevel().getBlockState(pos).is(Blocks.WHITE_CARPET))
+                        .isPresent(),
+                "mourner did not select a reachable carpeted graveside standing position at grave level");
+        helper.succeed();
+    }
+
     @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 400)
     public static void failedAmbientApproachDoesNotExcludeReachableNearbyVillager(GameTestHelper helper) {
         BlockPos grave = prepareArena(helper);

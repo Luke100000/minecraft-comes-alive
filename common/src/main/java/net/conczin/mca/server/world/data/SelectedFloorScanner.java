@@ -310,9 +310,6 @@ final class SelectedFloorScanner {
             }
             BlockState state = world.getBlockState(pos);
             for (Direction observedFace : Direction.values()) observeFrameState(pos, observedFace);
-            if (state.getBlock() instanceof TrapDoorBlock || state.getBlock() instanceof FenceGateBlock) {
-                state = world.getBlockState(pos);
-            }
             if (state.is(BlockTags.LEAVES) || !state.getFluidState().isEmpty()
                     || state.getBlock() instanceof LeavesBlock || state.getBlock() instanceof DoorBlock) return List.of();
             var shape = state.getCollisionShape(world, pos);

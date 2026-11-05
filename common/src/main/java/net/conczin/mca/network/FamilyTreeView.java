@@ -97,7 +97,7 @@ public record FamilyTreeView(
             throw new IllegalArgumentException("Family tree view contains grave for node outside the bounded view");
         }
         Map<UUID, FamilyTreeNode> ownedNodes = new LinkedHashMap<>(nodes.size());
-        nodes.forEach((id, node) -> ownedNodes.put(id, new FamilyTreeNode(null, node.save())));
+        nodes.forEach((id, node) -> ownedNodes.put(id, node.detachedCopy()));
         nodes = Map.copyOf(ownedNodes);
         continuations = Set.copyOf(continuations);
         unavailable = Set.copyOf(unavailable);

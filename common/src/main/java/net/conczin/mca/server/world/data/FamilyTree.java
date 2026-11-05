@@ -54,7 +54,8 @@ public class FamilyTree extends SavedData {
     }
 
     public Stream<FamilyTreeNode> getAllWithName(String name) {
-        return entries.values().stream().filter(n -> n.getName().toLowerCase(Locale.ROOT).equals(name.toLowerCase(Locale.ROOT)));
+        String query = name.toLowerCase(Locale.ROOT);
+        return entries.values().stream().filter(n -> n.getName().toLowerCase(Locale.ROOT).equals(query));
     }
 
     public Stream<FamilyTreeNode> getAllWithNameContaining(String name) {

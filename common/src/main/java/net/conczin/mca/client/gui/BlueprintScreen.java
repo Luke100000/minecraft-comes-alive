@@ -332,18 +332,17 @@ public class BlueprintScreen extends ExtendedScreen {
                     column.addTooltip("gui.blueprint.restrictAccess", b ->
                             targetedEditMessage(
                                     ReportBuildingMessage.Action.FORCE_TYPE,
-                                    village, getPlayerRoomScanPlan(), selectedFloorOrdinal)
+                                    village, getPlayerRoomScanPlan())
                                     .ifPresent(Network::sendToServer));
                     mainRoomButton = column.addTooltip("gui.blueprint.setMainRoom", b -> {
                         targetedEditMessage(
                                 ReportBuildingMessage.Action.SET_MAIN_ROOM,
-                                village, getPlayerRoomScanPlan(), selectedFloorOrdinal)
+                                village, getPlayerRoomScanPlan())
                                 .ifPresent(message -> {
                                     selectPlayerFloorOnNextVillageResponse = true;
                                     Network.sendToServer(message);
                                 });
                     });
-                    updateMainRoomControl(getPlayerRoomScanPlan());
                     if (isVillage) {
                         column.addButton(Component.translatable("gui.blueprint.renameVillage"), b -> setPage("rename"));
                     }
@@ -359,10 +358,9 @@ public class BlueprintScreen extends ExtendedScreen {
                             "gui.blueprint.addStructure", b -> requestPrimaryStructureScan());
                     removeRoomButton = column.addTooltip("gui.blueprint.removeRoom", b -> {
                         RoomScanPlan plan = getPlayerRoomScanPlan();
-                        RemovalControlState state = removalControlState(
-                                village, plan, selectedFloorOrdinal);
+                        RemovalControlState state = removalControlState(village, plan);
                         if (state.visible() && state.active() && state.action() != null) {
-                            targetedEditMessage(state.action(), village, plan, selectedFloorOrdinal)
+                            targetedEditMessage(state.action(), village, plan)
                                     .ifPresent(Network::sendToServer);
                         }
                     });
@@ -370,13 +368,14 @@ public class BlueprintScreen extends ExtendedScreen {
                             Component.translatable("gui.blueprint.removeBuilding"), b ->
                                     targetedEditMessage(
                                             ReportBuildingMessage.Action.REMOVE,
-                                            village, getPlayerRoomScanPlan(), selectedFloorOrdinal)
+                                            village, getPlayerRoomScanPlan())
                                             .ifPresent(Network::sendToServer));
 
                     addRenderableWidget(new ButtonWidget(
                             bx, floorControlY + 22, MAP_SIDE_CONTROL_WIDTH, 20,
                             Component.translatable("gui.blueprint.advanced"), b -> setPage("advanced")));
                 }
+                updateMapControls(getPlayerRoomScanPlan());
                 break;
             }
             case "rank":
@@ -470,11 +469,19 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     @Override
-    public void render(GuiGraphics context, int sizeX, int sizeY, float offset) {
-        if (village != null && ("map".equals(page) || "advanced".equals(page))) {
+    public void tick() {
+        super.tick();
+        if (village == null || !("map".equals(page) || "advanced".equals(page))
+                || minecraft == null || minecraft.player == null) {
+            return;
+        }
+        if (cachedRoomScanPlan == null || !minecraft.player.blockPosition().equals(lastRoomScanPosition)) {
             updateMapControls(getPlayerRoomScanPlan());
         }
+    }
 
+    @Override
+    public void render(GuiGraphics context, int sizeX, int sizeY, float offset) {
         super.render(context, sizeX, sizeY, offset);
 
         assert minecraft != null;
@@ -537,8 +544,7 @@ public class BlueprintScreen extends ExtendedScreen {
 
     static Optional<ReportBuildingMessage> targetedEditMessage(ReportBuildingMessage.Action action,
                                                                 Village village,
-                                                                RoomScanPlan plan,
-                                                                Integer selectedFloor) {
+                                                                RoomScanPlan plan) {
         if (village == null || plan == null) return Optional.empty();
         Building room = plan.currentRoom().orElse(null);
         int expectedTargetId = switch (action) {
@@ -546,17 +552,26 @@ public class BlueprintScreen extends ExtendedScreen {
             case REMOVE_FLOOR, REMOVE -> village.getLogicalBuildingId(plan.targetStructureId());
             default -> -1;
         };
+        Integer floorNumber = action == ReportBuildingMessage.Action.REMOVE_FLOOR
+                ? interactionFloorNumber(village, plan) : null;
         if (expectedTargetId < 0 || action == ReportBuildingMessage.Action.REMOVE_FLOOR
-                && (selectedFloor == null || !village.canRemoveFloor(expectedTargetId, selectedFloor))) {
+                && (floorNumber == null || !village.canRemoveFloor(expectedTargetId, floorNumber))) {
             return Optional.empty();
         }
         String data = switch (action) {
             case FORCE_TYPE -> "blocked";
-            case REMOVE_FLOOR -> floorRemovalData(village, expectedTargetId, selectedFloor);
+            case REMOVE_FLOOR -> floorRemovalData(village, expectedTargetId, floorNumber);
             default -> null;
         };
         if (action == ReportBuildingMessage.Action.REMOVE_FLOOR && data == null) return Optional.empty();
         return Optional.of(new ReportBuildingMessage(action, data, expectedTargetId));
+    }
+
+    private static Integer interactionFloorNumber(Village village, RoomScanPlan plan) {
+        return village.getStructure(plan.targetStructureId())
+                .flatMap(structure -> structure.getFloor(plan.targetFloorId()))
+                .map(StructureFloor::floorNumber)
+                .orElse(null);
     }
 
     private static String floorRemovalData(Village village, int logicalBuildingId, int floorNumber) {
@@ -618,7 +633,7 @@ public class BlueprintScreen extends ExtendedScreen {
         Village.RoomScanMode primaryMode = scanContext.mode();
         boolean roomRegistered = scanContext.mode() == Village.RoomScanMode.UPDATE_ROOM;
         boolean insideBuilding = roomRegistered || scanContext.mode() == Village.RoomScanMode.ADD_ROOM;
-        RemovalControlState removalState = removalControlState(village, scanContext, selectedFloorOrdinal);
+        RemovalControlState removalState = removalControlState(village, scanContext);
         int y = layoutBaseY() - 56 + 22 * 3;
 
         String scanKey = primaryMode == Village.RoomScanMode.ADD_ATTACHMENT
@@ -646,12 +661,12 @@ public class BlueprintScreen extends ExtendedScreen {
     }
 
     static RemovalControlState removalControlState(Village village,
-                                                   RoomScanPlan scanContext,
-                                                   Integer selectedFloor) {
+                                                   RoomScanPlan scanContext) {
         if (village == null || scanContext == null) return RemovalControlState.hidden();
 
-        if (selectedFloor != null
-                && village.canRemoveFloor(village.getLogicalBuildingId(scanContext.targetStructureId()), selectedFloor)) {
+        Integer playerFloor = interactionFloorNumber(village, scanContext);
+        if (playerFloor != null
+                && village.canRemoveFloor(village.getLogicalBuildingId(scanContext.targetStructureId()), playerFloor)) {
             return new RemovalControlState(true, true, ReportBuildingMessage.Action.REMOVE_FLOOR,
                     "gui.blueprint.removeFloor", "gui.blueprint.removeFloor.tooltip");
         }
@@ -1413,18 +1428,22 @@ public class BlueprintScreen extends ExtendedScreen {
         this.roomTypeResolver = RoomTypeResolver.create(village);
         this.tooltipFactory = BlueprintTooltipFactory.create(village, roomTypeResolver);
         this.mapGeometry = BlueprintMapGeometry.build(village, roomTypeResolver);
-        RoomScanPlan scanContext = getPlayerRoomScanPlan();
+        boolean mapPage = "map".equals(page) || "advanced".equals(page)
+                || (village != null && ("waiting".equals(page) || "empty".equals(page)));
+        RoomScanPlan scanContext = (selectPlayerFloorOnNextVillageResponse || mapPage)
+                ? getPlayerRoomScanPlan() : null;
         if (selectPlayerFloorOnNextVillageResponse && selectedFloorOrdinal != null
-                && scanContext.mode() == Village.RoomScanMode.UPDATE_ROOM) {
+                && scanContext != null && scanContext.mode() == Village.RoomScanMode.UPDATE_ROOM) {
             selectPlayerFloor(scanContext);
         }
         selectPlayerFloorOnNextVillageResponse = false;
-        updateMapControls(scanContext);
 
         if (village == null) {
             setPage("empty");
         } else if (page.equals("waiting") || page.equals("empty")) {
             setPage("map");
+        } else if (scanContext != null) {
+            updateMapControls(scanContext);
         }
     }
 
