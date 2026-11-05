@@ -10,14 +10,23 @@ import net.conczin.mca.resources.data.skin.HairStyle;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.conczin.mca.resources.data.skin.SkinListEntry;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.packs.PackResources;
+import net.minecraft.server.packs.resources.Resource;
+import net.minecraft.server.packs.resources.ResourceManager;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStreamReader;
+import java.lang.reflect.Proxy;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SkinCatalogLoaderTest {
@@ -216,5 +225,126 @@ class SkinCatalogLoaderTest {
             reloader.hair.clear();
             reloader.hair.putAll(old);
         }
+    }
+
+    @Test
+    void bundledSkinCollectionsRemainAvailable() {
+        BuiltInSkinCatalog.Catalog catalog = BuiltInSkinCatalog.get();
+        assertFalse(catalog.clothing().isEmpty());
+        assertFalse(catalog.bodySkins().isEmpty());
+        assertFalse(catalog.hairStyles().isEmpty());
+        assertFalse(catalog.layeredHair().isEmpty());
+
+        assertEquals(Gender.FEMALE,
+                catalog.clothing().get("mca:skins/clothing/normal/female/none/0.png").getGender());
+        assertEquals(Gender.MALE, catalog.bodySkins().get("mca:skins/skin/male/0.png").getGender());
+        assertEquals(Gender.FEMALE, catalog.bodySkins().get("mca:skins/skin/female/0.png").getGender());
+        assertEquals(Gender.NEUTRAL, catalog.hairStyles().get("mca:hair_style/layered/short_1").getGender());
+        assertEquals("mca:skins/layered_hair/base/1.png",
+                catalog.hairStyles().get("mca:hair_style/layered/short_1").base());
+        assertEquals(LayeredHair.Category.BACK,
+                catalog.layeredHair().get("mca:skins/layered_hair/back/1.png|neutral|back").getCategory());
+
+        ClassLoader loader = BuiltInSkinCatalog.class.getClassLoader();
+        for (String path : List.of("skins/body/skins.json", "skins/clothing/female.json",
+                "skins/clothing/male.json", "skins/clothing/neutral.json",
+                "skins/hair_styles/female.json", "skins/hair_styles/male.json",
+                "skins/hair_styles/neutral.json", "hair_layers/back.json")) {
+            assertNotNull(loader.getResource("data/mca/" + path), path);
+        }
+    }
+
+    @Test
+    void layerCollectionsRespectReplaceDirective() {
+        Identifier fileId = Identifier.parse("mca:hair_layers/back.json");
+        String base = "[\"mca:skins/layered_hair/back/old\"]";
+        String replacement = "{\"replace\":true,\"textures\":[\"mca:skins/layered_hair/back/new\"]}";
+        String additive = "{\"replace\":false,\"textures\":[\"mca:skins/layered_hair/back/new\"]}";
+
+        Map<Identifier, List<String>> replaced = SkinListJson.textureCollections(
+                twoPackManager(fileId, base, replacement), "hair_layers");
+        assertEquals(List.of("mca:skins/layered_hair/back/new"),
+                replaced.get(Identifier.parse("mca:back")));
+
+        Map<Identifier, List<String>> appended = SkinListJson.textureCollections(
+                twoPackManager(fileId, base, additive), "hair_layers");
+        assertEquals(List.of("mca:skins/layered_hair/back/old", "mca:skins/layered_hair/back/new"),
+                appended.get(Identifier.parse("mca:back")));
+
+        LayeredHairList reloader = LayeredHairList.getInstance() == null ? new LayeredHairList() : LayeredHairList.getInstance();
+        var old = new HashMap<>(reloader.hair);
+        try {
+            reloader.apply(replaced, null, null);
+            assertFalse(reloader.hair.containsKey("mca:skins/layered_hair/back/old|neutral|back"));
+            assertTrue(reloader.hair.containsKey("mca:skins/layered_hair/back/new|neutral|back"));
+        } finally {
+            reloader.hair.clear();
+            reloader.hair.putAll(old);
+        }
+    }
+
+    @Test
+    void bundledStylesAndLayersAgreeWithReloaders() throws Exception {
+        var builtIn = BuiltInSkinCatalog.get();
+        var stylesJson = bundledJson("skins/hair_styles/neutral.json");
+        var layersJson = bundledJson("hair_layers/back.json");
+        HairStyleList styles = HairStyleList.getInstance() == null ? new HairStyleList() : HairStyleList.getInstance();
+        LayeredHairList layers = LayeredHairList.getInstance() == null ? new LayeredHairList() : LayeredHairList.getInstance();
+        var oldStyles = new HashMap<>(styles.styles);
+        var oldLayers = new HashMap<>(layers.hair);
+        try {
+            styles.apply(Map.of(Identifier.parse("mca:skins/hair_styles/neutral"), stylesJson), null, null);
+            layers.apply(Map.of(Identifier.parse("mca:hair_layers/back"),
+                    SkinListJson.textureCollection(Identifier.parse("mca:hair_layers/back"), layersJson)), null, null);
+            HairStyle bundledStyle = builtIn.hairStyles().get("mca:hair_style/layered/short_1");
+            HairStyle reloadedStyle = styles.get("mca:hair_style/layered/short_1");
+            assertEquals(bundledStyle.getGender(), reloadedStyle.getGender());
+            assertEquals(bundledStyle.getChance(), reloadedStyle.getChance());
+            for (LayeredHair.Category category : LayeredHair.Category.values()) {
+                assertEquals(bundledStyle.layer(category), reloadedStyle.layer(category));
+            }
+            String key = "mca:skins/layered_hair/back/1.png|neutral|back";
+            assertEquals(builtIn.layeredHair().get(key).getIdentifier(), layers.hair.get(key).getIdentifier());
+            assertEquals(builtIn.layeredHair().get(key).getCategory(), layers.hair.get(key).getCategory());
+        } finally {
+            styles.styles.clear();
+            styles.styles.putAll(oldStyles);
+            layers.hair.clear();
+            layers.hair.putAll(oldLayers);
+        }
+    }
+
+    private static com.google.gson.JsonElement bundledJson(String relativePath) throws Exception {
+        try (var reader = new InputStreamReader(
+                BuiltInSkinCatalog.class.getClassLoader().getResourceAsStream("data/mca/" + relativePath),
+                StandardCharsets.UTF_8)) {
+            return JsonParser.parseReader(reader);
+        }
+    }
+
+    private static ResourceManager twoPackManager(Identifier fileId, String base, String higherPriority) {
+        Resource baseResource = new Resource(pack("base"), () -> new ByteArrayInputStream(base.getBytes(StandardCharsets.UTF_8)));
+        Resource overrideResource = new Resource(pack("higher"),
+                () -> new ByteArrayInputStream(higherPriority.getBytes(StandardCharsets.UTF_8)));
+        return (ResourceManager) Proxy.newProxyInstance(ResourceManager.class.getClassLoader(),
+                new Class<?>[]{ResourceManager.class}, (proxy, method, args) -> {
+                    if (method.getName().equals("listResourceStacks")) {
+                        @SuppressWarnings("unchecked")
+                        Predicate<Identifier> filter = (Predicate<Identifier>) args[1];
+                        return args[0].equals("hair_layers") && filter.test(fileId)
+                                ? Map.of(fileId, List.of(baseResource, overrideResource)) : Map.of();
+                    }
+                    throw new UnsupportedOperationException(method.getName());
+                });
+    }
+
+    private static PackResources pack(String id) {
+        return (PackResources) Proxy.newProxyInstance(PackResources.class.getClassLoader(),
+                new Class<?>[]{PackResources.class}, (proxy, method, args) -> {
+                    if (method.getName().equals("packId")) {
+                        return id;
+                    }
+                    throw new UnsupportedOperationException(method.getName());
+                });
     }
 }
