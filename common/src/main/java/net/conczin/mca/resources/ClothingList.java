@@ -1,7 +1,6 @@
 package net.conczin.mca.resources;
 
 import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerLike;
@@ -14,7 +13,6 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
 import net.minecraft.util.ExtraCodecs;
-import net.minecraft.util.GsonHelper;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import org.jetbrains.annotations.Nullable;
@@ -42,25 +40,7 @@ public class ClothingList extends SimpleJsonResourceReloadListener<JsonElement> 
     @Override
     protected void apply(Map<Identifier, JsonElement> data, ResourceManager manager, ProfilerFiller profiler) {
         clothing.clear();
-
-        data.forEach((id, file) -> {
-            Gender fileGender = BodySkinList.getGenderFromPath(id);
-
-            for (SkinListJson.Entry entry : SkinListJson.entries(id, file)) {
-                Gender entryGender = SkinListJson.resolveGender(fileGender, entry);
-                if (entryGender == Gender.UNASSIGNED) {
-                    MCA.LOGGER.warn("Invalid gender for clothing entry {} in {}", entry.identifier(), id);
-                    continue;
-                }
-
-                JsonObject metadata = entry.metadata();
-                String profession = metadata.has("profession") && !metadata.get("profession").isJsonNull() ? GsonHelper.getAsString(metadata, "profession", null) : null;
-                boolean exclude = GsonHelper.getAsBoolean(metadata, "exclude", false);
-                int temperature = GsonHelper.getAsInt(metadata, "temperature", 0);
-
-                clothing.put(entry.identifier(), new Clothing(entry.identifier(), profession, temperature, exclude, entryGender));
-            }
-        });
+        data.forEach((id, file) -> SkinCatalogLoader.addClothing(clothing, id, file));
     }
 
     /**
