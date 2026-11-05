@@ -340,6 +340,30 @@ public final class StairDoorNavigationGameTests {
         });
     }
 
+    /** A temporarily unsupported start must keep its destination until native search becomes possible. */
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 80)
+    public static void airborneMovementWaitsForNativeSearchReadiness(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(40, 3, 40));
+        prepareArea(helper, start, 6, 5);
+        VillagerEntityMCA actor = spawnProbe(helper, Vec3.atBottomCenterOf(start));
+        actor.setPos(actor.getX(), actor.getY() + 0.75D, actor.getZ());
+        actor.setOnGround(false);
+        MCAGroundPathNavigation navigation = (MCAGroundPathNavigation) actor.getNavigation();
+        helper.assertTrue(!navigation.canUpdatePath(), "The movement probe must start in an unsupported native pose");
+        BlockPos target = start.east(3);
+        startWalking(helper, actor, target, true);
+
+        boolean started = new MoveToTargetSink().tryStart(helper.getLevel(), actor, helper.getLevel().getGameTime());
+
+        helper.assertTrue(!started, "Movement must wait for native navigation to accept a search");
+        helper.assertTrue(actor.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                        && !actor.getBrain().hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
+                "An unavailable airborne search consumed the destination and marked it unreachable");
+        helper.succeedWhen(() -> helper.assertTrue(actor.onGround()
+                        && actor.distanceToSqr(Vec3.atBottomCenterOf(target)) < 0.64D,
+                "The preserved destination did not resume its real journey after landing: " + actor.position()));
+    }
+
     @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 260)
     public static void impossibleSemanticFinalTargetEventuallyYields(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(40, 3, 40));

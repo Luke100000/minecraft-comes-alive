@@ -1,23 +1,20 @@
 package net.conczin.mca.server.world.data;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.SharedConstants;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.EmptyBlockGetter;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.material.FluidState;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.lang.invoke.MethodHandles;
-import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.lang.reflect.Proxy;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.*;
 
 class SelectedFloorScannerCachingTest {
     @BeforeAll
@@ -28,73 +25,49 @@ class SelectedFloorScannerCachingTest {
 
     @Test
     void rejectedFlightCachesEveryVisitedCell() throws ReflectiveOperationException {
-        SelectedFloorScanner.SurfaceCell lower = cell(0, 64, 0);
-        SelectedFloorScanner.SurfaceCell upper = cell(1, 65, 0);
+        OneStepWorld world = new OneStepWorld();
+        var observation = new SelectedFloorScanner.Observation(world, 64, 64);
+        var lower = observation.surfaceCell(new BlockPos(0, 64, 0)).orElseThrow();
+        var upper = observation.surfaceCell(new BlockPos(1, 65, 0)).orElseThrow();
 
-        Class<?> stepType = nestedType("HorizontalStep");
-        Constructor<?> stepConstructor = stepType.getDeclaredConstructor(
-                SelectedFloorScanner.SurfaceCell.class, BlockPos.class);
-        stepConstructor.setAccessible(true);
-        Object up = stepConstructor.newInstance(upper, null);
-        Object down = stepConstructor.newInstance(lower, null);
-        Map<BlockPos, List<?>> steps = Map.of(
-                lower.feet(), List.of(up),
-                upper.feet(), List.of(down)
-        );
-
-        Class<?> providerType = nestedType("StepProvider");
-        AtomicInteger lookups = new AtomicInteger();
-        Object provider = Proxy.newProxyInstance(
-                SelectedFloorScanner.class.getClassLoader(),
-                new Class<?>[]{providerType},
-                (proxy, method, args) -> {
-                    if (method.getName().equals("steps")) {
-                        lookups.incrementAndGet();
-                        SelectedFloorScanner.SurfaceCell requested =
-                                (SelectedFloorScanner.SurfaceCell) args[0];
-                        return steps.getOrDefault(requested.feet(), List.of());
-                    }
-                    if (method.isDefault()) {
-                        return MethodHandles.privateLookupIn(providerType, MethodHandles.lookup())
-                                .unreflectSpecial(method, providerType).bindTo(proxy).invokeWithArguments(args);
-                    }
-                    return switch (method.getName()) {
-                        case "toString" -> "counting step provider";
-                        case "hashCode" -> System.identityHashCode(proxy);
-                        case "equals" -> proxy == args[0];
-                        default -> throw new UnsupportedOperationException(method.toString());
-                    };
-                }
-        );
-
-        Class<?> regionType = nestedType("RegionDiscovery");
-        Constructor<?> regionConstructor = regionType.getDeclaredConstructor(
-                BlockGetter.class, FloorCeilingResolver.class, providerType, int.class, int.class);
-        regionConstructor.setAccessible(true);
-        BlockGetter world = EmptyBlockGetter.INSTANCE;
-        Object regions = regionConstructor.newInstance(world, new FloorCeilingResolver(world), provider, 64, 64);
-        Class<?> ownershipType = nestedType("TransitionOwnership");
-        Constructor<?> ownershipConstructor = ownershipType.getDeclaredConstructor(
-                BlockGetter.class, providerType, regionType, int.class, int.class);
-        ownershipConstructor.setAccessible(true);
-        Object ownership = ownershipConstructor.newInstance(world, provider, regions, 64, 64);
-        Method owner = ownershipType.getDeclaredMethod(
-                "owner", SelectedFloorScanner.SurfaceCell.class);
+        Field ownershipField = SelectedFloorScanner.Observation.class.getDeclaredField("transitionsOwner");
+        ownershipField.setAccessible(true);
+        Object ownership = ownershipField.get(observation);
+        Method owner = ownership.getClass().getDeclaredMethod("owner", SelectedFloorScanner.SurfaceCell.class);
         owner.setAccessible(true);
 
+        int beforeDiscovery = world.reads;
         assertNull(owner.invoke(ownership, lower));
-        int firstDiscoveryLookups = lookups.get();
+        int firstDiscoveryReads = world.reads;
+        assertTrue(firstDiscoveryReads > beforeDiscovery, "the initial flight proof must inspect the world");
 
         assertNull(owner.invoke(ownership, upper));
-        assertEquals(firstDiscoveryLookups, lookups.get(),
+        assertEquals(firstDiscoveryReads, world.reads,
                 "a second cell in the same rejected flight must reuse the negative result");
     }
 
-    private static SelectedFloorScanner.SurfaceCell cell(int x, int y, int z) {
-        return new SelectedFloorScanner.SurfaceCell(new BlockPos(x, y, z), y, y + 3);
-    }
+    /** Two supported cells joined by an ordinary one-block step, below a physical roof. */
+    private static final class OneStepWorld implements BlockGetter {
+        private int reads;
 
-    private static Class<?> nestedType(String simpleName) throws ClassNotFoundException {
-        return Class.forName(SelectedFloorScanner.class.getName() + "$" + simpleName);
+        @Override
+        public BlockState getBlockState(BlockPos pos) {
+            reads++;
+            boolean column = pos.getZ() == 0 && (pos.getX() == 0 || pos.getX() == 1);
+            return column && (pos.getY() == 63 + pos.getX() || pos.getY() == 68)
+                    ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState();
+        }
+
+        @Override
+        public FluidState getFluidState(BlockPos pos) { return getBlockState(pos).getFluidState(); }
+
+        @Override
+        public BlockEntity getBlockEntity(BlockPos pos) { return null; }
+
+        @Override
+        public int getHeight() { return 128; }
+
+        @Override
+        public int getMinY() { return 0; }
     }
 }

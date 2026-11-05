@@ -73,6 +73,12 @@ public final class AutonomousPathfindingGameTests {
     private static final String BOUNDED_DETOUR_BATCH = "mca_autonomous_bounded_detour";
     private static final String LONG_CORRIDOR_BATCH = "mca_autonomous_long_corridor";
     private static final String FLOWING_WATER_BATCH = "mca_autonomous_flowing_water";
+    private static final String SHELF_HOME_BATCH = "mca_autonomous_shelf_home";
+    private static final String SHELF_FULL_BRAIN_BATCH = "mca_shelf_home_full_brain";
+    private static final String SHELF_NIGHT_BATCH = "mca_shelf_home_night";
+    private static Long originalShelfDayTime;
+    private static Boolean originalShelfDaylightCycle;
+    private static final Set<VillagerEntityMCA> SHELF_RESIDENTS = new HashSet<>();
     private static final Set<VillagerEntityMCA> VILLAGERS = new HashSet<>();
     private static final Map<BlockPos, BlockState> ORIGINAL_BLOCKS = new LinkedHashMap<>();
     private static final Set<ChunkPos> FORCED_CHUNKS = new HashSet<>();
@@ -135,6 +141,130 @@ public final class AutonomousPathfindingGameTests {
     }
 
     private AutonomousPathfindingGameTests() {
+    }
+
+    @GameTest(batch = SHELF_HOME_BATCH, templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 1_500)
+    public static void goHomeLeavesShelfBuildingForDistantBed(GameTestHelper helper) {
+        assertShelfHomeJourney(helper, false, false);
+    }
+
+    @GameTest(batch = SHELF_FULL_BRAIN_BATCH, templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 1_500)
+    public static void daytimeGoHomeDoesNotReturnInsideShelfBuilding(GameTestHelper helper) {
+        assertShelfHomeJourney(helper, true, false);
+    }
+
+    @GameTest(batch = SHELF_NIGHT_BATCH, templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 1_500)
+    public static void nighttimeGoHomeDoesNotReturnInsideShelfBuilding(GameTestHelper helper) {
+        assertShelfHomeJourney(helper, true, true);
+    }
+
+    private static void assertShelfHomeJourney(GameTestHelper helper, boolean fullBrain, boolean night) {
+        BlockPos start = helper.absolutePos(new BlockPos(8, 1, 8));
+        BlockPos bed = start.east(70);
+        BlockPos center = start.east(34);
+        ServerLevel level = helper.getLevel();
+        rememberArea(level, center, 64);
+        prepareFlatArea(helper, center, 64, 3);
+        for (int i = -6; i <= 6; i++) {
+            for (int y = 0; y < 3; y++) {
+                level.setBlock(start.offset(i, y, -6), Blocks.QUARTZ_BLOCK.defaultBlockState(), 3);
+                level.setBlock(start.offset(i, y, 6), Blocks.QUARTZ_BLOCK.defaultBlockState(), 3);
+                level.setBlock(start.offset(6, y, i), Blocks.QUARTZ_BLOCK.defaultBlockState(), 3);
+                if (i != 0 || y == 2) {
+                    level.setBlock(start.offset(-6, y, i), Blocks.QUARTZ_BLOCK.defaultBlockState(), 3);
+                }
+            }
+        }
+        if (fullBrain) {
+            rememberBlocks(level, start.offset(-6, 3, -6), start.offset(6, 3, 6));
+            for (int x = -6; x <= 6; x++) {
+                for (int z = -6; z <= 6; z++) {
+                    level.setBlock(start.offset(x, 3, z), Blocks.QUARTZ_BLOCK.defaultBlockState(), 3);
+                }
+            }
+        }
+        level.setBlock(start.offset(5, 0, 0), NavigationPhysicalSafetyGameTests.westFacingShelfState(), 3);
+        level.setBlock(start.offset(5, 1, 0), Blocks.FLOWERING_AZALEA_LEAVES.defaultBlockState(), 3);
+        level.setBlock(bed, Blocks.BED.pick(net.minecraft.world.item.DyeColor.RED).defaultBlockState()
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST)
+                .setValue(BlockStateProperties.BED_PART, net.minecraft.world.level.block.state.properties.BedPart.HEAD), 3);
+        level.setBlock(bed.west(), Blocks.BED.pick(net.minecraft.world.item.DyeColor.RED).defaultBlockState()
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST)
+                .setValue(BlockStateProperties.BED_PART, net.minecraft.world.level.block.state.properties.BedPart.FOOT), 3);
+
+        originalTeleportConfig = Config.getInstance().allowVillagerTeleporting;
+        Config.getInstance().allowVillagerTeleporting = false;
+        if (night) {
+            originalShelfDayTime = level.getOverworldClockTime();
+            originalShelfDaylightCycle = level.getGameRules().get(net.minecraft.world.level.gamerules.GameRules.ADVANCE_TIME);
+            level.getGameRules().set(net.minecraft.world.level.gamerules.GameRules.ADVANCE_TIME, false, level.getServer());
+            level.clockManager().setTotalTicks(level.dimensionType().defaultClock().orElseThrow(), 16000L);
+            helper.assertTrue(level.getPoiManager().take(type -> type.is(net.minecraft.world.entity.ai.village.poi.PoiTypes.HOME),
+                    (type, pos) -> pos.equals(bed), bed, 1).isPresent(), "fixture bed has no available HOME POI");
+        }
+        VillagerEntityMCA villager = spawnAutonomousVillager(helper, start, bed, 0.5F, false);
+        helper.assertTrue(villager.getNavigation().getMaxPathLength() >= 48.0F,
+                "ordinary navigation must retain the source branch's minimum search range");
+        if (fullBrain) {
+            villager.refreshBrain(level);
+        }
+        @SuppressWarnings("unchecked")
+        Brain<VillagerEntityMCA> brain = (Brain<VillagerEntityMCA>) (Brain<?>) villager.getBrain();
+        if (fullBrain) {
+            brain.setSchedule(night ? net.conczin.mca.entity.ai.SchedulesMCA.DEFAULT
+                    : GameTestBrain.fixedSchedule(Activity.IDLE));
+            brain.setActiveActivityIfPossible(night ? Activity.REST : Activity.IDLE);
+            brain.setMemory(MemoryModuleType.HOME, GlobalPos.of(level.dimension(), bed));
+            brain.setMemory(net.conczin.mca.entity.ai.MemoryModuleTypeMCA.FORCED_HOME, true);
+        } else {
+            brain.stopAll(level, villager);
+            brain.removeAllBehaviors();
+            GameTestBrain.addActivity(brain, Activity.CORE, 1, ImmutableList.of(new WanderOrTeleportToTargetTask()));
+        }
+        if (night) SHELF_RESIDENTS.add(villager);
+        villager.moveTowardsPersistent(bed, 0.5F, 1);
+        boolean[] exited = {false};
+        int[] returns = {0};
+        boolean[] wasInside = {true};
+        boolean[] partialFlank = {false};
+        Vec3[] previous = {villager.position()};
+        long started = level.getGameTime();
+        helper.onEachTick(() -> {
+            long elapsed = level.getGameTime() - started;
+            Path current = villager.getNavigation().getPath();
+            helper.assertTrue(level.isPositionEntityTicking(villager.blockPosition()),
+                    "Shelf journey left the fixture's ticking chunks at " + villager.blockPosition());
+            partialFlank[0] |= current != null && !current.canReach()
+                    && ((MCAGroundPathNavigation) villager.getNavigation()).isTakingDetourTo(bed);
+            helper.assertTrue(villager.position().distanceTo(previous[0]) < 3.0D, "villager teleported");
+            previous[0] = villager.position();
+            boolean inside = Math.abs(villager.getX() - (start.getX() + 0.5D)) < 5.5D
+                    && Math.abs(villager.getZ() - (start.getZ() + 0.5D)) < 5.5D;
+            if (Math.abs(villager.getX() - (start.getX() + 0.5D)) > 7.0D
+                    || Math.abs(villager.getZ() - (start.getZ() + 0.5D)) > 7.0D) exited[0] = true;
+            if (exited[0] && inside && !wasInside[0]) returns[0]++;
+            wasInside[0] = inside;
+            boolean arrived = night ? villager.isSleeping() && villager.getSleepingPos().filter(bed::equals).isPresent()
+                    : villager.blockPosition().distManhattan(bed) <= 1;
+            if (arrived) {
+                helper.assertTrue(exited[0], "villager reached home without leaving the building");
+                helper.assertTrue(fullBrain || partialFlank[0], "fixture did not exercise a partial flank route");
+                helper.assertTrue(returns[0] == 0, "villager returned inside after exiting the building");
+                helper.succeed();
+            } else if (!night && elapsed > 2 && !brain.hasMemoryValue(MemoryModuleType.WALK_TARGET)) {
+                helper.fail("Go Home target disappeared before arrival: pos=" + villager.position()
+                        + ", exited=" + exited[0] + ", returns=" + returns[0]);
+            } else if (elapsed >= 1_400L) {
+                helper.fail("Go Home did not reach the bed: pos=" + villager.position()
+                        + ", exited=" + exited[0] + ", returns=" + returns[0]
+                        + ", target=" + brain.getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                        + ", activity=" + brain.getActiveNonCoreActivity()
+                        + ", path=" + villager.getNavigation().getPath());
+            }
+        });
     }
 
     @GameTest(batch = FLOWING_WATER_BATCH, templateNamespace = "minecraft",
@@ -871,6 +1001,21 @@ public final class AutonomousPathfindingGameTests {
         cleanup(level);
     }
 
+    @AfterBatch(batch = SHELF_HOME_BATCH)
+    public static void cleanupShelfHome(ServerLevel level) {
+        cleanup(level);
+    }
+
+    @AfterBatch(batch = SHELF_FULL_BRAIN_BATCH)
+    public static void cleanupShelfFullBrain(ServerLevel level) {
+        cleanup(level);
+    }
+
+    @AfterBatch(batch = SHELF_NIGHT_BATCH)
+    public static void cleanupShelfNight(ServerLevel level) {
+        cleanup(level);
+    }
+
     private static void enableFenceGateMovementWithoutTeleporting() {
         Config config = Config.getInstance();
         if (originalGateConfig == null) {
@@ -884,6 +1029,18 @@ public final class AutonomousPathfindingGameTests {
     }
 
     private static void cleanup(ServerLevel level) {
+        SHELF_RESIDENTS.forEach(villager -> {
+            if (villager.isSleeping()) villager.stopSleeping();
+            villager.releasePoi(MemoryModuleType.HOME);
+        });
+        SHELF_RESIDENTS.clear();
+        if (originalShelfDayTime != null) {
+            level.clockManager().setTotalTicks(level.dimensionType().defaultClock().orElseThrow(), originalShelfDayTime);
+            level.getGameRules().set(net.minecraft.world.level.gamerules.GameRules.ADVANCE_TIME,
+                    originalShelfDaylightCycle, level.getServer());
+            originalShelfDayTime = null;
+            originalShelfDaylightCycle = null;
+        }
         GATE_LISTENERS.forEach(listener -> listener.remove(level));
         GATE_LISTENERS.clear();
         VILLAGERS.forEach(VillagerEntityMCA::discard);

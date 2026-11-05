@@ -95,7 +95,7 @@ public class FishingTask extends AbstractChoreTask {
 
         if (villager.isUsingRecoveryFood()) {
             if (bobber != null) {
-                MCA.LOGGER.info(
+                MCA.LOGGER.debug(
                         "[MCA Fishing Debug] recovery-pause villager={} bobber={} held={} inventoryRods={}",
                         villager.getUUID(), bobber.getId(), villager.getItemInHand(villager.getDominantHand()),
                         villager.getInventory().countItem(Items.FISHING_ROD)
@@ -214,7 +214,7 @@ public class FishingTask extends AbstractChoreTask {
                         MIN_BITE_REACTION_TICKS,
                         MAX_BITE_REACTION_TICKS
                 );
-                MCA.LOGGER.info(
+                MCA.LOGGER.debug(
                         "[MCA Fishing Debug] bite-reaction-start villager={} bobber={} delayTicks={}",
                         villager.getUUID(), bobber.getId(), biteReactionTicksRemaining
                 );
@@ -226,7 +226,7 @@ public class FishingTask extends AbstractChoreTask {
 
             biteAttempted = true;
             boolean catchSucceeded = shouldReelBite(villager);
-            MCA.LOGGER.info(
+            MCA.LOGGER.debug(
                     "[MCA Fishing Debug] bite-observed villager={} bobber={} result={} held={} inventoryRods={}",
                     villager.getUUID(), bobber.getId(), catchSucceeded ? "CATCH" : "MISS",
                     villager.getItemInHand(villager.getDominantHand()), villager.getInventory().countItem(Items.FISHING_ROD)
@@ -309,7 +309,7 @@ public class FishingTask extends AbstractChoreTask {
             );
             world.addFreshEntity(item);
             reelItems.add(item);
-            MCA.LOGGER.info(
+            MCA.LOGGER.debug(
                     "[MCA Fishing Debug] reel-start villager={} bobber={} item={} itemEntity={} inventoryRods={}",
                     villager.getUUID(), bobber.getId(), stack, item.getId(), villager.getInventory().countItem(Items.FISHING_ROD)
             );
@@ -368,7 +368,7 @@ public class FishingTask extends AbstractChoreTask {
 
         ItemStack remainder = villager.getInventory().addItem(item.getItem());
         if (remainder.isEmpty()) {
-            MCA.LOGGER.info(
+            MCA.LOGGER.debug(
                     "[MCA Fishing Debug] reel-delivered villager={} itemEntity={} inventoryRods={}",
                     villager.getUUID(), item.getId(), villager.getInventory().countItem(Items.FISHING_ROD)
             );
@@ -376,7 +376,7 @@ public class FishingTask extends AbstractChoreTask {
         } else {
             item.setItem(remainder);
             releasePickupProtection(item);
-            MCA.LOGGER.info(
+            MCA.LOGGER.debug(
                     "[MCA Fishing Debug] reel-remainder villager={} itemEntity={} remainder={} inventoryRods={}",
                     villager.getUUID(), item.getId(), remainder, villager.getInventory().countItem(Items.FISHING_ROD)
             );
@@ -422,7 +422,7 @@ public class FishingTask extends AbstractChoreTask {
         }
 
         villager.setItemInHand(villager.getDominantHand(), villager.getInventory().getItem(slot));
-        MCA.LOGGER.info(
+        MCA.LOGGER.debug(
                 "[MCA Fishing Debug] rod-equipped villager={} slot={} held={} inventoryRods={}",
                 villager.getUUID(), slot, villager.getItemInHand(villager.getDominantHand()),
                 villager.getInventory().countItem(Items.FISHING_ROD)

@@ -1,7 +1,7 @@
 package net.conczin.mca.entity.ai;
 
-import net.conczin.mca.MCA;
 import net.conczin.mca.Config;
+import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTask;
 import net.conczin.mca.entity.ai.navigation.BedApproachTarget;
@@ -25,7 +25,6 @@ import net.minecraft.world.entity.ai.village.poi.PoiType;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Path;
 
 import java.util.Comparator;

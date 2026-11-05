@@ -40,6 +40,11 @@ public class BuildingTask extends Task {
     }
 
     @Override
+    public boolean isCompleted(CompletionContext context) {
+        return context.hasBuilding(building);
+    }
+
+    @Override
     public MutableComponent getTranslatable() {
         return Component.translatable("task.build", Component.translatable("buildingType." + building));
     }

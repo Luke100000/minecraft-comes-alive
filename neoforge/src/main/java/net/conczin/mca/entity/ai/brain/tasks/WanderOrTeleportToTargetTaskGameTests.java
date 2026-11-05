@@ -14,9 +14,11 @@ import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.conczin.mca.neoforge.gametest.AfterBatch;
 import net.conczin.mca.neoforge.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.ai.behavior.EntityTracker;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -37,12 +39,18 @@ import net.minecraft.world.phys.Vec3;
 import net.conczin.mca.neoforge.gametest.GameTestHolder;
 import net.conczin.mca.neoforge.gametest.PrefixGameTestTemplate;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath;
 
 @GameTestHolder("minecraft")
 @PrefixGameTestTemplate(false)
 public final class WanderOrTeleportToTargetTaskGameTests {
+    private static final List<ChunkPos> REST_WALK_OWNED_CHUNKS = new ArrayList<>();
+    private static VillagerEntityMCA restWalkVillager;
+
     private WanderOrTeleportToTargetTaskGameTests() {
     }
 
@@ -454,7 +462,7 @@ public final class WanderOrTeleportToTargetTaskGameTests {
 
     @GameTest(batch = "mca_failed_path_retry_cadence", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 40)
-    public static void failedNearbyPathRetryIsNotThrottledInsideMovementSink(GameTestHelper helper) {
+    public static void airborneNearbyWalkWaitsUntilNavigationCanSearch(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(10, 2, 10));
         BlockPos destination = start.east(6);
         prepareFlatArea(helper, start, 10, 2);
@@ -474,26 +482,25 @@ public final class WanderOrTeleportToTargetTaskGameTests {
         brain.eraseMemory(MemoryModuleType.PATH);
         brain.eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
         WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
-        brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(destination, 0.5F, 0));
-        long firstFailureAt = helper.getLevel().getGameTime();
-        helper.assertTrue(!sink.tryStart(helper.getLevel(), villager, firstFailureAt),
-                "airborne initial attempt unexpectedly created a path");
-        helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty(),
-                "initial failed path did not erase its WALK_TARGET");
-        helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
-                        .filter(since -> since == firstFailureAt)
-                        .isPresent(),
-                "initial failed path did not establish the canonical failure timestamp");
-
-        brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(destination, 0.5F, 0));
-        helper.assertTrue(!sink.tryStart(helper.getLevel(), villager, firstFailureAt + 1L),
-                "airborne retry unexpectedly created a path");
-        helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty(),
-                "movement sink throttled the retry instead of letting its producer own retry cadence");
-        helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
-                        .filter(since -> since == firstFailureAt)
-                        .isPresent(),
-                "failed retry rewrote the canonical failure-since timestamp");
+        WalkTarget target = new WalkTarget(destination, 0.5F, 0);
+        brain.setMemory(MemoryModuleType.WALK_TARGET, target);
+        long now = helper.getLevel().getGameTime();
+        for (int attempt = 0; attempt < 2; attempt++) {
+            helper.assertTrue(!sink.tryStart(helper.getLevel(), villager, now + attempt),
+                    "airborne navigation unexpectedly started searching");
+            helper.assertTrue(brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null) == target,
+                    "airborne search deferral lost the original walk target");
+            helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
+                    "airborne search deferral recorded a false path failure");
+        }
+        villager.setPos(start.getX() + 0.5D, start.getY(), start.getZ() + 0.5D);
+        villager.setNoGravity(false);
+        villager.setOnGround(true);
+        helper.assertTrue(sink.tryStart(helper.getLevel(), villager, now + 2L),
+                "the preserved target did not start immediately after landing");
+        helper.assertTrue(!brain.hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
+                "successful search after landing retained a failure timestamp");
+        sink.doStop(helper.getLevel(), villager, now + 2L);
 
         villager.discard();
         helper.succeed();
@@ -630,6 +637,16 @@ public final class WanderOrTeleportToTargetTaskGameTests {
             template = "bastion/blocks/air", timeoutTicks = 900)
     public static void normalRestWithoutHomeDoesNotPauseAndResumeBetweenWalkLegs(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(40, 1, 40));
+        ChunkPos minChunk = ChunkPos.containing(start.offset(-64, 0, -64));
+        ChunkPos maxChunk = ChunkPos.containing(start.offset(64, 0, 64));
+        for (int x = minChunk.x(); x <= maxChunk.x(); x++) {
+            for (int z = minChunk.z(); z <= maxChunk.z(); z++) {
+                ChunkPos chunk = new ChunkPos(x, z);
+                if (!helper.getLevel().getForceLoadedChunks().contains(chunk.pack())) {
+                    REST_WALK_OWNED_CHUNKS.add(chunk);
+                }
+            }
+        }
         prepareFlatArea(helper, start, 64, 2);
 
         VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
@@ -637,8 +654,11 @@ public final class WanderOrTeleportToTargetTaskGameTests {
                 .withPosition(Vec3.atBottomCenterOf(start))
                 .withName("Normal Brain No Home Pause Probe")
                 .spawn(EntitySpawnReason.STRUCTURE);
+        restWalkVillager = villager;
         villager.refreshBrain(helper.getLevel());
         villager.setOnGround(true);
+        // Keep vanilla random village-seeking targets within the prepared terrain.
+        villager.setHomeTo(start, 48);
 
         var brain = villager.getBrain();
         brain.setSchedule(GameTestBrain.fixedSchedule(Activity.REST));
@@ -653,6 +673,7 @@ public final class WanderOrTeleportToTargetTaskGameTests {
         Vec3[] pausePosition = {null};
         WalkTarget[] lastWalkTarget = {null};
         int[] stationaryTicks = {0};
+        int[] stationaryStartEntityTick = {0};
         int[] walkLegs = {0};
         boolean[] hasWalked = {false};
         String[] pauseSnapshot = {null};
@@ -660,6 +681,11 @@ public final class WanderOrTeleportToTargetTaskGameTests {
         helper.onEachTick(() -> {
             long elapsed = helper.getLevel().getGameTime() - startedAt;
             Vec3 position = villager.position();
+            helper.assertTrue(Math.abs(villager.blockPosition().getX() - start.getX()) <= 64
+                            && Math.abs(villager.blockPosition().getZ() - start.getZ()) <= 64,
+                    "homeless REST fixture left its prepared terrain: " + villager.blockPosition());
+            helper.assertTrue(helper.getLevel().isPositionEntityTicking(villager.blockPosition()),
+                    "homeless REST fixture left entity-ticking chunks: " + villager.blockPosition());
             WalkTarget walkTarget = brain.getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
             if (walkTarget != null && walkTarget != lastWalkTarget[0]) {
                 lastWalkTarget[0] = walkTarget;
@@ -671,6 +697,9 @@ public final class WanderOrTeleportToTargetTaskGameTests {
             }
 
             if (hasWalked[0] && tickMovement < 1.0E-6D) {
+                if (stationaryTicks[0] == 0) {
+                    stationaryStartEntityTick[0] = villager.tickCount;
+                }
                 stationaryTicks[0]++;
             } else {
                 stationaryTicks[0] = 0;
@@ -679,7 +708,12 @@ public final class WanderOrTeleportToTargetTaskGameTests {
             if (pausePosition[0] == null && stationaryTicks[0] >= 20) {
                 pausePosition[0] = position;
                 pauseSnapshot[0] = "elapsed=" + elapsed
+                        + "; start=" + start
                         + "; pos=" + villager.blockPosition()
+                        + "; entityTicking=" + helper.getLevel().isPositionEntityTicking(villager.blockPosition())
+                        + "; entityTicksDuringPause=" + (villager.tickCount - stationaryStartEntityTick[0])
+                        + "; onGround=" + villager.onGround()
+                        + "; velocity=" + villager.getDeltaMovement()
                         + "; navDone=" + villager.getNavigation().isDone()
                         + "; navStuck=" + villager.getNavigation().isStuck()
                         + "; activity=" + brain.getActiveNonCoreActivity()
@@ -708,6 +742,16 @@ public final class WanderOrTeleportToTargetTaskGameTests {
                 helper.succeed();
             }
         });
+    }
+
+    @AfterBatch(batch = "mca_normal_brain_no_home_walk")
+    public static void cleanupNormalRestWalkFixture(ServerLevel level) {
+        if (restWalkVillager != null) {
+            restWalkVillager.discard();
+            restWalkVillager = null;
+        }
+        REST_WALK_OWNED_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x(), chunk.z(), false));
+        REST_WALK_OWNED_CHUNKS.clear();
     }
 
     @GameTest(batch = "mca_normal_night_sleep", templateNamespace = "mca",

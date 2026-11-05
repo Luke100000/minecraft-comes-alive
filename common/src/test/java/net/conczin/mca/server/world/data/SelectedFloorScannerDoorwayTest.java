@@ -10,8 +10,9 @@ import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.SlabType;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.level.material.FluidState;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -29,6 +30,39 @@ class SelectedFloorScannerDoorwayTest {
     static void bootstrapMinecraft() {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
+    }
+
+    @Test
+    void tallWindowWithAThinSolidJambKeepsTheRoomEnclosed() {
+        for (boolean rotated : new boolean[]{false, true}) {
+            HouseBlocks world = house(1, rotated);
+            // A three-block-high window, with a closed pane beside its open half.
+            world.put(5, 66, 2, Blocks.AIR.defaultBlockState());
+            BlockState pane = Blocks.GLASS_PANE.defaultBlockState()
+                    .setValue(rotated ? BlockStateProperties.EAST : BlockStateProperties.NORTH, true)
+                    .setValue(rotated ? BlockStateProperties.WEST : BlockStateProperties.SOUTH, true);
+            for (int y = 64; y <= 66; y++) world.put(5, y, 1, pane);
+
+            var scan = SelectedFloorScanner.scan(world, world.pos(2, 64, 2), 512, 16);
+
+            assertEquals(Building.validationResult.SUCCESS, scan.result());
+            assertTrue(scan.floor().cellAt(world.pos(2, 64, 2)).isPresent());
+            assertTrue(scan.floor().cellAt(world.pos(7, 64, 2)).isEmpty());
+            assertEquals(1, BuildingRoomScanner.components(world, scan).size());
+        }
+    }
+
+    @Test
+    void thinJambsAtDifferentWallDepthsDoNotSealAnOpening() {
+        HouseBlocks world = house(1, false);
+        BlockState left = Blocks.OAK_TRAPDOOR.defaultBlockState()
+                .setValue(BlockStateProperties.OPEN, true).setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.WEST);
+        BlockState right = left.setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST);
+        for (int y = 64; y <= 65; y++) {
+            world.put(5, y, 1, left);
+            world.put(5, y, 3, right);
+        }
+        assertRejected(world, "offset partial jambs do not prove a continuous wall");
     }
 
     @Test

@@ -2,8 +2,8 @@ package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
-import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Memories;
+import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Mourning;
 import net.conczin.mca.resources.API;
 import net.conczin.mca.resources.BuildingTypes;
@@ -508,16 +508,41 @@ public class Village implements Iterable<Building> {
     }
 
     public float getTaxes() { return taxes; }
-    public void setTaxes(float taxes) { this.taxes = taxes; }
+    public void setTaxes(float taxes) {
+        if (Float.compare(this.taxes, taxes) != 0) {
+            this.taxes = taxes;
+            markDirty();
+        }
+    }
     public float getPopulationThreshold() { return populationThreshold; }
-    public void setPopulationThreshold(float populationThreshold) { this.populationThreshold = populationThreshold; }
+    public void setPopulationThreshold(float populationThreshold) {
+        if (Float.compare(this.populationThreshold, populationThreshold) != 0) {
+            this.populationThreshold = populationThreshold;
+            markDirty();
+        }
+    }
     public float getMarriageThreshold() { return marriageThreshold; }
-    public void setMarriageThreshold(float marriageThreshold) { this.marriageThreshold = marriageThreshold; }
+    public void setMarriageThreshold(float marriageThreshold) {
+        if (Float.compare(this.marriageThreshold, marriageThreshold) != 0) {
+            this.marriageThreshold = marriageThreshold;
+            markDirty();
+        }
+    }
     public boolean isAutoScan() { return autoScan; }
-    public void setAutoScan(boolean autoScan) { this.autoScan = autoScan; }
+    public void setAutoScan(boolean autoScan) {
+        if (this.autoScan != autoScan) {
+            this.autoScan = autoScan;
+            markDirty();
+        }
+    }
     public void toggleAutoScan() { setAutoScan(!isAutoScan()); }
     public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public void setName(String name) {
+        if (!Objects.equals(this.name, name)) {
+            this.name = name;
+            markDirty();
+        }
+    }
     public int getId() { return id; }
     public boolean hasSpace() { return getPopulation() < getMaxPopulation(); }
     public int getPopulation() { return residentNames.size(); }
@@ -558,6 +583,20 @@ public class Village implements Iterable<Building> {
             return getExternalBuildings().anyMatch(building -> building.getType().equals(type) && building.isComplete());
         }
         return getBuildingsOfType(type).findAny().isPresent();
+    }
+
+    /** Snapshot for a group of requirement checks, with each effective room type resolved once. */
+    public Set<String> getPresentBuildingTypes() {
+        Set<String> types = new HashSet<>();
+        RoomTypeResolver resolver = RoomTypeResolver.create(this);
+        getRooms().forEach(room -> {
+            BuildingType effective = resolver.effectiveType(room);
+            if (effective != null && !effective.grouped()) types.add(effective.name());
+        });
+        getExternalBuildings().filter(Building::isComplete).forEach(building -> {
+            if (building.getBuildingType().grouped()) types.add(building.getType());
+        });
+        return Set.copyOf(types);
     }
 
     List<BuildingType> getMatchingRoomTypes(Building candidate) {

@@ -2,6 +2,8 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.BedPoiCompatibility;
+import net.conczin.mca.entity.ai.navigation.PathNodeGeometry;
+import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.conczin.mca.server.world.data.Building;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -9,10 +11,10 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
 import java.util.Map;
@@ -30,7 +32,9 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
 
     protected void start(ServerLevel serverWorld, VillagerEntityMCA villager, long l) {
         getNextPosition(villager)
-                .ifPresent(pos -> villager.moveTowardsPersistent(pos, this.speed, getCompletionRange()));
+                .ifPresent(pos -> BehaviorUtils.setWalkAndLookTargetMemories(villager,
+                        new PersistentPathTarget(pos, villager.getBrain().getActiveNonCoreActivity().orElse(null)),
+                        this.speed, getCompletionRange()));
     }
 
     protected Optional<Building> getNearestBuilding(VillagerEntityMCA villager) {
@@ -111,7 +115,7 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
         return isIdleFloorSurface(world, pos)
                 && mob.getNavigation().isStableDestination(pos)
                 && world.noBlockCollision(mob,
-                        mob.getBoundingBox().move(Vec3.atBottomCenterOf(pos).subtract(mob.position())));
+                        mob.getBoundingBox().move(PathNodeGeometry.walkingPosition(world, pos, mob).subtract(mob.position())));
     }
 
     private static boolean isIdleFloorSurface(Level world, BlockPos pos) {
@@ -124,7 +128,7 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
         return mob.getNavigation().isStableDestination(pos)
                 && world.noCollision(
                         mob,
-                        mob.getBoundingBox().move(Vec3.atBottomCenterOf(pos).subtract(mob.position()))
+                        mob.getBoundingBox().move(PathNodeGeometry.walkingPosition(world, pos, mob).subtract(mob.position()))
                 );
     }
 

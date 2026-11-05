@@ -82,7 +82,7 @@ public class AdminCommand {
             success(String.format(Locale.ROOT, "%d: %s with %d buildings and %d/%d villager(s)",
                             village.getId(),
                             village.getName(),
-                            village.getBuildings().size(),
+                            village.getStructureCount(),
                             village.getPopulation(),
                             village.getMaxPopulation()
                     ), ctx,
@@ -168,19 +168,11 @@ public class AdminCommand {
         if (player == null) return 0;
 
         VillageManager villages = VillageManager.get(ctx.getSource().getLevel());
-        Optional<Village> village = villages.findNearestVillage(player);
-
-        Optional<Building> building = village.flatMap(v -> v.findPhysicalRoomAt(player.blockPosition()));
-        if (building.isPresent()) {
-            if (building.get().getType().equals(type)) {
-                building.get().setTypeForced(false);
-                building.get().determineType();
-            } else {
-                building.get().setTypeForced(true);
-                building.get().setType(type);
-            }
-        } else {
+        VillageManager.BuildingEditResult result = villages.forceRoomType(player.blockPosition(), type);
+        if (result == VillageManager.BuildingEditResult.NO_BUILDING) {
             fail(Component.translatable("blueprint.noBuilding").getString(), ctx);
+        } else if (result == VillageManager.BuildingEditResult.INVALID_TYPE) {
+            fail(Component.translatable("blueprint.scan.invalid_type").getString(), ctx);
         }
         return 0;
     }

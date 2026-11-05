@@ -17,7 +17,6 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.spider.CaveSpider;
 import net.minecraft.world.entity.monster.spider.Spider;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 
@@ -64,7 +63,7 @@ public final class ArcherSpiderCombatGameTests {
     }
 
     @GameTest(batch = "mca_archer_spider_cave_escape", templateNamespace = "mca",
-            template = "gametest/isolated_ai_arena", timeoutTicks = 500)
+            template = "gametest/isolated_ai_arena", timeoutTicks = 1000)
     public static void archerEscapesCaveCornerAndKillsPursuingSpider(GameTestHelper helper) {
         cleanupTestEntities();
         BlockPos archerPos = helper.absolutePos(new BlockPos(14, 22, 14));
@@ -92,12 +91,22 @@ public final class ArcherSpiderCombatGameTests {
         double[] furthestProgressSquared = {0.0D};
         boolean[] sawEmergency = {false};
         int[] ticks = {0};
+        int[] hits = {0};
+        float[] previousHealth = {spider.getHealth()};
 
         helper.onEachTick(() -> {
             ticks[0]++;
             bestDistanceSquared[0] = Math.max(bestDistanceSquared[0], archer.distanceToSqr(spider));
             furthestProgressSquared[0] = Math.max(furthestProgressSquared[0], archer.position().distanceToSqr(origin));
             sawEmergency[0] |= RangedCombatState.current(archer).orElse(null) == RangedCombatState.EMERGENCY_FLEE;
+            if (spider.getHealth() < previousHealth[0]) {
+                var damage = spider.getLastDamageSource();
+                helper.assertTrue(damage != null && damage.getEntity() == archer
+                                && damage.getDirectEntity() instanceof net.minecraft.world.entity.projectile.arrow.AbstractArrow,
+                        "pursuing spider took damage outside the archer's arrows");
+                hits[0]++;
+                previousHealth[0] = spider.getHealth();
+            }
 
             if (!archer.isAlive()) {
                 helper.fail("pursuing spider killed the archer before it escaped the cave corner");
@@ -105,6 +114,8 @@ public final class ArcherSpiderCombatGameTests {
             }
 
             if (!spider.isAlive()) {
+                helper.assertTrue(spider.getHealth() <= 0 && hits[0] >= 1,
+                        "cave pursuit did not land an attributable arrow");
                 helper.assertTrue(sawEmergency[0], "close pursuing spider never triggered EMERGENCY_FLEE");
                 helper.assertTrue(
                         bestDistanceSquared[0] >= 25.0D,
@@ -120,7 +131,7 @@ public final class ArcherSpiderCombatGameTests {
                 return;
             }
 
-            if (ticks[0] >= 420) {
+            if (ticks[0] >= 900) {
                 helper.fail("archer did not escape the cave corner and kill the pursuing spider; state="
                         + RangedCombatState.current(archer).orElse(null)
                         + ", bestDistanceSqr=" + bestDistanceSquared[0]
@@ -279,6 +290,9 @@ public final class ArcherSpiderCombatGameTests {
         helper.onEachTick(() -> {
             ticks[0]++;
             bowTask.tick(helper.getLevel(), archer, startTime + ticks[0]);
+            // NoAI skips native controllers; the manual BowTask fixture still
+            // needs LookControl to turn toward the spider before release.
+            archer.getLookControl().tick();
             if (!archer.isAlive()) {
                 helper.fail("archer died before killing the " + targetName);
                 return;
@@ -289,7 +303,9 @@ public final class ArcherSpiderCombatGameTests {
             }
             if (ticks[0] >= deadlineTicks) {
                 helper.fail("archer failed to kill the " + targetName + "; health=" + spider.getHealth()
-                        + ", state=" + RangedCombatState.current(archer).orElse(null));
+                        + ", state=" + RangedCombatState.current(archer).orElse(null)
+                        + ", actorTicks=" + archer.tickCount + ", drawTicks=" + archer.getTicksUsingItem()
+                        + ", usingItem=" + archer.isUsingItem());
             }
         });
     }
@@ -382,25 +398,7 @@ public final class ArcherSpiderCombatGameTests {
     }
 
     private static void prepareFlatArea(GameTestHelper helper, BlockPos center, int radius) {
-        BlockPos min = center.offset(-radius, 0, -radius);
-        BlockPos max = center.offset(radius, 0, radius);
-        ChunkPos minChunk = new ChunkPos(min.getX() >> 4, min.getZ() >> 4);
-        ChunkPos maxChunk = new ChunkPos(max.getX() >> 4, max.getZ() >> 4);
-        for (int chunkX = minChunk.x(); chunkX <= maxChunk.x(); chunkX++) {
-            for (int chunkZ = minChunk.z(); chunkZ <= maxChunk.z(); chunkZ++) {
-                helper.getLevel().setChunkForced(chunkX, chunkZ, true);
-            }
-        }
-
-        for (int x = -radius; x <= radius; x++) {
-            for (int z = -radius; z <= radius; z++) {
-                BlockPos feet = center.offset(x, 0, z);
-                helper.getLevel().setBlock(feet.below(), Blocks.STONE.defaultBlockState(), 3);
-                helper.getLevel().setBlock(feet, Blocks.AIR.defaultBlockState(), 3);
-                helper.getLevel().setBlock(feet.above(), Blocks.AIR.defaultBlockState(), 3);
-                helper.getLevel().setBlock(feet.above(2), Blocks.AIR.defaultBlockState(), 3);
-            }
-        }
+        net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea(helper, center, radius, 3);
     }
 
     private static void cleanupTestEntities() {

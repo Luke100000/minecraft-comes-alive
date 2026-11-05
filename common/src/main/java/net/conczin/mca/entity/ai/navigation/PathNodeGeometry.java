@@ -6,6 +6,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.PathComputationType;
+import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.BooleanOp;
@@ -18,6 +19,15 @@ public final class PathNodeGeometry {
     static final double FLOOR_EPSILON = 1.0E-3D;
 
     private PathNodeGeometry() { }
+
+    /** Matches 1.21.1 WalkNodeEvaluator without requiring an active search context. */
+    public static double jumpHeight(Mob mob) {
+        return Math.max(1.125D, mob.maxUpStep());
+    }
+
+    public static Vec3 walkingPosition(BlockGetter level, BlockPos node, Mob mob) {
+        return walkingPosition(level, node, mob, WalkNodeEvaluator.getFloorLevel(level, node));
+    }
 
     static Vec3 walkingPosition(BlockGetter level, BlockPos node, Mob mob, double fallbackFloorY) {
         return new Vec3(node.getX() + 0.5D, walkingFloorY(level, node, mob, fallbackFloorY), node.getZ() + 0.5D);

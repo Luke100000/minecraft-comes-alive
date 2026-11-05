@@ -52,7 +52,7 @@ public interface CParameter<T, TrackedType> {
     static CDataParameter<CompoundTag> create(String id, CompoundTag def) {
         return new CDataParameter<>(id, MCAEntityDataSerializers.COMPOUND_TAG, def,
                 (nbt, key, provider) -> NbtCompoundDefaultGetters.getCompound(nbt, key, def),
-                (nbt, key, value, provider) -> nbt.put(key, value)
+                (nbt, key, value, provider) -> nbt.put(key, value.copy())
         );
     }
 

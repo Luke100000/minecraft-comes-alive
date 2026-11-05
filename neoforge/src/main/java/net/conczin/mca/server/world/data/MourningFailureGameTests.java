@@ -5,18 +5,22 @@ import net.conczin.mca.block.TombstoneBlock;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.ActivitiesMCA;
+import net.conczin.mca.entity.ai.Genetics;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Mourning;
+import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.brain.tasks.EnterGraveyardTask;
 import net.conczin.mca.entity.ai.brain.tasks.GrieveTask;
 import net.conczin.mca.registry.BlocksMCA;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.conczin.mca.neoforge.gametest.AfterBatch;
 import net.conczin.mca.neoforge.gametest.BeforeBatch;
 import net.conczin.mca.neoforge.gametest.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -26,6 +30,9 @@ import net.minecraft.util.ProblemReporter;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.TrapDoorBlock;
+import net.minecraft.world.level.block.state.properties.Half;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructurePlaceSettings;
 import net.minecraft.world.phys.Vec3;
 import net.conczin.mca.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -204,6 +211,48 @@ public final class MourningFailureGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void carpetedGravesideStillProvidesStandingPosition(GameTestHelper helper) {
+        BlockPos grave = prepareArena(helper);
+        for (int x = -1; x <= 1; x++) {
+            for (int z = -1; z <= 1; z++) {
+                if (x != 0 || z != 0) {
+                    helper.getLevel().setBlock(grave.offset(x, 0, z), Blocks.CARPET.pick(net.minecraft.world.item.DyeColor.WHITE).defaultBlockState(), 3);
+                }
+            }
+        }
+        VillagerEntityMCA mourner = spawnVillager(helper, grave.east(6), "Carpeted Graveside Mourner");
+        mourner.setOnGround(true);
+        BlockPos entrance = grave.east();
+        helper.assertTrue(Mourning.isMournableTombstone(helper.getLevel(), grave)
+                        && Mourning.isSafeToMourn(helper.getLevel(), grave),
+                "carpet fixture did not provide a safe, occupied grave");
+        helper.assertTrue(mourner.getNavigation().isStableDestination(entrance),
+                "carpeted graveside position is not stable");
+        Vec3 standingPose = Vec3.atBottomCenterOf(entrance).add(0, 1.0D / 16.0D, 0);
+        helper.assertTrue(helper.getLevel().noBlockCollision(mourner,
+                        mourner.getBoundingBox().move(standingPose.subtract(mourner.position()))),
+                "carpeted graveside physically obstructs the standing villager");
+        var path = mourner.getNavigation().createPath(entrance, 0);
+        helper.assertTrue(path != null && path.canReach() && path.getTarget().equals(entrance),
+                "carpeted graveside fixture is not a reachable navigation target: " + path);
+
+        Mourning.start(mourner, grave);
+        helper.assertTrue(new EnterGraveyardTask().tryStart(helper.getLevel(), mourner, helper.getLevel().getGameTime()),
+                "mourning task did not start in carpeted graveside fixture");
+        helper.assertTrue(mourner.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_POSITION)
+                        .filter(selected -> selected.dimension().equals(helper.getLevel().dimension()))
+                        .map(GlobalPos::pos)
+                        .filter(pos -> pos.getY() == grave.getY()
+                                && !pos.equals(grave)
+                                && Math.abs(pos.getX() - grave.getX()) <= 1
+                                && Math.abs(pos.getZ() - grave.getZ()) <= 1
+                                && helper.getLevel().getBlockState(pos).is(Blocks.CARPET.pick(net.minecraft.world.item.DyeColor.WHITE)))
+                        .isPresent(),
+                "mourner did not select a reachable carpeted graveside standing position at grave level");
+        helper.succeed();
+    }
+
     @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 400)
     public static void failedAmbientApproachDoesNotExcludeReachableNearbyVillager(GameTestHelper helper) {
         BlockPos grave = prepareArena(helper);
@@ -253,6 +302,43 @@ public final class MourningFailureGameTests {
                 helper.succeed();
             }
         });
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 240)
+    public static void mournerLeavesRaisedGrassPlanterWithUprightTrapdoors(GameTestHelper helper) {
+        // Captured read-only from New World (6), (623,64,-948), size 13x9x13.
+        // Restore the left planter removed to release the reported villager.
+        BlockPos destination = helper.absolutePos(new BlockPos(5, 0, 5));
+        prepareFlatArea(helper, destination.offset(6, 1, 6), 8, 10);
+        var terrain = helper.getLevel().getStructureManager().get(Identifier.fromNamespaceAndPath(
+                "mca", "gametest/reported_mourning_planter")).orElseThrow();
+        helper.assertTrue(terrain.placeInWorld(helper.getLevel(), destination, destination,
+                        new StructurePlaceSettings().setIgnoreEntities(true), helper.getLevel().getRandom(), 3),
+                "could not place captured planter terrain");
+        BlockPos grave = destination.offset(4, 2, 7);
+        BlockPos grass = destination.offset(5, 2, 6);
+        helper.getLevel().setBlock(grass, Blocks.GRASS_BLOCK.defaultBlockState(), 3);
+        for (Direction side : List.of(Direction.WEST, Direction.SOUTH)) {
+            helper.getLevel().setBlock(grass.relative(side), Blocks.OAK_TRAPDOOR.defaultBlockState()
+                    .setValue(TrapDoorBlock.FACING, side)
+                    .setValue(TrapDoorBlock.HALF, Half.TOP)
+                    .setValue(TrapDoorBlock.OPEN, true), 3);
+        }
+        VillagerEntityMCA deceased = VillagerFactory.newVillager(helper.getLevel()).withAge(0).build();
+        TombstoneBlock.Data.of(helper.getLevel().getBlockEntity(grave)).orElseThrow().setEntity(deceased);
+        VillagerEntityMCA mourner = spawnVillager(helper, grass.above(), "Raised Planter Mourner");
+        mourner.getTraits().removeTrait(Traits.DWARFISM);
+        mourner.getTraits().removeTrait(Traits.TOUGH);
+        mourner.getTraits().removeTrait(Traits.WEAK);
+        mourner.getGenetics().setGene(Genetics.SIZE, 0.5F);
+        mourner.getGenetics().setGene(Genetics.WIDTH, 0.5F);
+        mourner.refreshDimensions();
+        helper.assertTrue(helper.getLevel().noCollision(mourner, mourner.getBoundingBox()),
+                "planter mourner must start with a clear body above the grass");
+        Mourning.startAmbient(mourner, grave);
+        helper.succeedWhen(() -> helper.assertTrue(
+                mourner.getBrain().hasMemoryValue(MemoryModuleTypeMCA.MOURNING_FLOWER),
+                "mourner failed to leave raised planter and begin mourning: " + mourner.position()));
     }
 
     private static BlockPos prepareArena(GameTestHelper helper) {
