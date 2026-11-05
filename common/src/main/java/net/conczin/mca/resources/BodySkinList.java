@@ -10,7 +10,6 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleJsonResourceReloadListener;
 import net.minecraft.util.ExtraCodecs;
-import net.minecraft.util.GsonHelper;
 import net.minecraft.util.profiling.ProfilerFiller;
 
 import java.util.HashMap;
@@ -33,17 +32,7 @@ public class BodySkinList extends SimpleJsonResourceReloadListener<JsonElement> 
     @Override
     protected void apply(Map<Identifier, JsonElement> data, ResourceManager manager, ProfilerFiller profiler) {
         skins.clear();
-
-        data.forEach(this::addEntries);
-    }
-
-    private void addEntries(Identifier id, JsonElement file) {
-        Gender fileGender = getGenderFromPath(id);
-        SkinListJson.entries(id, file).forEach(entry -> {
-            Gender entryGender = SkinListJson.resolveGender(fileGender, entry);
-            float chance = GsonHelper.getAsFloat(entry.metadata(), "chance", 1.0f);
-            skins.put(entry.identifier(), new BodySkin(entry.identifier(), entryGender, chance));
-        });
+        data.forEach((id, file) -> SkinCatalogLoader.addBodySkins(skins, id, file));
     }
 
     public BodySkin get(String identifier) {

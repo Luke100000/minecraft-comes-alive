@@ -84,7 +84,7 @@ final class SkinCatalogLoader {
         }
 
         LayeredHair entry = new LayeredHair(texture, Gender.NEUTRAL, category, 1.0F);
-        layeredHair.put(entry.getIdentifier() + "|" + entry.getGender().getDataName() + "|" + entry.getCategory().getId(), entry);
+        layeredHair.put(LayeredHairList.key(entry.getIdentifier(), entry.getGender(), entry.getCategory()), entry);
     }
 
     private static LayeredHair.Category getLayeredHairCategory(Identifier id) {
