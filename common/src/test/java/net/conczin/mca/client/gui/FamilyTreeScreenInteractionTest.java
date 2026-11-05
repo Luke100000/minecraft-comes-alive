@@ -1,5 +1,6 @@
 package net.conczin.mca.client.gui;
 
+import com.mojang.blaze3d.platform.Window;
 import net.conczin.mca.FamilyTreeTestSupport;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
@@ -8,6 +9,11 @@ import net.conczin.mca.network.FamilyTreeView;
 import net.conczin.mca.network.s2c.GetFamilyTreeResponse;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.minecraft.util.Util;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.screens.Screen;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.registries.Registries;
@@ -15,9 +21,13 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.Identifier;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.level.Level;
+import org.joml.Matrix3x2fStack;
+import org.joml.Vector2f;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import sun.misc.Unsafe;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -33,6 +43,229 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class FamilyTreeScreenInteractionTest {
     private static final UUID ROOT = uuid(1);
     private static final UUID OTHER = uuid(2);
+
+    @Test
+    void lowZoomTextUsesWholeFramebufferPixels() throws Exception {
+        RecordingGraphics graphics = renderCards(0.25F, 2.0, false);
+        TextDraw name = graphics.text.getFirst();
+
+        assertTrue(name.scale() * 2.0 >= 1.0, "Names must remain at least one framebuffer pixel per glyph pixel");
+        assertEquals(Math.rint(name.scale() * 2.0), name.scale() * 2.0, 0.0001);
+        assertEquals(Math.rint(name.x() * 2.0), name.x() * 2.0, 0.0001);
+        assertEquals(Math.rint(name.y() * 2.0), name.y() * 2.0, 0.0001);
+    }
+
+    @Test
+    void zoomingAcrossNinetyFivePercentKeepsOrphanAndFixedTextRows() throws Exception {
+        for (float zoom : new float[]{0.9F, 0.95F, 1.0F, 1.05F}) {
+            RecordingGraphics graphics = renderCards(zoom, 2.0, false);
+
+            assertEquals(4, graphics.text.size(), "All four labels must remain visible at " + zoom);
+            assertEquals("Émilie", graphics.text.get(0).text());
+            assertEquals("Villager", graphics.text.get(1).text());
+            assertEquals("Mother", graphics.text.get(2).text());
+            assertRendersOrphan(graphics.text.get(3));
+
+            for (int line = 0; line < 4; line++) {
+                double expectedOffset = (5 + line * 12) * zoom;
+                assertEquals(expectedOffset, graphics.text.get(line).y() - graphics.cardTop, 1.0,
+                        "Logical text baselines must not jump as zoom changes, row " + line);
+            }
+        }
+    }
+
+    @Test
+    void nearFullZoomKeepsOrphanWhenMarriageStatusAlsoOccupiesCard() throws Exception {
+        for (float zoom : new float[]{0.95F, 1.0F}) {
+            RecordingGraphics graphics = renderCards(zoom, 2.0, false, true);
+
+            assertEquals(5, graphics.text.size(), "Marriage status must not evict orphan at " + zoom);
+            assertRendersOrphan(graphics.text.get(4));
+        }
+    }
+
+    @Test
+    void sharpTextNeverSilentlyDropsFamilyLabelsAtDistantZoom() throws Exception {
+        for (float zoom : new float[]{0.25F, 0.5F, 0.75F}) {
+            RecordingGraphics graphics = renderCards(zoom, 2.0, false, true);
+
+            assertEquals(5, graphics.text.size(), "All details remain represented at " + zoom);
+            assertEquals("Émilie", graphics.text.getFirst().text());
+            assertRendersOrphan(graphics.text.getLast());
+        }
+    }
+
+    private static void assertRendersOrphan(TextDraw draw) {
+        String expected = Component.translatable("gui.family_tree.label.orphan").getString();
+        String actual = draw.text();
+        assertTrue(expected.equals(actual) || actual.endsWith("...")
+                        && expected.startsWith(actual.substring(0, actual.length() - 3)),
+                "Orphan text must be drawn (possibly ellipsized): " + actual);
+    }
+
+    @Test
+    void enlargedAccentedNameStaysBelowCardTop() throws Exception {
+        RecordingGraphics graphics = renderCards(0.25F, 1.0, false);
+        TextDraw name = graphics.text.getFirst();
+
+        // Vanilla's accented bitmap has ascent 10: SheetGlyphInfo puts its top at 7 - 10.
+        assertTrue(name.y() - 3 * name.scale() > graphics.cardTop,
+                "Accented name pixels must stay inside the top border");
+    }
+
+    @Test
+    void skullDoesNotGrowIntoExactGraveIcon() throws Exception {
+        RecordingGraphics graphics = renderCards(0.25F, 2.0, true);
+        TextDraw skull = graphics.text.stream()
+                .filter(draw -> draw.text().equals(FamilyTreeScreen.DECEASED_MARKER)).findFirst().orElseThrow();
+
+        assertTrue(skull.x() + 10 * skull.scale() <= graphics.graveLeft,
+                "The skull including its shadow must not overlap the grave icon");
+    }
+
+    @Test
+    void atReadableZoomTextIncludingShadowStaysInsideCard() throws Exception {
+        for (float zoom : new float[]{0.95F, 1.0F, 2.0F}) {
+            for (double guiScale : new double[]{1.0, 2.0, 3.0, 4.0}) {
+                RecordingGraphics graphics = renderCards(zoom, guiScale, false);
+                assertTrue(!graphics.text.isEmpty(), "Always retain the name");
+                for (TextDraw draw : graphics.text) {
+                    assertTrue(draw.y() - 3 * draw.scale() > graphics.cardTop,
+                            "Accented glyph top must fit at zoom " + zoom + ", GUI scale " + guiScale);
+                    assertTrue(draw.y() + 10 * draw.scale() < graphics.cardBottom,
+                            "Accented glyph bottom plus shadow must fit at zoom " + zoom + ", GUI scale " + guiScale);
+                }
+            }
+        }
+    }
+
+    @Test
+    void quarterZoomHitTargetsFollowExpandedCardAndGrave() {
+        FamilyTreeNode deceased = node(ROOT, "Émilie");
+        deceased.setDeceased(true);
+        FamilyTreeLayout.Bounds bounds = new FamilyTreeLayout.Bounds(-64, 64, -32, 32);
+        FamilyTreeLayout.Result layout = new FamilyTreeLayout.Result(
+                List.of(new FamilyTreeLayout.Card(ROOT, bounds)), List.of(), List.of(), bounds);
+        GlobalPos grave = GlobalPos.of(Level.OVERWORLD, new BlockPos(12, 70, 8));
+
+        assertEquals(Optional.of(new FamilyTreeScreen.PersonTarget(ROOT)),
+                FamilyTreeScreen.hitTargetAt(layout, Map.of(ROOT, deceased), Map.of(ROOT, grave), -68, 0, 0.25F));
+        assertEquals(Optional.of(new FamilyTreeScreen.GraveTarget(ROOT, grave)),
+                FamilyTreeScreen.hitTargetAt(layout, Map.of(ROOT, deceased), Map.of(ROOT, grave), -54, -35, 0.25F));
+        assertTrue(FamilyTreeScreen.hitTargetAt(layout, Map.of(ROOT, deceased), Map.of(ROOT, grave), -70, 0, 0.25F).isEmpty());
+        assertTrue(FamilyTreeScreen.hitTargetAt(layout, Map.of(ROOT, deceased), Map.of(ROOT, grave), -68, 0, 1.0F).isEmpty());
+    }
+
+    private record TextDraw(String text, float x, float y, float scale) {
+    }
+
+    private static RecordingGraphics renderCards(float zoom, double guiScale, boolean deceased) throws Exception {
+        return renderCards(zoom, guiScale, deceased, false);
+    }
+
+    private static RecordingGraphics renderCards(float zoom, double guiScale, boolean deceased,
+                                                 boolean withRelationshipStatus) throws Exception {
+        // Allocate client owners without starting a window or changing Minecraft's singleton.
+        java.lang.reflect.Field unsafeField = Unsafe.class.getDeclaredField("theUnsafe");
+        unsafeField.setAccessible(true);
+        Unsafe allocator = (Unsafe) unsafeField.get(null);
+        Minecraft client = (Minecraft) allocator.allocateInstance(Minecraft.class);
+        Window window = (Window) allocator.allocateInstance(Window.class);
+        setField(Window.class, window, "guiScale", (int) guiScale);
+        setField(Minecraft.class, client, "window", window);
+        FamilyTreeScreen screen = (FamilyTreeScreen) allocator.allocateInstance(FamilyTreeScreen.class);
+        setField(Screen.class, screen, "minecraft", client);
+        setField(Screen.class, screen, "font", new Font(null) {
+            @Override
+            public int width(String text) {
+                return text.equals(FamilyTreeScreen.DECEASED_MARKER) ? 9 : text.length() * 6;
+            }
+
+            @Override
+            public String plainSubstrByWidth(String text, int width) {
+                return text.substring(0, Math.min(text.length(), Math.max(0, width / 6)));
+            }
+        });
+        screen.width = 801;
+        screen.height = 601;
+        FamilyTreeNode person = node(ROOT, "Émilie");
+        person.setDeceased(deceased);
+        if (withRelationshipStatus) {
+            person.setRelationshipState(RelationshipState.MARRIED_TO_VILLAGER);
+        }
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        long request = model.beginFocus(ROOT, new FamilyTreeViewModel.ViewportState(0, 0, zoom));
+        Map<UUID, GlobalPos> graves = deceased
+                ? Map.of(ROOT, GlobalPos.of(Level.OVERWORLD, new BlockPos(12, 70, 8))) : Map.of();
+        model.accept(new GetFamilyTreeResponse(request, ROOT, true,
+                new FamilyTreeView(Map.of(ROOT, person), Set.of(), Set.of(), Set.of(), graves)));
+        setField(FamilyTreeScreen.class, screen, "viewModel", model);
+        setField(FamilyTreeScreen.class, screen, "viewport", new FamilyTreeViewModel.ViewportState(0.3, 0.7, zoom));
+        FamilyTreeLayout.Bounds bounds = new FamilyTreeLayout.Bounds(-64, 64, -32, 32);
+        setField(FamilyTreeScreen.class, screen, "layout", new FamilyTreeLayout.Result(
+                List.of(new FamilyTreeLayout.Card(ROOT, bounds)), List.of(), List.of(), bounds));
+        setField(FamilyTreeScreen.class, screen, "cardPresentations", Map.of(ROOT,
+                new FamilyTreeScreen.CardPresentation(Component.literal("Émilie"), -1,
+                        Component.literal("Villager"), Component.literal("Mother"),
+                        withRelationshipStatus ? Component.literal("Married") : null, true)));
+        RecordingGraphics graphics = (RecordingGraphics) allocator.allocateInstance(RecordingGraphics.class);
+        setField(GuiGraphicsExtractor.class, graphics, "pose", new Matrix3x2fStack(16));
+        setField(RecordingGraphics.class, graphics, "text", new ArrayList<TextDraw>());
+        graphics.pose().translate(400.8F, 313.2F);
+        graphics.pose().scale(zoom, zoom);
+        java.lang.reflect.Method render = FamilyTreeScreen.class.getDeclaredMethod("renderCards", GuiGraphicsExtractor.class, Map.class);
+        render.setAccessible(true);
+        MCAScreens originalScreens = MCAScreens.getInstance();
+        try {
+            if (originalScreens == null) {
+                new MCAScreens();
+            }
+            render.invoke(screen, graphics, Map.of(ROOT, person));
+        } finally {
+            setField(MCAScreens.class, null, "INSTANCE", originalScreens);
+        }
+        return graphics;
+    }
+
+    private static void setField(Class<?> owner, Object target, String name, Object value) throws Exception {
+        java.lang.reflect.Field field = owner.getDeclaredField(name);
+        field.setAccessible(true);
+        field.set(target, value);
+    }
+
+    private static class RecordingGraphics extends GuiGraphicsExtractor {
+        List<TextDraw> text;
+        float cardTop;
+        float cardBottom;
+        float graveLeft;
+
+        RecordingGraphics(Minecraft client) {
+            super(client, null, 0, 0);
+        }
+
+        @Override
+        public void fill(int left, int top, int right, int bottom, int color) {
+            if (right - left <= 1 && bottom - top <= 1) return;
+            cardTop = pose().transformPosition(new Vector2f(left, top)).y;
+            cardBottom = pose().transformPosition(new Vector2f(right, bottom)).y;
+        }
+
+        @Override
+        public void outline(int x, int y, int width, int height, int color) {
+        }
+
+        @Override
+        public void text(Font font, String value, int x, int y, int color) {
+            Vector2f position = pose().transformPosition(new Vector2f(x, y));
+            text.add(new TextDraw(value, position.x, position.y, pose().m00()));
+        }
+
+        @Override
+        public void blit(RenderPipeline pipeline, Identifier texture, int x, int y, float u, float v,
+                         int width, int height, int textureWidth, int textureHeight) {
+            graveLeft = pose().transformPosition(new Vector2f(x, y)).x;
+        }
+    }
 
     @BeforeAll
     static void bootstrapMinecraft() {

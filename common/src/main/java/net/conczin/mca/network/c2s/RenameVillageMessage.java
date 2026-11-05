@@ -2,7 +2,7 @@ package net.conczin.mca.network.c2s;
 
 import net.conczin.mca.MCA;
 import net.conczin.mca.network.HandleablePayload;
-import net.conczin.mca.server.world.data.VillageManager;
+import net.conczin.mca.server.world.data.Village;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -16,10 +16,18 @@ public record RenameVillageMessage(int id, String name) implements HandleablePay
             ByteBufCodecs.STRING_UTF8, RenameVillageMessage::name,
             RenameVillageMessage::new
     );
+    static final int MAX_NAME_LENGTH = 32;
 
     @Override
     public void handleServer(ServerPlayer player) {
-        VillageManager.get(player.level()).getOrEmpty(id).ifPresent(v -> v.setName(name));
+        Village.findNearest(player).ifPresent(this::applyTo);
+    }
+
+    public void applyTo(Village village) {
+        if (village == null || village.getId() != id || name == null || name.isBlank() || name.length() > MAX_NAME_LENGTH) {
+            return;
+        }
+        village.setName(name);
     }
 
     @Override

@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -35,5 +36,43 @@ class BuildingTypesReloadTest {
             types.getServerBuildingTypes().putAll(oldServerTypes);
             types.setBuildingTypes(oldClientTypes);
         }
+    }
+
+    @Test
+    void buildingTypePublishesCompleteBlockAndGroupMapsUnderConcurrentFirstAccess() throws Exception {
+        JsonObject blocks = new JsonObject();
+        for (int i = 0; i < 64; i++) {
+            blocks.addProperty("minecraft:block_" + i, i + 1);
+        }
+        JsonObject definition = new JsonObject();
+        definition.add("blocks", blocks);
+        BuildingType type = new BuildingType("concurrent_room", definition);
+
+        int threads = 8;
+        java.util.concurrent.CountDownLatch ready = new java.util.concurrent.CountDownLatch(threads);
+        java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+        java.util.List<Throwable> failures = new java.util.concurrent.CopyOnWriteArrayList<>();
+        java.util.List<Thread> workers = new java.util.ArrayList<>();
+        for (int i = 0; i < threads; i++) {
+            Thread worker = new Thread(() -> {
+                ready.countDown();
+                try {
+                    start.await();
+                    assertEquals(64, type.getBlockToGroup().size());
+                    assertEquals(64, type.getGroups().size());
+                    assertTrue(type.matchesBlock(Identifier.fromNamespaceAndPath("minecraft", "block_63")));
+                } catch (Throwable t) {
+                    failures.add(t);
+                }
+            });
+            workers.add(worker);
+            worker.start();
+        }
+        ready.await();
+        start.countDown();
+        for (Thread worker : workers) {
+            worker.join();
+        }
+        assertTrue(failures.isEmpty(), () -> "Concurrent access failed: " + failures);
     }
 }

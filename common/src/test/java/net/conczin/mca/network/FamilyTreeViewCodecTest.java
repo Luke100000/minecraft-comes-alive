@@ -21,18 +21,15 @@ import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.util.Map;
 import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import static net.conczin.mca.FamilyTreeTestSupport.uuid;
 import static net.conczin.mca.network.FamilyTreeView.Direction.ANCESTORS;
 import static net.conczin.mca.network.FamilyTreeView.Direction.DESCENDANTS;
-import static net.conczin.mca.FamilyTreeTestSupport.uuid;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 class FamilyTreeViewCodecTest {
     private static final UUID ROOT = uuid(1);
@@ -169,6 +166,37 @@ class FamilyTreeViewCodecTest {
         assertEquals(73L, decoded.requestId());
         assertEquals("root", decoded.search());
         assertEquals(java.util.List.of(entry), decoded.list());
+    }
+
+    @Test
+    void searchRequestRejectsOversizedOutboundQueries() {
+        String tooLong = "x".repeat(65);
+        assertThrows(RuntimeException.class, () -> roundTrip(
+                FamilyTreeUUIDLookup.STREAM_CODEC,
+                new FamilyTreeUUIDLookup(74L, tooLong)
+        ));
+    }
+
+    @Test
+    void searchRequestRejectsOversizedInboundQueries() {
+        FriendlyByteBuf buffer = new FriendlyByteBuf(Unpooled.buffer());
+        try {
+            ByteBufCodecs.VAR_LONG.encode(buffer, 75L);
+            ByteBufCodecs.STRING_UTF8.encode(buffer, "x".repeat(65));
+
+            assertThrows(RuntimeException.class, () -> FamilyTreeUUIDLookup.STREAM_CODEC.decode(buffer));
+        } finally {
+            buffer.release();
+        }
+    }
+
+    @Test
+    void searchRequestAcceptsQueriesAtTheLimit() {
+        String query = "x".repeat(64);
+        assertEquals(query, roundTrip(
+                FamilyTreeUUIDLookup.STREAM_CODEC,
+                new FamilyTreeUUIDLookup(76L, query)
+        ).search());
     }
 
     @Test

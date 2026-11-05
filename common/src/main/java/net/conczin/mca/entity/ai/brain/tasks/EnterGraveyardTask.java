@@ -4,6 +4,8 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Mourning;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
+import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
+import net.conczin.mca.entity.ai.navigation.PathNodeGeometry;
 import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.core.BlockPos;
@@ -12,14 +14,11 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
+import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
 
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
@@ -33,6 +32,9 @@ public class EnterGraveyardTask extends Behavior<VillagerEntityMCA> {
     private static final int[] VERTICAL_OFFSETS = {0, 1, -1};
     private static final double MOURNING_GRAVE_DISTANCE = 3.0D;
     private static final double RESERVATION_FALLBACK_RADIUS = 256.0D;
+    private static final long STANDING_POSITION_RECHECK_TICKS = 100L;
+
+    private long nextStandingPositionCheck;
 
     public EnterGraveyardTask() {
         super(Map.of(
@@ -78,12 +80,22 @@ public class EnterGraveyardTask extends Behavior<VillagerEntityMCA> {
         if (currentPosition != null
                 && currentPosition.dimension().equals(world.dimension())
                 && !currentPosition.pos().equals(grave)) {
-            return;
+            if (time < nextStandingPositionCheck
+                    || !WalkTargetFailureMemory.hasFailureFor(villager, currentPosition.pos())
+                    || MCAGroundPathNavigation.requiresExtendedPath(villager, currentPosition.pos())) {
+                return;
+            }
         }
 
+        nextStandingPositionCheck = time + STANDING_POSITION_RECHECK_TICKS;
         findStandingPosition(world, villager, grave)
                 .ifPresentOrElse(
-                        position -> setMourningPosition(villager, GlobalPos.of(world.dimension(), position)),
+                        position -> {
+                            GlobalPos selected = GlobalPos.of(world.dimension(), position);
+                            if (!selected.equals(currentPosition)) {
+                                setMourningPosition(villager, selected);
+                            }
+                        },
                         () -> Mourning.noStandingPosition(villager)
                 );
     }
@@ -121,14 +133,43 @@ public class EnterGraveyardTask extends Behavior<VillagerEntityMCA> {
         Map<BlockPos, Integer> reservations = getMourningReservations(level, villager, grave);
         BlockPos origin = villager.blockPosition();
         int villagerHash = villager.getUUID().hashCode();
-        return getStandingPositions(grave)
+        Set<BlockPos> positions = getStandingPositions(grave)
                 .filter(position -> isGoodWalkTarget(level, villager, position))
-                .min(Comparator
+                .collect(Collectors.toCollection(HashSet::new));
+        BlockPos preferred = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_POSITION)
+                .filter(position -> position.dimension().equals(level.dimension()))
+                .map(GlobalPos::pos)
+                .filter(positions::contains)
+                .orElseGet(() -> positions.stream().min(Comparator
                         .comparingInt((BlockPos position) -> isOppositeSide(origin, grave, position) ? 1 : 0)
                         .thenComparingInt(position -> Math.abs(position.getY() - grave.getY()))
                         .thenComparingInt(position -> reservations.getOrDefault(position, 0))
                         .thenComparingInt(position -> position.distManhattan(origin))
-                        .thenComparingInt(position -> position.hashCode() ^ villagerHash));
+                        .thenComparingInt(position -> position.hashCode() ^ villagerHash))
+                        .orElse(null));
+        if (preferred == null) {
+            return Optional.empty();
+        }
+        if (preferred.equals(origin)
+                || MCAGroundPathNavigation.requiresExtendedPath(villager, preferred)
+                || villager.getNavigation() instanceof MCAGroundPathNavigation navigation && !navigation.canUpdatePath()) {
+            return Optional.of(preferred);
+        }
+
+        // Keep the established preference when usable. Search the alternatives
+        // together so an enclosed stand cannot monopolize an accessible grave.
+        Path preferredPath = villager.getNavigation().createPath(Set.of(preferred), 0);
+        if (preferredPath != null && preferredPath.canReach()) {
+            return Optional.of(preferred);
+        }
+        positions.remove(preferred);
+        Path alternativePath = villager.getNavigation().createPath(positions, 0);
+        if (alternativePath != null && alternativePath.canReach()) {
+            return Optional.of(alternativePath.getTarget());
+        }
+        // A bounded search can miss a long detour. Preserve the ordinary journey
+        // and its existing retry policy when no alternative has been proven usable.
+        return Optional.of(preferred);
     }
 
     private static boolean isOppositeSide(BlockPos origin, BlockPos grave, BlockPos position) {
@@ -174,6 +215,7 @@ public class EnterGraveyardTask extends Behavior<VillagerEntityMCA> {
 
     private static boolean isGoodWalkTarget(ServerLevel level, VillagerEntityMCA villager, BlockPos position) {
         return villager.getNavigation().isStableDestination(position)
-                && level.noCollision(villager, villager.getBoundingBox().move(Vec3.atBottomCenterOf(position).subtract(villager.position())));
+                && level.noCollision(villager, villager.getBoundingBox().move(
+                        PathNodeGeometry.walkingPosition(level, position, villager).subtract(villager.position())));
     }
 }

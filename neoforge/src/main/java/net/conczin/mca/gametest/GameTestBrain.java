@@ -8,6 +8,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.Brain;
 import net.minecraft.world.entity.ai.behavior.BehaviorControl;
 import net.minecraft.world.entity.schedule.Activity;
+import net.minecraft.server.level.ServerLevel;
 
 import java.util.List;
 import java.util.Set;
@@ -34,5 +35,18 @@ public final class GameTestBrain {
         return EnvironmentAttribute.builder(AttributeTypes.ACTIVITY)
                 .defaultValue(activity)
                 .build();
+    }
+
+    public static Activity scheduledActivityAt(ServerLevel level, LivingEntity entity, long ticks) {
+        var clock = level.dimensionType().defaultClock().orElseThrow();
+        long previous = level.clockManager().getInstance(clock).totalTicks();
+        try {
+            level.clockManager().setTotalTicks(clock, ticks);
+            level.environmentAttributes().invalidateTickCache();
+            return level.environmentAttributes().getValue(entity.getBrain().schedule, entity.position());
+        } finally {
+            level.clockManager().setTotalTicks(clock, previous);
+            level.environmentAttributes().invalidateTickCache();
+        }
     }
 }

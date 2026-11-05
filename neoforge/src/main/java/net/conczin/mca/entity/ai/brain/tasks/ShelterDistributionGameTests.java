@@ -961,13 +961,68 @@ public final class ShelterDistributionGameTests {
                 "fixture corridor does not reach the unloaded chunk boundary");
         helper.assertTrue(level.getChunkSource().getChunkNow(absent.x(), absent.z()) == null,
                 "fixture boundary chunk was already loaded");
-        helper.assertTrue(VillageManager.get(level).getIndoorRooms().resolve(bed).isEmpty(),
-                "discovery accepted incomplete boundary evidence");
+        var discovered = VillageManager.get(level).getIndoorRooms().resolve(bed);
+        helper.assertTrue(discovered.isEmpty(),
+                "discovery accepted incomplete boundary evidence; center=" + center
+                        + ", cells=" + discovered.map(room -> room.floorCells().toString()).orElse("none"));
         helper.assertTrue(level.getChunkSource().getChunkNow(absent.x(), absent.z()) == null,
                 "discovery loaded its missing boundary");
         helper.succeed();
     }
 
+    @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void enclosedRoomAtUnloadedChunkEdgeRemainsUsable(GameTestHelper helper) {
+        var level = helper.getLevel();
+        int chunkMin = 73104 & ~15;
+        BlockPos center = new BlockPos(chunkMin + 1, helper.absolutePos(new BlockPos(0, 2, 0)).getY(), chunkMin + 3);
+        ChunkPos source = ChunkPos.containing(center);
+        ChunkPos absent = new ChunkPos(source.x() - 1, source.z());
+        level.getChunk(source.x(), source.z());
+        helper.assertTrue(level.getChunkSource().getChunkNow(absent.x(), absent.z()) == null,
+                "fixture boundary chunk was already loaded");
+        for (BlockPos pos : BlockPos.betweenClosed(center.offset(-1, -1, -1), center.offset(5, 3, 5))) {
+            int x = pos.getX() - center.getX(), y = pos.getY() - center.getY(), z = pos.getZ() - center.getZ();
+            BLOCKS.putIfAbsent(pos.immutable(), level.getBlockState(pos));
+            level.setBlock(pos, y == -1 || y == 3 || x == -1 || x == 5 || z == -1 || z == 5
+                            ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(),
+                    Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
+        }
+        BlockPos bed = bed(level, center.south());
+        helper.assertTrue(VillageManager.get(level).getIndoorRooms().resolve(bed).isPresent(),
+                "an enclosed room with a loaded boundary wall must remain usable");
+        helper.assertTrue(level.getChunkSource().getChunkNow(absent.x(), absent.z()) == null,
+                "enclosed room discovery loaded the neighboring chunk");
+        helper.succeed();
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void paneWallAtUnloadedChunkEdgeRemainsUsable(GameTestHelper helper) {
+        var level = helper.getLevel();
+        int chunkMin = 73216 & ~15;
+        BlockPos foot = new BlockPos(chunkMin + 1, helper.absolutePos(new BlockPos(0, 2, 0)).getY(), chunkMin + 4);
+        ChunkPos source = ChunkPos.containing(foot);
+        ChunkPos absent = new ChunkPos(source.x() - 1, source.z());
+        level.getChunk(source.x(), source.z());
+        helper.assertTrue(level.getChunkSource().getChunkNow(absent.x(), absent.z()) == null,
+                "fixture boundary chunk was already loaded");
+        BlockState pane = Blocks.GLASS_PANE.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.NORTH, true)
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.SOUTH, true);
+        for (BlockPos pos : BlockPos.betweenClosed(foot.offset(-1, -1, -2), foot.offset(2, 3, 4))) {
+            int x = pos.getX() - foot.getX(), y = pos.getY() - foot.getY(), z = pos.getZ() - foot.getZ();
+            boolean shell = y == -1 || y == 3 || x == -1 || x == 2 || z == -2 || z == 4;
+            BlockState state = x == -1 && y >= 0 && y < 3 && z > -2 && z < 4
+                    ? pane : shell ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState();
+            BLOCKS.putIfAbsent(pos.immutable(), level.getBlockState(pos));
+            level.setBlock(pos, state, Block.UPDATE_CLIENTS | Block.UPDATE_KNOWN_SHAPE);
+        }
+        BlockPos head = bed(level, foot);
+        helper.assertTrue(VillageManager.get(level).getIndoorRooms().resolve(head).isPresent(),
+                "a pane-enclosed room with a loaded boundary wall must remain usable");
+        helper.assertTrue(level.getChunkSource().getChunkNow(absent.x(), absent.z()) == null,
+                "pane wall discovery loaded the neighboring chunk");
+        helper.succeed();
+    }
     @GameTest(batch = BATCH, templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 400)
     public static void cachedConnectorDoesNotReloadUnloadedChunk(GameTestHelper helper) {
         BlockPos arena = arena(helper, 34);
@@ -1461,7 +1516,7 @@ public final class ShelterDistributionGameTests {
             guest.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                     new WalkTarget(center.east(2).south(2), 0.5F, 0));
             choose(helper, first);
-            helper.assertTrue(selected(first).equals(current), "physical guest and same-house intent were counted twice");
+            helper.assertTrue(selected(first).equals(current), "physical guest and same-house intent were counted twice; selected=" + selected(first) + ", current=" + current + ", destination=" + destination + ", guest=" + guest.blockPosition() + ", first=" + first.blockPosition() + ", actors=" + VILLAGERS.stream().map(v -> v.blockPosition().toShortString()).toList());
             guest.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
                     new WalkTarget(center.east(18).south(2), 0.5F, 0));
             choose(helper, second);

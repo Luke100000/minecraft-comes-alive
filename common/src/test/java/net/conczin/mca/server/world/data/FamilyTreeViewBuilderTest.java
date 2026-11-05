@@ -8,6 +8,7 @@ import net.minecraft.util.Util;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -451,6 +452,34 @@ class FamilyTreeViewBuilderTest {
         detachedRoot.setName("mutated after view construction");
 
         assertEquals(ROOT.toString(), view.nodes().get(ROOT).getName());
+    }
+
+    @Test
+    void viewSnapshotPreservesCompleteNodeDataAndOwnsItsRelationships() {
+        FamilyTree tree = tree();
+        FamilyTreeNode source = node(tree, ROOT, Gender.FEMALE);
+        FamilyTreeNode father = node(tree, FATHER, Gender.MALE);
+        FamilyTreeNode partner = node(tree, PARTNER, Gender.MALE);
+        source.setFather(father);
+        source.updatePartner(partner);
+        source.setProfession(net.minecraft.core.registries.BuiltInRegistries.VILLAGER_PROFESSION
+                .getValueOrThrow(VillagerProfession.LIBRARIAN));
+        source.setDeceased(true);
+        source.addChild(CHILD);
+        CompoundTag original = source.save().copy();
+
+        FamilyTreeView view = new FamilyTreeView(Map.of(ROOT, source), Set.of(), Set.of(), Set.of(), Map.of());
+        FamilyTreeNode snapshot = view.nodes().get(ROOT);
+        assertEquals(original, snapshot.save(), "Snapshot must retain all persisted fields");
+
+        source.setName("Changed live record");
+        source.setProfession(net.minecraft.core.registries.BuiltInRegistries.VILLAGER_PROFESSION
+                .getValueOrThrow(VillagerProfession.NONE));
+        source.children().clear();
+        assertEquals(original, snapshot.save(), "Snapshot must not share mutable source state");
+
+        snapshot.addChild(uuid(777));
+        assertFalse(source.children().contains(uuid(777)), "Snapshot relationship edits must not affect source");
     }
 
     @Test

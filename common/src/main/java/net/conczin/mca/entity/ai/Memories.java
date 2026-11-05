@@ -30,6 +30,7 @@ public class Memories {
             return null;
         }
 
+        // Saved memories can contain either a UUID int array or a UUID string.
         UUID playerUuid = tag.read("playerUUID", UUIDUtil.LENIENT_CODEC).orElse(new UUID(0L, 0L));
         Memories memories = new Memories(villager.getVillagerBrain(), villager.level().getOverworldClockTime(), playerUuid);
 

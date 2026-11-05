@@ -1,7 +1,13 @@
 classTweaker v1 official
 
+# Check native collision stepping before requesting an AI jump, without applying movement.
+accessible method net/minecraft/world/entity/Entity collide (Lnet/minecraft/world/phys/Vec3;)Lnet/minecraft/world/phys/Vec3;
+
 # Reuse vanilla's live partial-collision transition guard for raised navigation starts.
 accessible method net/minecraft/world/level/pathfinder/WalkNodeEvaluator canReachWithoutCollision (Lnet/minecraft/world/level/pathfinder/Node;)Z
+
+# Bound collision-surface start normalization by vanilla's native jump reach.
+accessible method net/minecraft/world/level/pathfinder/WalkNodeEvaluator getMobJumpHeight ()D
 
 # Reuse the vanilla live-hostile distance predicate for shelter overflow.
 accessible method net/minecraft/world/entity/ai/sensing/VillagerHostilesSensor isMatchingEntity (Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/LivingEntity;Lnet/minecraft/world/entity/LivingEntity;)Z
@@ -40,6 +46,12 @@ accessible method net/minecraft/world/entity/ai/control/MoveControl rotlerp (FFF
 # vanilla's required-path-length policy in MCA.
 accessible method net/minecraft/world/entity/ai/navigation/PathNavigation getMaxPathLength ()F
 
+# Keep native STRAFE inputs while admitting safe local steps and drops.
+extendable method net/minecraft/world/entity/ai/control/MoveControl isWalkable (FF)Z
+
+# Reuse the vanilla action-bar extraction above the Blueprint screen background.
+accessible method net/minecraft/client/gui/Hud extractOverlayMessage (Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V
+
 # Reuse vanilla's fishing-line curve primitive for MCA villager bobbers.
 accessible method net/minecraft/client/renderer/entity/FishingHookRenderer stringVertex (FFFLcom/mojang/blaze3d/vertex/VertexConsumer;Lcom/mojang/blaze3d/vertex/PoseStack$Pose;FFF)V
 
@@ -60,9 +72,10 @@ accessible method net/minecraft/world/level/block/TrapDoorBlock toggle (Lnet/min
 # Reuse FenceGateBlock's vanilla wood-type sounds while MCA controls gate pathing.
 accessible field net/minecraft/world/level/block/FenceGateBlock type Lnet/minecraft/world/level/block/state/properties/WoodType;
 
-# Reuse CrossbowAttack's vanilla state machine while replacing its exact-item hand selection.
+# Reuse CrossbowAttack's vanilla state machine with MCA hand selection and aiming delay.
 extendable method net/minecraft/world/entity/ai/behavior/CrossbowAttack crossbowAttack (Lnet/minecraft/world/entity/Mob;Lnet/minecraft/world/entity/LivingEntity;)V
 accessible field net/minecraft/world/entity/ai/behavior/CrossbowAttack crossbowState Lnet/minecraft/world/entity/ai/behavior/CrossbowAttack$CrossbowState;
+accessible field net/minecraft/world/entity/ai/behavior/CrossbowAttack attackDelay I
 accessible class net/minecraft/world/entity/ai/behavior/CrossbowAttack$CrossbowState
 
 # Extend vanilla HOME POI states on Fabric without an accessor mixin.

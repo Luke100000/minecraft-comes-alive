@@ -19,13 +19,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -96,6 +90,11 @@ public final class FamilyTreeNode {
         copy.deceased = source.deceased;
         copy.children.addAll(children);
         return copy;
+    }
+
+    /** A standalone snapshot that does not share mutable family relationships with its source. */
+    public FamilyTreeNode detachedCopy() {
+        return detachedCopy(this, children);
     }
 
     public static boolean isValid(@Nullable UUID uuid) {
@@ -210,14 +209,16 @@ public final class FamilyTreeNode {
     }
 
     public Identifier getProfessionId() {
-        return Identifier.tryParse(profession);
+        Identifier id = Identifier.tryParse(profession);
+        return id != null ? id : VillagerProfession.NONE.identifier();
     }
 
     public String getProfessionName() {
+        Identifier id = getProfessionId();
         String professionName = (
-                getProfessionId().getNamespace().equalsIgnoreCase("minecraft") ?
-                        (getProfessionId().getPath().equals("none") ? "mca.none" : getProfessionId().getPath()) :
-                        getProfessionId().toString()
+                id.getNamespace().equalsIgnoreCase("minecraft") ?
+                        (id.getPath().equals("none") ? "mca.none" : id.getPath()) :
+                        id.toString()
         ).replace(":", ".");
 
         return MCA.isBlankString(professionName) ? "mca.none" : professionName;

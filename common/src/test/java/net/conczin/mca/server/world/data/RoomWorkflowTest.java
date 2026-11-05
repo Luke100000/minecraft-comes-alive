@@ -1,7 +1,7 @@
 package net.conczin.mca.server.world.data;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.SharedConstants;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.BeforeAll;
@@ -76,7 +76,7 @@ class RoomWorkflowTest {
                 source,
                 new Building(source),
                 List.of("library", "music_store"),
-                null));
+                null, RoomScanPlan.addBuilding(source)));
 
         RoomWorkflow workflow = new RoomWorkflow(manager, null);
 
@@ -166,7 +166,7 @@ class RoomWorkflowTest {
                 source,
                 new Building(source),
                 types,
-                null);
+                null, RoomScanPlan.addBuilding(source));
     }
 
     private static final class StubManager extends VillageManager {

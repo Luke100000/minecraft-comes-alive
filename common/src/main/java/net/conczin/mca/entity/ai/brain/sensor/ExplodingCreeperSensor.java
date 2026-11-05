@@ -1,5 +1,6 @@
 package net.conczin.mca.entity.ai.brain.sensor;
 
+import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -15,6 +16,6 @@ public class ExplodingCreeperSensor extends NearestVisibleLivingEntitySensor {
 
     @Override
     protected MemoryModuleType<LivingEntity> getMemoryToSet() {
-        return MemoryModuleType.NEAREST_HOSTILE;
+        return MemoryModuleTypeMCA.NEAREST_IGNITED_CREEPER;
     }
 }

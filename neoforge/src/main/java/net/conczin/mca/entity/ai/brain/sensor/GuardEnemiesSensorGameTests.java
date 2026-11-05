@@ -28,6 +28,7 @@ import net.minecraft.world.entity.ai.village.poi.PoiTypes;
 import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.state.properties.BedPart;
@@ -44,6 +45,7 @@ import java.util.Optional;
 @PrefixGameTestTemplate(false)
 public final class GuardEnemiesSensorGameTests {
     private static final List<Entity> TEST_ENTITIES = new ArrayList<>();
+    private static final List<ChunkPos> BEDTIME_FORCED_CHUNKS = new ArrayList<>();
     private static Long originalBedtimeDayTime;
 
     private GuardEnemiesSensorGameTests() {
@@ -79,6 +81,16 @@ public final class GuardEnemiesSensorGameTests {
         level.setBlock(foot, bed, 3);
         level.setBlock(head, bed.setValue(BedBlock.PART, BedPart.HEAD), 3);
 
+        // The one-block air template only forces its own chunk. Actor offsets
+        // can cross that boundary; getChunk alone does not enable entity ticks.
+        for (BlockPos actorPos : List.of(guardPos, enemyPos, foot, head)) {
+            ChunkPos chunk = ChunkPos.containing(actorPos);
+            if (!level.getForceLoadedChunks().contains(chunk.pack())) {
+                BEDTIME_FORCED_CHUNKS.add(chunk);
+                level.setChunkForced(chunk.x(), chunk.z(), true);
+            }
+            level.getChunk(actorPos);
+        }
         VillagerEntityMCA guard = VillagerFactory.newVillager(level)
                 .withAge(0)
                 .withProfession(ProfessionsMCA.GUARD)
@@ -86,6 +98,8 @@ public final class GuardEnemiesSensorGameTests {
                 .withName("Guard Bedtime Combat Probe")
                 .spawn(EntitySpawnReason.STRUCTURE);
         TEST_ENTITIES.add(guard);
+        helper.assertTrue(level.getEntity(guard.getId()) == guard,
+                "bedtime guard fixture was not added to the world");
         guard.refreshBrain(level);
         guard.getBrain().setSchedule(SchedulesMCA.GUARD);
         guard.getBrain().updateActivityFromSchedule(level.environmentAttributes(), level.getGameTime(), guard.position());
@@ -107,10 +121,17 @@ public final class GuardEnemiesSensorGameTests {
         helper.assertTrue(guard.getBrain().getMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY)
                         .orElse(null) == target,
                 "fixture guard failed to detect the 24-block enemy while on duty");
-        guard.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
-
+        // A distant monster detected by the guard sensor is not, by itself,
+        // an ongoing fight. Do not seed ATTACK_TARGET: combat already underway
+        // is covered by the separate REST target-continuity regression.
+        guard.getBrain().eraseMemory(MemoryModuleType.ATTACK_TARGET);
         setDayTime(level, 15010);
-        guard.getBrain().updateActivityFromSchedule(level.environmentAttributes(), level.getGameTime(), guard.position());
+        // The fixture jumps the time-of-day forward by 20 ticks without
+        // advancing game time. Vanilla throttles schedule updates by 20 game
+        // ticks; simulate that elapsed interval for this controlled handoff.
+        guard.getBrain().updateActivityFromSchedule(level.environmentAttributes(), level.getGameTime() + 21L, guard.position());
+        helper.assertTrue(guard.getBrain().isActive(Activity.REST),
+                "guard did not enter its scheduled REST activity with no attack target");
         long started = level.getGameTime();
         helper.onEachTick(() -> {
             if (guard.isSleeping()) {
@@ -122,9 +143,15 @@ public final class GuardEnemiesSensorGameTests {
                         "guard kept the distant enemy while sleeping");
                 helper.succeed();
             } else if (level.getGameTime() - started >= 180) {
+                helper.assertTrue(guard.tickCount > 0,
+                        "bedtime guard never ticked after being spawned into the world");
                 helper.fail("guard stayed awake at bedtime with a 24-block enemy: activity="
                         + guard.getBrain().getActiveNonCoreActivity() + ", attackTarget="
                         + guard.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET)
+                        + ", daytime=" + getDayTime(level)
+                        + ", enemyDistance=" + guard.distanceTo(target)
+                        + ", bedState=" + level.getBlockState(head)
+                        + ", entityTicks=" + guard.tickCount
                         + ", home=" + guard.getBrain().getMemory(MemoryModuleType.HOME)
                         + ", walk=" + guard.getBrain().getMemory(MemoryModuleType.WALK_TARGET)
                         + ", path=" + guard.getNavigation().getPath()
@@ -193,6 +220,8 @@ public final class GuardEnemiesSensorGameTests {
     @AfterBatch(batch = "mca_guard_bedtime_far_enemy")
     public static void restoreBedtimeGameTest(net.minecraft.server.level.ServerLevel level) {
         cleanupTestEntities();
+        BEDTIME_FORCED_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x(), chunk.z(), false));
+        BEDTIME_FORCED_CHUNKS.clear();
         if (originalBedtimeDayTime != null) {
             setDayTime(level, originalBedtimeDayTime);
             originalBedtimeDayTime = null;
@@ -220,14 +249,14 @@ public final class GuardEnemiesSensorGameTests {
                 "getGuardScanBounds", VillagerEntityMCA.class, Optional.class);
         getBounds.setAccessible(true);
         try {
-            AABB guardOnly = guard.getBoundingBox().inflate(48.0D);
+            AABB guardOnly = guard.getBoundingBox().inflate(30.0D);
 
             followedPlayer.snapTo(guard.getX() + 24.0D, guard.getY(), guard.getZ());
             AABB nearbyFollowBounds = (AABB) getBounds.invoke(new GuardEnemiesSensor(),
                     guard, Optional.of(followedPlayer));
             helper.assertTrue(nearbyFollowBounds.equals(
-                            guardOnly.minmax(followedPlayer.getBoundingBox().inflate(48.0D))),
-                    "nearby followed players should retain both 48-block defense areas");
+                            guardOnly.minmax(followedPlayer.getBoundingBox().inflate(30.0D))),
+                    "nearby followed players should retain both 30-block defense areas");
 
             followedPlayer.snapTo(guard.getX() + 320.0D, guard.getY(), guard.getZ());
             AABB distantFollowBounds = (AABB) getBounds.invoke(new GuardEnemiesSensor(),
@@ -275,13 +304,13 @@ public final class GuardEnemiesSensorGameTests {
             helper.getLevel().addFreshEntity(enemy);
             guard.getBrain().setMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING, followedPlayer);
 
-            helper.assertTrue(guard.distanceToSqr(enemy) > 48.0D * 48.0D,
-                    "fixture enemy must be outside guard's own 48-block scan");
-            helper.assertTrue(followedPlayer.distanceToSqr(enemy) < 48.0D * 48.0D,
+            helper.assertTrue(guard.distanceToSqr(enemy) > 30.0D * 30.0D,
+                    "fixture enemy must be outside guard's own 30-block scan");
+            helper.assertTrue(followedPlayer.distanceToSqr(enemy) < 30.0D * 30.0D,
                     "fixture enemy must be in followed player's defense range");
             helper.assertTrue(helper.getLevel().getEntitiesOfClass(
                             LivingEntity.class,
-                            followedPlayer.getBoundingBox().inflate(48.0D),
+                            followedPlayer.getBoundingBox().inflate(30.0D),
                             candidate -> candidate == enemy).contains(enemy),
                     "fixture enemy must be queryable in the test's loaded area");
             helper.assertTrue(guard.getSensing().hasLineOfSight(enemy),
@@ -299,6 +328,38 @@ public final class GuardEnemiesSensorGameTests {
             enemy.discard();
             guard.discard();
             followedPlayer.discard();
+        }
+    }
+
+    @GameTest(batch = "mca_guard_enemy_range", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void guardSearchStopsAtThirtyBlocks(GameTestHelper helper) {
+        cleanupTestEntities();
+        try {
+            BlockPos guardPos = helper.absolutePos(new BlockPos(3, 2, 3));
+            prepareClearLane(helper, guardPos, guardPos.east(31));
+            VillagerEntityMCA guard = VillagerFactory.newVillager(helper.getLevel())
+                    .withAge(0).withProfession(ProfessionsMCA.GUARD)
+                    .withPosition(Vec3.atBottomCenterOf(guardPos)).spawn(EntitySpawnReason.STRUCTURE);
+            guard.setNoAi(true);
+            guard.refreshBrain(helper.getLevel());
+            TEST_ENTITIES.add(guard);
+            Zombie enemy = EntityTypes.ZOMBIE.create(helper.getLevel(), net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+            if (enemy == null) throw new IllegalStateException("No zombie for guard range regression");
+            enemy.setNoAi(true);
+            enemy.snapTo(guard.getX() + 30, guard.getY(), guard.getZ());
+            helper.getLevel().addFreshEntity(enemy);
+            TEST_ENTITIES.add(enemy);
+            GuardEnemiesSensor sensor = new GuardEnemiesSensor();
+            sensor.doTick(helper.getLevel(), guard);
+            helper.assertTrue(guard.getBrain().isMemoryValue(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY, enemy),
+                    "melee guard failed to acquire a visible enemy at the 30-block boundary");
+            enemy.snapTo(guard.getX() + 31, guard.getY(), guard.getZ());
+            sensor.doTick(helper.getLevel(), guard);
+            helper.assertTrue(guard.getBrain().getMemory(MemoryModuleTypeMCA.NEAREST_GUARD_ENEMY).isEmpty(),
+                    "melee guard acquired a new enemy beyond the 30-block boundary");
+            helper.succeed();
+        } finally {
+            cleanupTestEntities();
         }
     }
 
@@ -347,7 +408,7 @@ public final class GuardEnemiesSensorGameTests {
                     .orElse(List.of());
             boolean targetInScan = helper.getLevel().getEntitiesOfClass(
                     LivingEntity.class,
-                    guard.getBoundingBox().inflate(48.0D),
+                    guard.getBoundingBox().inflate(30.0D),
                     candidate -> candidate == target
             ).contains(target);
             boolean lineOfSight = guard.getSensing().hasLineOfSight(target);
