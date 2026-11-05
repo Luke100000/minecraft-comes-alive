@@ -4,7 +4,6 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.resources.data.skin.LayeredHair;
 import net.conczin.mca.resources.data.skin.SkinListEntry;
-import net.minecraft.IdentifierException;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimplePreparableReloadListener;
@@ -36,30 +35,7 @@ public class LayeredHairList extends SimplePreparableReloadListener<Map<Identifi
     @Override
     protected void apply(Map<Identifier, List<String>> data, ResourceManager manager, ProfilerFiller profiler) {
         hair.clear();
-
-        data.forEach(this::addEntries);
-    }
-
-    private void addEntries(Identifier id, List<String> textures) {
-        LayeredHair.Category fileCategory = getCategoryFromPath(id);
-        textures.forEach(texture -> addEntry(texture, fileCategory));
-    }
-
-    private void addEntry(String texture, LayeredHair.Category category) {
-        Identifier parsed;
-        try {
-            parsed = Identifier.parse(texture);
-        } catch (IdentifierException exception) {
-            MCA.LOGGER.warn("Invalid layered hair texture identifier {}", texture, exception);
-            return;
-        }
-        if (!parsed.getPath().startsWith("skins/layered_hair/")) {
-            MCA.LOGGER.warn("Invalid layered hair texture path {}", texture);
-            return;
-        }
-
-        LayeredHair layeredHair = new LayeredHair(texture, Gender.NEUTRAL, category, 1.0F);
-        hair.put(layeredHair.getIdentifier() + "|" + layeredHair.getGender().getDataName() + "|" + layeredHair.getCategory().getId(), layeredHair);
+        data.forEach((id, textures) -> SkinCatalogLoader.addLayeredHair(hair, id, textures));
     }
 
     public boolean containsIdentifier(String identifier) {
@@ -113,14 +89,7 @@ public class LayeredHairList extends SimplePreparableReloadListener<Map<Identifi
                 .orElse(0.0);
     }
 
-    private static LayeredHair.Category getCategoryFromPath(Identifier id) {
-        String[] parts = id.getPath().split("/");
-        for (String part : parts) {
-            LayeredHair.Category category = LayeredHair.Category.byNameOrNull(part);
-            if (category != null) {
-                return category;
-            }
-        }
-        return LayeredHair.Category.BASE;
+    public static String key(String identifier, Gender gender, LayeredHair.Category category) {
+        return identifier + "|" + gender.getDataName() + "|" + category.getId();
     }
 }
