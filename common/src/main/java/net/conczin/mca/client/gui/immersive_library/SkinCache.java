@@ -8,13 +8,14 @@ import net.conczin.mca.client.gui.immersive_library.responses.ContentResponse;
 import net.conczin.mca.client.gui.immersive_library.responses.Response;
 import net.conczin.mca.client.gui.immersive_library.types.Content;
 import net.conczin.mca.client.gui.immersive_library.types.LiteContent;
-import net.conczin.mca.client.resources.SkinMeta;
 import net.conczin.mca.client.render.DynamicSkinCache;
+import net.conczin.mca.client.resources.SkinMeta;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.resources.ResourceLocation;
 import org.apache.commons.io.FileUtils;
+
 import java.io.*;
 import java.nio.charset.Charset;
 import java.nio.file.Files;

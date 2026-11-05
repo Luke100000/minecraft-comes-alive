@@ -3,15 +3,9 @@ package net.conczin.mca.server.world.data;
 import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 
-import java.util.AbstractCollection;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class RoomPoiEvidenceTest {
     @Test

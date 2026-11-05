@@ -8,11 +8,7 @@ import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Personality;
 import net.conczin.mca.registry.CriterionMCA;
-import net.conczin.mca.util.network.datasync.CDataManager;
-import net.conczin.mca.util.network.datasync.CDataParameter;
-import net.conczin.mca.util.network.datasync.CEnumParameter;
-import net.conczin.mca.util.network.datasync.CParameter;
-import net.conczin.mca.util.network.datasync.CResourceLocationParameter;
+import net.conczin.mca.util.network.datasync.*;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -27,7 +23,10 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.schedule.Activity;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Handles memory and complex bodily functions. Such as walking, and not being a nitwit.

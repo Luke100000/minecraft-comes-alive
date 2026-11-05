@@ -15,16 +15,8 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Stream;
 
-import static net.conczin.mca.client.gui.FamilyTreeRelationshipResolver.Relation.CHILD;
-import static net.conczin.mca.client.gui.FamilyTreeRelationshipResolver.Relation.FATHER;
-import static net.conczin.mca.client.gui.FamilyTreeRelationshipResolver.Relation.GRANDCHILD;
-import static net.conczin.mca.client.gui.FamilyTreeRelationshipResolver.Relation.GRANDPARENT;
-import static net.conczin.mca.client.gui.FamilyTreeRelationshipResolver.Relation.MOTHER;
-import static net.conczin.mca.client.gui.FamilyTreeRelationshipResolver.Relation.OTHER;
-import static net.conczin.mca.client.gui.FamilyTreeRelationshipResolver.Relation.PARTNER;
-import static net.conczin.mca.client.gui.FamilyTreeRelationshipResolver.Relation.SELF;
-import static net.conczin.mca.client.gui.FamilyTreeRelationshipResolver.Relation.SIBLING;
 import static net.conczin.mca.FamilyTreeTestSupport.uuid;
+import static net.conczin.mca.client.gui.FamilyTreeRelationshipResolver.Relation.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class FamilyTreeRelationshipResolverTest {

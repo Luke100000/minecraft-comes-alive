@@ -2,10 +2,10 @@ package net.conczin.mca.entity.ai;
 
 import com.mojang.serialization.Codec;
 import net.conczin.mca.MCA;
-import net.conczin.mca.entity.ai.brain.tasks.RangedCombatState;
 import net.conczin.mca.entity.ai.brain.UnreachableCombatTargets;
-import net.minecraft.resources.ResourceLocation;
+import net.conczin.mca.entity.ai.brain.tasks.RangedCombatState;
 import net.minecraft.core.GlobalPos;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.player.Player;

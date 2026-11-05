@@ -17,8 +17,8 @@ import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.AABB;
 
-import java.util.Objects;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /** Temporary bed diagnostics. No gameplay state is changed or persisted. */

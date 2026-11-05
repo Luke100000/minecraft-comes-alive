@@ -1,10 +1,6 @@
 package net.conczin.mca.server.world.data;
 
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.OptionalInt;
+import java.util.*;
 
 /** Pure bounded storey grouping; stored labels are inputs, never rewritten here. */
 final class FloorGrouping {

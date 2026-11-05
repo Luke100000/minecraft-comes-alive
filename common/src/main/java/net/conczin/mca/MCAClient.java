@@ -1,7 +1,7 @@
 package net.conczin.mca;
 
-import net.conczin.mca.client.gui.SkinLibraryScreen;
 import net.conczin.mca.client.gui.BlueprintScreen;
+import net.conczin.mca.client.gui.SkinLibraryScreen;
 import net.conczin.mca.client.resources.ClientSkinCatalog;
 import net.conczin.mca.client.tts.SpeechManager;
 import net.conczin.mca.entity.PlayerDimensions;

@@ -3,9 +3,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class WalkTargetRetryGateTest {
     private static final BlockPos DESTINATION = new BlockPos(12, 64, 12);
