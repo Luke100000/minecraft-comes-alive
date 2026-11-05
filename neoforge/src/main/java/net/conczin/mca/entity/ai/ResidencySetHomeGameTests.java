@@ -11,7 +11,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.AfterBatch;
-import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -24,6 +23,9 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
+import net.minecraft.world.entity.schedule.Activity;
+import net.minecraft.world.entity.schedule.Schedule;
+import net.minecraft.world.entity.schedule.ScheduleBuilder;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -38,14 +40,11 @@ import java.util.Optional;
 @PrefixGameTestTemplate(false)
 public final class ResidencySetHomeGameTests {
     private static final List<VillagerEntityMCA> REPLACEMENT_VILLAGERS = new ArrayList<>();
-    private static long previousReplacementDayTime;
+    // This fixture exercises natural HOME acquisition and sleeping, not the shared world's clock.
+    private static final Schedule REPLACEMENT_REST_SCHEDULE = new ScheduleBuilder(new Schedule())
+            .changeActivityAt(0, Activity.REST).build();
 
     private ResidencySetHomeGameTests() {
-    }
-
-    @BeforeBatch(batch = "mca_replaced_sleeping_home")
-    public static void rememberReplacementDayTime(ServerLevel level) {
-        previousReplacementDayTime = level.getDayTime();
     }
 
     @AfterBatch(batch = "mca_replaced_sleeping_home")
@@ -58,7 +57,6 @@ public final class ResidencySetHomeGameTests {
             villager.discard();
         }
         REPLACEMENT_VILLAGERS.clear();
-        level.setDayTime(previousReplacementDayTime);
     }
 
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
@@ -708,7 +706,6 @@ public final class ResidencySetHomeGameTests {
     public static void replacingClaimedBedDoesNotAllowTwoSleepingOwners(GameTestHelper helper) {
         BlockPos center = helper.absolutePos(new BlockPos(56, 1, 56));
         GameTestTerrain.prepareFlatArea(helper, center, 12, 3);
-        helper.getLevel().setDayTime(13_000L);
         BlockPos bell = center.west(6);
         helper.getLevel().setBlock(bell, Blocks.BELL.defaultBlockState(), 3);
         helper.assertTrue(VillageManager.get(helper.getLevel()).processBuilding(bell) == Building.validationResult.SUCCESS,
@@ -787,9 +784,12 @@ public final class ResidencySetHomeGameTests {
                 .withPosition(Vec3.atBottomCenterOf(feet))
                 .withName(name)
                 .spawn(MobSpawnType.STRUCTURE);
+        // Village guard recruitment resets the villager's brain and replaces the test REST schedule.
+        // A little trading XP makes this ordinary resident ineligible without disabling its AI.
+        villager.setVillagerXp(1);
         villager.setOnGround(true);
         villager.refreshBrain(helper.getLevel());
-        villager.getBrain().setSchedule(SchedulesMCA.DEFAULT);
+        villager.getBrain().setSchedule(REPLACEMENT_REST_SCHEDULE);
         villager.getBrain().updateActivityFromSchedule(helper.getLevel().getDayTime(), helper.getLevel().getGameTime());
         return villager;
     }

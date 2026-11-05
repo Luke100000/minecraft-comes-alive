@@ -26,14 +26,19 @@
   "accessWidener": "${mod_id}.classtweaker",
   "mixins": [
     "${mod_id}.mixins.json",
-    "${mod_id}.journeymap.mixins.json"
+    "${mod_id}.journeymap.mixins.json",
+    "${mod_id}.opentogether.mixins.json"
   ],
   "depends": {
-    "fabricloader": ">=0.14",
+    "fabricloader": ">=0.18",
     "fabric": "*",
     "minecraft": "${minecraft_version}",
     "java": ">=17"
   },
   "suggests": {
+    "immersive_melodies": ">=${immersive_melodies_version}"
+  },
+  "breaks": {
+    "immersive_melodies": "<${immersive_melodies_version}"
   }
 }

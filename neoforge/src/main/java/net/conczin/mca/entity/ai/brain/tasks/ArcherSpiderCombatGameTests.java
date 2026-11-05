@@ -13,8 +13,10 @@ import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.CaveSpider;
 import net.minecraft.world.entity.monster.Spider;
+import net.minecraft.world.entity.schedule.Activity;
+import net.minecraft.world.entity.schedule.Schedule;
+import net.minecraft.world.entity.schedule.ScheduleBuilder;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -51,15 +53,13 @@ public final class ArcherSpiderCombatGameTests {
         VillagerEntityMCA archer = spawnArcher(helper, archerPos);
         archer.setNoAi(true);
         CaveSpider spider = spawnSpider(helper, EntityType.CAVE_SPIDER, archerPos.east(6), true);
-        // Real BowTask shots intentionally retain vanilla-style inaccuracy. Keep this integration
-        // check about hitting the cave spider at range rather than requiring several random hits.
-        spider.setHealth(1.0F);
         startCombat(archer, spider);
 
         requireBowTaskKill(helper, archer, spider, 300, "cave spider");
     }
 
-    @GameTest(batch = "mca_archer_spider_cave_escape", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 500)
+    @GameTest(batch = "mca_archer_spider_cave_escape", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 1000)
     public static void archerEscapesCaveCornerAndKillsPursuingSpider(GameTestHelper helper) {
         cleanupTestEntities();
         BlockPos archerPos = helper.absolutePos(new BlockPos(14, 22, 14));
@@ -67,14 +67,11 @@ public final class ArcherSpiderCombatGameTests {
         buildCaveCorner(helper, archerPos);
 
         VillagerEntityMCA archer = spawnArcher(helper, archerPos);
+        // Keep the archer awake throughout the real spider pursuit; the
+        // scheduled activity must not replace the one-time active IDLE.
+        archer.getBrain().setSchedule(new ScheduleBuilder(new Schedule()).changeActivityAt(0, Activity.IDLE).build());
+        archer.getBrain().setActiveActivityIfPossible(Activity.IDLE);
         Spider spider = spawnSpider(helper, EntityType.SPIDER, archerPos.east(2), false);
-        // Movement is the subject of this integration test. Real bow spread is intentionally
-        // stochastic, so require one post-escape hit rather than a random number of hits.
-        // Keep combat target retention out of the guard's unrelated critical-health
-        // shutdown while the real pursuing spider and native movement still tick.
-        archer.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.MAX_HEALTH).setBaseValue(100.0D);
-        archer.setHealth(100.0F);
-        spider.setHealth(1.0F);
         spider.setTarget(archer);
         startCombat(archer, spider);
 
@@ -84,12 +81,22 @@ public final class ArcherSpiderCombatGameTests {
         double[] furthestProgressSquared = {0.0D};
         boolean[] sawEmergency = {false};
         int[] ticks = {0};
+        int[] hits = {0};
+        float[] previousHealth = {spider.getHealth()};
 
         helper.onEachTick(() -> {
             ticks[0]++;
             bestDistanceSquared[0] = Math.max(bestDistanceSquared[0], archer.distanceToSqr(spider));
             furthestProgressSquared[0] = Math.max(furthestProgressSquared[0], archer.position().distanceToSqr(origin));
             sawEmergency[0] |= RangedCombatState.current(archer).orElse(null) == RangedCombatState.EMERGENCY_FLEE;
+            if (spider.getHealth() < previousHealth[0]) {
+                var damage = spider.getLastDamageSource();
+                helper.assertTrue(damage != null && damage.getEntity() == archer
+                                && damage.getDirectEntity() instanceof net.minecraft.world.entity.projectile.AbstractArrow,
+                        "pursuing spider took damage outside the archer's arrows");
+                hits[0]++;
+                previousHealth[0] = spider.getHealth();
+            }
 
             if (!archer.isAlive()) {
                 helper.fail("pursuing spider killed the archer before it escaped the cave corner");
@@ -97,6 +104,8 @@ public final class ArcherSpiderCombatGameTests {
             }
 
             if (!spider.isAlive()) {
+                helper.assertTrue(spider.getHealth() <= 0 && hits[0] >= 2,
+                        "cave pursuit did not require repeated damaging arrows");
                 helper.assertTrue(sawEmergency[0], "close pursuing spider never triggered EMERGENCY_FLEE");
                 helper.assertTrue(
                         bestDistanceSquared[0] >= 25.0D,
@@ -112,7 +121,7 @@ public final class ArcherSpiderCombatGameTests {
                 return;
             }
 
-            if (ticks[0] >= 420) {
+            if (ticks[0] >= 900) {
                 helper.fail("archer did not escape the cave corner and kill the pursuing spider; state="
                         + RangedCombatState.current(archer).orElse(null)
                         + ", bestDistanceSqr=" + bestDistanceSquared[0]
@@ -271,6 +280,9 @@ public final class ArcherSpiderCombatGameTests {
         helper.onEachTick(() -> {
             ticks[0]++;
             bowTask.tick(helper.getLevel(), archer, startTime + ticks[0]);
+            // NoAI skips native controllers; the manual BowTask fixture still
+            // needs LookControl to turn toward the spider before release.
+            archer.getLookControl().tick();
             if (!archer.isAlive()) {
                 helper.fail("archer died before killing the " + targetName);
                 return;
@@ -281,7 +293,9 @@ public final class ArcherSpiderCombatGameTests {
             }
             if (ticks[0] >= deadlineTicks) {
                 helper.fail("archer failed to kill the " + targetName + "; health=" + spider.getHealth()
-                        + ", state=" + RangedCombatState.current(archer).orElse(null));
+                        + ", state=" + RangedCombatState.current(archer).orElse(null)
+                        + ", actorTicks=" + archer.tickCount + ", drawTicks=" + archer.getTicksUsingItem()
+                        + ", usingItem=" + archer.isUsingItem());
             }
         });
     }
@@ -374,23 +388,7 @@ public final class ArcherSpiderCombatGameTests {
     }
 
     private static void prepareFlatArea(GameTestHelper helper, BlockPos center, int radius) {
-        ChunkPos minChunk = new ChunkPos(center.offset(-radius, 0, -radius));
-        ChunkPos maxChunk = new ChunkPos(center.offset(radius, 0, radius));
-        for (int chunkX = minChunk.x; chunkX <= maxChunk.x; chunkX++) {
-            for (int chunkZ = minChunk.z; chunkZ <= maxChunk.z; chunkZ++) {
-                helper.getLevel().setChunkForced(chunkX, chunkZ, true);
-            }
-        }
-
-        for (int x = -radius; x <= radius; x++) {
-            for (int z = -radius; z <= radius; z++) {
-                BlockPos feet = center.offset(x, 0, z);
-                helper.getLevel().setBlock(feet.below(), Blocks.STONE.defaultBlockState(), 3);
-                helper.getLevel().setBlock(feet, Blocks.AIR.defaultBlockState(), 3);
-                helper.getLevel().setBlock(feet.above(), Blocks.AIR.defaultBlockState(), 3);
-                helper.getLevel().setBlock(feet.above(2), Blocks.AIR.defaultBlockState(), 3);
-            }
-        }
+        net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea(helper, center, radius, 3);
     }
 
     private static void cleanupTestEntities() {

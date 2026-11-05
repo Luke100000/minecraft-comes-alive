@@ -222,6 +222,12 @@ public final class HomeArrivalGameTests {
         verifyArrival(helper, 2, false);
     }
 
+    @GameTest(batch = "mca_home_offset_raised_steps", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 600)
+    public static void restApproachesRaisedDoorFromSideAndSleeps(GameTestHelper helper) {
+        verifyArrival(helper, 2, false, true);
+    }
+
     @GameTest(batch = "mca_home_repaired_ledge", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 700)
     public static void restRecoversWhenStepsAreAddedToTwoBlockLedge(GameTestHelper helper) {
@@ -265,6 +271,11 @@ public final class HomeArrivalGameTests {
     }
 
     private static void verifyArrival(GameTestHelper helper, int heightDifference, boolean repairSteps) {
+        verifyArrival(helper, heightDifference, repairSteps, false);
+    }
+
+    private static void verifyArrival(GameTestHelper helper, int heightDifference, boolean repairSteps,
+                                      boolean offsetApproach) {
         BlockPos start = helper.absolutePos(new BlockPos(3, 4, 5));
         BlockPos door = start.offset(6, heightDifference, 0);
         BlockPos foot = door.east(4);
@@ -281,12 +292,18 @@ public final class HomeArrivalGameTests {
         boolean[] openedDoor = {false};
         boolean[] sawFailure = {false};
         boolean[] repaired = {false};
+        boolean[] crossedDoor = {false};
+        double[] outsideTurnDistance = {0.0D};
+        int[] outsideDirection = {0};
+        int[] outsideReversals = {0};
         // Register tick callbacks before execution starts: registering onEachTick
         // inside a delayed callback rehashes GameTest's live callback iterator.
         helper.runAfterDelay(10, () -> {
-            resident[0] = spawnResident(helper, start, head);
+            resident[0] = spawnResident(helper, offsetApproach ? start.south(3) : start, head);
             started[0] = helper.getLevel().getGameTime();
             previous[0] = resident[0].position();
+            outsideTurnDistance[0] = Math.hypot(previous[0].x - (door.getX() + 0.5D),
+                    previous[0].z - (door.getZ() + 0.5D));
         });
         helper.onEachTick(() -> {
             VillagerEntityMCA villager = resident[0];
@@ -301,6 +318,24 @@ public final class HomeArrivalGameTests {
             }
             previous[0] = villager.position();
             openedDoor[0] |= helper.getLevel().getBlockState(door).getValue(DoorBlock.OPEN);
+            crossedDoor[0] |= villager.getBlockX() == door.getX()
+                    && Math.abs(villager.getY() - door.getY()) < 0.75D;
+            if (offsetApproach && villager.getX() < door.getX() - 0.25D && !villager.isSleeping()) {
+                double distance = Math.hypot(villager.getX() - (door.getX() + 0.5D),
+                        villager.getZ() - (door.getZ() + 0.5D));
+                int direction = distance > outsideTurnDistance[0] + 0.85D ? 1
+                        : distance < outsideTurnDistance[0] - 0.85D ? -1 : 0;
+                if (direction != 0) {
+                    if (outsideDirection[0] != 0 && outsideDirection[0] != direction) {
+                        outsideReversals[0]++;
+                    }
+                    outsideDirection[0] = direction;
+                    outsideTurnDistance[0] = distance;
+                }
+                helper.assertTrue(outsideReversals[0] < 5,
+                        "HOME repeatedly reversed outside the raised doorway: turns="
+                                + outsideReversals[0] + ", " + describe(villager));
+            }
             sawFailure[0] |= villager.getBrain().hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
             if (repairSteps && !repaired[0] && elapsed >= 160) {
                 helper.assertTrue(!villager.isSleeping() && !openedDoor[0]
@@ -315,6 +350,8 @@ public final class HomeArrivalGameTests {
                 helper.assertTrue(villager.getSleepingPos().filter(head::equals).isPresent(),
                         "villager slept at a different bed");
                 helper.assertTrue(openedDoor[0], "villager reached bed without opening the only entrance");
+                helper.assertTrue(!offsetApproach || crossedDoor[0],
+                        "offset HOME reached bed without observed physical doorway crossing");
                 helper.assertTrue(!repairSteps || repaired[0], "villager reached raised HOME before repair");
                 MCA.LOGGER.info("[MCA Home Arrival] arrived rise={} repaired={} elapsed={} {}",
                         heightDifference, repaired[0], elapsed, describe(villager));
@@ -322,7 +359,7 @@ public final class HomeArrivalGameTests {
             } else if (elapsed >= 550) {
                 helper.fail("REST did not reach HOME through entrance; rise=" + heightDifference
                         + ", repaired=" + repaired[0] + ", doorOpened=" + openedDoor[0]
-                        + ", " + describe(villager));
+                        + ", outsideReversals=" + outsideReversals[0] + ", " + describe(villager));
             }
         });
     }
@@ -431,6 +468,11 @@ public final class HomeArrivalGameTests {
 
     @AfterBatch(batch = "mca_home_raised_steps")
     public static void cleanupSteps(ServerLevel level) {
+        cleanup(level);
+    }
+
+    @AfterBatch(batch = "mca_home_offset_raised_steps")
+    public static void cleanupOffsetSteps(ServerLevel level) {
         cleanup(level);
     }
 

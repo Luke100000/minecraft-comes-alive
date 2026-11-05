@@ -12,11 +12,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 public final class Config extends CommonConfig {
     private static final int VERSION = 2;
@@ -129,6 +125,16 @@ public final class Config extends CommonConfig {
      * If true, MCA book rewards are granted from advancements.
      */
     public boolean giveAdvancementBooks = true;
+
+    /**
+     * Chance (0–1) that a villager plays Immersive Melodies during a socializing attempt. Set to 0 to disable it.
+     */
+    public float immersiveMelodiesChance = 0.05f;
+
+    /**
+     * Namespace of Immersive Melodies songs villagers may play. Use "*" to allow all server-known melodies.
+     */
+    public String immersiveMelodiesNamespace = "*";
 
     /**
      * The number of hearts required for a villager to consider the player a friend.

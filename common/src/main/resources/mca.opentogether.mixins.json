@@ -1,0 +1,11 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "net.conczin.mca.mixin.compat",
+  "plugin": "net.conczin.mca.mixin.OptionalModMixinPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

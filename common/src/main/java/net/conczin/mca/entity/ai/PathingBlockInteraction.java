@@ -1,7 +1,5 @@
 package net.conczin.mca.entity.ai;
 
-import java.lang.reflect.Method;
-
 import net.conczin.mca.Config;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -22,6 +20,8 @@ import net.minecraft.world.level.block.state.properties.BlockSetType;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.gameevent.GameEvent;
 import org.jetbrains.annotations.Nullable;
+
+import java.lang.reflect.Method;
 
 /**
  * Shared contract for blocks MCA navigation may expect villagers to operate.
@@ -109,6 +109,16 @@ public final class PathingBlockInteraction {
             return state.getValue(BlockStateProperties.HORIZONTAL_FACING).getAxis() == movementAxis;
         }
         return true;
+    }
+
+    public static boolean shouldBeOpenForMovement(BlockState state, BlockPos node, @Nullable BlockPos adjacent) {
+        Direction.Axis axis = null;
+        if (adjacent != null && adjacent.getY() == node.getY()) {
+            boolean changesX = adjacent.getX() != node.getX();
+            boolean changesZ = adjacent.getZ() != node.getZ();
+            if (changesX != changesZ) axis = changesX ? Direction.Axis.X : Direction.Axis.Z;
+        }
+        return shouldBeOpenForMovement(state, axis);
     }
 
     public static boolean setOpen(@Nullable Entity entity, Level level, BlockState state, BlockPos pos, boolean open) {

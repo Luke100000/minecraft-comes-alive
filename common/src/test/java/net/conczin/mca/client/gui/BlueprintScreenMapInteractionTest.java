@@ -2,15 +2,10 @@ package net.conczin.mca.client.gui;
 
 import com.google.gson.JsonObject;
 import net.conczin.mca.client.gui.widget.TooltipButtonWidget;
+import net.conczin.mca.network.c2s.ReportBuildingMessage;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.data.BuildingType;
-import net.conczin.mca.network.c2s.ReportBuildingMessage;
-import net.conczin.mca.server.world.data.Building;
-import net.conczin.mca.server.world.data.TestFloorFootprint;
-import net.conczin.mca.server.world.data.RoomScanPlan;
-import net.conczin.mca.server.world.data.Structure;
-import net.conczin.mca.server.world.data.StructureFloor;
-import net.conczin.mca.server.world.data.Village;
+import net.conczin.mca.server.world.data.*;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -22,7 +17,6 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -34,16 +28,9 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class BlueprintScreenMapInteractionTest {
     @BeforeAll
@@ -226,12 +213,30 @@ class BlueprintScreenMapInteractionTest {
     }
 
     @Test
+    void scanMessagesProjectOnlyThePlansActionAndTarget() {
+        RoomScanPlan[] plans = {
+                RoomScanPlan.addBuilding(BlockPos.ZERO),
+                RoomScanPlan.addRoom(7, 3, BlockPos.ZERO),
+                RoomScanPlan.updateRoom(room(42), BlockPos.ZERO),
+                RoomScanPlan.attachment(91, -1, BlockPos.ZERO, BlockPos.ZERO)
+        };
+        var actions = new ReportBuildingMessage.Action[]{ReportBuildingMessage.Action.ADD_BUILDING,
+                ReportBuildingMessage.Action.SCAN_ROOM, ReportBuildingMessage.Action.SCAN_ROOM,
+                ReportBuildingMessage.Action.ADD_ATTACHMENT};
+        int[] targets = {-1, -1, 42, 91};
+        for (int i = 0; i < plans.length; i++) {
+            var message = BlueprintScreen.structureScanMessage(plans[i]);
+            assertEquals(actions[i], message.action());
+            assertEquals(targets[i], message.expectedTargetId());
+        }
+    }
+
+    @Test
     void registeredRoomScanCarriesExpectedRoomId() {
         Building room = room(42);
         RoomScanPlan plan = RoomScanPlan.updateRoom(room, BlockPos.ZERO);
 
-        ReportBuildingMessage message = BlueprintScreen.structureScanMessage(
-                Village.RoomScanMode.UPDATE_ROOM, plan);
+        ReportBuildingMessage message = BlueprintScreen.structureScanMessage(plan);
 
         assertEquals(ReportBuildingMessage.Action.SCAN_ROOM, message.action());
         assertEquals(42, message.expectedTargetId());
@@ -294,7 +299,7 @@ class BlueprintScreenMapInteractionTest {
             assertEquals(Component.translatable(plan.hasProspectiveFloor() && floorNumber < 0
                     ? "gui.blueprint.addBasement" : "gui.blueprint.addFloor"), button.getMessage());
             assertEquals(ReportBuildingMessage.Action.ADD_ATTACHMENT,
-                    BlueprintScreen.structureScanMessage(plan.mode(), plan).action());
+                    BlueprintScreen.structureScanMessage(plan).action());
         }
     }
 

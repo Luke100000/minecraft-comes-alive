@@ -13,12 +13,7 @@ import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.Rank;
 import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.resources.data.tasks.Task;
-import net.conczin.mca.server.world.data.Building;
-import net.conczin.mca.server.world.data.RoomScanPlan;
-import net.conczin.mca.server.world.data.RoomTypeResolver;
-import net.conczin.mca.server.world.data.Structure;
-import net.conczin.mca.server.world.data.StructureFloor;
-import net.conczin.mca.server.world.data.Village;
+import net.conczin.mca.server.world.data.*;
 import net.conczin.mca.util.compat.ButtonWidget;
 import net.conczin.mca.util.localization.FlowingText;
 import net.minecraft.ChatFormatting;
@@ -523,21 +518,21 @@ public class BlueprintScreen extends ExtendedScreen {
 
     private void requestPrimaryStructureScan() {
         RoomScanPlan plan = getPlayerRoomScanPlan();
-        sendStructureScan(plan.mode(), plan);
+        sendStructureScan(plan);
     }
 
-    private void sendStructureScan(Village.RoomScanMode mode, RoomScanPlan plan) {
+    private void sendStructureScan(RoomScanPlan plan) {
         selectPlayerFloorOnNextVillageResponse = true;
-        Network.sendToServer(structureScanMessage(mode, plan));
+        Network.sendToServer(structureScanMessage(plan));
     }
 
-    static ReportBuildingMessage structureScanMessage(Village.RoomScanMode mode, RoomScanPlan plan) {
-        int expectedTargetId = switch (mode) {
+    static ReportBuildingMessage structureScanMessage(RoomScanPlan plan) {
+        int expectedTargetId = switch (plan.mode()) {
             case UPDATE_ROOM -> plan.currentRoom().map(Building::getId).orElse(-1);
             case ADD_ATTACHMENT -> plan.targetBuildingId();
             default -> -1;
         };
-        return new ReportBuildingMessage(getStructureScanAction(mode), null, expectedTargetId);
+        return new ReportBuildingMessage(getStructureScanAction(plan.mode()), null, expectedTargetId);
     }
 
     static Optional<ReportBuildingMessage> targetedEditMessage(ReportBuildingMessage.Action action,

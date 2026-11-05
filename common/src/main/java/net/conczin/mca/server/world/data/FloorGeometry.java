@@ -5,17 +5,7 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectMaps;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /** Exact structural ownership geometry for one semantic Floor; cells need not be traversable. */
@@ -106,11 +96,11 @@ final class FloorGeometry {
     }
 
     int maxPhysicalCeilingY() {
-        return cells.stream().mapToInt(Cell::ceilingY).max().orElse(anchorY() + 2);
+        return cells.stream().mapToInt(Cell::ceilingY).max().orElse(2);
     }
 
     int minFeetY() {
-        return cells.stream().mapToInt(cell -> cell.feet().getY()).min().orElse(anchorY());
+        return cells.stream().mapToInt(cell -> cell.feet().getY()).min().orElse(0);
     }
 
     static Bounds bounds(Collection<Cell> cells, int minYOffset) {

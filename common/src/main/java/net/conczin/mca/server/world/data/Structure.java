@@ -232,10 +232,6 @@ public final class Structure implements VillageBuilding {
         return copy;
     }
 
-    boolean replaceFloorGeometry(int floorId, StructureFloor scannedFloor) {
-        return replaceFloorGeometry(floorId, scannedFloor == null ? null : scannedFloor.geometry());
-    }
-
     boolean replaceFloorGeometry(int floorId, FloorGeometry scannedFloor) {
         StructureFloor existing = floors.get(floorId);
         if (existing == null || scannedFloor == null) return false;

@@ -1,19 +1,10 @@
 package net.conczin.mca.client.gui;
 
-import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.BufferUploader;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.blaze3d.vertex.Tesselator;
-import com.mojang.blaze3d.vertex.VertexFormat;
+import com.mojang.blaze3d.vertex.*;
 import net.conczin.mca.MCA;
 import net.conczin.mca.MCAClient;
-import net.conczin.mca.client.gui.BlueprintMapGeometry.MapFootprintLayer;
-import net.conczin.mca.client.gui.BlueprintMapGeometry.MapGeometry;
-import net.conczin.mca.client.gui.BlueprintMapGeometry.MapIconLayer;
-import net.conczin.mca.client.gui.BlueprintMapGeometry.MapConnectorLayer;
-import net.conczin.mca.client.gui.BlueprintMapGeometry.MapStructureLayer;
+import net.conczin.mca.client.gui.BlueprintMapGeometry.*;
 import net.conczin.mca.client.gui.widget.WidgetUtils;
 import net.conczin.mca.client.render.JourneyMapIconBridge;
 import net.conczin.mca.entity.VillagerLike;

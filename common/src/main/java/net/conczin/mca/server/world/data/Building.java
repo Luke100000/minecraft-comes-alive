@@ -431,6 +431,7 @@ public class Building implements VillageBuilding {
         SUCCESS,
         INVALID_TYPE,
         NOT_IN_BUILDING,
-        AMBIGUOUS_STRUCTURE
+        AMBIGUOUS_STRUCTURE,
+        TARGET_CHANGED
     }
 }

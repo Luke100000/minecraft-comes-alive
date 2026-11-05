@@ -19,13 +19,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -546,6 +540,13 @@ public final class FamilyTreeNode {
     // entries with these conditions are usually generated
     public boolean probablyGenerated() {
         return mother.equals(Util.NIL_UUID) && father.equals(Util.NIL_UUID) && children.size() == 1 && deceased && !isPlayer();
+    }
+
+    public boolean isUnpairedGeneratedParentOf(UUID childId) {
+        return probablyGenerated()
+                && children.contains(childId)
+                && !isValid(partner)
+                && relationshipState == RelationshipState.SINGLE;
     }
 
     // true if there is at least one non-generated relative

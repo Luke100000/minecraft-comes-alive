@@ -1,8 +1,8 @@
 package net.conczin.mca.mixin;
 
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.registry.ProfessionsMCA;
@@ -22,6 +22,7 @@ abstract class MixinAbstractArrow {
     private boolean mca$ignoreVillagersForArcherArrows(boolean original, Entity target) {
         return original && !(Config.getServerConfig().archerArrowsIgnoreVillagers
                 && (target instanceof Villager || target instanceof IronGolem)
+                && (!(target instanceof VillagerEntityMCA villager) || !villager.isHostile())
                 && mca$getMcaArcherOwner() != null);
     }
 

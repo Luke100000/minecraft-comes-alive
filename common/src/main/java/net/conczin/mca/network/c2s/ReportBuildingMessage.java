@@ -4,7 +4,10 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.BuildingPolymorphMessage;
-import net.conczin.mca.server.world.data.*;
+import net.conczin.mca.server.world.data.Building;
+import net.conczin.mca.server.world.data.RoomWorkflow;
+import net.conczin.mca.server.world.data.Village;
+import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -161,25 +164,23 @@ public record ReportBuildingMessage(Action action, String data, int expectedTarg
             requestType(outcome.matchingTypes(), outcome.source(), player, action, outcome.expectedTargetId());
             return;
         }
+        String key = workflowFeedbackKey(outcome, action);
+        if (key != null) player.displayClientMessage(Component.translatable(key), true);
+    }
+
+    static String workflowFeedbackKey(RoomWorkflow.Outcome outcome, Action action) {
+        if (outcome.status() == RoomWorkflow.Status.REQUIRES_TYPE_SELECTION) return null;
         if (outcome.status() == RoomWorkflow.Status.FAILED) {
             if (action == Action.SCAN_ROOM
                     && outcome.expectedTargetId() < 0
                     && outcome.result() == Building.validationResult.IDENTICAL) {
-                player.displayClientMessage(Component.translatable("blueprint.roomAlreadyAdded"), true);
-                return;
+                return "blueprint.roomAlreadyAdded";
             }
-            if ((action == Action.SCAN_ROOM || action == Action.SET_ROOM_INHERITANCE)
-                    && outcome.result() == Building.validationResult.NOT_IN_BUILDING) {
-                if (outcome.expectedTargetId() >= 0) {
-                    player.displayClientMessage(Component.translatable("blueprint.roomUpdateConflict"), true);
-                }
-                return;
-            }
-            displayScanResult(player, outcome.result());
-            return;
+            if (outcome.result() == Building.validationResult.TARGET_CHANGED) return "blueprint.targetChanged";
+            return "blueprint.scan." + outcome.result().name().toLowerCase(Locale.ENGLISH);
         }
 
-        String successKey = switch (action) {
+        return switch (action) {
             case ADD_BUILDING -> outcome.prospectiveFloorNumber() == Integer.MIN_VALUE
                     ? "blueprint.buildingAdded"
                     : outcome.prospectiveFloorNumber() < 0 ? "blueprint.basementAdded" : "blueprint.floorAdded";
@@ -189,7 +190,6 @@ public record ReportBuildingMessage(Action action, String data, int expectedTarg
                     ? "blueprint.roomUpdated" : "blueprint.roomAdded";
             default -> null;
         };
-        if (successKey != null) displayScanResult(player, Building.validationResult.SUCCESS, successKey);
     }
 
 

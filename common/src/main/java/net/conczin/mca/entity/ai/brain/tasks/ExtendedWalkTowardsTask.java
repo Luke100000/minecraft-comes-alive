@@ -2,14 +2,13 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
-import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
+import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.entity.ai.behavior.BlockPosTracker;
 import net.minecraft.world.entity.ai.behavior.OneShot;
 import net.minecraft.world.entity.ai.behavior.PositionTracker;
 import net.minecraft.world.entity.ai.behavior.declarative.BehaviorBuilder;
@@ -87,7 +86,7 @@ public final class ExtendedWalkTowardsTask {
                             }
 
                             if (currentWalkTarget != null) {
-                                if (!preserveCurrentWalkTarget(entity, retryGate, destination, globalPos, currentWalkTarget, policy)) {
+                                if (!preserveCurrentWalkTarget(world, entity, retryGate, destination, globalPos, currentWalkTarget, policy)) {
                                     walkTarget.erase();
                                     if (currentWalkTarget instanceof DestinationOwnedWalkTarget ownedTarget
                                             && ownedTarget.ownedBy(destination)) {
@@ -180,7 +179,7 @@ public final class ExtendedWalkTowardsTask {
         }
     }
 
-    private static boolean preserveCurrentWalkTarget(VillagerEntityMCA entity, WalkTargetRetryGate retryGate,
+    private static boolean preserveCurrentWalkTarget(ServerLevel world, VillagerEntityMCA entity, WalkTargetRetryGate retryGate,
                                                      MemoryModuleType<GlobalPos> destinationMemory, GlobalPos destination,
                                                      WalkTarget currentTarget, Policy policy) {
         if (currentTarget instanceof DestinationOwnedWalkTarget ownedFinalTarget) {
@@ -190,12 +189,13 @@ public final class ExtendedWalkTowardsTask {
             if (!ownedFinalTarget.destination().equals(destination)) {
                 return false;
             }
-            if (isReached(entity, currentTarget)) {
+            if (MultiTargetPositionTracker.isReached(entity, currentTarget.getTarget(), currentTarget.getCloseEnoughDist())) {
                 completeJourney(entity, retryGate, destination.pos());
             }
             return !(currentTarget.getTarget() instanceof PersistentPathTarget)
                     || policy.finalTargetResolver() == NO_FINAL_TARGET_OVERRIDE
-                    || MCAGroundPathNavigation.requiresExtendedPath(entity, destination.pos());
+                    || MCAGroundPathNavigation.requiresExtendedPath(entity, destination.pos())
+                    || policy.finalTargetResolver().resolve(world, entity, destination).isEmpty();
         }
         return true;
     }
@@ -213,7 +213,7 @@ public final class ExtendedWalkTowardsTask {
         Optional<? extends PositionTracker> finalTarget = policy.finalTargetResolver().resolve(world, entity, destination);
         if (finalTarget.isPresent()) {
             PositionTracker tracker = finalTarget.orElseThrow();
-            return tracker instanceof MultiTargetPositionTracker multiTarget && multiTarget.isReached(entity, 0)
+            return MultiTargetPositionTracker.isReached(entity, tracker, 0)
                     ? null
                     : new DestinationOwnedWalkTarget(destinationMemory, destination, tracker, speed, 0);
         }
@@ -221,14 +221,6 @@ public final class ExtendedWalkTowardsTask {
                 ? null
                 : new DestinationOwnedWalkTarget(destinationMemory, destination,
                 new PersistentPathTarget(targetPos), speed, completionRange);
-    }
-
-    private static boolean isReached(VillagerEntityMCA entity, WalkTarget target) {
-        if (target.getTarget() instanceof MultiTargetPositionTracker multiTarget) {
-            return multiTarget.isReached(entity, target.getCloseEnoughDist());
-        }
-        return target.getTarget() instanceof BlockPosTracker tracker
-                && tracker.currentBlockPosition().distManhattan(entity.blockPosition()) <= target.getCloseEnoughDist();
     }
 
     private static void completeJourney(VillagerEntityMCA entity, WalkTargetRetryGate retryGate, BlockPos destination) {
