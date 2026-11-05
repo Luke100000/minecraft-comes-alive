@@ -7,6 +7,7 @@ import net.conczin.mca.entity.VillagerBedAlignmentGameTests;
 import net.conczin.mca.entity.VillagerCarryPositionGameTests;
 import net.conczin.mca.entity.VillagerChildSuffocationGameTests;
 import net.conczin.mca.entity.VillagerConversionGameTests;
+import net.conczin.mca.entity.VillagerMemoryIsolationGameTests;
 import net.conczin.mca.entity.VillagerEquipmentOwnershipGameTests;
 import net.conczin.mca.entity.VillagerRecoveryFoodGameTests;
 import net.conczin.mca.entity.VillagerVoicePitchGameTests;
@@ -130,6 +131,7 @@ public final class McaGameTestRegistration {
             VillagerCarryPositionGameTests.class,
             VillagerChildSuffocationGameTests.class,
             VillagerConversionGameTests.class,
+            VillagerMemoryIsolationGameTests.class,
             VillagerEquipmentOwnershipGameTests.class,
             VillagerRecoveryFoodGameTests.class,
             VillagerVoicePitchGameTests.class,

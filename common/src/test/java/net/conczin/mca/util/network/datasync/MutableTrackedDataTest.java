@@ -13,8 +13,11 @@ import net.minecraft.world.level.storage.ValueOutput;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -104,6 +107,29 @@ class MutableTrackedDataTest {
         assertFalse(previous.contains("hearts"));
         assertTrue(villager.getEntityData().isDirty());
         assertEquals(42, data.get(villager, memories).getInt("hearts").orElseThrow());
+    }
+
+    @Test
+    void dirtyPacketSnapshotDoesNotRetainTheLiveTrackedTag() {
+        TestEntity villager = new TestEntity();
+        CompoundTag live = new CompoundTag();
+        CompoundTag relationship = new CompoundTag();
+        relationship.putInt("hearts", 5);
+        live.put("player", relationship);
+        data.set(villager, memories, live);
+
+        List<SynchedEntityData.DataValue<?>> snapshot = villager.getEntityData().packDirty();
+        assertNotNull(snapshot);
+        assertEquals(1, snapshot.size());
+        assertTrue(snapshot.getFirst().value() instanceof CompoundTag);
+        CompoundTag transmitted = (CompoundTag) snapshot.getFirst().value();
+        assertNotSame(live, transmitted);
+
+        relationship.putInt("hearts", 20);
+        live.putString("later", "changed");
+        assertEquals(5, transmitted.getCompound("player").orElseThrow()
+                .getInt("hearts").orElseThrow());
+        assertFalse(transmitted.contains("later"));
     }
 
     @Test
