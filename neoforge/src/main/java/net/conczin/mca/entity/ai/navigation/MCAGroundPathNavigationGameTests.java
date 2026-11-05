@@ -29,6 +29,7 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.PathNavigationRegion;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.LadderBlock;
@@ -39,6 +40,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.level.pathfinder.PathFinder;
+import net.minecraft.world.level.pathfinder.PathType;
+import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.conczin.mca.neoforge.gametest.GameTestHolder;
@@ -1981,6 +1985,66 @@ public final class MCAGroundPathNavigationGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_navigation_extended_multiplier", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void extendedSearchPreservesCallersNodeMultiplier(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(4, 1, 4));
+        BlockPos target = start.east(4);
+        prepareFlatPath(helper, start, target);
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(start))
+                .spawn(EntitySpawnReason.STRUCTURE);
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+        try {
+            helper.assertTrue(villager.getNavigation().getMaxPathLength() >= 48.0F,
+                    "vanilla villager initialization must retain the 48-block ordinary path length");
+            MultiplierProbeNavigation navigation = new MultiplierProbeNavigation(villager);
+            // This test-only navigator isn't the one initialized by Villager's constructor.
+            navigation.setRequiredPathLength(48.0F);
+            helper.assertTrue(Config.getInstance().getVillagerPathfindingDistance() > navigation.getMaxPathLength(),
+                    "fixture needs an extended search beyond ordinary navigation range");
+            navigation.setMaxVisitedNodesMultiplier(2.0F);
+
+            Path extended = navigation.createPathForPersistentIntent(Set.of(target), 0);
+            helper.assertTrue(extended != null && extended.canReach(), "extended search did not reach its target");
+            helper.assertTrue(Math.abs(navigation.observedMultiplier - 2.0F) < 0.001F,
+                    "extended search replaced the caller's visited-node multiplier: " + navigation.observedMultiplier);
+
+            Path ordinary = navigation.createPath(target, 0);
+            helper.assertTrue(ordinary != null && ordinary.canReach(), "ordinary search did not reach its target");
+            helper.assertTrue(Math.abs(navigation.observedMultiplier - 2.0F) < 0.001F,
+                    "extended search failed to preserve the multiplier for the next path: " + navigation.observedMultiplier);
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    private static final class MultiplierProbeNavigation extends MCAGroundPathNavigation {
+        private float observedMultiplier;
+
+        private MultiplierProbeNavigation(VillagerEntityMCA villager) {
+            super(villager, villager.level());
+        }
+
+        @Override
+        protected PathFinder createPathFinder(int maxVisitedNodes) {
+            PathFinder actualFinder = super.createPathFinder(maxVisitedNodes);
+            return new PathFinder(this.nodeEvaluator, maxVisitedNodes) {
+                @Override
+                public Path findPath(PathNavigationRegion region, Mob mob, Set<BlockPos> targets,
+                                     float maxPathLength, int reachRange, float visitedNodesMultiplier) {
+                    observedMultiplier = visitedNodesMultiplier;
+                    return actualFinder.findPath(region, mob, targets, maxPathLength,
+                            reachRange, visitedNodesMultiplier);
+                }
+            };
+        }
+    }
+
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 100)
     public static void blockedPersistentSearchBoundsExtendedNodeExpansions(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(32, 1, 32));
@@ -2009,6 +2073,17 @@ public final class MCAGroundPathNavigationGameTests {
         villager.setOnGround(true);
         try {
             MCAGroundPathNavigation navigation = (MCAGroundPathNavigation) villager.getNavigation();
+            // This fixture checks the default 48-block allowance, not a larger
+            // FOLLOW_RANGE supplied by a server configuration or modifier.
+            villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(16.0D);
+            navigation.updatePathfinderMaxVisitedNodes();
+            helper.assertTrue(navigation.getMaxPathLength() == 48.0F,
+                    "fixture needs the 48-block ordinary budget: " + navigation.getMaxPathLength());
+            for (Direction direction : Direction.Plane.HORIZONTAL) {
+                BlockPos approach = target.relative(direction);
+                helper.assertTrue(WalkNodeEvaluator.getPathTypeStatic(villager, approach.mutable()) != PathType.WALKABLE,
+                        "sealed target has a walkable approach at " + approach);
+            }
             PathRequestDiagnostics.SearchSnapshot before = PathRequestDiagnostics.snapshot(villager);
             Path path = navigation.createPathForPersistentIntent(Set.of(target), 0);
             PathRequestDiagnostics.SearchSnapshot after = PathRequestDiagnostics.snapshot(villager);
@@ -2079,6 +2154,23 @@ public final class MCAGroundPathNavigationGameTests {
                     "fixture did not exceed the small extended search cap: " + ordinaryNodes);
             helper.assertTrue(extendedNodes >= ordinaryNodes,
                     "extended search expanded fewer nodes than ordinary: " + extendedNodes + " vs " + ordinaryNodes);
+
+            navigation.setMaxVisitedNodesMultiplier(2.0F);
+            PathRequestDiagnostics.SearchSnapshot beforeBoosted = PathRequestDiagnostics.snapshot(villager);
+            Path boostedOrdinary = navigation.createPath(target, 0);
+            PathRequestDiagnostics.SearchSnapshot afterBoostedOrdinary = PathRequestDiagnostics.snapshot(villager);
+            Path boostedExtended = navigation.createPathForPersistentIntent(Set.of(target), 0);
+            PathRequestDiagnostics.SearchSnapshot afterBoostedExtended = PathRequestDiagnostics.snapshot(villager);
+            long boostedOrdinaryNodes = afterBoostedOrdinary.expandedNodes() - beforeBoosted.expandedNodes();
+            long boostedExtendedNodes = afterBoostedExtended.expandedNodes() - afterBoostedOrdinary.expandedNodes();
+            helper.assertTrue(boostedOrdinary != null && !boostedOrdinary.canReach()
+                            && boostedExtended != null && !boostedExtended.canReach(),
+                    "sealed target became reachable with a caller multiplier");
+            helper.assertTrue(boostedOrdinaryNodes > extendedNodes,
+                    "fixture did not exercise an increased caller budget: " + boostedOrdinaryNodes);
+            helper.assertTrue(boostedExtendedNodes >= boostedOrdinaryNodes,
+                    "boosted extended search shrank the ordinary budget: "
+                            + boostedExtendedNodes + " vs " + boostedOrdinaryNodes);
         } finally {
             config.villagerPathfindingDistance = originalPathfindingDistance;
             villager.discard();
