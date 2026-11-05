@@ -2,15 +2,10 @@ package net.conczin.mca.client.gui;
 
 import com.google.gson.JsonObject;
 import net.conczin.mca.client.gui.widget.TooltipButtonWidget;
+import net.conczin.mca.network.c2s.ReportBuildingMessage;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.data.BuildingType;
-import net.conczin.mca.network.c2s.ReportBuildingMessage;
-import net.conczin.mca.server.world.data.Building;
-import net.conczin.mca.server.world.data.TestFloorFootprint;
-import net.conczin.mca.server.world.data.RoomScanPlan;
-import net.conczin.mca.server.world.data.Structure;
-import net.conczin.mca.server.world.data.StructureFloor;
-import net.conczin.mca.server.world.data.Village;
+import net.conczin.mca.server.world.data.*;
 import net.minecraft.SharedConstants;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.Minecraft;
@@ -23,7 +18,6 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,16 +29,9 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
-import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class BlueprintScreenMapInteractionTest {
     @BeforeAll

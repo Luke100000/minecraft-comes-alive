@@ -1,7 +1,7 @@
 package net.conczin.mca.entity.ai.brain.tasks.chore;
 
-import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.MCAFishingBobberEntity;
+import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -15,12 +15,7 @@ import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 final class FishingSiteSearch {
     private static final int NEARBY_RADIUS = 12;

@@ -1,15 +1,13 @@
 package net.conczin.mca.server.world.data;
 
-import net.minecraft.core.BlockPos;
 import net.conczin.mca.server.world.data.BuildingDiagnostics.StructuralPosition;
+import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.*;
 
 class BuildingDiagnosticsTest {
     @Test

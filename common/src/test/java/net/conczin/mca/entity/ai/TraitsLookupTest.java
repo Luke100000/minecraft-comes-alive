@@ -8,7 +8,8 @@ import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Proxy;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TraitsLookupTest {
     @BeforeAll

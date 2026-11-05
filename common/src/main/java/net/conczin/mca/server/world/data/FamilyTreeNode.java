@@ -19,13 +19,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Stream;
 

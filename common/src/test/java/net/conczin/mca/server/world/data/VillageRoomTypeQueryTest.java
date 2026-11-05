@@ -4,9 +4,9 @@ import com.google.gson.JsonObject;
 import net.conczin.mca.resources.BuildingTypes;
 import net.conczin.mca.resources.Rank;
 import net.conczin.mca.resources.Tasks;
+import net.conczin.mca.resources.data.BuildingType;
 import net.conczin.mca.resources.data.tasks.BlockingTask;
 import net.conczin.mca.resources.data.tasks.BuildingTask;
-import net.conczin.mca.resources.data.BuildingType;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.Identifier;
@@ -17,14 +17,12 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.List;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class VillageRoomTypeQueryTest {
     private Map<String, BuildingType> previousTypes;

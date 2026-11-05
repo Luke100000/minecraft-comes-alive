@@ -2,17 +2,9 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import org.junit.jupiter.api.Test;
 
-import static net.conczin.mca.entity.ai.brain.tasks.ArcherMovementTask.selectBaseState;
-import static net.conczin.mca.entity.ai.brain.tasks.ArcherMovementTask.shouldCancelStrafe;
-import static net.conczin.mca.entity.ai.brain.tasks.ArcherMovementTask.shouldStartStrafe;
-import static net.conczin.mca.entity.ai.brain.tasks.RangedCombatState.APPROACH;
-import static net.conczin.mca.entity.ai.brain.tasks.RangedCombatState.EMERGENCY_FLEE;
-import static net.conczin.mca.entity.ai.brain.tasks.RangedCombatState.HOLD;
-import static net.conczin.mca.entity.ai.brain.tasks.RangedCombatState.KITE;
-import static net.conczin.mca.entity.ai.brain.tasks.RangedCombatState.REPOSITION;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static net.conczin.mca.entity.ai.brain.tasks.ArcherMovementTask.*;
+import static net.conczin.mca.entity.ai.brain.tasks.RangedCombatState.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 class ArcherMovementStateTest {
     @Test

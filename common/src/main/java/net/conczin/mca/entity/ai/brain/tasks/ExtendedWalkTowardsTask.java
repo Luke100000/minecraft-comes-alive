@@ -2,10 +2,10 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
-import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
+import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;

@@ -1,8 +1,8 @@
 package net.conczin.mca.entity.ai;
 
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.control.BodyRotationControl;
-import net.minecraft.util.Mth;
 
 import java.util.function.BooleanSupplier;
 

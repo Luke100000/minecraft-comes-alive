@@ -8,11 +8,7 @@ import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.LeavesBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.OptionalInt;
+import java.util.*;
 
 /** Resolves and caches the nearest physical non-leaf ceiling above exact floor cells. */
 final class FloorCeilingResolver {
