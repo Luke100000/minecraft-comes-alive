@@ -329,15 +329,6 @@ public final class BuildingDiagnostics {
         return dx * dx + dy * dy + dz * dz;
     }
 
-    private static StructureFloor floorAt(List<StructureFloor> floors, BlockPos pos) {
-        return floors.stream()
-                .filter(candidate -> candidate.anchorY() <= pos.getY()
-                        && pos.getY() < candidate.maxPhysicalCeilingY())
-                .filter(candidate -> candidate.contains(pos.getX(), pos.getZ()))
-                .max(Comparator.comparingInt(StructureFloor::anchorY))
-                .orElse(null);
-    }
-
     private static String floors(List<StructureFloor> floors) {
         return floors.stream().map(BuildingDiagnostics::floor).toList().toString();
     }

@@ -77,7 +77,7 @@ public final class MCAFishingBobberEntity extends Projectile {
                 0.4F / (world.getRandom().nextFloat() * 0.4F + 0.8F)
         );
         owner.gameEvent(GameEvent.ITEM_INTERACT_START);
-        MCA.LOGGER.info(
+        MCA.LOGGER.debug(
                 "[MCA Fishing Debug] cast bobber={} owner={} target={} lureSpeed={} pos={} motion={}",
                 bobber.getId(), owner.getUUID(), targetWater, bobber.lureSpeed, bobber.position(), bobber.getDeltaMovement()
         );
@@ -196,7 +196,7 @@ public final class MCAFishingBobberEntity extends Projectile {
         synchronizedRandom.setSeed(getUUID().getLeastSignificantBits() ^ level().getGameTime());
         VillagerEntityMCA owner = getVillagerOwner();
         if (!level().isClientSide() && !canRemain(owner)) {
-            MCA.LOGGER.info(
+            MCA.LOGGER.debug(
                     "[MCA Fishing Debug] discard-invalid-owner bobber={} owner={} job={} held={} distanceSqr={}",
                     getId(), owner == null ? null : owner.getUUID(),
                     owner == null ? null : owner.getVillagerBrain().getCurrentJob(),
@@ -223,7 +223,7 @@ public final class MCAFishingBobberEntity extends Projectile {
                 bobbing = true;
                 flyingTicks = 0;
                 if (!level().isClientSide()) {
-                    MCA.LOGGER.info(
+                    MCA.LOGGER.debug(
                             "[MCA Fishing Debug] bobbing-start bobber={} tick={} pos={} motion={}",
                             getId(), tickCount, position(), getDeltaMovement()
                     );
@@ -238,7 +238,7 @@ public final class MCAFishingBobberEntity extends Projectile {
 
             if (++flyingTicks > MAX_FLYING_TICKS) {
                 if (!level().isClientSide()) {
-                    MCA.LOGGER.info(
+                    MCA.LOGGER.debug(
                             "[MCA Fishing Debug] discard-flying-timeout bobber={} tick={} pos={} motion={}",
                             getId(), tickCount, position(), getDeltaMovement()
                     );
@@ -340,7 +340,7 @@ public final class MCAFishingBobberEntity extends Projectile {
                 timeUntilLured = 0;
                 timeUntilHooked = 0;
                 entityData.set(DATA_BITING, false);
-                MCA.LOGGER.info(
+                MCA.LOGGER.debug(
                         "[MCA Fishing Debug] bite-ended bobber={} tick={} pos={} motion={}",
                         getId(), tickCount, position(), getDeltaMovement()
                 );
@@ -380,7 +380,7 @@ public final class MCAFishingBobberEntity extends Projectile {
                 world.sendParticles(ParticleTypes.FISHING, getX(), y, getZ(), count, getBbWidth(), 0.0, getBbWidth(), 0.2F);
                 nibble = Mth.nextInt(random, 20, 40);
                 entityData.set(DATA_BITING, true);
-                MCA.LOGGER.info(
+                MCA.LOGGER.debug(
                         "[MCA Fishing Debug] bite-started bobber={} tick={} nibble={} pos={} motion={}",
                         getId(), tickCount, nibble, position(), getDeltaMovement()
                 );
@@ -413,7 +413,7 @@ public final class MCAFishingBobberEntity extends Projectile {
             if (timeUntilLured <= 0) {
                 fishAngle = Mth.nextFloat(random, 0.0F, 360.0F);
                 timeUntilHooked = Mth.nextInt(random, 20, 80);
-                MCA.LOGGER.info(
+                MCA.LOGGER.debug(
                         "[MCA Fishing Debug] approach-started bobber={} tick={} approachTicks={} fishAngle={}",
                         getId(), tickCount, timeUntilHooked, fishAngle
                 );
@@ -423,7 +423,7 @@ public final class MCAFishingBobberEntity extends Projectile {
 
         timeUntilLured = Mth.nextInt(random, 100, 600);
         timeUntilLured -= lureSpeed;
-        MCA.LOGGER.info(
+        MCA.LOGGER.debug(
                 "[MCA Fishing Debug] lure-wait-started bobber={} tick={} waitTicks={} lureSpeed={}",
                 getId(), tickCount, timeUntilLured, lureSpeed
         );
@@ -478,7 +478,7 @@ public final class MCAFishingBobberEntity extends Projectile {
     protected void onHitBlock(BlockHitResult result) {
         super.onHitBlock(result);
         if (!level().isClientSide() && !level().getFluidState(BlockPos.containing(result.getLocation())).is(FluidTags.WATER)) {
-            MCA.LOGGER.info(
+            MCA.LOGGER.debug(
                     "[MCA Fishing Debug] discard-block-hit bobber={} block={} pos={} motion={}",
                     getId(), result.getBlockPos(), position(), getDeltaMovement()
             );
@@ -502,7 +502,7 @@ public final class MCAFishingBobberEntity extends Projectile {
                         getDeltaMovement().z
                 );
             }
-            MCA.LOGGER.info(
+            MCA.LOGGER.debug(
                     "[MCA Fishing Debug] bite-sync side={} bobber={} tick={} biting={} pos={} motion={}",
                     level().isClientSide() ? "client" : "server", getId(), tickCount, biting, position(), getDeltaMovement()
             );

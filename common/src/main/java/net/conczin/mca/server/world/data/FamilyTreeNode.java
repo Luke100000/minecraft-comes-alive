@@ -92,6 +92,11 @@ public final class FamilyTreeNode {
         return copy;
     }
 
+    /** A standalone snapshot that does not share mutable family relationships with its source. */
+    public FamilyTreeNode detachedCopy() {
+        return detachedCopy(this, children);
+    }
+
     public static boolean isValid(@Nullable UUID uuid) {
         return uuid != null && !Util.NIL_UUID.equals(uuid);
     }
@@ -204,14 +209,16 @@ public final class FamilyTreeNode {
     }
 
     public Identifier getProfessionId() {
-        return Identifier.tryParse(profession);
+        Identifier id = Identifier.tryParse(profession);
+        return id != null ? id : VillagerProfession.NONE.identifier();
     }
 
     public String getProfessionName() {
+        Identifier id = getProfessionId();
         String professionName = (
-                getProfessionId().getNamespace().equalsIgnoreCase("minecraft") ?
-                        (getProfessionId().getPath().equals("none") ? "mca.none" : getProfessionId().getPath()) :
-                        getProfessionId().toString()
+                id.getNamespace().equalsIgnoreCase("minecraft") ?
+                        (id.getPath().equals("none") ? "mca.none" : id.getPath()) :
+                        id.toString()
         ).replace(":", ".");
 
         return MCA.isBlankString(professionName) ? "mca.none" : professionName;

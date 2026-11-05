@@ -4,6 +4,9 @@ import net.conczin.mca.FamilyTreeTestSupport;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.minecraft.util.Util;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -35,6 +38,19 @@ class FamilyTreeNodeRelationshipTest {
         assertEquals(PARTNER, person.partner());
         assertEquals(RelationshipState.WIDOW, person.getRelationshipState());
         assertTrue(person.activePartner().isEmpty());
+    }
+
+    @Test
+    void malformedSavedProfessionFallsBackToNone() {
+        CompoundTag saved = node(PERSON).save();
+        saved.putString("profession", "invalid profession!");
+
+        FamilyTreeNode restored = new FamilyTreeNode(null, saved);
+
+        assertEquals(VillagerProfession.NONE.identifier(), restored.getProfessionId());
+        assertEquals(BuiltInRegistries.VILLAGER_PROFESSION.getValueOrThrow(VillagerProfession.NONE), restored.getProfession());
+        assertEquals("mca.none", restored.getProfessionName());
+        assertEquals("entity.minecraft.villager.mca.none", restored.getProfessionText().getString());
     }
 
     private static FamilyTreeNode node(UUID id) {

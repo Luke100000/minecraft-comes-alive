@@ -508,16 +508,41 @@ public class Village implements Iterable<Building> {
     }
 
     public float getTaxes() { return taxes; }
-    public void setTaxes(float taxes) { this.taxes = taxes; }
+    public void setTaxes(float taxes) {
+        if (Float.compare(this.taxes, taxes) != 0) {
+            this.taxes = taxes;
+            markDirty();
+        }
+    }
     public float getPopulationThreshold() { return populationThreshold; }
-    public void setPopulationThreshold(float populationThreshold) { this.populationThreshold = populationThreshold; }
+    public void setPopulationThreshold(float populationThreshold) {
+        if (Float.compare(this.populationThreshold, populationThreshold) != 0) {
+            this.populationThreshold = populationThreshold;
+            markDirty();
+        }
+    }
     public float getMarriageThreshold() { return marriageThreshold; }
-    public void setMarriageThreshold(float marriageThreshold) { this.marriageThreshold = marriageThreshold; }
+    public void setMarriageThreshold(float marriageThreshold) {
+        if (Float.compare(this.marriageThreshold, marriageThreshold) != 0) {
+            this.marriageThreshold = marriageThreshold;
+            markDirty();
+        }
+    }
     public boolean isAutoScan() { return autoScan; }
-    public void setAutoScan(boolean autoScan) { this.autoScan = autoScan; }
+    public void setAutoScan(boolean autoScan) {
+        if (this.autoScan != autoScan) {
+            this.autoScan = autoScan;
+            markDirty();
+        }
+    }
     public void toggleAutoScan() { setAutoScan(!isAutoScan()); }
     public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public void setName(String name) {
+        if (!Objects.equals(this.name, name)) {
+            this.name = name;
+            markDirty();
+        }
+    }
     public int getId() { return id; }
     public boolean hasSpace() { return getPopulation() < getMaxPopulation(); }
     public int getPopulation() { return residentNames.size(); }

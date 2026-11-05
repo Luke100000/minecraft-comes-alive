@@ -51,8 +51,14 @@ public record ReportBuildingMessage(Action action, String data, int expectedTarg
                         manager.setMainRoom(player.blockPosition(), expectedTargetId), "blueprint.mainRoomSet");
                 case AUTO_SCAN -> manager.findNearestVillage(player).ifPresent(Village::toggleAutoScan);
                 case FULL_SCAN -> fullScan(manager, player);
-                case FORCE_TYPE -> displayEditResult(player,
-                        manager.forceRoomType(player.blockPosition(), data, expectedTargetId), null);
+                case FORCE_TYPE -> {
+                    if (isAllowedForcedType(data)) {
+                        displayEditResult(player,
+                                manager.forceRoomType(player.blockPosition(), data, expectedTargetId), null);
+                    } else {
+                        MCA.LOGGER.warn("Ignoring invalid forced building type '{}' from {}", data, player);
+                    }
+                }
                 case REMOVE_ROOM -> displayEditResult(player,
                         manager.removeRoom(player.blockPosition(), expectedTargetId), "blueprint.roomRemoved");
                 case REMOVE_FLOOR -> {
@@ -92,6 +98,10 @@ public record ReportBuildingMessage(Action action, String data, int expectedTarg
             return;
         }
         displayWorkflowOutcome(player, outcome, action);
+    }
+
+    static boolean isAllowedForcedType(String type) {
+        return type == null || "blocked".equals(type);
     }
 
     private static int parseTargetBuildingId(String value) {
@@ -228,6 +238,7 @@ public record ReportBuildingMessage(Action action, String data, int expectedTarg
             case MAIN_ROOM -> "blueprint.cannotRemoveMainRoom";
             case NO_STRUCTURE -> "blueprint.mainRoomNoStructure";
             case TARGET_CHANGED -> "blueprint.targetChanged";
+            case INVALID_TYPE -> "blueprint.scan.invalid_type";
         };
         if (key != null) player.sendSystemMessage(Component.translatable(key), true);
     }

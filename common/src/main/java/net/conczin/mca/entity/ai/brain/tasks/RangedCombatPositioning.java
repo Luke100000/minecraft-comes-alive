@@ -224,17 +224,6 @@ final class RangedCombatPositioning {
             }
         }
 
-        Comparator<EscapeCandidate> safeComparator = Comparator
-                .comparing(EscapeCandidate::demonstratedContinuation).reversed()
-                .thenComparing(Comparator.comparingInt(EscapeCandidate::onwardProgress).reversed())
-                .thenComparing(Comparator.comparingInt(EscapeCandidate::elevationGain).reversed())
-                .thenComparing(Comparator.comparingInt(EscapeCandidate::onwardSpace).reversed())
-                .thenComparing(Comparator.comparingDouble(EscapeCandidate::minimumDistanceSquared).reversed())
-                .thenComparing(Comparator.comparingDouble(EscapeCandidate::minimumHazardDistanceSquared).reversed())
-                .thenComparingInt(EscapeCandidate::travelSteps)
-                .thenComparingInt(candidate -> candidate.position().getX())
-                .thenComparingInt(candidate -> candidate.position().getY())
-                .thenComparingInt(candidate -> candidate.position().getZ());
         Comparator<EscapeCandidate> emergencyComparator = Comparator
                 .comparing(EscapeCandidate::demonstratedContinuation).reversed()
                 .thenComparing(Comparator.comparingInt(EscapeCandidate::onwardProgress).reversed())
@@ -243,6 +232,10 @@ final class RangedCombatPositioning {
                 .thenComparing(Comparator.comparingDouble(EscapeCandidate::minimumDistanceSquared).reversed())
                 .thenComparing(Comparator.comparingDouble(EscapeCandidate::minimumHazardDistanceSquared).reversed())
                 .thenComparingInt(EscapeCandidate::travelSteps);
+        Comparator<EscapeCandidate> safeComparator = emergencyComparator
+                .thenComparingInt(candidate -> candidate.position().getX())
+                .thenComparingInt(candidate -> candidate.position().getY())
+                .thenComparingInt(candidate -> candidate.position().getZ());
         safeCandidates.sort(safeComparator);
         nonClosingCandidates.sort(safeComparator);
         emergencyFallbackCandidates.sort(emergencyComparator);

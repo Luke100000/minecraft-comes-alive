@@ -589,10 +589,24 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         Building room = village == null ? null : village.findInteractionRoomAt(pos).orElse(null);
         if (room == null) return BuildingEditResult.NO_BUILDING;
         if (expectedRoomId >= 0 && room.getId() != expectedRoomId) return BuildingEditResult.TARGET_CHANGED;
-        boolean forced = !room.getType().equals(type);
+        boolean forced = type != null && !type.equals(room.getType());
+        if (forced && !isValidForcedRoomType(type)) {
+            return BuildingEditResult.INVALID_TYPE;
+        }
         String resolvedType = forced ? type : RoomTypeResolver.create(village).resolve(room).updatedType(null);
         village.setRoomType(room, resolvedType, forced);
         return BuildingEditResult.SUCCESS;
+    }
+
+    static boolean isValidForcedRoomType(String type) {
+        if (type == null || type.isBlank()) return false;
+        BuildingTypes types = BuildingTypes.getInstance();
+        if (!types.hasBuildingType(type)) {
+            return "blocked".equals(type)
+                    && types.getBuildingTypes().isEmpty()
+                    && types.getServerBuildingTypes().isEmpty();
+        }
+        return !types.getBuildingType(type).grouped();
     }
 
     public BuildingEditResult removeRoom(BlockPos pos) {
@@ -631,6 +645,10 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         RoomScanPlan plan = village.getRoomScanPlan(world, pos);
         Structure structure = village.getStructure(plan.targetStructureId()).orElse(null);
         if (structure == null) return BuildingEditResult.NO_BUILDING;
+        StructureFloor playerFloor = structure.getFloor(plan.targetFloorId()).orElse(null);
+        if (playerFloor == null || playerFloor.floorNumber() != floorNumber) {
+            return BuildingEditResult.TARGET_CHANGED;
+        }
         if (expectedBuildingId >= 0
                 && structure.getLogicalBuildingId() != expectedBuildingId) {
             return BuildingEditResult.TARGET_CHANGED;
@@ -746,7 +764,8 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         NO_FLOOR,
         MAIN_ROOM,
         NO_STRUCTURE,
-        TARGET_CHANGED
+        TARGET_CHANGED,
+        INVALID_TYPE
     }
 
     public void setBuildingCooldown(int buildingCooldown) { this.buildingCooldown = buildingCooldown; }

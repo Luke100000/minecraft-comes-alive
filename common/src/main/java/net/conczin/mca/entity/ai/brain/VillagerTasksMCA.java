@@ -641,8 +641,7 @@ public class VillagerTasksMCA {
                 }))),
                 // try to reach the bed, and if not a set home, forget if out of range
                 Pair.of(2, new ConditionalTask<>(ExtendedWalkTowardsTask.createWithFinalTarget(MemoryModuleType.HOME, speed, 1, 1200, (v) -> {
-                    Optional<Boolean> memory = v.getBrain().getMemoryInternal(MemoryModuleTypeMCA.FORCED_HOME);
-                    boolean forced = memory != null && memory.isPresent();
+                    boolean forced = v.getBrain().hasMemoryValue(MemoryModuleTypeMCA.FORCED_HOME);
                     if (forced) {
                         v.sendChatToAllAround("villager.cant_find_bed");
                     }
@@ -658,11 +657,8 @@ public class VillagerTasksMCA {
                                 .orElse(true))),
                 //verify the bed, occupancies state and similar
                 Pair.of(3, new ConditionalTask<>(ValidateNearbyPoi.create(
-                        registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME), (v) -> {
-                    Optional<Boolean> memory = v.getBrain().getMemoryInternal(MemoryModuleTypeMCA.FORCED_HOME);
-                    //noinspection OptionalAssignedToNull
-                    return memory == null || memory.isEmpty();
-                })),
+                        registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME),
+                        v -> !v.getBrain().hasMemoryValue(MemoryModuleTypeMCA.FORCED_HOME))),
                 Pair.of(3, new SleepInBed()),
                 // An already-active REST activity may linger for a tick after an
                 // archer acquires ATTACK_TARGET. Do not let its random stroll or
@@ -683,8 +679,8 @@ public class VillagerTasksMCA {
 
     private static boolean isForcedHomeOccupiedByOtherSleeper(ServerLevel world, VillagerEntityMCA villager,
                                                                net.minecraft.core.GlobalPos home) {
-        Optional<Boolean> forcedHome = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.FORCED_HOME);
-        if (forcedHome == null || forcedHome.isEmpty() || home.dimension() != world.dimension()) {
+        if (!villager.getBrain().hasMemoryValue(MemoryModuleTypeMCA.FORCED_HOME)
+                || home.dimension() != world.dimension()) {
             return false;
         }
 
