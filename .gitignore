@@ -20,6 +20,7 @@ run-gametest/
 logs/
 backup/
 /local.properties
+local-sources/
 
 # Editor and script artifacts
 *.kra

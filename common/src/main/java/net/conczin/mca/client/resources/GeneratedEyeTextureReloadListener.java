@@ -17,6 +17,7 @@ public final class GeneratedEyeTextureReloadListener implements ResourceManagerR
 
     @Override
     public void onResourceManagerReload(ResourceManager manager) {
+        VillagerLayer.clearTextureExistenceCache();
         FaceLayer.clearGeneratedEyeTextureCache();
         VillagerLayer.clearTextureCaches();
         DynamicSkinCache.clear();

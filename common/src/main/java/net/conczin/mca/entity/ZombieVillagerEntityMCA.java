@@ -3,6 +3,7 @@ package net.conczin.mca.entity;
 import net.conczin.mca.Config;
 import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.ai.Genetics;
+import net.conczin.mca.entity.ai.EyeGenetics;
 import net.conczin.mca.entity.ai.LongTermMemory;
 import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.entity.ai.Traits;
@@ -277,6 +278,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         CompoundTag data = McaDataFixers.update(nbt);
         super.readAdditionalSaveData(data);
         getTypeDataManager().load(this, data);
+        getGenetics().finishEyeExpression(EyeGenetics.seed(getUUID(), 0));
         relations.readFromNbt(data);
         chatAIPrompt = data.getString(VillagerEntityMCA.CHAT_AI_PROMPT_KEY);
         nicknameData = data.getCompound(VillagerEntityMCA.NICKNAMES_KEY).copy();
@@ -287,7 +289,7 @@ public class ZombieVillagerEntityMCA extends ZombieVillager implements VillagerL
         inventory.clearContent();
         InventoryUtils.readFromNBT(this.registryAccess(), inventory, data);
 
-        validateClothes();
+        validateAppearance();
     }
 
     @Override

@@ -951,7 +951,10 @@ public final class Config extends CommonConfig {
     }
 
     public static Config loadOrCreate() {
-        File file = getConfigFile();
+        return loadOrCreate(getConfigFile());
+    }
+
+    static Config loadOrCreate(File file) {
         if (file.exists()) {
             try (FileReader reader = new FileReader(file)) {
                 Gson gson = new GsonBuilder().setPrettyPrinting().create();
@@ -964,7 +967,7 @@ public final class Config extends CommonConfig {
                     config.playerRendererBlacklist = mergeDefaults(config.playerRendererBlacklist, defaults.playerRendererBlacklist);
                     config.configDefaultsVersion = DEFAULTS_VERSION;
                 }
-                config.save();
+                config.save(file);
                 return config;
             } catch (JsonSyntaxException e) {
                 MCA.LOGGER.error("");
@@ -979,7 +982,7 @@ public final class Config extends CommonConfig {
         }
 
         Config config = new Config();
-        config.save();
+        config.save(file);
         return config;
     }
 
@@ -1022,9 +1025,13 @@ public final class Config extends CommonConfig {
     }
 
     public void save() {
+        save(getConfigFile());
+    }
+
+    private void save(File file) {
         autocomplete();
 
-        try (FileWriter writer = new FileWriter(getConfigFile())) {
+        try (FileWriter writer = new FileWriter(file)) {
             version = VERSION;
             configDefaultsVersion = DEFAULTS_VERSION;
             Gson gson = new GsonBuilder().setPrettyPrinting().create();

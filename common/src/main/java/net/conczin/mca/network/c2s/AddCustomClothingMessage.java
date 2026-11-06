@@ -4,6 +4,8 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.conczin.mca.MCA;
 import net.conczin.mca.network.HandleablePayload;
+import net.conczin.mca.network.s2c.AppearanceClothingUpdate;
+import net.conczin.mca.network.s2c.AppearanceHairUpdate;
 import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.Hair;
 import net.conczin.mca.resources.data.skin.SkinListEntry;
@@ -14,6 +16,7 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.MinecraftServer;
 
 public record AddCustomClothingMessage(String identifier, boolean isHair, String json) implements HandleablePayload {
     public static final CustomPacketPayload.Type<AddCustomClothingMessage> TYPE = new CustomPacketPayload.Type<>(MCA.locate("add_custom_clothing"));
@@ -44,10 +47,15 @@ public record AddCustomClothingMessage(String identifier, boolean isHair, String
             MCA.LOGGER.warn("Ignoring invalid global skin data for {}", identifier);
             return;
         }
+        MinecraftServer server = player.serverLevel().getServer();
         if (entry instanceof Hair hair) {
-            CustomClothingManager.getHair().addEntry(identifier, hair);
+            if (CustomClothingManager.getHair(server).addEntry(identifier, hair)) {
+                AppearanceHairUpdate.broadcast(server, identifier);
+            }
         } else if (entry instanceof Clothing clothing) {
-            CustomClothingManager.getClothing().addEntry(identifier, clothing);
+            if (CustomClothingManager.getClothing(server).addEntry(identifier, clothing)) {
+                AppearanceClothingUpdate.broadcast(server, identifier);
+            }
         }
     }
 
