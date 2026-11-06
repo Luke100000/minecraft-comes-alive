@@ -51,6 +51,7 @@ public class Api {
             con.setRequestProperty("Content-Type", "application/json");
             con.setRequestProperty("Accept-Encoding", "gzip");
             con.setRequestProperty("Accept", "application/json");
+            con.setRequestProperty("User-Agent", "MCA");
 
             // Authenticate
             if (Auth.hasToken()) {
