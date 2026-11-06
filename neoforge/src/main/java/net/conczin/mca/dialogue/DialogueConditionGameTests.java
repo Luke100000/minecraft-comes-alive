@@ -4,6 +4,7 @@ import com.mojang.authlib.GameProfile;
 import com.google.gson.JsonParser;
 import com.mojang.serialization.JsonOps;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.RecentVillagerEvents;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.relationship.AgeState;
@@ -84,6 +85,20 @@ public final class DialogueConditionGameTests {
         assertNoMatch(helper, fixture.context(),
                 "{\"type\":\"mca:recent_event\",\"event\":\"mca:cured\",\"within_ticks\":20}");
 
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_conditions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void mourningConditionFollowsAssignedMourningSite(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        String mourning = "{\"type\":\"mca:mourning\"}";
+
+        assertNoMatch(helper, fixture.context(), mourning);
+        fixture.villager().getBrain().setMemory(MemoryModuleTypeMCA.MOURNING_SITE,
+                GlobalPos.of(helper.getLevel().dimension(), fixture.villager().blockPosition()));
+        assertMatch(helper, fixture.context(), mourning);
+        fixture.villager().getBrain().eraseMemory(MemoryModuleTypeMCA.MOURNING_SITE);
+        assertNoMatch(helper, fixture.context(), mourning);
         helper.succeed();
     }
 

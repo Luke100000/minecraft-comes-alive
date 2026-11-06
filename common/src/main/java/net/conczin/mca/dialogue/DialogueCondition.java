@@ -8,6 +8,7 @@ import com.mojang.serialization.Dynamic;
 import com.mojang.serialization.JsonOps;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.LongTermMemory;
+import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.RecentVillagerEvents;
 import net.conczin.mca.entity.ai.Relationship;
 import net.conczin.mca.entity.ai.Traits;
@@ -62,6 +63,7 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
 
     ResourceLocation PERSONALITY = MCA.locate("personality");
     ResourceLocation MOOD = MCA.locate("mood");
+    ResourceLocation MOURNING = MCA.locate("mourning");
     ResourceLocation HEARTS = MCA.locate("hearts");
     ResourceLocation RELATIONSHIP = MCA.locate("relationship");
     ResourceLocation FAMILY = MCA.locate("family");
@@ -89,7 +91,7 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
     ResourceLocation VILLAGE_HAS_SPACE = MCA.locate("village_has_space");
 
     Set<ResourceLocation> BUILTIN_TYPES = Set.of(
-            PERSONALITY, MOOD, HEARTS, RELATIONSHIP, FAMILY, AGE_GROUP, PROFESSION, RANK, TRAIT,
+            PERSONALITY, MOOD, MOURNING, HEARTS, RELATIONSHIP, FAMILY, AGE_GROUP, PROFESSION, RANK, TRAIT,
             HEALTH, INFECTED, TIME, WEATHER, BIOME, ADVANCEMENT, VILLAGE_HAS_BUILDING, IN_BUILDING,
             GENDER, PREGNANCY, INVENTORY, ITEM, TAG, MEMORY, RECENT_EVENT, BUILDING_ASSIGNMENT,
             HIT_BY, VILLAGE_HAS_SPACE, EVENT_COMPLETED, EVENT_CHOICE, NOT
@@ -110,6 +112,7 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
     Map<ResourceLocation, DefinedEvaluator> EVALUATORS = Map.ofEntries(
             Map.entry(PERSONALITY, DialogueCondition::evaluatePersonality),
             Map.entry(MOOD, DialogueCondition::evaluateMood),
+            Map.entry(MOURNING, DialogueCondition::evaluateMourning),
             Map.entry(HEARTS, DialogueCondition::evaluateHearts),
             Map.entry(RELATIONSHIP, DialogueCondition::evaluateRelationship),
             Map.entry(FAMILY, DialogueCondition::evaluateFamily),
@@ -352,6 +355,8 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
             if (object.has("within_ticks") && requiredLong(object, "within_ticks") < 0L) {
                 throw new IllegalArgumentException("mca:recent_event within_ticks must be non-negative");
             }
+        } else if (MOURNING.equals(type)) {
+            requireOnly(object, "type");
         } else if (BUILDING_ASSIGNMENT.equals(type)) {
             requireOnly(object, "type", "value", "source");
             requiredNonblankString(object, "value");
@@ -404,6 +409,11 @@ public sealed interface DialogueCondition permits DialogueCondition.Defined, Dia
     private static Evaluation evaluateMood(Defined condition, DialogueContext context) {
         return result(context.villager().getVillagerBrain().getMood().getName()
                 .equals(normalized(condition.definition(), "value")));
+    }
+
+    private static Evaluation evaluateMourning(Defined condition, DialogueContext context) {
+        return result(context.villager().getBrain()
+                .getMemoryInternal(MemoryModuleTypeMCA.MOURNING_SITE).isPresent());
     }
 
     private static Evaluation evaluateHearts(Defined condition, DialogueContext context) {

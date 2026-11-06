@@ -277,6 +277,59 @@ class McaDialogueEventResourcesTest {
     }
 
     @Test
+    void mourningRequiresDepressionTenHeartsAndAnActiveMourningAssignment() throws Exception {
+        DialogueEvent mourning = loadShippedEvents().stream()
+                .filter(event -> event.id().equals(id("personal/mourning")))
+                .findFirst().orElseThrow();
+
+        assertEquals(3, mourning.requirements().size());
+        Map<ResourceLocation, DialogueCondition.Defined> requirements = new HashMap<>();
+        for (DialogueCondition requirement : mourning.requirements()) {
+            DialogueCondition.Defined condition = assertInstanceOf(DialogueCondition.Defined.class, requirement);
+            requirements.put(condition.type(), condition);
+        }
+        assertEquals(Set.of(DialogueCondition.MOOD, DialogueCondition.HEARTS,
+                DialogueCondition.MOURNING), requirements.keySet());
+        assertEquals("depressed", requirements.get(DialogueCondition.MOOD).definition().get("value").getAsString());
+        assertEquals(10, requirements.get(DialogueCondition.HEARTS).definition().get("min").getAsInt());
+        assertFalse(requirements.get(DialogueCondition.HEARTS).definition().has("max"));
+
+        DialogueEvent.Node intro = mourning.nodes().get(mourning.start());
+        List<DialogueEvent.Choice> choices = intro.choices().orElseThrow();
+        assertEquals(3, choices.size());
+        Map<String, DialogueEvent.Choice> byId = new HashMap<>();
+        choices.forEach(choice -> byId.put(choice.id(), choice));
+        assertEquals(Set.of("listen", "dismiss", "give_space"), byId.keySet());
+
+        for (Map.Entry<String, Integer> entry : Map.of("listen", 10, "dismiss", -10).entrySet()) {
+            DialogueEvent.Choice choice = byId.get(entry.getKey());
+            assertTrue(choice.next().isEmpty());
+            assertTrue(choice.actions().isEmpty());
+            List<DialogueEvent.Outcome> outcomes = choice.outcomes().orElseThrow();
+            assertEquals(2, outcomes.size(), "positive and negative choices each need two random replies");
+            assertEquals(2, outcomes.stream().map(DialogueEvent.Outcome::next).distinct().count());
+            for (DialogueEvent.Outcome outcome : outcomes) {
+                assertTrue(outcome.requirements().isEmpty());
+                assertEquals(1.0D, outcome.weight());
+                assertEquals(0, outcome.priority());
+                assertEquals(List.of(entry.getValue()), outcome.actions().stream()
+                        .map(action -> assertInstanceOf(DialogueAction.Hearts.class, action).amount())
+                        .toList());
+                DialogueEvent.Node reply = mourning.nodes().get(outcome.next());
+                assertTrue(reply.complete());
+                assertEquals(1, reply.lines().size());
+            }
+        }
+
+        DialogueEvent.Choice neutral = byId.get("give_space");
+        assertTrue(neutral.actions().isEmpty(), "neutral response must leave hearts unchanged");
+        assertTrue(neutral.outcomes().isEmpty());
+        DialogueEvent.Node neutralReply = mourning.nodes().get(neutral.next().orElseThrow());
+        assertTrue(neutralReply.complete());
+        assertEquals(1, neutralReply.lines().size());
+    }
+
+    @Test
     void affectionStartsWithPlayerChoiceAndPartnerCannotReject() throws Exception {
         Map<ResourceLocation, DialogueEvent> events = new HashMap<>();
         loadShippedEvents().forEach(event -> events.put(event.id(), event));
