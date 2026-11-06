@@ -27,13 +27,16 @@ abstract class MixinClientLanguage extends Language {
     private Map<String, String> storage;
     @Unique
     private PooledTranslationStorage mca$pool;
+    @Unique
+    private Map<String, String> mca$poolStorage;
 
     @Shadow
     public abstract @NotNull String getOrDefault(String key, String fallback);
 
     @Unique
     private PooledTranslationStorage mca$getPool() {
-        if (mca$pool == null) {
+        if (mca$pool == null || mca$poolStorage != storage) {
+            mca$poolStorage = storage;
             mca$pool = new PooledTranslationStorage(storage);
             MCA.storage = storage;
             MCA.language = Minecraft.getInstance().options.languageCode;

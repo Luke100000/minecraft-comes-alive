@@ -18,11 +18,17 @@ import java.util.Optional;
 import java.util.Set;
 
 public record GetVillageRequest() implements HandleablePayload {
-    public static final CustomPacketPayload.Type<GetVillageRequest> TYPE = new CustomPacketPayload.Type<>(MCA.locate("get_village_request"));
-    public static final StreamCodec<FriendlyByteBuf, GetVillageRequest> STREAM_CODEC = StreamCodec.unit(new GetVillageRequest());
+    public static final CustomPacketPayload.Type<GetVillageRequest> TYPE =
+            new CustomPacketPayload.Type<>(MCA.locate("get_village_request"));
+    public static final StreamCodec<FriendlyByteBuf, GetVillageRequest> STREAM_CODEC =
+            StreamCodec.unit(new GetVillageRequest());
 
     @Override
     public void handleServer(ServerPlayer player) {
+        sendResponse(player);
+    }
+
+    static void sendResponse(ServerPlayer player) {
         Optional<Village> village = Village.findNearest(player);
         if (village.isPresent()) {
             GraveyardManager.get(player.serverLevel()).reportToVillageManager(player);

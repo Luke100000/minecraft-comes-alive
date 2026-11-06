@@ -4,6 +4,7 @@ import net.conczin.mca.ClientProxy;
 import net.conczin.mca.MCA;
 import net.conczin.mca.network.FamilyTreeSearchEntry;
 import net.conczin.mca.network.HandleablePayload;
+import net.conczin.mca.network.c2s.FamilyTreeUUIDLookup;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -12,10 +13,12 @@ import net.minecraft.world.entity.player.Player;
 
 import java.util.List;
 
-public record FamilyTreeUUIDResponse(List<FamilyTreeSearchEntry> list) implements HandleablePayload {
+public record FamilyTreeUUIDResponse(long requestId, String search, List<FamilyTreeSearchEntry> list) implements HandleablePayload {
     public static final CustomPacketPayload.Type<FamilyTreeUUIDResponse> TYPE = new CustomPacketPayload.Type<>(MCA.locate("family_tree_uuid_response"));
     public static final StreamCodec<FriendlyByteBuf, FamilyTreeUUIDResponse> STREAM_CODEC = StreamCodec.composite(
-            FamilyTreeSearchEntry.STREAM_CODEC.apply(ByteBufCodecs.list()), FamilyTreeUUIDResponse::list,
+            ByteBufCodecs.VAR_LONG, FamilyTreeUUIDResponse::requestId,
+            ByteBufCodecs.stringUtf8(FamilyTreeUUIDLookup.MAX_SEARCH_LENGTH), FamilyTreeUUIDResponse::search,
+            FamilyTreeSearchEntry.STREAM_CODEC.apply(ByteBufCodecs.list(16)), FamilyTreeUUIDResponse::list,
             FamilyTreeUUIDResponse::new
     );
 

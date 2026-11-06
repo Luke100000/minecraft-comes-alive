@@ -8,11 +8,7 @@ import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Personality;
 import net.conczin.mca.registry.CriterionMCA;
-import net.conczin.mca.util.network.datasync.CDataManager;
-import net.conczin.mca.util.network.datasync.CDataParameter;
-import net.conczin.mca.util.network.datasync.CEnumParameter;
-import net.conczin.mca.util.network.datasync.CParameter;
-import net.conczin.mca.util.network.datasync.CResourceLocationParameter;
+import net.conczin.mca.util.network.datasync.*;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -27,9 +23,10 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.schedule.Activity;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
-
-import static net.conczin.mca.entity.ai.MemoryModuleTypeMCA.LAST_GRIEVE;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Handles memory and complex bodily functions. Such as walking, and not being a nitwit.
@@ -44,9 +41,6 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     private static final CDataParameter<Boolean> PANICKING = CParameter.create("IsPanicking", false);
     private static final CDataParameter<Boolean> WEAR_ARMOR = CParameter.create("WearArmor", false);
 
-    private static final long GRIEVE_COOLDOWN = 24000 * 7;
-    private static final long GRIEVE_RETRY_DELAY = 1200L;
-    private final Random random = new Random();
     private final E entity;
 
     public VillagerBrain(E entity) {
@@ -70,7 +64,7 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         // When you relog, it should continue doing the chores.
         // Chore saves but Activity doesn't, so this checks if the activity is not on there and puts it on there.
 
-        if (entity.getTrackedValue(ACTIVE_CHORE) != Chore.NONE) {
+        if (entity.getTrackedValue(ACTIVE_CHORE) != Chore.NONE && !entity.getBrain().isActive(Activity.PANIC)) {
             // find something to do
             //todo here switch between rest and chore
             entity.getBrain().getActiveNonCoreActivity().ifPresent(activity -> {
@@ -155,6 +149,7 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
 
     public Map<UUID, Memories> getMemories() {
         CompoundTag nbt = entity.getTrackedValue(MEMORIES);
+        nbt = nbt == null ? new CompoundTag() : nbt;
         Map<UUID, Memories> memories = new HashMap<>();
         for (String uuid : nbt.getAllKeys()) {
             memories.put(UUID.fromString(uuid), Memories.fromCNBT(entity, nbt.getCompound(uuid)));
@@ -164,13 +159,13 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
 
     public Memories getMemoriesForPlayer(Player player) {
         CompoundTag nbt = entity.getTrackedValue(MEMORIES);
-        nbt = nbt == null ? new CompoundTag() : nbt;
-        CompoundTag compoundTag = nbt.getCompound(player.getUUID().toString());
+        CompoundTag compoundTag = nbt == null ? null : nbt.getCompound(player.getUUID().toString());
         Memories returnMemories = Memories.fromCNBT(entity, compoundTag);
         if (returnMemories == null) {
             returnMemories = new Memories(this, player.level().getDayTime(), player.getUUID());
-            nbt.put(player.getUUID().toString(), returnMemories.toCNBT());
-            entity.setTrackedValue(MEMORIES, nbt);
+            if (!entity.level().isClientSide) {
+                updateMemories(returnMemories);
+            }
         }
         return returnMemories;
     }
@@ -259,28 +254,6 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         entity.setTrackedValue(WEAR_ARMOR, s);
     }
 
-    public void setGrieving() {
-        entity.getBrain().setMemory(LAST_GRIEVE, -GRIEVE_COOLDOWN);
-    }
-
-    public void retryGrievingLater() {
-        entity.getBrain().setMemory(LAST_GRIEVE, entity.level().getGameTime() - GRIEVE_COOLDOWN + GRIEVE_RETRY_DELAY);
-    }
-
-    public void justGrieved() {
-        entity.getBrain().setMemory(LAST_GRIEVE, entity.level().getGameTime());
-    }
-
-    public boolean shouldGrieve() {
-        Optional<Long> memory = entity.getBrain().getMemoryInternal(LAST_GRIEVE);
-        if (memory.isPresent()) {
-            return entity.level().getGameTime() - memory.get() > GRIEVE_COOLDOWN;
-        } else {
-            entity.getBrain().setMemory(LAST_GRIEVE, entity.level().getGameTime() - random.nextLong(GRIEVE_COOLDOWN));
-            return false;
-        }
-    }
-
     /**
      * Read the move state from the active memory.
      */
@@ -288,8 +261,6 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         if (getMoveState() == MoveState.FOLLOW && entity.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isEmpty()) {
             if (entity.getBrain().getMemoryInternal(MemoryModuleTypeMCA.STAYING).isPresent()) {
                 entity.setTrackedValue(MOVE_STATE, MoveState.STAY);
-            } else if (entity.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING).isPresent()) {
-                entity.setTrackedValue(MOVE_STATE, MoveState.FOLLOW);
             } else {
                 entity.setTrackedValue(MOVE_STATE, MoveState.MOVE);
             }

@@ -10,6 +10,10 @@ config = "${mod_id}.mixins.json"
 config = "${mod_id}.journeymap.mixins.json"
 requiredMods = ["journeymap"]
 
+[[mixins]]
+config = "${mod_id}.opentogether.mixins.json"
+requiredMods = ["opentogether"]
+
 [[mods]]
 modId = "${mod_id}"
 version = "${version}"
@@ -32,4 +36,11 @@ modId = "minecraft"
 type = "required"
 versionRange = "${minecraft_version_range}"
 ordering = "NONE"
+side = "BOTH"
+
+[[dependencies.${ mod_id }]]
+modId = "immersive_melodies"
+type = "optional"
+versionRange = "[${immersive_melodies_version},)"
+ordering = "AFTER"
 side = "BOTH"

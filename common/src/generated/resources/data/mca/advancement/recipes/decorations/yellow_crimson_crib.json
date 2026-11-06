@@ -28,6 +28,5 @@
     "recipes": [
       "mca:yellow_crimson_crib"
     ]
-  },
-  "sends_telemetry_event": false
+  }
 }

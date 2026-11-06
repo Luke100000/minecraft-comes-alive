@@ -23,11 +23,11 @@ jobs:
         shell: bash
         run: echo "minecraft_version=$(grep '^minecraft_version=' gradle.properties | cut -d= -f2)" >> "$GITHUB_OUTPUT"
 
-      - name: Setup Java 21
+      - name: Setup Java 25
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: 21
+          java-version: 25
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6

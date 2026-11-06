@@ -29,10 +29,13 @@ public class BuildingTypes extends SimpleJsonResourceReloadListener implements I
 
     @Override
     protected void apply(Map<ResourceLocation, JsonElement> prepared, ResourceManager manager, ProfilerFiller profiler) {
+        Map<String, BuildingType> reloaded = new HashMap<>();
         for (Map.Entry<ResourceLocation, JsonElement> pair : prepared.entrySet()) {
             String name = pair.getKey().getPath();
-            buildingTypes.put(name, new BuildingType(name, pair.getValue().getAsJsonObject()));
+            reloaded.put(name, new BuildingType(name, pair.getValue().getAsJsonObject()));
         }
+        buildingTypes.clear();
+        buildingTypes.putAll(reloaded);
         setBuildingTypes(buildingTypes);
     }
 
@@ -49,8 +52,16 @@ public class BuildingTypes extends SimpleJsonResourceReloadListener implements I
         buildingTypesClient = Map.copyOf(buildingTypes);
     }
 
+    public boolean hasBuildingType(String type) {
+        return type != null && (buildingTypes.containsKey(type) || buildingTypesClient.containsKey(type));
+    }
+
     public BuildingType getBuildingType(String type) {
-        return buildingTypesClient.containsKey(type) ? buildingTypesClient.get(type) : new BuildingType();
+        if (type == null) return new BuildingType();
+        BuildingType clientType = buildingTypesClient.get(type);
+        if (clientType != null) return clientType;
+        BuildingType serverType = buildingTypes.get(type);
+        return serverType != null ? serverType : new BuildingType();
     }
 
     @Override

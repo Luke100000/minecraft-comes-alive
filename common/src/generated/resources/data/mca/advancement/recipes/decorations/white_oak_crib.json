@@ -28,6 +28,5 @@
     "recipes": [
       "mca:white_oak_crib"
     ]
-  },
-  "sends_telemetry_event": false
+  }
 }
