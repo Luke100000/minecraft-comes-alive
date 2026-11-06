@@ -77,7 +77,7 @@ public class SkinCache {
     }
 
     public static void sync(LiteContent content) {
-        sync(content.contentid(), content.version());
+        sync(content.content_id(), content.version());
     }
 
     /**
@@ -116,15 +116,9 @@ public class SkinCache {
                 CompletableFuture.runAsync(() -> {
                     try {
                         logger("Requested asset " + contentid + " with version " + version + " and current version " + currentVersion);
-                        Response response = request(Api.HttpMethod.GET, ContentResponse.class, "content/mca/" + contentid, Map.of("version", String.valueOf(version)));
+                        Response response = request(Api.HttpMethod.GET, ContentResponse.class, "v3/content/mca/" + contentid, Map.of("version", String.valueOf(version)));
                         if (response instanceof ContentResponse(Content content)) {
-                            int newVersion = content.version();
-                            write(contentid + ".png", Base64.getDecoder().decode(content.data()));
-                            write(contentid + ".json", content.meta());
-                            write(contentid + ".version", Integer.toString(newVersion));
-                            cachedVersions.put(contentid, newVersion);
-                            textureIdentifiers.remove(contentid);
-                            logger("Received " + contentid);
+                            store(content);
                         }
                     } catch (RuntimeException e) {
                         MCA.LOGGER.warn("Unable to sync immersive library asset {}", contentid, e);
@@ -134,6 +128,19 @@ public class SkinCache {
                 });
             }
         }
+    }
+
+    public static void store(Content content) {
+        int contentid = content.content_id();
+        if (cachedVersions.getOrDefault(contentid, -1) == content.version()) {
+            return;
+        }
+        write(contentid + ".png", Base64.getDecoder().decode(content.data()));
+        write(contentid + ".json", content.meta());
+        write(contentid + ".version", Integer.toString(content.version()));
+        cachedVersions.put(contentid, content.version());
+        textureIdentifiers.remove(contentid);
+        logger("Received " + contentid);
     }
 
     /**
@@ -181,17 +188,17 @@ public class SkinCache {
 
     public static Optional<SkinMeta> getMeta(LiteContent content) {
         sync(content);
-        return Optional.ofNullable(metas.get(content.contentid()));
+        return Optional.ofNullable(metas.get(content.content_id()));
     }
 
     public static Optional<NativeImage> getImage(LiteContent content) {
         sync(content);
-        return Optional.ofNullable(images.get(content.contentid()));
+        return Optional.ofNullable(images.get(content.content_id()));
     }
 
     public static ResourceLocation getTextureIdentifier(LiteContent content) {
         sync(content);
-        return textureIdentifiers.getOrDefault(content.contentid(), DEFAULT_SKIN);
+        return textureIdentifiers.getOrDefault(content.content_id(), DEFAULT_SKIN);
     }
 
     /**
