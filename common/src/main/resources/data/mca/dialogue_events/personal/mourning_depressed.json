@@ -1,0 +1,86 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "highlighted",
+    "prompt": "dialogue_event.mca.personal.mourning_depressed.prompt",
+    "resume_prompt": "dialogue_event.mca.personal.mourning_depressed.resume",
+    "topic": "life_event"
+  },
+  "priority": 121,
+  "weight": 1,
+  "requirements": [
+    { "type": "mca:mood", "value": "depressed" },
+    { "type": "mca:hearts", "min": 10 },
+    { "type": "mca:mourning" }
+  ],
+  "repeat": { "type": "cooldown", "seconds": 5 },
+  "history": "scheduling",
+  "start": "intro",
+  "nodes": {
+    "intro": {
+      "lines": [
+        "dialogue_event.mca.personal.mourning_depressed.intro.quiet",
+        "dialogue_event.mca.personal.mourning_depressed.intro.unsaid"
+      ],
+      "choices": [
+        {
+          "id": "listen",
+          "text": "dialogue_event.mca.personal.mourning_depressed.choice.listen",
+          "outcomes": [
+            {
+              "weight": 1,
+              "actions": [{ "type": "mca:hearts", "amount": 10 }],
+              "next": "listened"
+            },
+            {
+              "weight": 1,
+              "actions": [{ "type": "mca:hearts", "amount": 10 }],
+              "next": "listened_story"
+            }
+          ]
+        },
+        {
+          "id": "dismiss",
+          "text": "dialogue_event.mca.personal.mourning_depressed.choice.dismiss",
+          "outcomes": [
+            {
+              "weight": 1,
+              "actions": [{ "type": "mca:hearts", "amount": -10 }],
+              "next": "dismissed"
+            },
+            {
+              "weight": 1,
+              "actions": [{ "type": "mca:hearts", "amount": -10 }],
+              "next": "dismissed_angry"
+            }
+          ]
+        },
+        {
+          "id": "give_space",
+          "text": "dialogue_event.mca.personal.mourning_depressed.choice.give_space",
+          "next": "space"
+        }
+      ]
+    },
+    "listened": {
+      "line": "dialogue_event.mca.personal.mourning_depressed.listened",
+      "complete": true
+    },
+    "listened_story": {
+      "line": "dialogue_event.mca.personal.mourning_depressed.listened.story",
+      "complete": true
+    },
+    "dismissed": {
+      "line": "dialogue_event.mca.personal.mourning_depressed.dismissed",
+      "complete": true
+    },
+    "dismissed_angry": {
+      "line": "dialogue_event.mca.personal.mourning_depressed.dismissed.angry",
+      "complete": true
+    },
+    "space": {
+      "line": "dialogue_event.mca.personal.mourning_depressed.space",
+      "complete": true
+    }
+  }
+}

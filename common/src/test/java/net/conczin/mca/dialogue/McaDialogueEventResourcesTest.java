@@ -67,6 +67,7 @@ class McaDialogueEventResourcesTest {
             id("ambient/rain_relaxed"),
             id("personal/lactose_intolerance"),
             id("personal/mourning"),
+            id("personal/mourning_depressed"),
             id("personal/cured_identity"),
             id("personal/cured_zombies"),
             id("personal/cured_zombies_followup"),
@@ -279,7 +280,7 @@ class McaDialogueEventResourcesTest {
     @Test
     void mourningRequiresDepressionTenHeartsAndAnActiveMourningAssignment() throws Exception {
         DialogueEvent mourning = loadShippedEvents().stream()
-                .filter(event -> event.id().equals(id("personal/mourning")))
+                .filter(event -> event.id().equals(id("personal/mourning_depressed")))
                 .findFirst().orElseThrow();
 
         assertEquals(3, mourning.requirements().size());
@@ -327,6 +328,41 @@ class McaDialogueEventResourcesTest {
         DialogueEvent.Node neutralReply = mourning.nodes().get(neutral.next().orElseThrow());
         assertTrue(neutralReply.complete());
         assertEquals(1, neutralReply.lines().size());
+    }
+
+    @Test
+    void originalMourningStoryRetainsItsRecentRelativeDeathRequirementsAndChoices() throws Exception {
+        DialogueEvent mourning = loadShippedEvents().stream()
+                .filter(event -> event.id().equals(id("personal/mourning")))
+                .findFirst().orElseThrow();
+
+        assertEquals(2, mourning.requirements().size());
+        Map<ResourceLocation, DialogueCondition.Defined> requirements = new HashMap<>();
+        for (DialogueCondition requirement : mourning.requirements()) {
+            DialogueCondition.Defined defined = assertInstanceOf(DialogueCondition.Defined.class, requirement);
+            requirements.put(defined.type(), defined);
+        }
+        assertEquals(Set.of(DialogueCondition.RECENT_EVENT, DialogueCondition.HEARTS), requirements.keySet());
+        assertEquals("mca:relative_death", requirements.get(DialogueCondition.RECENT_EVENT)
+                .definition().get("event").getAsString());
+        assertEquals(24000, requirements.get(DialogueCondition.RECENT_EVENT)
+                .definition().get("within_ticks").getAsInt());
+        assertEquals(20, requirements.get(DialogueCondition.HEARTS).definition().get("min").getAsInt());
+
+        DialogueEvent.Node intro = mourning.nodes().get(mourning.start());
+        List<DialogueEvent.Choice> choices = intro.choices().orElseThrow();
+        assertEquals(Set.of("listen", "give_space"), choices.stream()
+                .map(DialogueEvent.Choice::id).collect(java.util.stream.Collectors.toSet()));
+        DialogueEvent.Choice listen = choices.stream().filter(choice -> choice.id().equals("listen"))
+                .findFirst().orElseThrow();
+        assertEquals(List.of(3), listen.actions().stream()
+                .map(action -> assertInstanceOf(DialogueAction.Hearts.class, action).amount()).toList());
+        assertTrue(listen.outcomes().isEmpty());
+        assertEquals(2, mourning.nodes().get(listen.next().orElseThrow()).lines().size());
+        DialogueEvent.Choice space = choices.stream().filter(choice -> choice.id().equals("give_space"))
+                .findFirst().orElseThrow();
+        assertTrue(space.actions().isEmpty());
+        assertEquals(2, mourning.nodes().get(space.next().orElseThrow()).lines().size());
     }
 
     @Test

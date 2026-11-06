@@ -335,6 +335,7 @@ These shipped resources make useful fixtures:
 | `mca:personal/cured_zombies_followup` | Separate Ask topic after `cured_zombies` completion with `experience_changes_you` |
 | `mca:personal/cured_identity` | Highlighted personal story for a speaker with a recorded `mca:cured` event within 24000 ticks |
 | `mca:personal/mourning` / `mca:personal/revived` | Actual recorded gameplay events as requirements |
+| `mca:personal/mourning_depressed` | Depressed speaker with at least 10 hearts and an active mourning assignment; two weighted +10 and two weighted -10 response outcomes, plus one neutral reply |
 
 For a manual smoke test, finish Joke by acknowledging its final line, reopen Talk after its five-second cooldown, and check the updated hearts. Speak to an awake crabby villager at night (`/time set night`) to try its ambient line. For the general cured-zombie topic, use an adult gloomy villager with at least 20 hearts at night, select `experience_changes_you`, finish the story, then check the follow-up. Separately cure an MCA zombie villager and Talk to the converted villager within one in-game day to check its personal story.
 

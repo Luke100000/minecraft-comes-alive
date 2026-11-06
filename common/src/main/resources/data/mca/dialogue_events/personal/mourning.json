@@ -9,9 +9,8 @@
   "priority": 120,
   "weight": 1,
   "requirements": [
-    { "type": "mca:mood", "value": "depressed" },
-    { "type": "mca:hearts", "min": 10 },
-    { "type": "mca:mourning" }
+    { "type": "mca:recent_event", "event": "mca:relative_death", "within_ticks": 24000 },
+    { "type": "mca:hearts", "min": 20 }
   ],
   "repeat": { "type": "cooldown", "seconds": 5 },
   "history": "scheduling",
@@ -28,34 +27,8 @@
         {
           "id": "listen",
           "text": "dialogue_event.mca.personal.mourning.choice.listen",
-          "outcomes": [
-            {
-              "weight": 1,
-              "actions": [{ "type": "mca:hearts", "amount": 10 }],
-              "next": "listened"
-            },
-            {
-              "weight": 1,
-              "actions": [{ "type": "mca:hearts", "amount": 10 }],
-              "next": "listened_story"
-            }
-          ]
-        },
-        {
-          "id": "dismiss",
-          "text": "dialogue_event.mca.personal.mourning.choice.dismiss",
-          "outcomes": [
-            {
-              "weight": 1,
-              "actions": [{ "type": "mca:hearts", "amount": -10 }],
-              "next": "dismissed"
-            },
-            {
-              "weight": 1,
-              "actions": [{ "type": "mca:hearts", "amount": -10 }],
-              "next": "dismissed_angry"
-            }
-          ]
+          "actions": [{ "type": "mca:hearts", "amount": 3 }],
+          "next": "listened"
         },
         {
           "id": "give_space",
@@ -65,23 +38,17 @@
       ]
     },
     "listened": {
-      "line": "dialogue_event.mca.personal.mourning.listened",
-      "complete": true
-    },
-    "listened_story": {
-      "line": "dialogue_event.mca.personal.mourning.listened.story",
-      "complete": true
-    },
-    "dismissed": {
-      "line": "dialogue_event.mca.personal.mourning.dismissed",
-      "complete": true
-    },
-    "dismissed_angry": {
-      "line": "dialogue_event.mca.personal.mourning.dismissed.angry",
+      "lines": [
+        "dialogue_event.mca.personal.mourning.listened",
+        "dialogue_event.mca.personal.mourning.listened.story"
+      ],
       "complete": true
     },
     "space": {
-      "line": "dialogue_event.mca.personal.mourning.space",
+      "lines": [
+        "dialogue_event.mca.personal.mourning.space",
+        "dialogue_event.mca.personal.mourning.space.sit"
+      ],
       "complete": true
     }
   }
