@@ -1,6 +1,6 @@
 # DialogueEvent developer guide
 
-MCA's DialogueEvent system runs data-driven villager conversations on Minecraft 1.21.1. This guide explains its Java ownership, supported datapack format, selection and execution rules, history, and extension points. Most new conversations need only a JSON resource and translations. New types of gameplay facts or effects require Java changes.
+This guide covers the Java implementation of MCA's DialogueEvent system on Minecraft 1.21.1: server ownership, selection, session lifecycle, networking and addon extensions. For event JSON, use the [authoring reference](dialogue-authoring.md). For your first datapack, use the [beginner tutorial](dialogue-datapack-guide.md).
 
 ## Architecture
 
@@ -18,96 +18,21 @@ MCA's DialogueEvent system runs data-driven villager conversations on Minecraft 
 
 The owners live in `common/src/main/java/net/conczin/mca/`. `MCA.startServer` creates one engine for the running server. Fabric (`MCAFabric`) and NeoForge (`CommonNeoForge`) register the same `DialogueEvents.INSTANCE` reload listener and server lifecycle hooks. The engine runs on the server thread; the client never decides event eligibility, allowed choices or rewards.
 
-## 1. Define an event
+## 1. Loading and validating events
 
-Datapacks and addon mods supply resources at these exact paths:
+`DialogueEvents` reloads resources from `data/<namespace>/dialogue_events/<path>.json`. The namespace and path form the event ID; the file contains no separate `id` field. The client gets text from `assets/<namespace>/lang/<locale>.json` in an enabled resource pack or mod. Fabric and NeoForge register the same server datapack reload listener. NeoForge's separate top-level `neoforge:conditions` field is not part of this schema; MCA event-level `requirements` must be used instead. Normal datapack priority resolves duplicate resource paths.
 
-```text
-data/<namespace>/dialogue_events/<path>.json
-assets/<namespace>/lang/<locale>.json
-```
-
-For example, `data/example_addon/dialogue_events/weather/rain_chat.json` has the ID `example_addon:weather/rain_chat`. The namespace and nested path are part of the ID. Do not put an additional `id` field into the JSON. A standalone datapack puts the `data/` path beside its `pack.mcmeta`; translations belong in an enabled client resource pack or mod assets.
-
-This complete example offers an Ask topic in rainy weather. The player hears two passages, chooses one reply, and queues a heart reward with amount `2` for successful completion.
-
-```json
-{
-  "trigger": "talk",
-  "presentation": {
-    "mode": "ask",
-    "prompt": "dialogue_event.example_addon.rain.prompt",
-    "resume_prompt": "dialogue_event.example_addon.rain.resume"
-  },
-  "requirements": [
-    { "type": "mca:weather", "value": "rain" }
-  ],
-  "repeat": { "type": "cooldown", "seconds": 5 },
-  "history": "story",
-  "start": "intro",
-  "nodes": {
-    "intro": {
-      "lines": [
-        "dialogue_event.example_addon.rain.first",
-        "dialogue_event.example_addon.rain.second"
-      ],
-      "choices": [
-        {
-          "id": "agree_about_rain",
-          "text": "dialogue_event.example_addon.rain.agree",
-          "actions": [{ "type": "mca:hearts", "amount": 2 }],
-          "next": "goodbye"
-        }
-      ]
-    },
-    "goodbye": {
-      "line": "dialogue_event.example_addon.rain.goodbye",
-      "complete": true
-    }
-  }
-}
-```
-
-Supply `assets/example_addon/lang/en_us.json`:
-
-```json
-{
-  "dialogue_event.example_addon.rain.prompt": "Do you enjoy the rain?",
-  "dialogue_event.example_addon.rain.resume": "We were talking about the rain...",
-  "dialogue_event.example_addon.rain.first": "It's been raining all afternoon.",
-  "dialogue_event.example_addon.rain.second": "The sound on the roof is rather nice, though.",
-  "dialogue_event.example_addon.rain.agree": "I like it too.",
-  "dialogue_event.example_addon.rain.goodbye": "Then perhaps we can enjoy it together."
-}
-```
-
-Once the pack is enabled, `/reload` updates server dialogue resources. Talk to an awake, interactable MCA villager in rain to find the new Ask choice. The last `Back to topics` acknowledgement is required for completion and the heart reward.
-
-### Top-level fields
-
-| Field | Required | Meaning |
-| --- | --- | --- |
-| `trigger` | Yes | Currently only `"talk"` |
-| `presentation` | Yes | `mode` and `resume_prompt`; `prompt` required for Ask and highlighted; optional `topic` |
-| `priority` | No | Integer, defaults to `0` |
-| `weight` | No | Finite positive number, defaults to `1` |
-| `requirements` | No | List of conditions, defaults to empty; every entry must match |
-| `repeat` | Yes | `always`, `once` or `cooldown` policy |
-| `history` | No | `story` (default) or `scheduling` |
-| `start` | Yes | Name of the first local node |
-| `nodes` | Yes | Object containing the event's node graph |
-
-The `DialogueEvent` decoder validates allowed fields and rejects unknown event, node, choice, outcome, condition or action fields. Write fully namespaced cross-event IDs so they resolve to the intended pack (an unqualified resource location defaults to Minecraft's namespace). Weights must be finite and greater than zero.
+The `DialogueEvent` decoder rejects unknown fields, invalid conditions, bad graph links and malformed weights. The loader validates cross-event story references. Each successful `/reload` replaces the registry snapshot and invalidates stale sessions. For a complete event, translations and field defaults, see the [beginner example](dialogue-datapack-guide.md#2-write-your-first-conversation) and [authoring reference](dialogue-authoring.md#minimal-event).
 
 ## 2. Presentation and selection
 
 | Mode | Behavior |
 | --- | --- |
-| `highlighted` | Highest-priority eligible event occupies the highlighted slot; other eligible highlighted events remain in Ask |
-| `ask` | Selectable topic under the grey, non-clickable `Ask about...` heading |
-| `ambient` | Candidate behind `What's on your mind?`, with no separate topic prompt |
+| `highlighted` | Highest-priority eligible event receives a featured marker; other eligible highlighted events remain selectable in their topic section |
+| `ask` | Selectable entry in its topic section |
+| `ambient` | Candidate behind `What's on your mind?` within Conversations |
 
-`highlighted` and `ask` require `presentation.prompt`. Every mode, including `ambient`, requires `presentation.resume_prompt`. Resume labels may use `%1$s` for the villager's name. Optional `presentation.topic` is authoring metadata, not a submenu.
+`presentation.mode` determines how an event is offered; `presentation.topic` determines the section of the Talk menu for a directly selectable event. `InteractScreen` groups topics into five expandable sections: Conversations (`small_talk`, `location`, `game`), Relationships (`relationship`), Personal stories (`personal`, `life_event`, `introduction`), Practical matters (`service`) and Other topics (missing or unrecognized topics). Ambient conversations are selected separately inside Conversations; `ambient` is a mode, not a topic. Highlighted and Ask events require `presentation.prompt`; every mode requires `presentation.resume_prompt` (which can use `%1$s` for the villager name).
 
 Highlighted and Ask events are ordered by descending `priority`, then ID. At most **64** direct event options are transmitted per menu. For ambient selection, only the highest eligible priority tier participates; the engine selects among events in that tier by `weight` when the player clicks the ambient option. Weight does not let an ineligible event bypass prerequisites. The shipped `mca:ambient/baseline` has the lowest possible priority and a zero-second cooldown, preserving ordinary small talk.
 
@@ -123,7 +48,7 @@ Each node is local to one event. A visible node has exactly one `line` string or
 | `end: true` | End the run without committing a completion |
 | `outcomes` | Automatically choose another node without displaying this routing node |
 
-The UI reveals one complete passage at a time. `Next` advances between passages or to a `next` node. Choices become clickable after the final passage has finished revealing. A terminal displays `Back to topics`; clicking it commits a successful `complete` node and refreshes Talk. Translation suffixes such as `/1` and `/2` are MCA's alternative phrasings, not ordered passages. Use distinct keys inside `lines`.
+The UI reveals one passage at a time. `Next` advances between passages or nodes. Choices become clickable after the final passage has finished revealing. A terminal displays **Finish conversation**, returning to the topic list. On a `complete: true` terminal, this also commits the run. For line-authoring rules, see [nodes and passages](dialogue-authoring.md#nodes-passages-and-routing).
 
 `silent: true` is an optional visible-node flag. In the client, it runs the text through `villager.transformMessage` instead of the ordinary `villager.sendChatMessage` path. The default is `false`.
 
@@ -136,70 +61,15 @@ Each choice accepts:
 
 A visible node can offer at most **32** choices. A direct choice requires `next`; an outcome-based choice cannot also have direct `next` or direct `actions`. Both node targets and choice targets must exist, and graphs cannot have cycles.
 
-When you want an eligible reply to have several possible results, use `outcomes`:
-
-```json
-{
-  "id": "ask_about_work",
-  "text": "dialogue_event.example_addon.work.ask",
-  "outcomes": [
-    {
-      "requirements": [{ "type": "mca:mood", "value": "happy" }],
-      "weight": 3,
-      "actions": [{ "type": "mca:hearts", "amount": 2 }],
-      "next": "happy_answer"
-    },
-    { "weight": 1, "next": "ordinary_answer" }
-  ]
-}
-```
-
-An outcome has optional `requirements`, positive `weight` (default `1`), optional `actions` and required `next`. The server filters ineligible outcomes before making the weighted choice. A reply with no eligible outcomes is hidden; its eligibility is checked again when the client sends the reply. The chosen outcome is retained in the session rather than rerolled on resume.
+Outcome selection runs in order: (1) remove outcomes with unmet requirements, (2) retain only those in the highest eligible `priority` tier, (3) pick among that tier using positive `weight`. A reply with no eligible outcomes is hidden, and its eligibility is rechecked when the player chooses it. The selected outcome is retained on pause/resume. See [authoring outcomes](dialogue-authoring.md#choices-and-weighted-outcomes) for the JSON format.
 
 For routing before any text, define a node with `outcomes` and no `line`/`lines`. An automatic routing node must include at least one unconditional outcome so a destination remains possible. A reachable `end: true` node in a `once` or `cooldown` event must explicitly set `retryable: true`. Use `complete: true` for successful endings.
 
 ## 4. Supported conditions
 
-Every requirement is a typed JSON object, for example `{ "type": "mca:hearts", "min": 20 }`. Requirements can appear on the event, a player choice, or an outcome. An array means logical AND. Probability belongs in weights, not in the condition definitions.
+Event, choice and outcome requirements are typed `DialogueCondition` codecs evaluated against the server state. An array is logical AND. See the [authoring condition reference](dialogue-authoring.md#requirements) for available types and fields.
 
-`DialogueCondition` currently recognizes the following built-in types:
-
-| Type | Fields and evaluated state |
-| --- | --- |
-| `mca:personality` | `value`: registered MCA personality, such as `gloomy` or `crabby` |
-| `mca:mood` | `value`: `depressed`, `sad`, `unhappy`, `passive`, `fine`, `happy`, or `overjoyed` |
-| `mca:hearts` | `min` and/or `max`: villager's heart count for this player |
-| `mca:relationship` | `value`: `spouse`, `engaged`, `promised`, `romantic_partner`, `single`, or `widow` |
-| `mca:family` | `value`: `family`, `relative`, `parent`, `child`, or `orphan` |
-| `mca:age_group` | `value`: valid MCA `AgeState` enum (e.g. `adult`, `child`) |
-| `mca:profession` | `value`: registered vanilla/MCA profession ID, such as `minecraft:farmer` or `mca:guard` |
-| `mca:rank` | `value`: MCA `Rank` enum for the player's rank in the villager's village |
-| `mca:trait` | `value`: registered MCA trait, such as `lactose_intolerance` |
-| `mca:health` | `min` and/or `max`: villager's current health |
-| `mca:infected` | Active infection; optional inclusive progress `min`/`max` from 0.0 to 1.0, or neither for any infection |
-| `mca:gender` | `value`: valid MCA `Gender` enum |
-| `mca:pregnancy` | Required boolean `value`; if true, optional `min_progress`, `max_progress`, `child_gender` |
-| `mca:time` | `value: "day"` / `"night"`, or a `min`/`max` range in [0, 24000] game-time ticks |
-| `mca:weather` | `value`: `clear`, `rain`, or `thunder`; ordinary rain excludes thunderstorms |
-| `mca:biome` | Required nonempty `values` array: biome IDs or `#namespace:tag`; optional `scope: "current"` (default) or `"home"`. See the [authoring reference](dialogue-authoring.md#biome-selectors-and-ordered-outcomes) |
-| `mca:advancement` | `value`: ID of an advancement completed by this player |
-| `mca:village_has_building` | `value`: registered building type in the villager's home village |
-| `mca:in_building` | `value`: building type containing the villager's current position |
-| `mca:building_assignment` | `value`: building type at `source` `home` (default) or `workplace` |
-| `mca:item` | `value`: registered item ID; optional `min`/`max` count in player's inventory |
-| `mca:tag` | `value`: item tag ID; optional `min`/`max` count in player's inventory |
-| `mca:inventory` | Exactly one `item` ID or `tag` ID; optional `min`/`max` inventory count |
-| `mca:memory` | `id`: long-term villager memory; optional `var: "player"` and `present` (default true) |
-| `mca:recent_event` | `event`: a registered villager life-event ID; optional nonnegative `within_ticks` (omitted means ever occurred) |
-| `mca:hit_by` | No additional fields; villager's tracked hit-by-this-player state |
-| `mca:village_has_space` | No additional fields; capacity in the player's last-seen village |
-| `mca:event_completed` | `event`: full event ID with a successful `story` completion for this pair |
-| `mca:event_choice` | `event` and `choice`: stable choice ID from that story's latest completed run |
-| `mca:not` | `condition`: one nested, negated condition |
-
-Numeric ranges use inclusive boundaries. The `hearts` and `health` conditions need at least one bound. Inventory-count conditions default to a minimum count of one. A time-of-day range uses the world's day time modulo 24,000. The `mca:memory` condition checks `present: false` when you need an absent memory; `var: "player"` addresses a memory scoped to the talking player.
-
-Registered `mca:recent_event` IDs are `mca:relative_death`, `mca:attacked`, `mca:zombified`, `mca:cured`, `mca:revived`, and `mca:raid_survived`. These timestamps come from actual gameplay producers. A story cannot create a missing life event merely by referring to its ID.
+Recent-event timestamps are recorded by gameplay producers, not by the dialogue engine. The [authoring reference](dialogue-authoring.md#requirements) lists registered IDs.
 
 Condition evaluation has three states: match, no match, or unavailable. Missing registered content, such as an absent addon event, is unavailable even inside `mca:not`. A history requirement must reference an event whose history policy is `story`; it cannot target scheduling-only ambient chatter. The reload loader validates references to existing events and choices; missing optional addon references remain unavailable at runtime.
 
@@ -227,37 +97,28 @@ Examples:
 
 The current `mca:command` allowlist in `DialogueEngine` is `adopt`, `apologize`, `divorcePapers`, `divorceConfirm`, `hire_short`, `hire_long`, `procreate`, `slap`, `stay_in_village`, and `location`. The engine allows at most **one** command action in a run and requires the owner to report it accepted before committing. It does not execute arbitrary Minecraft command strings.
 
-Effects accumulate in the server-side session. They are applied only when the player acknowledges a `complete: true` terminal with `Back to topics`. The engine checks history writability, validates any command, runs the command, applies the other actions, and stores the successful completion. An `end: true` terminal, discarded session, or unsuccessful commit does not record a successful event. The usual heart-reward path can affect mood too, so do not add a separate matching mood action just to imitate old dialogue data.
+Effects accumulate in the server-side session. They are applied only when the player acknowledges a `complete: true` terminal with **Finish conversation**. The engine checks history writability, validates any command, runs the command, applies other actions and records completion. An `end: true` terminal, discarded session or failed commit does not record completion. `mca:hearts` may affect mood too; avoid duplicating that effect.
 
 ## 6. Repeat, pair history, and follow-ups
 
-The `repeat` field is mandatory and supports these exact formats:
-
-```json
-{ "type": "always" }
-{ "type": "once" }
-{ "type": "cooldown", "seconds": 5 }
-{ "type": "cooldown", "min_seconds": 30, "max_seconds": 90 }
-```
-
-Use either `seconds` or the pair `min_seconds`/`max_seconds` for a cooldown, never both. All durations are finite nonnegative seconds, normalized to ticks with `ceil(seconds * 20)`. A range is rolled once on successful completion. Legacy social/reference conversations commonly use five seconds, or 100 ticks at 20 TPS; authored personality conversations use 60–180 seconds for ambient chatter and 300–900 seconds for stories.
+`DialogueEvent.Repeat` handles `always`, `once` and `cooldown` policies. Cooldowns use fixed or ranged seconds, converted to ticks with `ceil(seconds * 20)`. The engine rolls a ranged cooldown once on successful completion. See [repeat policy authoring](dialogue-authoring.md#repeat-policies-and-the-pause-deadline) for JSON formats.
 
 Eligibility and history are scoped to **(player UUID, villager UUID, event ID)**. Successful `story` history records a completion count, latest completion time, next eligible time, and choice IDs from the latest completed run. Repeating the same story with a different reply replaces those remembered choice IDs. Abandoning a run does not rewrite story history.
 
 `history: "scheduling"` records only a cooldown, and expired scheduling records can be pruned. It is valid only with `repeat.type: "cooldown"`. A scheduling-only event cannot be the target of `mca:event_completed` or `mca:event_choice`.
 
-Write follow-ups as separate events. For example, put these requirements in the follow-up to the rain event above:
+Write follow-ups as separate events. For example, a follow-up to the [beginner tutorial's hello event](dialogue-datapack-guide.md#2-write-your-first-conversation) could use:
 
 ```json
 "requirements": [
   {
     "type": "mca:event_completed",
-    "event": "example_addon:weather/rain_chat"
+    "event": "villager_stories:hello_neighbor"
   },
   {
     "type": "mca:event_choice",
-    "event": "example_addon:weather/rain_chat",
-    "choice": "agree_about_rain"
+    "event": "villager_stories:hello_neighbor",
+    "choice": "friendly"
   }
 ]
 ```
@@ -279,7 +140,7 @@ Interact with MCA villager -> normal interaction screen
     <- InteractionDialogueNodeResponse (current complete line Component)
   Choose reply -> InteractionDialogueChoiceMessage
     DialogueEngine.choose(...): validate choice, resolve outcome, advance
-  Next / Back to topics -> InteractionDialogueAdvanceMessage
+  Next / Finish conversation -> InteractionDialogueAdvanceMessage
     DialogueEngine.advance(...): next passage/node, or commit/end
     <- InteractionDialogueNodeResponse (active / paused / ended)
   Leave Talk / close screen -> InteractionDialogueLeaveMessage / InteractionCloseRequest
@@ -290,7 +151,7 @@ Interact with MCA villager -> normal interaction screen
 
 Closing the screen or moving out of range pauses an unfinished run for **2,400 overworld game ticks**. The player can reopen Talk with the same villager and explicitly select the topic-specific continuation. Browsing the menu does not resume or extend the pause. Starting a different valid event abandons it. Paused sessions do not survive logout, server stop, resource reload, permanent villager removal, or the pause deadline. A datapack reload increments `DialogueEvents.generation()` and invalidates stale sessions/offers.
 
-The server sends a complete text Component for each visible passage. `ClientHandlerImpl.DialoguePresentation` reveals one Unicode grapheme every **40 ms**, without extra packets for each character. Replies and `Next`/`Back to topics` appear only after the current passage has finished revealing. Clicking early cannot skip or queue progress; there is no instant-reveal setting. `InteractScreen` renders the grey, non-clickable `Ask about...` section header and the actual selectable topics. Presentation timing does not grant completion or rewards.
+The server sends complete text Components for each passage. `ClientHandlerImpl.DialoguePresentation` reveals one Unicode grapheme every **40 ms**, without per-character packets. Replies, `Next` and **Finish conversation** appear after the passage is fully revealed. Early clicks cannot skip or queue progress. `InteractScreen` renders the five expandable sections and their entries. Presentation timing never grants completion or rewards.
 
 ## 8. Extending functionality in Java
 
@@ -353,6 +214,4 @@ When an event does not appear, inspect the resource ID/path, active pack, reload
 
 For a conversation that ends unexpectedly, distinguish a deliberate `end` terminal from an unsuccessful command commit, expired or invalidated pause, stale offer token, or invalid interaction. A revealed line alone never commits effects.
 
-More examples are in [DialogueEvent authoring](dialogue-authoring.md). [DialogueEvent porting](dialogue-porting.md) describes newer Minecraft API seams, not completed ports. The [design specification](superpowers/specs/2026-10-06-dialogue-event-conversation-system-design.md) includes intentions and proposals; the rules in this guide describe the implemented 1.21.1 code.
-
-Before release, complete the [interactive and multiplayer acceptance checklist](dialogue-release-smoke.md) with evidence from real clients on both loaders. Automated server tests cannot certify those UI and wire-protocol gates.
+For content examples, see [DialogueEvent authoring](dialogue-authoring.md). The [design specification](superpowers/specs/2026-10-06-dialogue-event-conversation-system-design.md) records earlier decisions; the rules here reflect the implemented 1.21.1 code. Real-client and multiplayer testing on both loaders is still required for release confidence; automated server tests alone cannot verify UI and network behavior.

@@ -2,7 +2,7 @@
 
 You can add your own conversations to Minecraft Comes Alive (MCA) without writing Java or building a mod. A dialogue datapack decides **when a villager can say something**, **what they say**, **how the player can answer**, and **what happens after the conversation**.
 
-**Want to try a complete conversation before writing JSON?** The opt-in [DialogueEvent showcase](../testpacks/dialogue-showcase/README.md) includes seven test events with multi-line branches, remembered choices, a gated follow-up, a highlighted first meeting, cooldowns, conditions and weighted ambient conversations. Install its separate datapack and resource pack in a disposable 1.21.1 test world. It is not part of normal MCA content.
+Want to try a conversation first? The optional [DialogueEvent showcase](../testpacks/dialogue-showcase/README.md) includes working examples. Install its datapack and resource pack in a test world; it is not part of normal MCA content.
 
 This guide is for Minecraft **1.21.1** and MCA's **DialogueEvent** system. It starts with a conversation that works for any available MCA villager, then shows how to make it more interesting.
 
@@ -54,11 +54,7 @@ These pack formats are for Minecraft 1.21.1. If you target another Minecraft ver
 
 **Important:** `assets` inside a server datapack is not a replacement for an enabled client resource pack. In multiplayer, the server needs the datapack and each player needs the resource pack (or the server must provide it as a server resource pack).
 
-### NeoForge 1.21.1 compatibility
-
-MCA registers `DialogueEvents` as a **server datapack reload listener** on NeoForge, not as a NeoForge datapack registry. This is intentional: each file is a self-contained conversation that MCA validates and keeps server-side. `/reload` replaces the event snapshot, and normal Minecraft datapack priority determines which version wins when packs define the same resource path.
-
-Use MCA's event-level `requirements` for conditional conversations. NeoForge's separate top-level `neoforge:conditions` format is **not part of the DialogueEvent JSON schema**; adding that field to a conversation is rejected as an unknown field. For optional addons, distribute the dialogue file only when its companion content is installed, or use supported MCA requirements to make it unavailable until a prerequisite exists. See the [NeoForge 1.21.1 codec guide](https://docs.neoforged.net/docs/1.21.1/datastorage/codecs/) for general Mojang codec conventions and the [NeoForge data load conditions guide](https://docs.neoforged.net/docs/1.21.1/resources/server/conditions/) for the separate NeoForge feature.
+On NeoForge, MCA loads these as ordinary server datapack resources. Use MCA `requirements` to restrict when a conversation can appear; the separate `neoforge:conditions` field is not supported in event JSON. See the [developer guide](dialogue-system-guide.md#1-loading-and-validating-events) for loader details.
 
 ## 2. Write your first conversation
 
@@ -70,7 +66,8 @@ Create `data/villager_stories/dialogue_events/hello_neighbor.json` and paste:
   "presentation": {
     "mode": "ask",
     "prompt": "dialogue_event.villager_stories.hello.prompt",
-    "resume_prompt": "dialogue_event.villager_stories.hello.resume"
+    "resume_prompt": "dialogue_event.villager_stories.hello.resume",
+    "topic": "small_talk"
   },
   "repeat": { "type": "cooldown", "seconds": 5 },
   "history": "story",
@@ -108,7 +105,7 @@ Create `data/villager_stories/dialogue_events/hello_neighbor.json` and paste:
 
 What it does:
 
-1. Adds an **Ask about...** topic to an MCA villager's Talk menu.
+1. Adds **How are you doing?** under **Conversations** in an MCA villager's Talk menu.
 2. Lets the villager greet the player.
 3. Offers two player replies, each leading to a different last line.
 4. Gives **2 hearts** for the friendly reply once the player finishes the conversation.
@@ -139,14 +136,14 @@ The JSON event contains **translation keys**, not the displayed sentences. Every
 1. Install a compatible MCA build for Minecraft 1.21.1. Put **Villager Stories** in the world's `datapacks` directory. A world may be a singleplayer save or a multiplayer server world.
 2. Enable **Villager Stories Text** in **Options > Resource Packs** on the client.
 3. Enter the world, run `/datapack list` to check the datapack is enabled, and run `/reload` after adding or editing dialogue JSON. Reload client resources with **F3+T** after editing translations.
-4. Interact with an awake, available **MCA villager**, open **Talk**, then find **How are you doing?** under **Ask about...**.
-5. Pick a reply. Read through to the final line, then click **Back to topics** to finish the conversation and apply any reward.
+4. Interact with an awake, available **MCA villager**, open **Talk**, expand **Conversations** and choose **How are you doing?**.
+5. Pick a reply. On the final line, click **Finish conversation**. This returns you to the topic list and applies any earned reward.
 
 If you quit the Talk screen midway, MCA can offer a topic-specific continuation when you return to that villager. Closing the screen is **not** the same as completing the dialogue.
 
 You can also distribute either pack as a ZIP. Keep `pack.mcmeta`, `data/`, or `assets/` at the **top level of the ZIP**, not inside an extra enclosing folder.
 
-## 5. Make a conversation appear only in the right situation
+## 5. Set conditions
 
 Add a `requirements` array to the **top level** of the event, alongside `trigger` and `presentation`. For example:
 
@@ -159,34 +156,23 @@ Add a `requirements` array to the **top level** of the event, alongside `trigger
 
 Now the event appears only when **both** requirements match: the weather is rain and this villager has at least 20 hearts for the player. Remove the array to return to an always-eligible starter conversation.
 
-Some other useful requirements:
-
-| Condition | Example | Meaning |
-| --- | --- | --- |
-| `mca:time` | `{"type":"mca:time","value":"night"}` | Only at night |
-| `mca:personality` | `{"type":"mca:personality","value":"crabby"}` | Only for crabby villagers |
-| `mca:profession` | `{"type":"mca:profession","value":"minecraft:farmer"}` | Only for farmers |
-| `mca:biome` | `{"type":"mca:biome","values":["minecraft:plains"]}` | Biome IDs or tags; `scope: "current"` (default) or `"home"` |
-| `mca:hearts` | `{"type":"mca:hearts","min":20}` | At least 20 hearts with this player |
-
 You can also put `requirements` on an individual **choice** or **outcome**. This hides or excludes only that reply or outcome, rather than the whole event.
 
-For all available condition types, outcome priorities and complete biome
-selector examples, see the [authoritative authoring guide](dialogue-authoring.md#biome-selectors-and-ordered-outcomes).
+See the [authoring reference](dialogue-authoring.md#requirements) for conditions, including personality, mood, biome and recent gameplay events.
 
-## 6. Pick how the topic appears
+## 6. Choose a mode and topic
 
-Change `presentation.mode` to choose where the event appears:
+`presentation.mode` controls how an event is offered. `presentation.topic` places directly selectable conversations in a Talk section.
 
-| Mode | Where the conversation appears | Good for |
+| Mode | Behavior | Good for |
 | --- | --- | --- |
-| `ask` | Selectable topic under **Ask about...** | Ordinary topics and questions |
-| `highlighted` | Featured conversation; other eligible highlighted stories can still appear in Ask | Something important happening right now |
-| `ambient` | Candidate for **What's on your mind?** | Small talk the villager starts |
+| `ask` | Selectable entry in its topic section | Ordinary topics and questions |
+| `highlighted` | Featured entry in its topic section | Important current stories |
+| `ambient` | Candidate for **What's on your mind?** within Conversations | Random small talk |
 
-`ask` and `highlighted` require a `prompt`. `ambient` does not need a `prompt`, but **every mode requires a `resume_prompt`** so unfinished conversations have a recognizable continuation.
+Talk has five expandable sections: **Conversations**, **Relationships**, **Personal stories**, **Practical matters** and **Other topics**. For example, `"topic": "small_talk"` places the starter event in Conversations. Unknown or missing topics appear in Other topics. Ambient conversations are selected separately within Conversations; `ambient` is a mode, not a topic.
 
-Optional `priority` (default `0`) decides which eligible highlighted story comes first and which ambient priority tier can be picked. Optional positive `weight` (default `1`) controls random selection **among eligible ambient events at the same highest priority**. Changing weight does not override requirements.
+`ask` and `highlighted` require a `prompt`. Every mode requires a `resume_prompt`; `ambient` needs no `prompt`. For exact topic names and selection priority, see [presentation modes](dialogue-authoring.md#presentation-modes).
 
 Tip: start with `ask` while testing. It's easier to verify than a random ambient conversation.
 
@@ -203,41 +189,11 @@ Replace a node's single `line` with `lines` when you want the villager to speak 
 
 Add translations for **both** keys. After those lines, the node still needs exactly one continuation: `next`, `choices`, `complete: true`, or `end: true`.
 
-If one player reply should sometimes go well and sometimes badly, give it weighted `outcomes` instead of a direct `next` and direct `actions`:
-
-```json
-{
-  "id": "tell_joke",
-  "text": "dialogue_event.villager_stories.story.joke",
-  "outcomes": [
-    {
-      "weight": 3,
-      "actions": [{ "type": "mca:hearts", "amount": 2 }],
-      "next": "laughs"
-    },
-    {
-      "weight": 1,
-      "next": "does_not_laugh"
-    }
-  ]
-}
-```
-
-That snippet is **one choice inside a node's `choices` array**. You must also create the `laughs` and `does_not_laugh` nodes and add all referenced translations. The 3-to-1 weights are relative chances among eligible outcomes.
-
-Keep these limits in mind: at most **32 replies per node**, unique choice IDs of at most **96 characters** per event, valid `next` destinations, and **no circular node paths**.
+If one player reply can lead to several reactions, use weighted `outcomes` instead of a direct `next`. The engine filters out ineligible results, keeps the highest-priority eligible tier and then uses `weight` to choose within that tier. See [choices and outcomes](dialogue-authoring.md#choices-and-weighted-outcomes) for a complete example and node limits.
 
 ## 8. Rewards, repeat rules and follow-up stories
 
-Choices or their selected outcomes can apply built-in actions such as:
-
-```json
-{ "type": "mca:hearts", "amount": 3 }
-{ "type": "mca:mood", "amount": -2 }
-{ "type": "mca:remember", "id": "heard_about_storm", "var": "player" }
-```
-
-Place actions inside an `actions` array on the choice or outcome. These are separate examples, **not** one valid JSON document. `mca:command` also exists, but accepts only certain MCA interaction commands, not arbitrary `/` commands. See the developer guide before using it.
+Actions on a choice or its selected outcome can change hearts, mood or memory when the conversation finishes. See the [action reference](dialogue-authoring.md#built-in-actions) for supported types and how to use them.
 
 Every event needs a `repeat` policy:
 
@@ -267,7 +223,7 @@ Use these requirements in a **separate new event file** with its own `presentati
 
 For throwaway small talk with a cooldown, `history: "scheduling"` is an option, but those events cannot be referenced by `event_completed` or `event_choice`.
 
-**Rewards and story history are committed only when the player acknowledges the final `complete: true` line with Back to topics.** Walking away, closing the menu or reaching an `end: true` node does not count as a successful completion.
+**Rewards and story history are saved only when the player selects Finish conversation on a `complete: true` ending.** Walking away, closing the menu or reaching an `end: true` node does not count as successful completion.
 
 ## 9. Why isn't my dialogue showing up?
 
@@ -279,43 +235,8 @@ Check these common problems in order:
 4. **Conditions don't match:** Temporarily remove `requirements` and use `mode: "ask"`. Check villager availability, hearts, personality, weather and time as appropriate.
 5. **Text displays as a key:** Enable the separate client resource pack and check the exact spelling of the translation key in `en_us.json`. Try F3+T.
 6. **The story is unavailable again:** Check `repeat`, a previous completion, or whether you have a paused run with that villager.
-7. **The reward doesn't happen:** Finish at `complete: true` and click **Back to topics**. Verify the action is on the selected choice or outcome.
+7. **The reward doesn't happen:** Finish at `complete: true` and click **Finish conversation**. Verify the action is on the selected choice or outcome.
 
 For examples shipped with MCA, inspect `common/src/main/resources/data/mca/dialogue_events/` in the source repository. Good starting points are `social/joke.json` (choices and reactions), `ambient/crabby_night.json` (context-sensitive small talk), and `personal/cured_zombies_followup.json` (a story that checks an earlier reply).
 
-For every supported condition, action, and field, read the [DialogueEvent developer guide](dialogue-system-guide.md). For additional writing patterns and templates, see the [DialogueEvent authoring guide](dialogue-authoring.md). Both remain separate from this getting-started guide.
-
-## Addon-defined conditions and actions (Java mods)
-
-Datapacks can author arbitrary events, graphs, requirements, choices and effects using **registered** condition/action types. A datapack alone cannot execute new Java behavior. A Fabric or NeoForge addon can register new namespaced types from its common mod initialization code, **before the server loads dialogue datapacks**:
-
-```java
-import com.mojang.serialization.Codec;
-import net.conczin.mca.dialogue.DialogueAction;
-import net.conczin.mca.dialogue.DialogueCondition;
-import net.minecraft.resources.ResourceLocation;
-
-DialogueCondition.register(
-        ResourceLocation.fromNamespaceAndPath("myaddon", "min_experience"),
-        Codec.INT.fieldOf("levels").codec(),
-        (levels, context) -> context.player().experienceLevel >= levels
-                ? DialogueCondition.Evaluation.MATCH
-                : DialogueCondition.Evaluation.NO_MATCH
-);
-DialogueAction.register(
-        ResourceLocation.fromNamespaceAndPath("myaddon", "give_experience"),
-        Codec.INT.fieldOf("levels").codec(),
-        (levels, context) -> context.player().giveExperienceLevels(levels)
-);
-```
-
-Reference those types in `data/myaddon/dialogue_events/my_story.json` (only the relevant fragments are shown):
-
-```json
-"requirements": [{ "type": "myaddon:min_experience", "levels": 5 }],
-"actions": [{ "type": "myaddon:give_experience", "levels": 1 }]
-```
-
-The codec decodes **all fields except `type`** and must encode a JSON object. It is responsible for validating its own parameters. Conditions return `MATCH`, `NO_MATCH`, or `UNAVAILABLE` (for unavailable dependencies); `mca:not` does not invert `UNAVAILABLE` into a match. Addon condition types work in event, choice and outcome requirements, and addon actions work in choices and outcomes. Addon action executors run only on the **logical server** when the conversation's successful completion is committed; effects should be deterministic and avoid throwing after modifying world state.
-
-Registrations are process-wide and are not removed on `/reload`. Duplicate IDs, including MCA built-in IDs, throw during registration. Unregistered types and invalid parameter payloads cause the referencing dialogue event to fail decoding, with the event ID and reason in the server log. Install the implementing addon on the server before enabling the datapack; this is a new API and does not offer adapters for the removed legacy `Actions.register` or `GiftPredicate.register` dialogue formats.
+For the complete JSON format, conditions and writing examples, use the [DialogueEvent authoring reference](dialogue-authoring.md). Addon developers can use the [developer guide](dialogue-system-guide.md).

@@ -1,8 +1,8 @@
 # DialogueEvent authoring guide
 
-MCA conversations are authored as namespaced datapack `DialogueEvent` resources.
-An event owns both its eligibility rules and its conversation graph, so an addon can
-add a complete conversation without Java code.
+Write MCA conversations as namespaced datapack `DialogueEvent` resources. Each event defines when it is available and what happens during the conversation. You don't need Java to add dialogue.
+
+New to datapacks? Start with the [step-by-step tutorial](dialogue-datapack-guide.md). Implementing new conditions or actions in Java? See the [developer guide](dialogue-system-guide.md).
 
 Place resources under:
 
@@ -26,7 +26,8 @@ conversation is offered separately as its authored continuation.
 Talk
   -> paused continuation, if one exists for this pair
   -> evaluate new DialogueEvents
-  -> Conversations: small_talk, location, game, ambient
+  -> Conversations: small_talk, location, game
+     -> What's on your mind? (ambient mode, selected separately)
   -> Relationships: relationship
   -> Personal stories: personal, life_event, introduction
   -> Practical matters: service
@@ -34,10 +35,7 @@ Talk
   -> Back to interaction
 ```
 
-Requirements answer only "may this event/path happen?". `priority` decides which
-eligible event wins a presentation tier. `weight` is randomness only among
-equivalent eligible candidates or outcomes. Do not encode probability as a hard
-condition.
+`requirements` control eligibility. `priority` chooses the eligible tier; `weight` controls the random pick within that tier. Do not use requirements to model probability.
 
 ## Minimal event
 
@@ -88,8 +86,7 @@ new-topic prompt. Every event must provide `resume_prompt`, including ambient
 events, because a paused run needs a specific way back into that exact
 conversation.
 
-`presentation.mode` controls server scheduling, **not** the visible section.
-`presentation.topic` controls the section in the player's Talk menu. Known topics
+`presentation.mode` controls how an event is offered. `presentation.topic` controls its Talk menu section (for directly selectable events). Known topics
 map to Conversations (`small_talk`, `location`, `game`), Relationships
 (`relationship`), Personal stories (`personal`, `life_event`, `introduction`),
 or Practical matters (`service`). Missing, blank, overlong, or unrecognized
@@ -250,9 +247,7 @@ may instead use concise confirmations and direct feedback.
 
 ## Completion, ending, and rewards
 
-`complete: true` means the conversation successfully completes. Its accepted
-choices, completion history, cooldown, and pending actions are committed only when
-the player explicitly selects **Finish conversation** on the terminal line.
+`complete: true` makes a successful ending. The player must select **Finish conversation**, which returns to the topic list, to save their choices, history, cooldown and pending effects.
 
 ```json
 "good_end": {
@@ -305,6 +300,8 @@ an equal `mca:mood` action beside it just to mimic legacy dialogue data, because
 that can double-apply mood changes. Add a separate mood action only when the story
 actually intends an additional mood delta.
 
+`mca:command` accepts these existing interaction commands: `adopt`, `apologize`, `divorcePapers`, `divorceConfirm`, `hire_short`, `hire_long`, `procreate`, `slap`, `stay_in_village`, and `location`. It cannot run arbitrary Minecraft commands; use at most one command action per conversation.
+
 ## Requirements
 
 Event, choice, and outcome requirements are deterministic hard gates. An array is
@@ -327,6 +324,7 @@ Common examples:
 { "type": "mca:time", "value": "night" }
 { "type": "mca:time", "min": 13000, "max": 23000 }
 { "type": "mca:weather", "value": "rain" }
+{ "type": "mca:mourning" }
 { "type": "mca:biome", "values": ["minecraft:plains"] }
 { "type": "mca:biome", "values": ["minecraft:plains", "#mca:forest_biomes"], "scope": "current" }
 { "type": "mca:biome", "values": ["#mca:snowy_biomes"], "scope": "home" }
@@ -334,6 +332,45 @@ Common examples:
 { "type": "mca:village_has_building", "value": "infirmary" }
 { "type": "mca:in_building", "value": "infirmary" }
 ```
+
+### Condition reference
+
+All built-in requirements are shown below. Conditions can be placed at event, choice or outcome level; every condition in an array must match.
+
+| Type | Fields / meaning |
+| --- | --- |
+| `mca:personality` | `value`: registered personality, such as `crabby` |
+| `mca:mood` | `value`: `depressed`, `sad`, `unhappy`, `passive`, `fine`, `happy`, `overjoyed` |
+| `mca:hearts` | `min` and/or `max`: hearts with the player |
+| `mca:relationship` | `value`: `spouse`, `engaged`, `promised`, `romantic_partner`, `single`, `widow` |
+| `mca:family` | `value`: `family`, `relative`, `parent`, `child`, `orphan` |
+| `mca:age_group` | `value`: MCA age group such as `adult` |
+| `mca:profession` | `value`: profession ID such as `minecraft:farmer` |
+| `mca:rank` | `value`: player's rank in the villager's village |
+| `mca:trait` | `value`: registered trait |
+| `mca:health` | `min` and/or `max`: villager health |
+| `mca:infected` | Active infection; optional `min`/`max` progress from 0.0 to 1.0 |
+| `mca:mourning` | Villager currently has an active mourning assignment; no fields |
+| `mca:gender` | `value`: MCA gender |
+| `mca:pregnancy` | Boolean `value`; when true, optional `min_progress`, `max_progress`, `child_gender` |
+| `mca:time` | `value`: `day`/`night`, or `min`/`max` ticks in [0, 24000] |
+| `mca:weather` | `value`: `clear`, `rain` or `thunder` |
+| `mca:biome` | Nonempty `values` list of IDs/tags; `scope`: `current` or `home` |
+| `mca:advancement` | `value`: completed advancement ID |
+| `mca:village_has_building` | `value`: building type in home village |
+| `mca:in_building` | `value`: building type at villager's position |
+| `mca:building_assignment` | `value`: building type; `source`: `home` (default) or `workplace` |
+| `mca:item` / `mca:tag` | `value`: item or tag ID; optional inventory `min`/`max` |
+| `mca:inventory` | Exactly one `item` or `tag` ID; optional inventory `min`/`max` |
+| `mca:memory` | `id`: memory; optional `var: "player"`, `present` (default true) |
+| `mca:recent_event` | `event`: registered life-event ID; optional `within_ticks` |
+| `mca:hit_by` | Villager was hit by this player; no fields |
+| `mca:village_has_space` | Space in player's last-seen village; no fields |
+| `mca:event_completed` | `event`: completed `story` ID for this pair |
+| `mca:event_choice` | `event` and `choice`: latest completed story choice ID |
+| `mca:not` | `condition`: nested condition to negate |
+
+Numeric bounds are inclusive. Hearts/health need at least one bound; inventory counts default to at least one. Time ranges use day time modulo 24,000. `mca:memory` with `present: false` checks for an absent memory; `var: "player"` checks player-scoped memory. A missing dependency is unavailable, even when wrapped in `mca:not`.
 
 `mca:infected` requires an active infection. Its optional inclusive `min`/`max`
 bounds use infection progress from `0.0` to `1.0` (for example, `0.2` is 20%).
@@ -361,9 +398,7 @@ without a home uses its current biome instead; a known home in an inaccessible
 chunk produces an unavailable result, not a forced chunk load. Use neutral
 wording if the same line can be spoken by a villager with no home.
 
-For dialogue **outcomes**, optional integer `priority` defaults to `0`. The
-engine chooses the highest-priority eligible outcome, then uses `weight` among
-that tier. This is separate from the event's top-level `priority`.
+For dialogue **outcomes**, optional integer `priority` defaults to `0`. Selection has three steps: discard outcomes whose requirements do not match, keep the highest-priority eligible tier, then choose within it using positive `weight`. This is separate from the event's top-level `priority`.
 
 ```json
 {
@@ -393,8 +428,7 @@ Negate a known condition explicitly:
 Missing or unavailable referenced data stays unavailable under `mca:not`; it does
 not become an accidental match.
 
-Recent gameplay facts use their authoritative gameplay producer, not conversation
-history:
+Recent gameplay facts come from the game's recorded events, not dialogue history:
 
 ```json
 {
@@ -404,7 +438,7 @@ history:
 }
 ```
 
-Use only registered recent-event IDs. The engine does not invent facts such as
+Registered IDs are `mca:relative_death`, `mca:attacked`, `mca:zombified`, `mca:cured`, `mca:revived` and `mca:raid_survived`. Use only registered recent-event IDs. The engine does not invent facts such as
 "recently mourned", "recently cured", or "recently revived" just because a
 conversation wants them.
 
@@ -684,33 +718,7 @@ one Unicode-safe grapheme every **40 ms**. This is presentation only: there is n
 network packet per character, no instant-reveal control, and clicking during reveal
 does not skip, accelerate, advance, or queue an advance.
 
-For a multi-line node, `Next` appears only after the current passage is fully
-revealed and advances to the next authored passage. Player replies appear only
-after the final passage is fully revealed. A terminal completing/ending line uses
-`Back to topics`, not a generic `Continue`; that final acknowledgement is the
-server-authoritative commit boundary for completion/history/cooldown/pending
-effects.
-
-## Stardew Valley inspiration, not Stardew behavior
-
-Useful references:
-
-- [Stardew Valley dialogue modding](https://stardewvalleywiki.com/Modding:Dialogue)
-- [Stardew Valley event data](https://stardewvalleywiki.com/Modding:Event_data)
-
-MCA borrows stable event IDs, explicit prerequisites, remembered choices, event
-history, and inspectable selection. It does **not** copy Stardew's location-owned
-event model, event command language, or automatic answered-question suppression.
-
-Stardew's documented `$q`/`$r`/`$p` dialogue mechanisms can suppress or replace an
-answered question and later check a remembered reply. MCA instead models this with
-repeatable pair-scoped `DialogueEvent` stories plus separately authored follow-up
-events using `event_completed` and `event_choice`.
-
-That difference is intentional: an MCA story can become eligible again after its
-authored cooldown while its latest completed reply remains available to later
-stories. If you do not want repetition, opt into `repeat: { "type": "once" }`
-explicitly rather than assuming Stardew-style answered-question suppression.
+For a multi-line node, `Next` appears after the current passage is fully revealed and advances to the next passage. Replies appear after the final passage. A terminal shows **Finish conversation** and returns the player to the topic list. The server commits history, cooldown and pending effects only if that terminal has `complete: true`; `end: true` closes without completion.
 
 ## Author checklist
 
@@ -736,7 +744,7 @@ Before submitting an event, check that:
   or raid survival come from an authoritative condition owner;
 - actions are necessary, server-owned, and cannot be applied twice through an
   equivalent legacy effect;
-- completion is intended to commit only after the final `Back to topics`
+- completion is intended to commit only after the final `Finish conversation`
   acknowledgement.
 
 ## Personality story examples

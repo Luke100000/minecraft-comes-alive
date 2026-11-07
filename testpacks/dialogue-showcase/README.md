@@ -11,8 +11,8 @@ An **opt-in development fixture**, not shipped with normal MCA. It makes multi-l
 
 | What to test | In-game steps | Expected result |
 | --- | --- | --- |
-| Highlighted + once | First Talk with a fresh villager/player pair | **You look like you have something to say...** is highlighted. Finish its two-line branches with **Back to topics**; it then disappears for this pair. |
-| Full conversation | Talk → Ask about... → **Ask about the old bridge** | Three opening lines, three natural replies, and two ending lines per reply. |
+| Highlighted + once | First Talk with a fresh villager/player pair | **You look like you have something to say...** is highlighted. Finish its two-line branches with **Finish conversation**; it then disappears for this pair. |
+| Full conversation | Talk → expand **Personal stories** → **Ask about the old bridge** | Three opening lines, three natural replies, and two ending lines per reply. |
 | Rewards | Complete the bridge with **No. Tell me what those days were like.** | **+5 hearts** on final acknowledgement only; neutral = 0; dismissive = -5. Closing early does not commit rewards. |
 | Choice history | Finish bridge with the **listen** reply | Follow-up **Ask about the bridge again** appears because it requires completion and that particular choice. |
 | Latest choice | After 5 seconds, repeat and complete bridge with **dismiss** | The listening-dependent follow-up disappears. An abandoned replay must not replace completed choice history. |
@@ -29,6 +29,6 @@ An **opt-in development fixture**, not shipped with normal MCA. It makes multi-l
 
 **Quick tour:** complete highlighted welcome, play bridge with **listen**, finish and open its follow-up, wait 5 seconds, replay bridge with **dismiss**, verify the follow-up disappears; try the same with a second villager.
 
-This pack does not fabricate real zombie cure, mourning, raid, infirmary, prison, or resurrection facts. Those require natural gameplay for condition tests. Real authenticated multiplayer, actual forged network traffic, and both loader GUIs still require the [release checklist](../../docs/dialogue-release-smoke.md); this fixture is not proof of those checks.
+This pack does not fabricate real zombie cure, mourning, raid, infirmary, prison, or resurrection facts. Those require natural gameplay for condition tests. Multiplayer behavior, forged network traffic and both loader GUIs need separate testing; this fixture does not verify them. See the [developer guide](../../docs/dialogue-system-guide.md#9-testing-and-troubleshooting).
 
 Uninstall by disabling/removing the datapack and resource pack. Saved history may remain in a test world, so use another player/villager pair or fresh test world for first-contact testing. See [datapack guide](../../docs/dialogue-datapack-guide.md) for event authoring.
