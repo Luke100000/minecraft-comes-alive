@@ -27,6 +27,12 @@ class DialogueOverlayLayoutTest {
         assertInside(result.menu(), 640, 360);
     }
 
+    @Test
+    void paperTailIsOnlySafeToDrawWhenClearOfTheMenu() {
+        assertTrue(DialogueOverlayLayout.calculate(640, 360, 140, 75).canShowTail());
+        assertFalse(DialogueOverlayLayout.calculate(320, 240, 160, 65).canShowTail());
+    }
+
     private static void assertInsideAndSeparated(int width, int height, int menuHeight, int bubbleHeight) {
         DialogueOverlayLayout.Geometry result = DialogueOverlayLayout.calculate(width, height, menuHeight, bubbleHeight);
         assertInside(result.menu(), width, height);

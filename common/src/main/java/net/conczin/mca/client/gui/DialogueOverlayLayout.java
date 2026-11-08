@@ -36,5 +36,8 @@ final class DialogueOverlayLayout {
     }
 
     record Geometry(Rect menu, Rect bubble) {
+        boolean canShowTail() {
+            return bubble.height() > 0 && bubble.bottom() + 24 <= menu.y();
+        }
     }
 }

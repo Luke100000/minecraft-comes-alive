@@ -35,9 +35,7 @@ import java.util.stream.Collectors;
 
 public class InteractScreen extends AbstractDynamicScreen {
     public static final ResourceLocation ICON_TEXTURES = MCA.locate("textures/gui.png");
-    private static final int PAPER = 0xFFE6C995;
     private static final int INK = 0xFF292018;
-    private static final int MENU = 0xEE201917;
     private static final int FRAME = 0xFF67452F;
     private static final int GOLD = 0xFFD7A34D;
     private static final int CREAM = 0xFFEEE2D2;
@@ -54,8 +52,7 @@ public class InteractScreen extends AbstractDynamicScreen {
     private RelationshipState marriageState;
     private Component spouse;
     private boolean dialogueMode;
-    private final EnumSet<DialogueTopicSection> expandedSections =
-            EnumSet.of(DialogueTopicSection.CONVERSATIONS, DialogueTopicSection.RELATIONSHIPS);
+    private final EnumSet<DialogueTopicSection> expandedSections = EnumSet.noneOf(DialogueTopicSection.class);
     private final List<DialogueHit> dialogueHits = new ArrayList<>();
     private int dialogueScroll;
     private int dialogueRowsHeight;
@@ -437,8 +434,6 @@ public class InteractScreen extends AbstractDynamicScreen {
         dialogueMode = true;
         if (showOpening) {
             expandedSections.clear();
-            expandedSections.add(DialogueTopicSection.CONVERSATIONS);
-            expandedSections.add(DialogueTopicSection.RELATIONSHIPS);
         }
         dialogueHits.clear();
         dialogueScroll = 0;
@@ -527,11 +522,17 @@ public class InteractScreen extends AbstractDynamicScreen {
         boolean preview = presentation.hasPreview() && !presentation.nodeVisible();
         if (!presentation.nodeVisible()) {
             presentation.options().ifPresent(options -> {
+                DialogueMenuOrdering.Selection<InteractionDialogueOptionsResponse.EventOption> selected =
+                        DialogueMenuOrdering.split(options.eventOptions(),
+                                option -> option.mode() == InteractionDialogueOptionsResponse.Mode.HIGHLIGHTED);
+                selected.featured().ifPresent(option -> rows.add(new DialogueRow(option.prompt(),
+                        new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.EVENT, option.id(), null),
+                        true, -1)));
                 options.continuation().ifPresent(prompt -> rows.add(new DialogueRow(
                         Component.translatable("gui.dialogue.resume_topic", prompt),
                         new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.RESUME, null, null))));
                 for (DialogueTopicSection section : DialogueTopicSection.values()) {
-                    List<InteractionDialogueOptionsResponse.EventOption> group = options.eventOptions().stream()
+                    List<InteractionDialogueOptionsResponse.EventOption> group = selected.remaining().stream()
                             .filter(option -> DialogueTopicSection.fromTopic(option.topic()) == section)
                             .toList();
                     boolean ambient = section == DialogueTopicSection.CONVERSATIONS && options.ambientAvailable();
@@ -541,13 +542,13 @@ public class InteractScreen extends AbstractDynamicScreen {
                     boolean expanded = expandedSections.contains(section);
                     rows.add(new DialogueRow(Component.translatable(section.label).copy()
                             .append(expanded ? " ▾" : " ▸"),
-                            new DialogueClick(DialogueClickKind.TOGGLE_SECTION, null, null, section.name())));
+                            new DialogueClick(DialogueClickKind.TOGGLE_SECTION, null, null, section.name()), false,
+                            section.ordinal()));
                     if (!expanded) {
                         continue;
                     }
                     for (InteractionDialogueOptionsResponse.EventOption option : group) {
-                        Component label = Component.literal(option.mode() == InteractionDialogueOptionsResponse.Mode.HIGHLIGHTED
-                                ? "  ★ " : "    ").append(option.prompt());
+                        Component label = Component.literal("    ").append(option.prompt());
                         rows.add(new DialogueRow(label,
                                 new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.EVENT, option.id(), null)));
                     }
@@ -587,21 +588,22 @@ public class InteractScreen extends AbstractDynamicScreen {
     }
 
     private int dialoguePanelWidth() {
-        return Math.min(Math.max(1, width - 24), 560);
+        return DialogueOverlayLayout.calculate(width, height, FOOTER_HEIGHT + 20, 0).menu().width();
     }
 
-    private int dialoguePaperHeight(ClientHandlerImpl.DialoguePresentation presentation, int panelWidth) {
+    private int dialoguePaperHeight(ClientHandlerImpl.DialoguePresentation presentation) {
         if (!presentation.nodeVisible() && !presentation.hasPreview()) {
             return 0;
         }
-        return Math.max(43, font.split(presentation.fullLine(), Math.max(1, panelWidth - 28)).size() * 10 + 22);
+        int bubbleWidth = DialogueOverlayLayout.calculate(width, height, FOOTER_HEIGHT + 20, 1).bubble().width();
+        return Math.max(70, font.split(presentation.fullLine(), Math.max(1, bubbleWidth - 26)).size() * 10 + 44);
     }
 
     private int dialogueTargetHeight(ClientHandlerImpl.DialoguePresentation presentation) {
         int panelWidth = dialoguePanelWidth();
         List<DialogueRow> rows = dialogueRows(presentation);
         int listHeight = rows.isEmpty() ? 0 : rows.stream().mapToInt(row -> dialogueRowHeight(row, panelWidth)).sum() + 10;
-        int desiredHeight = dialoguePaperHeight(presentation, panelWidth) + listHeight + FOOTER_HEIGHT;
+        int desiredHeight = listHeight + FOOTER_HEIGHT;
         int maximumHeight = Math.max(FOOTER_HEIGHT + 20, Math.min(height - 54, height * 3 / 5));
         return Math.min(maximumHeight, Math.max(FOOTER_HEIGHT + 20, desiredHeight));
     }
@@ -633,9 +635,6 @@ public class InteractScreen extends AbstractDynamicScreen {
             dialogueTokenTracked = true;
         }
 
-        int panelWidth = dialoguePanelWidth();
-        int left = (width - panelWidth) / 2;
-        int bottom = height - 34;
         int target = dialogueTargetHeight(presentation);
         if (!presentation.nodeVisible()) {
             dialogueStoryHeight = 0;
@@ -656,49 +655,59 @@ public class InteractScreen extends AbstractDynamicScreen {
             dialogueHeightStartedAt = nowMillis;
         }
         int panelHeight = Math.round(animatedDialogueHeight(nowMillis));
-        int top = bottom - panelHeight;
+        int paperDesired = dialoguePaperHeight(presentation);
+        DialogueOverlayLayout.Geometry layout = DialogueOverlayLayout.calculate(width, height, panelHeight, paperDesired);
+        DialogueOverlayLayout.Rect menu = layout.menu();
+        DialogueOverlayLayout.Rect bubble = layout.bubble();
+        int left = menu.x();
+        int top = menu.y();
+        int bottom = menu.bottom();
+        int panelWidth = menu.width();
         List<DialogueRow> rows = dialogueRows(presentation);
-        int paperDesired = dialoguePaperHeight(presentation, panelWidth);
-        int availableContent = Math.max(0, panelHeight - FOOTER_HEIGHT);
-        int paperHeight = paperDesired == 0 ? 0 : Math.min(availableContent,
-                Math.min(paperDesired, Math.max(20, availableContent - (rows.isEmpty() ? 0 : 26))));
         int footerTop = bottom - FOOTER_HEIGHT;
-        int menuTop = top + paperHeight;
 
-        context.fill(left - 2, top - 2, left + panelWidth + 2, bottom + 2, FRAME);
-        if (paperHeight > 0) {
-            context.fill(left, top, left + panelWidth, menuTop, PAPER);
-            context.fill(left + 5, top + 4, left + 7, menuTop - 3, GOLD);
-            int textTop = top + 9;
-            int textBottom = menuTop - 6;
+        if (bubble.height() > 0) {
+            DialogueSkin.drawFrame(context, DialogueSkin.PAPER, bubble.x(), bubble.y(),
+                    bubble.width(), bubble.height());
+            if (layout.canShowTail()) {
+                DialogueSkin.drawTail(context, bubble.x() + 25, bubble.bottom() - 2);
+            }
+            int dividerY = bubble.y() + (bubble.height() < 60 ? 19 : 27);
+            context.enableScissor(bubble.x() + 11, bubble.y() + 5,
+                    bubble.right() - 11, dividerY - 2);
+            context.drawString(font, villager.asEntity().getName(), bubble.x() + 12,
+                    bubble.y() + 7, INK, false);
+            context.disableScissor();
+            context.fill(bubble.x() + 11, dividerY, bubble.right() - 11, dividerY + 1, FRAME);
+
+            int textTop = dividerY + 6;
+            int textBottom = bubble.bottom() - 8;
             if (textBottom > textTop) {
-                List<FormattedCharSequence> lines = font.split(presentation.visibleLine(), Math.max(1, panelWidth - 28));
+                List<FormattedCharSequence> lines = font.split(presentation.visibleLine(), Math.max(1, bubble.width() - 26));
                 int totalTextHeight = lines.size() * 10;
                 int scrollLimit = Math.max(0, totalTextHeight - (textBottom - textTop));
                 dialoguePassageScroll = Mth.clamp(dialoguePassageScroll, 0, scrollLimit);
-                dialoguePassageViewport = new DialogueViewport(left, top,
-                        left + panelWidth, menuTop, scrollLimit);
-                context.enableScissor(left + 10, textTop, left + panelWidth - 8, textBottom);
+                dialoguePassageViewport = new DialogueViewport(bubble.x(), bubble.y(),
+                        bubble.right(), bubble.bottom(), scrollLimit);
+                context.enableScissor(bubble.x() + 11, textTop, bubble.right() - 8, textBottom);
                 int y = textTop - dialoguePassageScroll;
                 for (FormattedCharSequence line : lines) {
-                    context.drawString(font, line, left + 14, y, INK, false);
+                    context.drawString(font, line, bubble.x() + 13, y, INK, false);
                     y += 10;
                 }
                 context.disableScissor();
                 if (dialoguePassageScroll > 0) {
-                    context.drawString(font, "▲", left + panelWidth - 17, textTop, INK);
+                    context.drawString(font, "▲", bubble.right() - 17, textTop, INK);
                 }
                 if (dialoguePassageScroll < scrollLimit) {
-                    context.drawString(font, "▼", left + panelWidth - 17, textBottom - 10, INK);
+                    context.drawString(font, "▼", bubble.right() - 17, textBottom - 10, INK);
                 }
             }
         }
-        context.fill(left, menuTop, left + panelWidth, bottom, MENU);
-        if (paperHeight > 0) {
-            context.fill(left, menuTop, left + panelWidth, menuTop + 2, FRAME);
-        }
 
-        int clipTop = menuTop + 5;
+        DialogueSkin.drawFrame(context, DialogueSkin.MENU, left, top, panelWidth, menu.height());
+
+        int clipTop = top + 7;
         int clipBottom = footerTop - 3;
         if (!rows.isEmpty() && clipBottom > clipTop) {
             dialogueRowsHeight = rows.stream().mapToInt(row -> dialogueRowHeight(row, panelWidth)).sum();
@@ -734,29 +743,41 @@ public class InteractScreen extends AbstractDynamicScreen {
     }
 
     private int dialogueRowHeight(DialogueRow row, int panelWidth) {
-        return Math.max(22, font.split(row.text(), Math.max(1, panelWidth - 30)).size() * 10 + 10);
+        int iconInset = row.featured() || row.iconIndex() >= 0 ? 24 : 0;
+        return Math.max(24, font.split(row.text(), Math.max(1, panelWidth - 30 - iconInset)).size() * 10 + 10);
     }
 
     private int drawDialogueRow(GuiGraphics context, DialogueRow row,
                                 int left, int panelWidth, int y, int clipTop, int clipBottom) {
-        List<FormattedCharSequence> lines = font.split(row.text(), Math.max(1, panelWidth - 30));
+        int iconInset = row.featured() || row.iconIndex() >= 0 ? 24 : 0;
+        List<FormattedCharSequence> lines = font.split(row.text(), Math.max(1, panelWidth - 30 - iconInset));
         int rowHeight = dialogueRowHeight(row, panelWidth);
         int hitTop = Math.max(y, clipTop);
         int hitBottom = Math.min(y + rowHeight - 2, clipBottom);
         boolean clickable = row.click() != null && hitBottom > hitTop;
         boolean hover = clickable && hoveringOver(left + 8, hitTop, panelWidth - 16, hitBottom - hitTop);
         boolean focused = clickable && dialogueKeyboardIndex == dialogueHits.size();
-        if (clickable) {
+        if (row.featured()) {
+            DialogueSkin.drawFrame(context, DialogueSkin.FEATURED, left + 8, y + 1,
+                    panelWidth - 16, rowHeight - 2);
+            if ((hover || focused) && hitBottom - hitTop > 4) {
+                context.fill(left + 12, hitTop + 2, left + panelWidth - 12, hitBottom - 2, 0x55D7A34D);
+            }
+        } else if (clickable) {
             context.fill(left + 8, hitTop, left + panelWidth - 8, hitBottom,
                     hover || focused ? 0xCC67452F : 0x88402D24);
             if (hover || focused) {
                 context.fill(left + 8, hitTop, left + 11, hitBottom, GOLD);
             }
         }
+        if (iconInset > 0) {
+            DialogueSkin.drawIcon(context, row.featured() ? 5 : row.iconIndex(),
+                    left + 14, y + (rowHeight - 16) / 2);
+        }
         int textHeight = (lines.size() - 1) * 10 + font.lineHeight;
         int lineY = y + (rowHeight - textHeight) / 2;
         for (FormattedCharSequence line : lines) {
-            context.drawString(font, line, left + 16, lineY,
+            context.drawString(font, line, left + 16 + iconInset, lineY,
                     hover || focused ? GOLD : CREAM);
             lineY += 10;
         }
@@ -889,7 +910,10 @@ public class InteractScreen extends AbstractDynamicScreen {
             String choiceId
     ) { }
 
-    private record DialogueRow(Component text, DialogueClick click) {
+    private record DialogueRow(Component text, DialogueClick click, boolean featured, int iconIndex) {
+        DialogueRow(Component text, DialogueClick click) {
+            this(text, click, false, -1);
+        }
     }
 
     private record DialogueHit(int left, int top, int right, int bottom, DialogueClick click) {
