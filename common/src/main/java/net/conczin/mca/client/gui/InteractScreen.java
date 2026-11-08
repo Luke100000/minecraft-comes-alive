@@ -937,10 +937,25 @@ public class InteractScreen extends AbstractDynamicScreen {
             if ((hover || focused) && hitBottom - hitTop > 4) {
                 context.fill(left + 12, hitTop + 2, left + panelWidth - 12, hitBottom - 2, 0x55D7A34D);
             }
-        } else if (hover || focused) {
-            // Resting rows share the menu's dark surface instead of painting a second background.
-            context.fill(left + 8, hitTop, left + panelWidth - 8, hitBottom, 0xCC825133);
-            context.fill(left + 8, hitTop, left + 11, hitBottom, GOLD);
+        } else if (clickable) {
+            // Give choices a subtle inset surface while leaving gaps of dark menu between rows.
+            // Section toggles are quieter than choices, and read-only history stays unboxed.
+            int surfaceLeft = left + 8;
+            int surfaceRight = left + panelWidth - 8;
+            int surfaceTop = y + 1;
+            int surfaceBottom = y + rowHeight - 2;
+            boolean highlighted = hover || focused;
+            int fill = highlighted ? 0xFF805032
+                    : row.iconIndex() >= 0 ? 0xFF362318 : 0xFF422B1C;
+            int border = highlighted ? 0xFFD7A76B : 0xFF71513A;
+            context.fill(surfaceLeft, surfaceTop, surfaceRight, surfaceBottom, fill);
+            context.fill(surfaceLeft, surfaceTop, surfaceRight, surfaceTop + 1, border);
+            context.fill(surfaceLeft, surfaceBottom - 1, surfaceRight, surfaceBottom, border);
+            context.fill(surfaceLeft, surfaceTop, surfaceLeft + 1, surfaceBottom, border);
+            context.fill(surfaceRight - 1, surfaceTop, surfaceRight, surfaceBottom, border);
+            if (highlighted) {
+                context.fill(surfaceLeft + 1, surfaceTop + 1, surfaceLeft + 3, surfaceBottom - 1, GOLD);
+            }
         }
         int iconSize = dialoguePixels(12);
         int glyphHeight = dialoguePixels(font.lineHeight - 1);
@@ -992,9 +1007,17 @@ public class InteractScreen extends AbstractDynamicScreen {
     private void drawDialogueAction(GuiGraphics context, DialogueRow row, int x, int y, int w, int h) {
         boolean hover = hoveringOver(x, y, w, h);
         boolean focused = dialogueKeyboardIndex == dialogueHits.size();
-        if (hover || focused) {
-            context.fill(x, y, x + w, y + h, 0x663D3027);
-        }
+        int actionLeft = x + 3;
+        int actionTop = y + 3;
+        int actionRight = x + w - 3;
+        int actionBottom = y + h - 3;
+        context.fill(actionLeft, actionTop, actionRight, actionBottom,
+                hover || focused ? 0xFF68432A : 0xFF332016);
+        int border = hover || focused ? 0xFFB38855 : 0xFF654733;
+        context.fill(actionLeft, actionTop, actionRight, actionTop + 1, border);
+        context.fill(actionLeft, actionBottom - 1, actionRight, actionBottom, border);
+        context.fill(actionLeft, actionTop, actionLeft + 1, actionBottom, border);
+        context.fill(actionRight - 1, actionTop, actionRight, actionBottom, border);
         String fullText = row.text().getString();
         int space = fullText.indexOf(' ');
         String key = space > 0 ? fullText.substring(0, space) : fullText;
