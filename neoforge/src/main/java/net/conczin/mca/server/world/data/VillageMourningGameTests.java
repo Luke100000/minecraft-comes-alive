@@ -8,6 +8,7 @@ import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.MoodGroup;
 import net.conczin.mca.entity.ai.Mourning;
+import net.conczin.mca.util.InventoryUtils;
 import net.conczin.mca.entity.ai.SchedulesMCA;
 import net.conczin.mca.entity.ai.brain.tasks.EnterGraveyardTask;
 import net.conczin.mca.entity.ai.brain.tasks.GrieveTask;
@@ -34,6 +35,7 @@ import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.schedule.Activity;
+import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
@@ -112,6 +114,7 @@ public final class VillageMourningGameTests {
     @GameTest(batch = "mca_mourning_long_distance", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void personalMourningDoesNotLoadDistantGraveChunk(GameTestHelper helper) {
         VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(3, 1, 1), "Distant Personal Mourner");
+        makeAwake(mourner);
         BlockPos grave = mourner.blockPosition().offset(4_096, 0, 4_096);
         helper.assertTrue(!helper.getLevel().isLoaded(grave),
                 "fixture requires the assigned grave chunk to start unloaded");
@@ -135,6 +138,7 @@ public final class VillageMourningGameTests {
         prepareFlatArea(helper, grave, 3, 3);
         occupyGrave(helper, grave);
         VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(4, 1, 3), "Interrupted Mourner");
+        makeAwake(mourner);
 
         Mourning.start(mourner, grave);
         EnterGraveyardTask enter = new EnterGraveyardTask();
@@ -255,6 +259,7 @@ public final class VillageMourningGameTests {
         occupyGrave(helper, grave);
         VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(1, 1, 3), "Combat Interrupted Mourner");
         VillagerEntityMCA threat = spawnVillager(helper, new BlockPos(1, 1, 5), "Combat Interruption Probe");
+        makeAwake(mourner);
 
         Mourning.start(mourner, grave);
         mourner.getBrain().tick(helper.getLevel(), mourner);
@@ -296,6 +301,7 @@ public final class VillageMourningGameTests {
         prepareFlatArea(helper, grave, 3, 3);
         occupyGrave(helper, grave);
         VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(4, 1, 3), "Flower Ownership Mourner");
+        makeAwake(mourner);
         mourner.setItemInHand(InteractionHand.MAIN_HAND, Items.IRON_SWORD.getDefaultInstance());
 
         Mourning.start(mourner, grave);
@@ -311,6 +317,9 @@ public final class VillageMourningGameTests {
         restore.doStop(helper.getLevel(), mourner, helper.getLevel().getGameTime() + 1L);
         helper.assertTrue(mourner.getMainHandItem().is(Items.IRON_SWORD),
                 "stopping mourning while the flower still owns the hand must restore the previous item");
+        helper.assertTrue(InventoryUtils.stream(mourner.getInventory())
+                        .noneMatch(stack -> stack.is(Items.IRON_SWORD) && stack != mourner.getMainHandItem()),
+                "restoring mourning equipment created a second sword");
 
         Mourning.start(mourner, grave);
         EnterGraveyardTask secondEnter = new EnterGraveyardTask();
@@ -338,6 +347,7 @@ public final class VillageMourningGameTests {
         VillagerEntityMCA reloaded = VillagerFactory.newVillager(helper.getLevel()).build();
         reloaded.load(saved);
         reloaded.refreshBrain(helper.getLevel());
+        makeAwake(reloaded);
         reloaded.getBrain().setActiveActivityIfPossible(ActivitiesMCA.GRIEVE);
 
         helper.assertTrue(reloaded.getBrain().getMemoryInternal(MemoryModuleTypeMCA.MOURNING_PREVIOUS_MAIN_HAND)
@@ -483,8 +493,13 @@ public final class VillageMourningGameTests {
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void mourningStartClearsCompetingInteractionState(GameTestHelper helper) {
         BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
+        helper.getLevel().getEntitiesOfClass(Monster.class, new AABB(grave).inflate(9.0D, 6.0D, 9.0D))
+                .forEach(Monster::discard);
         VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(3, 1, 1), "Mourning State Probe");
         VillagerEntityMCA target = spawnVillager(helper, new BlockPos(4, 1, 1), "Mourning State Target");
+        makeAwake(mourner);
+        helper.assertTrue(!Mourning.isTemporarilyBlocked(mourner) && Mourning.isSafeToMourn(helper.getLevel(), grave),
+                "mourning fixture must allow the activity to start");
         mourner.getBrain().setMemory(MemoryModuleType.BREED_TARGET, target);
         mourner.getBrain().setMemory(MemoryModuleType.INTERACTION_TARGET, target);
 
@@ -501,6 +516,7 @@ public final class VillageMourningGameTests {
     public static void distantMourningKeepsRealDestination(GameTestHelper helper) {
         VillagerEntityMCA deceased = spawnVillager(helper, new BlockPos(6, 1, 1), "Distant Deceased Probe");
         VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(3, 1, 1), "Distant Mourner Probe");
+        makeAwake(mourner);
         BlockPos start = mourner.blockPosition();
         int pathfindingDistance = Config.getInstance().getVillagerPathfindingDistance();
         BlockPos grave = start.east(pathfindingDistance + 32);
@@ -534,6 +550,7 @@ public final class VillageMourningGameTests {
         VillagerEntityMCA work = spawnVillager(helper, new BlockPos(3, 1, 1), "Work Mourning Probe");
         VillagerEntityMCA rest = spawnVillager(helper, new BlockPos(4, 1, 1), "Rest Mourning Probe");
         VillagerEntityMCA chore = spawnVillager(helper, new BlockPos(5, 1, 1), "Chore Mourning Probe");
+        List.of(idle, meet, work, rest, chore).forEach(VillageMourningGameTests::makeAwake);
         GlobalPos poi = GlobalPos.of(helper.getLevel().dimension(), helper.absolutePos(new BlockPos(2, 1, 2)));
 
         meet.getBrain().setMemory(MemoryModuleType.MEETING_POINT, poi);
@@ -556,6 +573,7 @@ public final class VillageMourningGameTests {
         BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
         VillagerEntityMCA deceased = spawnVillager(helper, new BlockPos(6, 1, 1), "Retry Deceased Probe");
         VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(3, 1, 1), "Retry Mourner Probe");
+        makeAwake(mourner);
         helper.getLevel().setBlock(grave.below(), Blocks.STONE.defaultBlockState(), 3);
         helper.getLevel().setBlock(grave, BlocksMCA.CROSS_HEADSTONE.defaultBlockState(), 3);
         TombstoneBlock.Data.of(helper.getLevel().getBlockEntity(grave)).orElseThrow().setEntity(deceased);
@@ -615,14 +633,19 @@ public final class VillageMourningGameTests {
     public static void witnessedDeathStartsSmallVisibleMourningGroup(GameTestHelper helper) {
         BlockPos grave = helper.absolutePos(new BlockPos(1, 1, 1));
         VillagerEntityMCA deceased = spawnVillager(helper, new BlockPos(6, 1, 1), "Witnessed Death Probe");
-        List.of(
+        List<VillagerEntityMCA> witnesses = List.of(
                 spawnVillager(helper, new BlockPos(2, 1, 3), "Witness Mourner 1"),
                 spawnVillager(helper, new BlockPos(3, 1, 3), "Witness Mourner 2"),
                 spawnVillager(helper, new BlockPos(4, 1, 3), "Witness Mourner 3"),
                 spawnVillager(helper, new BlockPos(5, 1, 3), "Witness Mourner 4")
         );
+        witnesses.forEach(VillageMourningGameTests::makeAwake);
+        helper.getLevel().getEntitiesOfClass(Monster.class, new AABB(grave).inflate(9.0D, 6.0D, 9.0D))
+                .forEach(Monster::discard);
         helper.getLevel().setBlock(grave, BlocksMCA.CROSS_HEADSTONE.defaultBlockState(), 3);
         TombstoneBlock.Data.of(helper.getLevel().getBlockEntity(grave)).orElseThrow().setEntity(deceased);
+        helper.assertTrue(Mourning.isSafeToMourn(helper.getLevel(), grave),
+                "witness fixture requires a safe grave");
 
         List<VillagerEntityMCA> eligibleWitnesses = helper.getLevel()
                 .getEntitiesOfClass(VillagerEntityMCA.class, deceased.getBoundingBox().inflate(32.0D))
@@ -662,6 +685,8 @@ public final class VillageMourningGameTests {
         Player followedPlayer = helper.makeMockPlayer(GameType.SURVIVAL);
         VillagerEntityMCA follower = spawnVillager(helper, new BlockPos(3, 1, 1), "Following Mourner Probe");
         VillagerEntityMCA staying = spawnVillager(helper, new BlockPos(4, 1, 1), "Staying Mourner Probe");
+        makeAwake(follower);
+        makeAwake(staying);
 
         follower.getBrain().setMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING, followedPlayer);
         staying.getBrain().setMemory(MemoryModuleTypeMCA.STAYING, true);
@@ -939,25 +964,29 @@ public final class VillageMourningGameTests {
         zombie.setNoAi(true);
         helper.getLevel().addFreshEntity(zombie);
 
-        helper.assertTrue(graves.subList(0, 4).stream().noneMatch(grave -> Mourning.isSafeToMourn(helper.getLevel(), grave)),
-                "the first four grave fixtures must be unsafe");
-        helper.assertTrue(Mourning.isSafeToMourn(helper.getLevel(), safeGrave),
-                "the distant fallback grave must be safe");
+        try {
+            helper.assertTrue(graves.subList(0, 4).stream().noneMatch(grave -> Mourning.isSafeToMourn(helper.getLevel(), grave)),
+                    "the first four grave fixtures must be unsafe");
+            helper.assertTrue(Mourning.isSafeToMourn(helper.getLevel(), safeGrave),
+                    "the distant fallback grave must be safe");
 
-        long seed = 0L;
-        while (true) {
-            List<BlockPos> shuffled = new ArrayList<>(graves);
-            Util.shuffle(shuffled, RandomSource.create(seed));
-            if (shuffled.getLast().equals(safeGrave)) {
-                break;
+            long seed = 0L;
+            while (true) {
+                List<BlockPos> shuffled = new ArrayList<>(graves);
+                Util.shuffle(shuffled, RandomSource.create(seed));
+                if (shuffled.getLast().equals(safeGrave)) {
+                    break;
+                }
+                seed++;
             }
-            seed++;
-        }
 
-        List<BlockPos> selected = Village.selectSafeMourningGraves(graves, RandomSource.create(seed),
-                grave -> Mourning.isSafeToMourn(helper.getLevel(), grave));
-        helper.assertTrue(selected.equals(List.of(safeGrave)),
-                "ambient grave selection must search past four unsafe graves to find a safe fallback");
+            List<BlockPos> selected = Village.selectSafeMourningGraves(graves, RandomSource.create(seed),
+                    grave -> Mourning.isSafeToMourn(helper.getLevel(), grave));
+            helper.assertTrue(selected.equals(List.of(safeGrave)),
+                    "ambient grave selection must search past four unsafe graves to find a safe fallback");
+        } finally {
+            zombie.discard();
+        }
         helper.succeed();
     }
 
@@ -966,6 +995,7 @@ public final class VillageMourningGameTests {
         BlockPos grave = helper.absolutePos(new BlockPos(4, 1, 4));
         occupyGrave(helper, grave);
         VillagerEntityMCA mourner = spawnVillager(helper, new BlockPos(2, 1, 4), "Unsafe Personal Mourner");
+        makeAwake(mourner);
         Zombie zombie = EntityType.ZOMBIE.create(helper.getLevel());
         if (zombie == null) {
             throw new IllegalStateException("failed to create zombie");
@@ -997,9 +1027,10 @@ public final class VillageMourningGameTests {
         helper.succeed();
     }
 
-    @GameTest(batch = "mca_mourning_fallback_graves", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    @GameTest(batch = "mca_mourning_fallback_graves", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void ambientMourningFallsBackToIndexedVillageTombstone(GameTestHelper helper) {
-        BlockPos formalAnchor = helper.absolutePos(new BlockPos(3, 1, 3));
+        // Keep the village's 48-block discovery border inside this fixture.
+        BlockPos formalAnchor = helper.absolutePos(new BlockPos(56, 1, 56));
         helper.getLevel().setBlock(formalAnchor, BlocksMCA.CROSS_HEADSTONE.defaultBlockState(), 3);
         helper.getLevel().setBlock(formalAnchor.east(), BlocksMCA.CROSS_HEADSTONE.defaultBlockState(), 3);
         helper.getLevel().setBlock(formalAnchor.west(), BlocksMCA.CROSS_HEADSTONE.defaultBlockState(), 3);
@@ -1164,10 +1195,15 @@ public final class VillageMourningGameTests {
         List<VillagerEntityMCA> residents = new ArrayList<>();
         for (int index = 0; index < count; index++) {
             VillagerEntityMCA resident = spawnVillager(helper, new BlockPos(2 + index, 1, 3), prefix + " " + index);
-            resident.getBrain().setActiveActivityIfPossible(Activity.IDLE);
+            makeAwake(resident);
             residents.add(resident);
         }
         return residents;
+    }
+
+    private static void makeAwake(VillagerEntityMCA villager) {
+        villager.getBrain().setSchedule(Schedule.EMPTY);
+        villager.getBrain().setActiveActivityIfPossible(Activity.IDLE);
     }
 
     private static List<GlobalPos> mourningSites(List<VillagerEntityMCA> residents) {

@@ -10,6 +10,7 @@ import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.brain.tasks.LocalInsideBrownianWalk;
+import net.conczin.mca.entity.ai.brain.tasks.WanderOrTeleportToTargetTask;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.registry.BlocksMCA;
 import net.minecraft.core.BlockPos;
@@ -20,6 +21,8 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobSpawnType;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.behavior.InsideBrownianWalk;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -28,6 +31,7 @@ import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.ScaffoldingBlock;
 import net.minecraft.world.level.block.SnowLayerBlock;
@@ -42,14 +46,166 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath;
 @PrefixGameTestTemplate(false)
 public final class MCAGroundPathNavigationGameTests {
     private static final Set<ChunkPos> PROGRESSIVE_FORCED_CHUNKS = new HashSet<>();
+    private static final Set<ChunkPos> REPLAN_FORCED_CHUNKS = new HashSet<>();
+    private static final Set<VillagerEntityMCA> REPLAN_ACTORS = new HashSet<>();
 
     private MCAGroundPathNavigationGameTests() {
+    }
+
+    @AfterBatch(batch = "mca_semantic_replan_admission")
+    public static void cleanupSemanticReplans(ServerLevel level) {
+        REPLAN_ACTORS.forEach(VillagerEntityMCA::discard);
+        REPLAN_ACTORS.clear();
+        REPLAN_FORCED_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x, chunk.z, false));
+        REPLAN_FORCED_CHUNKS.clear();
+    }
+
+    @GameTest(batch = "mca_semantic_replan_admission", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 80)
+    public static void recomputedCombatEscapeRejectsUnsafeNativeRoute(GameTestHelper helper) {
+        VillagerEntityMCA villager = prepareSemanticReplan(helper);
+        BlockPos destination = villager.blockPosition().west(6);
+        boolean[] safe = {true};
+        CombatEscapePositionTracker target = semanticReplanTarget(destination,
+                List.of(Set.of(destination)), () -> safe[0]);
+        startSemanticReplan(helper, villager, target);
+
+        helper.runAfterDelay(21, () -> {
+            safe[0] = false;
+            villager.getNavigation().recomputePath();
+            helper.assertTrue(villager.getNavigation().getPath() == null,
+                    "native recomputation admitted an escape route rejected by its target: "
+                            + villager.getNavigation().getPath());
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "mca_semantic_replan_admission", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 80)
+    public static void recomputedCombatEscapePreservesTacticalTierPreference(GameTestHelper helper) {
+        VillagerEntityMCA villager = prepareSemanticReplan(helper);
+        BlockPos preferred = villager.blockPosition().west(7);
+        BlockPos shorter = villager.blockPosition().west(3);
+        CombatEscapePositionTracker target = semanticReplanTarget(preferred,
+                List.of(Set.of(preferred), Set.of(shorter)), () -> true);
+        startSemanticReplan(helper, villager, target);
+        helper.assertTrue(villager.getNavigation().getPath().getTarget().equals(preferred),
+                "initial semantic search did not honor its tactical preference");
+
+        helper.runAfterDelay(21, () -> {
+            villager.getNavigation().recomputePath();
+            Path replanned = villager.getNavigation().getPath();
+            helper.assertTrue(replanned != null && replanned.getTarget().equals(preferred),
+                    "native recomputation replaced tactical preference with the shortest endpoint: "
+                            + (replanned == null ? null : replanned.getTarget()));
+            helper.succeed();
+        });
+    }
+
+    private static VillagerEntityMCA prepareSemanticReplan(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(16, 1, 16));
+        ChunkPos min = new ChunkPos(start.offset(-10, 0, -10));
+        ChunkPos max = new ChunkPos(start.offset(10, 0, 10));
+        for (int x = min.x; x <= max.x; x++) {
+            for (int z = min.z; z <= max.z; z++) {
+                ChunkPos chunk = new ChunkPos(x, z);
+                if (!helper.getLevel().getForcedChunks().contains(chunk.toLong())) {
+                    REPLAN_FORCED_CHUNKS.add(chunk);
+                }
+            }
+        }
+        prepareFlatArea(helper, start, 10, 3);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel()).withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(start)).spawn(MobSpawnType.STRUCTURE);
+        REPLAN_ACTORS.add(villager);
+        // Exercise native sink/recompute admission while keeping the original route unconsumed.
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+        return villager;
+    }
+
+    private static void startSemanticReplan(GameTestHelper helper, VillagerEntityMCA villager,
+                                            CombatEscapePositionTracker target) {
+        villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.9F, 0));
+        WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
+        helper.assertTrue(sink.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime()),
+                "semantic recomputation fixture could not start its initially accepted native path");
+        helper.assertTrue(villager.getNavigation().getPath() != null
+                        && villager.getNavigation().getPath().canReach(),
+                "semantic recomputation fixture must begin with a reachable path");
+    }
+
+    private static CombatEscapePositionTracker semanticReplanTarget(BlockPos preferred,
+            List<Set<BlockPos>> tiers, BooleanSupplier safe) {
+        Set<BlockPos> targets = new HashSet<>();
+        tiers.forEach(targets::addAll);
+        return new CombatEscapePositionTracker() {
+            @Override
+            public Set<BlockPos> getPathTargets(Mob mob) { return targets; }
+
+            @Override
+            public List<Set<BlockPos>> getRankedPathTargets(Mob mob) { return tiers; }
+
+            @Override
+            public boolean isPathSafe(Mob mob, Path path) { return safe.getAsBoolean(); }
+
+            @Override
+            public boolean isReached(Mob mob, int closeEnoughDistance) { return false; }
+
+            @Override
+            public Vec3 currentPosition() { return Vec3.atBottomCenterOf(preferred); }
+
+            @Override
+            public BlockPos currentBlockPosition() { return preferred; }
+
+            @Override
+            public boolean isVisibleBy(LivingEntity entity) { return true; }
+        };
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 40)
+    public static void partialHeightAirborneLadderEntryStartsClimbing(GameTestHelper helper) {
+        BlockPos first = helper.absolutePos(new BlockPos(5, 5, 5));
+        for (int y = 0; y < 3; y++) {
+            BlockPos position = first.above(y);
+            helper.getLevel().setBlock(position.south(), Blocks.STONE.defaultBlockState(), 3);
+            helper.getLevel().setBlock(position,
+                    Blocks.LADDER.defaultBlockState().setValue(LadderBlock.FACING, Direction.NORTH), 3);
+        }
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0)
+                .withPosition(new Vec3(first.getX() + 0.5D, first.getY() - 0.312D, first.getZ() + 0.5D))
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.setNoAi(true);
+        try {
+            villager.setOnGround(false);
+            helper.assertTrue(!villager.onClimbable(), "fixture starts inside ladder instead of just below it");
+            Path path = new Path(List.of(
+                    new Node(first.getX(), first.getY(), first.getZ()),
+                    new Node(first.getX(), first.getY() + 1, first.getZ()),
+                    new Node(first.getX(), first.getY() + 2, first.getZ())
+            ), first.above(2), true);
+            helper.assertTrue(villager.getNavigation().moveTo(path, 0.55D), "reachable upward ladder path did not start");
+            villager.setDeltaMovement(Vec3.ZERO);
+            villager.getNavigation().tick();
+            helper.assertTrue(villager.getNavigation() instanceof MCAGroundPathNavigation navigation
+                            && navigation.isControllingClimbableMovement()
+                            && villager.getDeltaMovement().y > 0.0D,
+                    "MCA did not enter ladder from partial-height airborne feet: position=" + villager.position()
+                            + ", delta=" + villager.getDeltaMovement()
+                            + ", path=" + villager.getNavigation().getPath());
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
     }
 
     @GameTest(batch = "mca_vine_column_descent", templateNamespace = "minecraft",
@@ -1612,8 +1768,8 @@ public final class MCAGroundPathNavigationGameTests {
         });
     }
 
-    @GameTest(batch = "mca_navigation_local_brownian_retry", templateNamespace = "minecraft",
-            template = "bastion/blocks/air", timeoutTicks = 80)
+    @GameTest(batch = "mca_navigation_local_brownian_retry", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 80)
     public static void stalledIndoorStrollWaitsButAPhysicalStepAllowsNewDestination(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(10, 1, 10));
         prepareFlatArea(helper, start, 3, 3);
@@ -1815,6 +1971,111 @@ public final class MCAGroundPathNavigationGameTests {
         }
         ordinaryVillager.discard();
         persistentVillager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void blockedPersistentSearchBoundsExtendedNodeExpansions(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(32, 1, 32));
+        BlockPos target = start.east(2);
+        prepareFlatArea(helper, start, 27, 3);
+        for (int z = -23; z <= 23; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (dx == 0 && dz == 0) {
+                    continue;
+                }
+                for (int y = 0; y < 3; y++) {
+                    helper.getLevel().setBlock(target.offset(dx, y, dz), Blocks.STONE.defaultBlockState(), 3);
+                }
+            }
+        }
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start))
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+        try {
+            MCAGroundPathNavigation navigation = (MCAGroundPathNavigation) villager.getNavigation();
+            PathRequestDiagnostics.SearchSnapshot before = PathRequestDiagnostics.snapshot(villager);
+            Path path = navigation.createPathForPersistentIntent(Set.of(target), 0);
+            PathRequestDiagnostics.SearchSnapshot after = PathRequestDiagnostics.snapshot(villager);
+            long expanded = after.expandedNodes() - before.expandedNodes();
+            helper.assertTrue(path != null && !path.canReach(), "sealed target was unexpectedly reachable");
+            helper.assertTrue(after.extendedSearches() == before.extendedSearches() + 1,
+                    "test did not exercise the extended search budget");
+            helper.assertTrue(expanded <= 1_024,
+                    "unreachable extended search expanded " + expanded + " nodes instead of staying bounded");
+
+            // A boosted ordinary search may visit 1,536 nodes (768 * 2), but
+            // the extended search must not multiply that allowance again.
+            navigation.setMaxVisitedNodesMultiplier(2.0F);
+            PathRequestDiagnostics.SearchSnapshot boostedBefore = PathRequestDiagnostics.snapshot(villager);
+            Path boostedPath = navigation.createPathForPersistentIntent(Set.of(target), 0);
+            PathRequestDiagnostics.SearchSnapshot boostedAfter = PathRequestDiagnostics.snapshot(villager);
+            long boostedExpanded = boostedAfter.expandedNodes() - boostedBefore.expandedNodes();
+            helper.assertTrue(boostedPath != null && !boostedPath.canReach(),
+                    "sealed target unexpectedly became reachable with a boosted search");
+            helper.assertTrue(boostedAfter.extendedSearches() == boostedBefore.extendedSearches() + 1,
+                    "boosted search did not exercise the extended node budget");
+            helper.assertTrue(boostedExpanded <= 1_536,
+                    "boosted extended search expanded " + boostedExpanded + " nodes beyond its ordinary allowance");
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void extendedBudgetNeverShrinksOrdinarySearch(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(38, 1, 38));
+        BlockPos target = start.east(2);
+        prepareFlatArea(helper, start, 32, 3);
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (dx == 0 && dz == 0) continue;
+                for (int y = 0; y < 3; y++) {
+                    helper.getLevel().setBlock(target.offset(dx, y, dz), Blocks.STONE.defaultBlockState(), 3);
+                }
+            }
+        }
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start))
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+        Config config = Config.getInstance();
+        int originalPathfindingDistance = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 160;
+            villager.getAttribute(Attributes.FOLLOW_RANGE).setBaseValue(96.0D);
+            // Construct after updating the attribute: vanilla fixes its base node
+            // budget when PathNavigation creates its PathFinder.
+            MCAGroundPathNavigation navigation = new MCAGroundPathNavigation(villager, helper.getLevel());
+            PathRequestDiagnostics.SearchSnapshot before = PathRequestDiagnostics.snapshot(villager);
+            Path ordinary = navigation.createPath(target, 0);
+            PathRequestDiagnostics.SearchSnapshot afterOrdinary = PathRequestDiagnostics.snapshot(villager);
+            Path extended = navigation.createPathForPersistentIntent(Set.of(target), 0);
+            PathRequestDiagnostics.SearchSnapshot afterExtended = PathRequestDiagnostics.snapshot(villager);
+            long ordinaryNodes = afterOrdinary.expandedNodes() - before.expandedNodes();
+            long extendedNodes = afterExtended.expandedNodes() - afterOrdinary.expandedNodes();
+            helper.assertTrue(ordinary != null && !ordinary.canReach()
+                            && extended != null && !extended.canReach(),
+                    "sealed target was unexpectedly reachable");
+            helper.assertTrue(ordinaryNodes > 1_024,
+                    "fixture did not exceed the small extended search cap: " + ordinaryNodes);
+            helper.assertTrue(extendedNodes >= ordinaryNodes,
+                    "extended search expanded fewer nodes than ordinary: " + extendedNodes + " vs " + ordinaryNodes);
+        } finally {
+            config.villagerPathfindingDistance = originalPathfindingDistance;
+            villager.discard();
+        }
         helper.succeed();
     }
 

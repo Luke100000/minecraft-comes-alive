@@ -57,11 +57,16 @@ abstract class MixinValidateNearbyPoi {
             BlockPos pos,
             Operation<Boolean> original,
             @Local(argsOnly = true) Predicate<Holder<PoiType>> poiValidator,
-            @Local(argsOnly = true) ServerLevel level
+            @Local(argsOnly = true) ServerLevel level,
+            @Local(argsOnly = true) LivingEntity entity
     ) {
         BlockState state = level.getBlockState(pos);
         boolean validatingHome = BedPoiCompatibility.isHomePoiState(state)
                 && poiManager.exists(pos, poi -> poi.is(PoiTypes.HOME) && poiValidator.test(poi));
+        if (validatingHome && entity instanceof VillagerEntityMCA villager
+                && !villager.getResidency().mayReleaseHomePoiAt(level, pos)) {
+            return false;
+        }
         if (validatingHome
                 && state.getValue(BedBlock.OCCUPIED)
                 && !level.getEntitiesOfClass(Villager.class, new AABB(pos), LivingEntity::isSleeping).isEmpty()) {

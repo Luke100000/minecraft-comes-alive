@@ -62,11 +62,7 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -414,7 +410,7 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
                         }
 
                         if (entity instanceof CompassionateEntity<?> compassionateEntity) {
-                            compassionateEntity.getRelationships().getFamilyEntry().setDeceased(false);
+                            compassionateEntity.getRelationships().onResurrection();
                         }
                         if (entity instanceof VillagerEntityMCA villager) {
                             villager.getRecentVillagerEvents().record(

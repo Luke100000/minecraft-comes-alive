@@ -19,13 +19,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.npc.VillagerProfession;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Stream;
 
@@ -98,6 +92,11 @@ public final class FamilyTreeNode {
         copy.deceased = source.deceased;
         copy.children.addAll(children);
         return copy;
+    }
+
+    /** A standalone snapshot that does not share mutable family relationships with its source. */
+    public FamilyTreeNode detachedCopy() {
+        return detachedCopy(this, children);
     }
 
     public static boolean isValid(@Nullable UUID uuid) {
@@ -212,14 +211,16 @@ public final class FamilyTreeNode {
     }
 
     public ResourceLocation getProfessionId() {
-        return ResourceLocation.tryParse(profession);
+        ResourceLocation id = ResourceLocation.tryParse(profession);
+        return id != null ? id : BuiltInRegistries.VILLAGER_PROFESSION.getKey(VillagerProfession.NONE);
     }
 
     public String getProfessionName() {
+        ResourceLocation id = getProfessionId();
         String professionName = (
-                getProfessionId().getNamespace().equalsIgnoreCase("minecraft") ?
-                        (getProfessionId().getPath().equals("none") ? "mca.none" : getProfessionId().getPath()) :
-                        getProfessionId().toString()
+                id.getNamespace().equalsIgnoreCase("minecraft") ?
+                        (id.getPath().equals("none") ? "mca.none" : id.getPath()) :
+                        id.toString()
         ).replace(":", ".");
 
         return MCA.isBlankString(professionName) ? "mca.none" : professionName;
@@ -546,6 +547,13 @@ public final class FamilyTreeNode {
     // entries with these conditions are usually generated
     public boolean probablyGenerated() {
         return mother.equals(Util.NIL_UUID) && father.equals(Util.NIL_UUID) && children.size() == 1 && deceased && !isPlayer();
+    }
+
+    public boolean isUnpairedGeneratedParentOf(UUID childId) {
+        return probablyGenerated()
+                && children.contains(childId)
+                && !isValid(partner)
+                && relationshipState == RelationshipState.SINGLE;
     }
 
     // true if there is at least one non-generated relative

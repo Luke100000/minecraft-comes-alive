@@ -17,8 +17,8 @@ import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.phys.AABB;
 
-import java.util.Objects;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /** Temporary bed diagnostics. No gameplay state is changed or persisted. */
@@ -31,6 +31,21 @@ public final class BedDebugLog {
     private String previousActivity;
     private Boolean previousNight;
     private long nextSnapshot;
+
+    public static void lifecycle(VillagerEntityMCA villager, String event, BlockPos bed) {
+        if (!ENABLED || !(villager.level() instanceof ServerLevel level)) {
+            return;
+        }
+        // Capture the caller at the transition; sampled snapshots can miss a sleeper's removal.
+        String callers = StackWalker.getInstance().walk(frames -> frames.skip(1).limit(7)
+                .map(frame -> frame.getClassName() + "." + frame.getMethodName() + ":" + frame.getLineNumber())
+                .collect(java.util.stream.Collectors.joining(" <- ")));
+        MCA.LOGGER.info("[MCA-BED][lifecycle] event={} uuid={} gameTime={} dayTime={} pos={} home={} sleeping={} bed={} callers={}",
+                event, villager.getUUID(), level.getGameTime(), level.getDayTime(), villager.position(),
+                villager.getBrain().getMemory(MemoryModuleType.HOME), villager.getSleepingPos(),
+                bed == null ? "none" : level.getServer().isSameThread()
+                        ? describeBed(level, bed) : bed.toShortString() + ":offServerThread", callers);
+    }
 
     public void tick(VillagerEntityMCA villager) {
         // Sample transitions once per second; stagger villagers to spread diagnostic work across ticks.

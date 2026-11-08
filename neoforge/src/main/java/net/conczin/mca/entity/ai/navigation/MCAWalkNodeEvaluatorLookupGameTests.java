@@ -3,6 +3,7 @@ package net.conczin.mca.entity.ai.navigation;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
+import net.conczin.mca.entity.ai.PathingBlockInteraction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -11,6 +12,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.level.PathNavigationRegion;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.PathType;
@@ -66,6 +68,45 @@ public final class MCAWalkNodeEvaluatorLookupGameTests {
             helper.succeed();
         } finally {
             Config.getInstance().villagersInteractWithFenceGates = oldGateConfig;
+            villager.discard();
+        }
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void doorPathingUsesSamePolicyAsDoorInteraction(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos woodenDoor = helper.absolutePos(new BlockPos(4, 2, 4));
+        BlockPos ironDoor = woodenDoor.east(2);
+        level.setBlock(woodenDoor, Blocks.OAK_DOOR.defaultBlockState(), 3);
+        level.setBlock(ironDoor, Blocks.IRON_DOOR.defaultBlockState(), 3);
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(level)
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(woodenDoor.west(2)))
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.setNoAi(true);
+        boolean oldAnyDoorConfig = Config.getInstance().villagersInteractWithAnyDoor;
+        try {
+            MCAWalkNodeEvaluator evaluator = new MCAWalkNodeEvaluator();
+            PathfindingContext context = new PathfindingContext(level, villager);
+
+            Config.getInstance().villagersInteractWithAnyDoor = false;
+            helper.assertTrue(PathingBlockInteraction.isOpenable(level.getBlockState(woodenDoor)),
+                    "vanilla mob-interactable door should remain operable by default");
+            helper.assertTrue(!PathingBlockInteraction.isOpenable(level.getBlockState(ironDoor)),
+                    "untagged iron door should remain protected by default");
+            helper.assertTrue(evaluator.getPathType(context, woodenDoor.getX(), woodenDoor.getY(), woodenDoor.getZ()) == PathType.WALKABLE_DOOR,
+                    "operable wooden door should be pathable");
+            helper.assertTrue(evaluator.getPathType(context, ironDoor.getX(), ironDoor.getY(), ironDoor.getZ()) == PathType.DOOR_IRON_CLOSED,
+                    "door the villager refuses to operate must not be pathable");
+
+            Config.getInstance().villagersInteractWithAnyDoor = true;
+            helper.assertTrue(PathingBlockInteraction.isOpenable(level.getBlockState(ironDoor)),
+                    "any-door config should make an iron DoorBlock operable");
+            helper.assertTrue(evaluator.getPathType(context, ironDoor.getX(), ironDoor.getY(), ironDoor.getZ()) == PathType.WALKABLE_DOOR,
+                    "any-door config should make the same iron DoorBlock pathable");
+            helper.succeed();
+        } finally {
+            Config.getInstance().villagersInteractWithAnyDoor = oldAnyDoorConfig;
             villager.discard();
         }
     }
@@ -194,6 +235,86 @@ public final class MCAWalkNodeEvaluatorLookupGameTests {
             helper.assertTrue(context.lookups == 4,
                     "four ordinary grounded neighbors should require exactly four state reads, not "
                             + context.lookups);
+            int repeated = evaluator.addDescendingClimbableEntries(new Node[32], 0, startPos);
+            helper.assertTrue(repeated == 0, "repeated flat-terrain probe added a descending climbable");
+            helper.assertTrue(context.lookups == 4,
+                    "repeated probes should reuse non-climbable terrain classifications, not reread "
+                            + context.lookups + " block states");
+            helper.succeed();
+        } finally {
+            evaluator.done();
+            villager.discard();
+        }
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void descendingClimbableProbePreservesTwoBlockDrop(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos origin = helper.absolutePos(new BlockPos(8, 3, 8));
+        prepareFlatArea(helper, origin, 4, 3);
+        BlockPos lower = origin.east().below(2);
+        level.setBlock(lower.below(), Blocks.STONE.defaultBlockState(), 3);
+        level.setBlock(lower, Blocks.SCAFFOLDING.defaultBlockState(), 3);
+        level.setBlock(lower.above(), Blocks.AIR.defaultBlockState(), 3);
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(level)
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(origin))
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.setNoAi(true);
+        DescendingCountingEvaluator evaluator = new DescendingCountingEvaluator();
+        try {
+            evaluator.prepare(new PathNavigationRegion(level, origin.offset(-4, -4, -4),
+                    origin.offset(4, 3, 4)), villager);
+            helper.assertTrue(level.getBlockState(lower).is(Blocks.SCAFFOLDING),
+                    "two-block drop fixture lost its climbable support");
+            Node[] nodes = new Node[32];
+            int count = evaluator.addDescendingClimbableEntries(nodes, 0, origin);
+            helper.assertTrue(count == 1 && nodes[0].asBlockPos().equals(lower),
+                    "descending probe did not preserve the reachable lower climbable");
+            Node[] repeated = new Node[32];
+            int repeatedCount = evaluator.addDescendingClimbableEntries(repeated, 0, origin);
+            helper.assertTrue(repeatedCount == 1 && repeated[0] == nodes[0],
+                    "cached descending probe returned a different climb node");
+            helper.succeed();
+        } finally {
+            evaluator.done();
+            villager.discard();
+        }
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void openTrapdoorEdgeChecksReuseStateOnlyWithinTheSameSearch(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos pos = helper.absolutePos(new BlockPos(8, 2, 8));
+        level.setBlock(pos, Blocks.SPRUCE_TRAPDOOR.defaultBlockState()
+                .setValue(TrapDoorBlock.OPEN, true), 3);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(level)
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(pos.west()))
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.setNoAi(true);
+
+        DescendingCountingEvaluator evaluator = new DescendingCountingEvaluator();
+        try {
+            evaluator.prepare(new PathNavigationRegion(level, pos.offset(-3, -3, -3),
+                    pos.offset(3, 3, 3)), villager);
+            CountingContext context = new CountingContext(level, villager);
+            evaluator.installContext(context);
+            helper.assertTrue(evaluator.isOpenTrapdoor(pos.getX(), pos.getY(), pos.getZ()),
+                    "fixture must have an open trapdoor");
+            helper.assertTrue(evaluator.isOpenTrapdoor(pos.getX(), pos.getY(), pos.getZ()),
+                    "the repeated probe changed its result");
+            helper.assertTrue(context.lookups == 1,
+                    "repeated trapdoor edge probes fetched the same state " + context.lookups + " times");
+
+            evaluator.done();
+            level.setBlock(pos, Blocks.STONE.defaultBlockState(), 3);
+            evaluator.prepare(new PathNavigationRegion(level, pos.offset(-3, -3, -3),
+                    pos.offset(3, 3, 3)), villager);
+            evaluator.installContext(context);
+            helper.assertTrue(!evaluator.isOpenTrapdoor(pos.getX(), pos.getY(), pos.getZ()),
+                    "trapdoor state was stale after the previous search finished");
+            helper.assertTrue(context.lookups == 2,
+                    "the next search did not recheck changed terrain");
             helper.succeed();
         } finally {
             evaluator.done();

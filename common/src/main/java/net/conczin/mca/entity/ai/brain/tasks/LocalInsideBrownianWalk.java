@@ -1,21 +1,17 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
-import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.behavior.BehaviorControl;
 import net.minecraft.world.entity.ai.behavior.declarative.BehaviorBuilder;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.levelgen.Heightmap;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Selects short walks within the same resolved room used for shelter entry.
@@ -32,7 +28,13 @@ public final class LocalInsideBrownianWalk {
                     if (!(mob instanceof VillagerEntityMCA villager)) {
                         return false;
                     }
-                    if (!retryGate.canReserve(origin, origin, gameTime)) {
+                    var chunk = level.getChunkSource().getChunkNow(origin.getX() >> 4, origin.getZ() >> 4);
+                    if (chunk == null) return false;
+                    // A changed column (for example a newly added roof) permits an immediate retry.
+                    BlockPos retryKey = new BlockPos(origin.getX(),
+                            chunk.getHeight(Heightmap.Types.WORLD_SURFACE, origin.getX() & 15, origin.getZ() & 15),
+                            origin.getZ());
+                    if (!retryGate.tryReserve(retryKey, origin, gameTime)) {
                         PathRequestDiagnostics.recordDeferredProducerRetry(mob);
                         return false;
                     }
@@ -53,45 +55,8 @@ public final class LocalInsideBrownianWalk {
                     if (candidates.isEmpty()) return false;
 
                     BlockPos preferred = candidates.get(level.getRandom().nextInt(candidates.size()));
-                    walkTarget.set(new WalkTarget(new RoomStrollTarget(preferred, Set.copyOf(candidates)), speedModifier, 0));
-                    retryGate.tryReserve(origin, origin, gameTime);
+                    walkTarget.set(new WalkTarget(preferred, speedModifier, 0));
                     return true;
                 }));
-    }
-
-    /** Movement owns path selection; the producer only supplies equivalent room-local endpoints. */
-    private static final class RoomStrollTarget implements MultiTargetPositionTracker {
-        private final BlockPos preferred;
-        private final Set<BlockPos> targets;
-
-        private RoomStrollTarget(BlockPos preferred, Set<BlockPos> targets) {
-            this.preferred = preferred.immutable();
-            this.targets = targets;
-        }
-
-        @Override
-        public Vec3 currentPosition() {
-            return Vec3.atBottomCenterOf(preferred);
-        }
-
-        @Override
-        public BlockPos currentBlockPosition() {
-            return preferred;
-        }
-
-        @Override
-        public boolean isVisibleBy(LivingEntity livingEntity) {
-            return true;
-        }
-
-        @Override
-        public Set<BlockPos> getPathTargets(Mob mob) {
-            return targets;
-        }
-
-        @Override
-        public boolean isReached(Mob mob, int closeEnoughDistance) {
-            return targets.stream().anyMatch(target -> target.distManhattan(mob.blockPosition()) <= closeEnoughDistance);
-        }
     }
 }

@@ -42,7 +42,7 @@ abstract class MixinSleepInBed {
                     target = "Lnet/minecraft/core/BlockPos;closerToCenterThan(Lnet/minecraft/core/Position;D)Z"
             )
     )
-    private boolean mca$allowBehindFootApproach(
+    private boolean mca$allowValidatedBedsideApproach(
             boolean original,
             ServerLevel world,
             LivingEntity entity
@@ -53,7 +53,7 @@ abstract class MixinSleepInBed {
 
         BlockPos bedPos = villager.getBrain().getMemory(MemoryModuleType.HOME).orElseThrow().pos();
         return BedApproachTarget.create(world, bedPos)
-                .map(target -> target.isAtBehindFootApproach(villager))
+                .map(target -> target.isReached(villager, 0))
                 .orElse(false);
     }
 }

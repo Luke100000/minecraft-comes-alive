@@ -16,10 +16,11 @@ import net.minecraft.server.level.ServerPlayer;
 import java.util.List;
 
 public record FamilyTreeUUIDLookup(long requestId, String search) implements HandleablePayload {
+    public static final int MAX_SEARCH_LENGTH = 64;
     public static final CustomPacketPayload.Type<FamilyTreeUUIDLookup> TYPE = new CustomPacketPayload.Type<>(MCA.locate("family_tree_uuid_lookup"));
     public static final StreamCodec<FriendlyByteBuf, FamilyTreeUUIDLookup> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.VAR_LONG, FamilyTreeUUIDLookup::requestId,
-            ByteBufCodecs.STRING_UTF8, FamilyTreeUUIDLookup::search,
+            ByteBufCodecs.stringUtf8(MAX_SEARCH_LENGTH), FamilyTreeUUIDLookup::search,
             FamilyTreeUUIDLookup::new
     );
 

@@ -67,29 +67,26 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
             return false;
         }
 
-        boolean preserveMourningHands = isPeacefullyGrieving(villager);
         if (wear) {
             lastEquipTime = villager.tickCount;
-            return !present || set != null && !preserveMourningHands && isMissingRequestedHandItem(villager, set);
-        } else if (villager.tickCount - lastEquipTime > COOLDOWN) {
-            return present;
-        } else {
-            return false;
+            return !present || set != null && !isPeacefullyGrieving(villager)
+                    && isMissingRequestedHandItem(villager, set);
         }
+        return villager.tickCount - lastEquipTime > COOLDOWN && present;
     }
 
     private void equipBestArmor(VillagerEntityMCA villager, EquipmentSlot slot, Item fallback) {
-        ItemStack stack = InventoryUtils.getBestArmor(villager.getInventory(), slot).orElse(fallback == null ? ItemStack.EMPTY : new ItemStack(fallback));
+        ItemStack stack = InventoryUtils.getBestArmor(villager.getInventory(), slot).orElseGet(() -> fallback == null ? ItemStack.EMPTY : InventoryUtils.temporary(new ItemStack(fallback)));
         villager.setItemSlot(slot, stack);
     }
 
     private void equipBestWeapon(VillagerEntityMCA villager, Item fallback) {
-        ItemStack stack = InventoryUtils.getBestSword(villager.getInventory()).orElse(fallback == null ? ItemStack.EMPTY : new ItemStack(fallback));
+        ItemStack stack = InventoryUtils.getBestSword(villager.getInventory()).orElseGet(() -> fallback == null ? ItemStack.EMPTY : InventoryUtils.temporary(new ItemStack(fallback)));
         villager.setItemSlot(villager.getDominantSlot(), stack);
     }
 
     private void equipBestRanged(VillagerEntityMCA villager, Item fallback) {
-        ItemStack stack = InventoryUtils.getBestRanged(villager.getInventory()).orElse(fallback == null ? ItemStack.EMPTY : new ItemStack(fallback));
+        ItemStack stack = InventoryUtils.getBestRanged(villager.getInventory()).orElseGet(() -> fallback == null ? ItemStack.EMPTY : InventoryUtils.temporary(new ItemStack(fallback)));
         villager.setItemSlot(villager.getDominantSlot(), stack);
     }
 
@@ -134,14 +131,25 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
         // cannot remove or replace the flower. Combat still takes priority.
         if (!isPeacefullyGrieving(villager)) {
             if (wear) {
+                boolean usingRanged = villager.isUsingItem()
+                        && villager.getUseItem().getItem() instanceof ProjectileWeaponItem
+                        && villager.getItemInHand(villager.getUsedItemHand()) == villager.getUseItem();
                 if (isRequestedItem(set.getMainHand()) && set.getMainHand() instanceof ProjectileWeaponItem) {
-                    equipBestRanged(villager, set.getMainHand());
+                    // An armour-only refresh must not replace the stack currently
+                    // being drawn in either hand, or select that borrowed stack
+                    // into a second slot while its original hand still owns it.
+                    if (!usingRanged) {
+                        equipBestRanged(villager, set.getMainHand());
+                    }
                 } else if (isRequestedItem(set.getMainHand())) {
                     equipBestWeapon(villager, set.getMainHand());
                 } else {
                     villager.setItemSlot(villager.getDominantSlot(), ItemStack.EMPTY);
                 }
-                villager.setItemSlot(villager.getOpposingSlot(), new ItemStack(set.getGetOffHand()));
+                ItemStack opposing = villager.getItemBySlot(villager.getOpposingSlot());
+                if (!usingRanged || villager.getUseItem() != opposing) {
+                    villager.setItemSlot(villager.getOpposingSlot(), InventoryUtils.temporary(new ItemStack(set.getGetOffHand())));
+                }
             } else {
                 villager.setItemInHand(villager.getDominantHand(), ItemStack.EMPTY);
                 villager.setItemInHand(villager.getOpposingHand(), ItemStack.EMPTY);

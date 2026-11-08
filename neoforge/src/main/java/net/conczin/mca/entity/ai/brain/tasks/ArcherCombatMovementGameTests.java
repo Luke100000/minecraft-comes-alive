@@ -4,6 +4,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.EquipmentSet;
 import net.conczin.mca.entity.ai.MCAMoveControl;
+import net.conczin.mca.entity.ai.MCABodyRotationControl;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.MoveState;
 import net.conczin.mca.entity.ai.RangedWeaponHelper;
@@ -12,8 +13,10 @@ import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.conczin.mca.registry.ProfessionsMCA;
 import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -49,6 +52,236 @@ public final class ArcherCombatMovementGameTests {
     private static final List<Entity> TEST_ENTITIES = new ArrayList<>();
 
     private ArcherCombatMovementGameTests() {
+    }
+
+    @GameTest(batch = "mca_archer_active_ranged_evasion", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void archerEvadesActiveSkeletonBeforeSkeletonReachesMeleeRange(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        prepareFlatArea(helper, start, 16);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        Skeleton skeleton = spawnSkeleton(helper, start.east(7), archer);
+        archer.setNoAi(true);
+        archer.setOnGround(true);
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, skeleton);
+        seedNearbyEnemies(archer, List.of(skeleton));
+
+        ArcherMovementTask<VillagerEntityMCA> movement = new ArcherMovementTask<>(15);
+        long now = helper.getLevel().getGameTime();
+        movement.start(helper.getLevel(), archer, now);
+        movement.tick(helper.getLevel(), archer, now + 1);
+
+        helper.assertTrue(RangedCombatState.current(archer).orElse(null) == RangedCombatState.KITE,
+                "active ranged skeleton inside evasion distance kept archer stationary");
+        WalkTarget retreat = archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
+        helper.assertTrue(retreat != null && retreat.getTarget() instanceof CombatEscapePositionTracker,
+                "ranged-threat evasion did not publish a navigable retreat");
+        helper.assertTrue(retreat.getTarget().currentPosition().distanceToSqr(skeleton.position())
+                        > archer.distanceToSqr(skeleton),
+                "ranged-threat evasion route did not open distance from skeleton");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_passive_ranged_hold", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void archerDoesNotRetreatFromSkeletonThatIsNotAttacking(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        prepareFlatArea(helper, start, 16);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        Skeleton skeleton = spawnSkeleton(helper, start.east(12), archer);
+        skeleton.setTarget(null);
+        archer.setNoAi(true);
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, skeleton);
+        seedNearbyEnemies(archer, List.of(skeleton));
+
+        ArcherMovementTask<VillagerEntityMCA> movement = new ArcherMovementTask<>(15);
+        long now = helper.getLevel().getGameTime();
+        movement.start(helper.getLevel(), archer, now);
+        movement.tick(helper.getLevel(), archer, now + 1);
+        helper.assertTrue(RangedCombatState.current(archer).orElse(null) == RangedCombatState.HOLD,
+                "passive skeleton provoked unnecessary retreat instead of a stable firing position");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_active_ranged_navigation", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 180)
+    public static void archerNavigationActuallyOpensDistanceFromActiveSkeleton(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        prepareFlatArea(helper, start, 18);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        Skeleton skeleton = spawnSkeleton(helper, start.east(7), archer);
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, skeleton);
+        seedNearbyEnemies(archer, List.of(skeleton));
+        double startingDistance = archer.distanceTo(skeleton);
+        Vec3 origin = archer.position();
+        int[] ticks = {0};
+        boolean[] sawRetreat = {false};
+        helper.onEachTick(() -> {
+            ticks[0]++;
+            if (RangedCombatState.current(archer).orElse(null) == RangedCombatState.KITE) {
+                sawRetreat[0] = true;
+            }
+            if (sawRetreat[0] && archer.position().distanceToSqr(origin) > 2.25D
+                    && archer.distanceTo(skeleton) > startingDistance + 1.5D) {
+                helper.succeed();
+            } else if (ticks[0] >= 150) {
+                helper.fail("ranged evasion published intent but never navigated away from the skeleton; state="
+                        + RangedCombatState.current(archer).orElse(null)
+                        + ", distance=" + archer.distanceTo(skeleton)
+                        + ", navigationDone=" + archer.getNavigation().isDone());
+            }
+        });
+    }
+
+    @GameTest(batch = "mca_archer_explicit_threats", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void explicitPlayerTargetIsEscapeThreatWithoutGuardEnemyPriority(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        prepareFlatArea(helper, start, 8);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        archer.setNoAi(true);
+        Player attacker = helper.makeMockPlayer(GameType.SURVIVAL);
+        attacker.absMoveTo(start.getX() + 2.5D, start.getY(), start.getZ() + 0.5D);
+        Player bystander = helper.makeMockPlayer(GameType.SURVIVAL);
+        bystander.absMoveTo(start.getX() + 3.5D, start.getY(), start.getZ() + 0.5D);
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, attacker);
+        seedNearbyEnemies(archer, List.of(attacker, bystander));
+
+        var context = RangedCombatPositioning.collectThreatContext(archer, attacker);
+        helper.assertTrue(context.escapeThreats().contains(attacker),
+                "explicit survival player ATTACK_TARGET was filtered by guard acquisition policy");
+        helper.assertTrue(!context.escapeThreats().contains(bystander) && !context.hazards().contains(bystander),
+                "unrelated player was admitted as a movement threat");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_real_player_retaliation", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 260)
+    public static void playerRetaliationDamageDrivesActualEmergencyEscape(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(12, 2, 12));
+        prepareFlatArea(helper, start, 16);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        Player attacker = helper.makeMockPlayer(GameType.SURVIVAL);
+        attacker.absMoveTo(start.getX() + 2.5D, start.getY(), start.getZ() + 0.5D);
+
+        // The prior warnings are an input to the real hurt/retaliation path; do not
+        // directly seed ATTACK_TARGET, which would bypass the behavior under test.
+        archer.getBrain().setMemory(MemoryModuleTypeMCA.SMALL_BOUNTY, 1000);
+        helper.assertTrue(archer.hurt(helper.getLevel().damageSources().playerAttack(attacker), 1.0F),
+                "player retaliation fixture could not damage the guard");
+        helper.assertTrue(archer.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).orElse(null) == attacker,
+                "the real warning/bounty retaliation path did not authorize the attacker");
+        helper.assertTrue(RangedCombatPositioning.collectThreatContext(archer, attacker).escapeThreats().contains(attacker),
+                "authorized player was not included in close escape threats");
+
+        Vec3 origin = archer.position();
+        double initialSpacing = archer.distanceTo(attacker);
+        int[] ticks = {0};
+        double[] maximumSpacing = {initialSpacing};
+        double[] furthestProgressSquared = {0.0D};
+        boolean[] sawEmergency = {false};
+        helper.onEachTick(() -> {
+            ticks[0]++;
+            maximumSpacing[0] = Math.max(maximumSpacing[0], archer.distanceTo(attacker));
+            furthestProgressSquared[0] = Math.max(furthestProgressSquared[0], archer.position().distanceToSqr(origin));
+            if (RangedCombatState.current(archer).orElse(null) == RangedCombatState.EMERGENCY_FLEE) {
+                sawEmergency[0] = true;
+                helper.assertTrue(!archer.isUsingItem(), "archer fired or drew its weapon during emergency retreat");
+            }
+            if (sawEmergency[0] && furthestProgressSquared[0] >= 9.0D
+                    && maximumSpacing[0] >= initialSpacing + 3.0D) {
+                helper.succeed();
+            } else if (ticks[0] >= 230) {
+                helper.fail("real player retaliation never produced sustained escape; state="
+                        + RangedCombatState.current(archer) + ", distance=" + maximumSpacing[0]
+                        + ", movementSqr=" + furthestProgressSquared[0]);
+            }
+        });
+    }
+
+    @GameTest(batch = "mca_archer_active_secondary_threats", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void secondaryMobOnlyHazardWhenActuallyTargetingArcher(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        prepareFlatArea(helper, start, 8);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        archer.setNoAi(true);
+        Zombie target = spawnTarget(helper, start.east(5));
+        Skeleton neutral = spawnSkeleton(helper, start.west(2), archer);
+        neutral.setTarget(null);
+        seedNearbyEnemies(archer, List.of(target, neutral));
+
+        var context = RangedCombatPositioning.collectThreatContext(archer, target);
+        helper.assertTrue(!context.hazards().contains(neutral) && !context.escapeThreats().contains(neutral),
+                "a secondary mob without aggression toward the archer was treated as route hazard");
+
+        neutral.setTarget(archer);
+        context = RangedCombatPositioning.collectThreatContext(archer, target);
+        helper.assertTrue(context.hazards().contains(neutral) && context.escapeThreats().contains(neutral),
+                "secondary mob targeting the archer was excluded from route hazards");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_raised_route_preference", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void openRaisedLaneBeatsComparableFlatLane(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(14, 2, 14));
+        prepareFlatArea(helper, start, 12);
+        // A wide natural flat lane remains accessible while the northern lane climbs
+        // ordinary one-block terrain; both have continuation beyond candidate radius.
+        for (int z = -2; z >= -12; z--) {
+            for (int x = -1; x <= 1; x++) {
+                helper.getLevel().setBlock(start.offset(x, 0, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        Zombie threat = spawnTarget(helper, start.east(2));
+        archer.setNoAi(true);
+        var escape = RangedCombatPositioning.findGroupEscapeTarget(
+                archer, List.of(threat), List.of(threat), 6.0D
+        ).orElseThrow(() -> new AssertionError("no escape route in paired open lanes"));
+        helper.assertTrue(escape.currentBlockPosition().getY() > start.getY(),
+                "raised open lane lost to comparable flat lane; preferred=" + escape.currentBlockPosition());
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_raised_dead_end", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void raisedDeadEndLosesToContinuingFlatGround(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(14, 2, 14));
+        prepareFlatArea(helper, start, 12);
+        // Raised north corridor has exactly one entrance, while west remains open.
+        for (int z = -2; z >= -5; z--) {
+            for (int x = -1; x <= 1; x++) {
+                helper.getLevel().setBlock(start.offset(x, 0, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int z = -1; z >= -6; z--) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(-2, y, z), Blocks.STONE.defaultBlockState(), 3);
+                helper.getLevel().setBlock(start.offset(2, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int x = -2; x <= 2; x++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(x, y, -6), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        Zombie attacker = spawnTarget(helper, start.east(2));
+        var escape = RangedCombatPositioning.findGroupEscapeTarget(
+                archer, List.of(attacker), List.of(attacker), 6.0D
+        ).orElseThrow(() -> new AssertionError("no flat escape found outside raised pocket"));
+        helper.assertTrue(escape.currentBlockPosition().getY() <= start.getY(),
+                "planner chose elevated dead end instead of continuing flat ground: " + escape.currentBlockPosition());
+        helper.assertTrue(escape.currentBlockPosition().getX() < start.getX(),
+                "planner chose sealed northern pocket rather than escaping west: " + escape.currentBlockPosition());
+        helper.succeed();
     }
 
     @GameTest(batch = "mca_archer_strafe_motion_axis", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
@@ -161,14 +394,14 @@ public final class ArcherCombatMovementGameTests {
         ArcherMovementTask<VillagerEntityMCA> movement = new ArcherMovementTask<>(15);
         long time = helper.getLevel().getGameTime();
         movement.start(helper.getLevel(), archer, time);
-        for (int tick = 1; tick <= 12 && archer.xxa == 0.0F; tick++) {
+        for (int tick = 1; tick <= 22 && archer.xxa == 0.0F; tick++) {
             movement.tick(helper.getLevel(), archer, time + tick);
             archer.getMoveControl().tick();
         }
         helper.assertTrue(archer.xxa != 0.0F, "fixture did not start a strafe");
 
         archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, nextTarget);
-        movement.tick(helper.getLevel(), archer, time + 13);
+        movement.tick(helper.getLevel(), archer, time + 23);
         helper.assertTrue(archer.xxa == 0.0F, "target handoff left the old strafe input applied");
         helper.assertTrue(RangedCombatState.current(archer).orElse(null) == RangedCombatState.HOLD,
                 "target handoff did not restart in HOLD");
@@ -531,7 +764,7 @@ public final class ArcherCombatMovementGameTests {
     public static void escapeTargetSetRejectsDeadEndPocketForUpwardOnwardRoute(GameTestHelper helper) {
         cleanupTestEntities();
         BlockPos start = helper.absolutePos(new BlockPos(12, 2, 12));
-        prepareFlatArea(helper, start, 12);
+        prepareFlatArea(helper, start, 12, 4);
         for (int x = -12; x <= 12; x++) {
             for (int z = -12; z <= 12; z++) {
                 helper.getLevel().setBlock(start.offset(x, -2, z), Blocks.AIR.defaultBlockState(), 3);
@@ -572,6 +805,11 @@ public final class ArcherCombatMovementGameTests {
         Zombie threat = spawnTarget(helper, start.east(2));
         archer.setOnGround(true);
 
+        helper.assertTrue(helper.getLevel().noCollision(archer,
+                        archer.getBoundingBox().move(0.0D, 1.0D, -4.0D)),
+                "topology fixture's raised route has leftover collision above its floor: "
+                        + helper.getLevel().getBlockState(start.offset(0, 2, -4)));
+
         var escapeTarget = RangedCombatPositioning.findGroupEscapeTarget(
                 archer,
                 List.of(threat),
@@ -598,6 +836,7 @@ public final class ArcherCombatMovementGameTests {
         VillagerEntityMCA archer = spawnArcher(helper, start);
         Zombie eastThreat = spawnTarget(helper, start.east(2));
         Zombie westThreat = spawnTarget(helper, start.west(4));
+        westThreat.setTarget(archer);
         archer.setOnGround(true);
         archer.setNoAi(true);
         archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, eastThreat);
@@ -699,6 +938,263 @@ public final class ArcherCombatMovementGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_archer_escape_route_rejection", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void escapeNativePathRejectedWhenTacticalTrackerFindsHazard(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        prepareFlatArea(helper, start, 10);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        archer.setOnGround(true);
+        BlockPos destination = start.west(6);
+        var baselinePath = archer.getNavigation().createPath(destination, 0);
+        helper.assertTrue(baselinePath != null && baselinePath.canReach(),
+                "route-rejection fixture has no native walkable path");
+
+        CombatEscapePositionTracker target = new CombatEscapePositionTracker() {
+            @Override
+            public Set<BlockPos> getPathTargets(net.minecraft.world.entity.Mob mob) {
+                return Set.of(destination);
+            }
+
+            @Override
+            public boolean isPathSafe(net.minecraft.world.entity.Mob mob, net.minecraft.world.level.pathfinder.Path path) {
+                return false;
+            }
+
+            @Override
+            public boolean isReached(net.minecraft.world.entity.Mob mob, int closeEnoughDistance) {
+                return false;
+            }
+
+            @Override
+            public Vec3 currentPosition() {
+                return Vec3.atBottomCenterOf(destination);
+            }
+
+            @Override
+            public BlockPos currentBlockPosition() {
+                return destination;
+            }
+
+            @Override
+            public boolean isVisibleBy(LivingEntity entity) {
+                return true;
+            }
+        };
+        archer.getBrain().eraseMemory(MemoryModuleType.PATH);
+        archer.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.9F, 0));
+        var sink = new WanderOrTeleportToTargetTask();
+        helper.assertTrue(!sink.tryStart(helper.getLevel(), archer, helper.getLevel().getGameTime()),
+                "sink started a native escape route rejected by its combat-owned tracker");
+        helper.assertTrue(!archer.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET),
+                "failed escape route left a stale WALK_TARGET");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_escape_ranked_path", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void escapeNativePathHonorsTacticalTierBeforeShortestPath(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        prepareFlatArea(helper, start, 10);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        archer.setOnGround(true);
+        BlockPos tactical = start.west(7);
+        BlockPos shortPath = start.west(3);
+        CombatEscapePositionTracker target = new CombatEscapePositionTracker() {
+            @Override
+            public Set<BlockPos> getPathTargets(net.minecraft.world.entity.Mob mob) {
+                return Set.of(tactical, shortPath);
+            }
+
+            @Override
+            public List<Set<BlockPos>> getRankedPathTargets(net.minecraft.world.entity.Mob mob) {
+                return List.of(Set.of(tactical), Set.of(shortPath));
+            }
+
+            @Override
+            public boolean isReached(net.minecraft.world.entity.Mob mob, int closeEnoughDistance) {
+                return false;
+            }
+
+            @Override
+            public Vec3 currentPosition() {
+                return Vec3.atBottomCenterOf(tactical);
+            }
+
+            @Override
+            public BlockPos currentBlockPosition() {
+                return tactical;
+            }
+
+            @Override
+            public boolean isVisibleBy(LivingEntity entity) {
+                return true;
+            }
+        };
+        archer.getBrain().eraseMemory(MemoryModuleType.PATH);
+        archer.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(target, 0.9F, 0));
+        var sink = new WanderOrTeleportToTargetTask();
+        helper.assertTrue(sink.tryStart(helper.getLevel(), archer, helper.getLevel().getGameTime()),
+                "ranked escape fixture could not acquire a native path");
+        var path = archer.getNavigation().getPath();
+        helper.assertTrue(path != null && path.getTarget().equals(tactical),
+                "native shortest-path selection overrode tactical ranking: path=" + path);
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_escape_route_revalidation", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void pursuingAttackerDoesNotCancelStillUsefulEmergencyPath(GameTestHelper helper) {
+        pursuingEmergencyPath(helper, true);
+    }
+
+    @GameTest(batch = "mca_archer_escape_route_revalidation", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void pursuitBeforeFirstValidationKeepsUsefulEmergencyPath(GameTestHelper helper) {
+        pursuingEmergencyPath(helper, false);
+    }
+
+    private static void pursuingEmergencyPath(GameTestHelper helper, boolean validateBeforePursuit) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(12, 2, 12));
+        prepareFlatArea(helper, start, 20);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        Zombie pursuer = spawnTarget(helper, start.east(2));
+        archer.setNoAi(true);
+        archer.setOnGround(true);
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, pursuer);
+        seedNearbyEnemies(archer, List.of(pursuer));
+
+        ArcherMovementTask<VillagerEntityMCA> movement = new ArcherMovementTask<>(15);
+        long time = helper.getLevel().getGameTime();
+        movement.start(helper.getLevel(), archer, time);
+        movement.tick(helper.getLevel(), archer, time + 1);
+        WalkTarget owned = archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElseThrow();
+        helper.assertTrue(owned.getTarget() instanceof CombatEscapePositionTracker,
+                "fixture never published an emergency escape target");
+        CombatEscapePositionTracker escape = (CombatEscapePositionTracker) owned.getTarget();
+        var sink = new WanderOrTeleportToTargetTask();
+        helper.assertTrue(sink.tryStart(helper.getLevel(), archer, time + 2),
+                "fixture could not start the emergency escape route");
+        var path = archer.getNavigation().getPath();
+        helper.assertTrue(path != null && path.getNodeCount() >= 5
+                        && archer.getBrain().getMemory(MemoryModuleType.PATH).orElse(null) == path,
+                "fixture has no combat-owned native escape path with remaining nodes");
+        helper.assertTrue(escape.isPathSafe(archer, path),
+                "fixture's emergency route was not initially strictly safe");
+
+        // Record the original threat set while the path is safe, then let that same
+        // pursuer enter the escape corridor without introducing another attacker.
+        if (validateBeforePursuit) {
+            movement.tick(helper.getLevel(), archer, time + 3);
+            helper.assertTrue(archer.getNavigation().getPath() == path,
+                    "fixture lost its escape path before the pursuer moved");
+        }
+        Vec3 onRoute = path.getEntityPosAtNode(archer, Math.min(3, path.getNodeCount() - 2));
+        pursuer.teleportTo(onRoute.x, onRoute.y, onRoute.z);
+        helper.assertTrue(archer.distanceToSqr(pursuer) < 25.0D,
+                "pursuer moved outside the emergency-retreat hysteresis band");
+        helper.assertTrue(!escape.isPathSafe(archer, path),
+                "moving pursuer did not invalidate strict corridor clearance");
+        helper.assertTrue(escape.isDegradedEmergencyPathSafe(archer, path),
+                "route no longer opens useful distance from the moving pursuer");
+
+        movement.tick(helper.getLevel(), archer, time + 8);
+        helper.assertTrue(archer.getNavigation().getPath() == path
+                        && archer.getBrain().getMemory(MemoryModuleType.PATH).orElse(null) == path
+                        && archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null) == owned,
+                "unchanged pursuer caused the archer to discard a useful emergency escape route");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_escape_route_revalidation", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void movingAttackerInvalidatesOwnedEscapeWithoutRetainingUnsafePath(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(12, 2, 12));
+        prepareFlatArea(helper, start, 20);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        Zombie target = spawnTarget(helper, start.east(2));
+        archer.setNoAi(true);
+        archer.setOnGround(true);
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+        seedNearbyEnemies(archer, List.of(target));
+
+        ArcherMovementTask<VillagerEntityMCA> movement = new ArcherMovementTask<>(15);
+        long time = helper.getLevel().getGameTime();
+        movement.start(helper.getLevel(), archer, time);
+        movement.tick(helper.getLevel(), archer, time + 1);
+        WalkTarget owned = archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElseThrow();
+        helper.assertTrue(owned.getTarget() instanceof CombatEscapePositionTracker,
+                "fixture never published a combat escape target");
+        var sink = new WanderOrTeleportToTargetTask();
+        helper.assertTrue(sink.tryStart(helper.getLevel(), archer, time + 2),
+                "fixture could not start an initially safe native escape route");
+        var path = archer.getNavigation().getPath();
+        helper.assertTrue(path != null && path.getNodeCount() > 2,
+                "fixture did not produce a usable route with remaining nodes");
+        CombatEscapePositionTracker escape = (CombatEscapePositionTracker) owned.getTarget();
+
+        Skeleton attacker = spawnSkeleton(helper, start.south(20), archer);
+        Vec3 unsafe = path.getEntityPosAtNode(archer, Math.max(1, path.getNodeCount() / 2));
+        attacker.teleportTo(unsafe.x, unsafe.y, unsafe.z);
+        seedNearbyEnemies(archer, List.of(target, attacker));
+        helper.assertTrue(RangedCombatPositioning.collectThreatContext(archer, target).escapeThreats().contains(attacker),
+                "fixture attacker did not enter active escape-threat context");
+        helper.assertTrue(!escape.isPathSafe(archer, path),
+                "newly active attacker did not invalidate strict route clearance");
+        helper.assertTrue(RangedCombatPositioning.isEscapePathSafe(archer, path,
+                        RangedCombatPositioning.collectThreatContext(archer, target), true),
+                "fixture did not exercise useful geometry despite the newly active attacker");
+        helper.assertTrue(!escape.isDegradedEmergencyPathSafe(archer, path),
+                "escape owner relaxed clearance for an attacker absent at route admission");
+
+        for (int tick = 3; tick <= 9; tick++) {
+            movement.tick(helper.getLevel(), archer, time + tick);
+        }
+        helper.assertTrue(archer.getNavigation().getPath() != path,
+                "owned route continued through a newly active attacker without cancellation");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_nonattacker_route", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void nonAttackingMobOnEscapePathDoesNotCancelOwnedMovement(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(12, 2, 12));
+        prepareFlatArea(helper, start, 20);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        Zombie target = spawnTarget(helper, start.east(2));
+        archer.setNoAi(true);
+        archer.setOnGround(true);
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+        seedNearbyEnemies(archer, List.of(target));
+
+        ArcherMovementTask<VillagerEntityMCA> movement = new ArcherMovementTask<>(15);
+        long time = helper.getLevel().getGameTime();
+        movement.start(helper.getLevel(), archer, time);
+        movement.tick(helper.getLevel(), archer, time + 1);
+        WalkTarget owned = archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElseThrow();
+        helper.assertTrue(owned.getTarget() instanceof CombatEscapePositionTracker,
+                "fixture did not publish an owned escape route");
+        var sink = new WanderOrTeleportToTargetTask();
+        helper.assertTrue(sink.tryStart(helper.getLevel(), archer, time + 2),
+                "fixture did not start a native escape route");
+        var path = archer.getNavigation().getPath();
+        helper.assertTrue(path != null && path.getNodeCount() > 2,
+                "fixture did not obtain usable native path nodes");
+
+        Zombie bystander = spawnTarget(helper, start.south(10));
+        Vec3 onRoute = path.getEntityPosAtNode(archer, Math.max(1, path.getNodeCount() / 2));
+        bystander.teleportTo(onRoute.x, onRoute.y, onRoute.z);
+        seedNearbyEnemies(archer, List.of(target, bystander));
+        helper.assertTrue(!RangedCombatPositioning.collectThreatContext(archer, target).hazards().contains(bystander),
+                "nonattacking mob was classified as an active hazard");
+
+        for (int tick = 3; tick <= 10; tick++) {
+            movement.tick(helper.getLevel(), archer, time + tick);
+        }
+        helper.assertTrue(archer.getNavigation().getPath() == path,
+                "a nonattacking bystander caused an owned escape route to be cancelled");
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_archer_strafe_short_lane", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 160)
     public static void shortButImmediatelySafeStrafeLaneIsUsable(GameTestHelper helper) {
         cleanupTestEntities();
@@ -713,8 +1209,8 @@ public final class ArcherCombatMovementGameTests {
         setWallColumn(helper, start.west(2));
 
         helper.assertTrue(
-                RangedCombatPositioning.isImmediateStrafeStepSafe(archer, target, -1.0F, List.of())
-                        && RangedCombatPositioning.isImmediateStrafeStepSafe(archer, target, 1.0F, List.of()),
+                RangedCombatPositioning.findSafeStrafeLanding(archer, -1.0F, List.of()) != null
+                        && RangedCombatPositioning.findSafeStrafeLanding(archer, 1.0F, List.of()) != null,
                 "short-lane fixture must leave the immediate strafe step safe on both sides"
         );
         helper.assertTrue(
@@ -894,7 +1390,7 @@ public final class ArcherCombatMovementGameTests {
     }
 
     @GameTest(batch = "mca_archer_very_close_secondary", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
-    public static void veryClosePassiveSecondaryTriggersEmergency(GameTestHelper helper) {
+    public static void veryClosePassiveSecondaryDoesNotTriggerEmergency(GameTestHelper helper) {
         cleanupTestEntities();
         BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
         prepareFlatArea(helper, start, 20);
@@ -911,8 +1407,8 @@ public final class ArcherCombatMovementGameTests {
         movement.tick(helper.getLevel(), archer, now + 1);
 
         helper.assertTrue(
-                RangedCombatState.current(archer).orElse(null) == RangedCombatState.EMERGENCY_FLEE,
-                "hostile inside emergency range was ignored because it was passive"
+                RangedCombatState.current(archer).orElse(null) == RangedCombatState.APPROACH,
+                "passive secondary inside emergency range incorrectly interrupted approach"
         );
         helper.succeed();
     }
@@ -980,8 +1476,8 @@ public final class ArcherCombatMovementGameTests {
         );
         var currentTarget = archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
         helper.assertTrue(
-                currentTarget == preCombatTarget,
-                "EMERGENCY_FLEE directly stole a WALK_TARGET before its movement owner yielded"
+                currentTarget == null && archer.getBrain().getMemory(MemoryModuleType.PATH).orElse(null) == preCombatPath,
+                "combat acquisition did not release the ordinary stroll intent while leaving its PATH to the sink"
         );
 
         sink.tickOrStop(helper.getLevel(), archer, gameTime + 2);
@@ -994,6 +1490,40 @@ public final class ArcherCombatMovementGameTests {
         var emergencyTarget = archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
         helper.assertTrue(emergencyTarget != null && emergencyTarget != preCombatTarget,
                 "EMERGENCY_FLEE did not publish an escape target after the previous owner yielded");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_hold_active_sink", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void combatHoldReleasesActiveOrdinaryStrollAfterSinkYields(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        prepareFlatArea(helper, start, 12);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        Zombie target = spawnTarget(helper, start.east(10));
+        archer.setOnGround(true);
+        archer.setNoAi(true);
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+
+        WalkTarget stroll = new WalkTarget(Vec3.atBottomCenterOf(start.west(8)), 0.5F, 0);
+        archer.getBrain().setMemory(MemoryModuleType.WALK_TARGET, stroll);
+        WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
+        long gameTime = helper.getLevel().getGameTime();
+        helper.assertTrue(sink.tryStart(helper.getLevel(), archer, gameTime), "ordinary stroll did not start");
+        helper.assertTrue(archer.getBrain().hasMemoryValue(MemoryModuleType.PATH), "ordinary stroll has no owned PATH");
+
+        ArcherMovementTask<VillagerEntityMCA> movement = new ArcherMovementTask<>(15);
+        movement.start(helper.getLevel(), archer, gameTime);
+        movement.tick(helper.getLevel(), archer, gameTime + 1);
+        helper.assertTrue(RangedCombatState.current(archer).orElse(null) == RangedCombatState.HOLD,
+                "visible in-range target should enter HOLD");
+        helper.assertTrue(!archer.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                        && archer.getBrain().hasMemoryValue(MemoryModuleType.PATH),
+                "combat did not release the stroll intent while leaving its PATH for the active sink to stop");
+
+        sink.tickOrStop(helper.getLevel(), archer, gameTime + 2);
+        helper.assertTrue(!archer.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                        && !archer.getBrain().hasMemoryValue(MemoryModuleType.PATH),
+                "ordinary stroll continued navigating after combat HOLD requested its release");
         helper.succeed();
     }
 
@@ -1154,7 +1684,7 @@ public final class ArcherCombatMovementGameTests {
         int[] majorMotionReversals = {0};
         int[] destinationChanges = {0};
         int[] emergencyTicks = {0};
-        int[] rangedUseTicks = {0};
+        int[] emergencyDrawStarts = {0};
         double[] emergencyEpisodeStartMinimumDistanceSquared = {Double.NaN};
         double[] bestCompletedEmergencySpacingGain = {Double.NEGATIVE_INFINITY};
 
@@ -1166,8 +1696,8 @@ public final class ArcherCombatMovementGameTests {
                     emergencyEpisodeStartMinimumDistanceSquared[0] = minimumDistanceSquared(archer.position(), threats);
                 }
                 emergencyTicks[0]++;
-                if (archer.isUsingItem()) {
-                    rangedUseTicks[0]++;
+                if (archer.isUsingItem() && archer.getTicksUsingItem() <= 1) {
+                    emergencyDrawStarts[0]++;
                 }
 
                 var walkTarget = archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
@@ -1212,8 +1742,8 @@ public final class ArcherCombatMovementGameTests {
                         "crowded retreat repeatedly reversed direction: " + majorMotionReversals[0]);
                 helper.assertTrue(destinationChanges[0] <= 4,
                         "crowded retreat thrashed WALK_TARGET destinations: " + destinationChanges[0]);
-                helper.assertTrue(rangedUseTicks[0] == 0,
-                        "archer tried to use its ranged weapon during EMERGENCY_FLEE for " + rangedUseTicks[0] + " ticks");
+                helper.assertTrue(emergencyDrawStarts[0] == 0,
+                        "archer started a new draw during EMERGENCY_FLEE " + emergencyDrawStarts[0] + " times");
                 helper.assertTrue(archer.position().distanceToSqr(origin) > 4.0D,
                         "crowded retreat did not make sustained physical progress: origin=" + origin + ", pos=" + archer.position());
                 helper.assertTrue(bestCompletedEmergencySpacingGain[0] > 1.0D,
@@ -1315,6 +1845,9 @@ public final class ArcherCombatMovementGameTests {
         Zombie northThreat = spawnTarget(helper, start.north(10));
         Zombie southThreat = spawnTarget(helper, start.south(10));
         List<Zombie> threats = List.of(eastThreat, westThreat, northThreat, southThreat);
+        for (Zombie threat : threats) {
+            threat.setTarget(archer);
+        }
         archer.setNoAi(true);
         archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, eastThreat);
         archer.getBrain().setMemory(MemoryModuleType.NEAREST_LIVING_ENTITIES, List.copyOf(threats));
@@ -1340,7 +1873,7 @@ public final class ArcherCombatMovementGameTests {
                 double requiredDistance = Math.min(origin.distanceTo(threat.position()), 6.0D);
                 helper.assertTrue(
                         destination.distanceTo(threat.position()) + 1.0E-6D >= requiredDistance,
-                        "KITE violated passive-hazard clearance: threat=" + threat.position()
+                        "KITE violated active-attacker clearance: threat=" + threat.position()
                                 + ", required=" + requiredDistance + ", destination=" + destination
                 );
             }
@@ -1469,6 +2002,7 @@ public final class ArcherCombatMovementGameTests {
                 spawnTarget(helper, start.east(6)),
                 spawnTarget(helper, start.west(6))
         );
+        hazards.forEach(hazard -> hazard.setTarget(archer));
         archer.setNoAi(true);
         archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
         List<LivingEntity> all = new ArrayList<>(hazards);
@@ -1499,6 +2033,7 @@ public final class ArcherCombatMovementGameTests {
         VillagerEntityMCA archer = spawnArcher(helper, start);
         Zombie target = spawnTarget(helper, start.east(18));
         Zombie passive = spawnTarget(helper, start.east(6));
+        passive.setTarget(archer);
         archer.setOnGround(true);
         archer.setNoAi(true);
         archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
@@ -1535,7 +2070,7 @@ public final class ArcherCombatMovementGameTests {
     public static void groupEscapeCanChooseOneBlockHigherGround(GameTestHelper helper) {
         cleanupTestEntities();
         BlockPos start = helper.absolutePos(new BlockPos(10, 2, 10));
-        prepareFlatArea(helper, start, 12);
+        prepareFlatArea(helper, start, 12, 4);
         for (int x = -12; x <= 12; x++) {
             for (int z = -12; z <= 12; z++) {
                 helper.getLevel().setBlock(start.offset(x, -2, z), Blocks.AIR.defaultBlockState(), 3);
@@ -1551,6 +2086,11 @@ public final class ArcherCombatMovementGameTests {
         Zombie threat = spawnTarget(helper, start.east(5));
         helper.getLevel().setBlock(threat.blockPosition().below(), Blocks.STONE.defaultBlockState(), 3);
         archer.setOnGround(true);
+
+        helper.assertTrue(helper.getLevel().noCollision(archer,
+                        archer.getBoundingBox().move(-1.0D, 1.0D, 0.0D)),
+                "raised-lane fixture has leftover collision above its first step: "
+                        + helper.getLevel().getBlockState(start.offset(-1, 2, 0)));
 
         var escapeTarget = RangedCombatPositioning.findGroupEscapeTarget(
                         archer,
@@ -1573,6 +2113,53 @@ public final class ArcherCombatMovementGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_archer_cave_lip_escape", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 300)
+    public static void archerClimbsOutOfShallowCaveHoleDuringRetreat(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(12, 2, 12));
+        prepareFlatArea(helper, start, 12, 5);
+
+        // The archer starts one block below the eastern passage. Its only exit
+        // is a normal jumpable lip, not an impossible two-block vertical wall.
+        for (int x = 1; x <= 9; x++) {
+            helper.getLevel().setBlock(start.offset(x, 0, 0), Blocks.STONE.defaultBlockState(), 3);
+        }
+        for (int x = -4; x <= 9; x++) {
+            for (int y = 0; y <= 3; y++) {
+                helper.getLevel().setBlock(start.offset(x, y, -1), Blocks.STONE.defaultBlockState(), 3);
+                helper.getLevel().setBlock(start.offset(x, y, 1), Blocks.STONE.defaultBlockState(), 3);
+            }
+            helper.getLevel().setBlock(start.offset(x, 4, 0), Blocks.STONE.defaultBlockState(), 3);
+        }
+
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        Zombie attacker = spawnTarget(helper, start.west(2));
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, attacker);
+
+        double initialDistance = archer.distanceTo(attacker);
+        int[] ticks = {0};
+        boolean[] sawRetreat = {false};
+        helper.onEachTick(() -> {
+            ticks[0]++;
+            RangedCombatState state = RangedCombatState.current(archer).orElse(null);
+            sawRetreat[0] |= state == RangedCombatState.EMERGENCY_FLEE || state == RangedCombatState.KITE;
+
+            if (archer.getX() > start.getX() + 2.0D && archer.getY() >= start.getY() + 0.85D) {
+                helper.assertTrue(sawRetreat[0], "archer escaped without entering retreat behavior");
+                helper.assertTrue(archer.distanceTo(attacker) > initialDistance + 1.0D,
+                        "archer climbed the lip without opening distance from attacker");
+                helper.succeed();
+            } else if (ticks[0] >= 230) {
+                helper.fail("archer did not climb a jumpable cave lip; pos=" + archer.position()
+                        + ", state=" + state
+                        + ", walk=" + archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET)
+                        + ", path=" + archer.getNavigation().getPath()
+                        + ", navDone=" + archer.getNavigation().isDone());
+            }
+        });
+    }
+
     @GameTest(batch = "mca_archer_reposition_retry", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 320)
     public static void unreachableRepositionDoesNotPathSpam(GameTestHelper helper) {
         cleanupTestEntities();
@@ -1592,43 +2179,21 @@ public final class ArcherCombatMovementGameTests {
         Zombie target = spawnTarget(helper, start.east(10));
         archer.getBrain().setMemory(net.minecraft.world.entity.ai.memory.MemoryModuleType.ATTACK_TARGET, target);
 
-        WalkTarget[] firstPublished = {null};
-        int[] firstPublishTick = {-1};
-        boolean[] sawUnreachableMark = {false};
-        int[] ticks = {0};
-
+        boolean[] sawReposition = {false};
         helper.onEachTick(() -> {
-            ticks[0]++;
-            if (RangedCombatState.current(archer).orElse(null) != RangedCombatState.REPOSITION) {
-                return;
+            if (RangedCombatState.current(archer).orElse(null) == RangedCombatState.REPOSITION) {
+                sawReposition[0] = true;
+                helper.assertTrue(!archer.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                                && !archer.getBrain().hasMemoryValue(MemoryModuleType.PATH)
+                                && archer.getNavigation().isDone(),
+                        "sealed archer published an unreachable firing route");
             }
-
-            WalkTarget current = archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
-            if (archer.getBrain().getMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE).isPresent()) {
-                sawUnreachableMark[0] = true;
+            if (helper.getTick() >= 120) {
+                helper.assertTrue(sawReposition[0], "sealed archer never attempted shot repositioning");
+                helper.assertTrue(archer.position().distanceToSqr(Vec3.atBottomCenterOf(start)) < 1,
+                        "sealed archer left its fixture instead of rejecting unreachable endpoints");
+                helper.succeed();
             }
-            if (firstPublished[0] == null) {
-                if (current != null) {
-                    firstPublished[0] = current;
-                    firstPublishTick[0] = ticks[0];
-                }
-                return;
-            }
-
-            int elapsed = ticks[0] - firstPublishTick[0];
-            if (current == null || current == firstPublished[0]) {
-                return;
-            }
-
-            helper.assertTrue(
-                    sawUnreachableMark[0],
-                    "REPOSITION retried before Brain/navigation marked the original intent unreachable"
-            );
-            helper.assertTrue(
-                    elapsed >= 10,
-                    "REPOSITION republished unreachable WALK_TARGET after only " + elapsed + " ticks"
-            );
-            helper.succeed();
         });
     }
 
@@ -1925,6 +2490,9 @@ public final class ArcherCombatMovementGameTests {
         }
 
         target.absMoveTo(archer.getX() + 9.0D, archer.getY(), archer.getZ());
+        // This fixture disables navigation. Model the sink completing the escape;
+        // threshold crossing alone now correctly retains an unfinished safe route.
+        archer.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
         task.tick(helper.getLevel(), archer, gameTime + 25);
         helper.assertTrue(
                 RangedCombatState.current(archer).orElse(null) == RangedCombatState.HOLD,
@@ -2114,7 +2682,7 @@ public final class ArcherCombatMovementGameTests {
     }
 
     @GameTest(batch = "mca_archer_kite_body_facing", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 260)
-    public static void movingBowDrawStartedDuringKiteKeepsBodyFacingAttackTarget(GameTestHelper helper) {
+    public static void movingBowDrawStartedDuringKiteKeepsBodyFacingTarget(GameTestHelper helper) {
         cleanupTestEntities();
         BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
         prepareFlatArea(helper, start, 16);
@@ -2145,21 +2713,23 @@ public final class ArcherCombatMovementGameTests {
                     && archer.getTicksUsingItem() >= 4
                     && moving) {
                 var lookTarget = archer.getBrain().getMemory(MemoryModuleType.LOOK_TARGET).orElse(null);
+                LivingEntity activeTarget = archer.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).orElse(null);
+                helper.assertTrue(activeTarget == target || activeTarget == closeThreat,
+                        "moving draw lost both eligible fixture targets");
                 helper.assertTrue(
-                        lookTarget != null && lookTarget.currentPosition().distanceToSqr(target.getEyePosition()) < 0.01D,
+                        lookTarget != null && lookTarget.currentPosition().distanceToSqr(activeTarget.getEyePosition()) < 0.01D,
                         "moving KITE bow draw lost attack-target look ownership"
                 );
-                helper.assertTrue(
-                        Math.abs(Mth.wrapDegrees(archer.yHeadRot - archer.yBodyRot)) <= 5.0F,
-                        "moving KITE bow draw did not turn the body with the attack-target look; headYaw="
-                                + archer.yHeadRot + ", bodyYaw=" + archer.yBodyRot
-                );
+                float targetYaw = (float) Math.toDegrees(Math.atan2(activeTarget.getZ() - archer.getZ(),
+                        activeTarget.getX() - archer.getX())) - 90;
+                // Observe a settled moving draw, not the initial bounded turn.
+                if (Math.abs(Mth.wrapDegrees(archer.yBodyRot - targetYaw)) > archer.getMaxHeadYRot()) return;
                 helper.succeed();
                 return;
             }
 
             if (ticks[0] >= 220) {
-                helper.fail("fixture never observed ranged use after KITE movement began");
+                helper.fail("fixture never observed a target-aligned draw after KITE movement began");
             }
         });
     }
@@ -2194,6 +2764,11 @@ public final class ArcherCombatMovementGameTests {
                         + moveControlSpeedBeforeTick + ", actual=" + archer.getMoveControl().getSpeedModifier()
         );
         helper.succeed();
+    }
+
+    @AfterBatch(batch = "mca_archer_kite_speed")
+    public static void cleanupKiteSpeedBatch(ServerLevel level) {
+        cleanupTestEntities();
     }
 
     @GameTest(batch = "mca_archer_bow_facing_ownership", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
@@ -2247,9 +2822,76 @@ public final class ArcherCombatMovementGameTests {
         var walkTarget = archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
         helper.assertTrue(walkTarget != null, "KITE did not publish a WALK_TARGET");
         helper.assertTrue(
-                Math.abs(walkTarget.getSpeedModifier() - 0.9F) < 1.0E-6F,
-                "KITE path did not use the shared retreat speed; actual=" + walkTarget.getSpeedModifier()
+                Math.abs(walkTarget.getSpeedModifier() - 0.75F) < 1.0E-6F,
+                "KITE path did not use the controlled retreat speed; actual=" + walkTarget.getSpeedModifier()
         );
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_baby_zombie_retreat_speed", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void babyZombiePursuitUsesControlledRetreatSpeed(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        prepareFlatArea(helper, start, 16);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        Zombie babyZombie = spawnTarget(helper, start.east(5));
+        babyZombie.setBaby(true);
+        babyZombie.setTarget(archer);
+        archer.setOnGround(true);
+        archer.setNoAi(true);
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, babyZombie);
+        seedNearbyEnemies(archer, List.of(babyZombie));
+        ArcherMovementTask<VillagerEntityMCA> task = new ArcherMovementTask<>(24);
+        long time = helper.getLevel().getGameTime();
+        task.start(helper.getLevel(), archer, time);
+        task.tick(helper.getLevel(), archer, time);
+
+        helper.assertTrue(RangedCombatState.current(archer).orElse(null) == RangedCombatState.KITE,
+                "baby-zombie pursuit did not enter ranged KITE");
+        var walk = archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
+        helper.assertTrue(walk != null, "baby-zombie KITE had no escape walk target");
+        double effectiveSpeed = walk.getSpeedModifier() * archer.getAttributeValue(Attributes.MOVEMENT_SPEED);
+        double pursuerSpeed = babyZombie.getAttributeValue(Attributes.MOVEMENT_SPEED);
+        helper.assertTrue(effectiveSpeed >= pursuerSpeed && effectiveSpeed <= pursuerSpeed * 1.15D,
+                "baby-zombie retreat speed was outside the controlled escape margin: "
+                        + effectiveSpeed + " versus pursuer " + pursuerSpeed);
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_escape_body_rotation", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void emergencyBowArcherFacesTravelDirectionWithoutSpinning(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        prepareFlatArea(helper, start, 10);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        archer.setNoAi(true);
+        archer.startUsingItem(net.minecraft.world.InteractionHand.MAIN_HAND);
+        helper.assertTrue(archer.isUsingItem(), "fixture could not begin a bow draw");
+        Zombie target = spawnTarget(helper, start.east(10));
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+        BowTask<VillagerEntityMCA> bow = new BowTask<>(20, 15);
+        bow.start(helper.getLevel(), archer, helper.getLevel().getGameTime());
+        bow.tick(helper.getLevel(), archer, helper.getLevel().getGameTime() + 1);
+        archer.getBrain().setMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE, RangedCombatState.EMERGENCY_FLEE);
+        bow.tick(helper.getLevel(), archer, helper.getLevel().getGameTime() + 2);
+        helper.assertTrue(archer.isUsingItem() && !archer.isAggressive(),
+                "emergency escape discarded its draw or retained combat-facing presentation");
+
+        archer.setYRot(180.0F);
+        archer.yBodyRot = 0.0F;
+        archer.yHeadRot = 0.0F;
+        archer.xo = archer.getX() - 0.2D;
+        MCABodyRotationControl control = new MCABodyRotationControl(archer, archer::isAggressive);
+        for (int tick = 0; tick < 6; tick++) {
+            float previous = archer.yBodyRot;
+            control.clientTick();
+            helper.assertTrue(Math.abs(Mth.wrapDegrees(archer.yBodyRot - previous)) <= 30.01F,
+                    "emergency travel snapped the body during its facing handoff");
+        }
+        helper.assertTrue(Math.abs(Mth.wrapDegrees(archer.yBodyRot - archer.getYRot())) <= 5.0F,
+                "moving bow archer rotated its body backwards toward the pursuer instead of locomotion");
         helper.succeed();
     }
 
@@ -2282,6 +2924,8 @@ public final class ArcherCombatMovementGameTests {
             ticks[0]++;
             movement.tick(helper.getLevel(), archer, gameTime + ticks[0]);
             crossbow.tickOrStop(helper.getLevel(), archer, gameTime + ticks[0]);
+            // This manual NoAI fixture must advance the look controller itself.
+            archer.getLookControl().tick();
             if (RangedCombatState.current(archer).orElse(null) == RangedCombatState.KITE
                     && archer.isUsingItem()
                     && archer.getTicksUsingItem() >= 4) {
@@ -2290,17 +2934,17 @@ public final class ArcherCombatMovementGameTests {
                         lookTarget != null && lookTarget.currentPosition().distanceToSqr(target.getEyePosition()) < 0.01D,
                         "KITE crossbow charge lost attack-target look ownership"
                 );
-                helper.assertTrue(
-                        Math.abs(Mth.wrapDegrees(archer.yHeadRot - archer.yBodyRot)) <= 5.0F,
-                        "moving KITE crossbow charge did not turn the body with the attack-target look; headYaw="
-                                + archer.yHeadRot + ", bodyYaw=" + archer.yBodyRot
-                );
+                float targetYaw = (float) Math.toDegrees(Math.atan2(target.getZ() - archer.getZ(),
+                        target.getX() - archer.getX())) - 90;
+                if (Math.abs(Mth.wrapDegrees(archer.yBodyRot - targetYaw)) > archer.getMaxHeadYRot()) return;
+                helper.assertTrue(Math.abs(Mth.wrapDegrees(archer.yHeadRot - targetYaw)) <= 15,
+                        "crossbow look controller did not track its actual target");
                 helper.succeed();
                 return;
             }
 
             if (ticks[0] >= 260) {
-                helper.fail("fixture never observed a moving KITE crossbow charge");
+                helper.fail("fixture never observed a target-aligned KITE crossbow charge");
             }
         });
     }
@@ -2498,7 +3142,10 @@ public final class ArcherCombatMovementGameTests {
                 "EMERGENCY_FLEE did not transition to KITE inside the retreat hysteresis band"
         );
         helper.assertTrue(
-                archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null) == emergencyTarget,
+                archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET)
+                        .filter(walk -> walk.getTarget() == emergencyTarget.getTarget()
+                                && walk.getCloseEnoughDist() == emergencyTarget.getCloseEnoughDist()
+                                && walk.getSpeedModifier() <= 0.75F).isPresent(),
                 "airborne retreat transition discarded the existing safe escape route"
         );
         helper.succeed();
@@ -2654,7 +3301,7 @@ public final class ArcherCombatMovementGameTests {
     }
 
     @GameTest(batch = "mca_archer_bow_emergency", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 240)
-    public static void emergencyFleeCancelsBowDraw(GameTestHelper helper) {
+    public static void emergencyFleeCarriesExistingBowDraw(GameTestHelper helper) {
         cleanupTestEntities();
         BlockPos start = helper.absolutePos(new BlockPos(2, 2, 2));
         prepareFlatArea(helper, start.east(5), 10);
@@ -2670,7 +3317,8 @@ public final class ArcherCombatMovementGameTests {
                 return;
             }
             if (drawStarted[0] && RangedCombatState.current(archer).orElse(null) == RangedCombatState.EMERGENCY_FLEE) {
-                helper.assertTrue(!archer.isUsingItem(), "bow draw continued during EMERGENCY_FLEE");
+                helper.assertTrue(archer.isUsingItem() && !archer.isAggressive(),
+                        "emergency discarded the existing draw or kept combat-facing presentation");
                 helper.succeed();
             }
         });
@@ -2709,6 +3357,178 @@ public final class ArcherCombatMovementGameTests {
                 "crossbow behavior remained running during EMERGENCY_FLEE"
         );
         helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_crossbow_charge_resume", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void interruptedCrossbowChargeRestartsUsingSelectedHand(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        prepareFlatArea(helper, start, 10);
+        VillagerEntityMCA archer = spawnArcher(helper, start, Items.CROSSBOW.getDefaultInstance());
+        Zombie target = spawnTarget(helper, start.east(7));
+        archer.setNoAi(true);
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+        seedNearbyEnemies(archer, List.of(target));
+        ExtendedCrossbowAttackTask<VillagerEntityMCA, Zombie> crossbow = new ExtendedCrossbowAttackTask<>();
+        long now = helper.getLevel().getGameTime();
+        helper.assertTrue(crossbow.tryStart(helper.getLevel(), archer, now),
+                "crossbow recovery fixture could not start combat");
+        crossbow.tickOrStop(helper.getLevel(), archer, now + 1);
+        helper.assertTrue(archer.isUsingItem(), "fixture did not begin an interrupted partial charge");
+
+        archer.getBrain().setMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE, RangedCombatState.EMERGENCY_FLEE);
+        crossbow.tickOrStop(helper.getLevel(), archer, now + 2);
+        helper.assertTrue(!archer.isUsingItem(), "crossbow remained in use during emergency retreat");
+        archer.getBrain().eraseMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE);
+        helper.assertTrue(crossbow.tryStart(helper.getLevel(), archer, now + 3),
+                "crossbow could not restart after emergency retreat");
+        crossbow.tickOrStop(helper.getLevel(), archer, now + 4);
+        // Vanilla CrossbowAttack.stop retains CHARGING; the first resumed tick
+        // clears that inherited phase, and the following tick starts using again.
+        crossbow.tickOrStop(helper.getLevel(), archer, now + 5);
+        helper.assertTrue(archer.isUsingItem(),
+                "resumed crossbow did not restart charging after the inherited phase cleared");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_crossbow_offhand_resume", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void interruptedOffhandCrossbowResumesInSameHand(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        prepareFlatArea(helper, start, 10);
+        VillagerEntityMCA archer = spawnArcher(helper, start, Items.STICK.getDefaultInstance());
+        archer.setItemSlot(EquipmentSlot.OFFHAND, Items.CROSSBOW.getDefaultInstance());
+        Zombie target = spawnTarget(helper, start.east(7));
+        archer.setNoAi(true);
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+        seedNearbyEnemies(archer, List.of(target));
+
+        ExtendedCrossbowAttackTask<VillagerEntityMCA, Zombie> task = new ExtendedCrossbowAttackTask<>();
+        long time = helper.getLevel().getGameTime();
+        helper.assertTrue(task.tryStart(helper.getLevel(), archer, time),
+                "offhand crossbow could not start combat");
+        task.tickOrStop(helper.getLevel(), archer, time + 1);
+        helper.assertTrue(archer.isUsingItem()
+                        && archer.getUsedItemHand() == net.minecraft.world.InteractionHand.OFF_HAND,
+                "initial crossbow charge did not use the selected offhand");
+
+        archer.getBrain().setMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE, RangedCombatState.EMERGENCY_FLEE);
+        task.tickOrStop(helper.getLevel(), archer, time + 2);
+        helper.assertTrue(!archer.isUsingItem() && task.getStatus() == net.minecraft.world.entity.ai.behavior.Behavior.Status.STOPPED,
+                "emergency escape did not stop offhand crossbow charge");
+        archer.getBrain().eraseMemory(MemoryModuleTypeMCA.RANGED_COMBAT_STATE);
+        helper.assertTrue(task.tryStart(helper.getLevel(), archer, time + 3),
+                "offhand crossbow could not restart after retreat");
+        task.tickOrStop(helper.getLevel(), archer, time + 4);
+        task.tickOrStop(helper.getLevel(), archer, time + 5);
+        helper.assertTrue(archer.isUsingItem()
+                        && archer.getUsedItemHand() == net.minecraft.world.InteractionHand.OFF_HAND,
+                "crossbow resumed in the wrong hand or failed to resume after interruption");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_planning_benchmark", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 260)
+    public static void measureBoundedEscapePlanningAtOneEightThirtyTwoArchers(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos center = helper.absolutePos(new BlockPos(56, 2, 56));
+        prepareFlatArea(helper, center, 40);
+        List<VillagerEntityMCA> archers = new ArrayList<>();
+        List<Zombie> targets = new ArrayList<>();
+        List<BlockPos> starts = new ArrayList<>();
+        for (int index = 0; index < 32; index++) {
+            BlockPos position = center.offset(index % 8 * 6 - 21, 0, index / 8 * 12 - 18);
+            starts.add(position);
+            VillagerEntityMCA archer = spawnArcher(helper, position);
+            archer.setNoAi(true);
+            archer.setOnGround(true);
+            archers.add(archer);
+            targets.add(spawnTarget(helper, position.east(2)));
+        }
+
+        // No production timing probes: three warmed samples for each workload are
+        // collected inside the existing GameTest arena. The server tick history is
+        // reported separately and includes other fixture activity.
+        long[][][] planning = new long[3][3][3];
+        long[][][] nativeRouting = new long[3][3][3];
+        int[][][] reachable = new int[3][3][3];
+        int[] tick = {0};
+        helper.onEachTick(() -> {
+            int sample = tick[0]++;
+            if (sample >= 45) {
+                long[] serverTicks = helper.getLevel().getServer().getTickTimesNanos().clone();
+                java.util.Arrays.sort(serverTicks);
+                for (int terrain = 0; terrain < 3; terrain++) {
+                    for (int group = 0; group < 3; group++) {
+                        long[] plan = planning[terrain][group].clone();
+                        long[] route = nativeRouting[terrain][group].clone();
+                        java.util.Arrays.sort(plan);
+                        java.util.Arrays.sort(route);
+                        net.conczin.mca.MCA.LOGGER.info(
+                                "[MCA Archer Planning Perf] terrain={} archers={} warmup=2 samples=3 "
+                                        + "planningMedianMs={} planningMaxMs={} nativeMedianMs={} nativeMaxMs={} "
+                                        + "reachable={}",
+                                new String[]{"flat", "raised", "cave"}[terrain],
+                                new int[]{1, 8, 32}[group],
+                                plan[1] / 1.0E6D, plan[2] / 1.0E6D,
+                                route[1] / 1.0E6D, route[2] / 1.0E6D,
+                                java.util.Arrays.toString(reachable[terrain][group]));
+                    }
+                }
+                net.conczin.mca.MCA.LOGGER.info(
+                        "[MCA Archer Planning Perf] last100ServerTicksMedianMs={} last100ServerTicksP95Ms={} "
+                                + "(includes fixture/setup and unrelated server work)",
+                        serverTicks[50] / 1.0E6D, serverTicks[94] / 1.0E6D);
+                helper.succeed();
+                return;
+            }
+            int terrain = sample / 15;
+            int group = sample % 15 / 5;
+            int repetition = sample % 5;
+            if (sample % 15 == 0) {
+                for (BlockPos start : starts) {
+                    for (int distance = 2; distance <= 6; distance++) {
+                        for (int wall = -2; wall <= 2; wall++) {
+                            BlockPos position = start.offset(wall, 0, -distance);
+                            helper.getLevel().setBlock(position,
+                                    (terrain == 1 && Math.abs(wall) <= 1
+                                            || terrain == 2 && Math.abs(wall) == 2)
+                                            ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 3);
+                            helper.getLevel().setBlock(position.above(),
+                                    terrain == 2 && Math.abs(wall) == 2
+                                            ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 3);
+                        }
+                    }
+                }
+            }
+
+            int count = new int[]{1, 8, 32}[group];
+            long planNs = 0;
+            long nativeNs = 0;
+            int found = 0;
+            for (int index = 0; index < count; index++) {
+                VillagerEntityMCA archer = archers.get(index);
+                Zombie threat = targets.get(index);
+                long start = System.nanoTime();
+                var candidate = RangedCombatPositioning.findGroupEscapeTarget(
+                        archer, List.of(threat), List.of(threat), 6.0D);
+                planNs += System.nanoTime() - start;
+                if (candidate.isEmpty()) {
+                    continue;
+                }
+                start = System.nanoTime();
+                var path = archer.getNavigation().createPath(candidate.orElseThrow().getPathTargets(archer), 0);
+                nativeNs += System.nanoTime() - start;
+                if (path != null && path.canReach()) {
+                    found++;
+                }
+            }
+            if (repetition >= 2) {
+                planning[terrain][group][repetition - 2] = planNs;
+                nativeRouting[terrain][group][repetition - 2] = nativeNs;
+                reachable[terrain][group][repetition - 2] = found;
+            }
+        });
     }
 
     @GameTest(batch = "mca_archer_reposition", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 240)
@@ -2850,27 +3670,27 @@ public final class ArcherCombatMovementGameTests {
         long gameTime = helper.getLevel().getGameTime();
         task.start(helper.getLevel(), archer, gameTime);
 
-        for (int tick = 1; tick < 10; tick++) {
+        for (int tick = 1; tick < 20; tick++) {
             task.tick(helper.getLevel(), archer, gameTime + tick);
         }
 
         helper.assertTrue(
                 RangedCombatState.current(archer).orElse(null) == RangedCombatState.HOLD,
-                "stable visible target strafed before the active 10-tick hold delay; state="
+                "stable visible target strafed before the active 20-tick hold delay; state="
                         + RangedCombatState.current(archer).orElse(null)
         );
 
-        task.tick(helper.getLevel(), archer, gameTime + 10);
+        task.tick(helper.getLevel(), archer, gameTime + 20);
         helper.assertTrue(
                 RangedCombatState.current(archer).orElse(null) == RangedCombatState.STRAFE,
-                "stable visible target did not strafe after the active 10-tick hold delay; state="
+                "stable visible target did not strafe after the active 20-tick hold delay; state="
                         + RangedCombatState.current(archer).orElse(null)
         );
         helper.succeed();
     }
 
     @GameTest(batch = "mca_archer_hold_ownership", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
-    public static void holdPreservesPreCombatNavigation(GameTestHelper helper) {
+    public static void combatPausesFollowingNavigation(GameTestHelper helper) {
         cleanupTestEntities();
         BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
         prepareFlatArea(helper, start, 12);
@@ -2879,6 +3699,8 @@ public final class ArcherCombatMovementGameTests {
         archer.setNoAi(true);
         archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
         WalkTarget preCombatWalkTarget = new WalkTarget(Vec3.atBottomCenterOf(start.north(8)), 0.5F, 0);
+        archer.getBrain().setMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING,
+                helper.makeMockPlayer(net.minecraft.world.level.GameType.SURVIVAL));
         archer.getBrain().setMemory(MemoryModuleType.WALK_TARGET, preCombatWalkTarget);
         archer.setOnGround(true);
         helper.assertTrue(
@@ -2897,10 +3719,12 @@ public final class ArcherCombatMovementGameTests {
                 "stable target did not enter HOLD; state=" + RangedCombatState.current(archer).orElse(null)
         );
         helper.assertTrue(
-                archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null) == preCombatWalkTarget,
-                "HOLD erased a pre-combat WALK_TARGET owned by another behavior"
+                archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null) != preCombatWalkTarget,
+                "combat retained a pre-combat follow route"
         );
-        helper.assertTrue(!archer.getNavigation().isDone(), "HOLD stopped pre-combat navigation owned by another behavior");
+        helper.assertTrue(archer.getNavigation().isDone(), "combat failed to pause pre-combat follow navigation");
+        helper.assertTrue(archer.getBrain().hasMemoryValue(MemoryModuleTypeMCA.PLAYER_FOLLOWING),
+                "combat discarded the follow instruction instead of pausing its route");
         helper.succeed();
     }
 
@@ -2996,6 +3820,181 @@ public final class ArcherCombatMovementGameTests {
                 Math.abs(archer.getMoveControl().getSpeedModifier() - 0.5D) < 1.0E-6D,
                 "direct STRAFE inherited vanilla's 0.25 speed modifier; actual=" + archer.getMoveControl().getSpeedModifier()
         );
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_blocked_input", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void blockedStrafeDoesNotLungeForward(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(8, 2, 8));
+        prepareFlatArea(helper, start, 8);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        // This synchronous probe calls native travel, which NoAI would disable.
+        archer.setNoAi(false);
+        MCAMoveControl control = (MCAMoveControl) archer.getMoveControl();
+
+        for (float yaw : new float[]{0.0F, 90.0F, 180.0F, -90.0F}) {
+            Vec3 lateral = Vec3.directionFromRotation(0.0F, yaw - 90.0F);
+            Vec3 center = Vec3.atBottomCenterOf(start);
+            double edgeOffset = 0.5D - archer.getBbWidth() / 2.0D - 0.01D;
+            Vec3 origin = center.add(lateral.scale(edgeOffset));
+            BlockPos wall = BlockPos.containing(center.add(lateral));
+            setWallColumn(helper, wall);
+            helper.getLevel().setBlock(wall.above(2), Blocks.STONE.defaultBlockState(), 3);
+            archer.absMoveTo(origin.x, origin.y, origin.z);
+            archer.setYRot(yaw);
+            archer.setOnGround(true);
+            archer.setDeltaMovement(Vec3.ZERO);
+            control.strafe(0.0F, 0.35F, 0.5D);
+            helper.assertTrue(!control.isWalkable(0.1F, 0.0F), "fixture did not block the immediate strafe at yaw=" + yaw);
+            control.tick();
+            archer.travel(new Vec3(archer.xxa, 0.0D, archer.zza));
+            helper.assertTrue(archer.position().subtract(origin).horizontalDistanceSqr() < 1.0E-8D,
+                    "blocked strafe moved forward instead of releasing input at yaw=" + yaw
+                            + ", input=" + archer.xxa + "," + archer.zza + ", displacement=" + archer.position().subtract(origin));
+            for (int y = 0; y < 3; y++) helper.getLevel().setBlock(wall.above(y), Blocks.AIR.defaultBlockState(), 3);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_measured_strafe_speed", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void strafingTravelsSlowerThanCombatWalking(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(16, 2, 16));
+        prepareFlatArea(helper, start, 20);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        archer.setNoAi(false);
+        archer.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(0.5D);
+        Zombie target = spawnTarget(helper, start.south(12));
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+        ArcherMovementTask<VillagerEntityMCA> movement = new ArcherMovementTask<>(15);
+        long now = helper.getLevel().getGameTime();
+        movement.start(helper.getLevel(), archer, now);
+        for (int tick = 1; tick <= 20; tick++) movement.tick(helper.getLevel(), archer, now + tick);
+        helper.assertTrue(RangedCombatState.current(archer).orElse(null) == RangedCombatState.STRAFE,
+                "fixture did not enter STRAFE");
+        Vec3 origin = archer.position();
+        for (int tick = 0; tick < 20; tick++) {
+            if (tick > 0) movement.tick(helper.getLevel(), archer, now + 20 + tick);
+            archer.getMoveControl().tick();
+            archer.travel(new Vec3(archer.xxa, 0.0D, archer.zza));
+        }
+        double strafeDistance = archer.position().subtract(origin).horizontalDistance();
+        movement.stop(helper.getLevel(), archer, now + 40);
+        archer.absMoveTo(origin.x, origin.y, origin.z);
+        archer.setDeltaMovement(Vec3.ZERO);
+        archer.setOnGround(true);
+        for (int tick = 0; tick < 20; tick++) {
+            archer.getMoveControl().setWantedPosition(origin.x, origin.y, origin.z + 15.0D, 0.5D);
+            archer.getMoveControl().tick();
+            archer.travel(new Vec3(archer.xxa, 0.0D, archer.zza));
+        }
+        double walkDistance = archer.position().subtract(origin).horizontalDistance();
+        helper.assertTrue(strafeDistance > 0.5D && strafeDistance < walkDistance,
+                "strafe should make useful progress below walking pace at the same movement attribute/modifier; strafe="
+                        + strafeDistance + ", walk=" + walkDistance);
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_archer_strafe_side_memory", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void consecutiveStrafesKeepSafeDirectionAndYieldToObstacles(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(24, 2, 24));
+        prepareFlatArea(helper, start, 24, 4);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        archer.setNoAi(false);
+        archer.setOnGround(true);
+        archer.setYRot(0.0F);
+        archer.yHeadRot = archer.yBodyRot = 0.0F;
+        Zombie target = spawnTarget(helper, start.south(12));
+        Zombie hazard = spawnTarget(helper, start.east(12));
+        hazard.setTarget(archer);
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+        seedNearbyEnemies(archer, List.of(target, hazard));
+        ArcherMovementTask<VillagerEntityMCA> movement = new ArcherMovementTask<>(15);
+        long now = helper.getLevel().getGameTime();
+        movement.start(helper.getLevel(), archer, now);
+        RangedCombatState previous = null;
+        int bursts = 0;
+        float firstDirection = 0.0F;
+        BlockPos obstacle = null;
+        for (int tick = 1; tick <= 260; tick++) {
+            archer.getSensing().tick();
+            movement.tick(helper.getLevel(), archer, now + tick);
+            archer.getMoveControl().tick();
+            RangedCombatState state = RangedCombatState.current(archer).orElse(null);
+            if (state == RangedCombatState.STRAFE && previous != RangedCombatState.STRAFE) {
+                bursts++;
+                float direction = Math.signum(archer.xxa);
+                if (bursts == 1) {
+                    firstDirection = direction;
+                    helper.assertTrue(direction == -1.0F, "fixture did not begin away from the east hazard");
+                } else if (bursts == 2) {
+                    helper.assertTrue(direction == firstDirection,
+                            "equally open sides repicked the opposite direction after a distant hazard moved; first="
+                                    + firstDirection + ", second=" + direction);
+                } else {
+                    helper.assertTrue(direction == -firstDirection,
+                            "remembered strafe side overrode an obstacle instead of taking the open side");
+                    for (int y = 0; y < 3; y++) {
+                        helper.getLevel().setBlock(obstacle.above(y), Blocks.AIR.defaultBlockState(), 3);
+                    }
+                    helper.succeed();
+                    return;
+                }
+            }
+            if (previous == RangedCombatState.STRAFE && state == RangedCombatState.HOLD) {
+                if (bursts == 1) {
+                    hazard.absMoveTo(archer.getX() - 12.0D, archer.getY(), archer.getZ());
+                } else if (bursts == 2) {
+                    Vec3 lateral = Vec3.directionFromRotation(0.0F, archer.getYRot() - 90.0F);
+                    BlockPos wall = BlockPos.containing(archer.position().add(lateral.scale(firstDirection * 2.0D)));
+                    obstacle = wall;
+                    setWallColumn(helper, wall);
+                    helper.getLevel().setBlock(wall.above(2), Blocks.STONE.defaultBlockState(), 3);
+                }
+            }
+            archer.travel(new Vec3(archer.xxa, 0.0D, archer.zza));
+            previous = state;
+        }
+        helper.fail("fixture did not complete three strafe starts; bursts=" + bursts
+                + ", state=" + previous + ", pos=" + archer.position());
+    }
+
+    @GameTest(batch = "mca_archer_safe_retreat_stop", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 120)
+    public static void safeGroundedShotReleasesUnfinishedEmergencyWaypoint(GameTestHelper helper) {
+        cleanupTestEntities();
+        BlockPos start = helper.absolutePos(new BlockPos(20, 2, 20));
+        prepareFlatArea(helper, start, 24, 4);
+        VillagerEntityMCA archer = spawnArcher(helper, start);
+        archer.setNoAi(true);
+        archer.setOnGround(true);
+        Skeleton target = spawnSkeleton(helper, start.east(2), archer);
+        archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, target);
+        seedNearbyEnemies(archer, List.of(target));
+        ArcherMovementTask<VillagerEntityMCA> movement = new ArcherMovementTask<>(15);
+        long now = helper.getLevel().getGameTime();
+        movement.start(helper.getLevel(), archer, now);
+        movement.tick(helper.getLevel(), archer, now + 1);
+        WalkTarget escape = archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElseThrow();
+        helper.assertTrue(RangedCombatState.current(archer).orElse(null) == RangedCombatState.EMERGENCY_FLEE,
+                "fixture did not publish an emergency escape");
+        // A pursuer's movement or a bent route can provide a shot before the
+        // original endpoint. Reproduce that pose without depending on ranking.
+        archer.absMoveTo(target.getX(), target.getY(), target.getZ() - 11.0D);
+        archer.setOnGround(true);
+        helper.assertTrue(!((CombatEscapePositionTracker) escape.getTarget()).isReached(archer, 0),
+                "fixture accidentally reached its original escape endpoint");
+        for (int tick = 2; tick <= 5; tick++) {
+            archer.getSensing().tick();
+            movement.tick(helper.getLevel(), archer, now + tick);
+        }
+        var settled = RangedCombatState.current(archer).orElse(null);
+        helper.assertTrue((settled == RangedCombatState.HOLD || settled == RangedCombatState.STRAFE)
+                        && !archer.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET),
+                "safe grounded firing pose kept following an obsolete emergency waypoint; state="
+                        + RangedCombatState.current(archer) + ", walk="
+                        + archer.getBrain().getMemory(MemoryModuleType.WALK_TARGET));
         helper.succeed();
     }
 

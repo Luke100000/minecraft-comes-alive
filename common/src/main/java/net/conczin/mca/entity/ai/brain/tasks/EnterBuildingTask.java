@@ -2,6 +2,8 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.BedPoiCompatibility;
+import net.conczin.mca.entity.ai.navigation.PathNodeGeometry;
+import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.conczin.mca.server.world.data.Building;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -9,18 +11,25 @@ import net.minecraft.tags.BlockTags;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
+    private static final int FAILED_BUILDING_RETRY_TICKS = 100;
+    private static final double FAILED_BUILDING_RETRY_MOVE_DISTANCE_SQR = 16.0D;
     private final String building;
     private final float speed;
+    private BlockPos lastIssuedDestination;
+    private BlockPos lastIssuedOrigin;
+    private String lastIssuedBuildingType;
+    private long nextFailedBuildingRetryTick;
 
     public EnterBuildingTask(String building, float speed) {
         super(Map.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT, MemoryModuleType.WALK_TARGET, MemoryStatus.VALUE_ABSENT, MemoryModuleType.LOOK_TARGET, MemoryStatus.REGISTERED));
@@ -28,9 +37,25 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
         this.speed = speed;
     }
 
+    @Override
+    protected boolean checkExtraStartConditions(ServerLevel level, VillagerEntityMCA villager) {
+        return lastIssuedDestination == null
+                || !Objects.equals(getBuilding(villager), lastIssuedBuildingType)
+                || villager.blockPosition().distSqr(lastIssuedOrigin) >= FAILED_BUILDING_RETRY_MOVE_DISTANCE_SQR
+                || level.getGameTime() >= nextFailedBuildingRetryTick;
+    }
+
     protected void start(ServerLevel serverWorld, VillagerEntityMCA villager, long l) {
         getNextPosition(villager)
-                .ifPresent(pos -> villager.moveTowardsPersistent(pos, this.speed, getCompletionRange()));
+                .ifPresent(pos -> {
+                    lastIssuedDestination = pos.immutable();
+                    lastIssuedOrigin = villager.blockPosition().immutable();
+                    lastIssuedBuildingType = getBuilding(villager);
+                    nextFailedBuildingRetryTick = l + FAILED_BUILDING_RETRY_TICKS;
+                    BehaviorUtils.setWalkAndLookTargetMemories(villager,
+                            new PersistentPathTarget(pos, villager.getBrain().getActiveNonCoreActivity().orElse(null)),
+                            this.speed, getCompletionRange());
+                });
     }
 
     protected Optional<Building> getNearestBuilding(VillagerEntityMCA villager) {
@@ -103,17 +128,28 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
 
     /** Idle standing space within a room, excluding sleep surfaces and doorways. */
     static boolean isUsableFloor(Level world, PathfinderMob mob, BlockPos pos) {
+        return isIdleFloorSurface(world, pos) && hasStandingSpace(world, mob, pos);
+    }
+
+    /** Structural space does not shrink when another entity occupies the floor. */
+    static boolean isUsableFloorGeometry(Level world, PathfinderMob mob, BlockPos pos) {
+        return isIdleFloorSurface(world, pos)
+                && mob.getNavigation().isStableDestination(pos)
+                && world.noBlockCollision(mob,
+                        mob.getBoundingBox().move(PathNodeGeometry.walkingPosition(world, pos, mob).subtract(mob.position())));
+    }
+
+    private static boolean isIdleFloorSurface(Level world, BlockPos pos) {
         return !world.getBlockState(pos).is(BlockTags.DOORS)
                 && !BedPoiCompatibility.isCompatibleBedState(world.getBlockState(pos))
-                && !BedPoiCompatibility.isCompatibleBedState(world.getBlockState(pos.below()))
-                && hasStandingSpace(world, mob, pos);
+                && !BedPoiCompatibility.isCompatibleBedState(world.getBlockState(pos.below()));
     }
 
     static boolean hasStandingSpace(Level world, PathfinderMob mob, BlockPos pos) {
         return mob.getNavigation().isStableDestination(pos)
                 && world.noCollision(
                         mob,
-                        mob.getBoundingBox().move(Vec3.atBottomCenterOf(pos).subtract(mob.position()))
+                        mob.getBoundingBox().move(PathNodeGeometry.walkingPosition(world, pos, mob).subtract(mob.position()))
                 );
     }
 

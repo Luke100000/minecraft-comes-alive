@@ -260,6 +260,15 @@ public class InteractScreen extends AbstractDynamicScreen {
                 return handleDialogueClick(dialogueHits.get(dialogueKeyboardIndex).click());
             }
         }
+        // Allow keyboard gifting without repeating a transfer for every held-key event.
+        if (inGiftMode && !dialogueMode
+                && (keyChar == GLFW.GLFW_KEY_ENTER || keyChar == GLFW.GLFW_KEY_KP_ENTER)) {
+            if (timeSinceLastClick > 2) {
+                timeSinceLastClick = 0;
+                Network.sendToServer(new InteractionVillagerMessage("gift", villager.asEntity().getUUID()));
+            }
+            return true;
+        }
         return super.keyPressed(keyChar, keyCode, unknown);
     }
 

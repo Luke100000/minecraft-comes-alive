@@ -5,6 +5,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.server.world.data.Building;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -15,6 +16,9 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.TrapDoorBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
@@ -182,6 +186,80 @@ public final class EnterBuildingGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_enter_building_surface_targets", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena")
+    public static void carpetFloorCellRemainsSelectable(GameTestHelper helper) {
+        assertFloorCellSelection(helper, Blocks.WHITE_CARPET.defaultBlockState(), false, true);
+    }
+
+    @GameTest(batch = "mca_enter_building_surface_targets", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena")
+    public static void carpetFloorCellCountsAsStructuralRoomSpace(GameTestHelper helper) {
+        assertFloorCellSelection(helper, Blocks.WHITE_CARPET.defaultBlockState(), true, true);
+    }
+
+    @GameTest(batch = "mca_enter_building_surface_targets", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena")
+    public static void closedBottomTrapdoorIsNotAReachableFloorNode(GameTestHelper helper) {
+        assertFloorCellSelection(helper, Blocks.OAK_TRAPDOOR.defaultBlockState()
+                .setValue(TrapDoorBlock.OPEN, false)
+                .setValue(TrapDoorBlock.HALF, Half.BOTTOM), false, false);
+    }
+
+    @GameTest(batch = "mca_enter_building_surface_targets", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena")
+    public static void bottomSlabIsNotAReachableFloorNode(GameTestHelper helper) {
+        assertFloorCellSelection(helper, Blocks.STONE_SLAB.defaultBlockState(), false, false);
+    }
+
+    private static void assertFloorCellSelection(GameTestHelper helper, BlockState surface,
+                                                 boolean structuralGeometry, boolean reachable) {
+        BlockPos start = helper.absolutePos(new BlockPos(12, 1, 12));
+        BlockPos floorCell = start.east(3);
+        helper.assertTrue(helper.getBounds().contains(Vec3.atCenterOf(start.offset(5, 2, 2))),
+                "surface fixture does not fit inside its allocated template");
+        for (BlockPos feet : BlockPos.betweenClosed(start.offset(-2, 0, -2), start.offset(5, 0, 2))) {
+            helper.getLevel().setBlock(feet.below(), Blocks.STONE.defaultBlockState(), 3);
+            for (int y = 0; y < 4; y++) {
+                helper.getLevel().setBlock(feet.above(y), Blocks.AIR.defaultBlockState(), 3);
+            }
+        }
+        helper.getLevel().setBlock(floorCell, surface, 3);
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start))
+                .withName("Registered Partial-Height Floor")
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.setNoAi(true);
+        villager.setOnGround(true);
+        try {
+            helper.assertTrue(villager.getNavigation().isStableDestination(floorCell),
+                    "surface fixture is not a stable destination: " + surface);
+            double surfaceY = floorCell.getY() + surface.getCollisionShape(helper.getLevel(), floorCell)
+                    .max(Direction.Axis.Y);
+            Vec3 standingPosition = new Vec3(floorCell.getX() + 0.5, surfaceY, floorCell.getZ() + 0.5);
+            helper.assertTrue(helper.getLevel().noBlockCollision(villager,
+                            villager.getBoundingBox().move(standingPosition.subtract(villager.position()))),
+                    "surface fixture does not physically accommodate a standing villager: " + surface);
+            var path = villager.getNavigation().createPath(floorCell, 0);
+            helper.assertTrue((path != null && path.canReach() && path.getTarget().equals(floorCell)) == reachable,
+                    "unexpected same-cell navigation reachability for " + surface + ": " + path);
+
+            if (structuralGeometry) {
+                helper.assertTrue(EnterBuildingTask.isUsableFloorGeometry(helper.getLevel(), villager, floorCell) == reachable,
+                        "shelter capacity disagreed with same-cell navigation reachability for " + surface);
+            } else {
+                Building building = buildingWithFloorCells(floorCell, floorCell.offset(1, 1, 1), Set.of(floorCell));
+                helper.assertTrue(new TargetSelectionProbe().select(building, helper.getLevel(), villager)
+                                .filter(floorCell::equals).isPresent() == reachable,
+                        "enter-building selection disagreed with same-cell navigation reachability for " + surface);
+            }
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_enter_building_nearest_selection", templateNamespace = "minecraft",
             template = "bastion/blocks/air")
     public static void nearestBuildingResolvesDynamicTypeOncePerScan(GameTestHelper helper) {
@@ -219,6 +297,64 @@ public final class EnterBuildingGameTests {
             villager.discard();
         }
         helper.succeed();
+    }
+
+    @GameTest(batch = "mca_enter_building_missing_retry", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 60)
+    public static void missingFavoredBuildingDoesNotRescanEveryIdleTick(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start))
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.setNoAi(true);
+        villager.refreshBrain(helper.getLevel());
+        MissingFavoredBuildingProbe task = new MissingFavoredBuildingProbe(start);
+        long startTick = helper.getLevel().getGameTime();
+        helper.onEachTick(() -> {
+            long elapsed = helper.getLevel().getGameTime() - startTick;
+            if (elapsed >= 1 && elapsed <= 20) {
+                if (task.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime())) {
+                    task.doStop(helper.getLevel(), villager, helper.getLevel().getGameTime());
+                }
+            }
+            if (elapsed == 20) {
+                helper.assertTrue(task.scans >= 1, "fixture never attempted a favored building lookup");
+                helper.assertTrue(task.scans <= 3,
+                        "missing favored building was looked up too often across 20 idle ticks: " + task.scans);
+                villager.discard();
+                helper.succeed();
+            }
+        });
+    }
+
+    @GameTest(batch = "mca_enter_building_new_building", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 60)
+    public static void newlyAvailableFavoredBuildingIsRetriedPromptly(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(4, 2, 4));
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start))
+                .spawn(MobSpawnType.STRUCTURE);
+        villager.setNoAi(true);
+        villager.refreshBrain(helper.getLevel());
+        MissingFavoredBuildingProbe task = new MissingFavoredBuildingProbe(start);
+        long startTick = helper.getLevel().getGameTime();
+        helper.onEachTick(() -> {
+            long elapsed = helper.getLevel().getGameTime() - startTick;
+            if (elapsed == 5) {
+                task.buildingAvailable = true;
+            }
+            if (elapsed >= 1 && elapsed <= 15) {
+                if (task.tryStart(helper.getLevel(), villager, helper.getLevel().getGameTime())) {
+                    task.doStop(helper.getLevel(), villager, helper.getLevel().getGameTime());
+                }
+            }
+            if (elapsed == 15) {
+                helper.assertTrue(task.foundBuilding,
+                        "newly available favored building was not found within ten ticks");
+                villager.discard();
+                helper.succeed();
+            }
+        });
     }
 
     private static Building buildingWithFloorCells(BlockPos min, BlockPos max, Set<BlockPos> floorCells) {
@@ -287,6 +423,30 @@ public final class EnterBuildingGameTests {
 
         private Optional<Building> select(VillagerEntityMCA villager, List<Building> candidates) {
             return getNearestBuilding(villager, candidates);
+        }
+    }
+
+    private static final class MissingFavoredBuildingProbe extends EnterFavoredBuildingTask {
+        private final Building building;
+        private int scans;
+        private boolean buildingAvailable;
+        private boolean foundBuilding;
+
+        private MissingFavoredBuildingProbe(BlockPos position) {
+            super(0.5F);
+            this.building = new Building(position);
+        }
+
+        @Override
+        protected Optional<Building> getNearestBuilding(VillagerEntityMCA villager) {
+            scans++;
+            return buildingAvailable ? Optional.of(building) : Optional.empty();
+        }
+
+        @Override
+        protected boolean isInsideBuilding(Building building, VillagerEntityMCA villager) {
+            foundBuilding = true;
+            return true;
         }
     }
 }

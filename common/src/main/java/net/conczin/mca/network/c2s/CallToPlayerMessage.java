@@ -1,7 +1,9 @@
 package net.conczin.mca.network.c2s;
 
+import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.MoveState;
 import net.conczin.mca.network.HandleablePayload;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.FriendlyByteBuf;
@@ -28,6 +30,9 @@ public record CallToPlayerMessage(UUID uuid) implements HandleablePayload {
             }
             v.stopRiding();
             v.setPos(player.getX(), player.getY(), player.getZ());
+            if (Config.getServerConfig().whistleCallMakesVillagersFollow) {
+                v.getVillagerBrain().setMoveState(MoveState.FOLLOW, player);
+            }
         }
     }
 

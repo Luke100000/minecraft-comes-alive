@@ -115,14 +115,14 @@ public final class DialogueConditionGameTests {
 
         assertMatch(helper, fixture.context(), "{\"type\":\"mca:health\",\"min\":6,\"max\":8}");
         assertMatch(helper, fixture.context(), "{\"type\":\"mca:weather\",\"value\":\"thunder\"}");
-        assertMatch(helper, fixture.context(), "{\"type\":\"mca:biome\",\"value\":\"" + biome + "\"}");
+        assertMatch(helper, fixture.context(), "{\"type\":\"mca:biome\",\"values\":[\"" + biome + "\"]}");
         assertMatch(helper, fixture.context(), "{\"type\":\"mca:relationship\",\"value\":\"spouse\"}");
         assertNoMatch(helper, fixture.context(), "{\"type\":\"mca:health\",\"max\":6}");
         assertNoMatch(helper, fixture.context(), "{\"type\":\"mca:weather\",\"value\":\"rain\"}");
         ResourceLocation otherBiome = biome.equals(ResourceLocation.withDefaultNamespace("the_void"))
                 ? ResourceLocation.withDefaultNamespace("plains")
                 : ResourceLocation.withDefaultNamespace("the_void");
-        assertNoMatch(helper, fixture.context(), "{\"type\":\"mca:biome\",\"value\":\"" + otherBiome + "\"}");
+        assertNoMatch(helper, fixture.context(), "{\"type\":\"mca:biome\",\"values\":[\"" + otherBiome + "\"]}");
         assertNoMatch(helper, fixture.context(), "{\"type\":\"mca:relationship\",\"value\":\"engaged\"}");
         helper.succeed();
     }
@@ -305,7 +305,7 @@ public final class DialogueConditionGameTests {
         fixture.villager().getBrain().setMemory(
                 MemoryModuleType.HOME,
                 GlobalPos.of(helper.getLevel().dimension(), center));
-        fixture.villager().getResidency().seekHomeAfterClaim();
+        fixture.villager().getResidency().reconcileVillageMembership();
         helper.assertTrue(fixture.context().village().map(Village::getId).orElse(-1) == village.getId(),
                 "villager did not resolve the registered home village");
 

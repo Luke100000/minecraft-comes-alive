@@ -109,7 +109,7 @@ public final class DialogueReferenceGameTests {
             fixture.villager().getBrain().setMemory(
                     MemoryModuleType.HOME,
                     GlobalPos.of(helper.getLevel().dimension(), center));
-            fixture.villager().getResidency().seekHomeAfterClaim();
+            fixture.villager().getResidency().reconcileVillageMembership();
 
             DialogueEngine.DialogueOptions menu = engine.begin(fixture.player(), fixture.villager());
             helper.assertTrue(menu.containsEvent(INFIRMARY),

@@ -2,8 +2,8 @@ package net.conczin.mca.server.world.data;
 
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
-import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Memories;
+import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.Mourning;
 import net.conczin.mca.resources.API;
 import net.conczin.mca.resources.BuildingTypes;
@@ -19,7 +19,6 @@ import net.minecraft.core.GlobalPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.nbt.*;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
@@ -444,9 +443,13 @@ public class Village implements Iterable<Building> {
     }
 
     Optional<Structure> getExactStructureAt(Vec3i pos) {
-        return structures.values().stream()
-                .filter(structure -> structure.containsPos(pos))
-                .min(Comparator.comparingInt(Structure::getId));
+        Structure selected = null;
+        for (Structure structure : structures.values()) {
+            if ((selected == null || structure.getId() < selected.getId()) && structure.containsPos(pos)) {
+                selected = structure;
+            }
+        }
+        return Optional.ofNullable(selected);
     }
 
     boolean hasRegisteredFloorOverlap(Structure candidate) {
@@ -509,16 +512,41 @@ public class Village implements Iterable<Building> {
     }
 
     public float getTaxes() { return taxes; }
-    public void setTaxes(float taxes) { this.taxes = taxes; }
+    public void setTaxes(float taxes) {
+        if (Float.compare(this.taxes, taxes) != 0) {
+            this.taxes = taxes;
+            markDirty();
+        }
+    }
     public float getPopulationThreshold() { return populationThreshold; }
-    public void setPopulationThreshold(float populationThreshold) { this.populationThreshold = populationThreshold; }
+    public void setPopulationThreshold(float populationThreshold) {
+        if (Float.compare(this.populationThreshold, populationThreshold) != 0) {
+            this.populationThreshold = populationThreshold;
+            markDirty();
+        }
+    }
     public float getMarriageThreshold() { return marriageThreshold; }
-    public void setMarriageThreshold(float marriageThreshold) { this.marriageThreshold = marriageThreshold; }
+    public void setMarriageThreshold(float marriageThreshold) {
+        if (Float.compare(this.marriageThreshold, marriageThreshold) != 0) {
+            this.marriageThreshold = marriageThreshold;
+            markDirty();
+        }
+    }
     public boolean isAutoScan() { return autoScan; }
-    public void setAutoScan(boolean autoScan) { this.autoScan = autoScan; }
+    public void setAutoScan(boolean autoScan) {
+        if (this.autoScan != autoScan) {
+            this.autoScan = autoScan;
+            markDirty();
+        }
+    }
     public void toggleAutoScan() { setAutoScan(!isAutoScan()); }
     public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
+    public void setName(String name) {
+        if (!Objects.equals(this.name, name)) {
+            this.name = name;
+            markDirty();
+        }
+    }
     public int getId() { return id; }
     public boolean hasSpace() { return getPopulation() < getMaxPopulation(); }
     public int getPopulation() { return residentNames.size(); }
@@ -567,6 +595,20 @@ public class Village implements Iterable<Building> {
         if (room == null) return false;
         BuildingType effective = RoomTypeResolver.create(this).effectiveType(room);
         return effective != null && effective.name().equals(type);
+    }
+
+    /** Snapshot for a group of requirement checks, with each effective room type resolved once. */
+    public Set<String> getPresentBuildingTypes() {
+        Set<String> types = new HashSet<>();
+        RoomTypeResolver resolver = RoomTypeResolver.create(this);
+        getRooms().forEach(room -> {
+            BuildingType effective = resolver.effectiveType(room);
+            if (effective != null && !effective.grouped()) types.add(effective.name());
+        });
+        getExternalBuildings().filter(Building::isComplete).forEach(building -> {
+            if (building.getBuildingType().grouped()) types.add(building.getType());
+        });
+        return Set.copyOf(types);
     }
 
     List<BuildingType> getMatchingRoomTypes(Building candidate) {
@@ -683,7 +725,7 @@ public class Village implements Iterable<Building> {
         for (int index = 0; index < count; index++) {
             VillagerEntityMCA villager = candidates.get(index);
             villager.getBrain().setMemory(MemoryModuleTypeMCA.LAST_AMBIENT_MOURNING, time);
-            Mourning.start(villager, safeGraves.get(index % safeGraves.size()));
+            Mourning.startAmbient(villager, safeGraves.get(index % safeGraves.size()));
         }
         return MourningBurstResult.STARTED;
     }
@@ -796,21 +838,20 @@ public class Village implements Iterable<Building> {
     Optional<AttachmentTarget> selectAttachmentTarget(
             StructureFloor candidate,
             Collection<StructureConnector.VerticalConnection> connections) {
-        return selectAttachmentTarget(candidate, connections, List.of());
+        return selectAttachmentTarget(candidate, connections, Set.of());
     }
 
     Optional<AttachmentTarget> selectAttachmentTarget(
             StructureFloor candidate,
-            Collection<StructureConnector.VerticalConnection> verticalConnections,
-            Collection<BlockPos> stairTransitions) {
+            Collection<StructureConnector.VerticalConnection> explicitConnections,
+            Set<StructureConnector.VerticalConnection> liveContacts) {
         if (candidate == null) return Optional.empty();
+        Set<StructureConnector.VerticalConnection> connections = Set.copyOf(explicitConnections);
         boolean alreadyRegistered = structures.values().stream()
                 .flatMap(structure -> structure.getFloors().stream())
                 .anyMatch(floor -> floor.geometry().sameCellPositions(candidate.geometry()));
         if (alreadyRegistered) return Optional.empty();
-        Set<StructureConnector.VerticalConnection> connections = attachmentConnections(
-                candidate, verticalConnections, stairTransitions);
-        if (hasUnprovenAttachmentOverlap(candidate, connections)) return Optional.empty();
+        if (hasUnprovenAttachmentOverlap(candidate, connections, liveContacts)) return Optional.empty();
 
         Map<Integer, AttachmentTarget> nearestByBuilding = new HashMap<>();
         if (!connections.isEmpty()) {
@@ -825,7 +866,8 @@ public class Village implements Iterable<Building> {
                 for (StructureFloor floor : structure.getFloors()) {
                     if (candidate.geometry().footprintIntersectionArea(floor.geometry()) == 0) continue;
                     int gap = candidate.attachmentGapTo(floor);
-                    if (!hasDirectVerticalAttachmentEvidence(candidate, floor)) continue;
+                    if (!liveContacts.contains(new StructureConnector.VerticalConnection(structure, floor))
+                            && !hasDirectVerticalAttachmentEvidence(candidate, floor)) continue;
                     addAttachmentTarget(nearestByBuilding, structure, floor, gap);
                 }
             }
@@ -883,30 +925,10 @@ public class Village implements Iterable<Building> {
                 (first, second) -> ATTACHMENT_TARGET_ORDER.compare(first, second) <= 0 ? first : second);
     }
 
-    private Set<StructureConnector.VerticalConnection> attachmentConnections(
-            StructureFloor candidate,
-            Collection<StructureConnector.VerticalConnection> verticalConnections,
-            Collection<BlockPos> stairTransitions) {
-        LinkedHashSet<StructureConnector.VerticalConnection> connections = new LinkedHashSet<>();
-        if (verticalConnections != null) connections.addAll(verticalConnections);
-        if (stairTransitions == null) return Set.copyOf(connections);
-
-        for (BlockPos transition : stairTransitions) {
-            for (Structure structure : structures.values()) {
-                for (StructureFloor floor : structure.getFloors()) {
-                    if (floor.geometry().interactionCellAt(
-                            transition.getX(), transition.getY(), transition.getZ()).isPresent()) {
-                        connections.add(new StructureConnector.VerticalConnection(structure, floor));
-                    }
-                }
-            }
-        }
-        return Set.copyOf(connections);
-    }
-
     private boolean hasUnprovenAttachmentOverlap(
             StructureFloor candidate,
-            Set<StructureConnector.VerticalConnection> connections) {
+            Set<StructureConnector.VerticalConnection> connections,
+            Set<StructureConnector.VerticalConnection> liveContacts) {
         Set<Integer> provenBuildingIds = connections.stream()
                 .map(connection -> connection.structure().getLogicalBuildingId())
                 .collect(Collectors.toSet());
@@ -918,7 +940,9 @@ public class Village implements Iterable<Building> {
                 boolean belongsToProvenBuilding = provenBuildingIds.size() == 1
                         && provenBuildingIds.contains(structure.getLogicalBuildingId())
                         && !candidate.hasNearbyAnchor(floor);
-                if (!directlyProven && !belongsToProvenBuilding) {
+                if (!directlyProven && !belongsToProvenBuilding
+                        && !(connections.isEmpty()
+                        && liveContacts.contains(new StructureConnector.VerticalConnection(structure, floor)))) {
                     return true;
                 }
             }
@@ -1236,9 +1260,22 @@ public class Village implements Iterable<Building> {
         if (home.isPresent() && home.get().dimension() == world.dimension()) {
             long homePosition = home.get().pos().asLong();
             if (authoritativeHomeClaim) {
+                // A replaced bed has a fresh POI ticket. Retire the previous loaded owner's
+                // derived state before the new claimant can sleep, without releasing its ticket.
+                for (Map.Entry<UUID, Long> assignment : residentHomes.entrySet()) {
+                    if (!assignment.getKey().equals(resident) && assignment.getValue() == homePosition) {
+                        if (world.getEntity(assignment.getKey()) instanceof VillagerEntityMCA displaced) {
+                            displaced.getResidency().invalidateHome(home.get());
+                        }
+                        markDirty();
+                    }
+                }
                 ResidentHomeAssignments.claimAuthoritatively(residentHomes, resident, homePosition);
-            } else {
-                accepted = ResidentHomeAssignments.claim(residentHomes, resident, homePosition);
+            } else if (!ResidentHomeAssignments.claim(residentHomes, resident, homePosition)) {
+                accepted = false;
+                // Reconciliation rejects this memory. Retire its old index entry,
+                // not its anonymous POI ticket, which might have a new claimant.
+                residentHomes.remove(resident);
             }
         } else {
             residentHomes.remove(resident);
@@ -1257,7 +1294,11 @@ public class Village implements Iterable<Building> {
         }
         GlobalPos currentHome = home.get();
         return currentHome.dimension() == world.dimension()
-                && Objects.equals(residentHomes.get(resident.getUUID()), currentHome.pos().asLong());
+                && ownsResidentHome(resident.getUUID(), currentHome.pos());
+    }
+
+    public boolean ownsResidentHome(UUID resident, BlockPos position) {
+        return Objects.equals(residentHomes.get(resident), position.asLong());
     }
 
     boolean repairDuplicateResidentHomes() {

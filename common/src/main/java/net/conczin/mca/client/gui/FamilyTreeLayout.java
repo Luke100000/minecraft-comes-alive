@@ -1,21 +1,10 @@
 package net.conczin.mca.client.gui;
 
-import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.network.FamilyTreeView;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.Deque;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 final class FamilyTreeLayout {
     public static final int CARD_WIDTH = 128;
@@ -85,68 +74,40 @@ final class FamilyTreeLayout {
         placements.put(layoutRoot, new Placement(0, Role.ANCHOR));
 
         FamilyTreeNode rootNode = nodes.get(layoutRoot);
-        walkAncestors(rootNode, 0, nodes, placements);
-        walkDescendants(rootNode, 0, nodes, placements);
+        walkLineage(rootNode, 0, nodes, placements, Role.ANCESTOR);
+        walkLineage(rootNode, 0, nodes, placements, Role.DESCENDANT);
         addSiblings(rootNode, nodes, placements);
         addPartnerBranches(nodes, placements, displayPartners);
         return placements;
     }
 
-    private static void walkAncestors(
+    private static void walkLineage(
             FamilyTreeNode root,
             int rootGeneration,
             Map<UUID, FamilyTreeNode> nodes,
-            Map<UUID, Placement> placements
+            Map<UUID, Placement> placements,
+            Role role
     ) {
         Deque<GenerationNode> queue = new ArrayDeque<>();
         queue.add(new GenerationNode(root, rootGeneration));
         Set<UUID> visited = new HashSet<>();
         visited.add(root.id());
 
+        boolean ancestors = role == Role.ANCESTOR;
+        int step = ancestors ? -1 : 1;
         while (!queue.isEmpty()) {
             GenerationNode current = queue.removeFirst();
-            int parentGeneration = current.generation() - 1;
-            for (UUID parentId : parentIds(current.node())) {
-                FamilyTreeNode parent = nodes.get(parentId);
-                if (parent == null) {
+            int generation = current.generation() + step;
+            List<UUID> relatives = ancestors
+                    ? parentIds(current.node())
+                    : current.node().streamChildren().sorted(UUID_ORDER).toList();
+            for (UUID relativeId : relatives) {
+                FamilyTreeNode relative = nodes.get(relativeId);
+                if (relative == null || !visited.add(relativeId)) {
                     continue;
                 }
-
-                if (!visited.add(parentId)) {
-                    continue;
-                }
-                placements.putIfAbsent(parentId, new Placement(parentGeneration, Role.ANCESTOR));
-                queue.addLast(new GenerationNode(parent, parentGeneration));
-            }
-        }
-    }
-
-    private static void walkDescendants(
-            FamilyTreeNode root,
-            int rootGeneration,
-            Map<UUID, FamilyTreeNode> nodes,
-            Map<UUID, Placement> placements
-    ) {
-        Deque<GenerationNode> queue = new ArrayDeque<>();
-        queue.add(new GenerationNode(root, rootGeneration));
-        Set<UUID> visited = new HashSet<>();
-        visited.add(root.id());
-
-        while (!queue.isEmpty()) {
-            GenerationNode current = queue.removeFirst();
-            int childGeneration = current.generation() + 1;
-            List<UUID> childIds = current.node().streamChildren().sorted(UUID_ORDER).toList();
-            for (UUID childId : childIds) {
-                FamilyTreeNode child = nodes.get(childId);
-                if (child == null) {
-                    continue;
-                }
-
-                if (!visited.add(childId)) {
-                    continue;
-                }
-                placements.putIfAbsent(childId, new Placement(childGeneration, Role.DESCENDANT));
-                queue.addLast(new GenerationNode(child, childGeneration));
+                placements.putIfAbsent(relativeId, new Placement(generation, role));
+                queue.addLast(new GenerationNode(relative, generation));
             }
         }
     }
@@ -182,8 +143,8 @@ final class FamilyTreeLayout {
             FamilyTreeNode partner = nodes.get(partnerId);
             int generation = entry.getValue().generation();
             placements.putIfAbsent(partner.id(), new Placement(generation, Role.PARTNER));
-            walkAncestors(partner, generation, nodes, placements);
-            walkDescendants(partner, generation, nodes, placements);
+            walkLineage(partner, generation, nodes, placements, Role.ANCESTOR);
+            walkLineage(partner, generation, nodes, placements, Role.DESCENDANT);
         }
     }
 
@@ -206,21 +167,14 @@ final class FamilyTreeLayout {
             FamilyTreeNode father = nodes.get(child.father());
             FamilyTreeNode mother = nodes.get(child.mother());
             if (father == null || mother == null || father.id().equals(mother.id())
-                    || !isUnpairedGeneratedParent(father, child.id())
-                    || !isUnpairedGeneratedParent(mother, child.id())) {
+                    || !father.isUnpairedGeneratedParentOf(child.id())
+                    || !mother.isUnpairedGeneratedParentOf(child.id())) {
                 continue;
             }
             partners.put(father.id(), mother.id());
             partners.put(mother.id(), father.id());
         }
         return partners;
-    }
-
-    private static boolean isUnpairedGeneratedParent(FamilyTreeNode node, UUID childId) {
-        return node.probablyGenerated()
-                && node.children().contains(childId)
-                && !FamilyTreeNode.isValid(node.partner())
-                && node.getRelationshipState() == RelationshipState.SINGLE;
     }
 
     private static Map<UUID, Integer> ancestorBranchWidths(
@@ -324,6 +278,14 @@ final class FamilyTreeLayout {
             List<UUID> members;
             if (FamilyTreeNode.isValid(partnerId) && generationIds.contains(partnerId) && assigned.add(partnerId)) {
                 members = List.of(id, partnerId);
+                if (generation > 0
+                        && parentIds(nodes.get(id)).stream().anyMatch(boundsById::containsKey)
+                        && parentIds(nodes.get(partnerId)).stream().anyMatch(boundsById::containsKey)
+                        && generationTarget(generation, List.of(id), nodes, boundsById)
+                        > generationTarget(generation, List.of(partnerId), nodes, boundsById)) {
+                    // Keep each spouse on the side of their own parents, rather than sorting by UUID.
+                    members = List.of(partnerId, id);
+                }
             } else {
                 members = List.of(id);
             }

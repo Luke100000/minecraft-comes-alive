@@ -36,38 +36,21 @@ public class HuntingTask extends AbstractChoreTask {
 
     @Override
     protected void stop(ServerLevel world, VillagerEntityMCA villager, long time) {
-        ItemStack stack = villager.getItemInHand(villager.getDominantHand());
-        if (!stack.isEmpty()) {
-            villager.setItemInHand(villager.getDominantHand(), ItemStack.EMPTY);
-        }
+        releaseChoreHand(villager, Chore.HUNT);
     }
 
     @Override
     protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.start(world, villager, time);
 
-        if (!villager.hasItemInSlot(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), Chore.HUNT::matchesTool);
-            if (i == -1) {
-                abandonJobWithMessage("chore.hunting.nosword");
-            } else {
-                ItemStack stack = villager.getInventory().getItem(i);
-                villager.setItemInHand(villager.getDominantHand(), stack);
-            }
-        }
+        equipChoreTool(villager, Chore.HUNT, "chore.hunting.nosword");
     }
 
     @Override
     protected void tick(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.tick(world, villager, time);
 
-        if (!InventoryUtils.contains(villager.getInventory(), Chore.HUNT::matchesTool) && !villager.hasItemInSlot(villager.getDominantSlot())) {
-            abandonJobWithMessage("chore.hunting.nosword");
-        } else if (!villager.hasItemInSlot(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), Chore.HUNT::matchesTool);
-            ItemStack stack = villager.getInventory().getItem(i);
-            villager.setItemInHand(villager.getDominantHand(), stack);
-        }
+        if (!equipChoreTool(villager, Chore.HUNT, "chore.hunting.nosword")) return;
 
         if (target == null) {
             ticks++;

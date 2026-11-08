@@ -3,9 +3,7 @@ package net.conczin.mca;
 import com.google.gson.Gson;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class CommonConfigGameplayOptionsTest {
     private static final Gson GSON = new Gson();
@@ -16,6 +14,7 @@ class CommonConfigGameplayOptionsTest {
 
         assertTrue(config.archerArrowsIgnoreVillagers);
         assertTrue(config.villagersInteractWithFenceGates);
+        assertFalse(config.villagersInteractWithAnyDoor);
     }
 
     @Test
@@ -23,12 +22,14 @@ class CommonConfigGameplayOptionsTest {
         CommonConfig config = GSON.fromJson("""
                 {
                   "archerArrowsIgnoreVillagers": false,
-                  "villagersInteractWithFenceGates": false
+                  "villagersInteractWithFenceGates": false,
+                  "villagersInteractWithAnyDoor": true
                 }
                 """, CommonConfig.class);
 
         assertFalse(config.archerArrowsIgnoreVillagers);
         assertFalse(config.villagersInteractWithFenceGates);
+        assertTrue(config.villagersInteractWithAnyDoor);
     }
 
     @Test

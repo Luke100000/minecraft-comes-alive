@@ -3,47 +3,57 @@ package net.conczin.mca.entity.ai.brain.tasks;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
-import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
-import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
-import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
-import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
-import net.conczin.mca.entity.ai.navigation.TeleportBlockBlacklist;
+import net.conczin.mca.entity.ai.navigation.*;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.behavior.MoveToTargetSink;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
+import net.minecraft.world.phys.AABB;
 
 public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
     private Mob movingEntity;
+    private long playEndTime;
+
+    @Override
+    protected boolean checkExtraStartConditions(ServerLevel world, Mob entity) {
+        WalkTarget target = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        if (clearInactiveActivityTarget(entity, target)) {
+            return false;
+        }
+        return super.checkExtraStartConditions(world, entity);
+    }
 
     @Override
     protected boolean timedOut(long gameTime) {
-        if (!super.timedOut(gameTime)) {
+        Mob entity = this.movingEntity;
+        boolean playExpired = entity != null && gameTime > this.playEndTime
+                && entity.getBrain().isActive(Activity.PLAY);
+        if (!playExpired && !super.timedOut(gameTime)) {
             return false;
         }
-        if (this.movingEntity == null) {
+        if (entity == null) {
             return true;
         }
-        // Behavior.tickOrStop checks timedOut before canStillUse and supplies no
-        // entity here. Read the running mob's current journey intent: nearby targets
-        // can grow into long detours, and producers can replace ordinary/persistent
-        // intent without moving far enough for MoveToTargetSink to restart.
-        // Initial distance/path length must never determine persistent lifetime.
-        // Arrival, target removal, emergency combat and navigation's stuck checks
-        // still end the journey. Preserve the timeout-scope and intent-change tests.
-        WalkTarget walkTarget = this.movingEntity.getBrain()
+        // The target's intent can change without restarting this behavior.
+        WalkTarget walkTarget = entity.getBrain()
                 .getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
-        return walkTarget == null || !(walkTarget.getTarget() instanceof PersistentPathTarget);
+        return !ExtendedWalkTowardsTask.isPersistentJourney(walkTarget);
     }
 
     @Override
     protected boolean canStillUse(ServerLevel world, Mob entity, long gameTime) {
-        if (shouldYieldToEmergencyCombat(entity)) {
+        WalkTarget walkTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        if (clearInactiveActivityTarget(entity, walkTarget)) {
+            return false;
+        }
+        if (shouldYieldToCombat(entity)) {
             return false;
         }
 
@@ -52,12 +62,11 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
             return true;
         }
 
-        WalkTarget walkTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
         Path path = entity.getNavigation().getPath();
         if (walkTarget != null
                 && path != null
                 && entity.getNavigation().isDone()
-                && !walkTargetReached(entity, walkTarget)
+                && !MultiTargetPositionTracker.isReached(entity, walkTarget.getTarget(), walkTarget.getCloseEnoughDist())
                 && !entity.getBrain().hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)) {
             if (entity instanceof VillagerEntityMCA villager) {
                 WalkTargetFailureMemory.record(villager, walkTarget.getTarget().currentBlockPosition(), gameTime);
@@ -76,11 +85,11 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         super.start(world, entity, gameTime);
         Path path = entity.getNavigation().getPath();
         if (walkTarget != null
-                && walkTarget.getTarget() instanceof PersistentPathTarget
+                && ExtendedWalkTowardsTask.isPersistentJourney(walkTarget)
                 && path != null
                 && !entity.getNavigation().isStuck()
                 && MCAGroundPathNavigation.isUsefulPartialPath(
-                        path, walkTarget.getTarget().currentBlockPosition()
+                        path, entity, walkTarget
                 )) {
             if (entity instanceof VillagerEntityMCA villager) {
                 // A fresh useful segment is optimistic progress and must be able
@@ -97,6 +106,9 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
                 entity.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
             }
         }
+        // The CORE sink also consumes PLAY targets, which get vanilla's shorter timeout.
+        this.playEndTime = entity.getBrain().isActive(Activity.PLAY)
+                ? gameTime + 80 + entity.getRandom().nextInt(41) : Long.MAX_VALUE;
     }
 
     @Override
@@ -105,21 +117,30 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         super.stop(world, entity, gameTime);
     }
 
-    private static boolean shouldYieldToEmergencyCombat(Mob entity) {
-        if (RangedCombatState.current(entity).orElse(null) != RangedCombatState.EMERGENCY_FLEE) {
+    private static boolean shouldYieldToCombat(Mob entity) {
+        RangedCombatState combat = RangedCombatState.current(entity).orElse(null);
+        WalkTarget walkTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        if (walkTarget == null) {
             return false;
         }
-
-        WalkTarget walkTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
-        return walkTarget != null && !(walkTarget.getTarget() instanceof CombatEscapePositionTracker);
+        if (combat == RangedCombatState.EMERGENCY_FLEE) {
+            return !(walkTarget.getTarget() instanceof CombatEscapePositionTracker);
+        }
+        return combat != null && entity.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)
+                && !(walkTarget instanceof ArcherMovementTask.CombatWalkTarget);
     }
 
-    private static boolean walkTargetReached(Mob entity, WalkTarget walkTarget) {
-        if (walkTarget.getTarget() instanceof MultiTargetPositionTracker multiTarget) {
-            return multiTarget.isReached(entity, walkTarget.getCloseEnoughDist());
+    private static boolean clearInactiveActivityTarget(Mob entity, WalkTarget target) {
+        if (target == null || !(target.getTarget() instanceof PersistentPathTarget persistent)
+                || !persistent.isInactiveFor(entity)) {
+            return false;
         }
-        return walkTarget.getTarget().currentBlockPosition().distManhattan(entity.blockPosition())
-                <= walkTarget.getCloseEnoughDist();
+        // Validate at the movement consumer, including when no HOME/other POI is remembered.
+        entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        if (entity.getBrain().getMemoryInternal(MemoryModuleType.LOOK_TARGET).orElse(null) == persistent) {
+            entity.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
+        }
+        return true;
     }
 
     @Override
@@ -154,11 +175,33 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         }
     }
 
-    private static boolean canTeleportTo(ServerLevel world, Mob entity, BlockPos pos) {
+    static boolean canTeleportTo(ServerLevel world, Mob entity, BlockPos pos) {
+        // Probe exactly where teleportTo() will place the feet and body. Moving
+        // by block-position deltas retains the mob's original fractional offset
+        // and can miss a narrow collision at the destination center.
+        AABB landingBox = entity.getBoundingBox().move(
+                pos.getX() + 0.5D - entity.getX(),
+                pos.getY() - entity.getY(),
+                pos.getZ() + 0.5D - entity.getZ()
+        );
+        // Path-type classification examines neighboring blocks and collision
+        // can cross the destination chunk boundary. Check the entire probe
+        // region before a world read that could load a distant chunk.
+        int minChunkX = Math.min(pos.getX() - 1, Mth.floor(landingBox.minX)) >> 4;
+        int maxChunkX = Math.max(pos.getX() + 1, Mth.floor(landingBox.maxX)) >> 4;
+        int minChunkZ = Math.min(pos.getZ() - 1, Mth.floor(landingBox.minZ)) >> 4;
+        int maxChunkZ = Math.max(pos.getZ() + 1, Mth.floor(landingBox.maxZ)) >> 4;
+        for (int chunkX = minChunkX; chunkX <= maxChunkX; chunkX++) {
+            for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; chunkZ++) {
+                if (world.getChunkSource().getChunkNow(chunkX, chunkZ) == null) {
+                    return false;
+                }
+            }
+        }
         if (WalkNodeEvaluator.getPathTypeStatic(entity, pos.mutable()) != PathType.WALKABLE
                 || TeleportBlockBlacklist.isBlocked(world.getBlockState(pos.below()))) {
             return false;
         }
-        return world.noCollision(entity, entity.getBoundingBox().move(pos.subtract(entity.blockPosition())));
+        return world.noCollision(entity, landingBox);
     }
 }

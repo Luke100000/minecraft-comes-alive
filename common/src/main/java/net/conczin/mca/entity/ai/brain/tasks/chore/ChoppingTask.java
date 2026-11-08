@@ -49,37 +49,21 @@ public class ChoppingTask extends AbstractChoreTask {
 
     @Override
     protected void stop(ServerLevel world, VillagerEntityMCA villager, long time) {
-        ItemStack stack = villager.getItemInHand(villager.getDominantHand());
-        if (!stack.isEmpty()) {
-            villager.setItemInHand(villager.getDominantHand(), ItemStack.EMPTY);
-        }
+        releaseChoreHand(villager, Chore.CHOP);
     }
 
     @Override
     protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.start(world, villager, time);
 
-        if (!villager.hasItemInSlot(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), Chore.CHOP::matchesTool);
-            if (i == -1) {
-                abandonJobWithMessage("chore.chopping.noaxe");
-            } else {
-                villager.setItemInHand(villager.getDominantHand(), villager.getInventory().getItem(i));
-            }
-        }
+        equipChoreTool(villager, Chore.CHOP, "chore.chopping.noaxe");
     }
 
     @Override
     protected void tick(ServerLevel world, VillagerEntityMCA villager, long time) {
         if (this.villager == null) this.villager = villager;
 
-        if (!InventoryUtils.contains(villager.getInventory(), Chore.CHOP::matchesTool) && !villager.hasItemInSlot(villager.getDominantSlot())) {
-            abandonJobWithMessage("chore.chopping.noaxe");
-        } else if (!villager.hasItemInSlot(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), Chore.CHOP::matchesTool);
-            ItemStack stack = villager.getInventory().getItem(i);
-            villager.setItemInHand(villager.getDominantHand(), stack);
-        }
+        if (!equipChoreTool(villager, Chore.CHOP, "chore.chopping.noaxe")) return;
 
         if (targetTree == null) {
             List<BlockPos> nearbyLogs = TaskUtils.getNearbyBlocks(villager.blockPosition(), world, (blockState -> blockState.is(BlockTags.LOGS)), 15, 5);

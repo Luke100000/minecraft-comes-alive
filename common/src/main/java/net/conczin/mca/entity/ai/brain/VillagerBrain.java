@@ -8,11 +8,7 @@ import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Personality;
 import net.conczin.mca.registry.CriterionMCA;
-import net.conczin.mca.util.network.datasync.CDataManager;
-import net.conczin.mca.util.network.datasync.CDataParameter;
-import net.conczin.mca.util.network.datasync.CEnumParameter;
-import net.conczin.mca.util.network.datasync.CParameter;
-import net.conczin.mca.util.network.datasync.CResourceLocationParameter;
+import net.conczin.mca.util.network.datasync.*;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -27,7 +23,10 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.schedule.Activity;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Handles memory and complex bodily functions. Such as walking, and not being a nitwit.
@@ -65,7 +64,7 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         // When you relog, it should continue doing the chores.
         // Chore saves but Activity doesn't, so this checks if the activity is not on there and puts it on there.
 
-        if (entity.getTrackedValue(ACTIVE_CHORE) != Chore.NONE) {
+        if (entity.getTrackedValue(ACTIVE_CHORE) != Chore.NONE && !entity.getBrain().isActive(Activity.PANIC)) {
             // find something to do
             //todo here switch between rest and chore
             entity.getBrain().getActiveNonCoreActivity().ifPresent(activity -> {
@@ -150,6 +149,7 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
 
     public Map<UUID, Memories> getMemories() {
         CompoundTag nbt = entity.getTrackedValue(MEMORIES);
+        nbt = nbt == null ? new CompoundTag() : nbt;
         Map<UUID, Memories> memories = new HashMap<>();
         for (String uuid : nbt.getAllKeys()) {
             memories.put(UUID.fromString(uuid), Memories.fromCNBT(entity, nbt.getCompound(uuid)));
@@ -159,13 +159,13 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
 
     public Memories getMemoriesForPlayer(Player player) {
         CompoundTag nbt = entity.getTrackedValue(MEMORIES);
-        nbt = nbt == null ? new CompoundTag() : nbt;
-        CompoundTag compoundTag = nbt.getCompound(player.getUUID().toString());
+        CompoundTag compoundTag = nbt == null ? null : nbt.getCompound(player.getUUID().toString());
         Memories returnMemories = Memories.fromCNBT(entity, compoundTag);
         if (returnMemories == null) {
             returnMemories = new Memories(this, player.level().getDayTime(), player.getUUID());
-            nbt.put(player.getUUID().toString(), returnMemories.toCNBT());
-            entity.setTrackedValue(MEMORIES, nbt);
+            if (!entity.level().isClientSide) {
+                updateMemories(returnMemories);
+            }
         }
         return returnMemories;
     }

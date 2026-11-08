@@ -8,19 +8,12 @@ import net.minecraft.Util;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
+import static net.conczin.mca.FamilyTreeTestSupport.uuid;
 import static net.conczin.mca.network.FamilyTreeView.Direction.ANCESTORS;
 import static net.conczin.mca.network.FamilyTreeView.Direction.DESCENDANTS;
-import static net.conczin.mca.FamilyTreeTestSupport.uuid;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class FamilyTreeLayoutTest {
     private static final UUID ROOT = uuid(1);
@@ -152,6 +145,51 @@ class FamilyTreeLayoutTest {
                 FamilyTreeLayout.CARD_WIDTH + FamilyTreeLayout.PARTNER_GAP,
                 Math.abs(card(result, CHILD_B).bounds().centerX() - card(result, PARTNER_B).bounds().centerX())
         );
+    }
+
+    @Test
+    void marriedChildrenStayUnderTheirOwnParentsWithoutOverlappingParentBranches() {
+        FamilyTreeNode damian = node(ROOT);
+        FamilyTreeNode than = node(PARTNER);
+        FamilyTreeNode lilija = node(PARTNER_A); // Higher UUID than Alexander: UUID order must not decide their sides.
+        FamilyTreeNode alexander = node(CHILD_A);
+        FamilyTreeNode natalia = node(FATHER);
+        FamilyTreeNode alihan = node(MOTHER);
+
+        damian.updatePartner(than);
+        than.updatePartner(damian);
+        natalia.updatePartner(alihan);
+        alihan.updatePartner(natalia);
+        lilija.setFather(damian);
+        lilija.setMother(than);
+        alexander.setFather(natalia);
+        alexander.setMother(alihan);
+        lilija.updatePartner(alexander);
+        alexander.updatePartner(lilija);
+
+        FamilyTreeLayout.Result result = layout(nodes(damian, than, lilija, alexander, natalia, alihan), Set.of());
+
+        int lilijaX = card(result, lilija.id()).bounds().centerX();
+        int alexanderX = card(result, alexander.id()).bounds().centerX();
+        int lilijaParentsX = (card(result, damian.id()).bounds().centerX()
+                + card(result, than.id()).bounds().centerX()) / 2;
+        int alexanderParentsX = (card(result, natalia.id()).bounds().centerX()
+                + card(result, alihan.id()).bounds().centerX()) / 2;
+
+        assertTrue(lilijaParentsX < alexanderParentsX);
+        assertTrue(lilijaX < alexanderX, "Spouses must follow the order of their parental branches");
+        assertTrue(Math.abs(lilijaParentsX - lilijaX) < Math.abs(lilijaParentsX - alexanderX));
+        assertTrue(Math.abs(alexanderParentsX - alexanderX) < Math.abs(alexanderParentsX - lilijaX));
+
+        assertTrue(result.edges().stream().anyMatch(edge -> edge.type() == FamilyTreeLayout.EdgeType.PARENT_CHILD
+                && edge.to().equals(lilija.id()) && edge.secondParent() != null));
+        assertTrue(result.edges().stream().anyMatch(edge -> edge.type() == FamilyTreeLayout.EdgeType.PARENT_CHILD
+                && edge.to().equals(alexander.id()) && edge.secondParent() != null));
+
+        int leftSegmentRight = Math.max(lilijaParentsX, lilijaX);
+        int rightSegmentLeft = Math.min(alexanderParentsX, alexanderX);
+        assertTrue(leftSegmentRight < rightSegmentLeft,
+                "Unrelated parent-child horizontal connectors should not look like one continuous line");
     }
 
     @Test
