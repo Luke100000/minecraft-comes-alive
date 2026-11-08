@@ -48,17 +48,18 @@ final class DialogueOverlayLayout {
         return new Geometry(menu, new Rect(menu.x(), bottom - speechHeight, menu.width(), speechHeight), true);
     }
 
-    /** The footer sits entirely inside the eight-pixel menu frame on every side. */
+    /** Fills the frame interior; text padding belongs to each action, not its background. */
     static FooterLayout footer(Rect menu, int footerHeight) {
-        int innerLeft = menu.x() + 8;
-        int innerWidth = Math.max(2, menu.width() - 16);
+        int innerLeft = menu.x() + 4;
+        int innerWidth = Math.max(2, menu.width() - 8);
         int half = innerWidth / 2;
-        int actionY = menu.bottom() - footerHeight + 5;
-        int actionHeight = Math.max(1, footerHeight - 12);
+        int dividerY = menu.bottom() - footerHeight + 1;
+        int actionY = dividerY + 1;
+        int actionHeight = Math.max(1, menu.bottom() - 4 - actionY);
         return new FooterLayout(
-                new Rect(innerLeft, menu.bottom() - footerHeight + 1, innerWidth, 1),
-                new Rect(innerLeft, actionY, Math.max(1, half - 2), actionHeight),
-                new Rect(innerLeft + half + 2, actionY, Math.max(1, innerWidth - half - 2), actionHeight));
+                new Rect(innerLeft, dividerY, innerWidth, 1),
+                new Rect(innerLeft, actionY, half, actionHeight),
+                new Rect(innerLeft + half, actionY, innerWidth - half, actionHeight));
     }
 
     record FooterLayout(Rect divider, Rect back, Rect close) {

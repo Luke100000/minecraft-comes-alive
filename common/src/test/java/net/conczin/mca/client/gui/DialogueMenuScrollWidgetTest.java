@@ -6,16 +6,16 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class DialogueMenuScrollWidgetTest {
     @Test
-    void expandedCategoryRevealsItsHeaderAndFirstOptionWithMinimalScroll() {
+    void expandedCategoryAnchorsItsHeaderAtTheViewportTop() {
         DialogueMenuScrollWidget scroller = new DialogueMenuScrollWidget();
         scroller.layout(50, 30, 100, 40, 500, 100);
-        scroller.revealRange(180, 232);
-        assertEquals(132, scroller.offset(), "use settled height, not the transient 40-pixel viewport");
+        scroller.scrollToSection(180);
+        assertEquals(180, scroller.offset());
         scroller.layout(50, 30, 100, 100, 500, 100);
-        assertEquals(132, scroller.offset(), "expansion must not reclamp to a different position");
-        scroller.revealRange(180, 232);
-        assertEquals(132, scroller.offset(), "an already visible section must stay still");
-        scroller.revealRange(100, 152);
+        assertEquals(180, scroller.offset(), "expansion must not reclamp to a different position");
+        scroller.scrollToSection(180);
+        assertEquals(180, scroller.offset());
+        scroller.scrollToSection(100);
         assertEquals(100, scroller.offset());
     }
 

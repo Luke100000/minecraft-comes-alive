@@ -38,6 +38,9 @@ def frame(name: str, interior: str, outside: str, border: str, shine: str) -> No
     else:
         for x, y in ((5, 5), (17, 5), (5, 18), (18, 17)):
             draw.point((x, y), fill="#BA8A61")
+    # Match visible corner colours and highlights as well as the alpha silhouette.
+    # Lighting may differ top-to-bottom, but left/right must be exact reflections.
+    image.paste(image.crop((0, 0, 12, 24)).transpose(Image.Transpose.FLIP_LEFT_RIGHT), (12, 0))
     save(image, name)
 
 

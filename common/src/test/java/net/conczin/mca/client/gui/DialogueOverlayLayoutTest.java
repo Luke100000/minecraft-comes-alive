@@ -49,13 +49,13 @@ class DialogueOverlayLayoutTest {
         DialogueOverlayLayout.FooterLayout footer = DialogueOverlayLayout.footer(menu, 27);
         for (DialogueOverlayLayout.Rect element : new DialogueOverlayLayout.Rect[]{
                 footer.divider(), footer.back(), footer.close()}) {
-            assertTrue(element.x() >= menu.x() + 7);
-            assertTrue(element.right() <= menu.right() - 7);
+            assertTrue(element.x() >= menu.x() + 4);
+            assertTrue(element.right() <= menu.right() - 4);
             assertTrue(element.y() > menu.y() + 7);
-            assertTrue(element.bottom() <= menu.bottom() - 7);
+            assertTrue(element.bottom() <= menu.bottom() - 4);
         }
-        assertTrue(footer.back().right() < footer.close().x());
-        assertTrue(footer.divider().bottom() < footer.back().y());
+        assertEquals(footer.back().right(), footer.close().x());
+        assertEquals(footer.divider().bottom(), footer.back().y());
     }
 
     @Test

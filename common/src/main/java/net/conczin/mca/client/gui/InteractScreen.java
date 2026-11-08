@@ -761,11 +761,7 @@ public class InteractScreen extends AbstractDynamicScreen {
                     int rowHeight = dialogueRowHeight(row, rowPanelWidth);
                     if (row.click() != null && row.click().kind() == DialogueClickKind.TOGGLE_SECTION
                             && dialogueSectionToReveal.name().equals(row.click().choiceId())) {
-                        int bottomOfFirstOption = rowTop + rowHeight;
-                        if (i + 1 < rows.size()) {
-                            bottomOfFirstOption += dialogueRowHeight(rows.get(i + 1), rowPanelWidth);
-                        }
-                        dialogueScroller.revealRange(rowTop, bottomOfFirstOption);
+                        dialogueScroller.scrollToSection(rowTop);
                         break;
                     }
                     rowTop += rowHeight;
