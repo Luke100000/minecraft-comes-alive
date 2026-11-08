@@ -6,6 +6,7 @@ import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.immersive_library.responses.ErrorResponse;
 import net.conczin.mca.client.gui.immersive_library.responses.Response;
+import net.minecraft.SharedConstants;
 import org.apache.commons.io.IOUtils;
 
 import java.io.IOException;
@@ -51,7 +52,7 @@ public class Api {
             con.setRequestProperty("Content-Type", "application/json");
             con.setRequestProperty("Accept-Encoding", "gzip");
             con.setRequestProperty("Accept", "application/json");
-            con.setRequestProperty("User-Agent", "MCA");
+            con.setRequestProperty("User-Agent", userAgent());
 
             // Authenticate
             if (Auth.hasToken()) {
@@ -90,6 +91,13 @@ public class Api {
             MCA.LOGGER.error(e);
             return new ErrorResponse(-1, e.toString());
         }
+    }
+
+    private static String userAgent() {
+        return "MCA/%s Minecraft/%s Java/%s".formatted(
+                MCA.platformHelper.getModVersion(),
+                SharedConstants.getCurrentVersion().getName(),
+                System.getProperty("java.version"));
     }
 
     public enum HttpMethod {
