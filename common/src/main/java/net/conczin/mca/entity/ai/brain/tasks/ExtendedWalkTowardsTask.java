@@ -253,7 +253,7 @@ public final class ExtendedWalkTowardsTask {
      */
     public static boolean isPersistentJourney(WalkTarget target) {
         return target != null && (target.getTarget() instanceof PersistentPathTarget
-                || target instanceof DestinationOwnedWalkTarget
+                || target instanceof WalkTargetFailureMemory.TargetIdentityOwner
                 && target.getTarget() instanceof MultiTargetPositionTracker);
     }
 

@@ -41,6 +41,7 @@ public class FamilyTreeScreen extends Screen {
     private static final int CENTER_WIDTH = 54;
     private static final int CONTROL_GAP = 2;
     private static final int CONTROL_GROUP_GAP = 6;
+    private static final int SEARCH_ROW_HORIZONTAL_PADDING = 12;
     private static final int SEARCH_ROW_HEIGHT = 22;
     private static final int SEARCH_RESULT_LIMIT = 6;
     private static final long SEARCH_DEBOUNCE_MS = 150L;
@@ -293,7 +294,7 @@ public class FamilyTreeScreen extends Screen {
                     searchOpen,
                     searchPending,
                     searchX,
-                    searchWidth,
+                    searchOverlayRowWidth(mouseY),
                     searchResults.size()
             )) {
                 return true;
@@ -340,7 +341,7 @@ public class FamilyTreeScreen extends Screen {
 
     @Nullable
     private FamilyTreeSearchEntry searchResultAt(double mouseX, double mouseY) {
-        if (!searchOpen || searchPending || mouseX < searchX || mouseX >= searchX + searchWidth) {
+        if (!searchOpen || searchPending || mouseX < searchX || mouseX >= searchX + searchOverlayRowWidth(mouseY)) {
             return null;
         }
         int top = HEADER_HEIGHT + 2;
@@ -349,6 +350,23 @@ public class FamilyTreeScreen extends Screen {
             return null;
         }
         return searchResults.get(index);
+    }
+
+    private int searchOverlayRowWidth(double mouseY) {
+        if (searchPending || searchResults.isEmpty()) {
+            return searchWidth;
+        }
+        int top = HEADER_HEIGHT + 2;
+        int index = (int) Math.floor((mouseY - top) / SEARCH_ROW_HEIGHT);
+        if (index < 0 || index >= Math.min(searchResults.size(), SEARCH_RESULT_LIMIT)) {
+            return 0;
+        }
+        return searchResultRowWidth(searchResults.get(index));
+    }
+
+    private int searchResultRowWidth(FamilyTreeSearchEntry entry) {
+        return Math.min(width - searchX - HEADER_MARGIN,
+                font.width(searchResultLabel(entry)) + SEARCH_ROW_HORIZONTAL_PADDING);
     }
 
     static boolean searchOverlayContains(
@@ -680,9 +698,6 @@ public class FamilyTreeScreen extends Screen {
         context.drawCenteredString(font, headerTitle, width / 2, 10, 0xFFFFFFFF);
 
         Optional<Component> status = statusMessage(viewModel, searchOpen && !searchPending, searchResults);
-        if (searchPending) {
-            status = Optional.of(Component.translatable("gui.family_tree.loading_family"));
-        }
         if (actionFeedback != null) {
             if (Util.getMillis() < actionFeedbackUntilMs) {
                 status = Optional.of(actionFeedback);
@@ -762,19 +777,21 @@ public class FamilyTreeScreen extends Screen {
         }
 
         int count = Math.min(searchResults.size(), SEARCH_RESULT_LIMIT);
-        context.fill(searchX, top, searchX + searchWidth, top + count * SEARCH_ROW_HEIGHT, 0xEE20262C);
         for (int index = 0; index < count; index++) {
             int rowTop = top + index * SEARCH_ROW_HEIGHT;
+            FamilyTreeSearchEntry entry = searchResults.get(index);
+            int rowWidth = searchResultRowWidth(entry);
+            context.fill(searchX, rowTop, searchX + rowWidth, rowTop + SEARCH_ROW_HEIGHT, 0xEE20262C);
             boolean rowHovered = mouseX >= searchX
-                    && mouseX < searchX + searchWidth
+                    && mouseX < searchX + rowWidth
                     && mouseY >= rowTop
                     && mouseY < rowTop + SEARCH_ROW_HEIGHT;
             if (rowHovered) {
-                context.fill(searchX, rowTop, searchX + searchWidth, rowTop + SEARCH_ROW_HEIGHT, 0xFF43586C);
+                context.fill(searchX, rowTop, searchX + rowWidth, rowTop + SEARCH_ROW_HEIGHT, 0xFF43586C);
             }
             context.drawString(
                     font,
-                    searchResultLabel(searchResults.get(index)),
+                    ellipsizedText(searchResultLabel(entry), rowWidth - SEARCH_ROW_HORIZONTAL_PADDING),
                     searchX + 6,
                     rowTop + 7,
                     0xFFFFFFFF
@@ -967,9 +984,6 @@ public class FamilyTreeScreen extends Screen {
     ) {
         if (model.unavailableFocusId().isPresent()) {
             return Optional.of(Component.translatable("gui.family_tree.family_record_unavailable"));
-        }
-        if (model.loading()) {
-            return Optional.of(Component.translatable("gui.family_tree.loading_family"));
         }
         if (searchOpen && searchResults.isEmpty()) {
             return Optional.of(Component.translatable("gui.family_tree.no_records"));

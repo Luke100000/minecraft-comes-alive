@@ -4,6 +4,7 @@ import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.PathingBlockInteraction;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
+import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTask;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.tags.FluidTags;
@@ -358,17 +359,16 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     }
 
     private boolean targetsCurrentPersistentWalkTarget(Set<BlockPos> targets, WalkTarget walkTarget) {
-        if (walkTarget == null) {
+        if (!ExtendedWalkTowardsTask.isPersistentJourney(walkTarget)) {
             return false;
         }
         if (walkTarget.getTarget() instanceof MultiTargetPositionTracker multiTarget) {
             // Only an owned, durable POI journey may use the expensive search.
             // The logical POI stays the failure identity, but the pathfinder must
             // search the actual physical endpoints (e.g. positions beside a bed).
-            return walkTarget instanceof WalkTargetFailureMemory.TargetIdentityOwner
-                    && !targets.isEmpty() && targets.equals(multiTarget.getPathTargets(this.mob));
+            return !targets.isEmpty() && targets.equals(multiTarget.getPathTargets(this.mob));
         }
-        if (!(walkTarget.getTarget() instanceof PersistentPathTarget) || targets.size() != 1) {
+        if (targets.size() != 1) {
             return false;
         }
         BlockPos pathTarget = targets.iterator().next();
@@ -599,9 +599,8 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (failure == null || !hasFailureEvidenceFor(failure.target)) {
             return;
         }
-        // An opening anywhere in the ordinary frontier can make the destination
-        // probe useful again, even when it is far from both endpoints.
         float ordinaryPathLength = getOrdinaryPathLength(this.mob);
+        // A change off the direct line can open a route around an obstacle.
         if (changed.distSqr(failure.target) <= FAILED_TARGET_INVALIDATION_RADIUS_SQR
                 || changed.distSqr(failure.origin) <= ordinaryPathLength * ordinaryPathLength) {
             failure.invalidated = true;
@@ -655,7 +654,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         }
         WalkTarget walkTarget = this.mob.getBrain()
                 .getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
-        if (!isPersistentWalkTarget(walkTarget)) {
+        if (!ExtendedWalkTowardsTask.isPersistentJourney(walkTarget)) {
             clearDetour();
             return;
         }
@@ -934,7 +933,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         WalkTarget walkTarget = this.mob.getBrain()
                 .getMemoryInternal(MemoryModuleType.WALK_TARGET)
                 .orElse(null);
-        if (!isPersistentWalkTarget(walkTarget)) {
+        if (!ExtendedWalkTowardsTask.isPersistentJourney(walkTarget)) {
             return;
         }
         BlockPos destination = walkTarget.getTarget().currentBlockPosition();
@@ -970,12 +969,6 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             clearFailure(this.mob);
         }
         this.moveTo(nextPath, walkTarget.getSpeedModifier());
-    }
-
-    private static boolean isPersistentWalkTarget(@Nullable WalkTarget walkTarget) {
-        return walkTarget != null && (walkTarget.getTarget() instanceof PersistentPathTarget
-                || walkTarget instanceof WalkTargetFailureMemory.TargetIdentityOwner
-                && walkTarget.getTarget() instanceof MultiTargetPositionTracker);
     }
 
     private Path createPathForWalkTarget(WalkTarget walkTarget) {

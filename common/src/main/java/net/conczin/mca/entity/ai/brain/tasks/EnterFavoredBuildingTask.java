@@ -6,6 +6,7 @@ import net.conczin.mca.server.world.data.Building;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 
+import java.util.Objects;
 import java.util.Optional;
 
 public class EnterFavoredBuildingTask extends EnterBuildingTask {
@@ -13,6 +14,7 @@ public class EnterFavoredBuildingTask extends EnterBuildingTask {
     private static final int MISSING_BUILDING_RETRY_TICKS = 10;
     private int lastMoodIncrease = 0;
     private long nextMissingBuildingRetryTick;
+    private String lastMissingBuildingType;
 
     public EnterFavoredBuildingTask(float speed) {
         super("", speed);
@@ -31,13 +33,15 @@ public class EnterFavoredBuildingTask extends EnterBuildingTask {
     @Override
     protected boolean checkExtraStartConditions(ServerLevel level, VillagerEntityMCA villager) {
         return super.checkExtraStartConditions(level, villager)
-                && level.getGameTime() >= nextMissingBuildingRetryTick;
+                && (level.getGameTime() >= nextMissingBuildingRetryTick
+                || !Objects.equals(getBuilding(villager), lastMissingBuildingType));
     }
 
     @Override
     protected Optional<BlockPos> getNextPosition(VillagerEntityMCA villager) {
         Optional<Building> b = getNearestBuilding(villager);
         if (b.isEmpty()) {
+            lastMissingBuildingType = getBuilding(villager);
             nextMissingBuildingRetryTick = villager.level().getGameTime() + MISSING_BUILDING_RETRY_TICKS;
             return Optional.empty();
         }

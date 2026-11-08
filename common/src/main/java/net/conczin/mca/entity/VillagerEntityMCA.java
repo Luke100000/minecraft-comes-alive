@@ -2019,8 +2019,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                     this,
                     weaponHand,
                     weaponStack,
-                    1.75F,
-                    14 - this.level().getDifficulty().getId() * 4,
+                    RangedWeaponHelper.CROSSBOW_PROJECTILE_SPEED,
+                    RangedWeaponHelper.crossbowInaccuracy(this.level().getDifficulty()),
                     target
             );
             this.onCrossbowAttackPerformed();

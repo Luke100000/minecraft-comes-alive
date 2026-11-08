@@ -1,6 +1,7 @@
 package net.conczin.mca.entity.ai;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.FlyingMob;
 import net.minecraft.world.entity.LivingEntity;
@@ -12,6 +13,8 @@ import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.monster.Blaze;
 import net.minecraft.world.entity.monster.Vex;
 import net.minecraft.world.item.*;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.component.ChargedProjectiles;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
@@ -23,6 +26,7 @@ public final class RangedWeaponHelper {
     public static final int GUARD_ATTACK_RANGE = 15;
     private static final double BOW_TARGET_HEIGHT_FRACTION = 0.5D;
     public static final float BOW_PROJECTILE_SPEED = 1.6F;
+    public static final float CROSSBOW_PROJECTILE_SPEED = 1.75F;
     public static final float BOW_INACCURACY = 3.0F;
     private static final double ARROW_AIR_DRAG = 0.99D;
     private static final double ARROW_GRAVITY = 0.05D;
@@ -32,12 +36,26 @@ public final class RangedWeaponHelper {
     private RangedWeaponHelper() {
     }
 
+    /** Preserve vanilla difficulty scaling except for a modest Normal-difficulty accuracy boost. */
+    public static float crossbowInaccuracy(Difficulty difficulty) {
+        return difficulty == Difficulty.NORMAL ? 4.0F : 14.0F - difficulty.getId() * 4.0F;
+    }
+
     public record BowShot(Vec3 direction, double flightTicks) {
     }
 
     public static Optional<BowShot> solveBowShot(Vec3 launchPosition, Vec3 targetBasePosition,
                                                   double targetHeight, Vec3 observedTargetVelocity) {
+        return solveArrowShot(launchPosition, targetBasePosition, targetHeight,
+                observedTargetVelocity, BOW_PROJECTILE_SPEED);
+    }
+
+    /** Solve ordinary-arrow flight at the weapon's actual launch speed. */
+    public static Optional<BowShot> solveArrowShot(Vec3 launchPosition, Vec3 targetBasePosition,
+                                                    double targetHeight, Vec3 observedTargetVelocity,
+                                                    float projectileSpeed) {
         if (!Double.isFinite(targetHeight) || targetHeight <= 0
+                || !Float.isFinite(projectileSpeed) || projectileSpeed <= 0
                 || !isFinite(launchPosition) || !isFinite(targetBasePosition) || !isFinite(observedTargetVelocity)) {
             return Optional.empty();
         }
@@ -48,7 +66,7 @@ public final class RangedWeaponHelper {
         Vec3 offset = targetBasePosition.add(0, targetHeight * BOW_TARGET_HEIGHT_FRACTION, 0)
                 .subtract(launchPosition);
         for (int tick = 1; tick <= MAX_TRAJECTORY_TICKS; tick++) {
-            if (requiredLaunchVelocity(offset, motion, tick).lengthSqr() > BOW_PROJECTILE_SPEED * BOW_PROJECTILE_SPEED) {
+            if (requiredLaunchVelocity(offset, motion, tick).lengthSqr() > projectileSpeed * projectileSpeed) {
                 continue;
             }
             double lower = tick - 1;
@@ -56,7 +74,7 @@ public final class RangedWeaponHelper {
             for (int iteration = 0; iteration < TRAJECTORY_SOLVER_ITERATIONS; iteration++) {
                 double middle = (lower + upper) * 0.5;
                 if (requiredLaunchVelocity(offset, motion, middle).lengthSqr()
-                        > BOW_PROJECTILE_SPEED * BOW_PROJECTILE_SPEED) {
+                        > projectileSpeed * projectileSpeed) {
                     lower = middle;
                 } else {
                     upper = middle;
@@ -86,8 +104,13 @@ public final class RangedWeaponHelper {
     }
 
     public static boolean hasClearBowTrajectory(PathfinderMob shooter, Vec3 launchPosition, BowShot shot) {
+        return hasClearArrowTrajectory(shooter, launchPosition, shot, BOW_PROJECTILE_SPEED);
+    }
+
+    public static boolean hasClearArrowTrajectory(PathfinderMob shooter, Vec3 launchPosition, BowShot shot,
+                                                   float projectileSpeed) {
         Vec3 position = launchPosition;
-        Vec3 velocity = shot.direction().normalize().scale(BOW_PROJECTILE_SPEED);
+        Vec3 velocity = shot.direction().normalize().scale(projectileSpeed);
         for (int tick = 0; tick < Math.ceil(shot.flightTicks()); tick++) {
             double fraction = Math.min(1, shot.flightTicks() - tick);
             Vec3 next = position.add(velocity.scale(fraction));
@@ -114,6 +137,36 @@ public final class RangedWeaponHelper {
         Vec3 launch = feetPosition.add(0, shooter.getEyeHeight() - 0.1F, 0);
         return solveBowShot(launch, target.position(), target.getBbHeight(), observedTargetVelocity(target))
                 .filter(shot -> hasClearBowTrajectory(shooter, launch, shot)).isPresent();
+    }
+
+    /** Use the same primary vanilla-arrow aim and launch speed as MCA's crossbow firing hook. */
+    public static boolean canShootCrossbowFrom(PathfinderMob shooter, Vec3 feetPosition, LivingEntity target) {
+        InteractionHand hand = getCrossbowHoldingHand(shooter);
+        if (hand == null) {
+            return false;
+        }
+        ItemStack weapon = shooter.getItemInHand(hand);
+        if (!weapon.is(Items.CROSSBOW) || shooter.isInWater()) {
+            return true;
+        }
+        ChargedProjectiles charged = weapon.getOrDefault(DataComponents.CHARGED_PROJECTILES, ChargedProjectiles.EMPTY);
+        ItemStack ammunition = charged.isEmpty() ? shooter.getProjectile(weapon) : charged.getItems().getFirst();
+        if (!ammunition.is(Items.ARROW) && !ammunition.is(Items.TIPPED_ARROW)
+                && !ammunition.is(Items.SPECTRAL_ARROW)) {
+            // Fireworks and unfamiliar projectiles retain their vanilla shooting behavior.
+            return true;
+        }
+        Vec3 launch = feetPosition.add(0, shooter.getEyeHeight() - 0.1F, 0);
+        return solveArrowShot(launch, target.position().add(0, target.getBbHeight() * 0.2D, 0),
+                target.getBbHeight(), observedTargetVelocity(target), CROSSBOW_PROJECTILE_SPEED)
+                .filter(shot -> hasClearArrowTrajectory(shooter, launch, shot, CROSSBOW_PROJECTILE_SPEED)).isPresent();
+    }
+
+    public static boolean canShootFrom(PathfinderMob shooter, Vec3 feetPosition, LivingEntity target) {
+        if (getCrossbowHoldingHand(shooter) != null) {
+            return canShootCrossbowFrom(shooter, feetPosition, target);
+        }
+        return canShootBowFrom(shooter, feetPosition, target);
     }
 
     public static boolean canPredictBowTrajectory(LivingEntity shooter, ItemStack weapon, ItemStack ammunition) {

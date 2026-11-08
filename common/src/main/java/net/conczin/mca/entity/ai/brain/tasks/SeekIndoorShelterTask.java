@@ -5,12 +5,14 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.BedDebugLog;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
+import net.conczin.mca.entity.ai.navigation.PathNodeGeometry;
 import net.conczin.mca.server.world.data.IndoorRoomCache;
 import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.sensing.VillagerHostilesSensor;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
@@ -113,6 +115,7 @@ public final class SeekIndoorShelterTask extends EnterBuildingTask {
             return Optional.empty();
         }
         List<Villager> loaded = manager.getLoadedVillagers();
+        boolean danger = hasDetectedDanger(villager);
         Map<UUID, BlockPos> homes = new HashMap<>();
         for (var village : manager) village.forEachResidentHome(homes::put);
         for (Villager resident : loaded) {
@@ -158,9 +161,8 @@ public final class SeekIndoorShelterTask extends EnterBuildingTask {
         }
         ReachableHouse chosen = nearest;
         ReachableHouse admitted = null;
-        boolean danger = hasDetectedDanger(villager);
         String reason = nearest.house.membershipKnown() ? "NEAREST_HAS_SPACE" : "NEAREST_CAPACITY_UNKNOWN";
-        if (!danger && nearest.occupancy != null) {
+        if (!danger) {
             ReachableHouse unknown = null;
             ReachableHouse overflow = nearest;
             for (ReachableHouse route : reachable) {
@@ -170,14 +172,14 @@ public final class SeekIndoorShelterTask extends EnterBuildingTask {
                     continue;
                 }
                 if (route.hasCapacity() && (admitted == null || isBetterShelter(route, admitted))) admitted = route;
-                if (isBetterShelter(route, overflow)) overflow = route;
+                if (overflow.occupancy == null || isBetterShelter(route, overflow)) overflow = route;
             }
             if (admitted != null) {
                 chosen = admitted;
                 reason = "SPACE_PER_OCCUPANT";
             } else if (unknown != null) {
                 chosen = unknown;
-                reason = "ALTERNATIVE_CAPACITY_UNKNOWN";
+                reason = unknown == nearest ? "NEAREST_CAPACITY_UNKNOWN" : "ALTERNATIVE_CAPACITY_UNKNOWN";
             } else {
                 chosen = overflow;
                 reason = "DENSITY_OVERFLOW";
@@ -226,8 +228,15 @@ public final class SeekIndoorShelterTask extends EnterBuildingTask {
             if (debug) logRoute(villager, house, "EMPTY_PATH_AWAY_FROM_TARGET", path, null);
             return null;
         }
-        Vec3 standingPosition = path.getNodeCount() == 0 ? villager.position()
-                : path.getEntityPosAtNode(villager, path.getNodeCount() - 1);
+        Vec3 standingPosition;
+        if (path.getNodeCount() == 0) {
+            standingPosition = villager.position();
+        } else {
+            int lastNode = path.getNodeCount() - 1;
+            Vec3 nodePosition = path.getEntityPosAtNode(villager, lastNode);
+            double walkingY = PathNodeGeometry.walkingPosition(level, path.getNodePos(lastNode), villager).y;
+            standingPosition = new Vec3(nodePosition.x, walkingY, nodePosition.z);
+        }
         BlockPos standing = BlockPos.containing(standingPosition);
         if (!isLoaded(level, standing) || !house.floorCells().contains(standing)
                 || !isUsableFloor(level, villager, standing)
@@ -260,42 +269,48 @@ public final class SeekIndoorShelterTask extends EnterBuildingTask {
         int occupants = reservedBeds.size();
         int capacity = Math.min(house.bedHeads().size() + MAX_EXTRA_OCCUPANTS,
                 usableFloorCells / FLOOR_CELLS_PER_OCCUPANT);
-        int physicalGuests = 0;
-        int incomingGuests = 0;
-        List<String> countedGuests = debug ? new ArrayList<>() : null;
+        List<Villager> countedGuests = debug ? new ArrayList<>() : null;
         for (Villager resident : loaded) {
             if (resident == selecting || owners.contains(resident.getUUID())) continue;
             var target = resident.getBrain().getMemory(MemoryModuleType.WALK_TARGET);
             boolean inside = house.contains(resident.blockPosition());
             if (inside || target
                     .filter(walk -> house.contains(walk.getTarget().currentBlockPosition())).isPresent()) {
-                if (debug) {
-                    if (inside) physicalGuests++; else incomingGuests++;
-                    if (countedGuests.size() < 16) {
-                        countedGuests.add(resident.getName().getString() + "/" + resident.getUUID()
-                                + "@" + resident.blockPosition().toShortString() + (inside ? ":inside" : ":incoming"));
-                    }
-                }
+                if (debug) countedGuests.add(resident);
                 occupants++;
             }
         }
-        if (debug) {
-            int minX = Integer.MAX_VALUE, minZ = Integer.MAX_VALUE;
-            int maxX = Integer.MIN_VALUE, maxZ = Integer.MIN_VALUE;
-            for (BlockPos cell : house.floorCells()) {
-                minX = Math.min(minX, cell.getX()); minZ = Math.min(minZ, cell.getZ());
-                maxX = Math.max(maxX, cell.getX()); maxZ = Math.max(maxZ, cell.getZ());
-            }
-            var present = level.getEntitiesOfClass(Villager.class,
-                    new AABB(minX, level.getMinBuildHeight(), minZ, maxX + 1, level.getMaxBuildHeight(), maxZ + 1),
-                    resident -> resident.isAlive() && house.contains(resident.blockPosition()));
-            var unindexed = present.stream().filter(resident -> !loaded.contains(resident))
-                    .map(resident -> resident.getName().getString() + "/" + resident.getUUID()).toList();
-            MCA.LOGGER.info("[MCA-SHELTER][capacity] uuid={} gameTime={} anchor={} membershipKnown=true beds={} usableFloorCells={} capacity={} reservedBeds={} physicalGuests={} incomingGuests={} countedOccupantsExcludingSelector={} hasSpace={} indexedVillagers={} actualInside={} unindexedInside={} countedGuestsFirst16={}",
-                    selecting.getUUID(), level.getGameTime(), house.anchor(), house.bedHeads(), usableFloorCells, capacity, reservedBeds,
-                    physicalGuests, incomingGuests, occupants, occupants < capacity, loaded.size(), present.size(), unindexed, countedGuests);
-        }
+        if (debug) logOccupancy(level, selecting, house, loaded, countedGuests,
+                reservedBeds, usableFloorCells, capacity, occupants);
         return new Occupancy(occupants, capacity, usableFloorCells);
+    }
+
+    private static void logOccupancy(ServerLevel level, VillagerEntityMCA selecting,
+                                     IndoorRoomCache.House house, List<? extends Villager> loaded,
+                                     List<Villager> guests, Set<BlockPos> reservedBeds,
+                                     int usableFloorCells, int capacity, int occupants) {
+        int minX = Integer.MAX_VALUE, minZ = Integer.MAX_VALUE;
+        int maxX = Integer.MIN_VALUE, maxZ = Integer.MIN_VALUE;
+        for (BlockPos cell : house.floorCells()) {
+            minX = Math.min(minX, cell.getX()); minZ = Math.min(minZ, cell.getZ());
+            maxX = Math.max(maxX, cell.getX()); maxZ = Math.max(maxZ, cell.getZ());
+        }
+        var present = level.getEntitiesOfClass(Villager.class,
+                new AABB(minX, level.getMinBuildHeight(), minZ, maxX + 1, level.getMaxBuildHeight(), maxZ + 1),
+                resident -> resident.isAlive() && house.contains(resident.blockPosition()));
+        var unindexed = present.stream().filter(resident -> !loaded.contains(resident))
+                .map(resident -> resident.getName().getString() + "/" + resident.getUUID()).toList();
+        int physical = 0;
+        List<String> samples = new ArrayList<>();
+        for (Villager guest : guests) {
+            boolean inside = house.contains(guest.blockPosition());
+            if (inside) physical++;
+            if (samples.size() < 16) samples.add(guest.getName().getString() + "/" + guest.getUUID()
+                    + "@" + guest.blockPosition().toShortString() + (inside ? ":inside" : ":incoming"));
+        }
+        MCA.LOGGER.info("[MCA-SHELTER][capacity] uuid={} gameTime={} anchor={} membershipKnown=true beds={} usableFloorCells={} capacity={} reservedBeds={} physicalGuests={} incomingGuests={} countedOccupantsExcludingSelector={} hasSpace={} indexedVillagers={} actualInside={} unindexedInside={} countedGuestsFirst16={}",
+                selecting.getUUID(), level.getGameTime(), house.anchor(), house.bedHeads(), usableFloorCells, capacity, reservedBeds,
+                physical, guests.size() - physical, occupants, occupants < capacity, loaded.size(), present.size(), unindexed, samples);
     }
 
     private static void logRoute(VillagerEntityMCA villager, IndoorRoomCache.House house,
@@ -342,9 +357,20 @@ public final class SeekIndoorShelterTask extends EnterBuildingTask {
         var brain = villager.getBrain();
         boolean hostile = brain.getMemory(MemoryModuleType.NEAREST_HOSTILE).filter(threat -> isLiveThreat(villager, threat))
                 .filter(threat -> threat instanceof Creeper creeper ? creeper.isIgnited()
-                        : HOSTILES.isMatchingEntity(villager, threat)).isPresent();
-        return hostile || brain.getMemory(MemoryModuleType.HURT_BY_ENTITY).filter(threat -> isLiveThreat(villager, threat))
+                        || isNearbyVillagerTargeter(villager, threat)
+                        : HOSTILES.isMatchingEntity(villager, threat) || isNearbyVillagerTargeter(villager, threat)).isPresent();
+        boolean nearbyDanger = brain.getMemory(MemoryModuleType.NEAREST_LIVING_ENTITIES).orElse(List.of()).stream()
+                .anyMatch(threat -> isLiveThreat(villager, threat)
+                        && (isNearbyVillagerTargeter(villager, threat)
+                        || threat instanceof Creeper creeper && creeper.isIgnited()
+                        && threat.distanceToSqr(villager) <= 256.0D));
+        return hostile || nearbyDanger || brain.getMemory(MemoryModuleType.HURT_BY_ENTITY).filter(threat -> isLiveThreat(villager, threat))
                 .filter(threat -> threat.distanceToSqr(villager) <= 36.0D).isPresent();
+    }
+
+    private static boolean isNearbyVillagerTargeter(VillagerEntityMCA villager, LivingEntity threat) {
+        return threat instanceof Mob mob && mob.getTarget() instanceof Villager
+                && threat.distanceToSqr(villager) <= 256.0D;
     }
 
     private static boolean isLiveThreat(VillagerEntityMCA villager, LivingEntity threat) {

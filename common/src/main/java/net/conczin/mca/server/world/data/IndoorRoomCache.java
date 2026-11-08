@@ -54,7 +54,8 @@ public final class IndoorRoomCache {
     }
 
     public Optional<House> resolveHouse(BlockPos bed) {
-        return resolveHouse(bed, new ScanBudget());
+        if (!isLoaded(bed) || !BedPoiCompatibility.isHomePoiState(level.getBlockState(bed))) return Optional.empty();
+        return resolveHouseValidBed(bed, new ScanBudget(), registeredHouse(bed).orElse(null));
     }
 
     /** One discovery budget for an admission attempt; beds are grouped before the house limit. */
@@ -62,21 +63,20 @@ public final class IndoorRoomCache {
         ScanBudget budget = new ScanBudget();
         List<House> houses = new ArrayList<>();
         for (BlockPos bed : beds) {
-            RegisteredHouse registered = registeredHouse(bed).orElse(null);
-            if (houses.stream().anyMatch(house -> house.floorCells().contains(bed)
-                    || registered != null && registered.equals(house.registered))) continue;
             if (houses.size() >= limit) break;
-            resolveHouse(bed, budget).ifPresent(houses::add);
+            if (!isLoaded(bed) || !BedPoiCompatibility.isHomePoiState(level.getBlockState(bed))) continue;
+            if (houses.stream().anyMatch(house -> house.floorCells().contains(bed))) continue;
+            RegisteredHouse registered = registeredHouse(bed).orElse(null);
+            if (registered != null && houses.stream().anyMatch(house -> registered.equals(house.registered))) continue;
+            resolveHouseValidBed(bed, budget, registered).ifPresent(houses::add);
         }
         return List.copyOf(houses);
     }
 
-    private Optional<House> resolveHouse(BlockPos bed, ScanBudget budget) {
-        if (!isLoaded(bed) || !BedPoiCompatibility.isHomePoiState(level.getBlockState(bed))) return Optional.empty();
+    private Optional<House> resolveHouseValidBed(BlockPos bed, ScanBudget budget, RegisteredHouse registered) {
         Entry initial = resolveFloor(bed, budget);
         if (initial == null || initial.rooms.stream().noneMatch(room -> room.floorCells().contains(bed))) return Optional.empty();
 
-        RegisteredHouse registered = registeredHouse(bed).orElse(null);
         ArrayDeque<BlockPos> pending = new ArrayDeque<>();
         Set<BlockPos> required = new HashSet<>();
         pending.add(bed);
@@ -156,7 +156,7 @@ public final class IndoorRoomCache {
             }
             if (BedPoiCompatibility.isHomePoiState(level.getBlockState(cell))) {
                 beds.add(cell);
-                RegisteredHouse other = registeredHouse(cell).orElse(null);
+                RegisteredHouse other = cell.equals(bed) ? registered : registeredHouse(cell).orElse(null);
                 if (registered != null && other != null && !registered.equals(other)) complete = false;
             }
         }
