@@ -22,13 +22,11 @@ def frame(name: str, interior: str, outside: str, border: str, shine: str) -> No
     draw = ImageDraw.Draw(image)
     # Stepped silhouette with three border layers. The corner artwork stays
     # pixel-sized while the nine-slice renderer stretches only the straight edges.
-    draw.polygon(((4, 0), (19, 0), (21, 1), (23, 4), (23, 19),
-                  (21, 22), (19, 23), (4, 23), (1, 22), (0, 19),
-                  (0, 4), (2, 1)), fill=outside)
-    draw.polygon(((4, 2), (19, 2), (21, 4), (21, 19),
-                  (19, 21), (4, 21), (2, 19), (2, 4)), fill=border)
-    draw.polygon(((5, 4), (18, 4), (19, 5), (19, 18),
-                  (18, 19), (5, 19), (4, 18), (4, 5)), fill=interior)
+    # One symmetric rounded-rectangle primitive prevents hand-authored corners
+    # from acquiring different step profiles on the left and right.
+    draw.rounded_rectangle((0, 0, 23, 23), radius=5, fill=outside)
+    draw.rounded_rectangle((2, 2, 21, 21), radius=4, fill=border)
+    draw.rounded_rectangle((4, 4, 19, 19), radius=3, fill=interior)
     draw.line((5, 3, 18, 3), fill=shine, width=1)
     draw.line((3, 5, 3, 18), fill=shine, width=1)
     draw.line((5, 20, 18, 20), fill=outside, width=1)

@@ -33,6 +33,16 @@ final class DialogueMenuScrollWidget extends AbstractScrollWidget {
         return (int) Math.round(scrollAmount());
     }
 
+    void revealRange(int top, int bottom) {
+        double desired = scrollAmount();
+        if (top < desired) {
+            desired = top;
+        } else if (bottom > desired + settledViewportHeight) {
+            desired = Math.min(top, bottom - settledViewportHeight);
+        }
+        setScrollAmount(Math.clamp(desired, 0, Math.max(0, contentHeight - settledViewportHeight)));
+    }
+
     void reset() {
         setScrollAmount(0);
         setFocused(false);

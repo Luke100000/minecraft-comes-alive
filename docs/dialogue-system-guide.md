@@ -38,6 +38,8 @@ The Kai-style Talk overlay keeps the villager visible between two independent pa
 
 Highlighted and Ask events are ordered by descending `priority`, then ID. At most **64** direct event options are transmitted per menu. For ambient selection, only the highest eligible priority tier participates; the engine selects among events in that tier by `weight` when the player clicks the ambient option. Weight does not let an ineligible event bypass prerequisites. The shipped `mca:ambient/baseline` has the lowest possible priority and a zero-second cooldown, preserving ordinary small talk.
 
+Expanding a section brings its heading and first option into view with the smallest necessary scroll. Q and Esc are centred with their labels in the two footer halves, using softly stepped keycaps. The featured row uses a larger gold Minecraft-font star and the same content width as the other rows.
+
 ## 3. Node graphs, replies and random branches
 
 Each node is local to one event. A visible node has exactly one `line` string or `lines` array of ordered, nonblank translation keys. It also has exactly one continuation shape:

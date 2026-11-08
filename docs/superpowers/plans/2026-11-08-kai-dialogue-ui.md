@@ -86,6 +86,14 @@ the upper-right bubble. Scrollbar need and wrapping width use the settled viewpo
 expansion cannot flash a transient scrollbar. Cover this and normal pointer retention
 in DialogueOverlayLayoutTest and DialogueMenuScrollWidgetTest.
 
+Polish after checkpoint `c7a4b0ddd`: centre each Q/Esc footer group in its half,
+round keycaps with symmetric pixel steps, generate matching frame silhouettes,
+render the native gold star in a centred icon-size slot and give its featured row
+more height. On expansion, reveal the clicked heading and first option with minimal
+scroll using settled viewport height. Reuse native scrolling and current panel width.
+Verify revealRange and symmetric PNG alpha silhouettes, then common tests and both
+loader compiles. Leave this new polish uncommitted after the requested checkpoint.
+
 Approved visual correction (2026-11-08): restore the featured star as inline text;
 centre visible icon artwork and text together in each padded row; put section arrows
 at the right edge; use the preferred right-hand parchment width even for short lines;

@@ -65,6 +65,22 @@ final class DialogueSkin {
         graphics.blit(TAIL, x, y, 0, 0, 16, 20, 16, 20);
     }
 
+    static void drawKeycap(GuiGraphics graphics, int x, int y, int width, int height) {
+        roundedFill(graphics, x, y, width, height, 2, 0xFF140D0C);
+        roundedFill(graphics, x + 1, y + 1, width - 2, height - 2, 2, 0xFF9B817A);
+        roundedFill(graphics, x + 2, y + 2, width - 4, height - 4, 1, 0xFF322928);
+    }
+
+    private static void roundedFill(GuiGraphics graphics, int x, int y, int width, int height,
+                                     int radius, int colour) {
+        graphics.fill(x, y + radius, x + width, y + height - radius, colour);
+        for (int row = 0; row < radius; row++) {
+            int inset = radius - row;
+            graphics.fill(x + inset, y + row, x + width - inset, y + row + 1, colour);
+            graphics.fill(x + inset, y + height - row - 1, x + width - inset, y + height - row, colour);
+        }
+    }
+
     static void drawIcon(GuiGraphics graphics, int iconIndex, int x, int y, int size) {
         if (iconIndex == DialogueTopicSection.CONVERSATIONS.ordinal()) {
             graphics.blitSprite(SPEECH, x, y, size, size);

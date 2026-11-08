@@ -10,6 +10,23 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class DialogueSkinResourcesTest {
     @Test
+    void frameCornerSilhouettesMatchOnEverySide() throws Exception {
+        for (String name : new String[]{"paper_frame", "menu_frame", "featured_frame"}) {
+            try (InputStream in = getClass().getResourceAsStream("/assets/mca/textures/gui/dialogue/" + name + ".png")) {
+                assertNotNull(in);
+                BufferedImage texture = ImageIO.read(in);
+                for (int y = 0; y < 24; y++) {
+                    for (int x = 0; x < 24; x++) {
+                        int alpha = texture.getRGB(x, y) >>> 24;
+                        assertEquals(alpha, texture.getRGB(23 - x, y) >>> 24, name + " horizontal silhouette");
+                        assertEquals(alpha, texture.getRGB(x, 23 - y) >>> 24, name + " vertical silhouette");
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
     void dialogueTexturesHaveExpectedPixelDimensionsAndAlpha() throws Exception {
         verify("paper_frame", 24, 24);
         verify("paper_tail", 16, 20);
