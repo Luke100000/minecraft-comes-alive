@@ -44,7 +44,7 @@ class DialogueOverlayLayoutTest {
     }
 
     @Test
-    void footerActionsAndDividerStayInsideFrameWithoutTouchingBorder() {
+    void footerActionsAndDividerReachLowerInteriorWhileLeavingBottomBorder() {
         DialogueOverlayLayout.Rect menu = new DialogueOverlayLayout.Rect(100, 150, 300, 140);
         DialogueOverlayLayout.FooterLayout footer = DialogueOverlayLayout.footer(menu, 27);
         for (DialogueOverlayLayout.Rect element : new DialogueOverlayLayout.Rect[]{
@@ -52,10 +52,12 @@ class DialogueOverlayLayoutTest {
             assertTrue(element.x() >= menu.x() + 4);
             assertTrue(element.right() <= menu.right() - 4);
             assertTrue(element.y() > menu.y() + 7);
-            assertTrue(element.bottom() <= menu.bottom() - 4);
+            assertTrue(element.bottom() <= menu.bottom() - 1);
         }
         assertEquals(footer.back().right(), footer.close().x());
         assertEquals(footer.divider().bottom(), footer.back().y());
+        assertEquals(menu.bottom() - 1, footer.back().bottom());
+        assertEquals(menu.bottom() - 1, footer.close().bottom());
     }
 
     @Test

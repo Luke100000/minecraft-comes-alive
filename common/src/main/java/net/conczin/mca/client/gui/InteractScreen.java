@@ -628,7 +628,9 @@ public class InteractScreen extends AbstractDynamicScreen {
     private int dialoguePaperHeight(ClientHandlerImpl.DialoguePresentation presentation) {
         int bubbleWidth = dialoguePaperWidth(presentation);
         int lines = dialogueLines(presentation.paperFullLine(), bubbleWidth - dialoguePixels(32)).size();
-        return dialoguePixels(Math.max(58, lines * 10 + 40)) + dialogueHistoryHeight(presentation);
+        int padding = dialogueSpeechAboveChoices ? 40 : 48;
+        int minimumHeight = dialogueSpeechAboveChoices ? 58 : 62;
+        return dialoguePixels(Math.max(minimumHeight, lines * 10 + padding)) + dialogueHistoryHeight(presentation);
     }
 
     private int dialoguePaperWidth(ClientHandlerImpl.DialoguePresentation presentation) {
@@ -926,22 +928,30 @@ public class InteractScreen extends AbstractDynamicScreen {
             if ((hover || focused) && hitBottom - hitTop > 4) {
                 context.fill(left + 12, hitTop + 2, left + panelWidth - 12, hitBottom - 2, 0x55D7A34D);
             }
-        } else {
-            context.fill(left + 8, hitTop, left + panelWidth - 8, hitBottom,
-                    hover || focused ? 0xCC825133 : 0x88492E1D);
-            if (hover || focused) {
-                context.fill(left + 8, hitTop, left + 11, hitBottom, GOLD);
-            }
+        } else if (hover || focused) {
+            // Resting rows share the menu's dark surface instead of painting a second background.
+            context.fill(left + 8, hitTop, left + panelWidth - 8, hitBottom, 0xCC825133);
+            context.fill(left + 8, hitTop, left + 11, hitBottom, GOLD);
         }
         int iconSize = dialoguePixels(12);
-        int symbolY = y + (rowHeight - 2 - iconSize) / 2;
+        int glyphHeight = dialoguePixels(font.lineHeight - 1);
+        int lineStep = dialoguePixels(10);
+        // Centre against the row itself: the featured frame starts at y + 1 and ends
+        // at y + rowHeight - 1, so its centre is also y + rowHeight / 2.
+        // Use the rounded line step actually drawn below, not a separately rounded total.
+        int textHeight = glyphHeight + (lines.size() - 1) * lineStep;
+        int lineY = y + (rowHeight - textHeight) / 2;
+        int glyphY = y + (rowHeight - glyphHeight) / 2;
+        int symbolY = y + (rowHeight - iconSize) / 2;
         // A partially clipped first row used to show only a stray coloured pixel
         // of its symbol when the user scrolled a small amount.
         if (symbolY >= clipTop && symbolY + iconSize <= clipBottom) {
             if (iconInset > 0) {
                 int iconX = left + dialoguePixels(16);
                 if (row.featured()) {
-                    drawDialogueStar(context, iconX, symbolY, iconSize);
+                    int starWidth = dialoguePixels(font.width("★"));
+                    drawDialogueText(context, Component.literal("★"),
+                            iconX + (iconSize - starWidth) / 2, glyphY, GOLD, true);
                 } else if (row.iconIndex() == DialogueTopicSection.RELATIONSHIPS.ordinal()) {
                     // Use the same MCA heart artwork shown in the villager status indicators.
                     context.blit(ICON_TEXTURES, iconX, symbolY, iconSize, iconSize,
@@ -951,37 +961,23 @@ public class InteractScreen extends AbstractDynamicScreen {
                 }
             }
         }
-        int textHeight = dialoguePixels((lines.size() - 1) * 10 + font.lineHeight - 1);
-        int lineY = y + (rowHeight - 2 - textHeight) / 2;
         for (FormattedCharSequence line : lines) {
             drawDialogueText(context, line, left + dialoguePixels(16) + iconInset, lineY,
                     !clickable ? 0xFFAA937A : hover || focused ? GOLD : CREAM, true);
-            lineY += dialoguePixels(10);
+            lineY += lineStep;
         }
         if (row.featured() || row.iconIndex() >= 0) {
             boolean expanded = row.click() != null && row.click().kind() == DialogueClickKind.TOGGLE_SECTION
                     && expandedSections.contains(DialogueTopicSection.valueOf(row.click().choiceId()));
             drawDialogueText(context, Component.literal(expanded ? "▾" : "▸"),
                     left + panelWidth - dialoguePixels(22),
-                    y + (rowHeight - 2 - dialoguePixels(font.lineHeight - 1)) / 2,
+                    glyphY,
                     hover || focused ? GOLD : CREAM, false);
         }
         if (clickable) {
             dialogueHits.add(new DialogueHit(left + 8, hitTop, left + panelWidth - 8, hitBottom, row.click()));
         }
         return y + rowHeight;
-    }
-
-    private void drawDialogueStar(GuiGraphics context, int x, int y, int size) {
-        int glyphWidth = font.width("★") + 1;
-        int glyphHeight = font.lineHeight - 1;
-        float scale = size / (float) Math.max(glyphWidth, glyphHeight);
-        context.pose().pushPose();
-        context.pose().translate(x + (size - glyphWidth * scale) / 2,
-                y + (size - glyphHeight * scale) / 2, 0);
-        context.pose().scale(scale, scale, 1);
-        context.drawString(font, "★", 0, 0, GOLD, true);
-        context.pose().popPose();
     }
 
     private void drawDialogueAction(GuiGraphics context, DialogueRow row, int x, int y, int w, int h) {

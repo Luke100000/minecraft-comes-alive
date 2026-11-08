@@ -43,13 +43,10 @@ final class DialogueSkin {
         piece(graphics, texture, x + width - CORNER, y + height - CORNER, CORNER, CORNER,
                 FRAME_SIZE - CORNER, FRAME_SIZE - CORNER, CORNER, CORNER);
 
-        // Soft inset shading like the reference, while preserving crisp nine-slice edges.
+        // Parchment uses a soft inset tint; the dark menu is textured only once.
         if (texture.equals(PAPER)) {
             graphics.fillGradient(x + CORNER, y + CORNER, x + width - CORNER, y + height - CORNER,
                     0xFFFFF3CE, 0xFFF8D79E);
-        } else if (texture.equals(MENU)) {
-            graphics.fillGradient(x + CORNER, y + CORNER, x + width - CORNER, y + height - CORNER,
-                    0xFF39251A, 0xFF21120D);
         }
     }
 

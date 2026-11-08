@@ -55,7 +55,7 @@ final class DialogueOverlayLayout {
         int half = innerWidth / 2;
         int dividerY = menu.bottom() - footerHeight + 1;
         int actionY = dividerY + 1;
-        int actionHeight = Math.max(1, menu.bottom() - 4 - actionY);
+        int actionHeight = Math.max(1, menu.bottom() - 1 - actionY);
         return new FooterLayout(
                 new Rect(innerLeft, dividerY, innerWidth, 1),
                 new Rect(innerLeft, actionY, half, actionHeight),

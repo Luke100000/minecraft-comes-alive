@@ -95,7 +95,7 @@ def icons() -> None:
 
 if __name__ == "__main__":
     frame("paper_frame", "#FAE8C9", "#291910", "#B58051", "#FFE6B5")
-    frame("menu_frame", "#2B1C18", "#120B09", "#78503B", "#AA7957")
+    frame("menu_frame", "#21120D", "#120B09", "#78503B", "#AA7957")
     frame("featured_frame", "#694632", "#281810", "#D4A36B", "#F6CD8F")
     tail()
     icons()
