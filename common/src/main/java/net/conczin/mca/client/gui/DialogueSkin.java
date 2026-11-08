@@ -11,6 +11,7 @@ final class DialogueSkin {
     static final ResourceLocation MENU = MCA.locate("textures/gui/dialogue/menu_frame.png");
     static final ResourceLocation FEATURED = MCA.locate("textures/gui/dialogue/featured_frame.png");
     private static final ResourceLocation ICONS = MCA.locate("textures/gui/dialogue/icons.png");
+    private static final ResourceLocation SPEECH = ResourceLocation.withDefaultNamespace("toast/social_interactions");
 
     private static final int FRAME_SIZE = 24;
     private static final int CORNER = 7;
@@ -45,10 +46,10 @@ final class DialogueSkin {
         // Soft inset shading like the reference, while preserving crisp nine-slice edges.
         if (texture.equals(PAPER)) {
             graphics.fillGradient(x + CORNER, y + CORNER, x + width - CORNER, y + height - CORNER,
-                    0xFFFFF0D5, 0xFFF7DCB4);
+                    0xFFFFF3CE, 0xFFF8D79E);
         } else if (texture.equals(MENU)) {
             graphics.fillGradient(x + CORNER, y + CORNER, x + width - CORNER, y + height - CORNER,
-                    0xFF382822, 0xFF261A17);
+                    0xFF39251A, 0xFF21120D);
         }
     }
 
@@ -65,6 +66,10 @@ final class DialogueSkin {
     }
 
     static void drawIcon(GuiGraphics graphics, int iconIndex, int x, int y, int size) {
+        if (iconIndex == DialogueTopicSection.CONVERSATIONS.ordinal()) {
+            graphics.blitSprite(SPEECH, x, y, size, size);
+            return;
+        }
         // Trim transparent margins so every category shares the same optical centre.
         int[] left = {2, 2, 2, 3, 3};
         int[] top = {2, 2, 3, 3, 7};

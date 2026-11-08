@@ -8,14 +8,20 @@ import net.minecraft.network.chat.Component;
 /** Vanilla scroll gestures and scroller sprite for the custom-drawn dialogue choices. */
 final class DialogueMenuScrollWidget extends AbstractScrollWidget {
     private int contentHeight;
+    private int settledViewportHeight;
 
     DialogueMenuScrollWidget() {
         super(0, 0, 1, 1, Component.empty());
     }
 
     void layout(int x, int y, int contentWidth, int viewportHeight, int rowsHeight) {
+        layout(x, y, contentWidth, viewportHeight, rowsHeight, viewportHeight);
+    }
+
+    void layout(int x, int y, int contentWidth, int viewportHeight, int rowsHeight, int settledHeight) {
         setRectangle(Math.max(1, contentWidth), Math.max(1, viewportHeight), x, y);
         contentHeight = Math.max(0, rowsHeight);
+        settledViewportHeight = Math.max(1, settledHeight);
         setScrollAmount(scrollAmount());
     }
 
@@ -39,7 +45,9 @@ final class DialogueMenuScrollWidget extends AbstractScrollWidget {
 
     @Override
     protected int getMaxScrollAmount() {
-        return Math.max(0, contentHeight - getHeight());
+        // A temporarily clipped fitting list must not acquire a scroll offset
+        // that would then be clamped back to zero as the panel finishes growing.
+        return contentHeight <= settledViewportHeight ? 0 : Math.max(0, contentHeight - getHeight());
     }
 
     @Override

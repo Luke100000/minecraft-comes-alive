@@ -20,7 +20,7 @@ final class DialogueOverlayLayout {
 
     static Geometry calculate(int width, int height, int menuHeight, int bubbleHeight, int desiredBubbleWidth) {
         int sideMargin = Math.max(12, Math.min(24, width / 32));
-        int bottomMargin = Math.max(6, Math.min(16, height / 32));
+        int bottomMargin = Math.min(height / 6, Math.round(30 * contentScale(width, height)));
         int availableWidth = Math.max(1, width - sideMargin * 2);
         int menuWidth = Math.min(availableWidth, Math.max(250,
                 Math.min(Math.round(560 * contentScale(width, height)), width * 3 / 5)));
@@ -39,6 +39,13 @@ final class DialogueOverlayLayout {
         Rect bubble = new Rect(width - sideMargin - bubbleWidth, bubbleTop, bubbleWidth,
                 Math.min(bubbleHeight, maximumBubbleHeight));
         return new Geometry(menu, bubble);
+    }
+
+    static Geometry speechAboveChoices(Geometry layout) {
+        Rect menu = layout.menu();
+        int bottom = Math.max(8, menu.y() - 8);
+        int speechHeight = Math.min(layout.bubble().height(), Math.max(0, bottom - 8));
+        return new Geometry(menu, new Rect(menu.x(), bottom - speechHeight, menu.width(), speechHeight), true);
     }
 
     /** The footer sits entirely inside the eight-pixel menu frame on every side. */
@@ -67,9 +74,15 @@ final class DialogueOverlayLayout {
         }
     }
 
-    record Geometry(Rect menu, Rect bubble) {
+    record Geometry(Rect menu, Rect bubble, boolean speechAboveChoices) {
+        Geometry(Rect menu, Rect bubble) {
+            this(menu, bubble, false);
+        }
+
         boolean canShowTail() {
-            return bubble.height() > 0 && bubble.bottom() + 24 <= menu.y();
+            // The 16x20 tail is drawn alongside the bubble, ending at its bottom.
+            return !speechAboveChoices && bubble.height() >= 20 && bubble.x() >= 14
+                    && bubble.bottom() + 6 <= menu.y();
         }
     }
 }

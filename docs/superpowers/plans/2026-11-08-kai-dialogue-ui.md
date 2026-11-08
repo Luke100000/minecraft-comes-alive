@@ -73,6 +73,19 @@
 
 ### Task 4: Runtime acceptance and docs
 
+Refinement after checkpoint `ec3dd60e1` (approved concept A):
+- [ ] Add regression for menu height staying fixed throughout scrollbar dragging and wheel gestures.
+- [ ] Put animation ownership in DialogueMenuAnimation; preserve existing native scroller behavior.
+- [ ] Move history to Previous/Next and Return to current under speech, with no counter/status.
+- [ ] Reuse vanilla toast/social_interactions, increase colour contrast, raise the panel and add a lightweight position toggle.
+- [ ] Run common tests and both loader compiles; inspect live click/history/scroll behavior if the client is available.
+
+Position clarification: the lightweight toggle moves speech above the fixed bottom
+choices pane (same width, separate frame, no pointer); it does not move choices below
+the upper-right bubble. Scrollbar need and wrapping width use the settled viewport so
+expansion cannot flash a transient scrollbar. Cover this and normal pointer retention
+in DialogueOverlayLayoutTest and DialogueMenuScrollWidgetTest.
+
 Approved visual correction (2026-11-08): restore the featured star as inline text;
 centre visible icon artwork and text together in each padded row; put section arrows
 at the right edge; use the preferred right-hand parchment width even for short lines;

@@ -6,6 +6,30 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class DialogueMenuScrollWidgetTest {
     @Test
+    void fittingExpandedListNeverFlashesScrollbarDuringHeightTween() {
+        DialogueMenuScrollWidget scroller = new DialogueMenuScrollWidget();
+        scroller.layout(50, 100, 100, 40, 90, 100);
+        assertFalse(scroller.hasScrollbar(), "transient clipping is not settled overflow");
+        scroller.mouseScrolled(55, 120, 0, -1);
+        assertEquals(0, scroller.offset(), "a fitting list must not acquire a temporary scroll offset");
+        scroller.layout(50, 70, 100, 70, 90, 100);
+        assertFalse(scroller.hasScrollbar());
+        scroller.layout(50, 40, 100, 100, 90, 100);
+        assertFalse(scroller.hasScrollbar());
+    }
+
+    @Test
+    void genuinelyOverflowingListKeepsNativeScrollbarDuringExpansion() {
+        DialogueMenuScrollWidget scroller = new DialogueMenuScrollWidget();
+        scroller.layout(50, 100, 100, 40, 180, 100);
+        assertTrue(scroller.hasScrollbar());
+        scroller.layout(50, 40, 100, 100, 180, 100);
+        assertTrue(scroller.hasScrollbar());
+        scroller.mouseScrolled(55, 65, 0, -1);
+        assertEquals(24, scroller.offset());
+    }
+
+    @Test
     void fractionalTouchpadDeltasAccumulateWithoutJumpingEntireRows() {
         DialogueMenuScrollWidget scroller = new DialogueMenuScrollWidget();
         scroller.layout(50, 30, 100, 100, 260);

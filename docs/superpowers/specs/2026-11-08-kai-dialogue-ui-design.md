@@ -26,6 +26,23 @@ Reproduce the supplied **Kai concept screenshot** as the MCA Talk interface. The
 
 For topics, the menu begins with a single featured event when one exists, followed by collapsible categories for remaining offered events, then a footer. For an active node, the same dark panel draws only actual replies, history/navigation and the footer, while the upper-right bubble shows the active speech. On a preview, bubble and topic list can coexist. The menu grows to fit short lists and scrolls longer ones; the bubble clips and scrolls its own wrapped passage independently.
 
-## Verification
+## Approved compact-history refinement
+
+Use generated concept A's spacing, without the numeric counter or "Earlier speech"
+status. Previous and Next below the parchment only review accepted speech. Return to
+current appears during review; live replies and Continue/Finish stay in the choices
+panel and cannot execute while reviewing. Use stronger cream/brown/gold contrast,
+the vanilla Social Interactions speech sprite, and a small borderless menu glyph for
+switching speech between upper-right and just above the fixed bottom choices panel
+(session preference). Speech above choices has matching width, a separate frame and
+an eight-pixel gap, without the speech pointer. Upper-right speech keeps its pointer
+while the menu expands.
+Leave a clear gap above the hotbar. Freeze the menu height while the scrollbar is
+dragged and briefly during wheel gestures, so animated viewport changes cannot snap
+the native scroller. Decide scrollbar visibility and reserved width from the settled
+viewport, not transient height during expansion; fitting lists never flash a scrollbar.
+Preserve native drag, wheel and token validation.
+
+### Verification of refinement
 
 Use focused tests for geometry bounds, feature-first/no-duplicate ordering, and the declared sprite dimensions; run common tests and both loader builds. Manually inspect 1.21.1 clients at multiple GUI scales, long translated text, daylight/night, large lists, active/review/preview/paused stories, mouse/keyboard scrolling, tween hit boxes and Q/Escape. Compilation alone does not establish visual fidelity. The reference screenshot remains the acceptance target.

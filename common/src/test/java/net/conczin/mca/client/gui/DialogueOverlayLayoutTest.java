@@ -6,6 +6,28 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class DialogueOverlayLayoutTest {
     @Test
+    void dockedSpeechSitsAboveUnmovedChoicesWithoutPointer() {
+        DialogueOverlayLayout.Geometry normal = DialogueOverlayLayout.calculate(640, 360, 120, 110);
+        DialogueOverlayLayout.Geometry docked = DialogueOverlayLayout.speechAboveChoices(normal);
+        assertEquals(normal.menu(), docked.menu(), "the toggle must move speech, not choices");
+        assertEquals(docked.bubble().x(), docked.menu().x());
+        assertEquals(docked.bubble().width(), docked.menu().width());
+        assertTrue(docked.menu().y() >= docked.bubble().bottom() + 8);
+        assertFalse(docked.canShowTail());
+        assertTrue(docked.menu().bottom() <= 330);
+        assertInside(docked.menu(), 640, 360);
+    }
+
+    @Test
+    void dockedSpeechStaysInBoundsOnSmallScreen() {
+        DialogueOverlayLayout.Geometry normal = DialogueOverlayLayout.calculate(320, 150, 100, 90);
+        DialogueOverlayLayout.Geometry docked = DialogueOverlayLayout.speechAboveChoices(normal);
+        assertEquals(normal.menu(), docked.menu());
+        assertInside(docked.bubble(), 320, 150);
+        assertTrue(docked.bubble().bottom() + 8 <= docked.menu().y());
+    }
+
+    @Test
     void largeGuiKeepsDialogueReadableWithoutEnlargingSmallScreens() {
         assertEquals(1.0f, DialogueOverlayLayout.contentScale(320, 240));
         assertEquals(1.0f, DialogueOverlayLayout.contentScale(640, 360));
@@ -71,14 +93,17 @@ class DialogueOverlayLayoutTest {
         DialogueOverlayLayout.Rect menu = DialogueOverlayLayout.calculate(530, 300, 115, 85).menu();
         assertTrue(menu.width() >= 300 && menu.width() <= 350,
                 "The conversation menu should occupy about 60% of the available width");
-        assertTrue(menu.bottom() >= 288, "Menu should sit near the bottom of the game view");
+        assertTrue(menu.bottom() <= 272 && menu.bottom() >= 260,
+                "Menu must clear the hotbar while staying near the bottom");
         assertTrue(menu.height() <= 120);
     }
 
     @Test
-    void paperTailIsOnlySafeToDrawWhenClearOfTheMenu() {
+    void upperRightTailDoesNotVanishWhenExpandedMenuGetsCloser() {
         assertTrue(DialogueOverlayLayout.calculate(640, 360, 140, 75).canShowTail());
-        assertFalse(DialogueOverlayLayout.calculate(320, 150, 160, 65).canShowTail());
+        assertTrue(DialogueOverlayLayout.calculate(640, 360, 144, 200).canShowTail(),
+                "tail ends at the bubble bottom and needs no extra 24-pixel clearance");
+        assertFalse(DialogueOverlayLayout.calculate(640, 360, 100, 10).canShowTail());
     }
 
     private static void assertInsideAndSeparated(int width, int height, int menuHeight, int bubbleHeight) {
