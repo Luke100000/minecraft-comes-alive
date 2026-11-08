@@ -41,6 +41,15 @@ final class DialogueSkin {
                 CORNER, FRAME_SIZE - CORNER, inner, CORNER);
         piece(graphics, texture, x + width - CORNER, y + height - CORNER, CORNER, CORNER,
                 FRAME_SIZE - CORNER, FRAME_SIZE - CORNER, CORNER, CORNER);
+
+        // Soft inset shading like the reference, while preserving crisp nine-slice edges.
+        if (texture.equals(PAPER)) {
+            graphics.fillGradient(x + CORNER, y + CORNER, x + width - CORNER, y + height - CORNER,
+                    0xFFFFF0D5, 0xFFF7DCB4);
+        } else if (texture.equals(MENU)) {
+            graphics.fillGradient(x + CORNER, y + CORNER, x + width - CORNER, y + height - CORNER,
+                    0xFF382822, 0xFF261A17);
+        }
     }
 
     private static void piece(GuiGraphics graphics, ResourceLocation texture, int x, int y,
@@ -55,7 +64,17 @@ final class DialogueSkin {
         graphics.blit(TAIL, x, y, 0, 0, 16, 20, 16, 20);
     }
 
-    static void drawIcon(GuiGraphics graphics, int iconIndex, int x, int y) {
-        graphics.blit(ICONS, x, y, 0, iconIndex * 16, 0, 16, 16, 96, 16);
+    static void drawIcon(GuiGraphics graphics, int iconIndex, int x, int y, int size) {
+        // Trim transparent margins so every category shares the same optical centre.
+        int[] left = {2, 2, 2, 3, 3};
+        int[] top = {2, 2, 3, 3, 7};
+        int[] width = {11, 12, 12, 10, 13};
+        int[] height = {12, 13, 11, 11, 3};
+        int i = Math.clamp(iconIndex, 0, left.length - 1);
+        float scale = size / (float) Math.max(width[i], height[i]);
+        int w = Math.round(width[i] * scale);
+        int h = Math.round(height[i] * scale);
+        graphics.blit(ICONS, x + (size - w) / 2, y + (size - h) / 2, w, h,
+                (float) (i * 16 + left[i]), (float) top[i], width[i], height[i], 96, 16);
     }
 }

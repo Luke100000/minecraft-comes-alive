@@ -6,6 +6,45 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class DialogueOverlayLayoutTest {
     @Test
+    void largeGuiKeepsDialogueReadableWithoutEnlargingSmallScreens() {
+        assertEquals(1.0f, DialogueOverlayLayout.contentScale(320, 240));
+        assertEquals(1.0f, DialogueOverlayLayout.contentScale(640, 360));
+        assertEquals(1.5f, DialogueOverlayLayout.contentScale(1024, 610));
+        assertEquals(2.0f, DialogueOverlayLayout.contentScale(1280, 720));
+        assertTrue(DialogueOverlayLayout.calculate(1280, 720, 250, 100).menu().width() >= 740,
+                "large GUI canvases must not leave a thin menu capped at 560 pixels");
+    }
+
+    @Test
+    void shortSpeechBubbleFitsTextInsteadOfLeavingBlankSpace() {
+        assertEquals(50, DialogueOverlayLayout.paperHeightForLineCount(1));
+        assertEquals(80, DialogueOverlayLayout.paperHeightForLineCount(4));
+    }
+
+    @Test
+    void footerActionsAndDividerStayInsideFrameWithoutTouchingBorder() {
+        DialogueOverlayLayout.Rect menu = new DialogueOverlayLayout.Rect(100, 150, 300, 140);
+        DialogueOverlayLayout.FooterLayout footer = DialogueOverlayLayout.footer(menu, 27);
+        for (DialogueOverlayLayout.Rect element : new DialogueOverlayLayout.Rect[]{
+                footer.divider(), footer.back(), footer.close()}) {
+            assertTrue(element.x() >= menu.x() + 7);
+            assertTrue(element.right() <= menu.right() - 7);
+            assertTrue(element.y() > menu.y() + 7);
+            assertTrue(element.bottom() <= menu.bottom() - 7);
+        }
+        assertTrue(footer.back().right() < footer.close().x());
+        assertTrue(footer.divider().bottom() < footer.back().y());
+    }
+
+    @Test
+    void speechWidthCanShrinkWithoutBreakingRightAlignment() {
+        DialogueOverlayLayout.Geometry layout = DialogueOverlayLayout.calculate(640, 360, 100, 50, 185);
+        assertEquals(185, layout.bubble().width());
+        assertEquals(640 - Math.max(12, Math.min(24, 640 / 32)) - 185,
+                layout.bubble().x());
+    }
+
+    @Test
     void largeScreenSeparatesSpeechAndMenu() {
         assertInsideAndSeparated(1672, 941, 280, 120);
     }
@@ -28,9 +67,18 @@ class DialogueOverlayLayoutTest {
     }
 
     @Test
+    void normalScaleKeepsChoicesCompactAndOffTheScreenEdges() {
+        DialogueOverlayLayout.Rect menu = DialogueOverlayLayout.calculate(530, 300, 115, 85).menu();
+        assertTrue(menu.width() >= 300 && menu.width() <= 350,
+                "The conversation menu should occupy about 60% of the available width");
+        assertTrue(menu.bottom() >= 288, "Menu should sit near the bottom of the game view");
+        assertTrue(menu.height() <= 120);
+    }
+
+    @Test
     void paperTailIsOnlySafeToDrawWhenClearOfTheMenu() {
         assertTrue(DialogueOverlayLayout.calculate(640, 360, 140, 75).canShowTail());
-        assertFalse(DialogueOverlayLayout.calculate(320, 240, 160, 65).canShowTail());
+        assertFalse(DialogueOverlayLayout.calculate(320, 150, 160, 65).canShowTail());
     }
 
     private static void assertInsideAndSeparated(int width, int height, int menuHeight, int bubbleHeight) {

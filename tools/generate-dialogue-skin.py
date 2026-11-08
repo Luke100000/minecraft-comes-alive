@@ -18,25 +18,39 @@ def save(image: Image.Image, name: str) -> None:
 
 
 def frame(name: str, interior: str, outside: str, border: str, shine: str) -> None:
-    image = Image.new("RGBA", (24, 24), interior)
+    image = Image.new("RGBA", (24, 24), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
-    draw.rectangle((0, 0, 23, 23), outline=outside, width=2)
-    draw.rectangle((2, 2, 21, 21), outline=border, width=2)
-    draw.line((4, 4, 19, 4), fill=shine, width=1)
-    draw.line((4, 4, 4, 19), fill=shine, width=1)
-    draw.line((5, 21, 20, 21), fill=outside, width=1)
-    # A little stepped corner detail, without affecting the stretchable centre.
-    for x, y in ((4, 4), (19, 4), (4, 19), (19, 19)):
-        draw.point((x, y), fill=outside)
+    # Stepped silhouette with three border layers. The corner artwork stays
+    # pixel-sized while the nine-slice renderer stretches only the straight edges.
+    draw.polygon(((4, 0), (19, 0), (21, 1), (23, 4), (23, 19),
+                  (21, 22), (19, 23), (4, 23), (1, 22), (0, 19),
+                  (0, 4), (2, 1)), fill=outside)
+    draw.polygon(((4, 2), (19, 2), (21, 4), (21, 19),
+                  (19, 21), (4, 21), (2, 19), (2, 4)), fill=border)
+    draw.polygon(((5, 4), (18, 4), (19, 5), (19, 18),
+                  (18, 19), (5, 19), (4, 18), (4, 5)), fill=interior)
+    draw.line((5, 3, 18, 3), fill=shine, width=1)
+    draw.line((3, 5, 3, 18), fill=shine, width=1)
+    draw.line((5, 20, 18, 20), fill=outside, width=1)
+    draw.line((20, 5, 20, 18), fill=outside, width=1)
+    # Light scuffs make the parchment and wood frames less like plain rectangles.
+    if name == "paper_frame":
+        for x, y in ((5, 5), (17, 6), (6, 17), (18, 16)):
+            draw.point((x, y), fill="#FFF4D9")
+    else:
+        for x, y in ((5, 5), (17, 5), (5, 18), (18, 17)):
+            draw.point((x, y), fill="#BA8A61")
     save(image, name)
 
 
 def tail() -> None:
     image = Image.new("RGBA", (16, 20), (0, 0, 0, 0))
     d = ImageDraw.Draw(image)
-    d.polygon(((1, 0), (15, 0), (1, 19)), fill="#382820", outline="#382820", width=1)
-    d.polygon(((4, 0), (12, 0), (4, 14)), fill="#D9B780")
-    d.line((5, 1, 5, 10), fill="#F5DB9C", width=1)
+    # The reference has a left-facing point near the lower edge of the bubble.
+    # The rightmost edge sits beneath the parchment frame's left border.
+    d.polygon(((15, 0), (15, 19), (0, 16), (9, 8)), fill="#291910")
+    d.polygon(((14, 2), (14, 17), (4, 15), (11, 8)), fill="#FAE8C9")
+    d.line((5, 15, 13, 17), fill="#FFE6B5", width=1)
     save(image, "paper_tail")
 
 
@@ -79,8 +93,8 @@ def icons() -> None:
 
 
 if __name__ == "__main__":
-    frame("paper_frame", "#E8CB99", "#34261F", "#A8794D", "#FFDFAB")
-    frame("menu_frame", "#2C1D19", "#160F0D", "#765039", "#94684A")
+    frame("paper_frame", "#FAE8C9", "#291910", "#B58051", "#FFE6B5")
+    frame("menu_frame", "#2B1C18", "#120B09", "#78503B", "#AA7957")
     frame("featured_frame", "#694632", "#281810", "#D4A36B", "#F6CD8F")
     tail()
     icons()

@@ -2,6 +2,7 @@ package net.conczin.mca.client.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.Config;
+import net.conczin.mca.client.gui.InteractScreen;
 import net.conczin.mca.client.gui.VillagerEditorScreen;
 import net.conczin.mca.client.model.VillagerEntityBaseModelMCA;
 import net.conczin.mca.client.model.VillagerEntityModelMCA;
@@ -63,6 +64,8 @@ public class VillagerLikeEntityMCARenderer<T extends Mob & VillagerLike<T>> exte
         Player player = Minecraft.getInstance().player;
         return villager.getCustomName() != null
                && !(Minecraft.getInstance().screen instanceof VillagerEditorScreen)
+               && !(Minecraft.getInstance().screen instanceof InteractScreen screen
+                    && screen.isInteractingWith(villager.getUUID()))
                && player != null
                && Config.getInstance().showNameTags
                && player.distanceToSqr(villager) < Math.pow(Config.getInstance().nameTagDistance, 2.0f)

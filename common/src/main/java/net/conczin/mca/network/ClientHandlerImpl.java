@@ -570,6 +570,19 @@ public class ClientHandlerImpl implements ClientHandler {
             return hasPreview() && !nodeVisible ? previewLine : resolvedLine;
         }
 
+        /**
+         * The parchment belongs to the whole interaction, including menus that
+         * have no speech preview. Never attribute an old node's line to a new
+         * menu while a server response is pending.
+         */
+        public Component paperFullLine() {
+            return nodeVisible || hasPreview() ? fullLine() : Component.literal("...");
+        }
+
+        public Component paperVisibleLine() {
+            return nodeVisible || hasPreview() ? visibleLine() : Component.literal("...");
+        }
+
         public Component visibleLine() {
             if (reviewingHistory()) {
                 return speechHistory.get(reviewIndex);

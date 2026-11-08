@@ -1,16 +1,18 @@
 package net.conczin.mca.client.gui;
 
 enum DialogueTopicSection {
-    CONVERSATIONS("gui.dialogue.section.conversations"),
-    RELATIONSHIPS("gui.dialogue.section.relationships"),
-    PERSONAL_STORIES("gui.dialogue.section.personal_stories"),
-    PRACTICAL_MATTERS("gui.dialogue.section.practical_matters"),
-    OTHER_TOPICS("gui.dialogue.section.other_topics");
+    CONVERSATIONS("gui.dialogue.section.conversations", "☰"),
+    RELATIONSHIPS("gui.dialogue.section.relationships", "♥"),
+    PERSONAL_STORIES("gui.dialogue.section.personal_stories", "▤"),
+    PRACTICAL_MATTERS("gui.dialogue.section.practical_matters", "⚒"),
+    OTHER_TOPICS("gui.dialogue.section.other_topics", "⋯");
 
     final String label;
+    final String symbol;
 
-    DialogueTopicSection(String label) {
+    DialogueTopicSection(String label, String symbol) {
         this.label = label;
+        this.symbol = symbol;
     }
 
     static DialogueTopicSection fromTopic(String topic) {

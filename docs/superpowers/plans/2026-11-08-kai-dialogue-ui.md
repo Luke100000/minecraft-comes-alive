@@ -73,6 +73,15 @@
 
 ### Task 4: Runtime acceptance and docs
 
+Approved visual correction (2026-11-08): restore the featured star as inline text;
+centre visible icon artwork and text together in each padded row; put section arrows
+at the right edge; use the preferred right-hand parchment width even for short lines;
+align Back left and Close right inside the footer. Scale text and icon spacing together
+on large GUI canvases so the overlay keeps the reference's readable proportions.
+Implement in InteractScreen, DialogueSkin and DialogueOverlayLayout; preserve native
+scroll gestures and derive hitboxes from the same row bounds. Verify existing common
+tests and both loader compiles, then inspect the actual client. Leave changes uncommitted.
+
 **Files:**
 - Modify `docs/dialogue-system-guide.md` to describe the actual split visuals and featured row (no engine changes).
 - Test and optionally amend the files from Task 3 for witnessed visual issues only.

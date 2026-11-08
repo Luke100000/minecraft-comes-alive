@@ -22,6 +22,33 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DialoguePresentationTest {
     @Test
+    void paperHasNonStaleSpeechDuringUnpreviewedTopicsAndRequests() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        assertEquals("...", presentation.paperFullLine().getString());
+        assertEquals("...", presentation.paperVisibleLine().getString());
+
+        presentation.beginRequest();
+        assertTrue(presentation.acceptOptions(new InteractionDialogueOptionsResponse(
+                1L, Optional.empty(), List.of(), true)));
+        assertEquals("...", presentation.paperFullLine().getString(),
+                "a menu with no preview must still have a speech bubble");
+        assertEquals("...", presentation.paperVisibleLine().getString());
+
+        presentation.markSelectionRequested(DialogueEngine.DialogueSelection.AMBIENT);
+        assertTrue(presentation.acceptNode(active(UUID.randomUUID(), 2L,
+                Component.literal("Hello"), DialogueEngine.AdvanceKind.NEXT, List.of()),
+                0L, Locale.ENGLISH));
+        assertEquals("Hello", presentation.paperFullLine().getString());
+        assertEquals("", presentation.paperVisibleLine().getString(),
+                "the actual node must still use character reveal");
+
+        presentation.beginRequest();
+        assertEquals("...", presentation.paperFullLine().getString(),
+                "returning to topics must not show stale node speech");
+        assertEquals("...", presentation.paperVisibleLine().getString());
+    }
+
+    @Test
     void previousAndNextReviewSpeechWithoutReplayingRevealOrAllowingStaleChoices() {
         ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
         UUID session = UUID.randomUUID();
