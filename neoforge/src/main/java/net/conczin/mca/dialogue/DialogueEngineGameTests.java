@@ -4,6 +4,8 @@ import com.google.gson.JsonParser;
 import com.mojang.authlib.GameProfile;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.ActivitiesMCA;
+import net.conczin.mca.entity.ai.Chore;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.network.c2s.InteractionCloseRequest;
 import net.conczin.mca.network.c2s.InteractionDialogueAdvanceMessage;
@@ -16,13 +18,19 @@ import net.conczin.mca.resources.DialogueEvents;
 import net.conczin.mca.server.world.data.DialogueEventHistory;
 import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.RandomSource;
+import net.minecraft.util.Mth;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.storage.LevelResource;
 import net.neoforged.neoforge.common.util.FakePlayer;
@@ -47,6 +55,17 @@ import java.util.concurrent.atomic.AtomicReference;
 
 @PrefixGameTestTemplate(false)
 public final class DialogueEngineGameTests {
+    private static final Set<Entity> AI_ACTORS = new LinkedHashSet<>();
+    private static final Set<ChunkPos> AI_FORCED_CHUNKS = new LinkedHashSet<>();
+
+    @AfterBatch(batch = "mca_dialogue_ai")
+    public static void cleanUpDialogueAi(ServerLevel level) {
+        AI_ACTORS.forEach(Entity::discard);
+        AI_ACTORS.clear();
+        AI_FORCED_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x, chunk.z, false));
+        AI_FORCED_CHUNKS.clear();
+    }
+
     private DialogueEngineGameTests() {
     }
 
@@ -81,25 +100,237 @@ public final class DialogueEngineGameTests {
     }
 
     @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
-    public static void offeredTopicRemainsSelectableWhenVillagerFallsAsleep(GameTestHelper helper) {
+    public static void clickingSleepingVillagerWakesBeforeDialogue(GameTestHelper helper) {
         Fixture fixture = fixture(helper);
         DialogueEvent chat = simpleEvent(ResourceLocation.parse("mca:test/sleeping_chat"));
         DialogueEngine engine = engine(chat);
+        fixture.villager().startSleeping(fixture.villager().blockPosition());
+        helper.assertTrue(fixture.villager().isSleeping(), "fixture villager must be sleeping before click");
         fixture.villager().getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        helper.assertTrue(!fixture.villager().isSleeping(), "an accepted right-click must wake the villager immediately");
 
         DialogueEngine.DialogueOptions menu = engine.begin(fixture.player(), fixture.villager(), false);
         helper.assertTrue(menu.containsEvent(chat.id()), "an awake villager should offer Chat");
-        fixture.villager().startSleeping(fixture.villager().blockPosition());
-        helper.assertTrue(fixture.villager().isSleeping(), "villager must be sleeping when selecting Chat");
-        helper.assertTrue(fixture.player().canInteractWithEntity(fixture.villager(), 1.0),
-                "villager should remain within interaction reach");
-        helper.assertTrue(fixture.villager().getInteractions().getInteractingPlayer()
-                        .filter(fixture.player()::equals).isPresent(),
-                "the player must still own the open interaction");
-
         helper.assertTrue(engine.select(fixture.player(), menu.token(),
                         DialogueEngine.DialogueSelection.EVENT, chat.id()).isPresent(),
-                "a displayed Chat topic must not become unselectable solely because the villager fell asleep");
+                "a newly woken villager should accept the offered Chat topic");
+        fixture.villager().discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 150)
+    public static void activeDialogueSuspendsChoreForEightyTicks(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        VillagerEntityMCA villager = fixture.villager();
+        // This air-only template has no floor. Keep the owner nearby so the
+        // test measures chore preemption, not legitimate out-of-range cleanup.
+        villager.setNoGravity(true);
+        villager.getVillagerBrain().assignJob(Chore.PROSPECT, fixture.player());
+        villager.getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        helper.assertTrue(villager.getVillagerBrain().getCurrentJob() == Chore.PROSPECT,
+                "talking must not discard an assigned chore");
+
+        helper.runAfterDelay(80, () -> {
+            helper.assertTrue(villager.getInteractions().getInteractingPlayer().filter(fixture.player()::equals).isPresent(),
+                    "dialogue owner must remain valid throughout normal AI ticks; villager=" + villager.position()
+                            + ", player=" + fixture.player().position()
+                            + ", distance=" + villager.distanceToSqr(fixture.player())
+                            + ", villagerAlive=" + villager.isAlive()
+                            + ", villagerRemoved=" + villager.isRemoved()
+                            + ", playerAlive=" + fixture.player().isAlive()
+                            + ", playerRemoved=" + fixture.player().isRemoved()
+                            + ", panic=" + villager.getBrain().isActive(net.minecraft.world.entity.schedule.Activity.PANIC)
+                            + ", attackTarget=" + villager.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)
+                            + ", activity=" + villager.getBrain().getActiveNonCoreActivity());
+            helper.assertTrue(!villager.getBrain().isActive(ActivitiesMCA.CHORE),
+                    "an active conversation must preempt the chore activity without deleting its assignment");
+            helper.assertTrue(villager.getBrain().isActive(ActivitiesMCA.INTERACT),
+                    "the dedicated conversation activity must remain active across normal AI ticks");
+            helper.assertTrue(!villager.isSleeping(), "an actively talking villager cannot start sleeping");
+            helper.assertTrue(villager.getVillagerBrain().getCurrentJob() == Chore.PROSPECT,
+                    "the assigned chore must survive an active conversation");
+            villager.discard();
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "mca_dialogue_ai", templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 460)
+    public static void dialogueMaintainsEyeContactAcrossLookTaskTimeouts(GameTestHelper helper) {
+        Fixture fixture = dialogueAiFixture(helper);
+        VillagerEntityMCA villager = fixture.villager();
+        villager.getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        Vec3 playerStart = fixture.player().position();
+        helper.runAfterDelay(140, () -> fixture.player().setPos(playerStart.add(-1.0D, 0, 0)));
+        helper.runAfterDelay(280, () -> fixture.player().setPos(playerStart.add(1.0D, 0, 0)));
+        float[] previousHead = {villager.yHeadRot};
+        for (int tick = 40; tick <= 420; tick++) {
+            int observedTick = tick;
+            helper.runAfterDelay(tick, () -> {
+                helper.assertTrue(villager.getBrain().getMemory(MemoryModuleType.NEAREST_VISIBLE_LIVING_ENTITIES)
+                                .map(visible -> visible.contains(fixture.player())).orElse(false),
+                        "the gaze fixture must expose its real player to native visibility sensing");
+                double dx = fixture.player().getX() - villager.getX();
+                double dz = fixture.player().getZ() - villager.getZ();
+                float bearing = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90.0F;
+                float error = Math.abs(Mth.wrapDegrees(villager.yHeadRot - bearing));
+                boolean turning = observedTick >= 140 && observedTick < 160
+                        || observedTick >= 280 && observedTick < 300;
+                helper.assertTrue(turning || error < 15.0F,
+                        "conversation lost actual eye contact at tick " + observedTick + "; error=" + error
+                                + "; activity=" + villager.getBrain().getActiveNonCoreActivity());
+                if (observedTick > 40) {
+                    helper.assertTrue(Math.abs(Mth.wrapDegrees(villager.yHeadRot - previousHead[0]))
+                                    <= villager.getHeadRotSpeed() + 0.01F,
+                            "conversation head movement must respect native turn speed at tick " + observedTick);
+                }
+                previousHead[0] = villager.yHeadRot;
+                if (observedTick >= 80 && !(observedTick >= 140 && observedTick < 180)
+                        && !(observedTick >= 280 && observedTick < 320)) {
+                    helper.assertTrue(Math.abs(Mth.wrapDegrees(villager.yBodyRot - bearing)) < 15.0F,
+                            "stationary body must settle toward the player after native head tracking");
+                }
+                helper.assertTrue(villager.getBrain().isActive(ActivitiesMCA.INTERACT),
+                        "conversation must keep its activity throughout native look-task timeouts");
+                if (observedTick == 420) helper.succeed();
+            });
+        }
+    }
+
+    @GameTest(batch = "mca_dialogue_ai", templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 100)
+    public static void brainRefreshPreservesActiveConversation(GameTestHelper helper) {
+        Fixture fixture = dialogueAiFixture(helper);
+        VillagerEntityMCA villager = fixture.villager();
+        villager.getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        UUID interactionId = villager.getInteractions().interactionId();
+        helper.runAfterDelay(30, () -> {
+            villager.refreshBrain(helper.getLevel());
+            helper.assertTrue(villager.getInteractions().matchesInteraction(fixture.player(), interactionId),
+                    "brain refresh must preserve the concrete screen owner");
+            helper.assertTrue(villager.getBrain().isActive(ActivitiesMCA.INTERACT),
+                    "profession/age brain refresh must restore conversation ownership before scheduled AI runs");
+            helper.runAfterDelay(30, () -> {
+                helper.assertTrue(villager.getBrain().isActive(ActivitiesMCA.INTERACT),
+                        "refreshed conversation must remain active across further AI ticks");
+                helper.succeed();
+            });
+        });
+    }
+
+    private static Fixture dialogueAiFixture(GameTestHelper helper) {
+        BlockPos base = helper.absolutePos(new BlockPos(16, 1, 16));
+        ChunkPos min = new ChunkPos(base.offset(-5, 0, -5));
+        ChunkPos max = new ChunkPos(base.offset(5, 0, 5));
+        for (int x = min.x; x <= max.x; x++) {
+            for (int z = min.z; z <= max.z; z++) {
+                ChunkPos chunk = new ChunkPos(x, z);
+                if (!helper.getLevel().getForcedChunks().contains(chunk.toLong())) AI_FORCED_CHUNKS.add(chunk);
+            }
+        }
+        net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea(helper, base, 5, 4);
+        FakePlayer player = new FakePlayer(helper.getLevel(), new GameProfile(UUID.randomUUID(), "dialogue-ai"));
+        player.setPos(base.getX() + 0.5D, base.getY(), base.getZ() + 0.5D);
+        player.setYRot(0.0F);
+        helper.getLevel().addNewPlayer(player);
+        AI_ACTORS.add(player);
+        VillagerEntityMCA villager = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(helper.getLevel()));
+        villager.setAgeState(AgeState.ADULT);
+        villager.setPos(player.getX(), player.getY(), player.getZ() + 2.0D);
+        helper.getLevel().addFreshEntity(villager);
+        AI_ACTORS.add(villager);
+        return new Fixture(player, villager);
+    }
+
+    @GameTest(batch = "mca_dialogue_ai", templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 180)
+    public static void dialogueWalksToFrontOfPlayersView(GameTestHelper helper) {
+        Fixture fixture = dialogueAiFixture(helper);
+        VillagerEntityMCA villager = fixture.villager();
+        Vec3 playerPos = fixture.player().position();
+        fixture.player().setYRot(0.0F); // Faces +Z; the target is in front, not at the player's feet.
+        fixture.player().setXRot(0.0F);
+        villager.setPos(playerPos.add(4.0D, 0, 0));
+        villager.getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+
+        helper.runAfterDelay(110, () -> {
+            Vec3 fromPlayer = villager.position().subtract(playerPos);
+            helper.assertTrue(fromPlayer.z >= 1.35D && fromPlayer.z <= 3.85D,
+                    "dialogue approach must reach 2-3 blocks along the player's look direction, got " + fromPlayer
+                            + "; owner=" + villager.getInteractions().getInteractingPlayer()
+                            + "; activity=" + villager.getBrain().getActiveNonCoreActivity()
+                            + "; walk=" + villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET)
+                            + "; path=" + villager.getNavigation().getPath()
+                            + "; navDone=" + villager.getNavigation().isDone()
+                            + "; look=" + fixture.player().getLookAngle()
+                            + "; danger=" + villager.isConversationDangerous());
+            helper.assertTrue(Math.abs(fromPlayer.x) < 1.45D,
+                    "the villager must approach the view vector instead of standing beside the player: " + fromPlayer);
+            helper.assertTrue(villager.getBrain().isActive(ActivitiesMCA.INTERACT),
+                    "arrival must keep the dialogue activity active");
+            float bearing = (float) Math.toDegrees(Math.atan2(-fromPlayer.z, -fromPlayer.x)) - 90.0F;
+            helper.assertTrue(Math.abs(Mth.wrapDegrees(villager.yHeadRot - bearing)) < 15.0F,
+                    "the villager must face the player after finishing its approach");
+            villager.discard();
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 100)
+    public static void attackTargetImmediatelyReleasesDialogueOwner(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        VillagerEntityMCA villager = fixture.villager();
+        villager.getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        helper.assertTrue(villager.getBrain().isActive(ActivitiesMCA.INTERACT),
+                "the interaction activity must be active before combat starts");
+        villager.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, fixture.player());
+        helper.runAfterDelay(2, () -> {
+            helper.assertTrue(villager.getInteractions().getInteractingPlayer().isEmpty(),
+                    "the first defensive AI tick must release dialogue ownership");
+            helper.assertTrue(!villager.getBrain().isActive(ActivitiesMCA.INTERACT),
+                    "combat must not leave dialogue as the active Brain activity");
+            villager.discard();
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void closingDialogueRestoresAssignedChoreImmediately(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        VillagerEntityMCA villager = fixture.villager();
+        villager.getVillagerBrain().assignJob(Chore.PROSPECT, fixture.player());
+        villager.getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        helper.assertTrue(villager.getBrain().isActive(ActivitiesMCA.INTERACT), "opening must activate dialogue");
+        villager.getInteractions().stopInteracting(fixture.player(), villager.getInteractions().interactionId());
+        helper.assertTrue(villager.getBrain().isActive(ActivitiesMCA.CHORE),
+                "normal close must restore the assigned chore without waiting for the next schedule tick");
+        helper.assertTrue(villager.getVillagerBrain().getCurrentJob() == Chore.PROSPECT,
+                "closing dialogue must preserve assigned chore identity");
+        villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void walkingOutOfDialogueRangeClosesOwner(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        var interactions = fixture.villager().getInteractions();
+        interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        fixture.player().setPos(fixture.player().position().add(10.0D, 0, 0));
+        helper.runAfterDelay(3, () -> {
+            helper.assertTrue(interactions.getInteractingPlayer().isEmpty(),
+                    "moving out of usable dialogue range must release server ownership");
+            helper.assertTrue(!fixture.villager().getBrain().isActive(ActivitiesMCA.INTERACT),
+                    "out-of-range dialogue must not retain the conversation activity");
+            fixture.villager().discard();
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void discardedVillagerReleasesDialogueOwner(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        var interactions = fixture.villager().getInteractions();
+        interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        fixture.villager().discard();
+        helper.assertTrue(interactions.getInteractingPlayer().isEmpty(),
+                "removing a villager must release its dialogue owner without waiting for another AI tick");
         helper.succeed();
     }
 
@@ -384,12 +615,18 @@ public final class DialogueEngineGameTests {
 
         interactions.interactAt(other, Vec3.ZERO, InteractionHand.MAIN_HAND);
         UUID otherInteractionId = interactions.interactionId();
+        DialogueSession displacedSession = sessions(engine).get(fixture.player().getUUID());
+        helper.assertTrue(displacedSession.status() == DialogueSession.Status.PAUSED,
+                "superseding a player's screen must pause their own unfinished story");
+        long displacedPauseDeadline = displacedSession.pauseDeadline();
         new InteractionCloseRequest(fixture.villager().getUUID(), originalInteractionId,
                 UUID.randomUUID(), active.offerToken()).handleServer(fixture.player());
         new InteractionCloseRequest(fixture.villager().getUUID(), originalInteractionId,
                 active.sessionId(), active.offerToken() + 1L).handleServer(fixture.player());
-        helper.assertTrue(sessions(engine).get(fixture.player().getUUID()).status() == DialogueSession.Status.ACTIVE,
-                "displaced players cannot pause their own story using a forged session or token");
+        DialogueSession afterForgedClose = sessions(engine).get(fixture.player().getUUID());
+        helper.assertTrue(afterForgedClose.status() == DialogueSession.Status.PAUSED
+                        && afterForgedClose.pauseDeadline() == displacedPauseDeadline,
+                "forged displaced-player close packets cannot mutate or extend the already-paused story");
         helper.assertTrue(interactions.matchesInteraction(other, otherInteractionId),
                 "forged displaced-player close packets must preserve the new owner's screen");
         new InteractionCloseRequest(fixture.villager().getUUID(), originalInteractionId,
@@ -1791,11 +2028,23 @@ public final class DialogueEngineGameTests {
 
     private static Fixture fixture(GameTestHelper helper) {
         BlockPos position = helper.absolutePos(BlockPos.ZERO);
+        // GameTest's "air" template clears only its single template block. The
+        // villager is spawned one block beside it, which can be solid terrain
+        // at the server's underground test Y and cause IN_WALL -> PANIC.
+        // Build a small, deterministic room for both entities instead.
+        for (int x = -2; x <= 3; x++) {
+            for (int z = -2; z <= 2; z++) {
+                helper.getLevel().setBlock(position.offset(x, -1, z), Blocks.STONE.defaultBlockState(), 3);
+                for (int y = 0; y <= 3; y++) {
+                    helper.getLevel().setBlock(position.offset(x, y, z), Blocks.AIR.defaultBlockState(), 3);
+                }
+            }
+        }
         ServerPlayer player = new FakePlayer(
                 helper.getLevel(),
                 new GameProfile(UUID.randomUUID(), "dialogue-engine")
         );
-        player.setPos(position.getCenter());
+        player.setPos(position.getX() + 0.5D, position.getY(), position.getZ() + 0.5D);
         VillagerEntityMCA villager = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(helper.getLevel()));
         villager.setAgeState(AgeState.ADULT);
         villager.setPos(player.getX() + 1.0D, player.getY(), player.getZ());

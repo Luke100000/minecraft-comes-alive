@@ -307,6 +307,9 @@ public final class Config extends CommonConfig {
      */
     public boolean showNameTags = true;
 
+    /** Keeps the dialogue speech panel above the choices instead of in the corner. */
+    public boolean dialogueSpeechAboveChoices = false;
+
     /**
      * Maximum distance at which name tags are visible.
      */

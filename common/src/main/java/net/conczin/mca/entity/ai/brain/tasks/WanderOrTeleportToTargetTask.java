@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.navigation.*;
 import net.minecraft.core.BlockPos;
@@ -145,7 +146,8 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
 
     @Override
     protected void tick(ServerLevel world, Mob entity, long l) {
-        if (Config.getInstance().allowVillagerTeleporting) {
+        if (Config.getInstance().allowVillagerTeleporting
+                && !(entity instanceof VillagerEntityMCA villager && villager.getBrain().isActive(ActivitiesMCA.INTERACT))) {
             entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).ifPresent(walkTarget -> {
                 BlockPos targetPos = walkTarget.getTarget().currentBlockPosition();
 

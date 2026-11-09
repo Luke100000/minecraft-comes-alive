@@ -12,6 +12,7 @@ public interface ActivitiesMCA {
 
     Activity CHORE = activity("chore");
     Activity GRIEVE = activity("grieve");
+    Activity INTERACT = activity("interact");
 
     static Activity activity(String name) {
         ResourceLocation id = MCA.locate(name);

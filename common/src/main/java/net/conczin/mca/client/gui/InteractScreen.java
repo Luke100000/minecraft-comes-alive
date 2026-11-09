@@ -2,6 +2,7 @@ package net.conczin.mca.client.gui;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.conczin.mca.ClientProxy;
+import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.dialogue.DialogueEngine;
 import net.conczin.mca.entity.VillagerLike;
@@ -40,7 +41,6 @@ public class InteractScreen extends AbstractDynamicScreen {
     private static final int GOLD = 0xFFFFCD68;
     private static final int CREAM = 0xFFFFEED3;
     private static final int FOOTER_HEIGHT = 27;
-    private static boolean dialogueSpeechAboveChoices;
     private static Analysis analysis;
     private final VillagerLike<?> villager;
     private final UUID interactionId;
@@ -75,6 +75,15 @@ public class InteractScreen extends AbstractDynamicScreen {
 
     public boolean isInteractingWith(UUID villagerId) {
         return villager.asEntity().getUUID().equals(villagerId);
+    }
+
+    public boolean matchesInteraction(int villagerEntityId, UUID interactionId) {
+        return villager.asEntity().getId() == villagerEntityId && this.interactionId.equals(interactionId);
+    }
+
+    public void closeFromServer() {
+        dialoguePresentation().ifPresent(ClientHandlerImpl.DialoguePresentation::pause);
+        Objects.requireNonNull(this.minecraft).setScreen(null);
     }
 
     public static void setAnalysis(Analysis analysis) {
@@ -637,13 +646,13 @@ public class InteractScreen extends AbstractDynamicScreen {
     private int dialoguePaperHeight(ClientHandlerImpl.DialoguePresentation presentation) {
         int bubbleWidth = dialoguePaperWidth(presentation);
         int lines = dialogueLines(presentation.paperFullLine(), bubbleWidth - dialoguePixels(32)).size();
-        int padding = dialogueSpeechAboveChoices ? 40 : 48;
-        int minimumHeight = dialogueSpeechAboveChoices ? 58 : 62;
+        int padding = Config.getInstance().dialogueSpeechAboveChoices ? 40 : 48;
+        int minimumHeight = Config.getInstance().dialogueSpeechAboveChoices ? 58 : 62;
         return dialoguePixels(Math.max(minimumHeight, lines * 10 + padding)) + dialogueHistoryHeight(presentation);
     }
 
     private int dialoguePaperWidth(ClientHandlerImpl.DialoguePresentation presentation) {
-        if (dialogueSpeechAboveChoices) {
+        if (Config.getInstance().dialogueSpeechAboveChoices) {
             return dialoguePanelWidth();
         }
         return DialogueOverlayLayout.calculate(width, height, dialogueFooterHeight() + 20, 1).bubble().width();
@@ -697,7 +706,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         int panelHeight = dialogueHeight.update(settledLayout.menu().height(), nowMillis, dialogueScroller.isFocused());
         DialogueOverlayLayout.Geometry layout = DialogueOverlayLayout.calculate(width, height, panelHeight,
                 paperDesired, dialoguePaperWidth(presentation));
-        if (dialogueSpeechAboveChoices) {
+        if (Config.getInstance().dialogueSpeechAboveChoices) {
             layout = DialogueOverlayLayout.speechAboveChoices(layout);
         }
         DialogueOverlayLayout.Rect menu = layout.menu();
@@ -708,6 +717,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         int panelWidth = menu.width();
         List<DialogueRow> rows = dialogueRows(presentation);
         int footerTop = bottom - dialogueFooterHeight();
+        boolean positionToggleHovered = false;
 
         if (bubble.height() > 0) {
             if (layout.canShowTail()) {
@@ -747,7 +757,7 @@ public class InteractScreen extends AbstractDynamicScreen {
                 }
             }
             drawDialogueHistory(context, presentation, bubble);
-            drawDialoguePositionToggle(context, bubble, mouseX, mouseY);
+            positionToggleHovered = drawDialoguePositionToggle(context, bubble);
         }
 
         DialogueSkin.drawFrame(context, DialogueSkin.MENU, left, top, panelWidth, menu.height());
@@ -818,6 +828,11 @@ public class InteractScreen extends AbstractDynamicScreen {
                 .append(Component.translatable("gui.dialogue.close")),
                 new DialogueClick(DialogueClickKind.CLOSE, null, null, null)),
                 closeAction.x(), closeAction.y(), closeAction.width(), closeAction.height());
+        context.fill(closeAction.x(), closeAction.y(), closeAction.x() + 1, closeAction.bottom(), FRAME);
+        if (positionToggleHovered) {
+            context.renderTooltip(font, Component.translatable(Config.getInstance().dialogueSpeechAboveChoices
+                    ? "gui.dialogue.position_corner" : "gui.dialogue.position_above"), mouseX, mouseY);
+        }
     }
 
     private int dialogueHistoryHeight(ClientHandlerImpl.DialoguePresentation presentation) {
@@ -868,17 +883,13 @@ public class InteractScreen extends AbstractDynamicScreen {
         }
     }
 
-    private void drawDialoguePositionToggle(GuiGraphics context, DialogueOverlayLayout.Rect bubble,
-                                            int mouseX, int mouseY) {
+    private boolean drawDialoguePositionToggle(GuiGraphics context, DialogueOverlayLayout.Rect bubble) {
         int size = dialoguePixels(15);
         int x = bubble.right() - dialoguePixels(12) - size;
         int y = bubble.y() + dialoguePixels(7);
         drawSpeechControl(context, Component.literal("≡"), x, y, size, size,
                 new DialogueClick(DialogueClickKind.TOGGLE_POSITION, null, null, null), true);
-        if (hoveringOver(x, y, size, size)) {
-            context.renderTooltip(font, Component.translatable(dialogueSpeechAboveChoices
-                    ? "gui.dialogue.position_corner" : "gui.dialogue.position_above"), mouseX, mouseY);
-        }
+        return hoveringOver(x, y, size, size);
     }
 
     private float dialogueTextScale() {
@@ -1007,17 +1018,9 @@ public class InteractScreen extends AbstractDynamicScreen {
     private void drawDialogueAction(GuiGraphics context, DialogueRow row, int x, int y, int w, int h) {
         boolean hover = hoveringOver(x, y, w, h);
         boolean focused = dialogueKeyboardIndex == dialogueHits.size();
-        int actionLeft = x + 3;
-        int actionTop = y + 3;
-        int actionRight = x + w - 3;
-        int actionBottom = y + h - 3;
-        context.fill(actionLeft, actionTop, actionRight, actionBottom,
-                hover || focused ? 0xFF68432A : 0xFF332016);
-        int border = hover || focused ? 0xFFB38855 : 0xFF654733;
-        context.fill(actionLeft, actionTop, actionRight, actionTop + 1, border);
-        context.fill(actionLeft, actionBottom - 1, actionRight, actionBottom, border);
-        context.fill(actionLeft, actionTop, actionLeft + 1, actionBottom, border);
-        context.fill(actionRight - 1, actionTop, actionRight, actionBottom, border);
+        if (hover || focused) {
+            context.fill(x, y, x + w, y + h, 0x8864432A);
+        }
         String fullText = row.text().getString();
         int space = fullText.indexOf(' ');
         String key = space > 0 ? fullText.substring(0, space) : fullText;
@@ -1028,7 +1031,8 @@ public class InteractScreen extends AbstractDynamicScreen {
         int keyHeight = dialoguePixels(16);
         int gap = dialoguePixels(7);
         int groupWidth = keyWidth + gap + dialoguePixels(font.width(label));
-        int keyX = x + Math.max(dialoguePixels(4), (w - groupWidth) / 2);
+        int opticalOffset = row.click().kind() == DialogueClickKind.CLOSE ? 0 : dialoguePixels(3);
+        int keyX = x + Math.max(dialoguePixels(4), (w - groupWidth) / 2 + opticalOffset);
         int keyY = y + (h - keyHeight) / 2;
         DialogueSkin.drawKeycap(context, keyX, keyY, keyWidth, keyHeight);
         int textY = y + (h - dialoguePixels(font.lineHeight - 1)) / 2;
@@ -1067,7 +1071,9 @@ public class InteractScreen extends AbstractDynamicScreen {
             return true;
         }
         if (click.kind() == DialogueClickKind.TOGGLE_POSITION) {
-            dialogueSpeechAboveChoices = !dialogueSpeechAboveChoices;
+            Config config = Config.getInstance();
+            config.dialogueSpeechAboveChoices = !config.dialogueSpeechAboveChoices;
+            config.save();
             dialogueHeight.reset();
             dialogueScroller.reset();
             dialogueHits.clear();

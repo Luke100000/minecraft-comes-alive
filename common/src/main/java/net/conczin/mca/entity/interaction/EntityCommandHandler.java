@@ -1,6 +1,10 @@
 package net.conczin.mca.entity.interaction;
 
+import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerLike;
+import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.ActivitiesMCA;
+import net.conczin.mca.entity.ai.Chore;
 import net.minecraft.Util;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.OpenGuiRequest;
@@ -9,6 +13,8 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -27,7 +33,7 @@ public abstract class EntityCommandHandler<T extends Entity & VillagerLike<?>> {
     }
 
     public Optional<Player> getInteractingPlayer() {
-        return Optional.ofNullable(interactingPlayer).filter(player -> player.containerMenu != null);
+        return Optional.ofNullable(interactingPlayer);
     }
 
     public UUID interactionId() {
@@ -47,6 +53,14 @@ public abstract class EntityCommandHandler<T extends Entity & VillagerLike<?>> {
         }
         interactingPlayer = null;
         interactionId = Util.NIL_UUID;
+        if (entity instanceof VillagerEntityMCA villager && villager.getBrain().isActive(ActivitiesMCA.INTERACT)) {
+            Activity resume = villager.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)
+                    ? Activity.IDLE
+                    : villager.getVillagerBrain().getCurrentJob() == Chore.NONE
+                    ? villager.getBrain().getSchedule().getActivityAt((int) (villager.level().getDayTime() % 24000L))
+                    : ActivitiesMCA.CHORE;
+            villager.getMCABrain().setActiveActivityIfPossible(resume);
+        }
     }
 
     /** Stops only the named player's concrete interaction, leaving newer or foreign screens alone. */
@@ -57,8 +71,42 @@ public abstract class EntityCommandHandler<T extends Entity & VillagerLike<?>> {
     }
 
     public InteractionResult interactAt(Player player, Vec3 pos, @NotNull InteractionHand hand) {
+        if (entity instanceof VillagerEntityMCA villager && (villager.isConversationDangerous() || !villager.isAlive())) {
+            return InteractionResult.PASS;
+        }
         if (player instanceof ServerPlayer serverPlayer) {
+            if (interactingPlayer instanceof ServerPlayer priorPlayer) {
+                // Superseding the screen must close only the previous interaction ID.
+                UUID oldId = interactionId;
+                MCA.getDialogueEngine().ifPresent(engine -> engine.pause(priorPlayer));
+                stopInteracting(priorPlayer, oldId);
+                Network.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.CLOSE, entity, oldId), priorPlayer);
+            }
+            if (entity instanceof VillagerEntityMCA) {
+                // A player can have only one MCA conversation screen at a time.
+                serverPlayer.serverLevel().getEntitiesOfClass(VillagerEntityMCA.class,
+                        serverPlayer.getBoundingBox().inflate(6.0D), other -> other != entity)
+                        .forEach(other -> {
+                            if (other.getInteractions().getInteractingPlayer()
+                                    .filter(serverPlayer::equals).isPresent()) {
+                                UUID previousId = other.getInteractions().interactionId();
+                                MCA.getDialogueEngine().ifPresent(engine -> engine.pause(serverPlayer));
+                                other.getInteractions().stopInteracting(serverPlayer, previousId);
+                                Network.sendToPlayer(
+                                        new OpenGuiRequest(OpenGuiRequest.Type.CLOSE, other, previousId), serverPlayer);
+                            }
+                        });
+            }
+            if (entity instanceof VillagerEntityMCA villager) {
+                if (villager.isSleeping()) {
+                    villager.stopSleeping();
+                }
+            }
             interactionId = UUID.randomUUID();
+            interactingPlayer = player;
+            if (entity instanceof VillagerEntityMCA villager) {
+                villager.getMCABrain().setActiveActivityIfPossible(ActivitiesMCA.INTERACT);
+            }
             Network.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.INTERACT, entity, interactionId), serverPlayer);
         }
         interactingPlayer = player;

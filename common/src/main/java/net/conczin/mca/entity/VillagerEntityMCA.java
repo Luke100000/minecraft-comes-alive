@@ -9,6 +9,7 @@ import net.conczin.mca.datafix.McaDataFixers;
 import net.conczin.mca.entity.ai.*;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
+import net.conczin.mca.entity.ai.brain.tasks.InteractTask;
 import net.conczin.mca.entity.ai.brain.sensor.GuardEnemiesSensor;
 import net.conczin.mca.entity.ai.chatAI.ChatAI;
 import net.conczin.mca.entity.ai.chatAI.ChatAIContext;
@@ -16,6 +17,8 @@ import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.conczin.mca.entity.ai.relationship.*;
 import net.conczin.mca.entity.interaction.VillagerCommandHandler;
+import net.conczin.mca.network.Network;
+import net.conczin.mca.network.s2c.OpenGuiRequest;
 import net.conczin.mca.registry.*;
 import net.conczin.mca.resources.Names;
 import net.conczin.mca.resources.Rank;
@@ -275,10 +278,14 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
     @Override
     public void refreshBrain(ServerLevel world) {
         Brain<VillagerEntityMCA> brain = getMCABrain();
+        boolean restoreInteraction = brain.isActive(ActivitiesMCA.INTERACT) && !isConversationDangerous();
         brain.stopAll(world, this);
         //copyWithoutBehaviors will copy the memories of the old brain to the new brain
         this.brain = brain.copyWithoutBehaviors();
         VillagerTasksMCA.initializeTasks(this, getMCABrain());
+        if (restoreInteraction && InteractTask.shouldRun(this)) {
+            getMCABrain().setActiveActivityIfPossible(ActivitiesMCA.INTERACT);
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -466,9 +473,38 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                         && distanceToSqr(threat) < 16.0 * 16.0).isPresent();
     }
 
+    public boolean isConversationDangerous() {
+        return getBrain().isActive(Activity.PANIC)
+                || getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)
+                || hasIgnitedCreeperThreat();
+    }
+
+    private void closeDialogueForOwner(boolean terminal) {
+        getInteractions().getInteractingPlayer().filter(ServerPlayer.class::isInstance)
+                .map(ServerPlayer.class::cast).ifPresent(player -> {
+                    UUID id = getInteractions().interactionId();
+                    MCA.getDialogueEngine().ifPresent(engine -> {
+                        if (terminal) {
+                            engine.end(player);
+                        } else {
+                            engine.pause(player);
+                        }
+                    });
+                    getInteractions().stopInteracting(player, id);
+                    Network.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.CLOSE, this, id), player);
+                });
+    }
+
     @Override
     protected void customServerAiStep() {
         super.customServerAiStep();
+        if (isConversationDangerous()) {
+            closeDialogueForOwner(true);
+        } else if (getInteractions().getInteractingPlayer().filter(player ->
+                !player.isAlive() || player.isRemoved() || player.level() != level()
+                || distanceToSqr(player) > 25.0D).isPresent()) {
+            closeDialogueForOwner(false);
+        }
         if (hasIgnitedCreeperThreat()) {
             if (isSleeping()) {
                 stopSleeping();
@@ -544,7 +580,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         ItemStack stack = player.getItemInHand(hand);
         boolean isOnBlacklist = Config.getInstance().villagerInteractionItemBlacklist.contains(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
-        if (hand.equals(InteractionHand.MAIN_HAND) && !isOnBlacklist && !stack.is(TagsMCA.Items.VILLAGER_EGGS) && canInteractWithItemStackInHand(stack) && !getVillagerBrain().isPanicking()) {
+        if (hand.equals(InteractionHand.MAIN_HAND) && !isOnBlacklist && !stack.is(TagsMCA.Items.VILLAGER_EGGS) && canInteractWithItemStackInHand(stack) && !getVillagerBrain().isPanicking() && !isConversationDangerous()) {
             //make sure dialogueType is synced in case the client needs it
             getDialogueType(player);
 
@@ -572,7 +608,10 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
         ItemStack stack = player.getItemInHand(hand);
         boolean isOnBlacklist = Config.getInstance().villagerInteractionItemBlacklist.contains(BuiltInRegistries.ITEM.getKey(stack.getItem()).toString());
-        if (!isOnBlacklist && !stack.is(TagsMCA.Items.VILLAGER_EGGS) && isAlive() && !isTrading() && !isSleeping() && canInteractWithItemStackInHand(stack) && !getVillagerBrain().isPanicking()) {
+        if (!isOnBlacklist && !stack.is(TagsMCA.Items.VILLAGER_EGGS) && isAlive() && !isTrading() && canInteractWithItemStackInHand(stack) && !getVillagerBrain().isPanicking() && !isConversationDangerous()) {
+            if (!level().isClientSide && isSleeping()) {
+                stopSleeping();
+            }
             if (isBaby()) {
                 setUnhappy();
             } else if (!level().isClientSide) {
@@ -1394,6 +1433,9 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (!dead) {
             return;
         }
+        if (!level().isClientSide) {
+            closeDialogueForOwner(true);
+        }
 
         // deselect equipment as this messes with MobEntities equipment dropping
         clearEquipment();
@@ -2112,7 +2154,13 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
         if (isSleeping()) {
             BedDebugLog.lifecycle(this, "remove-sleeper/" + reason, getSleepingPos().orElse(null));
         }
+        if (!level().isClientSide) {
+            closeDialogueForOwner(reason.shouldDestroy());
+        }
         super.remove(reason);
+        if (!level().isClientSide) {
+            MCA.getDialogueEngine().ifPresent(engine -> engine.onVillagerLeave(this));
+        }
     }
 
     private void tickDespawnDelay() {

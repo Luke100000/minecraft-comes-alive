@@ -76,6 +76,12 @@ public class ClientHandlerImpl implements ClientHandler {
                     }
                 }
                 break;
+            case CLOSE:
+                if (client.screen instanceof InteractScreen gui
+                        && gui.matchesInteraction(message.villager(), message.interactionId())) {
+                    gui.closeFromServer();
+                }
+                break;
             case VILLAGER_EDITOR:
                 entity = client.level.getEntity(message.villager());
                 assert entity != null;

@@ -167,7 +167,9 @@ public class VillagerTasksMCA {
             // Babies do not play, work, or claim homes, but still need basic survival movement.
             brain.addActivity(Activity.CORE, ImmutableList.of(
                     Pair.of(0, new Swim(0.8F)),
+                    Pair.of(0, new LookAtTargetSink(45, 90)),
                     Pair.of(1, new WanderOrTeleportToTargetTask())));
+            brain.addActivity(ActivitiesMCA.INTERACT, ImmutableList.of(Pair.of(0, new InteractTask(0.5F))));
             brain.setCoreActivities(ImmutableSet.of(Activity.CORE));
             brain.setDefaultActivity(Activity.IDLE);
             brain.setActiveActivityIfPossible(Activity.IDLE);
@@ -192,6 +194,7 @@ public class VillagerTasksMCA {
         }
 
         brain.addActivity(ActivitiesMCA.GRIEVE, VillagerTasksMCA.getGrievingPackage());
+        brain.addActivity(ActivitiesMCA.INTERACT, ImmutableList.of(Pair.of(0, new InteractTask(0.5F))));
 
         if (!noDefault) {
             brain.addActivity(Activity.CORE, VillagerTasksMCA.getImportantCorePackage(0.5F));
@@ -239,7 +242,6 @@ public class VillagerTasksMCA {
                 Pair.of(0, WakeUp.create()),
                 Pair.of(0, new DeliverMessageTask()),
                 Pair.of(1, new WanderOrTeleportToTargetTask()),
-                Pair.of(3, new InteractTask(speedModifier)),
                 Pair.of(10, new ExtendedFindPointOfInterestTask(registryEntry -> registryEntry.is(PoiTypes.HOME), MemoryModuleType.HOME, false, Optional.of((byte) 14),
                         villager -> villager.getResidency().onHomeClaimed(), (entity, pos) -> {
                     // verify that this bed is not blocked

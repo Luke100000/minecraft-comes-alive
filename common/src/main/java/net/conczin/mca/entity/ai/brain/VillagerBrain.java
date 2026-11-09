@@ -68,7 +68,7 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
             // find something to do
             //todo here switch between rest and chore
             entity.getBrain().getActiveNonCoreActivity().ifPresent(activity -> {
-                if (!activity.equals(ActivitiesMCA.CHORE)) {
+                if (!activity.equals(ActivitiesMCA.CHORE) && !activity.equals(ActivitiesMCA.INTERACT)) {
                     entity.getBrain().setActiveActivityIfPossible(ActivitiesMCA.CHORE);
                 }
             });

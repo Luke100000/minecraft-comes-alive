@@ -2,6 +2,7 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import com.google.common.collect.ImmutableMap;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.ConversationManager;
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.minecraft.server.level.ServerLevel;
@@ -9,8 +10,10 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
+import net.minecraft.world.entity.ai.behavior.PositionTracker;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
+import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Optional;
@@ -22,6 +25,8 @@ public class DeliverMessageTask extends Behavior<VillagerEntityMCA> {
 
     private ConversationManager.Message message = null;
     private Entity receiver = null;
+    private WalkTarget ownedWalkTarget;
+    private PositionTracker ownedLookTarget;
 
     private int talked;
 
@@ -54,7 +59,8 @@ public class DeliverMessageTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA villager) {
-        if (villager.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).isPresent()) {
+        if (villager.getBrain().isActive(ActivitiesMCA.INTERACT)
+                || villager.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).isPresent()) {
             return false;
         }
 
@@ -77,7 +83,8 @@ public class DeliverMessageTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected boolean canStillUse(ServerLevel world, VillagerEntityMCA villager, long time) {
-        return message != null
+        return !villager.getBrain().isActive(ActivitiesMCA.INTERACT)
+               && message != null
                && talked < getMaxTalkingTime()
                && villager.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).isEmpty()
                && !villager.getVillagerBrain().isPanicking()
@@ -104,6 +111,8 @@ public class DeliverMessageTask extends Behavior<VillagerEntityMCA> {
 
         // Walk towards receiver
         BehaviorUtils.setWalkAndLookTargetMemories(villager, receiver, 0.5F, 2);
+        ownedWalkTarget = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        ownedLookTarget = villager.getBrain().getMemoryInternal(MemoryModuleType.LOOK_TARGET).orElse(null);
 
         // Wait until the next talk cycle if receiver changed
         if (message.getReceiver() != receiver) {
@@ -137,10 +146,20 @@ public class DeliverMessageTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected void stop(ServerLevel world, VillagerEntityMCA villager, long time) {
+        if (villager.getBrain().getMemoryInternal(MemoryModuleType.INTERACTION_TARGET).orElse(null) == receiver) {
+            villager.getBrain().eraseMemory(MemoryModuleType.INTERACTION_TARGET);
+        }
+        if (ownedWalkTarget != null && villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                .orElse(null) == ownedWalkTarget) {
+            villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        }
+        if (ownedLookTarget != null && villager.getBrain().getMemoryInternal(MemoryModuleType.LOOK_TARGET)
+                .orElse(null) == ownedLookTarget) {
+            villager.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
+        }
         message = null;
         receiver = null;
-        villager.getBrain().eraseMemory(MemoryModuleType.INTERACTION_TARGET);
-        villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
-        villager.getBrain().eraseMemory(MemoryModuleType.LOOK_TARGET);
+        ownedWalkTarget = null;
+        ownedLookTarget = null;
     }
 }
