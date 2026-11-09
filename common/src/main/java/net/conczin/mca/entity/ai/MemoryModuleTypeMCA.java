@@ -43,9 +43,7 @@ public interface MemoryModuleTypeMCA {
     MemoryModuleType<List<UnreachableCombatTargets.Failure>> UNREACHABLE_COMBAT_TARGETS = register("unreachable_combat_targets", Optional.empty());
     MemoryModuleType<GlobalPos> CANT_REACH_WALK_TARGET = register("cant_reach_walk_target", Optional.empty());
     MemoryModuleType<GlobalPos> SHELTER_BED = register("shelter_bed", Optional.empty());
-    MemoryModuleType<List<Pair<GlobalPos, BlockState>>> FOLDED_TRAPDOORS = register("folded_trapdoors",
-            Optional.of(Codec.mapPair(GlobalPos.CODEC.fieldOf("position"), BlockState.CODEC.fieldOf("folded_state"))
-                    .codec().listOf()));
+    MemoryModuleType<List<Pair<GlobalPos, BlockState>>> FOLDED_TRAPDOORS = register("folded_trapdoors", Optional.empty());
 
     static <U> MemoryModuleType<U> register(String name, Optional<Codec<U>> codec) {
         ResourceLocation id = MCA.locate(name);
