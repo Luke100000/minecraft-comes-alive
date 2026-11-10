@@ -14,11 +14,12 @@ import net.minecraft.world.entity.Entity;
 
 import java.util.UUID;
 
-public record InteractionVillagerMessage(String command, UUID villagerUUID) implements HandleablePayload {
+public record InteractionVillagerMessage(String command, UUID villagerUUID, UUID interactionId) implements HandleablePayload {
     public static final CustomPacketPayload.Type<InteractionVillagerMessage> TYPE = new CustomPacketPayload.Type<>(MCA.locate("interaction_villager"));
     public static final StreamCodec<FriendlyByteBuf, InteractionVillagerMessage> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.STRING_UTF8, InteractionVillagerMessage::command,
             UUIDUtil.STREAM_CODEC, InteractionVillagerMessage::villagerUUID,
+            UUIDUtil.STREAM_CODEC, InteractionVillagerMessage::interactionId,
             InteractionVillagerMessage::new
     );
 
@@ -28,13 +29,12 @@ public record InteractionVillagerMessage(String command, UUID villagerUUID) impl
         if (!(v instanceof VillagerLike<?> villager)
                 || !v.isAlive()
                 || player.distanceToSqr(v) > 64.0D
-                || villager.getInteractions().getInteractingPlayer().filter(player::equals).isEmpty()
+                || !villager.getInteractions().matchesInteraction(player, interactionId)
                 || !InteractionMenuCommandAccess.allows(villager, player, command)) {
             return;
         }
-        UUID id = villager.getInteractions().interactionId();
         if (villager.getInteractions().handle(player, command)) {
-            villager.getInteractions().stopInteracting(player, id);
+            villager.getInteractions().stopInteracting(player, interactionId);
         }
     }
 

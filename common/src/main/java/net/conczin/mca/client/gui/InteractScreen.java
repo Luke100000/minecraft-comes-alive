@@ -214,7 +214,7 @@ public class InteractScreen extends AbstractDynamicScreen {
 
         // Right mouse button
         if (inGiftMode && button == 1) {
-            Network.sendToServer(new InteractionVillagerMessage("gift", villager.asEntity().getUUID()));
+            Network.sendToServer(new InteractionVillagerMessage("gift", villager.asEntity().getUUID(), interactionId));
             return true;
         } else {
             return false;
@@ -274,7 +274,7 @@ public class InteractScreen extends AbstractDynamicScreen {
                 && (keyChar == GLFW.GLFW_KEY_ENTER || keyChar == GLFW.GLFW_KEY_KP_ENTER)) {
             if (timeSinceLastClick > 2) {
                 timeSinceLastClick = 0;
-                Network.sendToServer(new InteractionVillagerMessage("gift", villager.asEntity().getUUID()));
+                Network.sendToServer(new InteractionVillagerMessage("gift", villager.asEntity().getUUID(), interactionId));
             }
             return true;
         }
@@ -555,7 +555,8 @@ public class InteractScreen extends AbstractDynamicScreen {
             /* Anything that should notify the server is handled here */
 
             if (!button.targetServer()) {
-                Network.sendToServer(new InteractionVillagerMessage(id.replace("gui.button.", ""), villager.asEntity().getUUID()));
+                Network.sendToServer(new InteractionVillagerMessage(id.replace("gui.button.", ""),
+                        villager.asEntity().getUUID(), interactionId));
             }
         } else if (id.equals("gui.button.gift")) {
             this.inGiftMode = true;

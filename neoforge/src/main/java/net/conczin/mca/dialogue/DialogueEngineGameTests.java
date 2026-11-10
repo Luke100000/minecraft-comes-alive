@@ -841,18 +841,45 @@ public final class DialogueEngineGameTests {
         intruder.setPos(fixture.player().position());
         boolean originalArmor = fixture.villager().getVillagerBrain().getArmorWear();
 
-        new InteractionVillagerMessage("armor", fixture.villager().getUUID()).handleServer(intruder);
+        new InteractionVillagerMessage("armor", fixture.villager().getUUID(), interactionId).handleServer(intruder);
         helper.assertTrue(fixture.villager().getVillagerBrain().getArmorWear() == originalArmor,
                 "a non-owner must not toggle the villager's armor through a forged command");
         helper.assertTrue(interactions.matchesInteraction(fixture.player(), interactionId),
                 "a non-owner's command must not close the actual owner's interaction");
 
         var originalProfession = fixture.villager().getVillagerData().getProfession();
-        new InteractionVillagerMessage("execute", fixture.villager().getUUID()).handleServer(fixture.player());
+        new InteractionVillagerMessage("execute", fixture.villager().getUUID(), interactionId).handleServer(fixture.player());
         helper.assertTrue(fixture.villager().getVillagerData().getProfession().equals(originalProfession),
                 "direct commands must not bypass the mayor eligibility enforced by the GUI");
         helper.assertTrue(interactions.matchesInteraction(fixture.player(), interactionId),
                 "rejected privileged commands must not close the owner screen");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void legacyCommandPacketRejectsStaleInteractionId(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        var interactions = fixture.villager().getInteractions();
+        interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        UUID firstId = interactions.interactionId();
+        interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        UUID secondId = interactions.interactionId();
+        helper.assertTrue(!firstId.equals(secondId), "reopening the menu must rotate the interaction identity");
+        boolean originalArmor = fixture.villager().getVillagerBrain().getArmorWear();
+
+        // A queued command from the first menu must never act on or close the newer menu.
+        new InteractionVillagerMessage("armor", fixture.villager().getUUID(), firstId).handleServer(fixture.player());
+        helper.assertTrue(fixture.villager().getVillagerBrain().getArmorWear() == originalArmor,
+                "an old-menu command must not change the newer menu's villager state");
+        helper.assertTrue(interactions.matchesInteraction(fixture.player(), secondId),
+                "an old-menu command must not dismiss the new interaction owner");
+
+        new InteractionVillagerMessage("armor", fixture.villager().getUUID(), secondId)
+                .handleServer(fixture.player());
+        helper.assertTrue(fixture.villager().getVillagerBrain().getArmorWear() != originalArmor,
+                "the new interaction's legitimate armor command must still execute");
+        helper.assertTrue(interactions.getInteractingPlayer().isEmpty(),
+                "the accepted command may only close its own matching interaction");
         helper.succeed();
     }
 
