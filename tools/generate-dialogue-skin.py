@@ -31,10 +31,17 @@ def frame(name: str, interior: str, outside: str, border: str, shine: str) -> No
     draw.line((3, 5, 3, 18), fill=shine, width=1)
     draw.line((5, 20, 18, 20), fill=outside, width=1)
     draw.line((20, 5, 20, 18), fill=outside, width=1)
-    # Light scuffs make the parchment and wood frames less like plain rectangles.
+    # Bake the warm paper gradient into the nine-slice's interior pixels.
+    # The source rows then stretch together without a rectangular overlay seam.
     if name == "paper_frame":
-        for x, y in ((5, 5), (17, 6), (6, 17), (18, 16)):
-            draw.point((x, y), fill="#FFF4D9")
+        top = (255, 243, 206)
+        bottom = (246, 197, 128)
+        for y in range(4, 20):
+            strength = (y - 4) / 15
+            colour = tuple(round(a + (b - a) * strength) for a, b in zip(top, bottom)) + (255,)
+            for x in range(4, 20):
+                if image.getpixel((x, y)) == (250, 232, 201, 255):
+                    image.putpixel((x, y), colour)
     else:
         for x, y in ((5, 5), (17, 5), (5, 18), (18, 17)):
             draw.point((x, y), fill="#BA8A61")
@@ -47,11 +54,12 @@ def frame(name: str, interior: str, outside: str, border: str, shine: str) -> No
 def tail() -> None:
     image = Image.new("RGBA", (16, 20), (0, 0, 0, 0))
     d = ImageDraw.Draw(image)
-    # The reference has a left-facing point near the lower edge of the bubble.
-    # The rightmost edge sits beneath the parchment frame's left border.
+    # The left-facing pointer joins the straight part of the frame. Its right
+    # side stays open so the renderer can connect the parchment interiors.
     d.polygon(((15, 0), (15, 19), (0, 16), (9, 8)), fill="#291910")
     d.polygon(((14, 2), (14, 17), (4, 15), (11, 8)), fill="#FAE8C9")
-    d.line((5, 15, 13, 17), fill="#FFE6B5", width=1)
+    d.rectangle((14, 4, 15, 16), fill="#FAE8C9")
+    d.line((5, 15, 13, 17), fill="#E9C99A", width=1)
     save(image, "paper_tail")
 
 
@@ -94,7 +102,7 @@ def icons() -> None:
 
 
 if __name__ == "__main__":
-    frame("paper_frame", "#FAE8C9", "#291910", "#B58051", "#FFE6B5")
+    frame("paper_frame", "#FAE8C9", "#291910", "#B58051", "#E9C99A")
     frame("menu_frame", "#21120D", "#120B09", "#78503B", "#AA7957")
     frame("featured_frame", "#694632", "#281810", "#D4A36B", "#F6CD8F")
     tail()

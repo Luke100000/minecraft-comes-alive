@@ -108,6 +108,35 @@ class DialogueOverlayLayoutTest {
         assertFalse(DialogueOverlayLayout.calculate(640, 360, 100, 10).canShowTail());
     }
 
+    @Test
+    void speakerHeaderAvoidsPositionToggleAtDifferentScales() {
+        for (DialogueOverlayLayout.Rect bubble : new DialogueOverlayLayout.Rect[]{
+                new DialogueOverlayLayout.Rect(180, 15, 128, 75),
+                new DialogueOverlayLayout.Rect(400, 35, 300, 120)}) {
+            for (float scale : new float[]{1.0f, 2.0f}) {
+                DialogueOverlayLayout.Rect header = DialogueOverlayLayout.speakerHeader(bubble, scale);
+                assertTrue(header.x() >= bubble.x());
+                assertTrue(header.y() >= bubble.y());
+                assertTrue(header.right() <= bubble.right() - Math.round(27 * scale),
+                        "Name label must end before the position toggle");
+                assertTrue(header.bottom() <= bubble.y() + Math.round(23 * scale),
+                        "Nameplate must stay above the speech divider");
+            }
+        }
+    }
+
+    @Test
+    void pointerJoinsStraightLeftBorderOnlyInUpperRightMode() {
+        DialogueOverlayLayout.Geometry upper = DialogueOverlayLayout.calculate(640, 360, 140, 75);
+        DialogueOverlayLayout.Rect bubble = upper.bubble();
+        DialogueOverlayLayout.Rect tail = DialogueOverlayLayout.tailBounds(bubble);
+        assertTrue(upper.canShowTail());
+        assertEquals(bubble.x() + 2, tail.right());
+        assertTrue(tail.y() >= bubble.y() + 7);
+        assertTrue(tail.bottom() <= bubble.bottom() - 7);
+        assertFalse(DialogueOverlayLayout.speechAboveChoices(upper).canShowTail());
+    }
+
     private static void assertInsideAndSeparated(int width, int height, int menuHeight, int bubbleHeight) {
         DialogueOverlayLayout.Geometry result = DialogueOverlayLayout.calculate(width, height, menuHeight, bubbleHeight);
         assertInside(result.menu(), width, height);

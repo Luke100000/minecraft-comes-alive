@@ -600,13 +600,12 @@ public class InteractScreen extends AbstractDynamicScreen {
                         continue;
                     }
                     for (InteractionDialogueOptionsResponse.EventOption option : group) {
-                        Component label = Component.literal("    ").append(option.prompt());
-                        rows.add(new DialogueRow(label,
+                        rows.add(DialogueRow.child(option.prompt(),
                                 new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.EVENT, option.id(), null)));
                     }
                     if (ambient) {
-                        rows.add(new DialogueRow(Component.literal("    ").append(Component.translatable(options.preview().isPresent()
-                                ? "gui.dialogue.ambient_other" : "gui.dialogue.ambient")),
+                        rows.add(DialogueRow.child(Component.translatable(options.preview().isPresent()
+                                ? "gui.dialogue.ambient_other" : "gui.dialogue.ambient"),
                                 new DialogueClick(DialogueClickKind.SELECT, DialogueEngine.DialogueSelection.AMBIENT, null, null)));
                     }
                 }
@@ -721,17 +720,21 @@ public class InteractScreen extends AbstractDynamicScreen {
         boolean positionToggleHovered = false;
 
         if (bubble.height() > 0) {
-            if (layout.canShowTail()) {
-                DialogueSkin.drawTail(context, bubble.x() - 14, bubble.bottom() - 20);
-            }
             DialogueSkin.drawFrame(context, DialogueSkin.PAPER, bubble.x(), bubble.y(),
                     bubble.width(), bubble.height());
+            if (layout.canShowTail()) {
+                DialogueOverlayLayout.Rect pointer = DialogueOverlayLayout.tailBounds(bubble);
+                DialogueSkin.drawTail(context, pointer.x(), pointer.y());
+            }
             int dividerY = bubble.y() + dialoguePixels(23);
-            context.enableScissor(bubble.x() + 11, bubble.y() + 5,
-                    bubble.right() - dialoguePixels(31), dividerY - 2);
-            drawDialogueText(context, villager.asEntity().getName(), bubble.x() + dialoguePixels(16),
-                    bubble.y() + dialoguePixels(10), INK, false);
-            context.disableScissor();
+            DialogueOverlayLayout.Rect speaker = DialogueOverlayLayout.speakerHeader(bubble, dialogueTextScale());
+            if (speaker.width() > 0 && speaker.height() > 0) {
+                context.fill(speaker.x(), speaker.y(), speaker.right(), speaker.bottom(), 0x336B482F);
+                context.enableScissor(speaker.x(), speaker.y(), speaker.right(), speaker.bottom());
+                drawDialogueText(context, villager.asEntity().getName().copy().withStyle(style -> style.withBold(true)),
+                        speaker.x() + dialoguePixels(3), speaker.y() + dialoguePixels(3), 0xFF58331E, false);
+                context.disableScissor();
+            }
             context.fill(bubble.x() + 11, dividerY, bubble.right() - 11, dividerY + 1, 0xFFC49765);
 
             int textTop = dividerY + dialoguePixels(8);
@@ -874,7 +877,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         boolean hovered = enabled && hoveringOver(x, y, w, h);
         boolean focused = enabled && dialogueKeyboardIndex == dialogueHits.size();
         if (hovered || focused) {
-            context.fill(x, y, x + w, y + h, 0x226B3C19);
+            context.renderOutline(x, y, w, h, 0xFFC49765);
         }
         int textX = x + (w - dialoguePixels(font.width(label))) / 2;
         drawDialogueText(context, label, textX, y + (h - dialoguePixels(font.lineHeight - 1)) / 2,
@@ -923,19 +926,17 @@ public class InteractScreen extends AbstractDynamicScreen {
     }
 
     private int dialogueRowTextWidth(DialogueRow row, int panelWidth) {
-        int iconInset = row.featured() || row.iconIndex() >= 0 ? dialoguePixels(20) : 0;
-        int arrowInset = row.featured() || row.iconIndex() >= 0 ? dialoguePixels(12) : 0;
-        return panelWidth - dialoguePixels(32) - iconInset - arrowInset;
+        return DialogueRowLayout.insets(panelWidth, dialogueTextScale(), row.kind()).textWidth();
     }
 
     private int dialogueRowHeight(DialogueRow row, int panelWidth) {
         int lines = dialogueLines(row.text(), dialogueRowTextWidth(row, panelWidth)).size();
-        return dialoguePixels(Math.max(row.featured() ? 30 : 26, lines * 10 + 14));
+        return DialogueRowLayout.height(dialogueTextScale(), lines, row.kind());
     }
 
     private int drawDialogueRow(GuiGraphics context, DialogueRow row,
                                 int left, int panelWidth, int y, int clipTop, int clipBottom) {
-        int iconInset = row.featured() || row.iconIndex() >= 0 ? dialoguePixels(20) : 0;
+        DialogueRowLayout.Insets insets = DialogueRowLayout.insets(panelWidth, dialogueTextScale(), row.kind());
         List<FormattedCharSequence> lines = dialogueLines(row.text(), dialogueRowTextWidth(row, panelWidth));
         int rowHeight = dialogueRowHeight(row, panelWidth);
         int hitTop = Math.max(y, clipTop);
@@ -947,7 +948,8 @@ public class InteractScreen extends AbstractDynamicScreen {
             DialogueSkin.drawFrame(context, DialogueSkin.FEATURED, left + 8, y + 1,
                     panelWidth - 16, rowHeight - 2);
             if ((hover || focused) && hitBottom - hitTop > 4) {
-                context.fill(left + 12, hitTop + 2, left + panelWidth - 12, hitBottom - 2, 0x55D7A34D);
+                context.renderOutline(left + 9, hitTop + 1, panelWidth - 18,
+                        hitBottom - hitTop - 2, 0xFFFFD88B);
             }
         } else if (clickable) {
             int surfaceLeft = left + 8;
@@ -955,15 +957,12 @@ public class InteractScreen extends AbstractDynamicScreen {
             int surfaceTop = y + 1;
             int surfaceBottom = y + rowHeight - 2;
             boolean highlighted = hover || focused;
-            int fill = highlighted ? 0xFF805032
-                    : row.iconIndex() >= 0 ? 0xFF362318 : 0xFF422B1C;
+            int fill = row.iconIndex() >= 0 ? 0xFF362318 : 0xFF422B1C;
             context.fill(surfaceLeft, surfaceTop, surfaceRight, surfaceBottom, fill);
-            if (row.iconIndex() >= 0) {
+            if (row.iconIndex() >= 0 || highlighted) {
                 int border = highlighted ? 0xFFD7A76B : 0xFF71513A;
-                context.fill(surfaceLeft, surfaceTop, surfaceRight, surfaceTop + 1, border);
-                context.fill(surfaceLeft, surfaceBottom - 1, surfaceRight, surfaceBottom, border);
-                context.fill(surfaceLeft, surfaceTop, surfaceLeft + 1, surfaceBottom, border);
-                context.fill(surfaceRight - 1, surfaceTop, surfaceRight, surfaceBottom, border);
+                context.renderOutline(surfaceLeft, surfaceTop, surfaceRight - surfaceLeft,
+                        surfaceBottom - surfaceTop, border);
             }
         }
         int iconSize = dialoguePixels(12);
@@ -979,12 +978,10 @@ public class InteractScreen extends AbstractDynamicScreen {
         // A partially clipped first row used to show only a stray coloured pixel
         // of its symbol when the user scrolled a small amount.
         if (symbolY >= clipTop && symbolY + iconSize <= clipBottom) {
-            if (iconInset > 0) {
-                int iconX = left + dialoguePixels(16);
+            if (row.featured() || row.iconIndex() >= 0) {
+                int iconX = left + insets.iconX();
                 if (row.featured()) {
-                    int starWidth = dialoguePixels(font.width("★"));
-                    drawDialogueText(context, Component.literal("★"),
-                            iconX + (iconSize - starWidth) / 2, glyphY, GOLD, true);
+                    DialogueSkin.drawFeaturedIcon(context, iconX, symbolY, iconSize);
                 } else if (row.iconIndex() == DialogueTopicSection.RELATIONSHIPS.ordinal()) {
                     // Use the same MCA heart artwork shown in the villager status indicators.
                     context.blit(ICON_TEXTURES, iconX, symbolY, iconSize, iconSize,
@@ -995,7 +992,7 @@ public class InteractScreen extends AbstractDynamicScreen {
             }
         }
         for (FormattedCharSequence line : lines) {
-            drawDialogueText(context, line, left + dialoguePixels(16) + iconInset, lineY,
+            drawDialogueText(context, line, left + insets.textX(), lineY,
                     !clickable ? 0xFFAA937A : hover || focused ? GOLD : CREAM, true);
             lineY += lineStep;
         }
@@ -1003,7 +1000,7 @@ public class InteractScreen extends AbstractDynamicScreen {
             boolean expanded = row.click() != null && row.click().kind() == DialogueClickKind.TOGGLE_SECTION
                     && expandedSections.contains(DialogueTopicSection.valueOf(row.click().choiceId()));
             drawDialogueText(context, Component.literal(expanded ? "▾" : "▸"),
-                    left + panelWidth - dialoguePixels(22),
+                    left + insets.trailingX(),
                     glyphY,
                     hover || focused ? GOLD : CREAM, false);
         }
@@ -1017,7 +1014,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         boolean hover = hoveringOver(x, y, w, h);
         boolean focused = dialogueKeyboardIndex == dialogueHits.size();
         if (hover || focused) {
-            context.fill(x, y, x + w, y + h, 0x8864432A);
+            context.renderOutline(x + 3, y + 1, w - 6, h - 4, 0xFFD7A76B);
         }
         String fullText = row.text().getString();
         int space = fullText.indexOf(' ');
@@ -1176,9 +1173,24 @@ public class InteractScreen extends AbstractDynamicScreen {
             String choiceId
     ) { }
 
-    private record DialogueRow(Component text, DialogueClick click, boolean featured, int iconIndex) {
+    private record DialogueRow(Component text, DialogueClick click, boolean featured, int iconIndex,
+                               boolean nested) {
         DialogueRow(Component text, DialogueClick click) {
-            this(text, click, false, -1);
+            this(text, click, false, -1, false);
+        }
+
+        DialogueRow(Component text, DialogueClick click, boolean featured, int iconIndex) {
+            this(text, click, featured, iconIndex, false);
+        }
+
+        DialogueRowLayout.Kind kind() {
+            return featured ? DialogueRowLayout.Kind.FEATURED
+                    : iconIndex >= 0 ? DialogueRowLayout.Kind.CATEGORY
+                    : nested ? DialogueRowLayout.Kind.CHILD : DialogueRowLayout.Kind.ORDINARY;
+        }
+
+        static DialogueRow child(Component text, DialogueClick click) {
+            return new DialogueRow(text, click, false, -1, true);
         }
     }
 

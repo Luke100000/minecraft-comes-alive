@@ -65,6 +65,20 @@ final class DialogueOverlayLayout {
                 new Rect(innerLeft + half, actionY, innerWidth - half, actionHeight));
     }
 
+    /** The speaker label stays clear of the upper-right speech-position toggle. */
+    static Rect speakerHeader(Rect paper, float scale) {
+        int left = paper.x() + Math.round(13 * scale);
+        int top = paper.y() + Math.round(7 * scale);
+        int right = Math.max(left, paper.right() - Math.round(32 * scale));
+        int bottom = Math.min(paper.bottom(), top + Math.round(14 * scale));
+        return new Rect(left, top, right - left, Math.max(0, bottom - top));
+    }
+
+    /** The pointer is placed on the straight left edge, above the lower rounded corner. */
+    static Rect tailBounds(Rect paper) {
+        return new Rect(paper.x() - 14, paper.bottom() - 28, 16, 20);
+    }
+
     record FooterLayout(Rect divider, Rect back, Rect close) {
     }
 
@@ -84,8 +98,7 @@ final class DialogueOverlayLayout {
         }
 
         boolean canShowTail() {
-            // The 16x20 tail is drawn alongside the bubble, ending at its bottom.
-            return !speechAboveChoices && bubble.height() >= 20 && bubble.x() >= 14
+            return !speechAboveChoices && bubble.height() >= 40 && bubble.x() >= 14
                     && bubble.bottom() + 6 <= menu.y();
         }
     }

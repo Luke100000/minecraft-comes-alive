@@ -43,11 +43,8 @@ final class DialogueSkin {
         piece(graphics, texture, x + width - CORNER, y + height - CORNER, CORNER, CORNER,
                 FRAME_SIZE - CORNER, FRAME_SIZE - CORNER, CORNER, CORNER);
 
-        // Parchment uses a soft inset tint; the dark menu is textured only once.
-        if (texture.equals(PAPER)) {
-            graphics.fillGradient(x + CORNER, y + CORNER, x + width - CORNER, y + height - CORNER,
-                    0xFFFFF3CE, 0xFFF8D79E);
-        }
+        // The generated parchment contains its own warm vertical gradient;
+        // the nine-slice scales it without covering the frame in an inset overlay.
     }
 
     private static void piece(GuiGraphics graphics, ResourceLocation texture, int x, int y,
@@ -60,6 +57,9 @@ final class DialogueSkin {
 
     static void drawTail(GuiGraphics graphics, int x, int y) {
         graphics.blit(TAIL, x, y, 0, 0, 16, 20, 16, 20);
+        // Open the speech-pointer interior into the bubble's parchment fill.
+        // This short bridge covers only the left frame stroke at the attachment.
+        graphics.fill(x + 14, y + 6, x + 19, y + 16, 0xFFFAE8C9);
     }
 
     static void drawKeycap(GuiGraphics graphics, int x, int y, int width, int height) {
@@ -83,16 +83,34 @@ final class DialogueSkin {
             graphics.blitSprite(SPEECH, x, y, size, size);
             return;
         }
-        // Trim transparent margins so every category shares the same optical centre.
-        int[] left = {2, 2, 2, 3, 3};
-        int[] top = {2, 2, 3, 3, 7};
-        int[] width = {11, 12, 12, 10, 13};
-        int[] height = {12, 13, 11, 11, 3};
-        int i = Math.clamp(iconIndex, 0, left.length - 1);
-        float scale = size / (float) Math.max(width[i], height[i]);
-        int w = Math.round(width[i] * scale);
-        int h = Math.round(height[i] * scale);
+        drawAtlasIcon(graphics, iconIndex, x, y, size);
+    }
+
+    static void drawFeaturedIcon(GuiGraphics graphics, int x, int y, int size) {
+        drawAtlasIcon(graphics, 5, x, y, size);
+    }
+
+    /** Visible pixel bounds in each 16x16 atlas cell, excluding transparent margins. */
+    static IconCrop cropFor(int iconIndex) {
+        return switch (iconIndex) {
+            case 2 -> new IconCrop(2, 3, 12, 11);
+            case 3 -> new IconCrop(3, 3, 10, 11);
+            case 4 -> new IconCrop(3, 7, 13, 3);
+            case 5 -> new IconCrop(1, 1, 15, 15);
+            default -> throw new IllegalArgumentException("No atlas crop for icon " + iconIndex);
+        };
+    }
+
+    private static void drawAtlasIcon(GuiGraphics graphics, int iconIndex, int x, int y, int size) {
+        IconCrop crop = cropFor(iconIndex);
+        float scale = size / (float) Math.max(crop.width(), crop.height());
+        int w = Math.round(crop.width() * scale);
+        int h = Math.round(crop.height() * scale);
         graphics.blit(ICONS, x + (size - w) / 2, y + (size - h) / 2, w, h,
-                (float) (i * 16 + left[i]), (float) top[i], width[i], height[i], 96, 16);
+                (float) (iconIndex * 16 + crop.left()), (float) crop.top(),
+                crop.width(), crop.height(), 96, 16);
+    }
+
+    record IconCrop(int left, int top, int width, int height) {
     }
 }

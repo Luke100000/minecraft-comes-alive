@@ -54,6 +54,71 @@ class DialogueSkinResourcesTest {
         verify("icons", 96, 16);
     }
 
+    @Test
+    void categoryAndFeaturedIconCropsMatchActualOpaquePixelBounds() throws Exception {
+        try (InputStream in = getClass().getResourceAsStream("/assets/mca/textures/gui/dialogue/icons.png")) {
+            assertNotNull(in);
+            BufferedImage atlas = ImageIO.read(in);
+            for (int index = 2; index <= 5; index++) {
+                DialogueSkin.IconCrop crop = DialogueSkin.cropFor(index);
+                int minX = 16;
+                int minY = 16;
+                int maxX = -1;
+                int maxY = -1;
+                for (int y = 0; y < 16; y++) {
+                    for (int x = 0; x < 16; x++) {
+                        if ((atlas.getRGB(index * 16 + x, y) >>> 24) != 0) {
+                            minX = Math.min(minX, x);
+                            minY = Math.min(minY, y);
+                            maxX = Math.max(maxX, x);
+                            maxY = Math.max(maxY, y);
+                        }
+                    }
+                }
+                assertTrue(maxX >= 0, "Icon cell " + index + " is empty");
+                assertEquals(minX, crop.left());
+                assertEquals(minY, crop.top());
+                assertEquals(maxX + 1, crop.left() + crop.width());
+                assertEquals(maxY + 1, crop.top() + crop.height());
+            }
+        }
+    }
+
+    @Test
+    void parchmentArtHasNoBrightScuffsAndTailHasAnOpenAttachment() throws Exception {
+        try (InputStream in = getClass().getResourceAsStream("/assets/mca/textures/gui/dialogue/paper_frame.png")) {
+            assertNotNull(in);
+            BufferedImage frame = ImageIO.read(in);
+            for (int y = 0; y < frame.getHeight(); y++) {
+                for (int x = 0; x < frame.getWidth(); x++) {
+                    assertNotEquals(0xFFFFF4D9, frame.getRGB(x, y), "Isolated bright scuff at " + x + "," + y);
+                }
+            }
+        }
+        try (InputStream in = getClass().getResourceAsStream("/assets/mca/textures/gui/dialogue/paper_tail.png")) {
+            assertNotNull(in);
+            BufferedImage tail = ImageIO.read(in);
+            assertEquals(0, tail.getRGB(0, 0) >>> 24);
+            assertEquals(0xFFFAE8C9, tail.getRGB(15, 10));
+        }
+    }
+
+    @Test
+    void parchmentInteriorHasAContinuousWarmVerticalGradient() throws Exception {
+        try (InputStream in = getClass().getResourceAsStream("/assets/mca/textures/gui/dialogue/paper_frame.png")) {
+            assertNotNull(in);
+            BufferedImage paper = ImageIO.read(in);
+            int top = paper.getRGB(12, 7);
+            int bottom = paper.getRGB(12, 16);
+            assertTrue((top & 0xFF) > (bottom & 0xFF), "Paper should grow warmer towards the bottom");
+            assertTrue(((top >> 8) & 0xFF) > ((bottom >> 8) & 0xFF));
+            for (int y = 7; y <= 16; y++) {
+                assertEquals(paper.getRGB(7, y), paper.getRGB(16, y),
+                        "Nine-slice interior should keep the same tone across the row");
+            }
+        }
+    }
+
     private static void verify(String name, int width, int height) throws Exception {
         String path = "/assets/mca/textures/gui/dialogue/" + name + ".png";
         try (InputStream in = DialogueSkinResourcesTest.class.getResourceAsStream(path)) {
