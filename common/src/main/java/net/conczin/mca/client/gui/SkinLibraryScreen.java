@@ -81,6 +81,9 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private static final float CANVAS_SCALE = 2.35f;
     private static final long SEARCH_DEBOUNCE_MILLIS = 400;
     private static final String LIBRARY_NAMESPACE = "immersive_library:";
+    private static final int PROFESSION_AREA_WIDTH = 105;
+    private static final int PROFESSION_AREA_HEIGHT = 110;
+    private static final int PROFESSION_CELL = 21;
     protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level), EntitySpawnReason.LOAD));
     private final List<LiteContent> serverContent = new ArrayList<>();
     private final ColorSelector color = new ColorSelector();
@@ -88,6 +91,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private final List<LiteContent> contents = new ArrayList<>();
     private String filteredString = "";
     private EditBox searchWidget;
+    private EditBox professionSearchWidget;
     private long searchDueAt;
     private SortingMode sortingMode = SortingMode.RECOMMENDATIONS;
     private boolean filterInvalidSkins = true;
@@ -1050,27 +1054,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
                 //profession
                 if (workspace.skinType == SkinType.CLOTHING) {
-                    int ox = 0;
-                    int oy = 0;
-                    List<ItemButtonWidget> widgets = new LinkedList<>();
-                    for (VillagerProfession profession : BuiltInRegistries.VILLAGER_PROFESSION) {
-                        String professionPath = BuiltInRegistries.VILLAGER_PROFESSION.getKey(profession).getPath();
-                        MutableComponent text = Component.translatable("entity.minecraft.villager." + professionPath);
-                        ItemButtonWidget widget = addRenderableWidget(new ItemButtonWidget(width / 2 - 200 + ox * 21, height / 2 - 30 + oy * 21, 20, text,
-                                ProfessionIcons.ICONS.getOrDefault(professionPath, Items.OAK_SAPLING.getDefaultInstance()),
-                                v -> {
-                                    workspace.profession = "none".equals(professionPath) ? null : professionPath;
-                                    widgets.forEach(b -> b.active = true);
-                                    v.active = false;
-                                }));
-                        widget.active = !Objects.equals(workspace.profession, "none".equals(professionPath) ? null : professionPath);
-                        widgets.add(widget);
-                        ox++;
-                        if (ox >= 5) {
-                            ox = 0;
-                            oy++;
-                        }
-                    }
+                    buildProfessionPicker();
                 }
 
 
@@ -1221,6 +1205,78 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                         }));
             }
         }
+    }
+
+    private void buildProfessionPicker() {
+        List<VillagerProfession> professions = BuiltInRegistries.VILLAGER_PROFESSION.stream().toList();
+        int x = width / 2 - 200;
+        int y = height / 2 - 30;
+        int columns = (PROFESSION_AREA_WIDTH + 1) / PROFESSION_CELL;
+        int rows = (PROFESSION_AREA_HEIGHT + 1) / PROFESSION_CELL;
+
+        if (professions.size() > columns * rows) {
+            // Keep the search widget across rebuilds to preserve its text and focus.
+            if (professionSearchWidget == null) {
+                professionSearchWidget = new EditBox(this.font, 0, 0, PROFESSION_AREA_WIDTH, 16,
+                        Component.translatable("gui.skin_library.search"));
+                professionSearchWidget.setHint(Component.translatable("gui.skin_library.search"));
+                professionSearchWidget.setResponder(v -> rebuild());
+            }
+            professionSearchWidget.setPosition(x, y);
+            addRenderableWidget(professionSearchWidget);
+
+            y += 18;
+            rows = (PROFESSION_AREA_HEIGHT - 18 + 1) / PROFESSION_CELL;
+            professions = findProfessions(professions, professionSearchWidget.getValue(), columns * rows);
+        }
+
+        List<ItemButtonWidget> widgets = new ArrayList<>();
+        for (VillagerProfession profession : professions) {
+            String professionName = getProfessionName(profession);
+            String professionPath = BuiltInRegistries.VILLAGER_PROFESSION.getKey(profession).getPath();
+            int ox = widgets.size() % columns;
+            int oy = widgets.size() / columns;
+            ItemButtonWidget widget = addRenderableWidget(new ItemButtonWidget(
+                    x + ox * PROFESSION_CELL, y + oy * PROFESSION_CELL, PROFESSION_CELL - 1,
+                    getProfessionText(professionPath),
+                    ProfessionIcons.ICONS.getOrDefault(professionPath, Items.OAK_SAPLING.getDefaultInstance()),
+                    v -> {
+                        workspace.profession = professionName;
+                        widgets.forEach(b -> b.active = true);
+                        v.active = false;
+                    }));
+            widget.active = !Objects.equals(workspace.profession, professionName);
+            widgets.add(widget);
+        }
+    }
+
+    private List<VillagerProfession> findProfessions(List<VillagerProfession> professions, String query, int limit) {
+        String needle = query.strip().toLowerCase(Locale.ROOT);
+        List<VillagerProfession> matches = professions.stream()
+                .filter(profession -> {
+                    String path = BuiltInRegistries.VILLAGER_PROFESSION.getKey(profession).getPath();
+                    return path.contains(needle)
+                            || getProfessionText(path).getString().toLowerCase(Locale.ROOT).contains(needle);
+                })
+                .limit(limit)
+                .collect(Collectors.toCollection(ArrayList::new));
+
+        professions.stream()
+                .filter(profession -> Objects.equals(workspace.profession, getProfessionName(profession))
+                        && !matches.contains(profession))
+                .findFirst()
+                .ifPresent(selected -> {
+                    if (matches.size() == limit) {
+                        matches.removeLast();
+                    }
+                    matches.addFirst(selected);
+                });
+        return matches;
+    }
+
+    private static String getProfessionName(VillagerProfession profession) {
+        String path = BuiltInRegistries.VILLAGER_PROFESSION.getKey(profession).getPath();
+        return "none".equals(path) ? null : path;
     }
 
     private void drawControls(LiteContent content, boolean advanced, int cx, int cy) {
