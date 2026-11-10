@@ -17,6 +17,7 @@ dependencies {
         }
     }
     runtimeOnly "maven.modrinth:sodium:${sodium_neoforge_version}"
+    runtimeOnly "maven.modrinth:lithium:${lithium_neoforge_version}"
     runtimeOnly "maven.modrinth:jei:${jei_neoforge_version}"
     //runtimeOnly "maven.modrinth:iris:${iris_neoforge_version}"
     runtimeOnly "maven.modrinth:ferrite-core:${ferritecore_neoforge_version}"
