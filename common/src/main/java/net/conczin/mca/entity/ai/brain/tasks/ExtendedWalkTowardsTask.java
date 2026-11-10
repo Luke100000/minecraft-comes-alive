@@ -238,6 +238,25 @@ public final class ExtendedWalkTowardsTask {
         return retractOwnedWalkTarget(entity, destinationMemory).isPresent();
     }
 
+    /** An active POI producer must keep observing its own WALK_TARGET, but never a foreign one. */
+    public static boolean ownsWalkTarget(VillagerEntityMCA entity, MemoryModuleType<GlobalPos> destinationMemory) {
+        return entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                .filter(target -> target instanceof DestinationOwnedWalkTarget owned
+                        && owned.ownedBy(destinationMemory))
+                .isPresent();
+    }
+
+    /**
+     * Persistence is an attribute of the logical journey, not necessarily its
+     * physical PositionTracker: HOME may finish through a multi-position bed approach.
+     * Other transient trackers must still respect vanilla sink timeouts.
+     */
+    public static boolean isPersistentJourney(WalkTarget target) {
+        return target != null && (target.getTarget() instanceof PersistentPathTarget
+                || target instanceof WalkTargetFailureMemory.TargetIdentityOwner
+                && target.getTarget() instanceof MultiTargetPositionTracker);
+    }
+
     private static Optional<GlobalPos> retractOwnedWalkTarget(VillagerEntityMCA entity,
                                                                MemoryModuleType<GlobalPos> destinationMemory) {
         Optional<WalkTarget> currentTarget = entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET);

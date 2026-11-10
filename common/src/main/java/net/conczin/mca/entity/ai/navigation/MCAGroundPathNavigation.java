@@ -4,6 +4,7 @@ import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.PathingBlockInteraction;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
+import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTask;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.tags.FluidTags;
@@ -30,6 +31,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Set;
+import java.util.Comparator;
 
 public class MCAGroundPathNavigation extends GroundPathNavigation {
     private static final float REQUIRED_PATH_LENGTH = 48.0F;
@@ -44,6 +46,9 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     private static final double FAILED_TARGET_INVALIDATION_RADIUS_SQR = 9.0D;
     private final ClimbTraversal climbTraversal;
     private FailedExtendedSearch failedExtendedSearch;
+    // The Brain producer gets its own one-shot wake-up even when navigation
+    // has already consumed the changed terrain by recomputing its path.
+    private BlockPos pendingProducerRetryInvalidation;
     private boolean recomputingPath;
     private Detour detour;
 
@@ -51,13 +56,15 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
     private static final class Detour {
         private final BlockPos destination;
+        private final BlockPos physicalTarget;
         private final BlockPos origin;
         private final BlockPos step;
         private double distance;
         private DetourPhase phase = DetourPhase.FLANKING;
 
-        private Detour(BlockPos destination, BlockPos origin, BlockPos step, double distance) {
+        private Detour(BlockPos destination, BlockPos physicalTarget, BlockPos origin, BlockPos step, double distance) {
             this.destination = destination.immutable();
+            this.physicalTarget = physicalTarget.immutable();
             this.origin = origin.immutable();
             this.step = step.immutable();
             this.distance = distance;
@@ -219,7 +226,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 // A previous full search already exhausted the ordinary frontier.
                 // Retry that search directly instead of expanding it twice.
                 Path path = super.createPath(targets, radiusOffset, above, reachRange, extendedPathLength);
-                updateFailedExtendedSearch(target, path, null, extendedPathLength);
+                updateFailedExtendedSearch(target, targets, path, null, extendedPathLength);
                 return path;
             }
             if (requiresExtendedPath(this.mob, target)) {
@@ -228,7 +235,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 float pathLength = useExtended ? extendedPathLength : ordinaryPathLength;
                 Path path = super.createPath(targets, radiusOffset, above, reachRange, pathLength);
                 if (useExtended) {
-                    updateFailedExtendedSearch(target, path, null, extendedPathLength);
+                    updateFailedExtendedSearch(target, targets, path, null, extendedPathLength);
                 } else if (suppressExtended) {
                     PathRequestDiagnostics.recordSuppressedExtendedSearch(this.mob);
                 }
@@ -244,7 +251,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             }
             if (ordinaryPath == null
                     || ordinaryPath.canReach()
-                    || isUsefulPartialPath(ordinaryPath, target)
+                    || isUsefulPartialPath(ordinaryPath, targets)
                     || extendedPathLength <= ordinaryPathLength) {
                 return ordinaryPath;
             }
@@ -255,7 +262,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             }
 
             Path extendedPath = super.createPath(targets, radiusOffset, above, reachRange, extendedPathLength);
-            updateFailedExtendedSearch(target, extendedPath, ordinaryPath, extendedPathLength);
+            updateFailedExtendedSearch(target, targets, extendedPath, ordinaryPath, extendedPathLength);
             return preferEscalatedPath(ordinaryPath, extendedPath);
         }
         return super.createPath(targets, radiusOffset, above, reachRange, ordinaryPathLength);
@@ -281,9 +288,10 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         return Mth.floor(this.mob.getY() + 0.5D);
     }
 
-    private void updateFailedExtendedSearch(BlockPos target, Path extendedPath, Path ordinaryPath, float pathLength) {
+    private void updateFailedExtendedSearch(BlockPos target, Set<BlockPos> requestedTargets,
+                                            Path extendedPath, Path ordinaryPath, float pathLength) {
         if (extendedPath == null || (!extendedPath.canReach()
-                && !isUsefulPartialPath(extendedPath, target)
+                && !isUsefulPartialPath(extendedPath, requestedTargets)
                 && (ordinaryPath == null
                 || extendedPath.getDistToTarget() >= ordinaryPath.getDistToTarget()))) {
             if (this.failedExtendedSearch == null || !this.failedExtendedSearch.target.equals(target)) {
@@ -309,6 +317,13 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (!failure.target.equals(target) || !hasFailureEvidenceFor(target)
                 || failure.pathLength != extendedPathLength
                 || this.mob.blockPosition().distSqr(failure.origin) >= FAILED_EXTENDED_RETRY_MOVE_DISTANCE_SQR) {
+            clearFailedExtendedSearch();
+            return false;
+        }
+        if (failure.invalidated && this.recomputingPath) {
+            // Native recomputation must not reuse terrain evidence invalidated
+            // by a block update. Ordinary requests still honor the backoff
+            // until the producer consumes its separate one-shot notification.
             clearFailedExtendedSearch();
             return false;
         }
@@ -360,10 +375,17 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 || (distanceComparison == 0 && candidate.getNodeCount() < current.getNodeCount());
     }
 
-    private static boolean targetsCurrentPersistentWalkTarget(Set<BlockPos> targets, WalkTarget walkTarget) {
-        if (walkTarget == null
-                || !(walkTarget.getTarget() instanceof PersistentPathTarget)
-                || targets.size() != 1) {
+    private boolean targetsCurrentPersistentWalkTarget(Set<BlockPos> targets, WalkTarget walkTarget) {
+        if (!ExtendedWalkTowardsTask.isPersistentJourney(walkTarget)) {
+            return false;
+        }
+        if (walkTarget.getTarget() instanceof MultiTargetPositionTracker multiTarget) {
+            // Only an owned, durable POI journey may use the expensive search.
+            // The logical POI stays the failure identity, but the pathfinder must
+            // search the actual physical endpoints (e.g. positions beside a bed).
+            return !targets.isEmpty() && targets.equals(multiTarget.getPathTargets(this.mob));
+        }
+        if (targets.size() != 1) {
             return false;
         }
         BlockPos pathTarget = targets.iterator().next();
@@ -393,6 +415,24 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         // a solid destination, including a bed. Measure against the pathfinder's
         // actual target, while keeping a flank waypoint distinct by its column.
         return path.getDistToTarget() < path.getNodePos(0).distManhattan(path.getTarget());
+    }
+
+    private static boolean isUsefulPartialPath(Path path, Set<BlockPos> requestedTargets) {
+        if (path == null) {
+            return false;
+        }
+        BlockPos pathTarget = path.getTarget();
+        return requestedTargets.stream().anyMatch(target -> target.getX() == pathTarget.getX()
+                && target.getZ() == pathTarget.getZ())
+                && isUsefulPartialPath(path, pathTarget);
+    }
+
+    /** Checks useful progress against a journey's physical endpoints, not only its logical POI. */
+    public static boolean isUsefulPartialPath(@Nullable Path path, Mob mob, WalkTarget walkTarget) {
+        if (walkTarget.getTarget() instanceof MultiTargetPositionTracker multiTarget) {
+            return isUsefulPartialPath(path, multiTarget.getPathTargets(mob));
+        }
+        return isUsefulPartialPath(path, walkTarget.getTarget().currentBlockPosition());
     }
 
     @Override
@@ -552,22 +592,30 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (failure == null || !hasFailureEvidenceFor(failure.target)) {
             return;
         }
-        // An opening anywhere in the ordinary frontier can make the destination
-        // probe useful again, even when it is far from both endpoints.
         float ordinaryPathLength = getOrdinaryPathLength(this.mob);
+        // A change off the direct line can open a route around an obstacle.
         if (changed.distSqr(failure.target) <= FAILED_TARGET_INVALIDATION_RADIUS_SQR
                 || changed.distSqr(failure.origin) <= ordinaryPathLength * ordinaryPathLength) {
             failure.invalidated = true;
+            pendingProducerRetryInvalidation = failure.target;
         }
     }
 
     public boolean consumeRetryInvalidation(BlockPos target) {
-        FailedExtendedSearch failure = this.failedExtendedSearch;
-        if (failure == null || !failure.invalidated || !failure.target.equals(target)) {
+        if (!target.equals(pendingProducerRetryInvalidation)) {
             return false;
         }
-        clearFailedExtendedSearch();
+        pendingProducerRetryInvalidation = null;
+        FailedExtendedSearch failure = this.failedExtendedSearch;
+        if (failure != null && failure.invalidated && failure.target.equals(target)) {
+            clearFailedExtendedSearch();
+        }
         return true;
+    }
+
+    private boolean hasNavigationRetryInvalidation(BlockPos target) {
+        FailedExtendedSearch failure = this.failedExtendedSearch;
+        return failure != null && failure.invalidated && failure.target.equals(target);
     }
 
     @Override
@@ -599,7 +647,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         }
         WalkTarget walkTarget = this.mob.getBrain()
                 .getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
-        if (walkTarget == null || !(walkTarget.getTarget() instanceof PersistentPathTarget)) {
+        if (!ExtendedWalkTowardsTask.isPersistentJourney(walkTarget)) {
             clearDetour();
             return;
         }
@@ -610,11 +658,13 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (!this.path.isDone() || this.isStuck()) {
             return;
         }
-        if (destination.distManhattan(this.mob.blockPosition()) <= walkTarget.getCloseEnoughDist()) {
+        if (MultiTargetPositionTracker.isReached(this.mob, walkTarget.getTarget(),
+                walkTarget.getCloseEnoughDist())) {
             clearDetour();
             return;
         }
-        if (this.detour != null || (!this.path.canReach() && !isUsefulPartialPath(this.path, destination))) {
+        if (this.detour != null || (!this.path.canReach()
+                && !isUsefulPartialForWalkTarget(this.path, walkTarget))) {
             if (!continueDetour(walkTarget)) {
                 recordTerminalPartialFailure(destination);
                 // A failed flank must return to the producer's retry clock, rather
@@ -629,12 +679,12 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (this.detour == null) {
             // A failed extended search already exhausted the ordinary frontier.
             // Re-probe only when its backoff expires or its evidence changes.
-            if (!consumeRetryInvalidation(destination) && skipRepeatedFailedExtendedSearch(destination)) {
+            if (!hasNavigationRetryInvalidation(destination) && skipRepeatedFailedExtendedSearch(destination)) {
                 return beginDetour(walkTarget, destination);
             }
-            Path destinationPath = this.createPath(destination, 0);
+            Path destinationPath = createPathForWalkTarget(walkTarget);
             if (destinationPath != null
-                    && (destinationPath.canReach() || isUsefulPartialPath(destinationPath, destination))) {
+                    && (destinationPath.canReach() || isUsefulPartialForWalkTarget(destinationPath, walkTarget))) {
                 if (destinationPath.canReach()) {
                     clearFailure(this.mob);
                 }
@@ -644,14 +694,19 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             return beginDetour(walkTarget, destination);
         }
 
-        boolean routeChanged = consumeRetryInvalidation(destination);
+        if (walkTarget.getTarget() instanceof MultiTargetPositionTracker multiTarget
+                && !multiTarget.getPathTargets(this.mob).contains(this.detour.physicalTarget)) {
+            clearDetour();
+            return false;
+        }
+        boolean routeChanged = hasNavigationRetryInvalidation(destination);
         // Short flank legs deliberately move sideways, so immediately searching
         // HOME again often just returns the route back to the obstacle's start.
         // At completed flank legs, a partial path may already cross the old
         // blocked frontier. Otherwise keep flanking or use the bounded crossing.
         Path destinationPath = this.detour.phase == DetourPhase.CROSSING || routeChanged
                 || this.detour.distance >= getOrdinaryPathLength(this.mob) * 0.25D
-                ? this.createPath(destination, 0)
+                ? createPathForWalkTarget(walkTarget)
                 : null;
         if (destinationPath != null && destinationPath.canReach()) {
             clearDetour();
@@ -661,14 +716,17 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         }
 
         if (this.detour.phase == DetourPhase.FLANKING
-                && isUsefulPartialBeyondDetourOrigin(destinationPath, this.detour.origin, destination)) {
+                && destinationPath != null
+                && isUsefulPartialForWalkTarget(destinationPath, walkTarget)
+                && isUsefulPartialBeyondDetourOrigin(destinationPath, this.detour.origin,
+                        destinationPath.getTarget())) {
             this.detour.phase = DetourPhase.CROSSING;
             this.moveTo(destinationPath, walkTarget.getSpeedModifier());
             return true;
         }
 
         if (this.detour.phase == DetourPhase.CROSSING) {
-            if (isUsefulPartialPath(destinationPath, destination)) {
+            if (isUsefulPartialForWalkTarget(destinationPath, walkTarget)) {
                 this.moveTo(destinationPath, walkTarget.getSpeedModifier());
                 return true;
             }
@@ -677,7 +735,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         }
 
         if (this.detour.distance >= getOrdinaryPathLength(this.mob)) {
-            Path crossing = tryCrossObstacle(destination);
+            Path crossing = tryCrossObstacle(this.detour.physicalTarget);
             if (crossing != null) {
                 this.detour.phase = DetourPhase.CROSSING;
                 this.moveTo(crossing, walkTarget.getSpeedModifier());
@@ -710,13 +768,14 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     }
 
     private boolean beginDetour(WalkTarget walkTarget, BlockPos destination) {
-        if (!hasWalkableApproach(destination)) {
+        BlockPos physicalTarget = physicalTargetForDetour(walkTarget);
+        if (physicalTarget == null || !hasWalkableApproach(physicalTarget)) {
             return false;
         }
 
         BlockPos origin = this.mob.blockPosition();
-        double dx = destination.getX() + 0.5D - this.mob.getX();
-        double dz = destination.getZ() + 0.5D - this.mob.getZ();
+        double dx = physicalTarget.getX() + 0.5D - this.mob.getX();
+        double dz = physicalTarget.getZ() + 0.5D - this.mob.getZ();
         double horizontalDistance = Math.sqrt(dx * dx + dz * dz);
         if (horizontalDistance < 1.0D) {
             return false;
@@ -725,7 +784,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         double probeDistance = getOrdinaryPathLength(this.mob) * 0.5D;
         double flankX = -dz / horizontalDistance * probeDistance;
         double flankZ = dx / horizontalDistance * probeDistance;
-        int preferredSide = ((destination.getX() ^ destination.getZ() ^ this.mob.getId()) & 1) == 0 ? 1 : -1;
+        int preferredSide = ((physicalTarget.getX() ^ physicalTarget.getZ() ^ this.mob.getId()) & 1) == 0 ? 1 : -1;
         Path partialPath = null;
         BlockPos partialCandidate = null;
         for (int side : new int[]{preferredSide, -preferredSide}) {
@@ -742,7 +801,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                     continue;
                 }
                 if (path.canReach()) {
-                    this.detour = new Detour(destination, origin, candidate.subtract(origin), progress);
+                    this.detour = new Detour(destination, physicalTarget, origin, candidate.subtract(origin), progress);
                     this.moveTo(path, walkTarget.getSpeedModifier());
                     return true;
                 }
@@ -755,7 +814,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         // Keep the opposite side's complete route preferable to a bounded
         // partial search, but retain useful progress when neither side finishes.
         if (partialPath != null) {
-            this.detour = new Detour(destination, origin, partialCandidate.subtract(origin),
+            this.detour = new Detour(destination, physicalTarget, origin, partialCandidate.subtract(origin),
                     horizontalDistance(origin, partialPath.getEndNode().asBlockPos()));
             this.moveTo(partialPath, walkTarget.getSpeedModifier());
             return true;
@@ -867,17 +926,13 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         WalkTarget walkTarget = this.mob.getBrain()
                 .getMemoryInternal(MemoryModuleType.WALK_TARGET)
                 .orElse(null);
-        if (walkTarget == null || !(walkTarget.getTarget() instanceof PersistentPathTarget)) {
+        if (!ExtendedWalkTowardsTask.isPersistentJourney(walkTarget)) {
             return;
         }
-        if (this.mob instanceof VillagerEntityMCA villager
-                && WalkTargetFailureMemory.hasFailureFor(villager, walkTarget.getTarget().currentBlockPosition())) {
-            return;
-        }
-
         BlockPos destination = walkTarget.getTarget().currentBlockPosition();
-        if (destination.distManhattan(this.mob.blockPosition()) <= walkTarget.getCloseEnoughDist()
-                || !isUsefulPartialPath(completedPath, destination)) {
+        if (MultiTargetPositionTracker.isReached(this.mob, walkTarget.getTarget(),
+                walkTarget.getCloseEnoughDist())
+                || !isUsefulPartialForWalkTarget(completedPath, walkTarget)) {
             return;
         }
         // An endpoint closer to the goal is not proof that the villager moved.
@@ -885,20 +940,52 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         // failure clock; its producer owns the next retry and eventual give-up.
         if (this.mob.blockPosition().equals(completedPath.getNodePos(0))) {
             recordTerminalPartialFailure(destination);
+            this.stop();
             return;
         }
-        Path nextPath = this.createPath(destination, 0);
+        Path nextPath = createPathForWalkTarget(walkTarget);
         if (nextPath == null
-                || (!nextPath.canReach() && !isUsefulPartialPath(nextPath, destination))) {
+                || (!nextPath.canReach() && !isUsefulPartialForWalkTarget(nextPath, walkTarget))) {
             // A useful short segment can finish at the edge of an obstacle.
             // Let the existing navigation recovery try a flank before the
             // producer receives terminal failure for this destination.
             if (!beginDetour(walkTarget, destination)) {
                 recordTerminalPartialFailure(destination);
+                // This completed route has no further progress to offer at the
+                // current position. Let Brain own the next attempt, rather than
+                // retrying the same completed path on every navigation tick.
+                this.stop();
             }
             return;
         }
+        if (nextPath.canReach()) {
+            clearFailure(this.mob);
+        }
         this.moveTo(nextPath, walkTarget.getSpeedModifier());
+    }
+
+    private Path createPathForWalkTarget(WalkTarget walkTarget) {
+        if (walkTarget.getTarget() instanceof MultiTargetPositionTracker multiTarget) {
+            return multiTarget.createPath(this, this.mob, 0);
+        }
+        return this.createPath(walkTarget.getTarget().currentBlockPosition(), 0);
+    }
+
+    private boolean isUsefulPartialForWalkTarget(@Nullable Path path, WalkTarget walkTarget) {
+        return isUsefulPartialPath(path, this.mob, walkTarget);
+    }
+
+    @Nullable
+    private BlockPos physicalTargetForDetour(WalkTarget walkTarget) {
+        if (!(walkTarget.getTarget() instanceof MultiTargetPositionTracker multiTarget)) {
+            return walkTarget.getTarget().currentBlockPosition();
+        }
+        Set<BlockPos> endpoints = multiTarget.getPathTargets(this.mob);
+        if (this.path != null && endpoints.contains(this.path.getTarget())) {
+            return this.path.getTarget();
+        }
+        return endpoints.stream().min(Comparator.comparingDouble(this.mob.blockPosition()::distSqr))
+                .orElse(null);
     }
 
     private void recordTerminalPartialFailure(BlockPos destination) {

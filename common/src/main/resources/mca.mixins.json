@@ -8,6 +8,7 @@
     "MixinAbstractFurnaceBlockEntity",
     "MixinAdvancementRewards",
     "MixinCrossbowAttack",
+    "MixinCrossbowItem",
     "MixinEntity",
     "MixinFishingHookPredicate",
     "MixinGameTestInfo",

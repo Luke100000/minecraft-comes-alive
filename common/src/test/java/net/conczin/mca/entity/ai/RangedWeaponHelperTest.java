@@ -1,5 +1,6 @@
 package net.conczin.mca.entity.ai;
 
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.phys.Vec3;
 import org.junit.jupiter.api.Test;
 
@@ -8,6 +9,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RangedWeaponHelperTest {
     private static final double EPSILON = 1.0E-3D;
+
+    @Test
+    void crossbowSpreadImprovesNormalDifficultyWithoutRemovingHardDifficultyMisses() {
+        assertEquals(10.0F, RangedWeaponHelper.crossbowInaccuracy(Difficulty.EASY));
+        assertEquals(4.0F, RangedWeaponHelper.crossbowInaccuracy(Difficulty.NORMAL));
+        assertEquals(2.0F, RangedWeaponHelper.crossbowInaccuracy(Difficulty.HARD));
+    }
 
     @Test
     void lateralMovingSmallTargetReceivesAnInterceptingShot() {
@@ -50,6 +58,26 @@ class RangedWeaponHelperTest {
                         "nominal projectile missed body at distance=" + distance + ", height=" + height);
             }
         }
+    }
+
+    @Test
+    void fasterCrossbowArrowMeetsUpperTorsoAtItsActualSpeed() {
+        Vec3 launch = new Vec3(0, 1.52, 0);
+        Vec3 target = new Vec3(8, 0, 0);
+        double height = 1.95;
+        Vec3 upperTorso = target.add(0, height * 0.2, 0);
+        float speed = 1.75F;
+        var shot = RangedWeaponHelper.solveArrowShot(launch, upperTorso, height, Vec3.ZERO, speed).orElseThrow();
+        Vec3 position = launch;
+        Vec3 velocity = shot.direction().normalize().scale(speed);
+        for (int tick = 0; tick < Math.ceil(shot.flightTicks()); tick++) {
+            position = position.add(velocity.scale(Math.min(1, shot.flightTicks() - tick)));
+            velocity = velocity.scale(0.99).subtract(0, 0.05, 0);
+        }
+        assertTrue(position.distanceTo(target.add(0, height * 0.7, 0)) < 1.0E-4,
+                "crossbow prediction must use crossbow speed and the actual upper-torso aim point");
+        assertTrue(RangedWeaponHelper.solveArrowShot(launch, upperTorso, height, Vec3.ZERO, 0).isEmpty(),
+                "non-positive arrow speed cannot produce a flight prediction");
     }
 
     @Test

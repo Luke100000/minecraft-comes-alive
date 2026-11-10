@@ -12,6 +12,7 @@ import net.conczin.mca.entity.ai.SchedulesMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
+import net.conczin.mca.entity.ai.navigation.BedApproachTarget;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.conczin.mca.neoforge.gametest.AfterBatch;
@@ -257,6 +258,112 @@ public final class WanderOrTeleportToTargetTaskGameTests {
 
         movingTarget.discard();
         villager.discard();
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_home_semantic_persistent", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void ownedBedsideJourneyKeepsPersistentLifetimeWithoutMakingRawBedTargetsPersistent(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(5, 2, 5));
+        BlockPos bedFoot = start.east(7);
+        BlockPos bedHead = bedFoot.east();
+        prepareFlatArea(helper, start, 14, 3);
+        BlockState bed = Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.EAST);
+        helper.getLevel().setBlock(bedFoot, bed.setValue(BedBlock.PART, BedPart.FOOT), 3);
+        helper.getLevel().setBlock(bedHead, bed.setValue(BedBlock.PART, BedPart.HEAD), 3);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start))
+                .spawn(EntitySpawnReason.STRUCTURE);
+        try {
+            villager.refreshBrain(helper.getLevel());
+            villager.setNoAi(true);
+            villager.setOnGround(true);
+            villager.getBrain().setMemory(MemoryModuleType.HOME,
+                    net.minecraft.core.GlobalPos.of(helper.getLevel().dimension(), bedHead));
+            long now = helper.getLevel().getGameTime();
+            var producer = ExtendedWalkTowardsTask.createWithFinalTarget(
+                    MemoryModuleType.HOME, 0.5F, 1, 1200,
+                    ignored -> false, ignored -> {}, (world, entity, destination) ->
+                            BedApproachTarget.create(world, destination.pos()));
+            helper.assertTrue(producer.tryStart(helper.getLevel(), villager, now),
+                    "HOME producer did not publish its owned bed approach");
+            WalkTarget owned = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElseThrow();
+            helper.assertTrue(owned.getTarget() instanceof BedApproachTarget,
+                    "HOME producer did not hand off to a real bedside semantic target");
+            var bedside = (BedApproachTarget) owned.getTarget();
+            helper.assertTrue(!bedside.getPathTargets(villager).isEmpty(),
+                    "bedside fixture has no physically reachable approach cells");
+
+            WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
+            helper.assertTrue(sink.tryStart(helper.getLevel(), villager, now),
+                    "owned bed approach did not start navigation");
+            helper.assertTrue(!sink.timedOut(now + 251L),
+                    "owned HOME bedside journey inherited the disposable path timeout");
+            sink.doStop(helper.getLevel(), villager, now + 251L);
+
+            villager.getBrain().eraseMemory(MemoryModuleType.PATH);
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(bedside, 0.5F, 0));
+            WanderOrTeleportToTargetTask rawSink = new WanderOrTeleportToTargetTask();
+            helper.assertTrue(rawSink.tryStart(helper.getLevel(), villager, now),
+                    "raw bed tracker fixture did not start");
+            helper.assertTrue(rawSink.timedOut(now + 251L),
+                    "an unowned bedside tracker incorrectly inherited persistent journey status");
+            rawSink.doStop(helper.getLevel(), villager, now + 251L);
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_home_semantic_useful_partial", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void usefulOwnedBedsidePartialDoesNotStartUnreachableFailureClock(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(40, 1, 40));
+        BlockPos bedHead = start.east(8);
+        prepareFlatArea(helper, start, 36, 3);
+        for (int z = -30; z <= 30; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(3, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        BlockState bed = Blocks.WHITE_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.EAST);
+        helper.getLevel().setBlock(bedHead.west(), bed.setValue(BedBlock.PART, BedPart.FOOT), 3);
+        helper.getLevel().setBlock(bedHead, bed.setValue(BedBlock.PART, BedPart.HEAD), 3);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start))
+                .spawn(EntitySpawnReason.STRUCTURE);
+        try {
+            villager.refreshBrain(helper.getLevel());
+            villager.setNoAi(true);
+            villager.setOnGround(true);
+            villager.getBrain().setMemory(MemoryModuleType.HOME,
+                    net.minecraft.core.GlobalPos.of(helper.getLevel().dimension(), bedHead));
+            long now = helper.getLevel().getGameTime();
+            var producer = ExtendedWalkTowardsTask.createWithFinalTarget(
+                    MemoryModuleType.HOME, 0.5F, 0, 1_200,
+                    ignored -> false, ignored -> {}, (world, entity, destination) ->
+                            BedApproachTarget.create(world, destination.pos()));
+            helper.assertTrue(producer.tryStart(helper.getLevel(), villager, now),
+                    "HOME did not publish its producer-owned bedside intent");
+            WalkTarget owned = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElseThrow();
+            helper.assertTrue(owned instanceof WalkTargetFailureMemory.TargetIdentityOwner
+                            && owned.getTarget() instanceof BedApproachTarget,
+                    "fixture needs an owned semantic bedside target");
+
+            WanderOrTeleportToTargetTask sink = new WanderOrTeleportToTargetTask();
+            helper.assertTrue(sink.tryStart(helper.getLevel(), villager, now),
+                    "movement sink did not start its bounded partial bedside path");
+            Path path = villager.getNavigation().getPath();
+            helper.assertTrue(path != null && !path.canReach()
+                            && MCAGroundPathNavigation.isUsefulPartialPath(path, path.getTarget())
+                            && ((BedApproachTarget) owned.getTarget()).getPathTargets(villager).contains(path.getTarget()),
+                    "fixture requires useful partial progress to a physical bedside endpoint: " + path);
+            helper.assertTrue(villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                            .isEmpty(),
+                    "useful owned bedside partial incorrectly started an unreachable failure clock");
+        } finally {
+            villager.discard();
+        }
         helper.succeed();
     }
 

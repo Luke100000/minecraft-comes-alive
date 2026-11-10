@@ -18,6 +18,7 @@ import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.level.pathfinder.*;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -184,7 +185,8 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         int nodeCount = super.getNeighbors(nodes, origin);
         nodeCount = rejectBlockedTransitions(nodes, nodeCount, origin);
         if (!isClimbable(origin.x, origin.y, origin.z)) {
-            return addDescendingClimbableEntries(nodes, nodeCount, origin.asBlockPos());
+            nodeCount = addDescendingClimbableEntries(nodes, nodeCount, origin.asBlockPos());
+            return addClosedHatchDescent(nodes, nodeCount, origin);
         }
 
         nodeCount = removeLargeVerticalTransitions(nodes, nodeCount, origin);
@@ -202,6 +204,40 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             nodeCount = addClimbableNode(nodes, nodeCount, below);
         }
 
+        return nodeCount;
+    }
+
+    /** A closed hatch beneath the feet is a valid route only to safe ground in its own column. */
+    private int addClosedHatchDescent(Node[] nodes, int nodeCount, Node origin) {
+        if (nodeCount >= nodes.length) return nodeCount;
+
+        BlockPos hatch = origin.asBlockPos().below();
+        BlockState state = this.currentContext.getBlockState(hatch);
+        if (!PathingBlockInteraction.isHandOpenableTrapDoor(state)
+                || state.getValue(TrapDoorBlock.OPEN)
+                || state.getValue(TrapDoorBlock.POWERED)) return nodeCount;
+
+        BlockPos landing = hatch.below();
+        Node destination = this.getStartNode(landing);
+        if (destination.closed || (destination.type != PathType.WALKABLE && destination.type != PathType.TRAPDOOR)
+                || destination.costMalus < 0.0F)
+            return nodeCount;
+
+        // Validate the destination with the hatch hypothetically opened, not
+        // with the currently closed panel that caused the deadlock. The actual
+        // toggle remains entirely the Brain task's responsibility.
+        CollisionGetter projection = new PathingCollisionView(
+                this.currentContext.level(), origin, destination, this.mob);
+        AABB from = getDepartureBox(origin);
+        AABB to = getMobBoxAt(destination);
+        if (from.minY < to.minY || from.minY - to.minY > this.mob.getMaxFallDistance()
+                || !projection.noBlockCollision(this.mob, to)) return nodeCount;
+
+        for (int step = 1; step <= 16; step++) {
+            AABB alongDrop = from.move(0.0D, (to.minY - from.minY) * step / 16.0D, 0.0D);
+            if (!projection.noBlockCollision(this.mob, alongDrop)) return nodeCount;
+        }
+        nodes[nodeCount++] = destination;
         return nodeCount;
     }
 
@@ -378,6 +414,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         if (!crossesTrapdoor) {
             return true;
         }
+        double stepUp = uprightDoorwayStepHeight(origin, candidate);
 
         AABB departure = getDepartureBox(origin);
         AABB destination = getMobBoxAt(candidate);
@@ -388,12 +425,26 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         int steps = Mth.ceil(Math.max(Math.abs(travelX), Math.abs(travelZ)) * 16.0D);
         for (int step = 1; step <= steps; step++) {
             double fraction = (double) step / steps;
-            if (!collisions.noBlockCollision(this.mob,
-                    departure.move(travelX * fraction, 0.0D, travelZ * fraction))) {
+            AABB footprint = departure.move(travelX * fraction, 0.0D, travelZ * fraction);
+            if (!collisions.noBlockCollision(this.mob, footprint)
+                    && (stepUp <= 0.0D || stepUp > this.mob.maxUpStep()
+                    || !collisions.noBlockCollision(this.mob, footprint.move(0.0D, stepUp + FLOOR_EPSILON, 0.0D)))) {
                 return false;
             }
         }
         return true;
+    }
+
+    private double uprightDoorwayStepHeight(Node origin, Node candidate) {
+        BlockPos previous = origin.asBlockPos();
+        BlockPos next = candidate.asBlockPos();
+        BlockState first = this.currentContext.getBlockState(previous);
+        BlockState second = this.currentContext.getBlockState(next);
+        BlockState panel = PathingBlockInteraction.canFoldUprightTrapdoor(first, previous, next) ? first
+                : PathingBlockInteraction.canFoldUprightTrapdoor(second, next, previous) ? second : null;
+        if (panel == null) return 0.0D;
+        return panel.getValue(TrapDoorBlock.HALF) == Half.TOP
+                ? 1.0D : 0.1875D;
     }
 
     boolean isOpenTrapdoor(int x, int y, int z) {
