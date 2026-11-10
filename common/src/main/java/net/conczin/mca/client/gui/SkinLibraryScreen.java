@@ -683,7 +683,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 isPanning = true;
             }
         } else {
-            if (event.button() == InputConstants.MOUSE_BUTTON_LEFT && hoveredContent != null) {
+            if (hoveredContent != null) {
                 if (previousScreen == null) {
                     focusedContent = hoveredContent;
                     setPage(Page.DETAIL);
