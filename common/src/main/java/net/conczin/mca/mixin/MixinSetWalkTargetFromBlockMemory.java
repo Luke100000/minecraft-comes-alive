@@ -47,7 +47,10 @@ abstract class MixinSetWalkTargetFromBlockMemory {
                 if (!(villager instanceof VillagerEntityMCA mcaVillager)) {
                     return original.trigger(level, villager, gameTime);
                 }
-                if (mcaVillager.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET)) {
+                // Vanilla must not replace another behavior's WALK_TARGET, but this
+                // producer must still observe its own target for progress and POI changes.
+                if (mcaVillager.getBrain().hasMemoryValue(MemoryModuleType.WALK_TARGET)
+                        && !ExtendedWalkTowardsTask.ownsWalkTarget(mcaVillager, memoryType)) {
                     return false;
                 }
                 return persistentTarget.trigger(level, mcaVillager, gameTime);

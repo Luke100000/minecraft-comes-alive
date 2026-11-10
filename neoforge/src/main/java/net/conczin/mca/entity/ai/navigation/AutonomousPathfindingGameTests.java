@@ -33,6 +33,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FenceGateBlock;
 import net.minecraft.world.level.block.StairBlock;
+import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.Half;
@@ -66,12 +67,15 @@ public final class AutonomousPathfindingGameTests {
     private static final String GATE_BATCH = "mca_autonomous_closed_gate";
     private static final String ENCLOSED_GATE_BATCH = "mca_autonomous_enclosed_gate_exit";
     private static final String ENCLOSED_RAISED_GATE_BATCH = "mca_autonomous_enclosed_raised_gate_exit";
+    private static final String ENCLOSED_HATCH_BATCH = "mca_autonomous_enclosed_hatch_exit";
+    private static final String UPRIGHT_TRAPDOOR_BATCH = "mca_autonomous_upright_trapdoor_doorway";
     private static final String DECORATIVE_GATE_BATCH = "mca_autonomous_decorative_raised_gate";
     private static final String WALL_GATE_BATCH = "mca_autonomous_wall_gate_approaches";
     private static final String SLOW_HEAD_GATE_BATCH = "mca_autonomous_slow_head_gate";
     private static final String SEGMENT_BATCH = "mca_autonomous_progressive_segments";
     private static final String BOUNDED_DETOUR_BATCH = "mca_autonomous_bounded_detour";
     private static final String LONG_CORRIDOR_BATCH = "mca_autonomous_long_corridor";
+    private static final String BED_CORRIDOR_BATCH = "mca_autonomous_bedside_long_corridor";
     private static final String FLOWING_WATER_BATCH = "mca_autonomous_flowing_water";
     private static final String SHELF_HOME_BATCH = "mca_autonomous_shelf_home";
     private static final String SHELF_FULL_BRAIN_BATCH = "mca_shelf_home_full_brain";
@@ -134,6 +138,66 @@ public final class AutonomousPathfindingGameTests {
                 helper.succeed();
             } else if (elapsed >= 1_000L) {
                 helper.fail("Brain abandoned its reachable long detour; position=" + villager.blockPosition()
+                        + ", path=" + villager.getNavigation().getPath()
+                        + ", searches=" + PathRequestDiagnostics.snapshot(villager));
+            }
+        });
+    }
+
+    @GameTest(batch = BED_CORRIDOR_BATCH, templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 1_100)
+    public static void ownedBedApproachCompletesLongNearbyDetour(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(4, 1, 4));
+        BlockPos bedHead = start.east(4);
+        BlockPos center = start.offset(1, 0, 28);
+        ServerLevel level = helper.getLevel();
+        rememberArea(level, center, 32);
+        prepareFlatArea(helper, center, 32, 3);
+        for (int x = -2; x <= 4; x++) {
+            for (int z = -1; z <= 58; z++) {
+                boolean passage = z >= 0 && z <= 56 && x >= 0 && x <= 2
+                        && (z == 56 || x == 0 || x == 2);
+                boolean bedCell = z == 0 && (x == 3 || x == 4);
+                if (!passage && !bedCell) {
+                    for (int y = 0; y < 3; y++) {
+                        level.setBlock(start.offset(x, y, z), Blocks.STONE.defaultBlockState(), 3);
+                    }
+                }
+            }
+        }
+        BlockState bedState = Blocks.BED.pick(net.minecraft.world.item.DyeColor.WHITE).defaultBlockState()
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST);
+        level.setBlock(bedHead.west(), bedState.setValue(BlockStateProperties.BED_PART,
+                net.minecraft.world.level.block.state.properties.BedPart.FOOT), 3);
+        level.setBlock(bedHead, bedState.setValue(BlockStateProperties.BED_PART,
+                net.minecraft.world.level.block.state.properties.BedPart.HEAD), 3);
+
+        originalPathDistance = Config.getInstance().villagerPathfindingDistance;
+        originalTeleportConfig = Config.getInstance().allowVillagerTeleporting;
+        Config.getInstance().villagerPathfindingDistance = 160;
+        Config.getInstance().allowVillagerTeleporting = false;
+        VillagerEntityMCA villager = spawnAutonomousVillager(helper, start, bedHead, 0.5F, false, true);
+        villager.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(0.5D);
+        BedApproachTarget approach = BedApproachTarget.create(level, bedHead).orElseThrow();
+        helper.assertTrue(approach.getPathTargets(villager).contains(start.east(2)),
+                "fixture has no reachable bedside approach at the far end of the corridor");
+
+        long started = level.getGameTime();
+        boolean[] passedTurn = {false};
+        Vec3[] previous = {villager.position()};
+        helper.onEachTick(() -> {
+            long elapsed = level.getGameTime() - started;
+            helper.assertTrue(villager.position().distanceTo(previous[0]) < 3.0D,
+                    "bed approach teleported instead of walking");
+            previous[0] = villager.position();
+            passedTurn[0] |= villager.getZ() > start.getZ() + 55.5D;
+            if (approach.isReached(villager, 0)) {
+                helper.assertTrue(passedTurn[0] && elapsed > 250,
+                        "bed approach bypassed its long physical corridor");
+                helper.succeed();
+            } else if (elapsed >= 1_000) {
+                helper.fail("owned bedside journey stalled before reachable bed: pos=" + villager.blockPosition()
+                        + ", walk=" + villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
                         + ", path=" + villager.getNavigation().getPath()
                         + ", searches=" + PathRequestDiagnostics.snapshot(villager));
             }
@@ -256,7 +320,14 @@ public final class AutonomousPathfindingGameTests {
                 helper.succeed();
             } else if (!night && elapsed > 2 && !brain.hasMemoryValue(MemoryModuleType.WALK_TARGET)) {
                 helper.fail("Go Home target disappeared before arrival: pos=" + villager.position()
-                        + ", exited=" + exited[0] + ", returns=" + returns[0]);
+                        + ", exited=" + exited[0] + ", returns=" + returns[0]
+                        + ", failure=" + brain.getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                        + ", home=" + brain.getMemoryInternal(MemoryModuleType.HOME)
+                        + ", activity=" + brain.getActiveNonCoreActivity()
+                        + ", nearestHostile=" + brain.getMemoryInternal(MemoryModuleType.NEAREST_HOSTILE)
+                        + ", hurtBy=" + brain.getMemoryInternal(MemoryModuleType.HURT_BY)
+                        + ", hurtByEntity=" + brain.getMemoryInternal(MemoryModuleType.HURT_BY_ENTITY)
+                        + ", path=" + villager.getNavigation().getPath());
             } else if (elapsed >= 1_400L) {
                 helper.fail("Go Home did not reach the bed: pos=" + villager.position()
                         + ", exited=" + exited[0] + ", returns=" + returns[0]
@@ -501,6 +572,142 @@ public final class AutonomousPathfindingGameTests {
                         + (gateOnSlab ? "the raised gate on a slab" : "the normal gate")
                         + "; pos=" + current + ", gateOpened=" + sawOpen[0]
                         + ", toggles=" + gateTransitions[0]
+                        + ", path=" + villager.getNavigation().getPath());
+            }
+        });
+    }
+
+    @GameTest(batch = ENCLOSED_HATCH_BATCH, templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 650)
+    public static void villagerStuckOnTrapdoorOpensOnlySafeExitBelow(GameTestHelper helper) {
+        BlockPos landing = helper.absolutePos(new BlockPos(7, 2, 7));
+        BlockPos hatch = landing.above();
+        BlockPos start = hatch.above();
+        BlockPos target = landing.east(4);
+        ServerLevel level = helper.getLevel();
+        rememberArea(level, landing, 8);
+        rememberArea(level, landing.above(2), 8);
+        prepareFlatArea(helper, landing, 8, 5);
+
+        // The villager stands on a closed top-half hatch. Walls rule out every
+        // horizontal exit; the empty cell below the hatch leads to safe ground.
+        for (int x = -1; x <= 1; x++) {
+            for (int z = -1; z <= 1; z++) {
+                if (x == 0 && z == 0) continue;
+                for (int y = 1; y <= 3; y++) {
+                    level.setBlock(hatch.offset(x, y, z), Blocks.STONE.defaultBlockState(), 3);
+                }
+            }
+        }
+        level.setBlock(hatch, Blocks.OAK_TRAPDOOR.defaultBlockState()
+                .setValue(TrapDoorBlock.HALF, Half.TOP), 3);
+        helper.assertTrue(level.getBlockState(landing).isAir()
+                        && level.getBlockState(landing.below()).is(Blocks.STONE)
+                        && level.getBlockState(target).isAir(),
+                "hatch fixture must have an open, supported lower escape route");
+
+        originalTeleportConfig = Config.getInstance().allowVillagerTeleporting;
+        Config.getInstance().allowVillagerTeleporting = false;
+        VillagerEntityMCA villager = spawnAutonomousVillager(helper, start, target, 0.7F, true);
+        long started = level.getGameTime();
+        boolean[] openedHatch = {false};
+        boolean[] descended = {false};
+        Vec3[] lastPosition = {villager.position()};
+        helper.onEachTick(() -> {
+            long elapsed = level.getGameTime() - started;
+            Vec3 position = villager.position();
+            helper.assertTrue(position.distanceTo(lastPosition[0]) < 2.0D,
+                    "hatch escape was teleported rather than traversed");
+            lastPosition[0] = position;
+            openedHatch[0] |= level.getBlockState(hatch).getValue(TrapDoorBlock.OPEN);
+            descended[0] |= position.y < start.getY() - 0.8D;
+
+            if (villager.blockPosition().closerThan(target, 1.5D)) {
+                helper.assertTrue(openedHatch[0] && descended[0],
+                        "villager reached the lower exit without opening and descending through the hatch");
+                helper.succeed();
+            } else if (elapsed >= 600L) {
+                helper.fail("villager stood on the sole safe exit hatch without opening it; pos=" + position
+                        + ", hatchOpened=" + openedHatch[0]
+                        + ", descended=" + descended[0]
+                        + ", path=" + villager.getNavigation().getPath());
+            }
+        });
+    }
+
+    @GameTest(batch = UPRIGHT_TRAPDOOR_BATCH, templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 650)
+    public static void villagerUsesUprightTrapdoorOnlyAtDoorwayPathNode(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(7, 2, 7));
+        BlockPos doorway = start.east(3);
+        BlockPos decoration = doorway.south().above();
+        BlockPos target = start.east(7);
+        ServerLevel level = helper.getLevel();
+        rememberArea(level, start.east(2), 9);
+        rememberArea(level, start.east(2).above(2), 9);
+        prepareFlatArea(helper, start.east(2), 9, 5);
+
+        // A walled yard has one path-node doorway. Its OPEN trapdoor stands
+        // vertically across the passage, whereas the adjacent upright panel
+        // is decorative and cannot serve as a traversal node.
+        for (int x = -3; x <= 3; x++) {
+            for (int z = -3; z <= 3; z++) {
+                if (Math.abs(x) != 3 && Math.abs(z) != 3) continue;
+                if (x == 3 && z == 0) continue;
+                for (int y = 0; y < 3; y++) {
+                    level.setBlock(start.offset(x, y, z), Blocks.STONE.defaultBlockState(), 3);
+                }
+            }
+        }
+        level.setBlock(doorway, Blocks.OAK_TRAPDOOR.defaultBlockState()
+                .setValue(TrapDoorBlock.FACING, Direction.EAST)
+                .setValue(TrapDoorBlock.OPEN, true), 3);
+        level.setBlock(decoration, Blocks.OAK_TRAPDOOR.defaultBlockState()
+                .setValue(TrapDoorBlock.FACING, Direction.EAST)
+                .setValue(TrapDoorBlock.OPEN, true), 3);
+
+        originalTeleportConfig = Config.getInstance().allowVillagerTeleporting;
+        Config.getInstance().allowVillagerTeleporting = false;
+        VillagerEntityMCA villager = spawnAutonomousVillager(helper, start, target, 0.7F, true);
+        long started = level.getGameTime();
+        boolean[] closedDoorway = {false};
+        boolean[] crossedDoorway = {false};
+        boolean[] reachedTarget = {false};
+        Vec3[] lastPosition = {villager.position()};
+        helper.onEachTick(() -> {
+            long elapsed = level.getGameTime() - started;
+            Vec3 position = villager.position();
+            helper.assertTrue(position.distanceTo(lastPosition[0]) < 2.0D,
+                    "upright trapdoor doorway was bypassed by teleporting");
+            lastPosition[0] = position;
+            helper.assertTrue(level.getBlockState(decoration).getValue(TrapDoorBlock.OPEN),
+                    "villager toggled an upright decorative trapdoor outside its path node");
+            boolean doorwayClosed = !level.getBlockState(doorway).getValue(TrapDoorBlock.OPEN);
+            if (doorwayClosed && !closedDoorway[0]) {
+                Path path = villager.getBrain().getMemory(MemoryModuleType.PATH).orElse(null);
+                boolean inActiveTransition = path != null && !path.isDone()
+                        && ((path.getPreviousNode() != null
+                                && doorway.equals(path.getPreviousNode().asBlockPos()))
+                            || doorway.equals(path.getNextNode().asBlockPos())
+                            || (path.getNextNodeIndex() + 1 < path.getNodeCount()
+                                && doorway.equals(path.getNode(path.getNextNodeIndex() + 1).asBlockPos())));
+                helper.assertTrue(inActiveTransition,
+                        "villager closed an upright trapdoor outside its current path nodes");
+            }
+            closedDoorway[0] |= doorwayClosed;
+            crossedDoorway[0] |= position.x > doorway.getX() + 1.2D;
+            reachedTarget[0] |= villager.blockPosition().closerThan(target, 1.5D);
+
+            if (reachedTarget[0] && level.getBlockState(doorway).getValue(TrapDoorBlock.OPEN)) {
+                helper.assertTrue(closedDoorway[0] && crossedDoorway[0],
+                        "villager bypassed the upright doorway without operating its path node");
+                helper.succeed();
+            } else if (elapsed >= 600L) {
+                helper.fail("villager failed to use its upright trapdoor doorway; pos=" + position
+                        + ", doorwayClosed=" + closedDoorway[0]
+                        + ", crossed=" + crossedDoorway[0]
+                        + ", reached=" + reachedTarget[0]
+                        + ", restored=" + level.getBlockState(doorway).getValue(TrapDoorBlock.OPEN)
                         + ", path=" + villager.getNavigation().getPath());
             }
         });
@@ -882,6 +1089,12 @@ public final class AutonomousPathfindingGameTests {
 
     private static VillagerEntityMCA spawnAutonomousVillager(GameTestHelper helper, BlockPos start,
                                                             BlockPos destination, float speed, boolean doors) {
+        return spawnAutonomousVillager(helper, start, destination, speed, doors, false);
+    }
+
+    private static VillagerEntityMCA spawnAutonomousVillager(GameTestHelper helper, BlockPos start,
+                                                             BlockPos destination, float speed, boolean doors,
+                                                             boolean semanticBed) {
         VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
                 .withAge(0).withPosition(Vec3.atBottomCenterOf(start))
                 .withName("Autonomous pathfinding probe")
@@ -899,9 +1112,12 @@ public final class AutonomousPathfindingGameTests {
             GameTestBrain.addActivity(brain, Activity.CORE, 0, ImmutableList.of(new SmarterOpenDoorsTask()));
         }
         GameTestBrain.addActivity(brain, Activity.CORE, 1, ImmutableList.of(new WanderOrTeleportToTargetTask()));
-        GameTestBrain.addActivity(brain, Activity.CORE, 2, ImmutableList.of(
-                ExtendedWalkTowardsTask.createWithoutPoiRelease(
-                        MemoryModuleType.HOME, speed, 0, 1_400, ignored -> false, ignored -> { })));
+        GameTestBrain.addActivity(brain, Activity.CORE, 2, ImmutableList.of(semanticBed
+                ? ExtendedWalkTowardsTask.createWithFinalTarget(MemoryModuleType.HOME, speed, 0,
+                    1_400, ignored -> false, ignored -> { },
+                    (world, entity, pos) -> BedApproachTarget.create(world, pos.pos()))
+                : ExtendedWalkTowardsTask.createWithoutPoiRelease(
+                    MemoryModuleType.HOME, speed, 0, 1_400, ignored -> false, ignored -> { })));
         GameTestBrain.addActivity(brain, Activity.IDLE, 0, ImmutableList.of(new DoNothing(100, 100)));
         brain.setCoreActivities(ImmutableSet.of(Activity.CORE));
         brain.setDefaultActivity(Activity.IDLE);
@@ -966,6 +1182,16 @@ public final class AutonomousPathfindingGameTests {
         cleanup(level);
     }
 
+    @AfterBatch(batch = ENCLOSED_HATCH_BATCH)
+    public static void cleanupEnclosedHatch(ServerLevel level) {
+        cleanup(level);
+    }
+
+    @AfterBatch(batch = UPRIGHT_TRAPDOOR_BATCH)
+    public static void cleanupUprightTrapdoor(ServerLevel level) {
+        cleanup(level);
+    }
+
     @AfterBatch(batch = DECORATIVE_GATE_BATCH)
     public static void cleanupDecorativeGate(ServerLevel level) {
         cleanup(level);
@@ -993,6 +1219,11 @@ public final class AutonomousPathfindingGameTests {
 
     @AfterBatch(batch = LONG_CORRIDOR_BATCH)
     public static void cleanupLongCorridor(ServerLevel level) {
+        cleanup(level);
+    }
+
+    @AfterBatch(batch = BED_CORRIDOR_BATCH)
+    public static void cleanupBedCorridor(ServerLevel level) {
         cleanup(level);
     }
 

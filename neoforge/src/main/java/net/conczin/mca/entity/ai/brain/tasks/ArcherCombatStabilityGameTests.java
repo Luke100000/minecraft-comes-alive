@@ -315,7 +315,14 @@ public final class ArcherCombatStabilityGameTests {
         helper.assertTrue(f.archer().hasLineOfSight(f.target()), "pillar fixture must expose the unreachable enemy");
         helper.runAfterDelay(260, () -> {
             helper.assertTrue(f.archer().getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).orElse(null) == reachable,
-                    "unreachable elevated enemy monopolized combat instead of the reachable enemy");
+                    "unreachable elevated enemy monopolized combat instead of the reachable enemy"
+                            + ", selected=" + f.archer().getBrain().getMemory(MemoryModuleType.ATTACK_TARGET)
+                            + ", blocked=" + net.conczin.mca.entity.ai.brain.UnreachableCombatTargets.contains(f.archer(), f.target())
+                            + ", unreachableHealth=" + f.target().getHealth()
+                            + ", reachableAlive=" + reachable.isAlive()
+                            + ", reachableHealth=" + reachable.getHealth()
+                            + ", archerPos=" + f.archer().position()
+                            + ", archerActivity=" + f.archer().getBrain().getActiveNonCoreActivity());
             helper.succeed();
         });
     }

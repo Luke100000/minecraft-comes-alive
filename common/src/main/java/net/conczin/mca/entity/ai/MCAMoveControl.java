@@ -58,12 +58,6 @@ public class MCAMoveControl<T extends Mob> extends MoveControl<T> {
                 tickMoveTo();
             } else {
                 if (this.operation == Operation.STRAFE) {
-                    if (this.mob.onGround()) {
-                        Vec3 landing = StrafeTerrain.findLanding(this.mob, strafeProbe(0.5));
-                        if (landing != null && landing.y - this.mob.getY() > this.mob.maxUpStep() + MOVEMENT_EPSILON) {
-                            this.mob.getJumpControl().jump();
-                        }
-                    }
                     tickStrafe();
                 } else {
                     super.tick();
@@ -97,8 +91,22 @@ public class MCAMoveControl<T extends Mob> extends MoveControl<T> {
     private void tickStrafe() {
         float speed = (float) (this.speedModifier * this.mob.getAttributeValue(Attributes.MOVEMENT_SPEED));
         double probe = speed * Math.min(1.0D, Math.hypot(this.strafeForwards, this.strafeRight));
-        boolean walkable = probe <= MOVEMENT_EPSILON
-                || isWalkable((float) probe, 0.0F);
+        boolean walkable = probe <= MOVEMENT_EPSILON;
+        if (this.mob.onGround() || !walkable) {
+            // Both probes share the unchanged origin. A jump request only sets
+            // a flag; each destination still gets its own full terrain checks.
+            double floor = StrafeTerrain.findCurrentSupport(this.mob);
+            if (this.mob.onGround()) {
+                Vec3 landing = StrafeTerrain.findLanding(this.mob, strafeProbe(0.5), floor);
+                if (landing != null && landing.y - this.mob.getY() > this.mob.maxUpStep() + MOVEMENT_EPSILON) {
+                    this.mob.getJumpControl().jump();
+                }
+            }
+            if (!walkable) {
+                walkable = StrafeTerrain.findLanding(this.mob,
+                        strafeProbe(Math.hypot((float) probe, 0.0F)), floor) != null;
+            }
+        }
         // Keep vanilla's strafe inputs and travel, but release a blocked step
         // instead of substituting full forward input toward the enemy.
         this.mob.setSpeed(speed);

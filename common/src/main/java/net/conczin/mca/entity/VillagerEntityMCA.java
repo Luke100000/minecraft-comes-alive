@@ -282,6 +282,7 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
 
     public static AttributeSupplier.Builder createAttributes() {
         return Villager.createAttributes()
+                .add(Attributes.LUCK)
                 .add(Attributes.WATER_MOVEMENT_EFFICIENCY, 1.0D)
                 .add(Attributes.ATTACK_DAMAGE, 3.0f)
                 .add(Attributes.ATTACK_KNOCKBACK, 1.0f)
@@ -2232,8 +2233,8 @@ public class VillagerEntityMCA extends Villager implements VillagerLike<Villager
                     this,
                     weaponHand,
                     weaponStack,
-                    1.75F,
-                    14 - this.level().getDifficulty().getId() * 4,
+                    RangedWeaponHelper.CROSSBOW_PROJECTILE_SPEED,
+                    RangedWeaponHelper.crossbowInaccuracy(this.level().getDifficulty()),
                     target
             );
             this.onCrossbowAttackPerformed();

@@ -11,6 +11,7 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.behavior.MoveToTargetSink;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
@@ -18,6 +19,7 @@ import net.minecraft.world.phys.AABB;
 
 public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
     private Mob movingEntity;
+    private long playEndTime;
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel world, Mob entity) {
@@ -25,33 +27,24 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         if (clearInactiveActivityTarget(entity, target)) {
             return false;
         }
-        // Durable intent survives a jump; unavailable native search must not begin its failure episode.
-        if (target != null && target.getTarget() instanceof PersistentPathTarget
-                && entity.getNavigation() instanceof MCAGroundPathNavigation navigation
-                && !navigation.canUpdatePath()) {
-            return false;
-        }
         return super.checkExtraStartConditions(world, entity);
     }
 
     @Override
     protected boolean timedOut(long gameTime) {
-        if (!super.timedOut(gameTime)) {
+        Mob entity = this.movingEntity;
+        boolean playExpired = entity != null && gameTime > this.playEndTime
+                && entity.getBrain().isActive(Activity.PLAY);
+        if (!playExpired && !super.timedOut(gameTime)) {
             return false;
         }
-        if (this.movingEntity == null) {
+        if (entity == null) {
             return true;
         }
-        // Behavior.tickOrStop checks timedOut before canStillUse and supplies no
-        // entity here. Read the running mob's current journey intent: nearby targets
-        // can grow into long detours, and producers can replace ordinary/persistent
-        // intent without moving far enough for MoveToTargetSink to restart.
-        // Initial distance/path length must never determine persistent lifetime.
-        // Arrival, target removal, emergency combat and navigation's stuck checks
-        // still end the journey. Preserve the timeout-scope and intent-change tests.
-        WalkTarget walkTarget = this.movingEntity.getBrain()
+        // The target's intent can change without restarting this behavior.
+        WalkTarget walkTarget = entity.getBrain()
                 .getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
-        return walkTarget == null || !(walkTarget.getTarget() instanceof PersistentPathTarget);
+        return !ExtendedWalkTowardsTask.isPersistentJourney(walkTarget);
     }
 
     @Override
@@ -92,11 +85,11 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         super.start(world, entity, gameTime);
         Path path = entity.getNavigation().getPath();
         if (walkTarget != null
-                && walkTarget.getTarget() instanceof PersistentPathTarget
+                && ExtendedWalkTowardsTask.isPersistentJourney(walkTarget)
                 && path != null
                 && !entity.getNavigation().isStuck()
                 && MCAGroundPathNavigation.isUsefulPartialPath(
-                        path, walkTarget.getTarget().currentBlockPosition()
+                        path, entity, walkTarget
                 )) {
             if (entity instanceof VillagerEntityMCA villager) {
                 // A fresh useful segment is optimistic progress and must be able
@@ -113,6 +106,9 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
                 entity.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
             }
         }
+        // The CORE sink also consumes PLAY targets, which get vanilla's shorter timeout.
+        this.playEndTime = entity.getBrain().isActive(Activity.PLAY)
+                ? gameTime + 80 + entity.getRandom().nextInt(41) : Long.MAX_VALUE;
     }
 
     @Override
