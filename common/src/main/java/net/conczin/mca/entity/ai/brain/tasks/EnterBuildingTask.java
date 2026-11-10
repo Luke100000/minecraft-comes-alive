@@ -18,11 +18,18 @@ import net.minecraft.world.level.Level;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
+    private static final int FAILED_BUILDING_RETRY_TICKS = 100;
+    private static final double FAILED_BUILDING_RETRY_MOVE_DISTANCE_SQR = 16.0D;
     private final String building;
     private final float speed;
+    private BlockPos lastIssuedDestination;
+    private BlockPos lastIssuedOrigin;
+    private String lastIssuedBuildingType;
+    private long nextFailedBuildingRetryTick;
 
     public EnterBuildingTask(String building, float speed) {
         super(Map.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT, MemoryModuleType.WALK_TARGET, MemoryStatus.VALUE_ABSENT, MemoryModuleType.LOOK_TARGET, MemoryStatus.REGISTERED));
@@ -30,11 +37,25 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
         this.speed = speed;
     }
 
+    @Override
+    protected boolean checkExtraStartConditions(ServerLevel level, VillagerEntityMCA villager) {
+        return lastIssuedDestination == null
+                || !Objects.equals(getBuilding(villager), lastIssuedBuildingType)
+                || villager.blockPosition().distSqr(lastIssuedOrigin) >= FAILED_BUILDING_RETRY_MOVE_DISTANCE_SQR
+                || level.getGameTime() >= nextFailedBuildingRetryTick;
+    }
+
     protected void start(ServerLevel serverWorld, VillagerEntityMCA villager, long l) {
         getNextPosition(villager)
-                .ifPresent(pos -> BehaviorUtils.setWalkAndLookTargetMemories(villager,
-                        new PersistentPathTarget(pos, villager.getBrain().getActiveNonCoreActivity().orElse(null)),
-                        this.speed, getCompletionRange()));
+                .ifPresent(pos -> {
+                    lastIssuedDestination = pos.immutable();
+                    lastIssuedOrigin = villager.blockPosition().immutable();
+                    lastIssuedBuildingType = getBuilding(villager);
+                    nextFailedBuildingRetryTick = l + FAILED_BUILDING_RETRY_TICKS;
+                    BehaviorUtils.setWalkAndLookTargetMemories(villager,
+                            new PersistentPathTarget(pos, villager.getBrain().getActiveNonCoreActivity().orElse(null)),
+                            this.speed, getCompletionRange());
+                });
     }
 
     protected Optional<Building> getNearestBuilding(VillagerEntityMCA villager) {

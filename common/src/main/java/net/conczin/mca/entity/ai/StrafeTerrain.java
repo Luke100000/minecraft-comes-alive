@@ -20,10 +20,19 @@ public final class StrafeTerrain {
 
     @Nullable
     public static Vec3 findLanding(Mob mob, Vec3 offset) {
-        AABB body = mob.getBoundingBox();
-        double floor = findSupport(mob, body, mob.getY() - AIRBORNE_FLOOR_SEARCH, mob.getY() + EPSILON);
+        return findLanding(mob, offset, findCurrentSupport(mob));
+    }
+
+    static double findCurrentSupport(Mob mob) {
+        return findSupport(mob, mob.getBoundingBox(), mob.getY() - AIRBORNE_FLOOR_SEARCH, mob.getY() + EPSILON);
+    }
+
+    /** The support height is valid only within the same synchronous movement command. */
+    @Nullable
+    static Vec3 findLanding(Mob mob, Vec3 offset, double floor) {
         if (!Double.isFinite(floor)) return null;
 
+        AABB body = mob.getBoundingBox();
         AABB destination = body.move(offset.x, 0, offset.z);
         double height = findSupport(mob, destination, floor - MAX_DROP - EPSILON,
                 floor + PathNodeGeometry.jumpHeight(mob) + EPSILON);

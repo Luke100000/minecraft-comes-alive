@@ -192,15 +192,20 @@ final class RangedCombatPositioning {
             if (candidateMinimumDistanceSquared <= currentMinimumDistanceSquared + MIN_USEFUL_DISTANCE_GAIN) {
                 continue;
             }
-            // Ranged evasion must preserve a usable shot rather than buy melee
-            // spacing by leaving range and immediately having to approach again.
-            if (firingTarget != null && (candidatePosition.distanceToSqr(firingTarget.position()) > attackRangeSquared
-                    || !hasLineOfSight(entity, candidatePosition, firingTarget)
-                    || RangedWeaponHelper.getBowHoldingHand(entity) != null
-                    && !RangedWeaponHelper.canShootBowFrom(entity, candidatePosition, firingTarget))) {
+            boolean opensEveryThreat = opensDistanceFromEveryThreat(origin, candidatePosition, escapeThreats);
+            boolean preservesHazards = preservesHazardClearance(origin, candidatePosition, hazards)
+                    && preservesHazardClearanceAlongSegment(origin, candidatePosition, hazards);
+            if (!emergency && (!preservesHazards || !opensEveryThreat)) {
                 continue;
             }
-            boolean opensEveryThreat = opensDistanceFromEveryThreat(origin, candidatePosition, escapeThreats);
+            // Ranged evasion must preserve a usable shot rather than buy melee
+            // spacing by leaving range and immediately having to approach again.
+            // Check the cheap threat constraints before the ballistic raycasts.
+            if (firingTarget != null && (candidatePosition.distanceToSqr(firingTarget.position()) > attackRangeSquared
+                    || !hasLineOfSight(entity, candidatePosition, firingTarget)
+                    || !RangedWeaponHelper.canShootFrom(entity, candidatePosition, firingTarget))) {
+                continue;
+            }
             OnwardReachability onward = measureOnwardReachability(originBlock, position, graph.edges());
             EscapeCandidate candidate = new EscapeCandidate(
                     position,
@@ -212,9 +217,6 @@ final class RangedCombatPositioning {
                     onward.demonstratedContinuation(),
                     position.getY() - originBlock.getY()
             );
-            boolean preservesHazards = preservesHazardClearance(origin, candidatePosition, hazards)
-                    && preservesHazardClearanceAlongSegment(origin, candidatePosition, hazards);
-
             if (preservesHazards && opensEveryThreat && candidateMinimumDistanceSquared >= desiredDistanceSquared) {
                 safeCandidates.add(candidate);
             } else if (preservesHazards && opensEveryThreat) {
@@ -263,10 +265,17 @@ final class RangedCombatPositioning {
             int nextTravelSteps = travelSteps.get(current) + 1;
             List<BlockPos> neighbors = new ArrayList<>(4);
             for (Direction direction : HORIZONTAL_DIRECTIONS) {
+                // Every possible landing for this horizontal neighbor shares
+                // these X/Z coordinates, including a one-block rise or drop.
+                // Avoid path-type and collision queries beyond the graph's radius.
+                int dx = current.getX() + direction.getStepX() - origin.getX();
+                int dz = current.getZ() + direction.getStepZ() - origin.getZ();
+                if (dx * dx + dz * dz > ESCAPE_GRAPH_RADIUS * ESCAPE_GRAPH_RADIUS) {
+                    continue;
+                }
                 BlockPos next = resolveAdjacentEscapePosition(entity, current, direction, safePositions);
                 if (next == null
-                        || Math.abs(next.getY() - origin.getY()) > ESCAPE_VERTICAL_RANGE
-                        || horizontalDistanceSquared(origin, next) > ESCAPE_GRAPH_RADIUS * ESCAPE_GRAPH_RADIUS) {
+                        || Math.abs(next.getY() - origin.getY()) > ESCAPE_VERTICAL_RANGE) {
                     continue;
                 }
                 neighbors.add(next);
@@ -518,7 +527,7 @@ final class RangedCombatPositioning {
                 && RangedWeaponHelper.isValidAttackTarget(mob, target)
                 && mob.distanceToSqr(target) <= attackRangeSquared
                 && mob.hasLineOfSight(target)
-                && RangedWeaponHelper.canShootBowFrom(archer, mob.position(), target);
+                && RangedWeaponHelper.canShootFrom(archer, mob.position(), target);
     }
 
     static boolean isEscapePathSafe(Mob mob, Path path, ThreatContext threats, boolean degraded) {
@@ -612,9 +621,9 @@ final class RangedCombatPositioning {
                 hazards,
                 attackRangeSquared,
                 minimumTargetDistanceSquared,
+                graph.travelSteps().keySet(),
                 candidates
         );
-        candidates.retainAll(graph.travelSteps().keySet());
         Optional<MultiTargetPositionTracker> preferred = createFiringTarget(candidates, target, hazards, attackRangeSquared);
         if (preferred.isPresent()) {
             return preferred;
@@ -761,6 +770,7 @@ final class RangedCombatPositioning {
             List<? extends LivingEntity> hazards,
             double attackRangeSquared,
             double minimumTargetDistanceSquared,
+            Set<BlockPos> reachablePositions,
             Set<BlockPos> candidates
     ) {
         Vec3 towardTarget = target.position().subtract(entity.position()).multiply(1.0D, 0.0D, 1.0D);
@@ -773,7 +783,7 @@ final class RangedCombatPositioning {
         for (double distance = FIRING_LATERAL_STEP; distance <= FIRING_HORIZONTAL_RANGE; distance += FIRING_LATERAL_STEP) {
             BlockPos preferredCandidate = findWalkableCandidateNear(entity,
                     entity.position().add(lateral.scale(distance * preferredSign)));
-            if (preferredCandidate != null && isValidFiringPosition(
+            if (preferredCandidate != null && reachablePositions.contains(preferredCandidate) && isValidFiringPosition(
                     entity,
                     target,
                     hazards,
@@ -786,7 +796,7 @@ final class RangedCombatPositioning {
 
             BlockPos oppositeCandidate = findWalkableCandidateNear(entity,
                     entity.position().add(lateral.scale(-distance * preferredSign)));
-            if (oppositeCandidate != null && isValidFiringPosition(
+            if (oppositeCandidate != null && reachablePositions.contains(oppositeCandidate) && isValidFiringPosition(
                     entity,
                     target,
                     hazards,
@@ -823,8 +833,7 @@ final class RangedCombatPositioning {
         }
 
         return hasLineOfSight(entity, candidate, target)
-                && (RangedWeaponHelper.getBowHoldingHand(entity) == null
-                || RangedWeaponHelper.canShootBowFrom(entity, candidate, target));
+                && RangedWeaponHelper.canShootFrom(entity, candidate, target);
     }
 
     static Optional<Vec3> findApproachPosition(
@@ -905,7 +914,7 @@ final class RangedCombatPositioning {
         if (landing != null && preservesHazardClearance(entity.position(), landing, hazards)) {
             return landing;
         }
-        if (MCA.platformHelper.isDevelopmentEnvironment()) {
+        if (ArcherMovementTask.DEBUG_LOGGING && MCA.platformHelper.isDevelopmentEnvironment()) {
             MCA.LOGGER.info("[MCA Archer Strafe Safety] entity={} reason={} pos={} body={} onGround={} velocity={} yaw={} direction={} landing={} hazards={}",
                     entity.getStringUUID(), landing == null ? "terrain_or_collision" : "threat_clearance",
                     entity.position(), entity.getBoundingBox(), entity.onGround(), entity.getDeltaMovement(),

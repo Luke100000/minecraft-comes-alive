@@ -12,22 +12,28 @@ import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.util.ARGB;
 import net.minecraft.util.Mth;
 
-import java.util.LinkedList;
-import java.util.Queue;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public final class Workspace {
     private static final int MAX_HISTORY = 50;
+    // Tags the library and the editor manage, not the player
+    public static final Set<String> SYSTEM_TAGS = Set.of("clothing", "hair", "invalid");
+    public static final int MIN_TAGS = 3;
+
     public final NativeImage currentImage;
     public final DynamicTexture backendTexture;
     public SkinLibraryScreen.SkinType skinType;
     public int contentid = -1;
     public int temperature;
     public double chance = 1.0;
-    public String title = "Unnamed Asset";
+    public String title = "";
+    public String tags = "";
     public String profession;
     public Gender gender = Gender.NEUTRAL;
     public int fillToolThreshold = 32;
     public LinkedList<NativeImage> history = new LinkedList<>();
+    private boolean invalid;
 
     private boolean dirty;
     private boolean dirtySinceSnapshot;
@@ -47,7 +53,7 @@ public final class Workspace {
     public Workspace(NativeImage image, SkinMeta meta, LiteContent content) {
         this(copyImage(image));
 
-        this.contentid = content.contentid();
+        this.contentid = content.content_id();
         this.title = content.title();
 
         this.skinType = content.hasTag("clothing") ? SkinLibraryScreen.SkinType.CLOTHING : SkinLibraryScreen.SkinType.HAIR;
@@ -56,6 +62,39 @@ public final class Workspace {
         this.gender = meta.getGender();
         this.profession = meta.getProfession();
         this.temperature = meta.getTemperature();
+
+        this.invalid = content.hasTag("invalid");
+        String professionTag = getProfessionTag();
+        this.tags = content.tags().stream()
+                .filter(tag -> !SYSTEM_TAGS.contains(tag) && !tag.equals(professionTag))
+                .sorted()
+                .collect(Collectors.joining(", "));
+    }
+
+    private String getProfessionTag() {
+        return profession == null ? null : profession.replace("mca.", "");
+    }
+
+    public Set<String> getCustomTags() {
+        return Arrays.stream(tags.split(","))
+                .map(tag -> tag.trim().toLowerCase(Locale.ROOT))
+                .filter(tag -> !tag.isEmpty() && !SYSTEM_TAGS.contains(tag))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    /**
+     * The upload replaces all tags, so this includes the type, the profession, and an existing invalid mark.
+     */
+    public List<String> getUploadTags() {
+        Set<String> uploadTags = getCustomTags();
+        uploadTags.add(skinType.name().toLowerCase(Locale.ROOT));
+        if (profession != null) {
+            uploadTags.add(getProfessionTag());
+        }
+        if (invalid) {
+            uploadTags.add("invalid");
+        }
+        return List.copyOf(uploadTags);
     }
 
     public SkinListEntry toListEntry() {
@@ -194,7 +233,7 @@ public final class Workspace {
     }
 
     public void undo() {
-        if (history.size() > 0) {
+        if (!history.isEmpty()) {
             NativeImage image = history.removeLast();
             currentImage.copyFrom(image);
             image.close();

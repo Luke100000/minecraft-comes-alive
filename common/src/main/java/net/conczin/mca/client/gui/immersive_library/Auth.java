@@ -1,12 +1,10 @@
 package net.conczin.mca.client.gui.immersive_library;
 
-import com.mojang.blaze3d.Blaze3D;
 import com.google.gson.JsonObject;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 
 import java.io.IOException;
-import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -76,9 +74,8 @@ public class Auth {
         return Base64.getEncoder().encodeToString(json.toString().getBytes(StandardCharsets.UTF_8));
     }
 
-    public static void authenticate(String username) {
+    public static String authenticate(String username) {
         currentToken = newToken();
-        String url = Config.getInstance().immersiveLibraryUrl + "/v1/login?state=" + createDataState(username, currentToken);
-        Blaze3D.openUri(URI.create(url));
+        return Config.getInstance().immersiveLibraryUrl + "/v1/login?state=" + createDataState(username, currentToken);
     }
 }

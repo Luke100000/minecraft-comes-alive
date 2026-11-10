@@ -78,6 +78,7 @@ public class VillagerTasksMCA {
             MemoryModuleType.BREED_TARGET,
             MemoryModuleType.PATH,
             MemoryModuleType.DOORS_TO_CLOSE,
+            MemoryModuleTypeMCA.FOLDED_TRAPDOORS,
             MemoryModuleType.NEAREST_BED,
             MemoryModuleType.HURT_BY,
             MemoryModuleType.HURT_BY_ENTITY,
@@ -177,7 +178,13 @@ public class VillagerTasksMCA {
             noDefault = true;
         } else if (age == AgeState.BABY) {
             brain.setSchedule(EnvironmentAttributes.BABY_VILLAGER_ACTIVITY);
-            //todo babies may get a little bit more AI
+            // Babies do not play, work, or claim homes, but still need basic survival movement.
+            brain.addActivity(Activity.CORE, ImmutableList.of(
+                    Pair.of(0, new Swim(0.8F)),
+                    Pair.of(1, new WanderOrTeleportToTargetTask())), ImmutableSet.of(), ImmutableSet.of());
+            brain.setCoreActivities(ImmutableSet.of(Activity.CORE));
+            brain.setDefaultActivity(Activity.IDLE);
+            brain.setActiveActivityIfPossible(Activity.IDLE);
             return brain;
         } else if (age != AgeState.ADULT) {
             brain.setSchedule(EnvironmentAttributes.BABY_VILLAGER_ACTIVITY);
@@ -610,7 +617,6 @@ public class VillagerTasksMCA {
 
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getPlayPackage(float speedModifier) {
         return ImmutableList.of(
-                Pair.of(0, new MoveToTargetSink(80, 120)),
                 getFullLookBehavior(),
                 Pair.of(5, PlayTagWithOtherKids.create()),
                 Pair.of(5, new RunOne<>(

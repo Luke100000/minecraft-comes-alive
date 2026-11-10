@@ -443,9 +443,13 @@ public class Village implements Iterable<Building> {
     }
 
     Optional<Structure> getExactStructureAt(Vec3i pos) {
-        return structures.values().stream()
-                .filter(structure -> structure.containsPos(pos))
-                .min(Comparator.comparingInt(Structure::getId));
+        Structure selected = null;
+        for (Structure structure : structures.values()) {
+            if ((selected == null || structure.getId() < selected.getId()) && structure.containsPos(pos)) {
+                selected = structure;
+            }
+        }
+        return Optional.ofNullable(selected);
     }
 
     boolean hasRegisteredFloorOverlap(Structure candidate) {

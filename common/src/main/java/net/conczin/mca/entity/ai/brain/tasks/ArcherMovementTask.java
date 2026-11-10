@@ -41,6 +41,8 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
     private static final int CLEAR_SHOT_BEFORE_HOLD = 3;
     private static final int LOST_CONTACT_WITHOUT_ROUTE_TICKS = 400;
     private static final int DEBUG_LOG_INTERVAL_TICKS = 20;
+    // Opt-in: full per-archer combat traces are expensive even on a development server.
+    static final boolean DEBUG_LOGGING = Boolean.getBoolean("mca.archer.debugLogging");
     private static final int FAILED_ROUTE_STALL_TICKS = 80;
 
     static final double EMERGENCY_ENTER_DISTANCE_SQUARED = 12.25D;
@@ -276,8 +278,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             return;
         }
         double attackRangeSquared = RangedWeaponHelper.getAttackRangeSquared(entity, this.maximumRangeSquared);
-        boolean usableShot = visible && (RangedWeaponHelper.getBowHoldingHand(entity) == null
-                || RangedWeaponHelper.canShootBowFrom(entity, entity.position(), target));
+        boolean usableShot = visible && RangedWeaponHelper.canShootFrom(entity, entity.position(), target);
         if (abandonUnreachableTarget(entity, target, gameTime,
                 usableShot && entity.distanceToSqr(target) <= attackRangeSquared)) {
             return;
@@ -374,7 +375,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             );
         }
 
-        if (MCA.platformHelper.isDevelopmentEnvironment()) {
+        if (DEBUG_LOGGING && MCA.platformHelper.isDevelopmentEnvironment()) {
             logDebugState(
                     level,
                     entity,
@@ -1050,6 +1051,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
             double threatDistanceSquared,
             boolean visible
     ) {
+        if (!DEBUG_LOGGING) return;
         MCA.LOGGER.info(
                 "[MCA Archer Decision] entity={} previous={} next={} reason={} targetChanged={} target={} threat={} targetDistSqr={} threatDistSqr={} los={} seeTime={} blockedShotTicks={} clearShotTicks={}",
                 entity.getStringUUID(),
@@ -1069,7 +1071,7 @@ public class ArcherMovementTask<E extends VillagerEntityMCA> extends Behavior<E>
     }
 
     private void logMovementIntent(E entity, String intent, String reason, WalkTarget walkTarget) {
-        if (!MCA.platformHelper.isDevelopmentEnvironment()) {
+        if (!DEBUG_LOGGING || !MCA.platformHelper.isDevelopmentEnvironment()) {
             return;
         }
 
