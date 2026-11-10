@@ -541,13 +541,20 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     @Override
     public boolean keyPressed(KeyEvent event) {
         int keyCode = event.key();
+        if (keyCode == GLFW.GLFW_KEY_ENTER && searchWidget != null && getFocused() == searchWidget) {
+            applySearch();
+            return true;
+        }
+
+        boolean typing = getFocused() instanceof EditBox;
+
         // Pan
-        if (keyCode == GLFW.GLFW_KEY_SPACE && (textFieldWidget == null || !textFieldWidget.isFocused())) {
+        if (keyCode == GLFW.GLFW_KEY_SPACE && !typing) {
             isPanning = true;
             return true;
         }
 
-        if (page == Page.EDITOR && (textFieldWidget == null || !textFieldWidget.isFocused())) {
+        if (page == Page.EDITOR && !typing) {
             // Reset viewport
             if (keyCode == GLFW.GLFW_KEY_R) {
                 x0 = 0.0f;
@@ -649,6 +656,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         if (timeSinceLastRebuild < 2) {
             return false;
+        }
+
+        // Clicking elsewhere leaves the text box.
+        if (getFocused() instanceof EditBox box && !box.isMouseOver(event.x(), event.y())) {
+            setFocused(null);
         }
 
         if (page == Page.EDITOR) {
