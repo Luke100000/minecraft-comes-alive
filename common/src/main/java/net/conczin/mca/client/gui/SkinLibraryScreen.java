@@ -944,15 +944,12 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                         v -> cancelAuthentication()));
             }
             case DETAIL -> {
-                if (canModifyFocusedContent()) {
+                if (canModifyContent(focusedContent)) {
                     //tag name
                     EditBox tagNameWidget = addRenderableWidget(new EditBox(this.font, width / 2 - 200, height / 2 - 100 + 2, 95, 16,
                             Component.literal("")));
                     tagNameWidget.setMaxLength(20);
-                    tagNameWidget.setSuggestion("New Tag Name");
-                    tagNameWidget.setResponder(v -> {
-                        tagNameWidget.setSuggestion(null);
-                    });
+                    tagNameWidget.setHint(Component.literal("New Tag Name"));
 
                     //add tag
                     addRenderableWidget(new TooltipButtonWidget(width / 2 - 100, height / 2 - 100, 40, 20, "gui.skin_library.add", sender -> {
@@ -981,7 +978,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 for (String tag : focusedContent.tags()) {
                     if (!Workspace.SYSTEM_TAGS.contains(tag) || isModerator()) {
                         int w = font.width(tag) + 10;
-                        if (canModifyFocusedContent()) {
+                        if (canModifyContent(focusedContent)) {
                             addRenderableWidget(new ButtonWidget(width / 2 - 200, ty, 20, 20,
                                     Component.literal("X"),
                                     v -> {
@@ -1026,14 +1023,19 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                         Component.translatable("gui.skin_library.name")));
                 textFieldWidget.setMaxLength(1024);
                 textFieldWidget.setValue(workspace.title);
-                if (workspace.title.isEmpty()) {
-                    textFieldWidget.setSuggestion(workspace.title);
-                }
+                textFieldWidget.setHint(Component.translatable("gui.skin_library.name"));
+                textFieldWidget.setTooltip(Tooltip.create(Component.translatable("gui.skin_library.name.tooltip")));
                 textFieldWidget.setFocused(false);
-                textFieldWidget.setResponder(v -> {
-                    workspace.title = v;
-                    textFieldWidget.setSuggestion(null);
-                });
+                textFieldWidget.setResponder(v -> workspace.title = v);
+
+                // Tags supplied with a skin upload.
+                EditBox tagsWidget = addRenderableWidget(new EditBox(this.font, width / 2 - 200, height / 2 + 82, 105, 16,
+                        Component.translatable("gui.skin_library.tags")));
+                tagsWidget.setMaxLength(256);
+                tagsWidget.setValue(workspace.tags);
+                tagsWidget.setHint(Component.translatable("gui.skin_library.tags"));
+                tagsWidget.setTooltip(Tooltip.create(Component.translatable("gui.skin_library.tags.tooltip", Workspace.MIN_TAGS)));
+                tagsWidget.setResponder(v -> workspace.tags = v);
 
                 // help
                 addRenderableWidget(new TooltipButtonWidget(width / 2 + 65, height / 2 - 105, 20, 20,
@@ -1426,10 +1428,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 return new Hair(LIBRARY_NAMESPACE + content.content_id());
             }
         });
-    }
-
-    private boolean canModifyFocusedContent() {
-        return canModifyContent(focusedContent);
     }
 
     private boolean canModifyContent(LiteContent content) {
