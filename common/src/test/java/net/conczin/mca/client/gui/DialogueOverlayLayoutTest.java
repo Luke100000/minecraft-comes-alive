@@ -44,7 +44,7 @@ class DialogueOverlayLayoutTest {
     }
 
     @Test
-    void footerActionsAndDividerReachLowerInteriorWhileLeavingBottomBorder() {
+    void footerActionsAndDividerLeaveEntireBottomBorderIntact() {
         DialogueOverlayLayout.Rect menu = new DialogueOverlayLayout.Rect(100, 150, 300, 140);
         DialogueOverlayLayout.FooterLayout footer = DialogueOverlayLayout.footer(menu, 27);
         for (DialogueOverlayLayout.Rect element : new DialogueOverlayLayout.Rect[]{
@@ -52,12 +52,12 @@ class DialogueOverlayLayoutTest {
             assertTrue(element.x() >= menu.x() + 4);
             assertTrue(element.right() <= menu.right() - 4);
             assertTrue(element.y() > menu.y() + 7);
-            assertTrue(element.bottom() <= menu.bottom() - 1);
+            assertTrue(element.bottom() <= menu.bottom() - 3);
         }
         assertEquals(footer.back().right(), footer.close().x());
         assertEquals(footer.divider().bottom(), footer.back().y());
-        assertEquals(menu.bottom() - 1, footer.back().bottom());
-        assertEquals(menu.bottom() - 1, footer.close().bottom());
+        assertEquals(menu.bottom() - 3, footer.back().bottom());
+        assertEquals(menu.bottom() - 3, footer.close().bottom());
     }
 
     @Test
@@ -91,12 +91,12 @@ class DialogueOverlayLayoutTest {
     }
 
     @Test
-    void normalScaleKeepsChoicesCompactAndOffTheScreenEdges() {
+    void normalScaleKeepsChoicesCompactAndJustAboveHeartsAndHunger() {
         DialogueOverlayLayout.Rect menu = DialogueOverlayLayout.calculate(530, 300, 115, 85).menu();
         assertTrue(menu.width() >= 300 && menu.width() <= 350,
                 "The conversation menu should occupy about 60% of the available width");
-        assertTrue(menu.bottom() <= 272 && menu.bottom() >= 260,
-                "Menu must clear the hotbar while staying near the bottom");
+        assertEquals(300 - 39 - 5, menu.bottom(),
+                "Menu must sit just above hearts and hunger without reserving armour space");
         assertTrue(menu.height() <= 120);
     }
 

@@ -10,6 +10,25 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class DialogueSkinResourcesTest {
     @Test
+    void footerHighlightsMeetVisibleBottomStrokeWithoutCoveringIt() throws Exception {
+        try (InputStream in = getClass().getResourceAsStream("/assets/mca/textures/gui/dialogue/menu_frame.png")) {
+            assertNotNull(in);
+            BufferedImage texture = ImageIO.read(in);
+            DialogueOverlayLayout.Rect menu = new DialogueOverlayLayout.Rect(100, 150, 300, 140);
+            DialogueOverlayLayout.FooterLayout footer = DialogueOverlayLayout.footer(menu, 27);
+            int centreX = texture.getWidth() / 2;
+            int borderColour = texture.getRGB(centreX, 2);
+            for (DialogueOverlayLayout.Rect action : new DialogueOverlayLayout.Rect[]{footer.back(), footer.close()}) {
+                int firstUncoveredTextureRow = texture.getHeight() - (menu.bottom() - action.bottom());
+                assertEquals(borderColour, texture.getRGB(centreX, firstUncoveredTextureRow),
+                        "Footer must meet the visible brown stroke, leaving no inner shadow strip");
+                assertNotEquals(borderColour, texture.getRGB(centreX, firstUncoveredTextureRow - 1),
+                        "Footer must stop at the stroke without painting over it");
+            }
+        }
+    }
+
+    @Test
     void frameCornerSilhouettesMatchOnEverySide() throws Exception {
         for (String name : new String[]{"paper_frame", "menu_frame", "featured_frame"}) {
             try (InputStream in = getClass().getResourceAsStream("/assets/mca/textures/gui/dialogue/" + name + ".png")) {

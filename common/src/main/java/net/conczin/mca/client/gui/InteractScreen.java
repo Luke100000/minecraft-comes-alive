@@ -908,11 +908,11 @@ public class InteractScreen extends AbstractDynamicScreen {
         return font.split(text, Math.max(1, (int) (availableWidth / dialogueTextScale())));
     }
 
-    private void drawDialogueText(GuiGraphics context, Component text, int x, int y, int colour, boolean shadow) {
+    private void drawDialogueText(GuiGraphics context, Component text, float x, float y, int colour, boolean shadow) {
         drawDialogueText(context, text.getVisualOrderText(), x, y, colour, shadow);
     }
 
-    private void drawDialogueText(GuiGraphics context, FormattedCharSequence text, int x, int y,
+    private void drawDialogueText(GuiGraphics context, FormattedCharSequence text, float x, float y,
                                   int colour, boolean shadow) {
         context.pose().pushPose();
         context.pose().translate(x, y, 0);
@@ -949,8 +949,6 @@ public class InteractScreen extends AbstractDynamicScreen {
                 context.fill(left + 12, hitTop + 2, left + panelWidth - 12, hitBottom - 2, 0x55D7A34D);
             }
         } else if (clickable) {
-            // Give choices a subtle inset surface while leaving gaps of dark menu between rows.
-            // Section toggles are quieter than choices, and read-only history stays unboxed.
             int surfaceLeft = left + 8;
             int surfaceRight = left + panelWidth - 8;
             int surfaceTop = y + 1;
@@ -958,14 +956,13 @@ public class InteractScreen extends AbstractDynamicScreen {
             boolean highlighted = hover || focused;
             int fill = highlighted ? 0xFF805032
                     : row.iconIndex() >= 0 ? 0xFF362318 : 0xFF422B1C;
-            int border = highlighted ? 0xFFD7A76B : 0xFF71513A;
             context.fill(surfaceLeft, surfaceTop, surfaceRight, surfaceBottom, fill);
-            context.fill(surfaceLeft, surfaceTop, surfaceRight, surfaceTop + 1, border);
-            context.fill(surfaceLeft, surfaceBottom - 1, surfaceRight, surfaceBottom, border);
-            context.fill(surfaceLeft, surfaceTop, surfaceLeft + 1, surfaceBottom, border);
-            context.fill(surfaceRight - 1, surfaceTop, surfaceRight, surfaceBottom, border);
-            if (highlighted) {
-                context.fill(surfaceLeft + 1, surfaceTop + 1, surfaceLeft + 3, surfaceBottom - 1, GOLD);
+            if (row.iconIndex() >= 0) {
+                int border = highlighted ? 0xFFD7A76B : 0xFF71513A;
+                context.fill(surfaceLeft, surfaceTop, surfaceRight, surfaceTop + 1, border);
+                context.fill(surfaceLeft, surfaceBottom - 1, surfaceRight, surfaceBottom, border);
+                context.fill(surfaceLeft, surfaceTop, surfaceLeft + 1, surfaceBottom, border);
+                context.fill(surfaceRight - 1, surfaceTop, surfaceRight, surfaceBottom, border);
             }
         }
         int iconSize = dialoguePixels(12);
@@ -1036,8 +1033,10 @@ public class InteractScreen extends AbstractDynamicScreen {
         int keyY = y + (h - keyHeight) / 2;
         DialogueSkin.drawKeycap(context, keyX, keyY, keyWidth, keyHeight);
         int textY = y + (h - dialoguePixels(font.lineHeight - 1)) / 2;
-        drawDialogueText(context, Component.literal(key), keyX + (keyWidth - dialoguePixels(font.width(key))) / 2,
-                textY, CREAM, true);
+        float textScale = dialogueTextScale();
+        float keyTextX = keyX + (keyWidth - font.width(key) * textScale) / 2.0f;
+        float keyTextY = keyY + (keyHeight - (font.lineHeight - 1) * textScale) / 2.0f;
+        drawDialogueText(context, Component.literal(key), keyTextX, keyTextY, CREAM, true);
         context.enableScissor(keyX + keyWidth + gap, y, x + w - 3, y + h);
         drawDialogueText(context, label, keyX + keyWidth + gap, textY,
                 hover || focused ? GOLD : CREAM, true);

@@ -20,7 +20,8 @@ final class DialogueOverlayLayout {
 
     static Geometry calculate(int width, int height, int menuHeight, int bubbleHeight, int desiredBubbleWidth) {
         int sideMargin = Math.max(12, Math.min(24, width / 32));
-        int bottomMargin = Math.min(height / 6, Math.round(30 * contentScale(width, height)));
+        // Hearts and hunger start 39 GUI pixels above the bottom; leave a five-pixel gap.
+        int bottomMargin = Math.min(height / 3, 44);
         int availableWidth = Math.max(1, width - sideMargin * 2);
         int menuWidth = Math.min(availableWidth, Math.max(250,
                 Math.min(Math.round(560 * contentScale(width, height)), width * 3 / 5)));
@@ -55,7 +56,9 @@ final class DialogueOverlayLayout {
         int half = innerWidth / 2;
         int dividerY = menu.bottom() - footerHeight + 1;
         int actionY = dividerY + 1;
-        int actionHeight = Math.max(1, menu.bottom() - 1 - actionY);
+        // The visible bottom stroke is three pixels from the edge. Cover its inner
+        // shadow pixel so hover fills and the centre divider meet the stroke.
+        int actionHeight = Math.max(1, menu.bottom() - 3 - actionY);
         return new FooterLayout(
                 new Rect(innerLeft, dividerY, innerWidth, 1),
                 new Rect(innerLeft, actionY, half, actionHeight),
