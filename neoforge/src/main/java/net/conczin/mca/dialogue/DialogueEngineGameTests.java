@@ -884,6 +884,47 @@ public final class DialogueEngineGameTests {
     }
 
     @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void legacyMenuCommandRejectsOutOfReachAndPrivilegedActions(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        var interactions = fixture.villager().getInteractions();
+        interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        UUID id = interactions.interactionId();
+        boolean armor = fixture.villager().getVillagerBrain().getArmorWear();
+        var profession = fixture.villager().getVillagerData().getProfession();
+
+        fixture.player().setPos(fixture.villager().getX() + 6.0D,
+                fixture.villager().getY(), fixture.villager().getZ());
+        new InteractionVillagerMessage("armor", fixture.villager().getUUID(), id).handleServer(fixture.player());
+        helper.assertTrue(fixture.villager().getVillagerBrain().getArmorWear() == armor,
+                "an out-of-reach player cannot trigger menu commands even with the right screen ID");
+        helper.assertTrue(interactions.matchesInteraction(fixture.player(), id),
+                "a rejected distant request cannot dismiss the active menu");
+
+        fixture.player().setPos(fixture.villager().getX() + 1.0D,
+                fixture.villager().getY(), fixture.villager().getZ());
+        new InteractionVillagerMessage("profession.guard", fixture.villager().getUUID(), id)
+                .handleServer(fixture.player());
+        helper.assertTrue(fixture.villager().getVillagerData().getProfession().equals(profession),
+                "a client-only profession menu cannot grant monarch privileges");
+        new InteractionVillagerMessage("slap", fixture.villager().getUUID(), id)
+                .handleServer(fixture.player());
+        helper.assertTrue(interactions.matchesInteraction(fixture.player(), id),
+                "dialogue-only effects must not be executable via a menu command");
+
+        new InteractionVillagerMessage("armor", fixture.villager().getUUID(), id).handleServer(fixture.player());
+        helper.assertTrue(fixture.villager().getVillagerBrain().getArmorWear() != armor,
+                "a nearby legitimate owner can still use the built-in armor control");
+
+        interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        new InteractionVillagerMessage("harvesting", fixture.villager().getUUID(),
+                interactions.interactionId()).handleServer(fixture.player());
+        helper.assertTrue(fixture.villager().getVillagerBrain().getCurrentJob()
+                        == net.conczin.mca.entity.ai.Chore.HARVEST,
+                "a nearby legitimate owner can still assign a built-in work command");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void choiceAndFinalAckPacketHandlersRejectReplaysAndCommitOnce(GameTestHelper helper) {
         Fixture fixture = fixture(helper);
         DialogueEngine engine = MCA.getDialogueEngine().orElseThrow();

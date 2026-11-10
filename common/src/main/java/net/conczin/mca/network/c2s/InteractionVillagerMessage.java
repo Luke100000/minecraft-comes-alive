@@ -28,7 +28,7 @@ public record InteractionVillagerMessage(String command, UUID villagerUUID, UUID
         Entity v = player.serverLevel().getEntity(villagerUUID);
         if (!(v instanceof VillagerLike<?> villager)
                 || !v.isAlive()
-                || player.distanceToSqr(v) > 64.0D
+                || !player.canInteractWithEntity(v, 1.0D)
                 || !villager.getInteractions().matchesInteraction(player, interactionId)
                 || !InteractionMenuCommandAccess.allows(villager, player, command)) {
             return;
