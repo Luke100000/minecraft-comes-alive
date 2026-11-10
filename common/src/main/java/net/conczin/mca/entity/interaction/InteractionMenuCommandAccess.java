@@ -2,7 +2,6 @@ package net.conczin.mca.entity.interaction;
 
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.VillagerEntityMCA;
-import net.conczin.mca.entity.ZombieVillagerEntityMCA;
 import net.minecraft.server.level.ServerPlayer;
 
 /** Authorizes built-in non-Talk commands independently of client-side GUI resources. */
@@ -12,7 +11,8 @@ public final class InteractionMenuCommandAccess {
 
     public static boolean allows(VillagerLike<?> villager, ServerPlayer player, String command) {
         if ("gift".equals(command)) {
-            return villager instanceof VillagerEntityMCA || villager instanceof ZombieVillagerEntityMCA;
+            // Zombie villagers have vanilla item curing, not an MCA Interact menu.
+            return villager instanceof VillagerEntityMCA;
         }
         if (!(villager instanceof VillagerEntityMCA)) {
             return false;

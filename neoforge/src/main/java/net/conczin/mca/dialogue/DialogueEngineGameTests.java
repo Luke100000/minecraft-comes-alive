@@ -1,9 +1,12 @@
 package net.conczin.mca.dialogue;
 
 import com.google.gson.JsonParser;
+import io.netty.buffer.Unpooled;
 import com.mojang.authlib.GameProfile;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ZombieVillagerEntityMCA;
+import net.conczin.mca.entity.interaction.InteractionMenuCommandAccess;
 import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.Chore;
 import net.conczin.mca.entity.ai.relationship.AgeState;
@@ -13,12 +16,16 @@ import net.conczin.mca.network.c2s.InteractionDialogueChoiceMessage;
 import net.conczin.mca.network.c2s.InteractionDialogueLeaveMessage;
 import net.conczin.mca.network.c2s.InteractionDialogueSelectMessage;
 import net.conczin.mca.network.c2s.InteractionVillagerMessage;
+import net.conczin.mca.network.c2s.GetInteractDataRequest;
+import net.conczin.mca.network.Network;
+import net.conczin.mca.network.s2c.GetInteractDataResponse;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ItemsMCA;
 import net.conczin.mca.resources.DialogueEvents;
 import net.conczin.mca.server.world.data.DialogueEventHistory;
 import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -31,6 +38,10 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.storage.LevelResource;
@@ -921,6 +932,94 @@ public final class DialogueEngineGameTests {
         helper.assertTrue(fixture.villager().getVillagerBrain().getCurrentJob()
                         == net.conczin.mca.entity.ai.Chore.HARVEST,
                 "a nearby legitimate owner can still assign a built-in work command");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void interactDataRequestRequiresCurrentMenuOwner(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        var interactions = fixture.villager().getInteractions();
+        interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        UUID firstId = interactions.interactionId();
+        interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        UUID currentId = interactions.interactionId();
+        ServerPlayer other = new FakePlayer(helper.getLevel(),
+                new GameProfile(UUID.randomUUID(), "data-intruder"));
+        other.setPos(fixture.player().position());
+
+        // Capture the actual packet boundary while leaving the global sender intact afterwards.
+        Network.Sender previous;
+        try {
+            Field field = Network.class.getDeclaredField("sender");
+            field.setAccessible(true);
+            previous = (Network.Sender) field.get(null);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("could not capture server packet sender", e);
+        }
+        AtomicInteger sent = new AtomicInteger();
+        AtomicReference<GetInteractDataResponse> lastResponse = new AtomicReference<>();
+        Network.registerSender((player, payload) -> {
+            if (payload instanceof GetInteractDataResponse response) {
+                lastResponse.set(response);
+                sent.incrementAndGet();
+            }
+        });
+        try {
+            new GetInteractDataRequest(fixture.villager().getId(), currentId).handleServer(other);
+            helper.assertTrue(sent.get() == 0,
+                    "a foreign player cannot request another player's private Interact menu data");
+            new GetInteractDataRequest(fixture.villager().getId(), firstId).handleServer(fixture.player());
+            helper.assertTrue(sent.get() == 0,
+                    "a stale menu request cannot access the replacement menu's personal data");
+            new GetInteractDataRequest(fixture.villager().getId(), currentId).handleServer(fixture.player());
+            helper.assertTrue(sent.get() == 1,
+                    "the current nearby menu owner can request Interact menu data");
+            // The wire response must carry its own correlation: a newer menu must
+            // be able to reject an earlier response that was already in flight.
+            FriendlyByteBuf encoded = new FriendlyByteBuf(Unpooled.buffer());
+            try {
+                GetInteractDataResponse.STREAM_CODEC.encode(encoded, lastResponse.get());
+                helper.assertTrue(encoded.readInt() == fixture.villager().getId(),
+                        "Interact data response must identify the villager it describes");
+                helper.assertTrue(encoded.readUUID().equals(currentId),
+                        "Interact data response must identify the menu whose data it describes");
+            } finally {
+                encoded.release();
+            }
+        } finally {
+            Network.registerSender(previous);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void zombieCureUsesVanillaInteractionNotForgedMenuCommands(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        ZombieVillagerEntityMCA zombie = EntitiesMCA.MALE_ZOMBIE_VILLAGER.create(helper.getLevel());
+        helper.assertTrue(zombie != null, "expected a zombie villager fixture");
+        zombie.setNoAi(true);
+        zombie.setPos(fixture.player().getX() + 1.0D, fixture.player().getY(), fixture.player().getZ());
+        zombie.addEffect(new MobEffectInstance(MobEffects.WEAKNESS, 200));
+        helper.getLevel().addFreshEntity(zombie);
+        fixture.player().setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.GOLDEN_APPLE, 3));
+        try {
+            new InteractionVillagerMessage("gift", zombie.getUUID(), UUID.randomUUID())
+                    .handleServer(fixture.player());
+            helper.assertTrue(!zombie.isConverting(),
+                    "a zombie with no open Interact menu must reject forged gift packets");
+            helper.assertTrue(fixture.player().getMainHandItem().getCount() == 3,
+                    "a forged zombie gift must not consume the held golden apple");
+            helper.assertTrue(!InteractionMenuCommandAccess.allows(zombie, fixture.player(), "gift"),
+                    "zombie cure must use native right-click, not a legacy GUI command with no menu owner");
+
+            zombie.mobInteract(fixture.player(), InteractionHand.MAIN_HAND);
+            helper.assertTrue(zombie.isConverting(),
+                    "normal right-click golden-apple curing must remain available");
+            helper.assertTrue(fixture.player().getMainHandItem().getCount() == 2,
+                    "normal zombie curing must consume exactly one golden apple");
+        } finally {
+            zombie.discard();
+        }
         helper.succeed();
     }
 

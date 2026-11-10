@@ -122,7 +122,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         dialogueScroller.reset();
         dialogueHeight.reset();
         dialogueDisplayedNode = null;
-        Network.sendToServer(new GetInteractDataRequest(villager.asEntity().getId()));
+        Network.sendToServer(new GetInteractDataRequest(villager.asEntity().getId(), interactionId));
     }
 
     @Override

@@ -142,7 +142,8 @@ public class ClientHandlerImpl implements ClientHandler {
     @Override
     public void handleInteractDataResponse(GetInteractDataResponse message) {
         Screen screen = client.screen;
-        if (screen instanceof InteractScreen gui) {
+        if (screen instanceof InteractScreen gui
+                && gui.matchesInteraction(message.villagerEntityId(), message.interactionId())) {
             gui.setConstraints(message.constraints());
             gui.setParents(message.father().orElse(null), message.mother().orElse(null));
             gui.setSpouse(message.marriageState(), message.spouse().orElse(null));

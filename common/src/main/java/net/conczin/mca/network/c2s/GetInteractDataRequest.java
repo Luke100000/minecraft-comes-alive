@@ -9,6 +9,7 @@ import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.GetInteractDataResponse;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -18,18 +19,23 @@ import net.minecraft.world.entity.Entity;
 
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
-public record GetInteractDataRequest(int id) implements HandleablePayload {
+public record GetInteractDataRequest(int id, UUID interactionId) implements HandleablePayload {
     public static final CustomPacketPayload.Type<GetInteractDataRequest> TYPE = new CustomPacketPayload.Type<>(net.conczin.mca.MCA.locate("get_interact_data_request"));
     public static final StreamCodec<FriendlyByteBuf, GetInteractDataRequest> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.INT, GetInteractDataRequest::id,
+            UUIDUtil.STREAM_CODEC, GetInteractDataRequest::interactionId,
             GetInteractDataRequest::new
     );
 
     @Override
     public void handleServer(ServerPlayer player) {
         Entity entity = player.level().getEntity(id);
-        if (entity instanceof VillagerLike<?> villager) {
+        if (entity instanceof VillagerLike<?> villager
+                && entity.isAlive()
+                && player.canInteractWithEntity(entity, 1.0D)
+                && villager.getInteractions().matchesInteraction(player, interactionId)) {
             Set<Constraint> constraints = Constraint.allMatching(villager, player);
             EntityRelationship relationship = ((CompassionateEntity<?>) villager).getRelationships();
             FamilyTreeNode family = relationship.getFamilyEntry();
@@ -37,7 +43,8 @@ public record GetInteractDataRequest(int id) implements HandleablePayload {
             Optional<String> motherName = relationship.getFamilyTree().getOrEmpty(family.mother()).map(FamilyTreeNode::getName);
             Optional<String> spouseName = relationship.getFamilyTree().getOrEmpty(family.partner()).map(FamilyTreeNode::getName);
             RelationshipState marriageState = relationship.getRelationshipState();
-            Network.sendToPlayer(new GetInteractDataResponse(constraints, fatherName, motherName, spouseName, marriageState), player);
+            Network.sendToPlayer(new GetInteractDataResponse(id, interactionId, constraints,
+                    fatherName, motherName, spouseName, marriageState), player);
         }
     }
 
