@@ -130,6 +130,26 @@ public final class DialogueEngineGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void openingInventoryReleasesWholeInteractMenuOwner(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        VillagerEntityMCA villager = fixture.villager();
+        var interactions = villager.getInteractions();
+        interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        UUID menuId = interactions.interactionId();
+        helper.assertTrue(interactions.matchesInteraction(fixture.player(), menuId),
+                "the Interact menu must be owned before switching to inventory");
+        helper.assertTrue(villager.getBrain().isActive(ActivitiesMCA.INTERACT),
+                "the full Interact menu must own the villager's brain activity");
+
+        interactions.handle(fixture.player(), "inventory");
+        helper.assertTrue(interactions.getInteractingPlayer().isEmpty(),
+                "replacing the whole Interact screen with inventory must release its owner");
+        helper.assertTrue(!villager.getBrain().isActive(ActivitiesMCA.INTERACT),
+                "inventory screen must not leave the villager in conversation activity");
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 150)
     public static void activeDialogueSuspendsChoreForEightyTicks(GameTestHelper helper) {
         Fixture fixture = fixture(helper);

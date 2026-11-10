@@ -182,6 +182,9 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 return false;
             }
             case "inventory" -> {
+                // The inventory replaces the entire Interact menu. Release its
+                // owner BEFORE opening the container, so we do not close it.
+                entity.getInteractions().stopInteracting(player, entity.getInteractions().interactionId());
                 player.openMenu(entity);
                 return false;
             }
