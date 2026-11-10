@@ -2,6 +2,7 @@ package net.conczin.mca.network.c2s;
 
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerLike;
+import net.conczin.mca.entity.interaction.InteractionMenuCommandAccess;
 import net.conczin.mca.network.HandleablePayload;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.FriendlyByteBuf;
@@ -24,8 +25,16 @@ public record InteractionVillagerMessage(String command, UUID villagerUUID) impl
     @Override
     public void handleServer(ServerPlayer player) {
         Entity v = player.serverLevel().getEntity(villagerUUID);
-        if (v instanceof VillagerLike<?> villager && villager.getInteractions().handle(player, command)) {
-            villager.getInteractions().stopInteracting();
+        if (!(v instanceof VillagerLike<?> villager)
+                || !v.isAlive()
+                || player.distanceToSqr(v) > 64.0D
+                || villager.getInteractions().getInteractingPlayer().filter(player::equals).isEmpty()
+                || !InteractionMenuCommandAccess.allows(villager, player, command)) {
+            return;
+        }
+        UUID id = villager.getInteractions().interactionId();
+        if (villager.getInteractions().handle(player, command)) {
+            villager.getInteractions().stopInteracting(player, id);
         }
     }
 

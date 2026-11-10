@@ -12,6 +12,7 @@ import net.conczin.mca.network.c2s.InteractionDialogueAdvanceMessage;
 import net.conczin.mca.network.c2s.InteractionDialogueChoiceMessage;
 import net.conczin.mca.network.c2s.InteractionDialogueLeaveMessage;
 import net.conczin.mca.network.c2s.InteractionDialogueSelectMessage;
+import net.conczin.mca.network.c2s.InteractionVillagerMessage;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ItemsMCA;
 import net.conczin.mca.resources.DialogueEvents;
@@ -826,6 +827,32 @@ public final class DialogueEngineGameTests {
                 "only the matching packet may close this concrete screen interaction");
         helper.assertTrue(sessions(engine).get(fixture.player().getUUID()).status() == DialogueSession.Status.PAUSED,
                 "the matching close must pause the real server dialogue session");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void legacyCommandPacketRejectsForeignPlayerAndDialogueOnlyEffects(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        var interactions = fixture.villager().getInteractions();
+        interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        UUID interactionId = interactions.interactionId();
+        ServerPlayer intruder = new FakePlayer(helper.getLevel(),
+                new GameProfile(UUID.randomUUID(), "legacy-command-intruder"));
+        intruder.setPos(fixture.player().position());
+        boolean originalArmor = fixture.villager().getVillagerBrain().getArmorWear();
+
+        new InteractionVillagerMessage("armor", fixture.villager().getUUID()).handleServer(intruder);
+        helper.assertTrue(fixture.villager().getVillagerBrain().getArmorWear() == originalArmor,
+                "a non-owner must not toggle the villager's armor through a forged command");
+        helper.assertTrue(interactions.matchesInteraction(fixture.player(), interactionId),
+                "a non-owner's command must not close the actual owner's interaction");
+
+        var originalProfession = fixture.villager().getVillagerData().getProfession();
+        new InteractionVillagerMessage("execute", fixture.villager().getUUID()).handleServer(fixture.player());
+        helper.assertTrue(fixture.villager().getVillagerData().getProfession().equals(originalProfession),
+                "direct commands must not bypass the mayor eligibility enforced by the GUI");
+        helper.assertTrue(interactions.matchesInteraction(fixture.player(), interactionId),
+                "rejected privileged commands must not close the owner screen");
         helper.succeed();
     }
 
