@@ -415,6 +415,67 @@ class McaDialogueEventResourcesTest {
     }
 
     @Test
+    void flirtAndKissSlapOutcomesUseTypedDamageWithoutChangingTheirRoutes() throws Exception {
+        Map<ResourceLocation, DialogueEvent> events = new HashMap<>();
+        loadShippedEvents().forEach(event -> events.put(event.id(), event));
+
+        Map<String, List<Double>> expectedWeights = Map.of(
+                "flirt", List.of(1.0, 5.0, 1.0, 5.0, 1.0, 5.0, 20.0),
+                "kiss", List.of(1.0, 5.0, 5.0));
+        Map<String, List<Integer>> expectedPriorities = Map.of(
+                "flirt", List.of(20, 20, 10, 10, 0, 0, 0),
+                "kiss", List.of(0, 0, 0));
+        Map<String, List<List<String>>> expectedRequirements = Map.of(
+                "flirt", List.of(
+                        List.of("mca:hearts={\"min\":60}"),
+                        List.of("mca:hearts={\"min\":60}", "mca:personality={\"value\":\"odd\"}"),
+                        List.of("mca:hearts={\"min\":30}"),
+                        List.of("mca:hearts={\"min\":30}", "mca:personality={\"value\":\"odd\"}"),
+                        List.of(),
+                        List.of("mca:personality={\"value\":\"odd\"}"),
+                        List.of("mca:hearts={\"max\":0}")),
+                "kiss", List.of(
+                        List.of(),
+                        List.of("mca:personality={\"value\":\"odd\"}"),
+                        List.of("mca:hearts={\"max\":0}")));
+
+        for (String action : List.of("flirt", "kiss")) {
+            DialogueEvent event = events.get(id("relationship/" + action));
+            DialogueEvent.Choice affection = event.nodes().get(event.start()).choices().orElseThrow().stream()
+                    .filter(choice -> choice.id().equals("affection"))
+                    .findFirst().orElseThrow();
+            List<DialogueEvent.Outcome> outcomes = affection.outcomes().orElseThrow();
+            List<DialogueEvent.Outcome> slapOutcomes = outcomes.stream()
+                    .filter(outcome -> outcome.next().equals("slap"))
+                    .toList();
+
+            assertEquals(expectedWeights.get(action), slapOutcomes.stream()
+                    .map(DialogueEvent.Outcome::weight).toList(), action + " slap weights");
+            assertEquals(expectedPriorities.get(action), slapOutcomes.stream()
+                    .map(DialogueEvent.Outcome::priority).toList(), action + " slap priorities");
+            assertEquals(expectedRequirements.get(action), slapOutcomes.stream()
+                    .map(outcome -> outcome.requirements().stream().map(requirement -> {
+                        DialogueCondition.Defined defined = assertInstanceOf(DialogueCondition.Defined.class, requirement);
+                        JsonObject definition = defined.definition();
+                        definition.remove("type");
+                        return defined.type() + "=" + definition;
+                    }).toList()).toList(), action + " slap requirements");
+
+            for (DialogueEvent.Outcome outcome : slapOutcomes) {
+                assertEquals(List.of(new DialogueAction.Hearts(-5), new DialogueAction.Slap(1.0f)),
+                        outcome.actions(), action + " slap must retain its hearts penalty and deal 1.0 damage");
+            }
+            assertTrue(outcomes.stream().flatMap(outcome -> outcome.actions().stream())
+                            .noneMatch(effect -> effect instanceof DialogueAction.Command command
+                                    && command.command().equals("slap")),
+                    action + " must not retain a legacy slap command");
+            DialogueEvent.Node terminal = event.nodes().get("slap");
+            assertEquals(List.of("dialogue." + action + ".slap"), terminal.lines());
+            assertTrue(terminal.complete());
+        }
+    }
+
+    @Test
     void apologyIsSpokenBeforeTheVillagerResponds() throws Exception {
         DialogueEvent apology = loadShippedEvents().stream()
                 .filter(event -> event.id().equals(id("relationship/apologize")))

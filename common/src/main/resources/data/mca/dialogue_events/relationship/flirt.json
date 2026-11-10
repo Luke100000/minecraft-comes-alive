@@ -80,7 +80,7 @@
           "weight": 1,
           "actions": [
             { "type": "mca:hearts", "amount": -5 },
-            { "type": "mca:command", "command": "slap" }
+            { "type": "mca:slap", "amount": 1.0 }
           ],
           "next": "slap"
         },
@@ -93,7 +93,7 @@
           "weight": 5,
           "actions": [
             { "type": "mca:hearts", "amount": -5 },
-            { "type": "mca:command", "command": "slap" }
+            { "type": "mca:slap", "amount": 1.0 }
           ],
           "next": "slap"
         },
@@ -137,7 +137,7 @@
           "weight": 1,
           "actions": [
             { "type": "mca:hearts", "amount": -5 },
-            { "type": "mca:command", "command": "slap" }
+            { "type": "mca:slap", "amount": 1.0 }
           ],
           "next": "slap"
         },
@@ -150,7 +150,7 @@
           "weight": 5,
           "actions": [
             { "type": "mca:hearts", "amount": -5 },
-            { "type": "mca:command", "command": "slap" }
+            { "type": "mca:slap", "amount": 1.0 }
           ],
           "next": "slap"
         },
@@ -192,7 +192,7 @@
           "weight": 1,
           "actions": [
             { "type": "mca:hearts", "amount": -5 },
-            { "type": "mca:command", "command": "slap" }
+            { "type": "mca:slap", "amount": 1.0 }
           ],
           "next": "slap"
         },
@@ -203,7 +203,7 @@
           "weight": 5,
           "actions": [
             { "type": "mca:hearts", "amount": -5 },
-            { "type": "mca:command", "command": "slap" }
+            { "type": "mca:slap", "amount": 1.0 }
           ],
           "next": "slap"
         },
@@ -214,7 +214,7 @@
           "weight": 20,
           "actions": [
             { "type": "mca:hearts", "amount": -5 },
-            { "type": "mca:command", "command": "slap" }
+            { "type": "mca:slap", "amount": 1.0 }
           ],
           "next": "slap"
         }

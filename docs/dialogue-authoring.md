@@ -247,7 +247,14 @@ may instead use concise confirmations and direct feedback.
 
 ## Completion, ending, and rewards
 
-`complete: true` makes a successful ending. The player must select **Finish conversation**, which returns to the topic list, to save their choices, history, cooldown and pending effects.
+`complete: true` makes a successful ending. Normally the player must select
+**Finish conversation**, which returns to the topic list, to save their choices,
+history, cooldown and pending effects. A provoking reply that leads directly to a
+single-line, completed slap reaction is the exception: accepting the reply
+completes the dialogue immediately, closes the entire interaction UI, and commits
+history and other authorized effects once. The server applies the slap three ticks
+later, then sends the final authored reaction in localized chat once, without a
+final **Finish conversation** click.
 
 ```json
 "good_end": {
@@ -286,21 +293,24 @@ Current built-in server actions are:
 ```
 
 Actions are server-owned and are committed with the successful conversation
-completion, not when the client merely displays a line. Use `mca:command` only to
+completion, not when the client merely displays a line. For a slap-ending reply,
+other authorized actions and history commit immediately, while the physical hit
+and final chat reaction follow the three-tick delay. Use `mca:command` only to
 delegate to an existing MCA gameplay command owner; do not reimplement gameplay
 logic in dialogue data.
 
 `mca:slap` makes the villager swing an empty hand when one is available and hit
 the player with the specified positive amount of vanilla mob-attack damage
-(1.0 damage = half a heart). It does not equip or use a weapon. Legacy
-`{ "type": "mca:command", "command": "slap" }` remains supported at 1.0 damage.
+(1.0 damage = half a heart). It does not equip or use a weapon. Author slap
+outcomes with the typed action. The former `mca:command` `slap` action is no
+longer accepted by the dialogue engine.
 
 `mca:hearts` already follows MCA's heart-reward behavior. Do not automatically add
 an equal `mca:mood` action beside it just to mimic legacy dialogue data, because
 that can double-apply mood changes. Add a separate mood action only when the story
 actually intends an additional mood delta.
 
-`mca:command` accepts these existing interaction commands: `adopt`, `apologize`, `divorcePapers`, `divorceConfirm`, `hire_short`, `hire_long`, `procreate`, `slap`, `stay_in_village`, and `location`. It cannot run arbitrary Minecraft commands; use at most one command action per conversation.
+`mca:command` accepts these existing interaction commands: `adopt`, `apologize`, `divorcePapers`, `divorceConfirm`, `hire_short`, `hire_long`, `procreate`, `stay_in_village`, and `location`. It cannot run arbitrary Minecraft commands; use at most one command action per conversation.
 
 ## Requirements
 
@@ -718,7 +728,7 @@ one Unicode-safe grapheme every **40 ms**. This is presentation only: there is n
 network packet per character, no instant-reveal control, and clicking during reveal
 does not skip, accelerate, advance, or queue an advance.
 
-For a multi-line node, `Next` appears after the current passage is fully revealed and advances to the next passage. Replies appear after the final passage. A terminal shows **Finish conversation** and returns the player to the topic list. The server commits history, cooldown and pending effects only if that terminal has `complete: true`; `end: true` closes without completion.
+For a multi-line node, `Next` appears after the current passage is fully revealed and advances to the next passage. Replies appear after the final passage. Ordinary terminals show **Finish conversation** and return the player to the topic list. The server commits history, cooldown and pending effects only for a `complete: true` terminal; `end: true` closes without completion. The slap-ending exception completes and closes the interaction on the provoking reply, with the final localized line delivered in chat after the delayed hit.
 
 ## Author checklist
 
@@ -744,8 +754,8 @@ Before submitting an event, check that:
   or raid survival come from an authoritative condition owner;
 - actions are necessary, server-owned, and cannot be applied twice through an
   equivalent legacy effect;
-- completion is intended to commit only after the final `Finish conversation`
-  acknowledgement.
+- completion is intended to commit after the final `Finish conversation`
+  acknowledgement, unless the reply leads directly to a completed slap reaction.
 
 ## Personality story examples
 

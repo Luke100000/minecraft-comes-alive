@@ -44,8 +44,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
     private static final java.util.Set<String> DIALOGUE_NON_CLOSING_COMMANDS = java.util.Set.of(
             "adopt",
             "apologize",
-            "location",
-            "slap"
+            "location"
     );
 
     public VillagerCommandHandler(VillagerEntityMCA entity) {
@@ -318,7 +317,6 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                     entity.sendChatMessage(player, "dialogue.location.forgot");
                 }
             }
-            case "slap" -> slap(player, 1.0f);
         }
 
         return super.handle(player, command);
@@ -328,6 +326,8 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
     public void slap(ServerPlayer player, float amount) {
         InteractionHand hand = entity.getMainHandItem().isEmpty() ? InteractionHand.MAIN_HAND
                 : InteractionHand.OFF_HAND;
+        // A fresh slap must animate even during the first half of an earlier swing.
+        entity.swinging = false;
         entity.swing(hand);
         player.hurt(entity.damageSources().mobAttack(entity), amount);
     }

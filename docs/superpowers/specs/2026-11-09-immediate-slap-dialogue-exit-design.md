@@ -16,7 +16,7 @@ A villager slapping the player is a physical interruption. After selecting the p
 - Deliver the final authored reaction in chat **after** the slap, using its existing localization, rather than requiring a final Continue or Finish click.
 - Treat a dialogue-triggered slap as an interruption of that dialogue path. Preserve normal completion/history and any other authorized effects from that path exactly once, even though the final UI acknowledgement is skipped.
 - Reuse the established interaction identity, server-to-client close mechanism, and dialogue state lifecycle. Avoid a client-only health check or a second independent interaction state machine. A close must target the correct villager and interaction, without closing a newer conversation. Any delayed effect must not fire if the player or villager becomes unavailable and must not be scheduled twice by retransmitted responses.
-- Keep ordinary non-slap dialogue progression and voluntarily closing/resuming a conversation as they currently work. Keep the legacy slap command's damage amount and swing behavior.
+- Keep ordinary non-slap dialogue progression and voluntarily closing/resuming a conversation as they currently work. Use the typed `mca:slap` action for slap outcomes; remove the unused legacy `mca:command/slap` and standalone text command on this development branch while retaining other gameplay commands.
 
 ## Validation
 

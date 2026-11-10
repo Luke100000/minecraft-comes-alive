@@ -4,7 +4,7 @@
 
 **Goal:** After a provoking reply leads to a slap, close the entire interaction UI, then visibly slap the player, then send the final authored reaction in chat.
 
-**Architecture:** The server-owned `DialogueEngine` recognizes completed slap paths during choice resolution, commits the dialogue once, and uses its existing server-tick loop to defer the physical hit for three ticks. The existing interaction-ID-qualified CLOSE packet dismisses the screen before the hit, and the villager's existing chat pipeline delivers the localized last line after damage. Both legacy `mca:command/slap` and authored `mca:slap` are supported, while bundled Flirt/Kiss resources migrate to the typed slap action.
+**Architecture:** The server-owned `DialogueEngine` recognizes completed typed `mca:slap` paths during choice resolution, commits the dialogue once, and uses its existing server-tick loop to defer the physical hit for three ticks. The existing interaction-ID-qualified CLOSE packet dismisses the screen before the hit, and the villager's existing chat pipeline delivers the localized last line after damage. Bundled Flirt/Kiss resources use typed slap actions. The legacy slap text command is retired on this development branch.
 
 **Tech Stack:** Minecraft 1.21.1, Java 21, shared MCA common code with Fabric and NeoForge, NeoForge GameTests.
 
@@ -15,7 +15,7 @@
 - Work only in the existing dialogue worktree. Do not create a worktree, use WSL, or modify unrelated staged UI styling.
 - Retain server authority, existing session/offer replay protection, the authenticated villager interaction ID, and the existing close packet. Do not add a new packet or parallel interaction lifecycle.
 - Use a three-server-tick delay (150 ms at 20 TPS) as the implementation choice. The client should receive CLOSE before damage. True rendered-frame ordering still needs in-game validation and might need acknowledgement if the delay proves insufficient.
-- Commit history and other authored effects once when the accepted path completes. Delay only the physical slap and its subsequent authored reaction. Preserve ordinary and resumable dialogue and the legacy standalone slap command.
+- Commit history and other authored effects once when the accepted path completes. Delay only the physical slap and its subsequent authored reaction. Preserve ordinary and resumable dialogue and unrelated gameplay commands.
 - A pending hit expires without damage or chat when either actor dies, disappears, changes world, or the server clears the dialogue engine. Keep queued work short-lived and server-thread-confined.
 
 ## Review Focus
@@ -24,7 +24,7 @@
 - **Concurrent/changed owner** — the close targets the captured interaction ID and never closes a newer player's UI. Test in Task 2.
 - **Actor lost during delay** — no damage or stale chat if the player or villager is unavailable. Test in Task 1.
 - **Other outcome** — non-slap success/failure still renders its terminal dialogue normally and commits on acknowledgement. Test in Task 1.
-- **Legacy authorship** — Flirt/Kiss `mca:command/slap` and direct `mca:slap` both retain damage values, hearts/history and correct localization. Test in Tasks 1 and 3.
+- **Legacy rejection** — obsolete `mca:command/slap` and standalone text slap cannot execute, while typed `mca:slap` retains damage values, hearts/history and correct localization. Test in Tasks 1 and 3.
 
 ---
 
@@ -41,9 +41,9 @@
 
 - [ ] **Step 1: Make the existing slap GameTest red.** Revise `slapActionUsesEmptyHandAndVillagerDamageOnce` to assert that choosing the provoking reply completes the path immediately and leaves health at 20 before the deferred hit. After three server ticks, assert health 17, villager damage attribution, an OFF_HAND swing with the occupied main hand unchanged, recorded history, and one hit after replaying the old token. Use the existing FakePlayer fixture conventions. Owner release is covered in Task 2.
 - [ ] **Step 2: Run the focused GameTest to confirm RED.** Run `.\gradlew.bat :neoforge:runGameTestServer -PmcaGameTest=DialogueActionGameTests#slapActionUsesEmptyHandAndVillagerDamageOnce --console=plain --no-configuration-cache --max-workers=1`. Expected failure is the old delayed-acknowledgement contract. Confirm the selector really ran.
-- [ ] **Step 3: Implement the transition in `DialogueEngine`.** After resolving an accepted choice and automatic routes, detect a complete, one-line final reaction with exactly one pending `DialogueAction.Slap` or `DialogueAction.Command` whose command is `slap`. Consume the session and offer token once, commit non-slap effects and history with existing validation, and enqueue the deferred hit. Treat the legacy command as 1.0 damage and `mca:slap` as its authored amount. Keep existing acknowledgement/commit behavior for unusual multi-slap or intermediate-node paths, avoiding an unrequested change to their semantics.
+- [ ] **Step 3: Implement the transition in `DialogueEngine`.** After resolving an accepted choice and automatic routes, detect a complete, one-line final reaction with exactly one pending `DialogueAction.Slap`. Consume the session and offer token once, commit non-slap effects and history with existing validation, and enqueue the deferred hit at the typed action's authored amount. Keep existing acknowledgement/commit behavior for unusual multi-slap or intermediate-node paths, avoiding an unrequested change to their semantics.
 - [ ] **Step 4: Process the pending hit in `DialogueEngine.tick(MinecraftServer)`.** At or after the due tick, remove the entry before execution, validate actors/world, call the existing `villager.getInteractions().slap(player, amount)`, and only then call `villager.sendChatMessage(capturedReaction, player)`. Discard invalid entries and clear pending hits on engine clear/removal. Use the current server tick registration in both loaders.
-- [ ] **Step 5: Add focused negative cases to the same GameTest class.** Cover a legacy `mca:command/slap` with an accompanying hearts action, repeated choice token, disappearance before the due tick, and an ordinary no-slap choice still requiring final acknowledgement. Update `nonClosingCommandStillCommitsAfterOwnerExecutes` to the new slap-path timing or move its nonclosing-command assertion to an existing valid non-slap command fixture. Keep the direct legacy `legacySlapCommandKeepsDefaultDamageAndSwings` test passing.
+- [ ] **Step 5: Add focused negative cases to the same GameTest class.** Cover a typed `mca:slap` with an accompanying hearts action, repeated choice token, disappearance before the due tick, and an ordinary no-slap choice still requiring final acknowledgement. Verify the removed legacy slap text command is rejected without damage or history. Keep nonclosing command assertions on valid unrelated command fixtures.
 - [ ] **Step 6: Verify GREEN.** Run `.\gradlew.bat :neoforge:runGameTestServer -PmcaGameTest=DialogueActionGameTests --console=plain --no-configuration-cache --max-workers=1`. Confirm the focused class executes and finishes successfully. Use `.\gradlew.bat :common:test --console=plain --no-configuration-cache --max-workers=1` for relevant shared behavior.
 - [ ] **Step 7: Commit only Task 1 files.** Use `git commit --only -m "feat(dialogue): complete slap paths before deferred hit" -- <exact tracked Task 1 paths>`. Check `git status --short` beforehand because unrelated styling is already staged. Do not run an unscoped `git commit`.
 
@@ -76,18 +76,18 @@
 
 **Interfaces**
 - Bundled event data uses `{ "type": "mca:slap", "amount": 1.0 }` instead of `{ "type": "mca:command", "command": "slap" }`.
-- `DialogueAction.Command("slap")` remains supported for external datapacks and existing callers. Standalone `VillagerCommandHandler.handleDialogue("slap")` keeps its immediate 1.0 damage behavior.
+- `DialogueAction.Command("slap")` is rejected by the dialogue command allowlist. The standalone legacy `VillagerCommandHandler.handleDialogue("slap")` is also rejected.
 
 - [ ] **Step 1: Add a failing resource test.** Assert every `relationship/flirt` and `relationship/kiss` slap outcome uses `DialogueAction.Slap(1.0f)`, none uses `DialogueAction.Command("slap")`, and negative heart deltas, weights, requirements and target `slap` nodes remain unchanged.
 - [ ] **Step 2: Confirm RED.** Run `.\gradlew.bat :common:test --tests 'net.conczin.mca.dialogue.McaDialogueEventResourcesTest' --console=plain --no-configuration-cache --max-workers=1`. Expected FAIL on the current bundled command actions.
 - [ ] **Step 3: Migrate the ten bundled slap command actions.** Replace each in `flirt.json` (seven) and `kiss.json` (three) with `mca:slap` at amount 1.0, preserving all outcome weights, priorities, requirements, hearts values, next links and `dialogue.flirt.slap`/`dialogue.kiss.slap` reaction keys.
-- [ ] **Step 4: Update the two dialogue guides.** Document the new exception to final-acknowledgement commit: a slap-ending response immediately completes, closes the UI, then hits after the short delay and delivers the localized terminal reaction in chat. Mention legacy `mca:command/slap` compatibility and typed-action preference for new datapacks.
+- [ ] **Step 4: Update the two dialogue guides.** Document the new exception to final-acknowledgement commit: a typed slap-ending response immediately completes, closes the UI, then hits after the short delay and delivers the localized terminal reaction in chat. Document removal of the legacy slap text command for datapacks.
 - [ ] **Step 5: Verify GREEN and compatibility.** Run the same resource test, `.\gradlew.bat :common:test --console=plain --no-configuration-cache --max-workers=1`, and the NeoForge `DialogueActionGameTests` class from Tasks 1–2. Confirm `DialogueEventParsingTest` still round-trips the typed slap action.
 - [ ] **Step 6: Commit only Task 3 paths.** Verify `git diff --check` and use `git commit --only -m "refactor(dialogue): migrate bundled slap actions" -- <exact tracked Task 3 paths>`, keeping unrelated staged styling untouched.
 
 ## Completion Criteria
 
-Both authored slap forms, old-token replay, disappearance, owner change and no-slap routes pass focused GameTests. Bundled Flirt/Kiss events use typed slap actions, and other legacy command handling remains compatible. Common tests and both loader compiles pass. A client check confirms the visual UI-close → slap → chat order, or the result is explicitly reported as still unverified.
+Typed slap actions, rejection of legacy slap text commands, old-token replay, disappearance, owner change and no-slap routes pass focused GameTests. Bundled Flirt/Kiss events use typed slap actions, and unrelated gameplay command handling remains compatible. Common tests and both loader compiles pass. A client check confirms the visual UI-close → slap → chat order, or the result is explicitly reported as still unverified.
 
 ## General Legacy Handling Audit — Separate Follow-up Workstreams
 
@@ -111,6 +111,6 @@ A read-only subagent audited legacy dialogue, interaction packets, GUI routes, c
 
 ### Already modernized and kept compatible
 
-The Talk entry point now uses `DialogueEngine`, typed server-owned choices, offers/session tokens, resource generations, history, strict action codecs and bounded client presentation. There is no active bundled legacy `dialogues/` directory or `legacyAvailable` response field in the audited source. `mca:command/slap` remains supported for external datapacks, and the standalone legacy `slap` handler retains its existing 1.0 damage behavior. Preserve the existing typed-slap parsing tests, legacy damage GameTest and scoped interaction-close tests.
+The Talk entry point now uses `DialogueEngine`, typed server-owned choices, offers/session tokens, resource generations, history, strict action codecs and bounded client presentation. There is no active bundled legacy `dialogues/` directory or `legacyAvailable` response field in the audited source. The unused legacy slap text command has been retired, including its external datapack entry point. Preserve typed-slap parsing, legacy rejection and scoped interaction-close tests.
 
 **Audit verification boundary:** This inventory is based on source inspection only. No Gradle suite, client gameplay run, permission exploit test or migration implementation was performed by the auditor. Existing staged UI changes and the concurrent Rumours design/plan files were not modified.

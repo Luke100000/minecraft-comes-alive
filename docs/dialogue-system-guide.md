@@ -48,11 +48,11 @@ Each node is local to one event. A visible node has exactly one `line` string or
 | --- | --- |
 | `next` | Advance to the named node |
 | `choices` | Show eligible player replies after the final line |
-| `complete: true` | Successful terminal; commit when the player acknowledges it |
+| `complete: true` | Successful terminal; normally commit when acknowledged, or immediately for a slap-ending reply |
 | `end: true` | End the run without committing a completion |
 | `outcomes` | Automatically choose another node without displaying this routing node |
 
-The UI reveals one passage at a time. `Next` advances between passages or nodes. Choices become clickable after the final passage has finished revealing. A terminal displays **Finish conversation**, returning to the topic list. On a `complete: true` terminal, this also commits the run. For line-authoring rules, see [nodes and passages](dialogue-authoring.md#nodes-passages-and-routing).
+The UI reveals one passage at a time. `Next` advances between passages or nodes. Choices become clickable after the final passage has finished revealing. An ordinary terminal displays **Finish conversation**, returning to the topic list and committing a `complete: true` run. If the selected reply leads directly to a single-line completed slap reaction, the server commits the run and closes the entire interaction immediately. The terminal line is delivered in localized chat after the delayed slap, with no final acknowledgement. For line-authoring rules, see [nodes and passages](dialogue-authoring.md#nodes-passages-and-routing).
 
 `silent: true` is an optional visible-node flag. In the client, it runs the text through `villager.transformMessage` instead of the ordinary `villager.sendChatMessage` path. The default is `false`.
 
@@ -99,9 +99,9 @@ Examples:
 { "type": "mca:slap", "amount": 2.0 }
 ```
 
-The current `mca:command` allowlist in `DialogueEngine` is `adopt`, `apologize`, `divorcePapers`, `divorceConfirm`, `hire_short`, `hire_long`, `procreate`, `slap`, `stay_in_village`, and `location`. The engine allows at most **one** command action in a run and requires the owner to report it accepted before committing. It does not execute arbitrary Minecraft command strings.
+The current `mca:command` allowlist in `DialogueEngine` is `adopt`, `apologize`, `divorcePapers`, `divorceConfirm`, `hire_short`, `hire_long`, `procreate`, `stay_in_village`, and `location`. The engine allows at most **one** command action in a run and requires the owner to report it accepted before committing. It does not execute arbitrary Minecraft command strings.
 
-Effects accumulate in the server-side session. They are applied only when the player acknowledges a `complete: true` terminal with **Finish conversation**. The engine checks history writability, validates any command, runs the command, applies other actions and records completion. An `end: true` terminal, discarded session or failed commit does not record completion. `mca:hearts` may affect mood too; avoid duplicating that effect.
+Effects accumulate in the server-side session. Normally they are applied when the player acknowledges a `complete: true` terminal with **Finish conversation**. The engine checks history writability, validates any command, applies authorized actions and records completion. For a reply whose only terminal reaction is a completed one-line typed `mca:slap`, the server commits history and other authorized effects once on choice acceptance, sends the interaction-ID-qualified screen close, and schedules the physical slap three server ticks later. It then sends the existing localized terminal reaction through the villager's chat pipeline once. A stale or repeated choice cannot schedule another hit, and the hit and chat are discarded if either actor becomes unavailable. The old `mca:command` with `slap` fails the command validation and cannot complete. An `end: true` terminal, discarded session or failed commit does not record completion. `mca:hearts` may affect mood too; avoid duplicating that effect.
 
 ## 6. Repeat, pair history, and follow-ups
 
@@ -144,6 +144,7 @@ Interact with MCA villager -> normal interaction screen
     <- InteractionDialogueNodeResponse (current complete line Component)
   Choose reply -> InteractionDialogueChoiceMessage
     DialogueEngine.choose(...): validate choice, resolve outcome, advance
+    slap-ending reply: commit once, close interaction, defer hit three ticks, then localized chat
   Next / Finish conversation -> InteractionDialogueAdvanceMessage
     DialogueEngine.advance(...): next passage/node, or commit/end
     <- InteractionDialogueNodeResponse (active / paused / ended)
@@ -155,7 +156,7 @@ Interact with MCA villager -> normal interaction screen
 
 Closing the screen or moving out of range pauses an unfinished run for **2,400 overworld game ticks**. The player can reopen Talk with the same villager and explicitly select the topic-specific continuation. Browsing the menu does not resume or extend the pause. Starting a different valid event abandons it. Paused sessions do not survive logout, server stop, resource reload, permanent villager removal, or the pause deadline. A datapack reload increments `DialogueEvents.generation()` and invalidates stale sessions/offers.
 
-The server sends complete text Components for each passage. `ClientHandlerImpl.DialoguePresentation` reveals one Unicode grapheme every **40 ms**, without per-character packets. Replies, `Next` and **Finish conversation** appear after the passage is fully revealed. Early clicks cannot skip or queue progress. `InteractScreen` renders the five expandable sections and their entries. Presentation timing never grants completion or rewards.
+The server sends complete text Components for each passage. `ClientHandlerImpl.DialoguePresentation` reveals one Unicode grapheme every **40 ms**, without per-character packets. Replies, `Next` and ordinary **Finish conversation** appear after the passage is fully revealed. Early clicks cannot skip or queue progress. `InteractScreen` renders the five expandable sections and their entries. Presentation timing never grants completion or rewards; the slap-ending exception is a server-owned choice transition.
 
 ## 8. Extending functionality in Java
 
@@ -175,7 +176,7 @@ DialogueAction.register(
 );
 ```
 
-These types can be used as `{"type":"myaddon:min_experience","levels":5}` in event/choice/outcome requirements and `{"type":"myaddon:add_experience","levels":1}` in choice/outcome actions. Codecs parse the object **without `type`**, and must serialize an object without that field. Invalid or unknown types reject the containing resource. Registered action executors run on the logical server only when the final completion is acknowledged; they should not throw after applying partial effects. Condition evaluations must preserve `UNAVAILABLE` when a referenced dependency is missing, including under `mca:not`.
+These types can be used as `{"type":"myaddon:min_experience","levels":5}` in event/choice/outcome requirements and `{"type":"myaddon:add_experience","levels":1}` in choice/outcome actions. Codecs parse the object **without `type`**, and must serialize an object without that field. Invalid or unknown types reject the containing resource. Registered action executors run on the logical server when the dialogue completes, ordinarily upon final acknowledgement and immediately on the supported slap-ending choice transition; they should not throw after applying partial effects. Condition evaluations must preserve `UNAVAILABLE` when a referenced dependency is missing, including under `mca:not`.
 
 The registry is process-wide, and IDs cannot be duplicated or override built-in types. There is **no legacy `Actions.register`/`GiftPredicate.register` compatibility adapter**. See the [datapack guide](dialogue-datapack-guide.md) for a complete matching JSON example.
 

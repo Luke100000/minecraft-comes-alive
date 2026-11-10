@@ -7,6 +7,7 @@ import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Memories;
 import net.conczin.mca.entity.ai.relationship.AgeState;
+import net.conczin.mca.entity.ai.relationship.Personality;
 import net.conczin.mca.entity.ai.relationship.RelationshipState;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ItemsMCA;
@@ -44,11 +45,19 @@ import java.util.concurrent.atomic.AtomicInteger;
 @PrefixGameTestTemplate(false)
 public final class DialogueActionGameTests {
     private static final ResourceLocation CUSTOM_TEST_ACTION = ResourceLocation.parse("dialogue_test:earned_points");
+    private static final ResourceLocation REPLACE_INTERACTION_ACTION = ResourceLocation.parse("dialogue_test:replace_interaction");
     private static final AtomicInteger CUSTOM_POINTS = new AtomicInteger();
 
     static {
         DialogueAction.register(CUSTOM_TEST_ACTION, Codec.INT.fieldOf("points").codec(),
                 (points, context) -> CUSTOM_POINTS.addAndGet(points));
+        DialogueAction.register(REPLACE_INTERACTION_ACTION, Codec.BOOL.fieldOf("replace").codec(),
+                (replace, context) -> {
+                    if (replace) {
+                        context.villager().getInteractions().interactAt(context.player(), Vec3.ZERO,
+                                InteractionHand.MAIN_HAND);
+                    }
+                });
     }
 
     private DialogueActionGameTests() {
@@ -476,25 +485,131 @@ public final class DialogueActionGameTests {
     }
 
     @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
-    public static void nonClosingCommandStillCommitsAfterOwnerExecutes(GameTestHelper helper) {
-        Fixture fixture = fixture(helper);
-        DialogueEvent event = commandStory(ResourceLocation.parse("mca:test/non_closing_command"), "slap");
+    public static void typedSlapDialogueCompletesBeforeHitAndCommitsHeartsOnce(GameTestHelper helper) {
+        Fixture fixture = fixture(helper, true);
+        fixture.villager().setNoAi(true);
+        fixture.villager().getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        disableFakePlayerSpawnProtection(fixture.player());
+        fixture.player().setHealth(20.0f);
+        fixture.villager().getVillagerBrain().setPersonality(Personality.FRIENDLY);
+        Memories memories = fixture.villager().getVillagerBrain().getMemoriesForPlayer(fixture.player());
+        memories.setHearts(50);
+        DialogueEvent event = DialogueEvent.decode(ResourceLocation.parse("mca:test/typed_slap_with_hearts"),
+                JsonParser.parseString("""
+                {
+                  "trigger":"talk",
+                  "presentation":{"mode":"ask","prompt":"test.prompt","resume_prompt":"test.resume"},
+                  "repeat":{"type":"once"},"start":"start",
+                  "nodes":{
+                    "start":{"line":"test.start","choices":[{"id":"support","text":"test.support",
+                      "actions":[{"type":"mca:slap","amount":1.0},
+                                 {"type":"mca:hearts","amount":-5}],"next":"done"}]},
+                    "done":{"line":"test.done","complete":true}
+                  }
+                }
+                """).getAsJsonObject());
         DialogueEngine engine = engine(event);
         DialogueEventHistory history = DialogueEventHistory.get(fixture.player().serverLevel());
 
-        DialogueEngine.DialogueNodeView terminal = startAndChoose(engine, fixture, event);
-        DialogueEngine.TransitionResult completed = engine.advance(fixture.player(), terminal.offerToken());
+        DialogueEngine.DialogueOptions menu = engine.begin(fixture.player(), fixture.villager());
+        DialogueEngine.DialogueNodeView start = engine.select(
+                fixture.player(), menu.token(), DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow();
+        DialogueEngine.TransitionResult completed = engine.choose(fixture.player(), start.offerToken(), "support");
 
         helper.assertTrue(completed.status() == DialogueEngine.TransitionStatus.COMPLETED,
-                "a known command whose owner intentionally returns the non-closing result must not be mistaken for command failure");
+                "typed slap dialogue must complete on the provoking choice");
         helper.assertTrue(history.completed(fixture.player().getUUID(), fixture.villager().getUUID(), event.id()),
-                "handled non-closing command completion must commit dialogue history");
+                "typed slap completion must commit dialogue history");
+        helper.assertTrue(fixture.villager().getVillagerBrain().getMemoriesForPlayer(fixture.player()).getHearts() == 45,
+                "other authored effects must commit before the hit");
+        helper.assertTrue(fixture.player().getHealth() == 20.0f, "typed slap must wait before damaging");
+        helper.assertTrue(engine.choose(fixture.player(), start.offerToken(), "support").status()
+                        == DialogueEngine.TransitionStatus.REJECTED,
+                "replaying the typed slap choice must be rejected");
+
+        helper.runAfterDelay(3, () -> {
+            engine.tick(helper.getLevel().getServer());
+            helper.assertTrue(fixture.player().getHealth() == 19.0f,
+                    "typed slap must apply the authored one-damage hit");
+            helper.assertTrue(fixture.villager().getVillagerBrain().getMemoriesForPlayer(fixture.player()).getHearts() == 45,
+                    "heart effects must never be replayed");
+            engine.tick(helper.getLevel().getServer());
+            helper.assertTrue(fixture.player().getHealth() == 19.0f, "typed slap must never repeat");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void slapRequiresCurrentInteractionOwnerBeforeCommittingEffects(GameTestHelper helper) {
+        Fixture fixture = fixture(helper, true);
+        fixture.villager().setNoAi(true);
+        fixture.villager().getVillagerBrain().getMemoriesForPlayer(fixture.player()).setHearts(50);
+        DialogueEvent event = DialogueEvent.decode(ResourceLocation.parse("mca:test/slap_owner_required"),
+                JsonParser.parseString("""
+                {
+                  "trigger":"talk", "presentation":{"mode":"ask","prompt":"test.prompt","resume_prompt":"test.resume"},
+                  "repeat":{"type":"once"}, "start":"start", "nodes":{
+                    "start":{"line":"test.start","choices":[{"id":"support","text":"test.support",
+                      "actions":[{"type":"mca:slap","amount":1.0},{"type":"mca:hearts","amount":-5}],
+                      "next":"done"}]},
+                    "done":{"line":"test.done","complete":true}
+                  }
+                }
+                """).getAsJsonObject());
+        DialogueEngine engine = engine(event);
+        DialogueEngine.DialogueOptions menu = engine.begin(fixture.player(), fixture.villager());
+        DialogueEngine.DialogueNodeView start = engine.select(
+                fixture.player(), menu.token(), DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow();
+        helper.assertTrue(engine.choose(fixture.player(), start.offerToken(), "support").status()
+                        == DialogueEngine.TransitionStatus.REJECTED,
+                "a terminal slap token without a concrete owned interaction must be rejected");
+        helper.assertTrue(fixture.villager().getVillagerBrain().getMemoriesForPlayer(fixture.player()).getHearts() == 50,
+                "unauthorized slap choice must not commit associated heart effects");
+        helper.assertTrue(!DialogueEventHistory.get(fixture.player().serverLevel()).completed(
+                        fixture.player().getUUID(), fixture.villager().getUUID(), event.id()),
+                "unauthorized slap choice must not commit completion history");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void slapAdditionalActionMustNotCloseReplacementInteraction(GameTestHelper helper) {
+        Fixture fixture = fixture(helper, true);
+        fixture.villager().setNoAi(true);
+        fixture.villager().getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        UUID originalId = fixture.villager().getInteractions().interactionId();
+        DialogueEvent event = DialogueEvent.decode(ResourceLocation.parse("mca:test/slap_replacement_owner"),
+                JsonParser.parseString("""
+                {
+                  "trigger":"talk", "presentation":{"mode":"ask","prompt":"test.prompt","resume_prompt":"test.resume"},
+                  "repeat":{"type":"once"}, "start":"start", "nodes":{
+                    "start":{"line":"test.start","choices":[{"id":"support","text":"test.support",
+                      "actions":[{"type":"mca:slap","amount":1.0},
+                                 {"type":"dialogue_test:replace_interaction","replace":true}],
+                      "next":"done"}]},
+                    "done":{"line":"test.done","complete":true}
+                  }
+                }
+                """).getAsJsonObject());
+        DialogueEngine engine = engine(event);
+        DialogueEngine.DialogueOptions menu = engine.begin(fixture.player(), fixture.villager());
+        DialogueEngine.DialogueNodeView start = engine.select(
+                fixture.player(), menu.token(), DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow();
+        helper.assertTrue(engine.choose(fixture.player(), start.offerToken(), "support").completed(),
+                "slap should still complete when a registered action replaces its interaction");
+        UUID replacementId = fixture.villager().getInteractions().interactionId();
+        helper.assertTrue(!originalId.equals(replacementId),
+                "registered action must have opened a different interaction ID");
+        helper.assertTrue(fixture.villager().getInteractions().matchesInteraction(fixture.player(), replacementId),
+                "completion must not close the replacement interaction opened during effect commit");
         helper.succeed();
     }
 
     @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void slapActionUsesEmptyHandAndVillagerDamageOnce(GameTestHelper helper) {
         Fixture fixture = fixture(helper, true);
+        // This tests dialogue ownership rather than natural AI threat interruption.
+        // Other GameTests may cause panic, legitimately closing the newer screen.
+        fixture.villager().setNoAi(true);
         disableFakePlayerSpawnProtection(fixture.player());
         fixture.player().setHealth(20.0f);
         fixture.villager().setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.IRON_SWORD));
@@ -513,42 +628,156 @@ public final class DialogueActionGameTests {
                 }
                 """).getAsJsonObject());
         DialogueEngine engine = engine(event);
-        DialogueEngine.DialogueNodeView terminal = startAndChoose(engine, fixture, event);
+        DialogueEventHistory history = DialogueEventHistory.get(fixture.player().serverLevel());
+        fixture.villager().getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        UUID originalInteraction = fixture.villager().getInteractions().interactionId();
+        DialogueEngine.DialogueOptions menu = engine.begin(fixture.player(), fixture.villager());
+        DialogueEngine.DialogueNodeView start = engine.select(
+                fixture.player(), menu.token(), DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow();
+        DialogueEngine.TransitionResult completion = engine.choose(fixture.player(), start.offerToken(), "support");
+        helper.assertTrue(completion.status() == DialogueEngine.TransitionStatus.COMPLETED,
+                "provoking a terminal slap must finish immediately without a final acknowledgement");
+        helper.assertTrue(history.completed(fixture.player().getUUID(), fixture.villager().getUUID(), event.id()),
+                "slap dialogue history must be committed exactly when the choice is accepted");
         helper.assertTrue(fixture.player().getHealth() == 20.0f,
-                "offering and choosing the reply must not slap before final acknowledgement");
-
-        helper.assertTrue(engine.advance(fixture.player(), terminal.offerToken()).completed(),
-                "acknowledging the last line must apply the slap");
-        helper.assertTrue(fixture.player().getHealth() == 17.0f,
-                "authored slap must deal 3 damage, but health was " + fixture.player().getHealth());
-        helper.assertTrue(fixture.player().getLastDamageSource() != null
-                        && fixture.player().getLastDamageSource().getEntity() == fixture.villager(),
-                "damage must be attributed to the slapping villager");
-        helper.assertTrue(fixture.villager().swinging && fixture.villager().swingingArm == InteractionHand.OFF_HAND,
-                "an occupied main hand must use the empty off hand for vanilla swing animation");
-        helper.assertTrue(fixture.villager().getMainHandItem().is(Items.IRON_SWORD)
-                        && fixture.villager().getOffhandItem().isEmpty(),
-                "slapping must not disturb villager equipment");
-        helper.assertTrue(engine.advance(fixture.player(), terminal.offerToken()).status()
+                "the accepted slap reply must not damage before the world screen closes");
+        helper.assertTrue(!fixture.villager().getInteractions().matchesInteraction(
+                        fixture.player(), originalInteraction),
+                "slap must release the original interaction owner before the hit");
+        helper.assertTrue(engine.choose(fixture.player(), start.offerToken(), "support").status()
                         == DialogueEngine.TransitionStatus.REJECTED,
-                "a used acknowledgement token must not repeat damage");
-        helper.assertTrue(fixture.player().getHealth() == 17.0f,
-                "slap damage must be applied only once");
+                "replaying an accepted slap choice must be rejected");
+        FakePlayer nextPlayer = new FakePlayer(helper.getLevel(),
+                new GameProfile(UUID.randomUUID(), "next-slap-conversation"));
+        nextPlayer.setPos(fixture.player().position());
+        fixture.villager().getInteractions().interactAt(nextPlayer, Vec3.ZERO, InteractionHand.MAIN_HAND);
+        UUID nextInteraction = fixture.villager().getInteractions().interactionId();
+        helper.assertTrue(fixture.villager().getInteractions().matchesInteraction(nextPlayer, nextInteraction),
+                "another player must be able to interact before the delayed hit");
+
+        helper.runAfterDelay(2, () -> {
+            engine.tick(helper.getLevel().getServer());
+            helper.assertTrue(fixture.player().getHealth() == 20.0f,
+                    "the deferred slap must not damage during its two-tick wait");
+        });
+        helper.runAfterDelay(3, () -> {
+            helper.assertTrue(fixture.villager().getInteractions().matchesInteraction(nextPlayer, nextInteraction),
+                    "newer owner must still be present immediately before processing the pending slap"
+                            + " (danger=" + fixture.villager().isConversationDangerous()
+                            + ", distanceSq=" + fixture.villager().distanceToSqr(nextPlayer)
+                            + ", nextAlive=" + nextPlayer.isAlive() + ")");
+            // Reproduce vanilla's first-half swing gate regardless of unrelated AI animation timing.
+            fixture.villager().swinging = true;
+            fixture.villager().swingTime = 0;
+            fixture.villager().swingingArm = InteractionHand.MAIN_HAND;
+            helper.assertTrue(fixture.villager().getMainHandItem().is(Items.IRON_SWORD),
+                    "the villager must still hold its sword when selecting the empty-hand slap");
+            engine.tick(helper.getLevel().getServer());
+            helper.assertTrue(fixture.player().getHealth() == 17.0f,
+                    "authored slap must deal 3 damage once after the three-tick delay");
+            helper.assertTrue(fixture.player().getLastDamageSource() != null
+                            && fixture.player().getLastDamageSource().getEntity() == fixture.villager(),
+                    "damage must be attributed to the slapping villager");
+            helper.assertTrue(fixture.villager().swinging
+                            && fixture.villager().swingingArm == InteractionHand.OFF_HAND,
+                    "an occupied main hand must use the empty off hand for vanilla swing animation"
+                            + " (swinging=" + fixture.villager().swinging
+                            + ", arm=" + fixture.villager().swingingArm
+                            + ", main=" + fixture.villager().getMainHandItem()
+                            + ", off=" + fixture.villager().getOffhandItem() + ")");
+            helper.assertTrue(fixture.villager().getMainHandItem().is(Items.IRON_SWORD)
+                            && fixture.villager().getOffhandItem().isEmpty(),
+                    "slapping must not disturb villager equipment");
+            engine.tick(helper.getLevel().getServer());
+            helper.assertTrue(fixture.player().getHealth() == 17.0f,
+                    "a completed slap must never fire a second time");
+            helper.assertTrue(fixture.villager().getInteractions().matchesInteraction(nextPlayer, nextInteraction),
+                    "the delayed hit must not close a newer interaction owner");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void disappearingSlapActorCancelsPendingDamage(GameTestHelper helper) {
+        Fixture fixture = fixture(helper, true);
+        fixture.villager().setNoAi(true);
+        fixture.villager().getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        disableFakePlayerSpawnProtection(fixture.player());
+        fixture.player().setHealth(20.0f);
+        DialogueEvent event = slapStory(ResourceLocation.parse("mca:test/disappearing_slap"));
+        DialogueEngine engine = engine(event);
+        DialogueEngine.DialogueOptions menu = engine.begin(fixture.player(), fixture.villager());
+        DialogueEngine.DialogueNodeView start = engine.select(
+                fixture.player(), menu.token(), DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow();
+
+        helper.assertTrue(engine.choose(fixture.player(), start.offerToken(), "support").completed(),
+                "slap must be pending before the actor disappears");
+        fixture.villager().discard();
+        helper.runAfterDelay(3, () -> {
+            engine.tick(helper.getLevel().getServer());
+            helper.assertTrue(fixture.player().getHealth() == 20.0f,
+                    "disappeared villager must never damage the player after cancellation");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void disconnectedSlapPlayerCancelsPendingDamage(GameTestHelper helper) {
+        Fixture fixture = fixture(helper, true);
+        fixture.villager().setNoAi(true);
+        fixture.villager().getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        disableFakePlayerSpawnProtection(fixture.player());
+        fixture.player().setHealth(20.0f);
+        DialogueEvent event = slapStory(ResourceLocation.parse("mca:test/disconnected_slap"));
+        DialogueEngine engine = engine(event);
+        DialogueEngine.DialogueOptions menu = engine.begin(fixture.player(), fixture.villager());
+        DialogueEngine.DialogueNodeView start = engine.select(
+                fixture.player(), menu.token(), DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow();
+
+        helper.assertTrue(engine.choose(fixture.player(), start.offerToken(), "support").completed(),
+                "slap must be queued before disconnect");
+        fixture.player().disconnect();
+        helper.runAfterDelay(3, () -> {
+            engine.tick(helper.getLevel().getServer());
+            helper.assertTrue(fixture.player().getHealth() == 20.0f,
+                    "a disconnected player must not receive queued damage");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void legacySlapCommandIsRejectedWithoutDamage(GameTestHelper helper) {
+        Fixture fixture = fixture(helper, true);
+        disableFakePlayerSpawnProtection(fixture.player());
+        fixture.player().setHealth(20.0f);
+        helper.assertTrue(!fixture.villager().getInteractions().handleDialogue(fixture.player(), "slap").accepted(),
+                "removed legacy slap command must be rejected");
+        helper.assertTrue(fixture.player().getHealth() == 20.0f,
+                "removed legacy slap command must not deal damage");
         helper.succeed();
     }
 
     @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
-    public static void legacySlapCommandKeepsDefaultDamageAndSwings(GameTestHelper helper) {
+    public static void legacySlapDialogueCannotCommit(GameTestHelper helper) {
         Fixture fixture = fixture(helper, true);
         disableFakePlayerSpawnProtection(fixture.player());
         fixture.player().setHealth(20.0f);
-        helper.assertTrue(fixture.villager().getInteractions().handleDialogue(fixture.player(), "slap").accepted(),
-                "legacy slap command should remain supported");
-        helper.assertTrue(fixture.player().getHealth() == 19.0f,
-                "legacy slap command must retain 1 damage default");
-        helper.assertTrue(fixture.villager().swinging && fixture.villager().swingingArm == InteractionHand.MAIN_HAND,
-                "an empty main hand must swing through vanilla animation");
-        helper.succeed();
+        DialogueEvent event = commandStory(ResourceLocation.parse("mca:test/removed_legacy_slap"), "slap");
+        DialogueEngine engine = engine(event);
+        DialogueEventHistory history = DialogueEventHistory.get(fixture.player().serverLevel());
+        DialogueEngine.DialogueNodeView terminal = startAndChoose(engine, fixture, event);
+
+        helper.assertTrue(engine.advance(fixture.player(), terminal.offerToken()).status()
+                        == DialogueEngine.TransitionStatus.ENDED,
+                "legacy slap dialogue must fail closed at completion");
+        helper.assertTrue(!history.completed(fixture.player().getUUID(), fixture.villager().getUUID(), event.id()),
+                "rejected legacy slap must not write completion history");
+        helper.runAfterDelay(3, () -> {
+            engine.tick(helper.getLevel().getServer());
+            helper.assertTrue(fixture.player().getHealth() == 20.0f,
+                    "rejected legacy slap must not queue delayed damage");
+            helper.succeed();
+        });
     }
 
     @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
@@ -1094,6 +1323,25 @@ public final class DialogueActionGameTests {
                   }
                 }
                 """.formatted(command)).getAsJsonObject());
+    }
+
+    private static DialogueEvent slapStory(ResourceLocation id) {
+        return DialogueEvent.decode(id, JsonParser.parseString("""
+                {
+                  "trigger":"talk",
+                  "presentation":{"mode":"ask","prompt":"dialogue.test.prompt","resume_prompt":"dialogue.test.resume"},
+                  "repeat":{"type":"once"},
+                  "start":"start",
+                  "nodes":{
+                    "start":{"line":"dialogue.test.start","choices":[{
+                      "id":"support","text":"dialogue.test.support",
+                      "actions":[{"type":"mca:slap","amount":1.0}],
+                      "next":"done"
+                    }]},
+                    "done":{"line":"dialogue.test.done","complete":true}
+                  }
+                }
+                """).getAsJsonObject());
     }
 
     private static DialogueEvent simpleComplete(ResourceLocation id) {

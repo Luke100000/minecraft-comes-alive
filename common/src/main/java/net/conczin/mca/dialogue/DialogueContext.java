@@ -1,6 +1,5 @@
 package net.conczin.mca.dialogue;
 
-import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.server.world.data.DialogueEventHistory;
 import net.conczin.mca.server.world.data.Village;
@@ -30,14 +29,6 @@ public record DialogueContext(
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(history, "history");
         Objects.requireNonNull(eventAvailable, "eventAvailable");
-    }
-
-    /**
-     * Compatibility constructor for contexts that only reference MCA-shipped history events.
-     * The event engine should pass its live registry predicate so installed addon events are also available.
-     */
-    public DialogueContext(VillagerEntityMCA villager, ServerPlayer player, DialogueEventHistory history) {
-        this(villager, player, history, id -> MCA.MOD_ID.equals(id.getNamespace()));
     }
 
     public ServerLevel level() {

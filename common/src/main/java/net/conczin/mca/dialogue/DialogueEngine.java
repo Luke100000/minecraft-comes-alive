@@ -4,6 +4,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.InteractionDialogueNodeResponse;
 import net.conczin.mca.network.s2c.InteractionDialogueOptionsResponse;
+import net.conczin.mca.network.s2c.OpenGuiRequest;
 import net.conczin.mca.resources.DialogueEvents;
 import net.conczin.mca.server.world.data.DialogueEventHistory;
 import net.minecraft.network.chat.Component;
@@ -20,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -58,7 +60,6 @@ public final class DialogueEngine {
             "hire_short",
             "hire_long",
             "procreate",
-            "slap",
             "stay_in_village",
             "location"
     );
@@ -66,6 +67,7 @@ public final class DialogueEngine {
     private final Map<UUID, DialogueSession> sessions = new HashMap<>();
     private final Map<UUID, DialogueOptions> offers = new HashMap<>();
     private final Map<UUID, LinkedHashMap<UUID, ResourceLocation>> recentPreviews = new HashMap<>();
+    private final List<PendingSlap> pendingSlaps = new ArrayList<>();
     private final RandomSource random;
     private long tokenSequence;
     private long previewGeneration = Long.MIN_VALUE;
@@ -397,6 +399,35 @@ public final class DialogueEngine {
         progressed = progressed.withProgress(next, 0, List.of(), nextToken());
         progressed = resolveAutomaticTransitions(progressed, context);
         progressed = refreshOfferedChoices(progressed, context);
+        DialogueEvent.Node ending = progressed.event().nodes().get(progressed.nodeId());
+        if (ending.complete() && ending.lines().size() == 1
+                && ending.choices().isEmpty() && ending.next().isEmpty()) {
+            List<DialogueAction.Slap> slaps = progressed.pendingEffects().stream()
+                    .filter(DialogueAction.Slap.class::isInstance)
+                    .map(DialogueAction.Slap.class::cast).toList();
+            if (slaps.size() == 1) {
+                UUID interactionId = villager.getInteractions().interactionId();
+                if (!villager.getInteractions().matchesInteraction(player, interactionId)) {
+                    return TransitionResult.rejected(view(session, context));
+                }
+                sessions.remove(playerId);
+                offers.remove(playerId);
+                if (!commit(player, villager, progressed, context, true)) {
+                    return TransitionResult.ending(session.id());
+                }
+                float amount = slaps.getFirst().amount();
+                if (villager.getInteractions().matchesInteraction(player, interactionId)) {
+                    villager.getInteractions().stopInteracting(player, interactionId);
+                }
+                // The effects may have closed or replaced the interaction. The client
+                // ignores this original-ID close when a newer interaction is visible.
+                Network.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.CLOSE, villager, interactionId), player);
+                pendingSlaps.add(new PendingSlap(player, villager, player.serverLevel(),
+                        saturatingAdd(overworldTime(player), 3L), amount,
+                        villager.getTranslatable(player, ending.lines().getFirst())));
+                return TransitionResult.completion(session.id());
+            }
+        }
         sessions.put(playerId, progressed);
         return TransitionResult.advanced(view(progressed, context));
     }
@@ -557,6 +588,22 @@ public final class DialogueEngine {
         Objects.requireNonNull(server, "server");
         long generation = events.generation();
         long gameTime = server.overworld().getGameTime();
+        for (Iterator<PendingSlap> iterator = pendingSlaps.iterator(); iterator.hasNext();) {
+            PendingSlap pending = iterator.next();
+            if (gameTime < pending.dueTick()) {
+                continue;
+            }
+            iterator.remove();
+            if (!pending.player().isAlive() || pending.player().isRemoved() || pending.player().hasDisconnected()
+                    || !pending.villager().isAlive() || pending.villager().isRemoved()
+                    || pending.player().getServer() != server
+                    || pending.player().serverLevel() != pending.level()
+                    || pending.villager().level() != pending.level()) {
+                continue;
+            }
+            pending.villager().getInteractions().slap(pending.player(), pending.amount());
+            pending.villager().sendChatMessage(pending.reaction(), pending.player());
+        }
         if (previewGeneration != generation) {
             recentPreviews.clear();
             previewGeneration = generation;
@@ -643,6 +690,7 @@ public final class DialogueEngine {
         sessions.clear();
         offers.clear();
         recentPreviews.clear();
+        pendingSlaps.clear();
     }
 
     private TransitionResult engagePreview(ServerPlayer player, long token, @Nullable String choiceId) {
@@ -923,6 +971,16 @@ public final class DialogueEngine {
             DialogueSession session,
             DialogueContext context
     ) {
+        return commit(player, villager, session, context, false);
+    }
+
+    private boolean commit(
+            ServerPlayer player,
+            VillagerEntityMCA villager,
+            DialogueSession session,
+            DialogueContext context,
+            boolean deferSlap
+    ) {
         if (!context.history().writable()) {
             return false;
         }
@@ -946,7 +1004,9 @@ public final class DialogueEngine {
             } else if (action instanceof DialogueAction.Mood mood) {
                 villager.getVillagerBrain().modifyMoodValue(mood.amount());
             } else if (action instanceof DialogueAction.Slap slap) {
-                villager.getInteractions().slap(player, slap.amount());
+                if (!deferSlap) {
+                    villager.getInteractions().slap(player, slap.amount());
+                }
             } else if (action instanceof DialogueAction.Remember remember) {
                 String id = remember.playerScoped()
                         ? remember.id() + "." + player.getUUID()
@@ -970,6 +1030,10 @@ public final class DialogueEngine {
                 random
         );
         return true;
+    }
+
+    private record PendingSlap(ServerPlayer player, VillagerEntityMCA villager, ServerLevel level,
+                               long dueTick, float amount, Component reaction) {
     }
 
     private static boolean canCommit(DialogueAction.Command command) {
