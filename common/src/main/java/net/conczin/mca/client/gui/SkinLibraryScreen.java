@@ -1217,6 +1217,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                         }));
             }
         }
+
+        // clearWidgets() retains focus even if the focused widget no longer belongs to this page.
+        if (getFocused() != null && !children().contains(getFocused())) {
+            setFocused(null);
+        }
     }
 
     private void buildProfessionPicker() {
@@ -1517,6 +1522,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             y0 = 0.0f;
             y1 = 1.0f;
             uploading = false;
+            professionSearchWidget = null;
         }
 
         if (page == Page.LIBRARY) {
