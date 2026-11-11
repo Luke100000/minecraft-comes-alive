@@ -747,6 +747,146 @@ public final class NavigationRecoveryGameTests {
         helper.succeed();
     }
 
+    @GameTest(batch = "mca_detour_recompute_target", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void invalidatedDetourRecomputesLogicalDestination(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(65, 1, 65));
+        BlockPos endpoint = start.east();
+        BlockPos destination = start.east(3);
+        prepareFlatArea(helper, start, 61, 3);
+        for (int z = -55; z <= 55; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(2, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        Config config = Config.getInstance();
+        int previousDistance = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 160;
+            villager.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(destination), 0.5F, 0));
+            NavigationProbe navigation = new NavigationProbe(villager);
+            Path shortPartial = new Path(List.of(node(start), node(endpoint)), destination, false);
+            helper.assertTrue(navigation.moveTo(shortPartial, 0.5D), "partial route could not start");
+            villager.setPos(Vec3.atBottomCenterOf(endpoint));
+            while (!shortPartial.isDone()) shortPartial.advance();
+            navigation.tick();
+            Path flank = navigation.getPath();
+            helper.assertTrue(flank != null && flank.canReach()
+                            && !flank.getTarget().equals(destination)
+                            && navigation.isTakingDetourTo(destination),
+                    "fixture did not create a physical flank route");
+
+            BlockPos repaired = destination.above();
+            helper.assertTrue(navigation.shouldRecomputePath(repaired),
+                    "terrain change near the destination should invalidate the detour");
+            navigation.recomputeNow();
+            Path replacement = navigation.getPath();
+            helper.assertTrue(replacement != null && replacement.getTarget().equals(destination),
+                    "detour recomputation kept its obsolete flank target: " + replacement);
+        } finally {
+            config.villagerPathfindingDistance = previousDistance;
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_remote_failure_repair", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void remotePassageRepairWakesFailedExtendedSearch(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(65, 1, 65));
+        BlockPos farTurn = start.west(55);
+        BlockPos destination = start.east(100).south(8);
+        // The only route initially heads away from the destination to a distant
+        // turn, then returns on a parallel lane. A blocked turn is not a useful partial path.
+        net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath(helper, farTurn, start);
+        net.conczin.mca.gametest.GameTestTerrain.prepareFlatPath(helper, farTurn.south(8), destination);
+        // The test world may offer unrelated ground routes. Clear an enclosed
+        // rectangular arena and restore exactly the two lanes and their far turn.
+        for (int x = farTurn.getX() - 1; x <= destination.getX() + 1; x++) {
+            for (int z = start.getZ() - 1; z <= destination.getZ() + 1; z++) {
+                BlockPos feet = new BlockPos(x, start.getY(), z);
+                helper.getLevel().setBlock(feet.below(), Blocks.AIR.defaultBlockState(), 3);
+                helper.getLevel().setBlock(feet.below(2), Blocks.AIR.defaultBlockState(), 3);
+                helper.getLevel().setBlock(feet.below(3), Blocks.AIR.defaultBlockState(), 3);
+                boolean perimeter = x == farTurn.getX() - 1 || x == destination.getX() + 1
+                        || z == start.getZ() - 1 || z == destination.getZ() + 1;
+                // Prevent a route along the GameTest world's natural bedrock floor
+                // beneath our corridor or underneath the enclosing boundary.
+                for (int y = helper.getLevel().getMinBuildHeight(); y < start.getY(); y++) {
+                    helper.getLevel().setBlock(new BlockPos(x, y, z),
+                            perimeter ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 3);
+                }
+                for (int y = 0; y < 3; y++) {
+                    helper.getLevel().setBlock(feet.above(y),
+                            perimeter ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState(), 3);
+                }
+            }
+        }
+        for (int x = farTurn.getX(); x <= start.getX(); x++) {
+            helper.getLevel().setBlock(new BlockPos(x, start.getY() - 1, start.getZ()),
+                    Blocks.STONE.defaultBlockState(), 3);
+        }
+        for (int x = farTurn.getX(); x <= destination.getX(); x++) {
+            helper.getLevel().setBlock(new BlockPos(x, start.getY() - 1, destination.getZ()),
+                    Blocks.STONE.defaultBlockState(), 3);
+        }
+        for (int z = start.getZ(); z <= destination.getZ(); z++) {
+            helper.getLevel().setBlock(new BlockPos(farTurn.getX(), start.getY() - 1, z),
+                    Blocks.STONE.defaultBlockState(), 3);
+        }
+        BlockPos gate = farTurn.south(4);
+        for (int y = 0; y < 3; y++) {
+            helper.getLevel().setBlock(gate.above(y), Blocks.STONE.defaultBlockState(), 3);
+        }
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        Config config = Config.getInstance();
+        int previousDistance = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 256;
+            villager.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(destination), 0.5F, 0));
+            WalkTargetFailureMemory.record(villager, destination, helper.getLevel().getGameTime());
+            MCAGroundPathNavigation navigation = (MCAGroundPathNavigation) villager.getNavigation();
+            Path blocked = navigation.createPath(destination, 0);
+            helper.assertTrue(blocked == null || !blocked.canReach()
+                            && !MCAGroundPathNavigation.isUsefulPartialPath(blocked, destination),
+                    "the long detour fixture unexpectedly offered a reachable/useful partial path: " + blocked
+                            + "; end=" + (blocked == null ? null : blocked.getEndNode()));
+            long initialSearches = PathRequestDiagnostics.snapshot(villager).extendedSearches();
+            helper.assertTrue(initialSearches > 0, "fixture did not attempt an extended search");
+            navigation.createPath(destination, 0);
+            helper.assertTrue(PathRequestDiagnostics.snapshot(villager).extendedSearches() == initialSearches,
+                    "fixture did not enter the failed extended-search backoff");
+
+            // A distant, unrelated change inside the extended origin radius
+            // cannot yield a route through it within the search budget.
+            navigation.shouldRecomputePath(start.north(170));
+            helper.assertTrue(!navigation.consumeRetryInvalidation(destination),
+                    "unrelated remote terrain change woke the failed-search producer");
+
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(gate.above(y), Blocks.AIR.defaultBlockState(), 3);
+            }
+            Path freshRoute = new NavigationProbe(villager).createPath(destination, 0);
+            helper.assertTrue(freshRoute != null && freshRoute.canReach(),
+                    "fixture repair did not actually create a reachable route: " + freshRoute);
+            navigation.shouldRecomputePath(gate);
+            helper.assertTrue(navigation.consumeRetryInvalidation(destination),
+                    "opening the remote turn failed to notify the stalled destination producer");
+            Path repaired = navigation.createPath(destination, 0);
+            helper.assertTrue(repaired != null && repaired.canReach(),
+                    "the repaired corridor still could not reach its destination: " + repaired);
+        } finally {
+            config.villagerPathfindingDistance = previousDistance;
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
     @GameTest(templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 20)
     public static void fallStopsPathWithDistantLowNode(GameTestHelper helper) {
         checkFallRecovery(helper, false);

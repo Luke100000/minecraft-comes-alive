@@ -147,6 +147,16 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         WalkTarget walkTarget = this.mob.getBrain()
                 .getMemoryInternal(MemoryModuleType.WALK_TARGET)
                 .orElse(null);
+        if (this.recomputingPath && this.detour != null
+                && ExtendedWalkTowardsTask.isPersistentJourney(walkTarget)
+                && this.detour.destination.equals(walkTarget.getTarget().currentBlockPosition())) {
+            // Vanilla remembers the physical flank target. Recompute the Brain's
+            // logical destination before discarding the invalidated detour.
+            clearDetour();
+            if (!(walkTarget.getTarget() instanceof MultiTargetPositionTracker)) {
+                return super.createPath(walkTarget.getTarget().currentBlockPosition(), reachRange);
+            }
+        }
         if (this.recomputingPath && walkTarget != null
                 && walkTarget.getTarget() instanceof MultiTargetPositionTracker multiTarget) {
             // Brain retains the logical target and can refresh endpoints after a
@@ -515,8 +525,8 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (this.detour != null && (changed.distSqr(this.detour.origin) <= FAILED_TARGET_INVALIDATION_RADIUS_SQR
                 || changed.distSqr(this.detour.destination) <= 100.0D)) {
             // A repaired approach near HOME can be far from both the active
-            // flank path and its starting point. Replan the logical destination.
-            clearDetour();
+            // flank path and its starting point. Keep its logical destination
+            // until the native recomputation actually runs.
             PathRequestDiagnostics.recordBlockRecompute(this.mob, changed, this.path);
             return true;
         }
@@ -630,9 +640,14 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             return;
         }
         float ordinaryPathLength = getOrdinaryPathLength(this.mob);
-        // A change off the direct line can open a route around an obstacle.
-        if (changed.distSqr(failure.target) <= FAILED_TARGET_INVALIDATION_RADIUS_SQR
-                || changed.distSqr(failure.origin) <= ordinaryPathLength * ordinaryPathLength) {
+        double originDistanceSqr = changed.distSqr(failure.origin);
+        double targetDistanceSqr = changed.distSqr(failure.target);
+        // A remote change can open a detour, but only paths inside the failed
+        // extended search's travel budget can reach the destination through it.
+        if (targetDistanceSqr <= FAILED_TARGET_INVALIDATION_RADIUS_SQR
+                || originDistanceSqr <= ordinaryPathLength * ordinaryPathLength
+                || (originDistanceSqr <= failure.pathLength * failure.pathLength
+                && Math.sqrt(originDistanceSqr) + Math.sqrt(targetDistanceSqr) <= failure.pathLength)) {
             failure.invalidated = true;
             pendingProducerRetryInvalidation = failure.target;
         }
@@ -795,13 +810,15 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         BlockPos end = path.getEndNode().asBlockPos();
         double goalX = (double) destination.getX() - origin.getX();
         double goalZ = (double) destination.getZ() - origin.getZ();
+        double goalDistanceSqr = goalX * goalX + goalZ * goalZ;
         double forward = ((double) end.getX() - origin.getX()) * goalX
                 + ((double) end.getZ() - origin.getZ()) * goalZ;
-        // Cross the old frontier and end closer to the destination than it was.
+        // A single block across the origin is not meaningful progress on a long
+        // journey; keep flanking until the partial route advances toward the goal.
         double remainingX = (double) destination.getX() - end.getX();
         double remainingZ = (double) destination.getZ() - end.getZ();
-        return forward > 0.0D && forward >= Math.sqrt(goalX * goalX + goalZ * goalZ)
-                && remainingX * remainingX + remainingZ * remainingZ < goalX * goalX + goalZ * goalZ;
+        return forward > 0.0D && forward >= goalDistanceSqr * 0.1D
+                && remainingX * remainingX + remainingZ * remainingZ < goalDistanceSqr;
     }
 
     private boolean beginDetour(WalkTarget walkTarget, BlockPos destination) {
