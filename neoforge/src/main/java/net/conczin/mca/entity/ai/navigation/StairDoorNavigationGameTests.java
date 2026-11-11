@@ -45,10 +45,12 @@ import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockSetType;
+import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.pathfinder.Node;
 import net.minecraft.world.level.pathfinder.PathType;
+import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.level.block.state.properties.DoorHingeSide;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.pathfinder.Path;
@@ -73,6 +75,7 @@ public final class StairDoorNavigationGameTests {
     private static final List<Villager> ACTORS = new ArrayList<>();
     private static final Set<ChunkPos> FORCED_CHUNKS = new HashSet<>();
     private static TallDoorProxy tallDoor;
+    private static Block thinTopPlatform;
 
     private StairDoorNavigationGameTests() { }
 
@@ -84,7 +87,131 @@ public final class StairDoorNavigationGameTests {
                         tallDoor = new TallDoorProxy();
                         return tallDoor;
                     });
+            event.register(Registries.BLOCK,
+                    ResourceLocation.fromNamespaceAndPath(MCA.MOD_ID, "gametest_thin_top_platform"), () -> {
+                        thinTopPlatform = new ThinTopPlatform();
+                        return thinTopPlatform;
+                    });
         }
+    }
+
+    /** The physical shape of a modded upper stair platform, with Block's default LAND pathfinding. */
+    private static final class ThinTopPlatform extends Block {
+        private static final BooleanProperty FULL_SUPPORT = BooleanProperty.create("full_support");
+        private static final VoxelShape SHAPE = Block.box(0, 13, 0, 16, 16, 16);
+        private static final VoxelShape NARROW = Block.box(7, 13, 7, 9, 16, 9);
+
+        private ThinTopPlatform() {
+            super(BlockBehaviour.Properties.of().strength(1.0F).noOcclusion());
+            registerDefaultState(stateDefinition.any().setValue(FULL_SUPPORT, true));
+        }
+
+        @Override
+        protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
+            builder.add(FULL_SUPPORT);
+        }
+
+        @Override
+        public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+            return state.getValue(FULL_SUPPORT) ? SHAPE : NARROW;
+        }
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void standalonePathTypeQueryHandlesThinPlatform(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(40, 4, 40));
+        prepareArea(helper, start, 3, 6);
+        helper.assertTrue(thinTopPlatform != null, "generic thin platform was not registered");
+        helper.getLevel().setBlock(start.below(), thinTopPlatform.defaultBlockState(), 3);
+        VillagerEntityMCA actor = spawnProbe(helper, Vec3.atBottomCenterOf(start));
+        var evaluator = actor.getNavigation().getNodeEvaluator();
+        helper.assertTrue(evaluator != null, "the actor must have a navigation evaluator");
+        // Combat positioning asks this outside a prepared A* search.
+        PathType type = evaluator.getPathType(actor, start);
+        helper.assertTrue(type == PathType.WALKABLE,
+                "standalone lookup must recognize full top support, got " + type);
+        helper.getLevel().setBlock(start.below(),
+                thinTopPlatform.defaultBlockState().setValue(ThinTopPlatform.FULL_SUPPORT, false), 3);
+        PathType narrowType = evaluator.getPathType(actor, start);
+        helper.assertTrue(narrowType == PathType.OPEN,
+                "standalone lookup must not treat narrow support as a floor, got " + narrowType);
+        helper.succeed();
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena")
+    public static void thinTopPlatformRetainsNearbyHazards(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(40, 4, 40));
+        prepareArea(helper, start, 3, 6);
+        helper.assertTrue(thinTopPlatform != null, "generic thin platform was not registered");
+        helper.getLevel().setBlock(start.below(), thinTopPlatform.defaultBlockState(), 3);
+        helper.getLevel().setBlock(start.east(), Blocks.LAVA.defaultBlockState(), 3);
+        VillagerEntityMCA actor = spawnProbe(helper, Vec3.atBottomCenterOf(start));
+        var evaluator = actor.getNavigation().getNodeEvaluator();
+        helper.assertTrue(evaluator != null, "the actor must have a navigation evaluator");
+        PathType type = evaluator.getPathType(actor, start);
+        helper.assertTrue(type == PathType.DANGER_FIRE,
+                "supported top plate must preserve adjacent lava danger, got " + type);
+        helper.succeed();
+    }
+
+    @GameTest(batch = BATCH, templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 180)
+    public static void thinTopPlateCrossingRejectsNarrowSupport(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(40, 4, 40));
+        prepareArea(helper, start.east(2), 9, 8);
+        var level = helper.getLevel();
+        BlockPos platform = start.east(2).below();
+        for (int x = -1; x <= 5; x++) {
+            for (int y = 0; y <= 4; y++) {
+                level.setBlock(start.offset(x, y, -1), Blocks.STONE.defaultBlockState(), 3);
+                level.setBlock(start.offset(x, y, 1), Blocks.STONE.defaultBlockState(), 3);
+            }
+            if (x >= 0 && x <= 4) {
+                level.setBlock(start.offset(x, -1, 0), Blocks.SPRUCE_PLANKS.defaultBlockState(), 3);
+                level.setBlock(start.offset(x, 3, 0), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int z = -1; z <= 1; z++) {
+            for (int y = 0; y <= 4; y++) {
+                level.setBlock(start.offset(-1, y, z), Blocks.STONE.defaultBlockState(), 3);
+                level.setBlock(start.offset(5, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        helper.assertTrue(thinTopPlatform != null, "generic thin platform was not registered");
+        level.setBlock(platform, thinTopPlatform.defaultBlockState(), 3);
+        var actor = spawnProbe(helper, Vec3.atBottomCenterOf(start));
+        var state = level.getBlockState(platform);
+        helper.assertTrue(state.isPathfindable(PathComputationType.LAND)
+                        && state.getCollisionShape(level, platform).max(Direction.Axis.Y) == 1.0D,
+                "fixture must have a full-footprint top surface and default LAND pathfindability");
+        helper.assertTrue(WalkNodeEvaluator.getPathTypeStatic(actor, platform.above()) == PathType.OPEN,
+                "fixture should expose vanilla's OPEN-above-top-plate classification");
+        BlockPos goal = start.east(4);
+        level.setBlock(platform, state.setValue(ThinTopPlatform.FULL_SUPPORT, false), 3);
+        Path overNarrowTop = actor.getNavigation().createPath(goal, 0);
+        helper.assertTrue(overNarrowTop == null || !overNarrowTop.canReach(),
+                "a narrow pathfindable top was treated as a full-width floor: " + describe(overNarrowTop));
+        level.setBlock(platform, state, 3);
+        Path path = actor.getNavigation().createPath(goal, 0);
+        helper.assertTrue(path != null && path.canReach(),
+                "no route across physical top plate: " + describe(path));
+        boolean usesPlatform = false;
+        for (int i = 0; i < path.getNodeCount(); i++) {
+            usesPlatform |= path.getNodePos(i).equals(platform.above());
+        }
+        helper.assertTrue(usesPlatform, "route bypasses top plate: " + describe(path));
+        startWalking(helper, actor, goal, true);
+        boolean[] crossed = {false};
+        helper.onEachTick(() -> {
+            crossed[0] |= actor.getBlockX() == platform.getX()
+                    && actor.getY() >= platform.getY() + 0.95D;
+            if (actor.distanceToSqr(Vec3.atBottomCenterOf(goal)) < 0.64D && actor.onGround()) {
+                helper.assertTrue(crossed[0], "villager did not physically cross top plate");
+                helper.succeed();
+            } else if (helper.getTick() >= 150) {
+                helper.fail("top-plate traverse stalled: " + actor.position() + ", path="
+                        + describe(actor.getNavigation().getPath()));
+            }
+        });
     }
 
     /** Optional integration proxy: Dramatic Doors 1.21.1's third property and linked setOpen contract. */
