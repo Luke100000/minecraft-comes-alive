@@ -162,8 +162,13 @@ public final class PathUpdateGameTests {
                 var initial = PathRequestDiagnostics.recomputeSnapshot(villager);
                 helper.getLevel().setBlock(changed, after, 3);
                 var updated = PathRequestDiagnostics.recomputeSnapshot(villager);
+                List<BlockPos> routeNodes = new ArrayList<>();
+                for (int i = 0; i < activePath.getNodeCount(); i++) {
+                    routeNodes.add(activePath.getNode(i).asBlockPos().subtract(changed));
+                }
                 helper.assertTrue((updated.blockUpdates() > initial.blockUpdates()) == invalidates,
-                        "unexpected toggle invalidation: " + before + " -> " + after + "; " + updated);
+                        "unexpected toggle invalidation: " + before + " -> " + after + "; " + updated
+                                + ", route relative to changed=" + routeNodes + ", width=" + villager.getBbWidth());
                 if (!invalidates) {
                     helper.getLevel().setBlock(changed, before, 3);
                     helper.assertTrue(PathRequestDiagnostics.recomputeSnapshot(villager).blockUpdates()

@@ -261,10 +261,12 @@ public final class ArcherCombatStabilityGameTests {
         Fixture f = fixture(helper, false);
         for (int x = -8; x <= 8; x++) {
             for (int z = -8; z <= 8; z++) {
-                if (x < 0 || z < 0) helper.getLevel().setBlock(f.start().offset(x, 0, z), Blocks.GRASS_BLOCK.defaultBlockState(), 3);
+                // Leave the starting cell low: every escape route must use the
+                // one-block step instead of an equally valid flat route.
+                if (x != 0 || z != 0) helper.getLevel().setBlock(f.start().offset(x, 0, z), Blocks.GRASS_BLOCK.defaultBlockState(), 3);
             }
         }
-        f.target().absMoveTo(f.archer().getX() + 3, f.archer().getY(), f.archer().getZ() + 3);
+        f.target().absMoveTo(f.archer().getX() + 3, f.archer().getY() + 1, f.archer().getZ() + 3);
         f.target().setTarget(f.archer());
         f.archer().getAttribute(Attributes.MAX_HEALTH).setBaseValue(100);
         f.archer().setHealth(20);

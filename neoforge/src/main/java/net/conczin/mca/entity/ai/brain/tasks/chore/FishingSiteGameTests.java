@@ -574,10 +574,22 @@ public final class FishingSiteGameTests {
         BlockPos start = distantLake(helper);
         VillagerEntityMCA villager = spawn(helper, start);
         Session task = naturalSession(helper, villager);
+        Brain<?> initialBrain = villager.getBrain();
+        helper.assertTrue(villager.getVillagerBrain().getCurrentJob() == Chore.FISH,
+                "distant fishing fixture did not begin with an assigned fishing job");
         int[] ticks = {0};
         boolean[] directedWalk = {false};
         helper.onEachTick(() -> {
             try {
+                helper.assertTrue(villager.getVillagerBrain().getCurrentJob() == Chore.FISH,
+                        "fishing job changed before the distant catch: tick=" + ticks[0]
+                                + ", pos=" + villager.position()
+                                + ", inventoryRods=" + villager.getInventory().countItem(Items.FISHING_ROD)
+                                + ", held=" + villager.getItemInHand(villager.getDominantHand())
+                                + ", taskAbandonReason=" + task.abandonReason
+                                + ", taskStatus=" + task.getStatus()
+                                + ", brainRebuilt=" + (villager.getBrain() != initialBrain)
+                                + ", activity=" + villager.getBrain().getActiveNonCoreActivity());
                 var target = villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
                 if (target != null) {
                     helper.assertTrue(target.getTarget().currentBlockPosition().getX() > start.getX() + 25,
@@ -983,8 +995,13 @@ public final class FishingSiteGameTests {
 
     private static final class Session extends FishingTask {
         private final Player assigningPlayer;
+        private String abandonReason;
         Session(Player assigningPlayer) { this.assigningPlayer = assigningPlayer; }
         @Override Optional<Player> getAssigningPlayer() { return Optional.of(assigningPlayer); }
+        @Override void abandonJobWithMessage(String message) {
+            abandonReason = message;
+            super.abandonJobWithMessage(message);
+        }
     }
 
     @GameTest(templateNamespace = "mca", template = "gametest/isolated_ai_arena")

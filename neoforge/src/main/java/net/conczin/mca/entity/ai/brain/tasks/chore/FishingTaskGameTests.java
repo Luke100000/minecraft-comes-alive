@@ -330,7 +330,7 @@ public final class FishingTaskGameTests {
     )
     public static void assignedFisherKeepsCatchingWithNaturalBrain(GameTestHelper helper) {
         BlockPos feet = biteCycleVillagerPos(helper);
-        prepareBiteWater(helper, feet.east(2));
+        prepareTaskWater(helper.getLevel(), feet);
         VillagerEntityMCA villager = spawnFisher(helper, feet);
         ItemStack rod = new ItemStack(Items.FISHING_ROD);
         var enchantments = helper.getLevel().registryAccess().lookupOrThrow(Registries.ENCHANTMENT);

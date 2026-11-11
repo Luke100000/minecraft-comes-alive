@@ -35,6 +35,10 @@ import java.util.Set;
 import java.util.Comparator;
 
 public class MCAGroundPathNavigation extends GroundPathNavigation {
+    private record BlockUpdate(BlockPos pos, BlockState before, BlockState after) {
+    }
+
+    private static final ThreadLocal<BlockUpdate> CURRENT_BLOCK_UPDATE = new ThreadLocal<>();
     private static final float REQUIRED_PATH_LENGTH = 48.0F;
     private static final int VISITED_NODES_PER_BLOCK = 16;
     private static final int MAX_EXTENDED_VISITED_NODES = 1_024;
@@ -91,6 +95,21 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     public MCAGroundPathNavigation(Mob mob, Level level) {
         super(mob, level);
         this.climbTraversal = new ClimbTraversal(mob, level);
+    }
+
+    /** Carries the change through vanilla and Lithium's separate navigation callbacks. */
+    public static void duringBlockUpdate(BlockPos pos, BlockState before, BlockState after, Runnable update) {
+        BlockUpdate previous = CURRENT_BLOCK_UPDATE.get();
+        CURRENT_BLOCK_UPDATE.set(new BlockUpdate(pos, before, after));
+        try {
+            update.run();
+        } finally {
+            if (previous == null) {
+                CURRENT_BLOCK_UPDATE.remove();
+            } else {
+                CURRENT_BLOCK_UPDATE.set(previous);
+            }
+        }
     }
 
     public boolean hasClimbablePathContext() {
@@ -485,11 +504,22 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
     @Override
     public boolean shouldRecomputePath(BlockPos changed) {
-        return shouldRecomputePath(changed, null, null);
+        BlockUpdate update = CURRENT_BLOCK_UPDATE.get();
+        return update != null && update.pos.equals(changed)
+                ? shouldRecomputePath(changed, update.before, update.after)
+                : shouldRecomputePath(changed, null, null);
     }
 
     public boolean shouldRecomputePath(BlockPos changed, @Nullable BlockState before, @Nullable BlockState after) {
         recordRetryInvalidation(changed);
+        if (this.detour != null && (changed.distSqr(this.detour.origin) <= FAILED_TARGET_INVALIDATION_RADIUS_SQR
+                || changed.distSqr(this.detour.destination) <= 100.0D)) {
+            // A repaired approach near HOME can be far from both the active
+            // flank path and its starting point. Replan the logical destination.
+            clearDetour();
+            PathRequestDiagnostics.recordBlockRecompute(this.mob, changed, this.path);
+            return true;
+        }
         if (!super.shouldRecomputePath(changed)) {
             return false;
         }
@@ -802,7 +832,8 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             );
             Path path = this.createPath(candidate, 0);
             if (path != null && path.getNodeCount() > 1 && path.getEndNode() != null
-                    && (path.canReach() || isUsefulPartialPath(path, candidate))) {
+                    && (path.canReach() || isUsefulPartialPath(path, candidate))
+                    && avoidsUnrecoverableDetourDrop(path, origin, physicalTarget)) {
                 double progress = horizontalDistance(origin, path.getEndNode().asBlockPos());
                 if (progress < 1.0D) {
                     continue;
@@ -866,7 +897,8 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (path == null
                 || path.getNodeCount() < 2
                 || (!path.canReach() && !isUsefulPartialPath(path, candidate))
-                || path.getEndNode() == null) {
+                || path.getEndNode() == null
+                || !avoidsUnrecoverableDetourDrop(path, this.detour.origin, this.detour.physicalTarget)) {
             return null;
         }
 
@@ -876,6 +908,19 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         }
         this.detour.distance += progress;
         return path;
+    }
+
+    private static boolean avoidsUnrecoverableDetourDrop(Path path, BlockPos origin, BlockPos destination) {
+        // A speculative flank must preserve a route back to the goal's elevation.
+        // A one-block descent can be climbed again, while a larger drop may strand
+        // the mob below a raised destination before the original route reopens.
+        int minimumY = Math.min(origin.getY(), destination.getY()) - 1;
+        for (int i = 0; i < path.getNodeCount(); i++) {
+            if (path.getNode(i).y < minimumY) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private Path tryCrossObstacle(BlockPos destination) {

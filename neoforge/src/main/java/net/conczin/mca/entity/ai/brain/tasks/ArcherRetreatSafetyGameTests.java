@@ -359,6 +359,10 @@ public final class ArcherRetreatSafetyGameTests {
             arena.archer.getBrain().setSchedule(new ScheduleBuilder(new Schedule())
                     .changeActivityAt(0, rest ? Activity.REST : Activity.IDLE).build());
             if (rest) {
+                // setSchedule does not activate REST until a later scheduled update.
+                arena.archer.getBrain().setActiveActivityIfPossible(Activity.REST);
+                helper.assertTrue(arena.archer.getBrain().isActive(Activity.REST),
+                        "REST guard fixture must start in its scheduled activity");
                 arena.archer.getBrain().setMemory(MemoryModuleType.HOME,
                         GlobalPos.of(helper.getLevel().dimension(), start));
             }
