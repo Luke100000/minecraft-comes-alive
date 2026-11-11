@@ -42,7 +42,7 @@ public record InteractionDialogueChoiceMessage(long offerToken, String choiceId)
 
     static void sendTransition(ServerPlayer player, long requestToken, DialogueEngine.TransitionResult result) {
         if (result.view().isPresent()) {
-            Network.sendToPlayer(InteractionDialogueNodeResponse.active(result.view().orElseThrow()), player);
+            MCA.getDialogueEngine().ifPresent(engine -> engine.sendView(player, result.view().orElseThrow()));
             return;
         }
         if (result.status() == DialogueEngine.TransitionStatus.REJECTED) {

@@ -65,6 +65,17 @@ final class DialogueOverlayLayout {
                 new Rect(innerLeft + half, actionY, innerWidth - half, actionHeight));
     }
 
+    /** Reserve the strip below speech and above history controls, including in the docked layout. */
+    static Rect progressStrip(Rect paper, int historyHeight, float contentScale) {
+        int inset = Math.round(16 * contentScale);
+        int top = paper.bottom() - historyHeight - Math.round(15 * contentScale);
+        int thickness = Math.max(2, Math.round(3 * contentScale));
+        if (paper.width() <= inset * 2 + 2 || top < paper.y() + Math.round(42 * contentScale)) {
+            return new Rect(0, 0, 0, 0);
+        }
+        return new Rect(paper.x() + inset, top, paper.width() - inset * 2, thickness);
+    }
+
     /** The speaker label stays clear of the upper-right speech-position toggle. */
     static Rect speakerHeader(Rect paper, float scale) {
         int left = paper.x() + Math.round(13 * scale);
@@ -76,7 +87,15 @@ final class DialogueOverlayLayout {
 
     /** The pointer is placed on the straight left edge, above the lower rounded corner. */
     static Rect tailBounds(Rect paper) {
-        return new Rect(paper.x() - 14, paper.bottom() - 28, 16, 20);
+        return new Rect(paper.x() - 14, paper.bottom() - 28, 20, 20);
+    }
+
+    /** A traveling segment is indeterminate. Its initial off-track position is clipped when drawn. */
+    static int progressSegmentStart(Rect strip, long nowMillis, boolean reducedMotion) {
+        int segmentWidth = Math.max(1, strip.width() / 3);
+        return reducedMotion ? strip.x() + (strip.width() - segmentWidth) / 2
+                : strip.x() + (int) Math.floorMod(nowMillis / 25L,
+                strip.width() + segmentWidth) - segmentWidth;
     }
 
     record FooterLayout(Rect divider, Rect back, Rect close) {

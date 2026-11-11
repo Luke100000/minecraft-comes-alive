@@ -856,7 +856,7 @@ public final class Config extends CommonConfig {
      */
     public List<String> structuresInRumors = List.of(
             "minecraft:igloo",
-            "minecraft:pyramid",
+            "minecraft:desert_pyramid",
             "minecraft:ruined_portal_desert",
             "minecraft:ruined_portal_swamp",
             "minecraft:ruined_portal",

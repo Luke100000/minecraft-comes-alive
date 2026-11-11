@@ -53,6 +53,7 @@ public interface MessagesMCA {
         c.register(GetVillagerResponse.TYPE, GetVillagerResponse.STREAM_CODEC, false);
         c.register(InteractionDialogueOptionsResponse.TYPE, InteractionDialogueOptionsResponse.STREAM_CODEC, false);
         c.register(InteractionDialogueNodeResponse.TYPE, InteractionDialogueNodeResponse.STREAM_CODEC, false);
+        c.register(InteractionDialoguePendingResponse.TYPE, InteractionDialoguePendingResponse.STREAM_CODEC, false);
         c.register(InteractionDialogueSelectionRejectedResponse.TYPE, InteractionDialogueSelectionRejectedResponse.STREAM_CODEC, false);
         c.register(OpenDestinyGuiRequest.TYPE, OpenDestinyGuiRequest.STREAM_CODEC, false);
         c.register(OpenGuiRequest.TYPE, OpenGuiRequest.STREAM_CODEC, false);

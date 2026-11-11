@@ -23,6 +23,8 @@ public interface ClientHandler {
 
     void handleDialogueNodeResponse(InteractionDialogueNodeResponse message);
 
+    void handleDialoguePendingResponse(InteractionDialoguePendingResponse message);
+
     void handleSkinListResponse(AnalysisResults message);
 
     void handleBabyNameResponse(BabyNameResponse message);

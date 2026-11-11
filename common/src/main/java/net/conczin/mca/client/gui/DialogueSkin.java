@@ -56,10 +56,8 @@ final class DialogueSkin {
     }
 
     static void drawTail(GuiGraphics graphics, int x, int y) {
-        graphics.blit(TAIL, x, y, 0, 0, 16, 20, 16, 20);
-        // Open the speech-pointer interior into the bubble's parchment fill.
-        // This short bridge covers only the left frame stroke at the attachment.
-        graphics.fill(x + 14, y + 6, x + 19, y + 16, 0xFFFAE8C9);
+        // The generated sprite includes the connector; no rectangular fill seam.
+        graphics.blit(TAIL, x, y, 0, 0, 20, 20, 20, 20);
     }
 
     static void drawKeycap(GuiGraphics graphics, int x, int y, int width, int height) {

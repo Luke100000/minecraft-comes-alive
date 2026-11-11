@@ -214,7 +214,7 @@ public record DialogueEvent(
                     continue;
                 }
                 JsonObject node = nodeEntry.getValue().getAsJsonObject();
-                requireOnly(node, Set.of("line", "lines", "choices", "outcomes", "next", "complete", "end", "retryable", "silent"), "node '" + nodeEntry.getKey() + "'");
+                requireOnly(node, Set.of("line", "lines", "resolve", "choices", "outcomes", "next", "complete", "end", "retryable", "silent"), "node '" + nodeEntry.getKey() + "'");
                 if (node.has("outcomes") && node.get("outcomes").isJsonArray()) {
                     for (JsonElement outcomeElement : node.getAsJsonArray("outcomes")) {
                         if (outcomeElement.isJsonObject()) {
@@ -376,7 +376,8 @@ public record DialogueEvent(
             boolean complete,
             boolean end,
             boolean retryable,
-            boolean silent
+            boolean silent,
+            Optional<DialogueAsyncResolver> resolve
     ) {
         private static final Codec<Node> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 DialogueCodecs.nonblankStringCodec("line").optionalFieldOf("line").forGetter(node -> node.lines.size() == 1 ? Optional.of(node.lines.get(0)) : Optional.empty()),
@@ -387,13 +388,19 @@ public record DialogueEvent(
                 Codec.BOOL.optionalFieldOf("complete", false).forGetter(Node::complete),
                 Codec.BOOL.optionalFieldOf("end", false).forGetter(Node::end),
                 Codec.BOOL.optionalFieldOf("retryable", false).forGetter(Node::retryable),
-                Codec.BOOL.optionalFieldOf("silent", false).forGetter(Node::silent)
+                Codec.BOOL.optionalFieldOf("silent", false).forGetter(Node::silent),
+                DialogueAsyncResolver.CODEC.optionalFieldOf("resolve").forGetter(Node::resolve)
         ).apply(instance, Node::fromFields));
 
         public Node {
             lines = List.copyOf(lines);
             choices = choices.map(List::copyOf);
             outcomes = outcomes.map(List::copyOf);
+        }
+
+        public Node(List<String> lines, Optional<List<Choice>> choices, Optional<List<Outcome>> outcomes,
+                    Optional<String> next, boolean complete, boolean end, boolean retryable, boolean silent) {
+            this(lines, choices, outcomes, next, complete, end, retryable, silent, Optional.empty());
         }
 
         public Node(
@@ -405,7 +412,7 @@ public record DialogueEvent(
                 boolean retryable,
                 boolean silent
         ) {
-            this(lines, choices, Optional.empty(), next, complete, end, retryable, silent);
+            this(lines, choices, Optional.empty(), next, complete, end, retryable, silent, Optional.empty());
         }
 
         private static Node fromFields(
@@ -417,7 +424,8 @@ public record DialogueEvent(
                 boolean complete,
                 boolean end,
                 boolean retryable,
-                boolean silent
+                boolean silent,
+                Optional<DialogueAsyncResolver> resolve
         ) {
             if (line.isPresent() && lines.isPresent()) {
                 throw new IllegalArgumentException("node cannot define both line and lines");
@@ -433,7 +441,10 @@ public record DialogueEvent(
             if (!automatic && normalized.isEmpty()) {
                 throw new IllegalArgumentException("node lines must not be empty");
             }
-            return new Node(normalized, choices, outcomes, next, complete, end, retryable, silent);
+            if (resolve.isPresent() && (line.isEmpty() || lines.isPresent() || outcomes.isPresent())) {
+                throw new IllegalArgumentException("resolved node requires a single line and cannot route outcomes");
+            }
+            return new Node(normalized, choices, outcomes, next, complete, end, retryable, silent, resolve);
         }
 
         private void validate(String nodeId) {

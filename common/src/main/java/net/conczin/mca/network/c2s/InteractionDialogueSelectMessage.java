@@ -51,7 +51,7 @@ public record InteractionDialogueSelectMessage(
                 selection,
                 eventId.orElse(null)
         ).ifPresentOrElse(
-                view -> Network.sendToPlayer(InteractionDialogueNodeResponse.active(view), player),
+                view -> engine.sendView(player, view),
                 () -> Network.sendToPlayer(new InteractionDialogueSelectionRejectedResponse(offerToken), player)
         ));
     }

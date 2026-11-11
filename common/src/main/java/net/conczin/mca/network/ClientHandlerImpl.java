@@ -234,6 +234,13 @@ public class ClientHandlerImpl implements ClientHandler {
     }
 
     @Override
+    public void handleDialoguePendingResponse(InteractionDialoguePendingResponse message) {
+        if (client.screen instanceof InteractScreen gui && gui.isDialogueMode()) {
+            dialoguePresentation.acceptPending(message, line -> gui.resolveDialogueLine(line, true));
+        }
+    }
+
+    @Override
     public void handleSkinListResponse(AnalysisResults message) {
         InteractScreen.setAnalysis(message.analysis());
     }
@@ -356,6 +363,8 @@ public class ClientHandlerImpl implements ClientHandler {
         private boolean nodeVisible;
         private boolean menuMode;
         private DialogueEngine.DialogueSelection pendingSelection;
+        private boolean pendingAsync;
+        private Component pendingLine = Component.empty();
 
         public boolean acceptOptions(InteractionDialogueOptionsResponse response) {
             return acceptOptions(response, 0L, Locale.ENGLISH, UnaryOperator.identity());
@@ -393,14 +402,50 @@ public class ClientHandlerImpl implements ClientHandler {
         }
 
         public boolean acceptSelectionRejection(long rejectedToken) {
-            return pendingSelection != null
+            return (nodeVisible && offerToken == rejectedToken)
+                    || (pendingSelection != null
                     && options != null
                     && !nodeVisible
-                    && options.offerToken() == rejectedToken;
+                    && options.offerToken() == rejectedToken);
         }
 
         public boolean acceptNode(InteractionDialogueNodeResponse response, long nowMillis, Locale locale) {
             return acceptNode(response, nowMillis, locale, UnaryOperator.identity());
+        }
+
+        public boolean acceptPending(InteractionDialoguePendingResponse response) {
+            return acceptPending(response, UnaryOperator.identity());
+        }
+
+        public boolean acceptPending(
+                InteractionDialoguePendingResponse response, UnaryOperator<Component> lineResolver
+        ) {
+            Objects.requireNonNull(response, "response");
+            Objects.requireNonNull(lineResolver, "lineResolver");
+            if (terminatedSessionId != null && terminatedSessionId.equals(response.sessionId())) {
+                return false;
+            }
+            boolean sameSession = sessionId != null && sessionId.equals(response.sessionId());
+            if ((!sameSession && pendingSelection == null)
+                    || (sameSession && pendingAsync && offerToken == response.offerToken())
+                    || !acceptsNewToken(response.offerToken())) {
+                return false;
+            }
+            if (!sameSession) {
+                speechHistory.clear();
+                reviewIndex = -1;
+            }
+            sessionId = response.sessionId();
+            offerToken = response.offerToken();
+            node = null;
+            nodeVisible = false;
+            menuMode = false;
+            options = null;
+            pendingSelection = null;
+            pendingAsync = true;
+            pendingLine = resolveOnce(lineResolver.apply(response.pendingLine())).component();
+            rememberToken(response.offerToken());
+            return true;
         }
 
         public boolean acceptNode(
@@ -433,6 +478,9 @@ public class ClientHandlerImpl implements ClientHandler {
             if (!sameOffer && !acceptsNewToken(response.offerToken())) {
                 return false;
             }
+            if (sameOffer && !pendingAsync && !nodeVisible) {
+                return false;
+            }
 
             InteractionDialogueNodeResponse.Node incoming = response.node().orElseThrow();
             boolean preserveResume = sameSession
@@ -455,6 +503,7 @@ public class ClientHandlerImpl implements ClientHandler {
             options = null;
             nodeVisible = true;
             menuMode = false;
+            clearPending();
             rememberToken(response.offerToken());
 
             if (preserveResume) {
@@ -482,6 +531,7 @@ public class ClientHandlerImpl implements ClientHandler {
             options = null;
             nodeVisible = false;
             pendingSelection = null;
+            clearPending();
             if (response.state() == InteractionDialogueNodeResponse.State.ENDED) {
                 terminatedSessionId = sessionId;
                 dropSnapshot();
@@ -515,6 +565,7 @@ public class ClientHandlerImpl implements ClientHandler {
             nodeVisible = false;
             menuMode = false;
             pendingSelection = null;
+            clearPending();
         }
 
         public void beginRequest() {
@@ -522,6 +573,7 @@ public class ClientHandlerImpl implements ClientHandler {
             nodeVisible = false;
             menuMode = true;
             pendingSelection = null;
+            clearPending();
         }
 
         public void dismissOptions() {
@@ -560,6 +612,23 @@ public class ClientHandlerImpl implements ClientHandler {
 
         public boolean nodeVisible() {
             return nodeVisible;
+        }
+
+        public boolean pendingAsync() {
+            return pendingAsync;
+        }
+
+        public Component pendingLine() {
+            return pendingLine;
+        }
+
+        public boolean awaitingReply() {
+            return pendingAsync || pendingSelection != null || (menuMode && options == null);
+        }
+
+        public boolean revealingLine() {
+            return !reviewingHistory() && (nodeVisible && !isFullyRevealed()
+                    || hasPreview() && previewRevealed < previewCuts.size());
         }
 
         public boolean hasPreview() {
@@ -666,6 +735,7 @@ public class ClientHandlerImpl implements ClientHandler {
 
         public void clear() {
             options = null;
+            clearPending();
             previewLine = Component.empty();
             previewCuts = List.of();
             previewRevealed = 0;
@@ -725,6 +795,7 @@ public class ClientHandlerImpl implements ClientHandler {
         }
 
         private void dropSnapshot() {
+            clearPending();
             speechHistory.clear();
             reviewIndex = -1;
             sessionId = null;
@@ -735,6 +806,11 @@ public class ClientHandlerImpl implements ClientHandler {
             revealedCharacters = 0;
             nextRevealAt = 0L;
             nodeVisible = false;
+        }
+
+        private void clearPending() {
+            pendingAsync = false;
+            pendingLine = Component.empty();
         }
 
         private boolean isFullyRevealed() {

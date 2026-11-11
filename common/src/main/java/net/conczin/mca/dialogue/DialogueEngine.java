@@ -1,13 +1,19 @@
 package net.conczin.mca.dialogue;
 
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.MCA;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.InteractionDialogueNodeResponse;
+import net.conczin.mca.network.s2c.InteractionDialoguePendingResponse;
 import net.conczin.mca.network.s2c.InteractionDialogueOptionsResponse;
 import net.conczin.mca.network.s2c.OpenGuiRequest;
 import net.conczin.mca.resources.DialogueEvents;
 import net.conczin.mca.server.world.data.DialogueEventHistory;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.TextColor;
 import net.minecraft.Util;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -30,6 +36,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletionStage;
 import java.util.function.LongSupplier;
 import java.util.function.Predicate;
 import java.util.function.ToDoubleFunction;
@@ -43,6 +50,7 @@ import java.util.function.ToDoubleFunction;
 public final class DialogueEngine {
     public static final int MAX_EVENT_OPTIONS = 64;
     public static final long PAUSE_TICKS = 2400L;
+    public static final long ASYNC_TIMEOUT_TICKS = 600L;
 
     private static final Comparator<DialogueEvent> PRIORITY_ORDER =
             Comparator.comparingInt(DialogueEvent::priority).reversed().thenComparing(DialogueEvent::id);
@@ -68,6 +76,7 @@ public final class DialogueEngine {
     private final Map<UUID, DialogueOptions> offers = new HashMap<>();
     private final Map<UUID, LinkedHashMap<UUID, ResourceLocation>> recentPreviews = new HashMap<>();
     private final List<PendingSlap> pendingSlaps = new ArrayList<>();
+    private final DialoguePendingRequests pendingRequests = new DialoguePendingRequests();
     private final RandomSource random;
     private long tokenSequence;
     private long previewGeneration = Long.MIN_VALUE;
@@ -101,6 +110,7 @@ public final class DialogueEngine {
         DialogueSession retained = expirePaused(playerId, gameTime);
         if (retained != null && retained.status() == DialogueSession.Status.ACTIVE
                 && retained.villagerId().equals(villager.getUUID())) {
+            cancelPending(playerId);
             retained = retained.pause(saturatingAdd(gameTime, PAUSE_TICKS));
             sessions.put(playerId, retained);
         }
@@ -272,6 +282,7 @@ public final class DialogueEngine {
                     || !retained.id().equals(offer.continuationSessionId().orElseThrow())
                     || !retained.canResume(gameTime, offer.generation(), offer.villagerId())) {
                 if (retained != null && retained.pauseDeadline() <= gameTime) {
+                    invalidatePending(playerId);
                     sessions.remove(playerId);
                 }
                 return Optional.empty();
@@ -280,6 +291,8 @@ public final class DialogueEngine {
             offers.remove(playerId);
             DialogueSession resumed = resolveAutomaticTransitions(retained.resume(nextToken(), offer.token()), context);
             resumed = refreshOfferedChoices(resumed, context);
+            pendingRequests.resumeResolved(DialoguePendingRequests.Key.from(retained),
+                    DialoguePendingRequests.Key.from(resumed));
             sessions.put(playerId, resumed);
             return Optional.of(view(resumed, context));
         }
@@ -324,6 +337,7 @@ public final class DialogueEngine {
         );
         session = resolveAutomaticTransitions(session, context);
         session = refreshOfferedChoices(session, context);
+        invalidatePending(playerId);
         sessions.put(playerId, session);
         return Optional.of(view(session, context));
     }
@@ -335,6 +349,9 @@ public final class DialogueEngine {
         DialogueSession session = validActiveSession(player, offerToken);
         if (session == null) {
             return engagePreview(player, offerToken, choiceId);
+        }
+        if (pendingRequests.pendingFor(DialoguePendingRequests.Key.from(session)).isPresent()) {
+            return TransitionResult.rejected();
         }
 
         VillagerEntityMCA villager = resolveBoundVillager(player, session.villagerId()).orElse(null);
@@ -361,6 +378,7 @@ public final class DialogueEngine {
         if (choice == null || !choiceEligible(choice, condition -> matches(condition, context))) {
             DialogueSession refreshed = refreshOfferedChoices(session, context);
             if (refreshed.offeredChoices().isEmpty()) {
+                invalidatePending(playerId);
                 sessions.remove(playerId);
                 offers.remove(playerId);
                 return TransitionResult.ending(session.id());
@@ -380,6 +398,7 @@ public final class DialogueEngine {
             if (outcome == null) {
                 DialogueSession refreshed = refreshOfferedChoices(session, context);
                 if (refreshed.offeredChoices().isEmpty()) {
+                    invalidatePending(playerId);
                     sessions.remove(playerId);
                     offers.remove(playerId);
                     return TransitionResult.ending(session.id());
@@ -410,6 +429,7 @@ public final class DialogueEngine {
                 if (!villager.getInteractions().matchesInteraction(player, interactionId)) {
                     return TransitionResult.rejected(view(session, context));
                 }
+                invalidatePending(playerId);
                 sessions.remove(playerId);
                 offers.remove(playerId);
                 if (!commit(player, villager, progressed, context, true)) {
@@ -439,6 +459,9 @@ public final class DialogueEngine {
         if (session == null) {
             return engagePreview(player, offerToken, null);
         }
+        if (pendingRequests.pendingFor(DialoguePendingRequests.Key.from(session)).isPresent()) {
+            return TransitionResult.rejected();
+        }
 
         VillagerEntityMCA villager = resolveBoundVillager(player, session.villagerId()).orElse(null);
         if (villager == null || !canInteract(player, villager)) {
@@ -463,6 +486,7 @@ public final class DialogueEngine {
         if (node.choices().isPresent()) {
             DialogueSession refreshed = refreshOfferedChoices(session, context);
             if (refreshed.offeredChoices().isEmpty()) {
+                invalidatePending(playerId);
                 sessions.remove(playerId);
                 offers.remove(playerId);
                 return TransitionResult.ending(session.id());
@@ -479,6 +503,7 @@ public final class DialogueEngine {
             return TransitionResult.advanced(view(progressed, context));
         }
 
+        invalidatePending(playerId);
         sessions.remove(playerId);
         offers.remove(playerId);
         if (!node.complete()) {
@@ -498,8 +523,27 @@ public final class DialogueEngine {
         if (session == null || session.status() == DialogueSession.Status.PAUSED) {
             return;
         }
+        cancelPending(playerId);
         long deadline = saturatingAdd(overworldTime(player), PAUSE_TICKS);
         sessions.put(playerId, session.pause(deadline));
+    }
+
+    /** Revokes only the dialogue state belonging to the released Interact screen. */
+    public void onInteractionReleased(ServerPlayer player, UUID villagerId) {
+        onInteractionReleased(player.getUUID(), villagerId, overworldTime(player));
+    }
+
+    void onInteractionReleased(UUID playerId, UUID villagerId, long gameTime) {
+        DialogueOptions offer = offers.get(playerId);
+        if (offer != null && offer.villagerId().equals(villagerId)) {
+            offers.remove(playerId);
+        }
+        DialogueSession session = sessions.get(playerId);
+        if (session != null && session.status() == DialogueSession.Status.ACTIVE
+                && session.villagerId().equals(villagerId)) {
+            cancelPending(playerId);
+            sessions.put(playerId, session.pause(saturatingAdd(gameTime, PAUSE_TICKS)));
+        }
     }
 
     /** Returns whether a screen-exit packet may also close the villager interaction. */
@@ -541,6 +585,7 @@ public final class DialogueEngine {
         if (matchingActiveSession || matchingPendingMenu || (matchingUnseenMenu
                 && session != null && session.status() == DialogueSession.Status.ACTIVE
                 && session.villagerId().equals(villagerId))) {
+            cancelPending(playerId);
             sessions.put(playerId, session.pause(saturatingAdd(overworldTime(player), PAUSE_TICKS)));
         }
         return true;
@@ -548,6 +593,7 @@ public final class DialogueEngine {
 
     public void end(ServerPlayer player) {
         Objects.requireNonNull(player, "player");
+        invalidatePending(player.getUUID());
         sessions.remove(player.getUUID());
         offers.remove(player.getUUID());
     }
@@ -562,6 +608,7 @@ public final class DialogueEngine {
             if (!session.villagerId().equals(villager.getUUID())) {
                 return session;
             }
+            invalidatePending(playerId);
             ServerPlayer player = server == null ? null : server.getPlayerList().getPlayer(playerId);
             if (destroyed) {
                 if (player != null) {
@@ -616,6 +663,7 @@ public final class DialogueEngine {
             DialogueSession session = entry.getValue();
             ServerPlayer player = server.getPlayerList().getPlayer(session.playerId());
             if (shouldDiscardSession(session, generation, gameTime, player != null)) {
+                invalidatePending(session.playerId());
                 if (player != null) {
                     notifyEnded(player, session);
                 }
@@ -626,6 +674,7 @@ public final class DialogueEngine {
                 boolean discard = entity != null
                         && (!(entity instanceof VillagerEntityMCA villager) || !villager.isAlive() || villager.isRemoved());
                 if (discard) {
+                    invalidatePending(session.playerId());
                     notifyEnded(player, session);
                 }
                 return discard;
@@ -640,6 +689,7 @@ public final class DialogueEngine {
                 return false;
             }
             if (!(entity instanceof VillagerEntityMCA villager) || !villager.isAlive() || villager.isRemoved()) {
+                invalidatePending(session.playerId());
                 notifyEnded(player, session);
                 return true;
             }
@@ -651,6 +701,15 @@ public final class DialogueEngine {
             }
             return false;
         });
+        for (DialoguePendingRequests.Ticket ticket : pendingRequests.snapshot()) {
+            DialogueSession session = sessions.get(ticket.key().playerId());
+            if (session == null || session.status() != DialogueSession.Status.ACTIVE
+                    || !ticket.key().equals(DialoguePendingRequests.Key.from(session))) {
+                invalidatePending(ticket.key().playerId());
+            } else if (gameTime >= ticket.deadline() && finishPending(ticket, null, null, server)) {
+                cancelOperation(ticket);
+            }
+        }
         Map<UUID, DialogueOptions> reloadInvalidatedMenus = new HashMap<>();
         offers.entrySet().removeIf(entry -> {
             DialogueOptions offer = entry.getValue();
@@ -687,6 +746,12 @@ public final class DialogueEngine {
     }
 
     public void clear(MinecraftServer server) {
+        for (UUID playerId : sessions.keySet()) {
+            invalidatePending(playerId);
+        }
+        for (DialoguePendingRequests.Ticket ticket : pendingRequests.snapshot()) {
+            invalidatePending(ticket.key().playerId());
+        }
         sessions.clear();
         offers.clear();
         recentPreviews.clear();
@@ -724,6 +789,7 @@ public final class DialogueEngine {
         if (choiceId != null && !started.offeredChoices().contains(choiceId)) {
             return TransitionResult.rejected();
         }
+        invalidatePending(playerId);
         sessions.put(playerId, started);
         offer.consume();
         offers.remove(playerId);
@@ -1060,10 +1126,8 @@ public final class DialogueEngine {
             throw new IllegalStateException("Automatic dialogue routing node cannot be rendered: "
                     + session.eventId() + "#" + session.nodeId());
         }
-        Component line = context.villager().getTranslatable(
-                context.player(),
-                node.lines().get(session.lineIndex())
-        );
+        Component line = pendingRequests.lineFor(DialoguePendingRequests.Key.from(session)).orElseGet(() ->
+                context.villager().getTranslatable(context.player(), node.lines().get(session.lineIndex())));
         List<ChoiceView> choices = session.lineIndex() == node.lines().size() - 1
                 ? node.choices().orElse(List.of()).stream()
                         .filter(choice -> session.offeredChoices().contains(choice.id()))
@@ -1079,6 +1143,132 @@ public final class DialogueEngine {
                 choices,
                 advanceKind(session)
         );
+    }
+
+    /** Sends a node only when ready; a resolver node first sends an authenticated pending frame. */
+    public void sendView(ServerPlayer player, DialogueNodeView view) {
+        DialogueSession session = sessions.get(player.getUUID());
+        if (session == null || session.status() != DialogueSession.Status.ACTIVE
+                || session.generation() != events.generation()
+                || !session.id().equals(view.sessionId()) || session.offerToken() != view.offerToken()
+                || !session.eventId().equals(view.eventId())) {
+            return;
+        }
+        DialoguePendingRequests.Key key = DialoguePendingRequests.Key.from(session);
+        DialogueEvent.Node node = session.event().nodes().get(session.nodeId());
+        if (node.resolve().isEmpty()) {
+            invalidatePending(player.getUUID());
+            Network.sendToPlayer(InteractionDialogueNodeResponse.active(view), player);
+            return;
+        }
+        VillagerEntityMCA villager = resolveBoundVillager(player, session.villagerId()).orElse(null);
+        if (villager == null || !canInteract(player, villager)) {
+            pauseUnavailable(player, session);
+            return;
+        }
+        DialogueContext context = context(player, villager);
+        if (pendingRequests.lineFor(key).isPresent()) {
+            Network.sendToPlayer(InteractionDialogueNodeResponse.active(view(session, context)), player);
+            return;
+        }
+        DialogueAsyncResolver resolver = node.resolve().orElseThrow();
+        var existing = pendingRequests.pendingFor(key);
+        if (existing.isPresent()) {
+            Network.sendToPlayer(new InteractionDialoguePendingResponse(session.id(), session.offerToken(),
+                    villager.getTranslatable(player, resolver.pendingLine())), player);
+            return;
+        }
+        UUID interactionId = villager.getInteractions().interactionId();
+        if (!villager.getInteractions().matchesInteraction(player, interactionId)) {
+            pauseUnavailable(player, session);
+            return;
+        }
+        var ticket = new DialoguePendingRequests.Ticket(key, interactionId, UUID.randomUUID(),
+                resolver, saturatingAdd(overworldTime(player), ASYNC_TIMEOUT_TICKS));
+        pendingRequests.install(ticket).ifPresent(DialogueEngine::cancelOperation);
+        // Send before starting provider work: even an already-complete future must produce pending first.
+        Network.sendToPlayer(new InteractionDialoguePendingResponse(session.id(), session.offerToken(),
+                villager.getTranslatable(player, resolver.pendingLine())), player);
+        MinecraftServer server = player.getServer();
+        try {
+            CompletionStage<DialogueAsyncResolver.Result> stage = Objects.requireNonNull(
+                    resolver.resolve(context, ticket.operationId()), "resolver returned null stage");
+            stage.whenComplete((result, error) -> server.execute(() -> finishPending(ticket, result, error, server)));
+        } catch (RuntimeException error) {
+            server.execute(() -> finishPending(ticket, null, error, server));
+        }
+    }
+
+    private boolean finishPending(DialoguePendingRequests.Ticket ticket,
+                               @Nullable DialogueAsyncResolver.Result result,
+                               @Nullable Throwable error, MinecraftServer server) {
+        DialoguePendingRequests.Key key = ticket.key();
+        if (pendingRequests.pendingFor(key).filter(current -> current == ticket).isEmpty()) {
+            return false;
+        }
+        DialogueSession session = sessions.get(key.playerId());
+        ServerPlayer player = server.getPlayerList().getPlayer(key.playerId());
+        VillagerEntityMCA villager = player == null ? null
+                : resolveBoundVillager(player, key.villagerId()).orElse(null);
+        if (session == null || !key.equals(DialoguePendingRequests.Key.from(session))
+                || session.status() != DialogueSession.Status.ACTIVE
+                || session.generation() != events.generation() || player == null || player.hasDisconnected()
+                || villager == null || !canInteract(player, villager)
+                || !villager.getInteractions().matchesInteraction(player, ticket.interactionId())) {
+            invalidatePending(key.playerId());
+            return false;
+        }
+        DialogueEvent.Node node = session.event().nodes().get(session.nodeId());
+        String translationKey = result == null || !result.found() || error != null
+                ? ticket.resolver().failureLine()
+                : result.lineOverride().orElseGet(() -> node.lines().get(session.lineIndex()));
+        Component line;
+        try {
+            Object[] arguments = result != null ? result.arguments().toArray() : new Object[0];
+            if (result != null && result.found() && error == null
+                    && ticket.resolver() instanceof DialogueAsyncResolver.StructureLocation
+                    && arguments.length > 0 && arguments[0] instanceof String coordinates) {
+                arguments[0] = styledStructureCoordinates(coordinates);
+            }
+            line = result != null && result.found() && error == null
+                    ? villager.getTranslatable(player, translationKey, arguments)
+                    : villager.getTranslatable(player, translationKey);
+        } catch (RuntimeException exception) {
+            MCA.LOGGER.warn("Failed to localize async dialogue result {}: {}", key, exception.toString());
+            line = villager.getTranslatable(player, ticket.resolver().failureLine());
+        }
+        if (!pendingRequests.finish(ticket, line)) {
+            return false;
+        }
+        Network.sendToPlayer(InteractionDialogueNodeResponse.active(view(session, context(player, villager))), player);
+        return true;
+    }
+
+    static Component styledStructureCoordinates(String text) {
+        return DialogueCoordinates.copyValue(text)
+                .<Component>map(copy -> Component.literal(text).setStyle(Style.EMPTY
+                        .withColor(TextColor.fromRgb(0x237B80))
+                        .withUnderlined(true)
+                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                                Component.translatable("gui.dialogue.copy_coordinates")))
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, copy))))
+                .orElseGet(() -> Component.literal(text));
+    }
+
+    private void invalidatePending(UUID playerId) {
+        pendingRequests.invalidate(playerId).ifPresent(DialogueEngine::cancelOperation);
+    }
+
+    private void cancelPending(UUID playerId) {
+        pendingRequests.cancelPending(playerId).ifPresent(DialogueEngine::cancelOperation);
+    }
+
+    private static void cancelOperation(DialoguePendingRequests.Ticket ticket) {
+        try {
+            ticket.resolver().cancel(ticket.operationId());
+        } catch (RuntimeException error) {
+            MCA.LOGGER.warn("Async dialogue cancellation failed for {}: {}", ticket.operationId(), error.toString());
+        }
     }
 
     private DialogueSession validActiveSession(ServerPlayer player, long offerToken) {
@@ -1112,15 +1302,15 @@ public final class DialogueEngine {
         return villager.isAlive()
                 && !villager.isRemoved()
                 && villager.level() == player.level()
+                && villager.getInteractions().matchesInteraction(player, villager.getInteractions().interactionId())
                 && !villager.isTrading()
-                && (!villager.isSleeping() || villager.getInteractions().getInteractingPlayer()
-                        .filter(player::equals).isPresent())
                 && !villager.getVillagerBrain().isPanicking()
                 && player.canInteractWithEntity(villager, 1.0);
     }
 
     private void pauseUnavailable(ServerPlayer player, DialogueSession session) {
         if (session.status() == DialogueSession.Status.ACTIVE) {
+            cancelPending(player.getUUID());
             sessions.put(player.getUUID(), session.pause(saturatingAdd(overworldTime(player), PAUSE_TICKS)));
             offers.remove(player.getUUID());
         }
@@ -1129,6 +1319,7 @@ public final class DialogueEngine {
     private void invalidateReloaded(UUID playerId, long generation) {
         DialogueSession session = sessions.get(playerId);
         if (session != null && session.generation() != generation) {
+            invalidatePending(playerId);
             sessions.remove(playerId);
         }
         DialogueOptions offer = offers.get(playerId);
@@ -1142,6 +1333,7 @@ public final class DialogueEngine {
         if (session != null
                 && session.status() == DialogueSession.Status.PAUSED
                 && gameTime >= session.pauseDeadline()) {
+            invalidatePending(playerId);
             sessions.remove(playerId);
             return null;
         }

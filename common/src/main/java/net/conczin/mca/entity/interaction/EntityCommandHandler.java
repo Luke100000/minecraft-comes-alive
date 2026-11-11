@@ -48,6 +48,10 @@ public abstract class EntityCommandHandler<T extends Entity & VillagerLike<?>> {
     public void stopInteracting() {
         if (!entity.level().isClientSide) {
             if (interactingPlayer instanceof ServerPlayer serverPlayer) {
+                if (entity instanceof VillagerEntityMCA villager) {
+                    MCA.getDialogueEngine().ifPresent(engine ->
+                            engine.onInteractionReleased(serverPlayer, villager.getUUID()));
+                }
                 serverPlayer.closeContainer();
             }
         }
