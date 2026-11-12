@@ -771,6 +771,10 @@ public final class ArcherLiveRegressionGameTests {
     public static void closeSkeletonRetreatSettlesInsideShootingRange(GameTestHelper helper) {
         Arena a = new Arena(helper, 0);
         a.target(7);
+        // Exercise retreat from an engaged close attack, not sensor-acquisition timing.
+        a.archer.getBrain().setMemory(MemoryModuleType.ATTACK_TARGET, a.target);
+        helper.assertTrue(a.archer.getBrain().getMemory(MemoryModuleType.ATTACK_TARGET).orElse(null) == a.target,
+                "retreat fixture must begin with the close ranged attacker selected" + a.describe());
         boolean[] retreated = {false};
         a.observe(() -> {
             retreated[0] |= RangedCombatState.current(a.archer).orElse(null) == RangedCombatState.KITE

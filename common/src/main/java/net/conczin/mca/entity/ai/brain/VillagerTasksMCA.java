@@ -327,8 +327,20 @@ public class VillagerTasksMCA {
     public static ImmutableList<Pair<Integer, ? extends BehaviorControl<? super VillagerEntityMCA>>> getGuardCorePackage(VillagerEntityMCA villager) {
         return ImmutableList.of(
                 Pair.of(0, new ConditionalTask<>(
-                        new VillagerPanicTrigger(),
-                        VillagerTasksMCA::guardTooHurt
+                        new VillagerPanicTrigger() {
+                            @Override
+                            protected boolean canStillUse(ServerLevel world, Villager guard, long time) {
+                                // REST may reclaim activity after this trigger starts. Stop and
+                                // rearm it so the next injury-memory tick can enter PANIC again.
+                                return super.canStillUse(world, guard, time)
+                                        && guard.getBrain().isActive(Activity.PANIC);
+                            }
+                        },
+                        // The vanilla trigger changes activity only in start().
+                        // Wait for danger memory so it cannot start inert and remain running.
+                        guard -> guardTooHurt(guard)
+                                && (VillagerPanicTrigger.isHurt(guard)
+                                || VillagerPanicTrigger.hasHostile(guard))
                 )),
                 Pair.of(0,
                         new SayTask("villager.retreat", 100, e -> VillagerTasksMCA.guardTooHurt(e) && e.getVillagerBrain().isPanicking())

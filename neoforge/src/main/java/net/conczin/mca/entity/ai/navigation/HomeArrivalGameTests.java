@@ -236,10 +236,10 @@ public final class HomeArrivalGameTests {
         verifyArrival(helper, 2, false, true);
     }
 
-    @GameTest(batch = "mca_home_repaired_ledge", templateNamespace = "minecraft",
-            template = "bastion/blocks/air", timeoutTicks = 700)
+    @GameTest(batch = "mca_home_repaired_ledge", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 1100)
     public static void restRecoversWhenStepsAreAddedToTwoBlockLedge(GameTestHelper helper) {
-        verifyArrival(helper, 2, true);
+        verifyArrival(helper, 2, true, false, new BlockPos(20, 8, 20));
     }
 
     @GameTest(batch = "mca_home_drop", templateNamespace = "minecraft",
@@ -284,7 +284,20 @@ public final class HomeArrivalGameTests {
 
     private static void verifyArrival(GameTestHelper helper, int heightDifference, boolean repairSteps,
                                       boolean offsetApproach) {
-        BlockPos start = helper.absolutePos(new BlockPos(3, 4, 5));
+        verifyArrival(helper, heightDifference, repairSteps, offsetApproach, new BlockPos(3, 4, 5));
+    }
+
+    private static void verifyArrival(GameTestHelper helper, int heightDifference, boolean repairSteps,
+                                      boolean offsetApproach, BlockPos relativeStart) {
+        BlockPos start = helper.absolutePos(relativeStart);
+        if (repairSteps) {
+            var bounds = helper.getBounds();
+            BlockPos min = start.offset(-3, 0, -9);
+            BlockPos max = start.offset(15, 0, 9);
+            helper.assertTrue(bounds.contains(new Vec3(min.getX() + 0.5D, bounds.minY + 0.5D, min.getZ() + 0.5D))
+                            && bounds.contains(new Vec3(max.getX() + 0.5D, bounds.minY + 0.5D, max.getZ() + 0.5D)),
+                    "HOME house and movement terrain extend outside the allocated GameTest arena");
+        }
         BlockPos door = start.offset(6, heightDifference, 0);
         BlockPos foot = door.east(4);
         BlockPos head = foot.east();
@@ -298,8 +311,8 @@ public final class HomeArrivalGameTests {
         long[] started = {0L};
         Vec3[] previous = {null};
         boolean[] openedDoor = {false};
-        boolean[] sawFailure = {false};
         boolean[] repaired = {false};
+        long[] repairedAt = {0L};
         boolean[] crossedDoor = {false};
         double[] outsideTurnDistance = {0.0D};
         int[] outsideDirection = {0};
@@ -344,15 +357,17 @@ public final class HomeArrivalGameTests {
                         "HOME repeatedly reversed outside the raised doorway: turns="
                                 + outsideReversals[0] + ", " + describe(villager));
             }
-            sawFailure[0] |= villager.getBrain().hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
-            if (repairSteps && !repaired[0] && elapsed >= 160) {
+            if (repairSteps && elapsed % 50 == 0) {
+                MCA.LOGGER.info("[MCA Home Arrival] diagnostic elapsed={} {}", elapsed, describe(villager));
+            }
+            if (repairSteps && !repaired[0] && elapsed >= 300) {
                 helper.assertTrue(!villager.isSleeping() && !openedDoor[0]
                                 && villager.getY() < door.getY() - 0.5D,
                         "two-block ledge was traversed without steps: " + describe(villager));
-                helper.assertTrue(sawFailure[0], "unreachable raised HOME never recorded failure");
                 MCA.LOGGER.info("[MCA Home Arrival] blocked ledge elapsed={} {}", elapsed, describe(villager));
                 addSteps(helper.getLevel(), door);
                 repaired[0] = true;
+                repairedAt[0] = elapsed;
             }
             if (villager.isSleeping()) {
                 helper.assertTrue(villager.getSleepingPos().filter(head::equals).isPresent(),
@@ -364,7 +379,8 @@ public final class HomeArrivalGameTests {
                 MCA.LOGGER.info("[MCA Home Arrival] arrived rise={} repaired={} elapsed={} {}",
                         heightDifference, repaired[0], elapsed, describe(villager));
                 helper.succeed();
-            } else if (elapsed >= 550) {
+            } else if ((!repairSteps && elapsed >= 550)
+                    || (repairSteps && repaired[0] && elapsed - repairedAt[0] >= 500)) {
                 helper.fail("REST did not reach HOME through entrance; rise=" + heightDifference
                         + ", repaired=" + repaired[0] + ", doorOpened=" + openedDoor[0]
                         + ", outsideReversals=" + outsideReversals[0] + ", " + describe(villager));

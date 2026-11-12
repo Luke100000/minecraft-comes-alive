@@ -207,31 +207,37 @@ public final class AutonomousPathfindingGameTests {
     private AutonomousPathfindingGameTests() {
     }
 
-    @GameTest(batch = SHELF_HOME_BATCH, templateNamespace = "minecraft",
-            template = "bastion/blocks/air", timeoutTicks = 1_500)
+    @GameTest(batch = SHELF_HOME_BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 1_500)
     public static void goHomeLeavesShelfBuildingForDistantBed(GameTestHelper helper) {
         assertShelfHomeJourney(helper, false, false);
     }
 
-    @GameTest(batch = SHELF_FULL_BRAIN_BATCH, templateNamespace = "minecraft",
-            template = "bastion/blocks/air", timeoutTicks = 1_500)
+    @GameTest(batch = SHELF_FULL_BRAIN_BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 1_500)
     public static void daytimeGoHomeDoesNotReturnInsideShelfBuilding(GameTestHelper helper) {
         assertShelfHomeJourney(helper, true, false);
     }
 
-    @GameTest(batch = SHELF_NIGHT_BATCH, templateNamespace = "minecraft",
-            template = "bastion/blocks/air", timeoutTicks = 1_500)
+    @GameTest(batch = SHELF_NIGHT_BATCH, templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 1_500)
     public static void nighttimeGoHomeDoesNotReturnInsideShelfBuilding(GameTestHelper helper) {
         assertShelfHomeJourney(helper, true, true);
     }
 
     private static void assertShelfHomeJourney(GameTestHelper helper, boolean fullBrain, boolean night) {
-        BlockPos start = helper.absolutePos(new BlockPos(8, 1, 8));
+        // The structure block is below the GameTest arena, so the fixture's
+        // stone floor must start at relative Y=1 rather than outside its bounds.
+        BlockPos start = helper.absolutePos(new BlockPos(21, 2, 56));
         BlockPos bed = start.east(70);
-        BlockPos center = start.east(34);
+        BlockPos center = start.east(35);
         ServerLevel level = helper.getLevel();
-        rememberArea(level, center, 64);
-        prepareFlatArea(helper, center, 64, 3);
+        var bounds = helper.getBounds();
+        helper.assertTrue(bounds.contains(Vec3.atCenterOf(center.offset(-54, -1, -54)))
+                        && bounds.contains(Vec3.atCenterOf(center.offset(54, 2, 54))),
+                "shelf HOME terrain extends outside its allocated GameTest arena");
+        rememberArea(level, center, 54);
+        prepareFlatArea(helper, center, 54, 3);
         for (int i = -6; i <= 6; i++) {
             for (int y = 0; y < 3; y++) {
                 level.setBlock(start.offset(i, y, -6), Blocks.QUARTZ_BLOCK.defaultBlockState(), 3);
@@ -243,10 +249,9 @@ public final class AutonomousPathfindingGameTests {
             }
         }
         if (fullBrain) {
-            rememberBlocks(level, start.offset(-6, 3, -6), start.offset(6, 3, 6));
             for (int x = -6; x <= 6; x++) {
                 for (int z = -6; z <= 6; z++) {
-                    level.setBlock(start.offset(x, 3, z), Blocks.QUARTZ_BLOCK.defaultBlockState(), 3);
+                    level.setBlock(start.offset(x, 2, z), Blocks.QUARTZ_BLOCK.defaultBlockState(), 3);
                 }
             }
         }
