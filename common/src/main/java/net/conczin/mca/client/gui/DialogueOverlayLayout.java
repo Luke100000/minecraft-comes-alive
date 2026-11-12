@@ -2,6 +2,8 @@ package net.conczin.mca.client.gui;
 
 /** Geometry in scaled GUI pixels. The world and entity remain visible behind both panels. */
 final class DialogueOverlayLayout {
+    private static final int INSPECTOR_GAP = 8;
+
     private DialogueOverlayLayout() {
     }
 
@@ -57,25 +59,47 @@ final class DialogueOverlayLayout {
     }
 
     static Geometry calculate(int width, int height, int menuHeight, int bubbleHeight, int desiredBubbleWidth) {
-        int sideMargin = Math.max(12, Math.min(24, width / 32));
+        return calculate(width, height, menuHeight, bubbleHeight, desiredBubbleWidth, menuColumn(width, height, 0));
+    }
+
+    static int inspectorRightLimit(int width, int height) {
+        int minimumMenuWidth = Math.round(180 * contentScale(width, height));
+        return width - sideMargin(width) - INSPECTOR_GAP - minimumMenuWidth;
+    }
+
+    static Column menuColumn(int width, int height, int inspectorRight) {
+        int sideMargin = sideMargin(width);
+        int availableWidth = Math.max(1, width - sideMargin * 2);
+        int preferredWidth = Math.min(availableWidth, Math.max(250,
+                Math.min(Math.round(560 * contentScale(width, height)), width * 3 / 5)));
+        int left = Math.max((width - preferredWidth) / 2, inspectorRight + INSPECTOR_GAP);
+        int menuWidth = Math.min(preferredWidth, Math.max(1, width - sideMargin - left));
+        return new Column(left, menuWidth);
+    }
+
+    private static int sideMargin(int width) {
+        return Math.max(12, Math.min(24, width / 32));
+    }
+
+    static int cornerBubbleWidth(int width) {
+        return Math.max(1, Math.min(420, Math.min(width * 2 / 5, width / 2 - 16)));
+    }
+
+    static Geometry calculate(int width, int height, int menuHeight, int bubbleHeight, int desiredBubbleWidth,
+                              Column column) {
         // Hearts and hunger start 39 GUI pixels above the bottom; leave a five-pixel gap.
         int bottomMargin = Math.min(height / 3, 44);
-        int availableWidth = Math.max(1, width - sideMargin * 2);
-        int menuWidth = Math.min(availableWidth, Math.max(250,
-                Math.min(Math.round(560 * contentScale(width, height)), width * 3 / 5)));
         int maximumMenuHeight = Math.max(1, Math.min(height - bottomMargin - 26, height * 2 / 5));
         int actualMenuHeight = Math.min(Math.max(1, menuHeight), maximumMenuHeight);
-        Rect menu = new Rect((width - menuWidth) / 2, height - bottomMargin - actualMenuHeight,
-                menuWidth, actualMenuHeight);
+        Rect menu = new Rect(column.x(), height - bottomMargin - actualMenuHeight, column.width(), actualMenuHeight);
 
         if (bubbleHeight <= 0) {
             return new Geometry(menu, new Rect(0, 0, 0, 0));
         }
         int bubbleTop = Math.max(12, Math.min(50, height / 11));
-        int bubbleWidth = Math.max(1, Math.min(Math.min(Math.min(420, width * 2 / 5), width / 2 - 16),
-                desiredBubbleWidth));
+        int bubbleWidth = Math.max(1, Math.min(cornerBubbleWidth(width), desiredBubbleWidth));
         int maximumBubbleHeight = Math.max(0, menu.y() - bubbleTop - 8);
-        Rect bubble = new Rect(width - sideMargin - bubbleWidth, bubbleTop, bubbleWidth,
+        Rect bubble = new Rect(width - sideMargin(width) - bubbleWidth, bubbleTop, bubbleWidth,
                 Math.min(bubbleHeight, maximumBubbleHeight));
         return new Geometry(menu, bubble);
     }
@@ -147,6 +171,9 @@ final class DialogueOverlayLayout {
     }
 
     record SpeechViewport(int top, int bottom) {
+    }
+
+    record Column(int x, int width) {
     }
 
     record Rect(int x, int y, int width, int height) {

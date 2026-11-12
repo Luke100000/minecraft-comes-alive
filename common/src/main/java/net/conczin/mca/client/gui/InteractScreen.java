@@ -23,13 +23,16 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.FormattedText;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.player.Player;
+import org.joml.Vector2i;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.*;
@@ -41,7 +44,9 @@ public class InteractScreen extends AbstractDynamicScreen {
     private static final int FRAME = 0xFF67452F;
     private static final int GOLD = 0xFFFFCD68;
     private static final int CREAM = 0xFFFFEED3;
-    private static final int FOOTER_HEIGHT = 27;
+    private static final int INSPECTOR_X = 10;
+    // The vanilla tooltip starts 12 pixels after its anchor and its background extends 4 more.
+    private static final int INSPECTOR_TEXT_RIGHT_INSET = 16;
     private static Analysis analysis;
     private final VillagerLike<?> villager;
     private final UUID interactionId;
@@ -160,8 +165,9 @@ public class InteractScreen extends AbstractDynamicScreen {
                     presentation.tick(System.nanoTime() / 1_000_000L));
         }
         drawIcons(context);
-        drawTextPopups(context);
-        drawDialogueEventState(context, mouseX, mouseY, tickDelta);
+        boolean docked = dialogueMode && Config.getInstance().dialogueSpeechAboveChoices;
+        int inspectorRight = drawTextPopups(context, docked);
+        drawDialogueEventState(context, mouseX, mouseY, tickDelta, docked, inspectorRight);
     }
 
     @Override
@@ -373,52 +379,39 @@ public class InteractScreen extends AbstractDynamicScreen {
         matrices.popPose();
     }
 
-    private void drawTextPopups(GuiGraphics context) {
-        //name or state tip (gifting, ...)
+    private int drawTextPopups(GuiGraphics context, boolean docked) {
         int h = 17;
-        if (inGiftMode) {
-            context.renderTooltip(font, Component.translatable("gui.interact.label.giveGift"), 10, 28);
-        } else {
-            context.renderTooltip(font, villager.asEntity().getName(), 10, 28);
-        }
-
-        //age or profession
-        context.renderTooltip(font, villager.asEntity().isBaby() ? villager.getAgeState().getName() : villager.getProfessionText(), 10, 30 + h);
+        int labelWidth = docked ? Math.max(font.width("…"),
+                DialogueOverlayLayout.inspectorRightLimit(width, height) - INSPECTOR_X - INSPECTOR_TEXT_RIGHT_INSET)
+                : Integer.MAX_VALUE;
+        Component name = inGiftMode ? Component.translatable("gui.interact.label.giveGift") : villager.asEntity().getName();
+        int inspectorRight = drawInspectorLabel(context, name, List.of(), 28, labelWidth);
+        Component profession = villager.asEntity().isBaby() ? villager.getAgeState().getName() : villager.getProfessionText();
+        inspectorRight = Math.max(inspectorRight, drawInspectorLabel(context, profession, List.of(), 30 + h, labelWidth));
 
         VillagerBrain<?> brain = villager.getVillagerBrain();
+        Component mood = Component.translatable("gui.interact.label.mood", brain.getMood().getText())
+                .withStyle(brain.getMood().getColor());
+        inspectorRight = Math.max(inspectorRight, drawInspectorLabel(context, mood, List.of(), 30 + h * 2, labelWidth));
 
-        //mood
-        context.renderTooltip(font,
-                Component.translatable("gui.interact.label.mood", brain.getMood().getText())
-                        .withStyle(brain.getMood().getColor()), 10, 30 + h * 2);
+        Component personality = Component.translatable("gui.interact.label.personality", brain.getPersonality().getName())
+                .withStyle(ChatFormatting.WHITE);
+        inspectorRight = Math.max(inspectorRight, drawInspectorLabel(context, personality,
+                List.of(brain.getPersonality().getDescription()), 30 + h * 3, labelWidth));
 
-        //personality
-        if (hoveringOverText(10, 30 + h * 3, 128)) {
-            context.renderTooltip(font, brain.getPersonality().getDescription(), 10, 30 + h * 3);
-        } else {
-            //White as we don't know if a personality is negative
-            context.renderTooltip(font, Component.translatable("gui.interact.label.personality", brain.getPersonality().getName()).withStyle(ChatFormatting.WHITE), 10, 30 + h * 3);
-        }
-
-        //traits
         Set<Traits.Trait> traits = villager.getTraits().getTraits();
         if (!traits.isEmpty()) {
-            if (hoveringOverText(10, 30 + h * 4, 128)) {
-                //details
-                List<Component> traitText = traits.stream().map(Traits.Trait::getDescription).collect(Collectors.toList());
-                traitText.addFirst(Component.translatable("traits.title"));
-                context.renderComponentTooltip(font, traitText, 10, 30 + h * 4);
-            } else {
-                //list
-                MutableComponent traitText = Component.translatable("traits.title");
-                traits.stream().map(Traits.Trait::getName).forEach(t -> {
-                    if (!traitText.getSiblings().isEmpty()) {
-                        traitText.append(Component.literal(", "));
-                    }
-                    traitText.append(t);
-                });
-                context.renderTooltip(font, traitText, 10, 30 + h * 4);
-            }
+            MutableComponent traitText = Component.translatable("traits.title");
+            traits.stream().map(Traits.Trait::getName).forEach(t -> {
+                if (!traitText.getSiblings().isEmpty()) {
+                    traitText.append(Component.literal(", "));
+                }
+                traitText.append(t);
+            });
+            List<Component> traitDetails = traits.stream().map(Traits.Trait::getDescription).collect(Collectors.toList());
+            traitDetails.addFirst(Component.translatable("traits.title"));
+            inspectorRight = Math.max(inspectorRight,
+                    drawInspectorLabel(context, traitText, traitDetails, 30 + h * 4, labelWidth));
         }
 
         //hearts
@@ -479,12 +472,37 @@ public class InteractScreen extends AbstractDynamicScreen {
             drawHoveringIconText(context, lines, "analysis");
         }
 
+        return docked ? inspectorRight : 0;
     }
 
-    //checks if the mouse hovers over a tooltip
-    //tooltips are not rendered on the given coordinates, so we need an offset
-    private boolean hoveringOverText(int x, int y, int w) {
-        return hoveringOver(x + 8, y - 16, w, 16);
+    private int drawInspectorLabel(GuiGraphics context, Component label, List<Component> details, int y, int maxWidth) {
+        if (maxWidth == Integer.MAX_VALUE) {
+            if (!details.isEmpty() && hoveringOver(INSPECTOR_X + 8, y - 16, 128, 16)) {
+                context.renderComponentTooltip(font, details, INSPECTOR_X, y);
+            } else {
+                context.renderTooltip(font, label, INSPECTOR_X, y);
+            }
+            return 0;
+        }
+        boolean clipped = font.width(label) > maxWidth;
+        FormattedCharSequence visible = clipped
+                ? Language.getInstance().getVisualOrder(FormattedText.composite(
+                        font.substrByWidth(label, maxWidth - font.width("…")), FormattedText.of("…")))
+                : label.getVisualOrderText();
+        context.renderTooltip(font, List.of(visible), INSPECTOR_X, y);
+        int labelWidth = font.width(visible);
+        if ((clipped || !details.isEmpty()) && hoveringOver(INSPECTOR_X + 8, y - 16, labelWidth + 8, 16)) {
+            List<FormattedCharSequence> tooltip = new ArrayList<>();
+            int wrapWidth = Math.min(240, width - 8);
+            if (clipped) {
+                tooltip.addAll(font.split(label, wrapWidth));
+            }
+            for (Component detail : details) {
+                tooltip.addAll(font.split(detail, wrapWidth));
+            }
+            setTooltipForNextRenderPass(tooltip);
+        }
+        return INSPECTOR_X + INSPECTOR_TEXT_RIGHT_INSET + labelWidth;
     }
 
     private boolean canDrawParentsIcon() {
@@ -703,13 +721,8 @@ public class InteractScreen extends AbstractDynamicScreen {
         return rows;
     }
 
-    private int dialoguePanelWidth() {
-        return DialogueOverlayLayout.calculate(width, height, FOOTER_HEIGHT + 20, 0).menu().width();
-    }
-
     private int dialoguePaperHeight(ClientHandlerImpl.DialoguePresentation presentation,
-                                    ReplyIndicators indicators) {
-        int bubbleWidth = dialoguePaperWidth(presentation);
+                                    ReplyIndicators indicators, int bubbleWidth) {
         Component speech = indicators.progress() ? presentation.pendingLine() : presentation.paperFullLine();
         int lines = dialogueLines(speech, bubbleWidth - dialoguePixels(32)).size();
         return DialogueOverlayLayout.minimumSpeechHeight(lines, dialogueHistoryHeight(presentation),
@@ -722,22 +735,15 @@ public class InteractScreen extends AbstractDynamicScreen {
         dialogueSpeechTextHeight = -1;
     }
 
-    private int dialoguePaperWidth(ClientHandlerImpl.DialoguePresentation presentation) {
-        if (Config.getInstance().dialogueSpeechAboveChoices) {
-            return dialoguePanelWidth();
-        }
-        return DialogueOverlayLayout.calculate(width, height, dialogueFooterHeight() + 20, 1).bubble().width();
-    }
-
-    private int dialogueTargetHeight(List<DialogueRow> rows) {
-        int panelWidth = dialoguePanelWidth();
+    private int dialogueTargetHeight(List<DialogueRow> rows, int panelWidth) {
         int listHeight = rows.isEmpty() ? 0 : rows.stream().mapToInt(row -> dialogueRowHeight(row, panelWidth)).sum() + 10;
         int desiredHeight = listHeight + dialogueFooterHeight();
         int maximumHeight = Math.max(dialogueFooterHeight() + 20, Math.min(height - 54, height * 3 / 5));
         return Math.min(maximumHeight, Math.max(dialogueFooterHeight() + 20, desiredHeight));
     }
 
-    private void drawDialogueEventState(GuiGraphics context, int mouseX, int mouseY, float tickDelta) {
+    private void drawDialogueEventState(GuiGraphics context, int mouseX, int mouseY, float tickDelta,
+                                        boolean docked, int inspectorRight) {
         dialogueHits.clear();
         dialogueTextTargets.clear();
         dialogueListViewport = null;
@@ -772,25 +778,27 @@ public class InteractScreen extends AbstractDynamicScreen {
                 presentation.nodeVisible() && presentation.revealingLine(),
                 presentation.pendingAsync(), presentation.reviewingHistory());
         List<DialogueRow> rows = dialogueRows(presentation, indicators);
+        DialogueOverlayLayout.Column column = DialogueOverlayLayout.menuColumn(width, height, inspectorRight);
+        int paperWidth = docked ? column.width() : DialogueOverlayLayout.cornerBubbleWidth(width);
         // A shorter reply should shrink the menu again instead of retaining
         // the largest height reached anywhere in the ongoing conversation.
-        int target = dialogueTargetHeight(rows);
+        int target = dialogueTargetHeight(rows, column.width());
         long nowMillis = System.nanoTime() / 1_000_000L;
-        int paperDesired = dialoguePaperHeight(presentation, indicators);
+        int paperDesired = dialoguePaperHeight(presentation, indicators, paperWidth);
         int paperMinimum = DialogueOverlayLayout.minimumSpeechHeight(2, dialogueHistoryHeight(presentation),
                 indicators.progress(), dialogueTextScale());
         int minimumMenuHeight = dialogueFooterHeight() + 20;
         target = DialogueOverlayLayout.menuHeightWithSpeechMinimum(height, target,
                 minimumMenuHeight, paperMinimum);
         DialogueOverlayLayout.Geometry settledLayout = DialogueOverlayLayout.calculate(width, height, target,
-                paperDesired, dialoguePaperWidth(presentation));
+                paperDesired, paperWidth, column);
         int settledViewportHeight = Math.max(1, settledLayout.menu().height() - dialogueFooterHeight() - 10);
         int panelHeight = dialogueHeight.update(settledLayout.menu().height(), nowMillis, dialogueScroller.isFocused());
         panelHeight = DialogueOverlayLayout.menuHeightWithSpeechMinimum(height, panelHeight,
                 minimumMenuHeight, paperMinimum);
         DialogueOverlayLayout.Geometry layout = DialogueOverlayLayout.calculate(width, height, panelHeight,
-                paperDesired, dialoguePaperWidth(presentation));
-        if (Config.getInstance().dialogueSpeechAboveChoices) {
+                paperDesired, paperWidth, column);
+        if (docked) {
             layout = DialogueOverlayLayout.speechAboveChoices(layout);
         }
         DialogueOverlayLayout.Rect menu = layout.menu();
@@ -800,7 +808,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         int bottom = menu.bottom();
         int panelWidth = menu.width();
         int footerTop = bottom - dialogueFooterHeight();
-        boolean positionToggleHovered = false;
+        DialogueOverlayLayout.Rect hoveredPositionToggle = null;
 
         if (bubble.height() > 0) {
             DialogueSkin.drawFrame(context, DialogueSkin.PAPER, bubble.x(), bubble.y(),
@@ -870,7 +878,7 @@ public class InteractScreen extends AbstractDynamicScreen {
                 drawDialogueProgress(context, progress, nowMillis);
             }
             drawDialogueHistory(context, presentation, bubble);
-            positionToggleHovered = drawDialoguePositionToggle(context, bubble);
+            hoveredPositionToggle = drawDialoguePositionToggle(context, bubble, docked);
         }
 
         DialogueSkin.drawFrame(context, DialogueSkin.MENU, left, top, panelWidth, menu.height());
@@ -922,12 +930,6 @@ public class InteractScreen extends AbstractDynamicScreen {
                 y = drawDialogueRow(context, row, left, rowPanelWidth, y, clipTop, clipBottom, nowMillis);
             }
             context.disableScissor();
-            if (dialogueScroll > 0) {
-                context.drawString(font, "▲", contentRight - 10, clipTop, GOLD);
-            }
-            if (dialogueScroll < scrollLimit) {
-                context.drawString(font, "▼", contentRight - 10, clipBottom - 10, GOLD);
-            }
             dialogueScroller.render(context, mouseX, mouseY, tickDelta);
         }
         DialogueOverlayLayout.FooterLayout footer = DialogueOverlayLayout.footer(menu, dialogueFooterHeight());
@@ -946,9 +948,8 @@ public class InteractScreen extends AbstractDynamicScreen {
                 new DialogueClick(DialogueClickKind.CLOSE, null, null, null)),
                 closeAction.x(), closeAction.y(), closeAction.width(), closeAction.height());
         context.fill(closeAction.x(), closeAction.y(), closeAction.x() + 1, closeAction.bottom(), FRAME);
-        if (positionToggleHovered) {
-            context.renderTooltip(font, Component.translatable(Config.getInstance().dialogueSpeechAboveChoices
-                    ? "gui.dialogue.position_corner" : "gui.dialogue.position_above"), mouseX, mouseY);
+        if (hoveredPositionToggle != null) {
+            showDialoguePositionTooltip(bubble, hoveredPositionToggle, docked);
         } else {
             dialogueTextStyleAt(mouseX, mouseY).ifPresent(hit -> {
                 HoverEvent event = hit.style().getHoverEvent();
@@ -975,16 +976,18 @@ public class InteractScreen extends AbstractDynamicScreen {
         int right = bubble.right() - dialoguePixels(16);
         int top = bubble.bottom() - historyHeight;
         int controlHeight = dialoguePixels(16);
-        context.fill(left, top - dialoguePixels(4), right, top - dialoguePixels(4) + 1, 0xFFBC8248);
-        Component previous = Component.literal("‹ ").append(Component.translatable("gui.dialogue.previous"));
-        Component next = Component.translatable("gui.dialogue.next").copy().append(" ›");
-        int previousWidth = dialoguePixels(font.width(previous) + 4);
-        int nextWidth = dialoguePixels(font.width(next) + 4);
-        drawSpeechControl(context, previous, left, top, previousWidth, controlHeight,
-                new DialogueClick(DialogueClickKind.PREVIOUS, null, null, null), presentation.canReviewPrevious());
-        drawSpeechControl(context, next, right - nextWidth, top, nextWidth, controlHeight,
-                new DialogueClick(DialogueClickKind.REVIEW_NEXT, null, null, null), presentation.reviewingHistory());
+        context.fill(left, top - dialoguePixels(4), right, top - dialoguePixels(4) + 1, 0x55BC8248);
+        int stepWidth = dialoguePixels(18);
+        int previousX = right - stepWidth * 2;
+        if (drawSpeechControl(context, Component.literal("‹"), previousX, top, stepWidth, controlHeight,
+                new DialogueClick(DialogueClickKind.PREVIOUS, null, null, null), presentation.canReviewPrevious())) {
+            setTooltipForNextRenderPass(Component.translatable("gui.dialogue.previous"));
+        }
         if (presentation.reviewingHistory()) {
+            if (drawSpeechControl(context, Component.literal("›"), right - stepWidth, top, stepWidth, controlHeight,
+                    new DialogueClick(DialogueClickKind.REVIEW_NEXT, null, null, null), true)) {
+                setTooltipForNextRenderPass(Component.translatable("gui.dialogue.next"));
+            }
             Component current = Component.translatable("gui.dialogue.return_current");
             int controlWidth = Math.min(right - left, dialoguePixels(font.width(current) + 8));
             drawSpeechControl(context, current, left + (right - left - controlWidth) / 2,
@@ -993,28 +996,59 @@ public class InteractScreen extends AbstractDynamicScreen {
         }
     }
 
-    private void drawSpeechControl(GuiGraphics context, Component label, int x, int y, int w, int h,
-                                   DialogueClick click, boolean enabled) {
+    private boolean drawSpeechControl(GuiGraphics context, Component label, int x, int y, int w, int h,
+                                      DialogueClick click, boolean enabled) {
         boolean hovered = enabled && hoveringOver(x, y, w, h);
         boolean focused = enabled && dialogueKeyboardIndex == dialogueHits.size();
         if (hovered || focused) {
-            context.renderOutline(x, y, w, h, 0xFFC49765);
+            context.fill(x, y, x + w, y + h, 0x33A97944);
         }
         int textX = x + (w - dialoguePixels(font.width(label))) / 2;
         drawDialogueText(context, label, textX, y + (h - dialoguePixels(font.lineHeight - 1)) / 2,
-                enabled ? INK : 0xFF967A56, false);
+                hovered || focused ? INK : enabled ? 0xFF68482F : 0xFF967A56, false);
         if (enabled) {
             dialogueHits.add(new DialogueHit(x, y, x + w, y + h, click));
         }
+        return hovered;
     }
 
-    private boolean drawDialoguePositionToggle(GuiGraphics context, DialogueOverlayLayout.Rect bubble) {
+    private DialogueOverlayLayout.Rect drawDialoguePositionToggle(GuiGraphics context, DialogueOverlayLayout.Rect bubble,
+                                                                  boolean docked) {
         int size = dialoguePixels(15);
         int x = bubble.right() - dialoguePixels(12) - size;
         int y = bubble.y() + dialoguePixels(7);
-        drawSpeechControl(context, Component.literal("≡"), x, y, size, size,
-                new DialogueClick(DialogueClickKind.TOGGLE_POSITION, null, null, null), true);
-        return hoveringOver(x, y, size, size);
+        if (y + size > bubble.bottom()) {
+            return null;
+        }
+        boolean hovered = hoveringOver(x, y, size, size);
+        if (hovered || dialogueKeyboardIndex == dialogueHits.size()) {
+            context.renderOutline(x, y, size, size, 0xFFC49765);
+        }
+        int iconWidth = dialoguePixels(9);
+        int iconHeight = dialoguePixels(8);
+        int iconX = x + (size - iconWidth) / 2;
+        int iconY = y + (size - iconHeight) / 2;
+        int speechWidth = docked ? iconWidth : dialoguePixels(5);
+        context.fill(iconX + iconWidth - speechWidth, iconY, iconX + iconWidth,
+                iconY + dialoguePixels(3), INK);
+        int choicesHeight = dialoguePixels(3);
+        context.renderOutline(iconX, iconY + iconHeight - choicesHeight, iconWidth, choicesHeight, INK);
+        dialogueHits.add(new DialogueHit(x, y, x + size, y + size,
+                new DialogueClick(DialogueClickKind.TOGGLE_POSITION, null, null, null)));
+        return hovered ? new DialogueOverlayLayout.Rect(x, y, size, size) : null;
+    }
+
+    private void showDialoguePositionTooltip(DialogueOverlayLayout.Rect bubble, DialogueOverlayLayout.Rect toggle,
+                                             boolean docked) {
+        Component label = Component.translatable(docked ? "gui.dialogue.position_corner" : "gui.dialogue.position_above");
+        List<FormattedCharSequence> lines = font.split(label, Math.max(1, width - 8));
+        setTooltipForNextRenderPass(lines, (screenWidth, screenHeight, mouseX, mouseY, tooltipWidth, tooltipHeight) -> {
+            int x = Math.max(4, Math.min(toggle.right() - tooltipWidth, screenWidth - tooltipWidth - 4));
+            int above = bubble.y() - tooltipHeight - 5;
+            int below = bubble.bottom() + 5;
+            int y = above >= 4 ? above : below;
+            return new Vector2i(x, Math.max(4, Math.min(y, screenHeight - tooltipHeight - 4)));
+        }, true);
     }
 
     private float dialogueTextScale() {
@@ -1151,20 +1185,17 @@ public class InteractScreen extends AbstractDynamicScreen {
                         panelWidth - 16, clipBottom - clipTop)));
         int glyphY = y + (rowHeight - glyphHeight) / 2;
         int symbolY = y + (rowHeight - iconSize) / 2;
-        // A partially clipped first row used to show only a stray coloured pixel
-        // of its symbol when the user scrolled a small amount.
-        if (symbolY >= clipTop && symbolY + iconSize <= clipBottom) {
-            if (row.featured() || row.iconIndex() >= 0) {
-                int iconX = left + insets.iconX();
-                if (row.featured()) {
-                    DialogueSkin.drawFeaturedIcon(context, iconX, symbolY, iconSize);
-                } else if (row.iconIndex() == DialogueTopicSection.RELATIONSHIPS.ordinal()) {
-                    // Use the same MCA heart artwork shown in the villager status indicators.
-                    context.blit(ICON_TEXTURES, iconX, symbolY, iconSize, iconSize,
-                            84.0f, 4.0f, 9, 9, 256, 256);
-                } else {
-                    DialogueSkin.drawIcon(context, row.iconIndex(), iconX, symbolY, iconSize);
-                }
+        // The list scissor clips icons alongside the row's text and background.
+        if (row.featured() || row.iconIndex() >= 0) {
+            int iconX = left + insets.iconX();
+            if (row.featured()) {
+                DialogueSkin.drawFeaturedIcon(context, iconX, symbolY, iconSize);
+            } else if (row.iconIndex() == DialogueTopicSection.RELATIONSHIPS.ordinal()) {
+                // Use the same MCA heart artwork shown in the villager status indicators.
+                context.blit(ICON_TEXTURES, iconX, symbolY, iconSize, iconSize,
+                        84.0f, 4.0f, 9, 9, 256, 256);
+            } else {
+                DialogueSkin.drawIcon(context, row.iconIndex(), iconX, symbolY, iconSize);
             }
         }
         for (FormattedCharSequence line : lines) {
@@ -1172,18 +1203,32 @@ public class InteractScreen extends AbstractDynamicScreen {
                     row.selected() ? GOLD : !clickable ? 0xFFAA937A : hover || focused ? GOLD : CREAM, true);
             lineY += lineStep;
         }
-        if (row.featured() || row.iconIndex() >= 0) {
-            boolean expanded = row.click() != null && row.click().kind() == DialogueClickKind.TOGGLE_SECTION
-                    && expandedSections.contains(DialogueTopicSection.valueOf(row.click().choiceId()));
-            drawDialogueText(context, Component.literal(expanded ? "▾" : "▸"),
-                    left + insets.trailingX(),
-                    glyphY,
+        if (row.click() != null && row.click().kind() == DialogueClickKind.TOGGLE_SECTION) {
+            boolean expanded = expandedSections.contains(DialogueTopicSection.valueOf(row.click().choiceId()));
+            drawSectionChevron(context, left + insets.trailingX(), y + rowHeight / 2,
+                    expanded, hover || focused ? GOLD : CREAM);
+        } else if (row.featured()) {
+            drawDialogueText(context, Component.literal("▸"), left + insets.trailingX(), glyphY,
                     hover || focused ? GOLD : CREAM, false);
         }
         if (clickable) {
             dialogueHits.add(new DialogueHit(left + 8, hitTop, left + panelWidth - 8, hitBottom, row.click()));
         }
         return y + rowHeight;
+    }
+
+    private void drawSectionChevron(GuiGraphics context, int x, int centerY, boolean expanded, int color) {
+        int y = centerY - dialoguePixels(expanded ? 5 : 7) / 2;
+        for (int i = 0; i < 7; i++) {
+            int step = Math.min(i, 6 - i);
+            if (expanded) {
+                context.fill(x + dialoguePixels(i), y + dialoguePixels(step),
+                        x + dialoguePixels(i + 1), y + dialoguePixels(step + 2), color);
+            } else {
+                context.fill(x + dialoguePixels(step), y + dialoguePixels(i),
+                        x + dialoguePixels(step + 2), y + dialoguePixels(i + 1), color);
+            }
+        }
     }
 
     private void drawDialogueAction(GuiGraphics context, DialogueRow row, int x, int y, int w, int h) {

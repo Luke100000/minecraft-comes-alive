@@ -113,6 +113,34 @@ class DialogueOverlayLayoutTest {
     }
 
     @Test
+    void dockedPanelsShiftTogetherToClearTheInspectorAtLargeGuiScale() {
+        DialogueOverlayLayout.Column column = DialogueOverlayLayout.menuColumn(427, 240, 133);
+        DialogueOverlayLayout.Geometry docked = DialogueOverlayLayout.speechAboveChoices(
+                DialogueOverlayLayout.calculate(427, 240, 96, 63, column.width(), column));
+
+        assertTrue(docked.bubble().x() > 133, "the inspector must not cover the parchment");
+        assertEquals(docked.menu().x(), docked.bubble().x());
+        assertEquals(docked.menu().width(), docked.bubble().width());
+        assertEquals(DialogueOverlayLayout.menuColumn(427, 240, 0).width(), column.width(),
+                "shift before reducing the text width");
+        assertInside(docked.menu(), 427, 240);
+    }
+
+    @Test
+    void dockedPanelsKeepSpaceForTextWhenTheInspectorIsWide() {
+        int inspectorRight = DialogueOverlayLayout.inspectorRightLimit(320, 180);
+        DialogueOverlayLayout.Column centered = DialogueOverlayLayout.menuColumn(320, 180, 0);
+        DialogueOverlayLayout.Column shortLabels = DialogueOverlayLayout.menuColumn(320, 180, 20);
+        DialogueOverlayLayout.Column wideLabels = DialogueOverlayLayout.menuColumn(320, 180, inspectorRight);
+
+        assertEquals(centered, shortLabels);
+        assertTrue(wideLabels.x() > inspectorRight);
+        assertTrue(wideLabels.width() < centered.width());
+        assertTrue(wideLabels.width() >= 180);
+        assertTrue(wideLabels.x() + wideLabels.width() < 320);
+    }
+
+    @Test
     void dockedSpeechStaysInBoundsOnSmallScreen() {
         DialogueOverlayLayout.Geometry normal = DialogueOverlayLayout.calculate(320, 150, 100, 90);
         DialogueOverlayLayout.Geometry docked = DialogueOverlayLayout.speechAboveChoices(normal);

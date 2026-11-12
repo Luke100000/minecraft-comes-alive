@@ -641,7 +641,7 @@
   "gui.dialogue.legacy": "Something else...",
   "gui.dialogue.continue": "Continue",
   "gui.dialogue.resume_topic": "Continue: %s",
-  "gui.dialogue.finish": "Finish conversation",
+  "gui.dialogue.finish": "Finish & return to topics",
   "gui.dialogue.history": "Conversation history",
   "gui.dialogue.earlier_line": "Earlier line",
   "gui.dialogue.latest_line": "Latest line",

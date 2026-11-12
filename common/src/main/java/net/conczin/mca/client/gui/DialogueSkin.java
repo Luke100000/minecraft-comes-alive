@@ -94,7 +94,7 @@ final class DialogueSkin {
             case 2 -> new IconCrop(2, 3, 12, 11);
             case 3 -> new IconCrop(3, 3, 10, 11);
             case 4 -> new IconCrop(3, 7, 13, 3);
-            case 5 -> new IconCrop(1, 1, 15, 15);
+            case 5 -> new IconCrop(2, 2, 12, 12);
             default -> throw new IllegalArgumentException("No atlas crop for icon " + iconIndex);
         };
     }
@@ -105,8 +105,8 @@ final class DialogueSkin {
         int w = Math.round(crop.width() * scale);
         int h = Math.round(crop.height() * scale);
         graphics.blit(ICONS, x + (size - w) / 2, y + (size - h) / 2, w, h,
-                (float) (iconIndex * 16 + crop.left()), (float) crop.top(),
-                crop.width(), crop.height(), 96, 16);
+                (float) ((iconIndex - DialogueTopicSection.PERSONAL_STORIES.ordinal()) * 16 + crop.left()), (float) crop.top(),
+                crop.width(), crop.height(), 64, 16);
     }
 
     record IconCrop(int left, int top, int width, int height) {

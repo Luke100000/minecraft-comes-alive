@@ -65,7 +65,7 @@ class DialogueSkinResourcesTest {
         verify("paper_tail", 20, 20);
         verify("menu_frame", 24, 24);
         verify("featured_frame", 24, 24);
-        verify("icons", 96, 16);
+        verify("icons", 64, 16);
     }
 
     @Test
@@ -81,7 +81,7 @@ class DialogueSkinResourcesTest {
                 int maxY = -1;
                 for (int y = 0; y < 16; y++) {
                     for (int x = 0; x < 16; x++) {
-                        if ((atlas.getRGB(index * 16 + x, y) >>> 24) != 0) {
+                        if ((atlas.getRGB((index - 2) * 16 + x, y) >>> 24) != 0) {
                             minX = Math.min(minX, x);
                             minY = Math.min(minY, y);
                             maxX = Math.max(maxX, x);

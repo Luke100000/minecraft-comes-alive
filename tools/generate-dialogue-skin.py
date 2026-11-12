@@ -74,40 +74,50 @@ def tail() -> None:
 
 
 def icons() -> None:
-    image = Image.new("RGBA", (96, 16), (0, 0, 0, 0))
+    image = Image.new("RGBA", (64, 16), (0, 0, 0, 0))
     d = ImageDraw.Draw(image)
     ink = "#E7D6BF"
     shadow = "#563929"
 
-    # Speech bubble.
-    d.rectangle((2, 2, 12, 10), outline=shadow, fill=ink, width=1)
-    d.polygon(((3, 10), (3, 13), (6, 10)), fill=ink)
-    for x in (5, 8, 11):
-        d.point((x, 6), fill=shadow)
-
-    # Heart.
-    d.polygon(((16 + 2, 5), (16 + 4, 2), (16 + 7, 3), (16 + 9, 2),
-               (16 + 13, 5), (16 + 12, 9), (16 + 7, 14), (16 + 3, 10)),
-              fill="#EF9298", outline=shadow, width=1)
-
     # Open book, personal stories.
-    d.polygon(((34, 3), (39, 4), (40, 13), (34, 11)), fill=ink, outline=shadow)
-    d.polygon(((40, 4), (45, 3), (45, 11), (40, 13)), fill=ink, outline=shadow)
-    d.line((40, 4, 40, 13), fill=shadow)
+    d.polygon(((2, 3), (7, 4), (8, 13), (2, 11)), fill=ink, outline=shadow)
+    d.polygon(((8, 4), (13, 3), (13, 11), (8, 13)), fill=ink, outline=shadow)
+    d.line((8, 4, 8, 13), fill=shadow)
 
     # Scroll / practical matters.
-    d.rectangle((51, 3, 60, 13), fill=ink, outline=shadow, width=1)
-    d.line((53, 6, 58, 6), fill=shadow)
-    d.line((53, 9, 58, 9), fill=shadow)
+    d.rectangle((19, 3, 28, 13), fill=ink, outline=shadow, width=1)
+    d.line((21, 6, 26, 6), fill=shadow)
+    d.line((21, 9, 26, 9), fill=shadow)
 
     # More / other topics.
-    for x in (67, 72, 77):
+    for x in (35, 40, 45):
         d.rectangle((x, 7, x + 2, 9), fill=ink)
 
-    # Star for the current featured story.
-    d.polygon(((88, 1), (90, 6), (95, 6), (91, 10), (92, 15),
-               (88, 12), (84, 15), (85, 10), (81, 6), (86, 6)),
-              fill="#FFD66C", outline=shadow)
+    # Native 12-pixel featured icon, including its one-pixel lower-right shadow.
+    # The foreground is symmetric; explicit rows keep all five points balanced.
+    star = (
+        ".....#.....",
+        "....###....",
+        "....###....",
+        "###########",
+        ".#########.",
+        "..#######..",
+        "...#####...",
+        "..#######..",
+        "..###.###..",
+        ".###...###.",
+        ".##.....##.",
+    )
+    pixels = {(x, y) for y, row in enumerate(star) for x, pixel in enumerate(row) if pixel == "#"}
+    for x, y in pixels:
+        d.point((50 + x + 1, 2 + y + 1), fill=shadow)
+    for x, y in pixels:
+        colour = "#FFCD68"
+        if y <= 4 and ((x - 1, y) not in pixels or (x, y - 1) not in pixels):
+            colour = "#FFE6A3"
+        elif y >= 6 and ((x + 1, y) not in pixels or (x, y + 1) not in pixels):
+            colour = "#C98C2D"
+        d.point((50 + x, 2 + y), fill=colour)
     save(image, "icons")
 
 
