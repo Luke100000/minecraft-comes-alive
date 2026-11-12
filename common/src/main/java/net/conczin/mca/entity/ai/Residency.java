@@ -23,6 +23,7 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.village.poi.PoiManager;
 import net.minecraft.world.entity.ai.village.poi.PoiType;
 import net.minecraft.world.entity.ai.village.poi.PoiTypes;
+import net.minecraft.world.entity.npc.villager.Villager;
 import net.minecraft.world.entity.npc.villager.VillagerProfession;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.pathfinder.Path;
@@ -370,9 +371,22 @@ public class Residency {
 
     /** Unlike the memory-based check, this also works after vanilla erased HOME. */
     public boolean mayReleaseHomePoiAt(ServerLevel level, BlockPos position) {
-        return VillageManager.get(level).findNearestVillage(position, Village.BORDER_MARGIN)
-                .map(village -> village.ownsResidentHome(entity.getUUID(), position))
-                .orElse(true);
+        Optional<Village> village = VillageManager.get(level).findNearestVillage(position, Village.BORDER_MARGIN);
+        if (village.isPresent()) {
+            return village.get().ownsResidentHome(entity.getUUID(), position);
+        }
+
+        // Outside registered MCA villages, POI tickets have no entity identity. A competing
+        // villager remembering this HOME means we cannot safely release its anonymous ticket.
+        for (Entity other : level.getAllEntities()) {
+            if (other instanceof Villager villager && other != entity
+                    && villager.getBrain().getMemoryInternal(MemoryModuleType.HOME)
+                    .filter(home -> home.dimension().equals(level.dimension()) && home.pos().equals(position))
+                    .isPresent()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private boolean canReachBed(ServerLevel level, BlockPos home) {

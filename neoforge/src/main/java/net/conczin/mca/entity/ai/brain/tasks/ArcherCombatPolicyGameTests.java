@@ -282,7 +282,11 @@ public final class ArcherCombatPolicyGameTests {
             descended[0] |= a.guard.onGround() && Math.abs(a.guard.getY() - a.start.getY()) < 0.1;
             helper.assertTrue(a.guard.distanceToSqr(target) <= 64,
                     "crossbow retreated beyond its own eight-block firing range; distance=" + a.guard.distanceTo(target)
-                            + ", state=" + RangedCombatState.current(a.guard));
+                            + ", state=" + RangedCombatState.current(a.guard)
+                            + ", motion=" + a.guard.getDeltaMovement()
+                            + ", path=" + a.guard.getNavigation().getPath()
+                            + ", walk=" + a.guard.getBrain().getMemory(MemoryModuleType.WALK_TARGET)
+                            + ", tick=" + helper.getTick());
             if (target.getHealth() < health[0]) {
                 var source = target.getLastDamageSource();
                 helper.assertTrue(source != null && source.getEntity() == a.guard

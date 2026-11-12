@@ -12,6 +12,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DetourHandoffTest {
     @Test
+    void oneBlockOfForwardProgressCannotFinishFlankingAcrossLongObstacle() {
+        BlockPos origin = new BlockPos(0, 64, 0);
+        BlockPos destination = new BlockPos(100, 64, 0);
+        Path shortPartial = new Path(List.of(new Node(-5, 64, 0), new Node(1, 64, 0)), destination, false);
+
+        assertFalse(MCAGroundPathNavigation.isUsefulPartialBeyondDetourOrigin(shortPartial, origin, destination));
+    }
+
+    @Test
     void partialReturnToBlockedApproachDoesNotEndFlanking() {
         BlockPos origin = new BlockPos(0, 64, 0);
         BlockPos destination = new BlockPos(70, 64, 0);

@@ -1,7 +1,7 @@
 package net.conczin.mca.mixin;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.server.SpawnQueue;
 import net.minecraft.core.BlockPos;
@@ -10,10 +10,10 @@ import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.WorldGenLevel;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.storage.WritableLevelData;
 import org.spongepowered.asm.mixin.Mixin;
@@ -37,13 +37,14 @@ abstract class MixinServerWorld extends Level implements WorldGenLevel {
         }
     }
 
-    @WrapOperation(method = "sendBlockUpdated", at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/world/entity/ai/navigation/PathNavigation;shouldRecomputePath(Lnet/minecraft/core/BlockPos;)Z"))
-    private boolean mca$checkPathAfterBlockChange(PathNavigation navigation, BlockPos position,
-                                                Operation<Boolean> original, BlockPos changed,
-                                                BlockState before, BlockState after, int flags) {
-        return navigation instanceof MCAGroundPathNavigation mcaNavigation
-                ? mcaNavigation.shouldRecomputePath(position, before, after)
-                : original.call(navigation, position);
+    @WrapMethod(method = "sendBlockUpdated")
+    private void mca$checkPathAfterBlockChange(BlockPos changed, BlockState before, BlockState after,
+                                               int flags, Operation<Void> original) {
+        if (!before.hasProperty(BlockStateProperties.OPEN) || !after.hasProperty(BlockStateProperties.OPEN)) {
+            original.call(changed, before, after, flags);
+            return;
+        }
+        MCAGroundPathNavigation.duringBlockUpdate(changed, before, after,
+                () -> original.call(changed, before, after, flags));
     }
 }
