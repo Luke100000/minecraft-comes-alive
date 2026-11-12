@@ -5,16 +5,19 @@ import net.minecraft.advancements.critereon.FishingHookPredicate;
 import net.conczin.mca.entity.MCAFishingBobberEntity;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
+import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.Chore;
 import net.conczin.mca.entity.ai.TaskUtils;
 import net.conczin.mca.entity.ai.brain.VillagerTasksMCA;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -39,6 +42,7 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import net.neoforged.neoforge.common.util.FakePlayer;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -52,6 +56,8 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 @PrefixGameTestTemplate(false)
 public final class FishingTaskGameTests {
+    private static final List<Entity> NATURAL_FISHING_ENTITIES = new ArrayList<>();
+
     @GameTest(batch = "mca_fishing_cast_distance", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void fartherCastLandsAtChosenWaterAcrossBankHeights(GameTestHelper helper) {
         BlockPos stance = helper.absolutePos(new BlockPos(40, 6, 40));
@@ -322,6 +328,35 @@ public final class FishingTaskGameTests {
         ));
     }
 
+    @GameTest(batch = "mca_fishing_fixture_cleanup", templateNamespace = "mca",
+            template = "gametest/isolated_ai_arena", timeoutTicks = 40)
+    public static void naturalFishingFixtureReleasesJobAssignerOnCleanup(GameTestHelper helper) {
+        FakePlayer assigner = new FakePlayer(helper.getLevel(),
+                new GameProfile(UUID.randomUUID(), "FishingCleanup"));
+        assigner.absMoveTo(helper.absolutePos(new BlockPos(40, 3, 40)).getCenter().x,
+                helper.absolutePos(new BlockPos(40, 3, 40)).getY(),
+                helper.absolutePos(new BlockPos(40, 3, 40)).getCenter().z);
+        helper.getLevel().addNewPlayer(assigner);
+        NATURAL_FISHING_ENTITIES.add(assigner);
+        try {
+            helper.assertTrue(helper.getLevel().players().contains(assigner),
+                    "test fixture never registered its fishing assigner");
+            cleanupNaturalFishingBatch(helper.getLevel());
+            helper.assertTrue(!helper.getLevel().players().contains(assigner),
+                    "fishing fixture left a registered player after cleanup");
+        } finally {
+            assigner.discard();
+            NATURAL_FISHING_ENTITIES.remove(assigner);
+        }
+        helper.succeed();
+    }
+
+    @AfterBatch(batch = "mca_fishing_natural_brain")
+    public static void cleanupNaturalFishingBatch(ServerLevel level) {
+        NATURAL_FISHING_ENTITIES.forEach(Entity::discard);
+        NATURAL_FISHING_ENTITIES.clear();
+    }
+
     @GameTest(
             batch = "mca_fishing_natural_brain",
             templateNamespace = "mca",
@@ -332,6 +367,7 @@ public final class FishingTaskGameTests {
         BlockPos feet = biteCycleVillagerPos(helper);
         prepareTaskWater(helper.getLevel(), feet);
         VillagerEntityMCA villager = spawnFisher(helper, feet);
+        NATURAL_FISHING_ENTITIES.add(villager);
         ItemStack rod = new ItemStack(Items.FISHING_ROD);
         var enchantments = helper.getLevel().registryAccess().lookupOrThrow(Registries.ENCHANTMENT);
         rod.enchant(enchantments.getOrThrow(Enchantments.LURE), 3);
@@ -341,12 +377,15 @@ public final class FishingTaskGameTests {
 
         FakePlayer assigner = new FakePlayer(helper.getLevel(),
                 new GameProfile(UUID.randomUUID(), "FishingAssigner"));
+        NATURAL_FISHING_ENTITIES.add(assigner);
         assigner.setGameMode(GameType.SURVIVAL);
         assigner.absMoveTo(feet.getX() + 1.5, feet.getY(), feet.getZ() + 6.5);
         helper.getLevel().addNewPlayer(assigner);
         villager.getVillagerBrain().assignJob(Chore.FISH, assigner);
         helper.assertTrue(villager.getVillagerBrain().getJobAssigner().isPresent(),
                 "natural AI fishing fixture has no online job assigner");
+        helper.assertTrue(villager.getBrain().isActive(ActivitiesMCA.CHORE),
+                "assigning a fishing chore left an idle activity able to publish a walk target");
         villager.setNoAi(false);
 
         AtomicReference<MCAFishingBobberEntity> seenBobber = new AtomicReference<>();
@@ -673,11 +712,16 @@ public final class FishingTaskGameTests {
         VillagerEntityMCA villager = spawnFisher(helper, villagerPos);
 
         MCAFishingBobberEntity openBobber = MCAFishingBobberEntity.cast(helper.getLevel(), villager, openWater);
+        // Casting and landing have their own tests; keep this predicate fixture in the intended pool.
+        openBobber.setPos(openWater.getX() + 0.5D, openWater.getY() + 0.5D, openWater.getZ() + 0.5D);
+        openBobber.setDeltaMovement(Vec3.ZERO);
         tickUntilBobbing(helper, openBobber);
         setFishingCountdown(openBobber, "timeUntilHooked", 2);
         openBobber.tick();
 
         MCAFishingBobberEntity shallowBobber = MCAFishingBobberEntity.cast(helper.getLevel(), villager, shallowWater);
+        shallowBobber.setPos(shallowWater.getX() + 0.5D, shallowWater.getY() + 0.5D, shallowWater.getZ() + 0.5D);
+        shallowBobber.setDeltaMovement(Vec3.ZERO);
         tickUntilBobbing(helper, shallowBobber);
         setFishingCountdown(shallowBobber, "timeUntilHooked", 2);
         shallowBobber.tick();

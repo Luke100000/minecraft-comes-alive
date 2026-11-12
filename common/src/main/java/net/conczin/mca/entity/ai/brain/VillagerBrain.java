@@ -121,13 +121,13 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
      * Assigns a job for the villager to do.
      */
     public void assignJob(Chore chore, Player player) {
-        entity.getBrain().setActiveActivityIfPossible(ActivitiesMCA.CHORE);
         entity.setTrackedValue(ACTIVE_CHORE, chore);
         entity.setTrackedValue(CHORE_ASSIGNING_PLAYER, Optional.of(player.getUUID()));
         entity.getBrain().eraseMemory(MemoryModuleTypeMCA.PLAYER_FOLLOWING);
         entity.getBrain().eraseMemory(MemoryModuleTypeMCA.STAYING);
 
         resetsBrain();
+        entity.getBrain().setActiveActivityIfPossible(ActivitiesMCA.CHORE);
     }
 
     public void randomize() {
