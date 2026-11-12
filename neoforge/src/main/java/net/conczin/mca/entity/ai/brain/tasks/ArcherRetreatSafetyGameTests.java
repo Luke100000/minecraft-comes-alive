@@ -109,6 +109,14 @@ public final class ArcherRetreatSafetyGameTests {
     public static void recentRangedPressurePreventsPrematureCalm(GameTestHelper helper) {
         Arena arena = criticalFixture(helper);
         arena.tick(() -> {
+            // This test exercises the guard's natural panic Brain, not the
+            // skeleton's pursuit speed. Keep live ranged pressure at a stable
+            // distance instead of letting the attacker enter melee or fall
+            // outside its effective range before the final assertion.
+            if (helper.getTick() >= 20) {
+                Vec3 guard = arena.archer.position();
+                arena.skeleton.snapTo(guard.x + 10.0D, guard.y, guard.z);
+            }
             if (helper.getTick() == 85) {
                 arena.assertCriticalPressure();
                 helper.assertTrue(arena.sawPanic && arena.sawNativePath,

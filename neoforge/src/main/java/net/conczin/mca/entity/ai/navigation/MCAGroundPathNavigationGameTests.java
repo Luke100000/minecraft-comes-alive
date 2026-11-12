@@ -1832,7 +1832,7 @@ public final class MCAGroundPathNavigationGameTests {
         prepareStrollRoom(helper, start);
 
         var stroll = LocalInsideBrownianWalk.create(0.5F);
-        helper.runAfterDelay(5, () -> {
+        helper.runAfterDelay(5, () -> whenSkyLightBlocked(helper, start, 55, () -> {
             try {
                 long gameTime = helper.getLevel().getGameTime();
                 helper.assertTrue(!helper.getLevel().canSeeSky(villager.blockPosition()),
@@ -1863,7 +1863,7 @@ public final class MCAGroundPathNavigationGameTests {
             } finally {
                 villager.discard();
             }
-        });
+        }));
     }
 
     @GameTest(batch = "mca_navigation_local_brownian_rejected", templateNamespace = "minecraft",
