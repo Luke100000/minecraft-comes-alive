@@ -462,7 +462,7 @@ public final class HomelessShelterGameTests {
         });
     }
 
-    @GameTest(batch = "mca_occupied_shelter_floor", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    @GameTest(batch = "mca_occupied_shelter_floor", templateNamespace = "mca", template = "gametest/isolated_ai_arena")
     public static void homelessRestChoosesIndoorFloorInsteadOfOccupiedBed(GameTestHelper helper) {
         BlockPos floor = helper.absolutePos(new BlockPos(2, 1, 2));
         setDayTime(helper.getLevel(), 13000L);
@@ -488,10 +488,16 @@ public final class HomelessShelterGameTests {
                 (poi, pos) -> pos.equals(head), head, 1).orElseThrow();
 
         VillagerEntityMCA sleeper = spawn(helper, head);
+        STROLL_VILLAGERS.add(sleeper);
         sleeper.startSleeping(head);
         VillagerEntityMCA homeless = spawn(helper, floor.west(3));
+        STROLL_VILLAGERS.add(homeless);
         helper.runAfterDelay(10, () -> {
-            helper.assertTrue(!helper.getLevel().canSeeSky(floor), "fixture roof did not provide indoor shelter");
+            helper.assertTrue(!helper.getLevel().canSeeSky(floor),
+                    "fixture roof did not provide indoor shelter; floor=" + floor
+                            + " roof=" + helper.getLevel().getBlockState(floor.above(3))
+                            + " above=" + helper.getLevel().getBlockState(floor.above(4))
+                            + " gameTime=" + helper.getLevel().getGameTime());
             var rest = VillagerTasksMCA.getRestPackage(0.5F).stream()
                     .filter(entry -> entry.getFirst() == 5).findFirst().orElseThrow().getSecond();
             long now = helper.getLevel().getGameTime();
@@ -521,11 +527,13 @@ public final class HomelessShelterGameTests {
                     + " floorPath=" + (floorPath == null ? "null" : floorPath.canReach()));
             helper.assertTrue(homeless.getBrain().getMemoryInternal(MemoryModuleType.HOME).isEmpty(),
                     "shelter movement claimed somebody else's HOME");
-            sleeper.stopSleeping();
-            sleeper.discard();
-            homeless.discard();
             helper.succeed();
         });
+    }
+
+    @AfterBatch(batch = "mca_occupied_shelter_floor")
+    public static void cleanupOccupiedShelter(ServerLevel level) {
+        cleanupStroll(level);
     }
 
     @GameTest(batch = "mca_indoor_stroll_selection", templateNamespace = "minecraft", template = "bastion/blocks/air")

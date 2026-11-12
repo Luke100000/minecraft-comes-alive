@@ -870,8 +870,12 @@ public final class NavigationPhysicalSafetyGameTests {
                     "Villager must start outside the upright trapdoor panels");
             helper.assertTrue(sweepCollides(level, villager, Vec3.atBottomCenterOf(west)),
                     "Fixture must physically block the cardinal sweep");
+            // A hand-operated panel at the next path node can be folded down before crossing.
+            helper.assertTrue(neighbors(level, villager, origin).contains(west),
+                    "MCA rejected a cardinal doorway whose upright trapdoor can be folded");
+            level.setBlock(west, level.getBlockState(west).setValue(TrapDoorBlock.POWERED, true), 3);
             helper.assertTrue(!neighbors(level, villager, origin).contains(west),
-                    "MCA offered a cardinal step through upright trapdoor collision geometry");
+                    "MCA offered a cardinal step through a powered, un-foldable upright trapdoor");
         } finally {
             villager.discard();
         }

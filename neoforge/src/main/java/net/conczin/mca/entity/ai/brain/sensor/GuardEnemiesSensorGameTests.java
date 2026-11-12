@@ -326,7 +326,7 @@ public final class GuardEnemiesSensorGameTests {
         }
     }
 
-    @GameTest(batch = "mca_guard_enemy_range", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    @GameTest(batch = "mca_guard_enemy_range", templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 80)
     public static void guardSearchStopsAtThirtyBlocks(GameTestHelper helper) {
         cleanupTestEntities();
         try {
@@ -358,7 +358,7 @@ public final class GuardEnemiesSensorGameTests {
         }
     }
 
-    @GameTest(batch = "mca_guard_enemy_range", templateNamespace = "minecraft", template = "bastion/blocks/air", timeoutTicks = 80)
+    @GameTest(batch = "mca_guard_enemy_range", templateNamespace = "mca", template = "gametest/isolated_ai_arena", timeoutTicks = 80)
     public static void guardDetectsVisibleEnemyBeyondVanillaSixteenBlockScan(GameTestHelper helper) {
         cleanupTestEntities();
         try {

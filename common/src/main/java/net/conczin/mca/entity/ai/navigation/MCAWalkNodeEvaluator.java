@@ -600,6 +600,16 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
 
     @Override
     public PathType getPathType(PathfindingContext context, int x, int y, int z) {
+        return getPathType(context, x, y, z, this.mob);
+    }
+
+    @Override
+    public PathType getPathType(Mob mob, BlockPos pos) {
+        return getPathType(new PathfindingContext(mob.level(), mob),
+                pos.getX(), pos.getY(), pos.getZ(), mob);
+    }
+
+    private PathType getPathType(PathfindingContext context, int x, int y, int z, @Nullable Mob mob) {
         // The same state also determines hand-openable gate handling. Reuse it
         // for climbable classification instead of fetching this block twice.
         BlockState state = context.getBlockState(this.climbablePos.set(x, y, z));
@@ -637,7 +647,21 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             return PathType.WALKABLE_DOOR;
         }
 
-        return super.getPathType(context, x, y, z);
+        PathType type = super.getPathType(context, x, y, z);
+        if (type == PathType.OPEN && mob != null && y > mob.level().getMinY()) {
+            BlockPos supportPos = this.collisionPos.set(x, y - 1, z);
+            BlockState support = context.getBlockState(supportPos);
+            // Some modded top plates inherit Block's LAND pathfindability despite
+            // having a full-footprint walking surface. Vanilla then calls the
+            // air above them OPEN rather than WALKABLE, breaking a level crossing.
+            // Check actual support geometry; narrow rails and walls are not floors.
+            if (!support.isAir() && support.isPathfindable(PathComputationType.LAND)
+                    && PathNodeGeometry.walkingFloorY(context.level(), supportPos, mob,
+                            supportPos.getY()) >= y - FLOOR_EPSILON) {
+                return WalkNodeEvaluator.checkNeighbourBlocks(context, x, y, z, PathType.WALKABLE);
+            }
+        }
+        return type;
     }
 
     private boolean isClimbable(BlockPos pos) {
