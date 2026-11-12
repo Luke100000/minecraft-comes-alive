@@ -5,6 +5,8 @@ import com.mojang.serialization.Codec;
 import com.mojang.authlib.GameProfile;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.interaction.InteractionCommands;
+import net.conczin.mca.network.c2s.InteractionVillagerMessage;
 import net.conczin.mca.entity.ai.Memories;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Personality;
@@ -61,6 +63,145 @@ public final class DialogueActionGameTests {
     }
 
     private DialogueActionGameTests() {
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void commandSourceAndOwnerChecksPrecedeAddonExecution(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        var interactions = fixture.villager().getInteractions();
+        interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        UUID id = interactions.interactionId();
+        AtomicInteger executions = new AtomicInteger();
+        var commandId = ResourceLocation.parse("command_test:guarded_" + UUID.randomUUID());
+        InteractionCommands.register(commandId, context -> context.source() == InteractionCommands.Source.MENU,
+                context -> {
+                    executions.incrementAndGet();
+                    return net.conczin.mca.entity.interaction.VillagerCommandHandler.DialogueCommandResult.accepted(false);
+                });
+
+        var valid = new InteractionCommands.Context(fixture.player(), fixture.villager(), id,
+                InteractionCommands.Source.MENU, commandId.toString());
+        var wrongSource = new InteractionCommands.Context(fixture.player(), fixture.villager(), id,
+                InteractionCommands.Source.DIALOGUE, commandId.toString());
+        var stale = new InteractionCommands.Context(fixture.player(), fixture.villager(), UUID.randomUUID(),
+                InteractionCommands.Source.MENU, commandId.toString());
+        FakePlayer foreign = new FakePlayer(helper.getLevel(), new GameProfile(UUID.randomUUID(), "command-intruder"));
+        foreign.setPos(fixture.player().position());
+        var intruder = new InteractionCommands.Context(foreign, fixture.villager(), id,
+                InteractionCommands.Source.MENU, commandId.toString());
+
+        helper.assertTrue(!InteractionCommands.execute(wrongSource).accepted(),
+                "addon command cannot run from an excluded source");
+        helper.assertTrue(!InteractionCommands.execute(stale).accepted(),
+                "stale interaction IDs must not execute addon callbacks");
+        helper.assertTrue(!InteractionCommands.execute(intruder).accepted(),
+                "foreign players must not execute addon callbacks");
+        fixture.player().setPos(fixture.villager().getX() + 8, fixture.villager().getY(), fixture.villager().getZ());
+        helper.assertTrue(!InteractionCommands.execute(valid).accepted(),
+                "out-of-reach players must not execute addon callbacks");
+        fixture.player().setPos(fixture.villager().getX() + 1, fixture.villager().getY(), fixture.villager().getZ());
+        helper.assertTrue(executions.get() == 0, "rejected requests must not invoke the callback");
+        helper.assertTrue(InteractionCommands.canExecute(valid), "the current owner must pass validation");
+        helper.assertTrue(InteractionCommands.execute(valid).accepted() && executions.get() == 1,
+                "the authenticated owner must execute the addon command exactly once");
+
+        var throwingId = ResourceLocation.parse("command_test:throwing_" + UUID.randomUUID());
+        InteractionCommands.register(throwingId, context -> true, context -> {
+            throw new IllegalStateException("expected test callback failure");
+        });
+        var throwing = new InteractionCommands.Context(fixture.player(), fixture.villager(), id,
+                InteractionCommands.Source.MENU, throwingId.toString());
+        var result = InteractionCommands.execute(throwing);
+        helper.assertTrue(!result.accepted() && !result.closeScreen()
+                        && interactions.matchesInteraction(fixture.player(), id),
+                "a failing addon callback must reject without automatically closing the menu");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void builtinMenuReportsRefusedFishingWithoutTreatingClosureAsSuccess(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        fixture.villager().setProfession(ProfessionsMCA.MERCENARY);
+        var interactions = fixture.villager().getInteractions();
+        interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        var result = InteractionCommands.execute(new InteractionCommands.Context(fixture.player(),
+                fixture.villager(), interactions.interactionId(), InteractionCommands.Source.MENU, "fishing"));
+        helper.assertTrue(!result.accepted() && result.closeScreen(),
+                "missing fishing-rod equipment must reject the action even when the menu closes");
+        helper.assertTrue(fixture.villager().getVillagerBrain().getCurrentJob()
+                        == net.conczin.mca.entity.ai.Chore.NONE,
+                "a rejected Work command must not assign the fishing job");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void registeredCommandWorksFromMenuAndDialogue(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        var interactions = fixture.villager().getInteractions();
+        interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        UUID interactionId = interactions.interactionId();
+        AtomicInteger menuCalls = new AtomicInteger();
+        AtomicInteger dialogueCalls = new AtomicInteger();
+        ResourceLocation id = ResourceLocation.parse("command_test:dual_" + UUID.randomUUID());
+        InteractionCommands.register(id, context -> true, context -> {
+            if (context.source() == InteractionCommands.Source.MENU) {
+                menuCalls.incrementAndGet();
+            } else {
+                dialogueCalls.incrementAndGet();
+            }
+            return net.conczin.mca.entity.interaction.VillagerCommandHandler.DialogueCommandResult.accepted(false);
+        });
+
+        new InteractionVillagerMessage(id.toString(), fixture.villager().getUUID(), interactionId)
+                .handleServer(fixture.player());
+        helper.assertTrue(menuCalls.get() == 1 && dialogueCalls.get() == 0,
+                "the existing menu packet must execute a registered Java callback as MENU");
+        helper.assertTrue(interactions.matchesInteraction(fixture.player(), interactionId),
+                "a non-closing addon command must preserve the interaction owner");
+
+        DialogueEvent event = commandStory(ResourceLocation.parse("mca:test/registered_command_dual"), id.toString());
+        DialogueEngine engine = engine(event);
+        DialogueEngine.DialogueNodeView last = startAndChoose(engine, fixture, event);
+        helper.assertTrue(dialogueCalls.get() == 0,
+                "a selected dialogue command must remain pending until acknowledgement");
+        helper.assertTrue(engine.advance(fixture.player(), last.offerToken()).status()
+                        == DialogueEngine.TransitionStatus.COMPLETED,
+                "an authenticated dialogue acknowledgement must execute a registered Java callback");
+        helper.assertTrue(menuCalls.get() == 1 && dialogueCalls.get() == 1,
+                "the dispatcher must provide the trusted DIALOGUE source exactly once");
+        helper.assertTrue(engine.advance(fixture.player(), last.offerToken()).status()
+                        == DialogueEngine.TransitionStatus.REJECTED && dialogueCalls.get() == 1,
+                "a replayed final acknowledgement must not execute the addon twice");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void addonMenuCommandKeepsNewContainerOpen(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        var interactions = fixture.villager().getInteractions();
+        UUID originalId = interactions.interactionId();
+        AtomicInteger calls = new AtomicInteger();
+        ResourceLocation command = ResourceLocation.parse("command_test:open_container_" + UUID.randomUUID());
+        InteractionCommands.register(command, context -> context.source() == InteractionCommands.Source.MENU,
+                context -> {
+                    // FakePlayer has no networked client to complete openMenu(). Attach
+                    // the real MCA inventory menu to exercise server-side closeContainer().
+                    context.player().containerMenu = Objects.requireNonNull(fixture.villager().createMenu(
+                            1, context.player().getInventory(), context.player()));
+                    helper.assertTrue(context.player().containerMenu != context.player().inventoryMenu,
+                            "the addon must open a real replacement container before returning");
+                    calls.incrementAndGet();
+                    return net.conczin.mca.entity.interaction.VillagerCommandHandler.DialogueCommandResult.accepted(true);
+                });
+
+        new InteractionVillagerMessage(command.toString(), fixture.villager().getUUID(), originalId)
+                .handleServer(fixture.player());
+        helper.assertTrue(calls.get() == 1, "the addon callback must execute exactly once");
+        helper.assertTrue(fixture.player().containerMenu != fixture.player().inventoryMenu,
+                "closing the original MCA interaction must preserve the newly opened addon container");
+        helper.assertTrue(!interactions.matchesInteraction(fixture.player(), originalId),
+                "replacing the MCA screen must release its original owner and interaction ID");
+        helper.succeed();
     }
 
     @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
@@ -560,9 +701,13 @@ public final class DialogueActionGameTests {
         DialogueEngine.DialogueOptions menu = engine.begin(fixture.player(), fixture.villager());
         DialogueEngine.DialogueNodeView start = engine.select(
                 fixture.player(), menu.token(), DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow();
+        // The fixture opens a real interaction so it can select the dialogue. Revoke it
+        // before the choice to exercise the original missing-owner rejection boundary.
+        var interactions = fixture.villager().getInteractions();
+        interactions.stopInteracting(fixture.player(), interactions.interactionId());
         helper.assertTrue(engine.choose(fixture.player(), start.offerToken(), "support").status()
-                        == DialogueEngine.TransitionStatus.REJECTED,
-                "a terminal slap token without a concrete owned interaction must be rejected");
+                        == DialogueEngine.TransitionStatus.PAUSED,
+                "a terminal slap without an owned interaction must pause without committing effects");
         helper.assertTrue(fixture.villager().getVillagerBrain().getMemoriesForPlayer(fixture.player()).getHearts() == 50,
                 "unauthorized slap choice must not commit associated heart effects");
         helper.assertTrue(!DialogueEventHistory.get(fixture.player().serverLevel()).completed(
@@ -750,7 +895,7 @@ public final class DialogueActionGameTests {
         Fixture fixture = fixture(helper, true);
         disableFakePlayerSpawnProtection(fixture.player());
         fixture.player().setHealth(20.0f);
-        helper.assertTrue(!fixture.villager().getInteractions().handleDialogue(fixture.player(), "slap").accepted(),
+        helper.assertTrue(!fixture.villager().getInteractions().executeBuiltin(fixture.player(), "slap").accepted(),
                 "removed legacy slap command must be rejected");
         helper.assertTrue(fixture.player().getHealth() == 20.0f,
                 "removed legacy slap command must not deal damage");
@@ -873,7 +1018,7 @@ public final class DialogueActionGameTests {
         DialogueEngine.DialogueNodeView terminal = startAndChoose(engine, fixture, event);
         FakePlayer other = new FakePlayer(helper.getLevel(), new GameProfile(UUID.randomUUID(), "competing-hirer"));
         other.getInventory().add(new ItemStack(Items.EMERALD, 10));
-        helper.assertTrue(fixture.villager().getInteractions().handleDialogue(other, "hire_long").accepted(),
+        helper.assertTrue(fixture.villager().getInteractions().executeBuiltin(other, "hire_long").accepted(),
                 "another player's paid hire must succeed before the first player acknowledges");
         helper.assertTrue(other.getInventory().countItem(Items.EMERALD) == 0,
                 "the competing player must pay for the seven-day hire");
@@ -969,6 +1114,7 @@ public final class DialogueActionGameTests {
     @GameTest(batch = "mca_dialogue_actions", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void completingCommandCannotCloseAnotherPlayersInteraction(GameTestHelper helper) {
         Fixture fixture = fixture(helper);
+        fixture.villager().setProfession(ProfessionsMCA.ADVENTURER);
         DialogueEvent event = commandStory(ResourceLocation.parse("mca:test/multiplayer_command_close"), "stay_in_village");
         DialogueEngine engine = engine(event);
         DialogueEngine.DialogueNodeView terminal = startAndChoose(engine, fixture, event);
@@ -977,8 +1123,13 @@ public final class DialogueActionGameTests {
         UUID otherInteraction = fixture.villager().getInteractions().interactionId();
 
         helper.assertTrue(engine.advance(fixture.player(), terminal.offerToken()).status()
-                        == DialogueEngine.TransitionStatus.COMPLETED,
-                "the initiating player's valid command should complete");
+                        == DialogueEngine.TransitionStatus.PAUSED,
+                "a stale command must pause after another player takes ownership");
+        helper.assertTrue(fixture.villager().getProfession() == ProfessionsMCA.ADVENTURER,
+                "a stale dialogue must not execute its gameplay command");
+        helper.assertTrue(!DialogueEventHistory.get(fixture.player().serverLevel()).completed(
+                        fixture.player().getUUID(), fixture.villager().getUUID(), event.id()),
+                "a stale dialogue must not commit completion history");
         helper.assertTrue(fixture.villager().getInteractions().matchesInteraction(other, otherInteraction),
                 "one player's completion must not close a different player's active interaction");
         helper.succeed();
@@ -1105,6 +1256,8 @@ public final class DialogueActionGameTests {
         villager.setAgeState(AgeState.ADULT);
         villager.setPos(player.getX() + 1.0D, player.getY(), player.getZ());
         helper.getLevel().addFreshEntity(villager);
+        // Dialogue selection requires the same live interaction owner as the real Interact screen.
+        villager.getInteractions().interactAt(player, Vec3.ZERO, InteractionHand.MAIN_HAND);
         return new Fixture(player, villager);
     }
 

@@ -1,8 +1,10 @@
 package net.conczin.mca.network;
 
 import net.conczin.mca.dialogue.DialogueEngine;
+import net.conczin.mca.client.gui.DialogueRichText;
 import net.conczin.mca.network.s2c.InteractionDialogueNodeResponse;
 import net.conczin.mca.network.s2c.InteractionDialogueOptionsResponse;
+import net.conczin.mca.network.s2c.InteractionDialoguePendingResponse;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -21,6 +23,74 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DialoguePresentationTest {
+    @Test
+    void pendingToReadyMatchesTokenAndRevealsResolvedLine() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        UUID session = UUID.randomUUID();
+        presentation.beginRequest();
+        assertTrue(presentation.acceptOptions(new InteractionDialogueOptionsResponse(
+                10L, Optional.empty(), List.of(), true)));
+        presentation.markSelectionRequested(DialogueEngine.DialogueSelection.AMBIENT);
+
+        assertTrue(presentation.acceptPending(new InteractionDialoguePendingResponse(
+                session, 11L, Component.literal("Searching for ruins…"))));
+        assertTrue(presentation.pendingAsync());
+        assertEquals("Searching for ruins…", presentation.pendingLine().getString());
+        assertTrue(presentation.awaitingReply());
+        assertFalse(presentation.canAdvance());
+        assertTrue(presentation.visibleChoices().isEmpty());
+
+        assertTrue(presentation.acceptNode(active(session, 11L, Component.literal("At 9,70,12"),
+                DialogueEngine.AdvanceKind.BACK_TO_TOPICS, List.of()), 100L, Locale.ENGLISH));
+        assertFalse(presentation.pendingAsync());
+        assertTrue(presentation.revealingLine());
+        assertEquals("", presentation.visibleLine().getString());
+        assertFalse(presentation.canAdvance());
+        tickSteps(presentation, 100L, 10);
+        assertFalse(presentation.revealingLine());
+        assertTrue(presentation.canAdvance());
+        assertFalse(presentation.acceptPending(new InteractionDialoguePendingResponse(
+                session, 11L, Component.literal("Stale lookup"))));
+    }
+
+    @Test
+    void stalePendingCannotReplaceNewerNodeAndLeavingClearsState() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        UUID session = UUID.randomUUID();
+        assertTrue(presentation.acceptNode(active(session, 30L, Component.literal("Current"),
+                DialogueEngine.AdvanceKind.NEXT, List.of()), 0L, Locale.ENGLISH));
+        assertFalse(presentation.acceptPending(new InteractionDialoguePendingResponse(
+                session, 29L, Component.literal("Late"))));
+        assertFalse(presentation.pendingAsync());
+
+        assertTrue(presentation.acceptPending(new InteractionDialoguePendingResponse(
+                session, 31L, Component.literal("Searching"))));
+        assertFalse(presentation.acceptPending(new InteractionDialoguePendingResponse(
+                session, 31L, Component.literal("Duplicate"))));
+        assertTrue(presentation.pendingAsync());
+        assertFalse(presentation.acceptSelectionRejection(31L),
+                "an async resolver still running must not be replaced by a duplicate reply rejection");
+        presentation.pause();
+        assertFalse(presentation.pendingAsync());
+        presentation.beginRequest();
+        assertEquals("", presentation.pendingLine().getString());
+        presentation.clear();
+        assertFalse(presentation.awaitingReply());
+    }
+
+    @Test
+    void ordinaryTypingDoesNotClaimAsyncProgress() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        UUID session = UUID.randomUUID();
+        assertTrue(presentation.acceptNode(active(session, 1L, Component.literal("Hello"),
+                DialogueEngine.AdvanceKind.NEXT, List.of()), 0L, Locale.ENGLISH));
+        assertTrue(presentation.revealingLine());
+        assertFalse(presentation.pendingAsync());
+        tickSteps(presentation, 0L, 5);
+        assertFalse(presentation.revealingLine());
+        assertFalse(presentation.pendingAsync());
+    }
+
     @Test
     void paperHasNonStaleSpeechDuringUnpreviewedTopicsAndRequests() {
         ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
@@ -76,6 +146,85 @@ class DialoguePresentationTest {
     }
 
     @Test
+    void reviewedLineRetainsOriginalChoicesAndAcknowledgedAnswer() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        UUID session = UUID.randomUUID();
+        List<InteractionDialogueNodeResponse.Choice> original = List.of(
+                new InteractionDialogueNodeResponse.Choice("stay", Component.literal("Stay here")),
+                new InteractionDialogueNodeResponse.Choice("leave", Component.literal("Leave now")),
+                new InteractionDialogueNodeResponse.Choice("ask", Component.literal("Ask another question")));
+        assertTrue(presentation.acceptNode(active(session, 10L, Component.literal("What will you do?"),
+                DialogueEngine.AdvanceKind.NONE, original), 0L, Locale.ENGLISH));
+        presentation.markChoiceRequested(10L, "leave");
+        assertTrue(presentation.acceptNode(active(session, 11L, Component.literal("Good luck"),
+                DialogueEngine.AdvanceKind.BACK_TO_TOPICS, List.of()), 100L, Locale.ENGLISH));
+        assertTrue(presentation.reviewPrevious());
+
+        var reviewed = presentation.reviewedEntry().orElseThrow();
+        assertEquals("What will you do?", reviewed.line().getString());
+        assertEquals(List.of("stay", "leave", "ask"), reviewed.choices().stream()
+                .map(InteractionDialogueNodeResponse.Choice::id).toList());
+        assertEquals(List.of("Stay here", "Leave now", "Ask another question"), reviewed.choices().stream()
+                .map(choice -> choice.text().getString()).toList());
+        assertEquals(Optional.of("leave"), reviewed.selectedChoiceId());
+        assertTrue(presentation.visibleChoices().isEmpty());
+        assertFalse(presentation.canAdvance());
+        assertTrue(presentation.reviewLatest());
+        assertTrue(presentation.reviewedEntry().isEmpty());
+    }
+
+    @Test
+    void pendingAcknowledgesChoiceButRejectionAndPauseDoNot() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        UUID session = UUID.randomUUID();
+        var choice = new InteractionDialogueNodeResponse.Choice("yes", Component.literal("Yes"));
+        assertTrue(presentation.acceptNode(active(session, 20L, Component.literal("Question"),
+                DialogueEngine.AdvanceKind.NONE, List.of(choice)), 0L, Locale.ENGLISH));
+
+        presentation.markChoiceRequested(19L, "yes");
+        presentation.markChoiceRequested(20L, "unknown");
+        assertTrue(presentation.acceptNode(active(session, 20L, Component.literal("Question"),
+                DialogueEngine.AdvanceKind.NONE, List.of(choice)), 40L, Locale.ENGLISH));
+        assertTrue(presentation.acceptPending(new InteractionDialoguePendingResponse(
+                session, 21L, Component.literal("Checking"))));
+        assertTrue(presentation.acceptNode(active(session, 21L, Component.literal("Answer"),
+                DialogueEngine.AdvanceKind.NEXT, List.of()), 80L, Locale.ENGLISH));
+        assertTrue(presentation.reviewPrevious());
+        assertTrue(presentation.reviewedEntry().orElseThrow().selectedChoiceId().isEmpty(),
+                "a same-offer refresh or invalid request must not gain a checkmark");
+        presentation.reviewLatest();
+
+        presentation.markChoiceRequested(21L, "yes");
+        assertTrue(presentation.acceptNode(active(session, 22L, Component.literal("Another question"),
+                DialogueEngine.AdvanceKind.NONE, List.of(choice)), 120L, Locale.ENGLISH));
+        presentation.markChoiceRequested(22L, "yes");
+        assertTrue(presentation.acceptPending(new InteractionDialoguePendingResponse(
+                session, 23L, Component.literal("Searching"))));
+        assertTrue(presentation.acceptNode(active(session, 23L, Component.literal("Result"),
+                DialogueEngine.AdvanceKind.NONE, List.of()), 160L, Locale.ENGLISH));
+        assertTrue(presentation.reviewPrevious());
+        assertEquals(Optional.of("yes"), presentation.reviewedEntry().orElseThrow().selectedChoiceId());
+        presentation.reviewLatest();
+
+        assertTrue(presentation.acceptNode(active(session, 24L, Component.literal("Last question"),
+                DialogueEngine.AdvanceKind.NONE, List.of(choice)), 180L, Locale.ENGLISH));
+        presentation.markChoiceRequested(24L, "yes");
+        assertTrue(presentation.acceptNode(new InteractionDialogueNodeResponse(
+                session, 24L, InteractionDialogueNodeResponse.State.PAUSED, Optional.empty()),
+                200L, Locale.ENGLISH));
+        presentation.beginRequest();
+        assertTrue(presentation.acceptOptions(new InteractionDialogueOptionsResponse(
+                25L, Optional.of(Component.literal("Resume")), List.of(), false)));
+        presentation.markSelectionRequested(DialogueEngine.DialogueSelection.RESUME);
+        assertTrue(presentation.acceptNode(active(session, 26L, Component.literal("Last question"),
+                DialogueEngine.AdvanceKind.NONE, List.of(choice)), 220L, Locale.ENGLISH));
+        assertTrue(presentation.acceptNode(active(session, 27L, Component.literal("Continued"),
+                DialogueEngine.AdvanceKind.NEXT, List.of()), 260L, Locale.ENGLISH));
+        assertTrue(presentation.reviewPrevious());
+        assertTrue(presentation.reviewedEntry().orElseThrow().selectedChoiceId().isEmpty());
+    }
+
+    @Test
     void repeatedPacketsAndResumeKeepOneHistoryEntryButReplacementClearsIt() {
         ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
         UUID original = UUID.randomUUID();
@@ -106,6 +255,39 @@ class DialoguePresentationTest {
         assertFalse(presentation.reviewPrevious(), "new session must not leak previous villager speech");
         presentation.clear();
         assertFalse(presentation.canReviewPrevious());
+    }
+
+    @Test
+    void resumeRefreshesHistoricalChoicesWithoutRestartingSpeech() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        UUID session = UUID.randomUUID();
+        var a = new InteractionDialogueNodeResponse.Choice("a", Component.literal("Old answer"));
+        var b = new InteractionDialogueNodeResponse.Choice("b", Component.literal("Still available"));
+        var c = new InteractionDialogueNodeResponse.Choice("c", Component.literal("New answer"));
+        assertTrue(presentation.acceptNode(active(session, 10L, Component.literal("Question"),
+                DialogueEngine.AdvanceKind.NONE, List.of(a, b)), 0L, Locale.ENGLISH));
+        presentation.tick(40L);
+        assertEquals("Q", presentation.visibleLine().getString());
+
+        presentation.pause();
+        presentation.beginRequest();
+        assertTrue(presentation.acceptOptions(new InteractionDialogueOptionsResponse(11L,
+                Optional.of(Component.literal("Resume")), List.of(), false)));
+        presentation.markSelectionRequested(DialogueEngine.DialogueSelection.RESUME);
+        assertTrue(presentation.acceptNode(active(session, 12L, Component.literal("Question"),
+                DialogueEngine.AdvanceKind.NONE, List.of(b, c)), 100L, Locale.ENGLISH));
+        assertEquals("Q", presentation.visibleLine().getString(), "resume preserves reveal progress");
+
+        presentation.markChoiceRequested(12L, "c");
+        assertTrue(presentation.acceptNode(active(session, 13L, Component.literal("Reply"),
+                DialogueEngine.AdvanceKind.BACK_TO_TOPICS, List.of()), 150L, Locale.ENGLISH));
+        assertTrue(presentation.reviewPrevious());
+        var previous = presentation.reviewedEntry().orElseThrow();
+        assertEquals("Question", previous.line().getString());
+        assertEquals(List.of("b", "c"), previous.choices().stream()
+                .map(InteractionDialogueNodeResponse.Choice::id).toList());
+        assertEquals(Optional.of("c"), previous.selectedChoiceId());
+        assertFalse(presentation.reviewPrevious(), "resume does not add another history entry");
     }
 
     @Test
@@ -188,6 +370,25 @@ class DialoguePresentationTest {
                 11L, Optional.empty(), List.of(), false)));
         assertEquals(11L, presentation.options().orElseThrow().offerToken());
         assertFalse(presentation.acceptSelectionRejection(10L), "late rejection cannot clear a newer server menu");
+    }
+
+    @Test
+    void rejectedActiveReplyRefreshesOnlyItsCurrentNodeOffer() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        UUID session = UUID.randomUUID();
+        assertTrue(presentation.acceptNode(active(session, 30L, Component.literal("Question"),
+                DialogueEngine.AdvanceKind.NEXT, List.of()), 0L, Locale.ENGLISH));
+
+        assertFalse(presentation.acceptSelectionRejection(29L), "a late rejection cannot refresh another node");
+        assertTrue(presentation.acceptSelectionRejection(30L), "the current node's rejected reply must recover");
+
+        presentation.pause();
+        assertFalse(presentation.acceptSelectionRejection(30L), "closing Talk must ignore an in-flight rejection");
+        presentation.beginRequest();
+        assertFalse(presentation.acceptSelectionRejection(30L), "refresh must invalidate the rejected offer");
+        assertTrue(presentation.acceptOptions(new InteractionDialogueOptionsResponse(
+                31L, Optional.empty(), List.of(), false)));
+        assertFalse(presentation.acceptSelectionRejection(30L), "a late rejection cannot discard newer topics");
     }
 
     @Test
@@ -373,6 +574,22 @@ class DialoguePresentationTest {
     }
 
     @Test
+    void styledRichTextSurvivesRevealAndSpeechHistory() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        UUID session = UUID.randomUUID();
+        presentation.acceptNode(active(session, 21L, Component.literal("<gold><bold>Hello!</bold></gold>"),
+                DialogueEngine.AdvanceKind.NEXT, List.of()), 0L, Locale.ENGLISH, DialogueRichText::parse);
+        tickSteps(presentation, 0L, 6);
+        assertEquals("Hello!", presentation.visibleLine().getString());
+        assertTrue(presentation.visibleLine().getSiblings().getFirst().getStyle().isBold());
+        presentation.acceptNode(active(session, 22L, Component.literal("Next"),
+                DialogueEngine.AdvanceKind.NEXT, List.of()), 320L, Locale.ENGLISH);
+        assertTrue(presentation.reviewPrevious());
+        assertEquals("Hello!", presentation.visibleLine().getString());
+        assertTrue(presentation.visibleLine().getSiblings().getFirst().getStyle().isBold());
+    }
+
+    @Test
     void explicitResumePreservesResolvedLineAndRevealProgress() {
         ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
         UUID sessionId = UUID.randomUUID();
@@ -505,6 +722,12 @@ class DialoguePresentationTest {
         assertEquals(List.of("new"), presentation.visibleChoices().stream()
                 .map(InteractionDialogueNodeResponse.Choice::id)
                 .toList());
+        assertTrue(presentation.acceptNode(active(sessionId, 56L, Component.literal("Next line"),
+                DialogueEngine.AdvanceKind.NEXT, List.of()), 600L, Locale.ENGLISH));
+        assertTrue(presentation.reviewPrevious());
+        assertEquals(List.of("new"), presentation.reviewedEntry().orElseThrow().choices().stream()
+                .map(InteractionDialogueNodeResponse.Choice::id).toList(),
+                "a refreshed offer must replace obsolete choices on the same historical line");
     }
 
     @Test

@@ -45,23 +45,45 @@
         { "priority": 0, "next": "home_generic" }
       ]
     },
-    "here_plains": { "line": "dialogue_event.mca.social.local_area.here.plains", "complete": true },
-    "here_savanna": { "line": "dialogue_event.mca.social.local_area.here.savanna", "complete": true },
-    "here_taiga": { "line": "dialogue_event.mca.social.local_area.here.taiga", "complete": true },
-    "here_snowy_plains": { "line": "dialogue_event.mca.social.local_area.here.snowy_plains", "complete": true },
-    "here_desert": { "line": "dialogue_event.mca.social.local_area.here.desert", "complete": true },
-    "here_snowy": { "line": "dialogue_event.mca.social.local_area.here.snowy", "complete": true },
-    "here_forest": { "line": "dialogue_event.mca.social.local_area.here.forest", "complete": true },
-    "here_dry": { "line": "dialogue_event.mca.social.local_area.here.dry", "complete": true },
-    "here_generic": { "line": "dialogue_event.mca.social.local_area.here.generic", "complete": true },
-    "home_plains": { "line": "dialogue_event.mca.social.local_area.home.plains", "complete": true },
-    "home_savanna": { "line": "dialogue_event.mca.social.local_area.home.savanna", "complete": true },
-    "home_taiga": { "line": "dialogue_event.mca.social.local_area.home.taiga", "complete": true },
-    "home_snowy_plains": { "line": "dialogue_event.mca.social.local_area.home.snowy_plains", "complete": true },
-    "home_desert": { "line": "dialogue_event.mca.social.local_area.home.desert", "complete": true },
-    "home_snowy": { "line": "dialogue_event.mca.social.local_area.home.snowy", "complete": true },
-    "home_forest": { "line": "dialogue_event.mca.social.local_area.home.forest", "complete": true },
-    "home_dry": { "line": "dialogue_event.mca.social.local_area.home.dry", "complete": true },
-    "home_generic": { "line": "dialogue_event.mca.social.local_area.home.generic", "complete": true }
+    "here_plains": { "line": "dialogue_event.mca.social.local_area.here.plains", "next": "here_followup" },
+    "here_savanna": { "line": "dialogue_event.mca.social.local_area.here.savanna", "next": "here_followup" },
+    "here_taiga": { "line": "dialogue_event.mca.social.local_area.here.taiga", "next": "here_followup" },
+    "here_snowy_plains": { "line": "dialogue_event.mca.social.local_area.here.snowy_plains", "next": "here_followup" },
+    "here_desert": { "line": "dialogue_event.mca.social.local_area.here.desert", "next": "here_followup" },
+    "here_snowy": { "line": "dialogue_event.mca.social.local_area.here.snowy", "next": "here_followup" },
+    "here_forest": { "line": "dialogue_event.mca.social.local_area.here.forest", "next": "here_followup" },
+    "here_dry": { "line": "dialogue_event.mca.social.local_area.here.dry", "next": "here_followup" },
+    "here_generic": { "line": "dialogue_event.mca.social.local_area.here.generic", "next": "here_followup" },
+    "home_plains": { "line": "dialogue_event.mca.social.local_area.home.plains", "next": "home_followup" },
+    "home_savanna": { "line": "dialogue_event.mca.social.local_area.home.savanna", "next": "home_followup" },
+    "home_taiga": { "line": "dialogue_event.mca.social.local_area.home.taiga", "next": "home_followup" },
+    "home_snowy_plains": { "line": "dialogue_event.mca.social.local_area.home.snowy_plains", "next": "home_followup" },
+    "home_desert": { "line": "dialogue_event.mca.social.local_area.home.desert", "next": "home_followup" },
+    "home_snowy": { "line": "dialogue_event.mca.social.local_area.home.snowy", "next": "home_followup" },
+    "home_forest": { "line": "dialogue_event.mca.social.local_area.home.forest", "next": "home_followup" },
+    "home_dry": { "line": "dialogue_event.mca.social.local_area.home.dry", "next": "home_followup" },
+    "home_generic": { "line": "dialogue_event.mca.social.local_area.home.generic", "next": "home_followup" },
+    "here_followup": {
+      "line": "dialogue_event.mca.social.local_area.followup.here",
+      "choices": [
+        { "id": "here_new", "text": "dialogue_event.mca.social.local_area.choice.here_new", "next": "here_new_reply" },
+        { "id": "here_regular", "text": "dialogue_event.mca.social.local_area.choice.here_regular", "next": "here_regular_reply" },
+        { "id": "here_leave", "text": "dialogue_event.mca.social.local_area.choice.here_leave", "next": "here_leave_reply" }
+      ]
+    },
+    "home_followup": {
+      "line": "dialogue_event.mca.social.local_area.followup.home",
+      "choices": [
+        { "id": "home_familiar", "text": "dialogue_event.mca.social.local_area.choice.home_familiar", "next": "home_familiar_reply" },
+        { "id": "home_unfamiliar", "text": "dialogue_event.mca.social.local_area.choice.home_unfamiliar", "next": "home_unfamiliar_reply" },
+        { "id": "home_leave", "text": "dialogue_event.mca.social.local_area.choice.home_leave", "next": "home_leave_reply" }
+      ]
+    },
+    "here_new_reply": { "line": "dialogue_event.mca.social.local_area.reply.here_new", "complete": true },
+    "here_regular_reply": { "line": "dialogue_event.mca.social.local_area.reply.here_regular", "complete": true },
+    "here_leave_reply": { "line": "dialogue_event.mca.social.local_area.reply.here_leave", "complete": true },
+    "home_familiar_reply": { "line": "dialogue_event.mca.social.local_area.reply.home_familiar", "complete": true },
+    "home_unfamiliar_reply": { "line": "dialogue_event.mca.social.local_area.reply.home_unfamiliar", "complete": true },
+    "home_leave_reply": { "line": "dialogue_event.mca.social.local_area.reply.home_leave", "complete": true }
   }
 }

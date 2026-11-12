@@ -2,6 +2,7 @@ package net.conczin.mca.client.gui;
 
 import net.conczin.mca.entity.interaction.Constraint;
 
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -48,6 +49,8 @@ public final class MCAButton {
      * Whether the button is an interaction that generates a response and boosts/decreases hearts
      */
     private final boolean isInteraction;
+    /** Optional command to send instead of deriving it from the translated button identifier. */
+    private final String command;
 
     public MCAButton(
             String identifier,     //The text and action to perform for this button
@@ -59,6 +62,13 @@ public final class MCAButton {
             boolean hideOnFail,    //Whether the button should be hidden completely when its constraints fail. The default is to simply disable it.
             boolean isInteraction  //Whether the button is an interaction that generates a response and boosts/decreases hearts
     ) {
+        this(identifier, align, x, col, y, row, width, height,
+                notifyServer, targetServer, constraints, hideOnFail, isInteraction, null);
+    }
+
+    public MCAButton(String identifier, String align, int x, int col, int y, int row, int width, int height,
+                     boolean notifyServer, boolean targetServer, String constraints, boolean hideOnFail,
+                     boolean isInteraction, String command) {
         this.identifier = identifier;
         this.align = align;
         this.x = x;
@@ -72,10 +82,24 @@ public final class MCAButton {
         this.constraints = constraints;
         this.hideOnFail = hideOnFail;
         this.isInteraction = isInteraction;
+        this.command = command;
     }
 
     public String identifier() {
         return identifier;
+    }
+
+    public String command() {
+        return command;
+    }
+
+    /** Explicit blank commands cannot accidentally fall back to a privileged builtin. */
+    public Optional<String> serverCommand() {
+        if (command != null) {
+            return command.isBlank() ? Optional.empty() : Optional.of(command);
+        }
+        return Optional.ofNullable(identifier).filter(id -> !id.isBlank())
+                .map(id -> id.replace("gui.button.", ""));
     }
 
     public String align() {

@@ -69,6 +69,36 @@ Talk
 defaults to `0`, `weight` defaults to `1`, `requirements` defaults to an empty
 list, and `history` defaults to `story`.
 
+### Interaction fatigue and refusal endings
+
+An outcome can declare `"fatigue": 1` to add the saved player/villager fatigue
+contribution to its weight. Ambient events can also declare an event-level
+`fatigue` rate. Both rates default to zero; they must be finite and nonnegative.
+An outcome or ambient event may have a zero or negative base `weight` only if
+its fatigue rate is positive. Nonpositive *effective* weights are never eligible,
+and inactive high-priority entries do not block lower-priority entries.
+
+The server computes the additive contribution using the integer-truncated
+`pairFatigue * interactionChanceFatigue` value. For example, with multiplier
+1, an ambient event with `"weight": -3, "fatigue": 1` has weight 0 at saved
+fatigue 3, weight 1 at fatigue 4, and weight 3 at fatigue 6.
+
+`Config.interactionFatigueEnabled` defaults to `true`. Turning it off prevents
+new fatigue accumulation and makes all fatigue-weight contributions zero, but
+does not clear existing saved fatigue or prevent its normal cooldown decay.
+With the switch enabled and `interactionChanceFatigue = 0`, fatigue still
+accumulates but does not affect selection. Ordinary heart changes and other
+dialogue effects continue when fatigue is disabled.
+
+Set `"close_interaction": true` on a completing visible node to end its
+interaction after the player reads and acknowledges its final line. This flag
+defaults to false and is only valid on a `complete` node. The ambient
+`root/busy.json` and `root/goaway.json` events use it for fatigue-based
+refusals; their base weights are -3 and -5 respectively. When a refusal is
+offered, it shows only the refusal and a Finish action. Finishing closes the
+matching conversation; leaving early still follows the normal screen-close
+path.
+
 ## Presentation modes
 
 Use the smallest mode that matches the importance of the conversation:
@@ -184,6 +214,42 @@ use a line-less `outcomes` node:
 An automatic routing node has no `line` or `lines`, and it must include at least
 one unconditional outcome so the route cannot dead-end solely because conditions
 fail.
+
+### Asynchronous node results
+
+A visible node may declare an optional `resolve` object when its line depends on
+a server-side lookup. Version 1 accepts exactly one `line` alongside `resolve`.
+Do not combine it with `lines` or an automatic `outcomes` route.
+
+```json
+"location": {
+  "line": "dialogue_event.example_addon.location.found",
+  "resolve": {
+    "type": "mca:structure_location",
+    "pool": "configured_rumors",
+    "pending_line": "dialogue_event.example_addon.location.searching",
+    "failure_line": "dialogue.location.forgot"
+  },
+  "complete": true
+}
+```
+
+The `type` names a built-in or Java-registered addon resolver. `failure_line`
+is required. `pending_line` defaults to `gui.dialogue.searching`. For the
+built-in structure lookup, provide exactly one of `pool: "configured_rumors"`
+or `structure: "namespace:path"`. The successful built-in result uses the
+existing `dialogue.location.<structurePath>` translations, substituting the
+player's name into `%1$s` and the exact `x,y,z` coordinates into `%2$s`.
+An addon resolver can instead use the authored `line` key or return a validated
+override key. Supply any custom keys in the client's resource pack.
+
+Registered resolver providers must perform idempotent, read-only work. The server
+owns the lookup, pending state, 30-second timeout and cancellation. A datapack
+can configure installed resolvers but cannot define executable provider code.
+Successful dialogue history and actions commit only after the player finishes
+the resolved node. During the search, the parchment shows the localized pending
+line and an indeterminate bar. Choices become available after the resolved line
+has finished revealing.
 
 ## Choices and weighted outcomes
 
@@ -310,7 +376,7 @@ an equal `mca:mood` action beside it just to mimic legacy dialogue data, because
 that can double-apply mood changes. Add a separate mood action only when the story
 actually intends an additional mood delta.
 
-`mca:command` accepts these existing interaction commands: `adopt`, `apologize`, `divorcePapers`, `divorceConfirm`, `hire_short`, `hire_long`, `procreate`, `stay_in_village`, and `location`. It cannot run arbitrary Minecraft commands; use at most one command action per conversation.
+`mca:command` accepts the existing dialogue commands `adopt`, `apologize`, `divorcePapers`, `divorceConfirm`, `hire_short`, `hire_long`, `procreate`, `stay_in_village`, and `location`, plus namespaced commands registered by an installed Java addon, such as `myaddon:inspect`. A datapack can *invoke* a registered command, but cannot define its executable behavior or run arbitrary Minecraft commands/functions. Use at most one command action per conversation. The server rechecks the interaction owner, distance, command permissions and the handler's success before committing other actions or history.
 
 ## Requirements
 

@@ -14,6 +14,44 @@ final class DialogueOverlayLayout {
         return Math.max(50, Math.max(1, wrappedLines) * 10 + 40);
     }
 
+    /** Match the header, line stepping and bottom reservations used by InteractScreen. */
+    static int minimumSpeechHeight(int textLineCount, int historyHeight, boolean progress, float scale) {
+        int top = Math.round(23 * scale) + Math.round(8 * scale);
+        int lineStep = Math.round(10 * scale);
+        int bottom = Math.round((progress ? 19 : 12) * scale);
+        return top + Math.max(2, textLineCount) * lineStep + bottom + historyHeight;
+    }
+
+    /** Maximum menu height that leaves the speech bubble its minimum vertical space. */
+    static int maximumMenuHeightForSpeech(int height, int minimumSpeechHeight) {
+        int bubbleTop = Math.max(12, Math.min(50, height / 11));
+        int bottomMargin = Math.min(height / 3, 44);
+        return Math.max(0, height - bottomMargin - bubbleTop - 8 - minimumSpeechHeight);
+    }
+
+    /** Extra wrapped lines scroll rather than consuming the two-line reservation for the menu. */
+    static int menuHeightWithSpeechMinimum(int height, int targetMenuHeight,
+                                           int minimumMenuHeight, int minimumSpeechHeight) {
+        int limit = maximumMenuHeightForSpeech(height, minimumSpeechHeight);
+        return Math.min(targetMenuHeight, Math.max(minimumMenuHeight, limit));
+    }
+
+    /** A single loading placeholder should fit the prompt viewport, never become a scrollable list. */
+    static int loadingRowHeight(Rect menu, int footerHeight, int desiredRowHeight) {
+        return Math.min(desiredRowHeight, Math.max(0, menu.height() - footerHeight - 10));
+    }
+
+    /** The speech viewport always uses the regular header and history layout. */
+    static SpeechViewport speechViewport(Rect bubble, int historyHeight, boolean progress, float scale) {
+        int top = bubble.y() + Math.round(23 * scale) + Math.round(8 * scale);
+        int bottom = bubble.bottom() - Math.round(12 * scale) - historyHeight;
+        Rect strip = progress ? progressStrip(bubble, historyHeight, scale) : new Rect(0, 0, 0, 0);
+        if (strip.height() > 0) {
+            bottom = Math.min(bottom, strip.y() - Math.round(4 * scale));
+        }
+        return new SpeechViewport(top, bottom);
+    }
+
     static Geometry calculate(int width, int height, int menuHeight, int bubbleHeight) {
         return calculate(width, height, menuHeight, bubbleHeight, Integer.MAX_VALUE);
     }
@@ -70,7 +108,14 @@ final class DialogueOverlayLayout {
         int inset = Math.round(16 * contentScale);
         int top = paper.bottom() - historyHeight - Math.round(15 * contentScale);
         int thickness = Math.max(2, Math.round(3 * contentScale));
-        if (paper.width() <= inset * 2 + 2 || top < paper.y() + Math.round(42 * contentScale)) {
+        if (paper.width() <= inset * 2 + 2) {
+            return new Rect(0, 0, 0, 0);
+        }
+        int textTop = paper.y() + Math.round(23 * contentScale) + Math.round(8 * contentScale);
+        int textBottom = Math.min(paper.bottom() - historyHeight - Math.round(12 * contentScale),
+                top - Math.round(4 * contentScale));
+        if (top < paper.y() + Math.round(42 * contentScale)
+                || textBottom - textTop < Math.round(10 * contentScale)) {
             return new Rect(0, 0, 0, 0);
         }
         return new Rect(paper.x() + inset, top, paper.width() - inset * 2, thickness);
@@ -99,6 +144,9 @@ final class DialogueOverlayLayout {
     }
 
     record FooterLayout(Rect divider, Rect back, Rect close) {
+    }
+
+    record SpeechViewport(int top, int bottom) {
     }
 
     record Rect(int x, int y, int width, int height) {

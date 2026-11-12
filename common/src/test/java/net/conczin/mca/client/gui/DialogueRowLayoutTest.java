@@ -44,4 +44,47 @@ class DialogueRowLayoutTest {
             assertTrue(DialogueRowLayout.height(1.5f, 3, kind) > DialogueRowLayout.height(1.5f, 2, kind));
         }
     }
+
+    @Test
+    void rowSurfaceHasEqualTopAndBottomMarginsAtEveryRowHeight() {
+        for (int height : new int[]{22, 24, 28, 40}) {
+            DialogueOverlayLayout.Rect surface = DialogueRowLayout.surface(100, 300, 200, height);
+            assertEquals(108, surface.x());
+            assertEquals(201, surface.y());
+            assertEquals(284, surface.width());
+            assertEquals(height - 2, surface.height());
+            assertEquals(1, surface.y() - 200);
+            assertEquals(1, 200 + height - surface.bottom());
+        }
+    }
+
+    @Test
+    void loadingStripLeavesBothEndsInsideThePromptClipAtAllGuiScales() {
+        for (float scale : new float[]{1.0f, 1.5f, 2.0f}) {
+            int left = 100;
+            int panelWidth = 300;
+            DialogueOverlayLayout.Rect surface = DialogueRowLayout.loadingSurface(
+                    left, panelWidth, 200, Math.round(26 * scale), scale);
+
+            assertEquals(left + Math.round(16 * scale), surface.x());
+            assertEquals(left + panelWidth - Math.round(16 * scale), surface.right());
+            assertTrue(surface.x() > left + 8, "the left stroke must not be scissored at the clip edge");
+            assertTrue(surface.right() < left + panelWidth - 8,
+                    "the right stroke must not be scissored at the clip edge");
+            assertEquals(201, surface.y());
+            assertEquals(Math.round(26 * scale) - 2, surface.height());
+        }
+    }
+
+    @Test
+    void featuredHoverTintReachesTheLowerGoldStroke() {
+        DialogueOverlayLayout.Rect frame = DialogueRowLayout.surface(100, 300, 200, 28);
+        DialogueOverlayLayout.Rect tint = DialogueRowLayout.featuredHoverFill(frame);
+
+        assertEquals(112, tint.x());
+        assertEquals(205, tint.y());
+        assertEquals(276, tint.width());
+        assertEquals(224, tint.bottom(), "Tint must cover the dark row directly above the lower gold stroke");
+        assertEquals(3, frame.bottom() - tint.bottom(), "Keep the three-pixel outer border untouched");
+    }
 }

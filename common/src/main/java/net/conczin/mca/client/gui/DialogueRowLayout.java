@@ -32,6 +32,23 @@ final class DialogueRowLayout {
         return Math.round(Math.max(singleLine, Math.max(1, wrappedLines) * 10 + 10) * scale);
     }
 
+    static DialogueOverlayLayout.Rect surface(int left, int panelWidth, int y, int rowHeight) {
+        return new DialogueOverlayLayout.Rect(left + 8, y + 1, panelWidth - 16, rowHeight - 2);
+    }
+
+    /** Inset the loading strip from the prompt scissor edges, with symmetric ends. */
+    static DialogueOverlayLayout.Rect loadingSurface(int left, int panelWidth, int y, int rowHeight, float scale) {
+        int inset = Math.round(16 * scale);
+        return new DialogueOverlayLayout.Rect(left + inset, y + 1,
+                Math.max(1, panelWidth - inset * 2), rowHeight - 2);
+    }
+
+    static DialogueOverlayLayout.Rect featuredHoverFill(DialogueOverlayLayout.Rect frame) {
+        return new DialogueOverlayLayout.Rect(frame.x() + 4, frame.y() + 4,
+                frame.width() - 8, frame.height() - 7);
+    }
+
     record Insets(int iconX, int textX, int textWidth, int trailingX) {
     }
+
 }

@@ -28,9 +28,9 @@
         { "weight": 5, "actions": [{ "type": "mca:hearts", "amount": 5 }], "next": "day_success" },
         { "requirements": [{ "type": "mca:personality", "value": "gloomy" }], "weight": 4, "actions": [{ "type": "mca:hearts", "amount": 5 }], "next": "day_success" },
         { "requirements": [{ "type": "mca:personality", "value": "sensitive" }], "weight": 2, "actions": [{ "type": "mca:hearts", "amount": 5 }], "next": "day_success" },
-        { "weight": 1, "actions": [{ "type": "mca:hearts", "amount": -1 }], "next": "day_fail" },
-        { "requirements": [{ "type": "mca:personality", "value": "odd" }], "weight": 5, "actions": [{ "type": "mca:hearts", "amount": -1 }], "next": "day_fail" },
-        { "requirements": [{ "type": "mca:personality", "value": "flirty" }], "weight": 1, "actions": [{ "type": "mca:hearts", "amount": -1 }], "next": "day_fail" }
+        { "weight": 1, "fatigue": 1.0, "next": "day_fail" },
+        { "requirements": [{ "type": "mca:personality", "value": "odd" }], "weight": 5, "next": "day_fail" },
+        { "requirements": [{ "type": "mca:personality", "value": "flirty" }], "weight": 1, "next": "day_fail" }
       ]
     },
     "news_reaction": {
@@ -38,9 +38,9 @@
         { "weight": 5, "actions": [{ "type": "mca:hearts", "amount": 5 }], "next": "news_success" },
         { "requirements": [{ "type": "mca:personality", "value": "gloomy" }], "weight": 4, "actions": [{ "type": "mca:hearts", "amount": 5 }], "next": "news_success" },
         { "requirements": [{ "type": "mca:personality", "value": "sensitive" }], "weight": 2, "actions": [{ "type": "mca:hearts", "amount": 5 }], "next": "news_success" },
-        { "weight": 1, "actions": [{ "type": "mca:hearts", "amount": -1 }], "next": "news_fail" },
-        { "requirements": [{ "type": "mca:personality", "value": "odd" }], "weight": 5, "actions": [{ "type": "mca:hearts", "amount": -1 }], "next": "news_fail" },
-        { "requirements": [{ "type": "mca:personality", "value": "flirty" }], "weight": 1, "actions": [{ "type": "mca:hearts", "amount": -1 }], "next": "news_fail" }
+        { "weight": 1, "fatigue": 1.0, "next": "news_fail" },
+        { "requirements": [{ "type": "mca:personality", "value": "odd" }], "weight": 5, "next": "news_fail" },
+        { "requirements": [{ "type": "mca:personality", "value": "flirty" }], "weight": 1, "next": "news_fail" }
       ]
     },
     "reaction": {
@@ -74,9 +74,7 @@
         },
         {
           "weight": 1,
-          "actions": [
-            { "type": "mca:hearts", "amount": -1 }
-          ],
+          "fatigue": 1.0,
           "next": "fail"
         },
         {
@@ -84,9 +82,6 @@
             { "type": "mca:personality", "value": "odd" }
           ],
           "weight": 5,
-          "actions": [
-            { "type": "mca:hearts", "amount": -1 }
-          ],
           "next": "fail"
         },
         {
@@ -94,24 +89,21 @@
             { "type": "mca:personality", "value": "flirty" }
           ],
           "weight": 1,
-          "actions": [
-            { "type": "mca:hearts", "amount": -1 }
-          ],
           "next": "fail"
         }
       ]
     },
     "success": {
       "line": "dialogue_event.mca.social.chat.village.success",
-      "complete": true
+      "next": "village_followup"
     },
     "fail": {
       "line": "dialogue_event.mca.social.chat.village.fail",
-      "complete": true
+      "next": "village_doubt_followup"
     },
     "day_success": {
       "line": "dialogue_event.mca.social.chat.day.success",
-      "complete": true
+      "next": "day_followup"
     },
     "day_fail": {
       "line": "dialogue_event.mca.social.chat.day.fail",
@@ -119,10 +111,75 @@
     },
     "news_success": {
       "line": "dialogue_event.mca.social.chat.news.success",
-      "complete": true
+      "next": "news_followup"
     },
     "news_fail": {
       "line": "dialogue_event.mca.social.chat.news.fail",
+      "complete": true
+    },
+    "day_followup": {
+      "line": "dialogue_event.mca.social.chat.followup.day",
+      "choices": [
+        { "id": "day_busy", "text": "dialogue_event.mca.social.chat.choice.day_busy", "next": "day_busy_reply" },
+        { "id": "day_rest", "text": "dialogue_event.mca.social.chat.choice.day_rest", "next": "day_rest_reply" },
+        { "id": "day_leave", "text": "dialogue_event.mca.social.chat.choice.day_leave", "next": "day_leave_reply" }
+      ]
+    },
+    "village_followup": {
+      "line": "dialogue_event.mca.social.chat.followup.village",
+      "choices": [
+        { "id": "village_friendly", "text": "dialogue_event.mca.social.chat.choice.village_friendly", "next": "village_friendly_reply" },
+        { "id": "village_new", "text": "dialogue_event.mca.social.chat.choice.village_new", "next": "village_new_reply" }
+      ]
+    },
+    "village_doubt_followup": {
+      "line": "dialogue_event.mca.social.chat.followup.village_doubt",
+      "choices": [
+        { "id": "village_encourage", "text": "dialogue_event.mca.social.chat.choice.village_encourage", "next": "village_encourage_reply" },
+        { "id": "village_understand", "text": "dialogue_event.mca.social.chat.choice.village_understand", "next": "village_understand_reply" }
+      ]
+    },
+    "news_followup": {
+      "line": "dialogue_event.mca.social.chat.followup.news",
+      "choices": [
+        { "id": "news_share", "text": "dialogue_event.mca.social.chat.choice.news_share", "next": "news_share_reply" },
+        { "id": "news_wait", "text": "dialogue_event.mca.social.chat.choice.news_wait", "next": "news_wait_reply" }
+      ]
+    },
+    "day_busy_reply": {
+      "line": "dialogue_event.mca.social.chat.reply.day_busy",
+      "complete": true
+    },
+    "day_rest_reply": {
+      "line": "dialogue_event.mca.social.chat.reply.day_rest",
+      "complete": true
+    },
+    "day_leave_reply": {
+      "line": "dialogue_event.mca.social.chat.reply.day_leave",
+      "complete": true
+    },
+    "village_friendly_reply": {
+      "line": "dialogue_event.mca.social.chat.reply.village_friendly",
+      "complete": true
+    },
+    "village_new_reply": {
+      "line": "dialogue_event.mca.social.chat.reply.village_new",
+      "complete": true
+    },
+    "village_encourage_reply": {
+      "line": "dialogue_event.mca.social.chat.reply.village_encourage",
+      "complete": true
+    },
+    "village_understand_reply": {
+      "line": "dialogue_event.mca.social.chat.reply.village_understand",
+      "complete": true
+    },
+    "news_share_reply": {
+      "line": "dialogue_event.mca.social.chat.reply.news_share",
+      "complete": true
+    },
+    "news_wait_reply": {
+      "line": "dialogue_event.mca.social.chat.reply.news_wait",
       "complete": true
     }
   }

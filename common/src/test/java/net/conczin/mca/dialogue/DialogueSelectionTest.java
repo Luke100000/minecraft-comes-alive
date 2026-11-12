@@ -16,9 +16,137 @@ import java.util.function.Predicate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DialogueSelectionTest {
+
+    @Test
+    void disablingFatigueSuppressesStoredWeightWithoutHidingOtherPriorities() {
+        DialogueEvent.Outcome ordinary = new DialogueEvent.Outcome(List.of(), 4.0, List.of(), "ordinary", 0);
+        DialogueEvent.Outcome tired = new DialogueEvent.Outcome(List.of(), 0.0, List.of(), "tired", 20, 1.0);
+
+        assertEquals("tired", DialogueEngine.pickOutcome(List.of(ordinary, tired),
+                RandomSource.create(9L), 6, 1.0f, true).orElseThrow().next());
+        assertEquals("ordinary", DialogueEngine.pickOutcome(List.of(ordinary, tired),
+                RandomSource.create(9L), 6, 1.0f, false).orElseThrow().next());
+        assertEquals("ordinary", DialogueEngine.pickOutcome(List.of(ordinary, tired),
+                RandomSource.create(9L), 6, 0.0f, true).orElseThrow().next());
+        assertTrue(DialogueEngine.pickOutcome(List.of(tired),
+                RandomSource.create(9L), 6, 1.0f, false).isEmpty());
+    }
+
+    @Test
+    void fatigueOnlyChoicesAreNotOfferedWhenTheirWeightIsZero() {
+        DialogueEvent.Outcome tired = new DialogueEvent.Outcome(List.of(), 0.0, List.of(), "done", 0, 1.0);
+        DialogueEvent.Choice choice = new DialogueEvent.Choice("tired", "dialogue.tired", List.of(),
+                List.of(), Optional.empty(), Optional.of(List.of(tired)));
+
+        assertFalse(DialogueEngine.choiceEligible(choice, ignored -> true, 0, 1.0f, true));
+        assertFalse(DialogueEngine.choiceEligible(choice, ignored -> true, 6, 1.0f, false));
+        assertFalse(DialogueEngine.choiceEligible(choice, ignored -> true, 6, 0.0f, true));
+        assertTrue(DialogueEngine.choiceEligible(choice, ignored -> true, 6, 1.0f, true));
+    }
+
+    @Test
+    void allZeroAutomaticRoutesFailClosedWithoutQueuingEffects() {
+        DialogueEvent event = DialogueEvent.decode(ResourceLocation.parse("test:fatigue_only_route"),
+                JsonParser.parseString("""
+                {
+                  "trigger":"talk",
+                  "presentation":{"mode":"ask","prompt":"test.prompt","resume_prompt":"test.resume"},
+                  "repeat":{"type":"always"},
+                  "start":"route",
+                  "nodes":{
+                    "route":{"outcomes":[{"weight":0,"fatigue":1,
+                      "actions":[{"type":"mca:hearts","amount":4}],"next":"done"}]},
+                    "done":{"line":"test.done","complete":true}
+                  }
+                }
+                """).getAsJsonObject());
+        DialogueSession start = DialogueSession.start(UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), 1L, 10L, event);
+
+        assertNull(DialogueEngine.resolveAutomaticTransitions(start, ignored -> true,
+                RandomSource.create(1L), () -> 11L, 0, 1.0f, true));
+        assertNull(DialogueEngine.resolveAutomaticTransitions(start, ignored -> true,
+                RandomSource.create(1L), () -> 11L, 6, 1.0f, false));
+        DialogueSession resolved = DialogueEngine.resolveAutomaticTransitions(start, ignored -> true,
+                RandomSource.create(1L), () -> 11L, 6, 1.0f, true);
+        assertEquals("done", resolved.nodeId());
+        assertEquals(List.of(new DialogueAction.Hearts(4)), resolved.pendingEffects());
+    }
+
+    @Test
+    void zeroWeightFatigueOutcomeOnlyCompetesAfterFatigueAccrues() {
+        DialogueEvent.Outcome ordinary = new DialogueEvent.Outcome(List.of(), 4.0, List.of(), "ordinary", 0);
+        DialogueEvent.Outcome tired = new DialogueEvent.Outcome(List.of(), 0.0, List.of(), "tired", 0, 1.0);
+        for (int seed = 0; seed < 32; seed++) {
+            double draw = RandomSource.create(seed).nextDouble();
+            assertEquals("ordinary", DialogueEngine.pickOutcome(List.of(ordinary, tired),
+                    RandomSource.create(seed), 0, 1.0f).orElseThrow().next());
+            String expected = draw * 10.0 < 4.0 ? "ordinary" : "tired";
+            assertEquals(expected, DialogueEngine.pickOutcome(List.of(ordinary, tired),
+                    RandomSource.create(seed), 6, 1.0f).orElseThrow().next());
+        }
+        assertEquals("ordinary", DialogueEngine.pickOutcome(List.of(ordinary, tired),
+                RandomSource.create(1L), 6, 0.0f).orElseThrow().next());
+    }
+
+    @Test
+    void fatigueRaisesOnlyMarkedEligibleOutcomeWeight() {
+        DialogueEvent.Outcome success = new DialogueEvent.Outcome(List.of(), 4.0, List.of(), "success", 2);
+        DialogueEvent.Outcome skepticism = new DialogueEvent.Outcome(List.of(), 2.0, List.of(), "skeptical", 2, 1.0);
+        DialogueEvent.Outcome lowerPriority = new DialogueEvent.Outcome(List.of(), 1000.0,
+                List.of(), "lower", 1, 1000.0);
+        List<DialogueEvent.Outcome> outcomes = List.of(success, skepticism, lowerPriority);
+
+        for (int seed = 0; seed < 32; seed++) {
+            double draw = RandomSource.create(seed).nextDouble();
+            String expected = draw * 11.0 < 4.0 ? "success" : "skeptical";
+            assertEquals(expected, DialogueEngine.pickOutcome(outcomes, RandomSource.create(seed),
+                    5, 1.0f).orElseThrow().next());
+            String withoutFatigue = draw * 6.0 < 4.0 ? "success" : "skeptical";
+            assertEquals(withoutFatigue, DialogueEngine.pickOutcome(outcomes, RandomSource.create(seed),
+                    0, 1.0f).orElseThrow().next());
+            assertEquals(withoutFatigue, DialogueEngine.pickOutcome(outcomes, RandomSource.create(seed))
+                    .orElseThrow().next());
+        }
+    }
+
+    @Test
+    void fatigueAppliesToAutomaticRoutingWithoutCommittingHearts() {
+        DialogueEvent event = DialogueEvent.decode(ResourceLocation.parse("test:fatigued_route"),
+                JsonParser.parseString("""
+                {
+                  "trigger":"talk",
+                  "presentation":{"mode":"ask","prompt":"p","resume_prompt":"r"},
+                  "repeat":{"type":"always"},
+                  "start":"route",
+                  "nodes":{
+                    "route":{"outcomes":[
+                      {"weight":4,"actions":[{"type":"mca:hearts","amount":2}],"next":"done"},
+                      {"weight":2,"fatigue":1.0,
+                       "actions":[{"type":"mca:hearts","amount":-2}],"next":"done"}
+                    ]},
+                    "done":{"line":"done","complete":true}
+                  }
+                }
+                """).getAsJsonObject());
+        for (int seed = 0; seed < 12; seed++) {
+            DialogueSession start = DialogueSession.start(UUID.randomUUID(), UUID.randomUUID(),
+                    UUID.randomUUID(), 1L, 10L, event);
+            double draw = RandomSource.create(seed).nextDouble();
+            int expectedHearts = draw * 11.0 < 4.0 ? 2 : -2;
+            DialogueSession resolved = DialogueEngine.resolveAutomaticTransitions(start,
+                    condition -> true, RandomSource.create(seed), () -> 11L, 5, 1.0f);
+            assertEquals(List.of(new DialogueAction.Hearts(expectedHearts)), resolved.pendingEffects());
+            assertTrue(resolved.acceptedChoices().isEmpty());
+            assertTrue(resolved.selectedOutcomes().isEmpty());
+        }
+    }
+
+
     @Test
     void outcomePrioritySelectsHighestTierThenPreservesWeightedDraw() {
         DialogueEvent.Outcome generic = new DialogueEvent.Outcome(List.of(), 100.0, List.of(), "generic", 0);
@@ -196,6 +324,77 @@ class DialogueSelectionTest {
                 safeA.id(),
                 RandomSource.create(31L)
         ).orElseThrow().id(), "a single highest-tier candidate remains valid even if repeated");
+    }
+
+    @Test
+    void fatiguedAmbientRefusalsEnterAtLegacyThresholdsAndRespectDisable() {
+        DialogueEvent busy = fatigueAmbient("test:busy", 0, -3.0, 1.0);
+        DialogueEvent goaway = fatigueAmbient("test:goaway", 0, -5.0, 1.0);
+        DialogueEvent ordinary = fatigueAmbient("test:ordinary", 0, 10.0, 0.0);
+        List<DialogueEvent> pool = List.of(goaway, ordinary, busy);
+
+        for (int fatigue : List.of(0, 3, 4, 5, 6)) {
+            int busyWeight = Math.max(0, fatigue - 3);
+            int goawayWeight = Math.max(0, fatigue - 5);
+            int total = busyWeight + goawayWeight + 10;
+            for (int seed = 0; seed < 20; seed++) {
+                double roll = RandomSource.create(seed).nextDouble() * total;
+                ResourceLocation expected = roll < busyWeight ? busy.id()
+                        : roll < busyWeight + goawayWeight ? goaway.id() : ordinary.id();
+                assertEquals(expected, DialogueEngine.pickPreview(pool, null,
+                        RandomSource.create(seed), fatigue, 1.0f, true).orElseThrow().id());
+            }
+        }
+
+        assertEquals(ordinary.id(), DialogueEngine.pickPreview(pool, null,
+                RandomSource.create(2L), 6, 1.0f, false).orElseThrow().id());
+        assertEquals(ordinary.id(), DialogueEngine.pickPreview(pool, null,
+                RandomSource.create(2L), 6, 0.0f, true).orElseThrow().id());
+        assertEquals(ordinary.id(), DialogueEngine.pickPreview(pool, null,
+                RandomSource.create(2L), -6, 1.0f, true).orElseThrow().id());
+
+        DialogueEvent fatigueOnlyHigh = fatigueAmbient("test:high_priority", 20, 0.0, 1.0);
+        assertEquals(ordinary.id(), DialogueEngine.pickPreview(List.of(ordinary, fatigueOnlyHigh), null,
+                RandomSource.create(2L), 6, 1.0f, false).orElseThrow().id());
+        assertEquals(fatigueOnlyHigh.id(), DialogueEngine.pickPreview(List.of(ordinary, fatigueOnlyHigh), null,
+                RandomSource.create(2L), 6, 1.0f, true).orElseThrow().id());
+        assertTrue(DialogueEngine.pickPreview(List.of(busy, goaway), null,
+                RandomSource.create(2L), 0, 1.0f, true).isEmpty());
+    }
+
+    private static DialogueEvent fatigueAmbient(String id, int priority, double weight, double fatigue) {
+        return DialogueEvent.decode(ResourceLocation.parse(id), JsonParser.parseString("""
+                {
+                  "trigger":"talk",
+                  "presentation":{"mode":"ambient","resume_prompt":"dialogue.resume"},
+                  "priority":%d,"weight":%s,"fatigue":%s,
+                  "history":"scheduling",
+                  "repeat":{"type":"cooldown","seconds":0},
+                  "start":"main",
+                  "nodes":{"main":{"line":"dialogue.main","complete":true}}
+                }
+                """.formatted(priority, weight, fatigue)).getAsJsonObject());
+    }
+
+    @Test
+    void terminalRefusalPreviewOffersAReadAndAcknowledgeAction() {
+        DialogueEvent refusal = DialogueEvent.decode(ResourceLocation.parse("test:busy"),
+                JsonParser.parseString("""
+                {
+                  "trigger":"talk",
+                  "presentation":{"mode":"ambient","resume_prompt":"dialogue.resume"},
+                  "weight":-3,"fatigue":1,
+                  "history":"scheduling",
+                  "repeat":{"type":"cooldown","seconds":0},
+                  "start":"main",
+                  "nodes":{"main":{"line":"dialogue.busy","complete":true,"close_interaction":true}}
+                }
+                """).getAsJsonObject());
+
+        assertTrue(DialogueEngine.previewable(refusal));
+        assertEquals(DialogueEngine.AdvanceKind.BACK_TO_TOPICS, DialogueEngine.previewAdvanceKind(refusal));
+        assertEquals(refusal.id(), DialogueEngine.pickPreview(List.of(refusal), null,
+                RandomSource.create(1L), 6, 1.0f, true).orElseThrow().id());
     }
 
     @Test

@@ -2,6 +2,7 @@ package net.conczin.mca;
 
 import net.conczin.mca.server.AsyncStructureLocator;
 import net.conczin.mca.dialogue.DialogueEngine;
+import net.conczin.mca.entity.interaction.InteractionCommands;
 import net.conczin.mca.resources.DialogueEvents;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -39,6 +40,7 @@ public final class MCA {
     }
 
     public static void startServer(MinecraftServer server) {
+        InteractionCommands.bootstrap();
         if (structureLocator != null && !structureLocator.isTerminated()) {
             LOGGER.warn("Previous structure locator has not terminated; starting the server with "
                     + "structure lookups unavailable until the old worker exits");

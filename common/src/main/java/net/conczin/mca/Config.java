@@ -327,9 +327,12 @@ public final class Config extends CommonConfig {
      */
     public boolean useVanillaVoices = false;
 
+    /** Enables interaction fatigue gain and its effect on dialogue selection. */
+    public boolean interactionFatigueEnabled = true;
+
     /**
-     * Amount of interaction fatigue gained per interaction.
-     * Each fatigue point makes the next interaction harder.
+     * Multiplier for saved interaction fatigue when weighting dialogue reactions.
+     * A value of zero stops weighting, but does not stop fatigue accumulation.
      */
     public float interactionChanceFatigue = 1.0f;
 

@@ -105,6 +105,14 @@
           "text": "dialogue.greet.kind",
           "outcomes": [
             {
+              "weight": 0,
+              "fatigue": 1.0,
+              "actions": [
+                { "type": "mca:hearts", "amount": -2 }
+              ],
+              "next": "fail"
+            },
+            {
               "weight": 5,
               "actions": [
                 { "type": "mca:hearts", "amount": 6 }
@@ -176,6 +184,7 @@
             },
             {
               "weight": 3,
+              "fatigue": 1.0,
               "actions": [
                 { "type": "mca:hearts", "amount": -2 }
               ],

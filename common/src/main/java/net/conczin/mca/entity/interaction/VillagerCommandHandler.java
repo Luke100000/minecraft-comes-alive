@@ -41,51 +41,8 @@ import java.util.Comparator;
 import java.util.Optional;
 
 public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityMCA> {
-    private static final java.util.Set<String> DIALOGUE_NON_CLOSING_COMMANDS = java.util.Set.of(
-            "adopt",
-            "apologize",
-            "location"
-    );
-
     public VillagerCommandHandler(VillagerEntityMCA entity) {
         super(entity);
-    }
-
-    /**
-     * Executes a command for a completing DialogueEvent path without treating the legacy
-     * handler's boolean as an execution-success flag. The legacy boolean only describes whether
-     * the interaction screen should close.
-     */
-    public DialogueCommandResult handleDialogue(ServerPlayer player, String command) {
-        String baseCommand = command.split("\\.", 2)[0];
-        if ("adopt".equals(baseCommand)
-                && (entity.getAgeState() == AgeState.ADULT
-                || !FamilyTree.get((ServerLevel) player.level()).isOrphan(entity.getRelationships().getFamilyEntry()))) {
-            return new DialogueCommandResult(false, false);
-        }
-        if ("divorceConfirm".equals(baseCommand)
-                && !entity.getRelationships().isMarriedTo(player.getUUID())) {
-            return new DialogueCommandResult(false, false);
-        }
-        if ("procreate".equals(baseCommand)) {
-            return handleProcreate(player, entity.getVillagerBrain().getMemoriesForPlayer(player));
-        }
-        if ("divorcePapers".equals(baseCommand)) {
-            Inventory inventory = player.getInventory();
-            int papersBefore = inventory.countItem(ItemsMCA.DIVORCE_PAPERS);
-            inventory.add(new ItemStack(ItemsMCA.DIVORCE_PAPERS));
-            boolean delivered = inventory.countItem(ItemsMCA.DIVORCE_PAPERS) > papersBefore;
-            return new DialogueCommandResult(delivered, delivered);
-        }
-        if ("hire_short".equals(baseCommand)) {
-            return handleHire(player, 5, 3);
-        }
-        if ("hire_long".equals(baseCommand)) {
-            return handleHire(player, 10, 7);
-        }
-        boolean closeScreen = handle(player, command);
-        boolean accepted = closeScreen || DIALOGUE_NON_CLOSING_COMMANDS.contains(baseCommand);
-        return new DialogueCommandResult(accepted, closeScreen);
     }
 
     /**
@@ -93,34 +50,38 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
      */
     @Override
     public boolean handle(ServerPlayer player, String command) {
+        return executeBuiltin(player, command).closeScreen();
+    }
+
+    /** Executes an already-authorized builtin command with an explicit gameplay outcome. */
+    public DialogueCommandResult executeBuiltin(ServerPlayer player, String command) {
         Memories memory = entity.getVillagerBrain().getMemoriesForPlayer(player);
 
-        if (MoveState.byCommand(command).filter(state -> {
-            entity.getVillagerBrain().setMoveState(state, player);
-            return true;
-        }).isPresent()) {
-            return true;
+        Optional<MoveState> moveState = MoveState.byCommand(command);
+        if (moveState.isPresent()) {
+            entity.getVillagerBrain().setMoveState(moveState.orElseThrow(), player);
+            return DialogueCommandResult.accepted(true);
         }
 
-        if (Chore.byCommand(command).filter(chore -> {
+        Optional<Chore> job = Chore.byCommand(command);
+        if (job.isPresent()) {
+            Chore chore = job.orElseThrow();
             if (chore == Chore.FISH
                     && !chore.matchesTool(entity.getItemInHand(entity.getDominantHand()))
                     && !InventoryUtils.contains(entity.getInventory(), chore::matchesTool)) {
                 entity.sendChatMessage(player, "chore.fishing.norod");
-                return true;
+                return DialogueCommandResult.rejected(true);
             }
             entity.getVillagerBrain().assignJob(chore, player);
             CriterionMCA.GENERIC_EVENT.trigger(player, "chores");
             entity.sendChatMessage(Component.translatable("chore.success"), player);
-            return true;
-        }).isPresent()) {
-            return true;
+            return DialogueCommandResult.accepted(true);
         }
 
-        //an optional argument is stored separated using a dot
+        // Only these legacy commands have dot-separated arguments; namespaced addon IDs do not.
         String arg = "";
-        String[] split = command.split("\\.");
-        if (split.length > 1) {
+        if (command.startsWith("profession.") || command.startsWith("location.")) {
+            String[] split = command.split("\\.", 2);
             command = split[0];
             arg = split[1];
         }
@@ -136,7 +97,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                     entity.startRiding(player, true);
                 }
                 player.connection.send(new ClientboundSetPassengersPacket(player));
-                return false;
+                return DialogueCommandResult.accepted(false);
             }
             case "ridehorse" -> {
                 if (entity.isPassenger()) {
@@ -160,51 +121,61 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                                 );
                     }
                 }
-                return true;
+                return DialogueCommandResult.accepted(true);
             }
             case "sethome" -> {
                 entity.getResidency().setHome(player);
-                return true;
+                return DialogueCommandResult.accepted(true);
             }
             case "gohome" -> {
                 entity.getResidency().goHome(player);
-                stopInteracting();
-                return false;
+                return DialogueCommandResult.accepted(true);
             }
             case "setworkplace" -> {
                 entity.getResidency().setWorkplace(player);
-                return true;
+                return DialogueCommandResult.accepted(true);
             }
             case "trade" -> {
-                entity.getInteractions().stopInteracting();
+                entity.getInteractions().stopInteracting(player, entity.getInteractions().interactionId());
                 this.entity.startTrading(player);
-                return false;
+                return DialogueCommandResult.accepted(false);
             }
             case "inventory" -> {
                 // The inventory replaces the entire Interact menu. Release its
                 // owner BEFORE opening the container, so we do not close it.
                 entity.getInteractions().stopInteracting(player, entity.getInteractions().interactionId());
                 player.openMenu(entity);
-                return false;
+                return DialogueCommandResult.accepted(false);
             }
             case "gift" -> {
                 entity.getRelationships().giveGift(player, memory);
-                return true;
+                return DialogueCommandResult.accepted(true);
             }
             case "adopt" -> {
+                if (entity.getAgeState() == AgeState.ADULT
+                        || !FamilyTree.get((ServerLevel) player.level()).isOrphan(entity.getRelationships().getFamilyEntry())) {
+                    return DialogueCommandResult.rejected(false);
+                }
                 entity.sendChatMessage(player, "interaction.adopt.success");
                 FamilyTreeNode parentNode = FamilyTree.get((ServerLevel) player.level()).getOrCreate(player);
                 Optional<FamilyTreeNode> parentSpouse = FamilyTree.get((ServerLevel) player.level()).getOrEmpty(parentNode.partner());
                 entity.getRelationships().getFamilyEntry().replaceParents(parentNode, parentSpouse);
+                return DialogueCommandResult.accepted(false);
             }
             case "procreate" -> {
-                return handleProcreate(player, memory).closeScreen();
+                return handleProcreate(player, memory);
             }
             case "divorcePapers" -> {
-                player.getInventory().add(new ItemStack(ItemsMCA.DIVORCE_PAPERS));
-                return true;
+                Inventory inventory = player.getInventory();
+                int before = inventory.countItem(ItemsMCA.DIVORCE_PAPERS);
+                inventory.add(new ItemStack(ItemsMCA.DIVORCE_PAPERS));
+                boolean delivered = inventory.countItem(ItemsMCA.DIVORCE_PAPERS) > before;
+                return new DialogueCommandResult(delivered, delivered);
             }
             case "divorceConfirm" -> {
+                if (!entity.getRelationships().isMarriedTo(player.getUUID())) {
+                    return DialogueCommandResult.rejected(false);
+                }
                 ItemStack papers = ItemsMCA.DIVORCE_PAPERS.getDefaultInstance();
                 Memories memories = entity.getVillagerBrain().getMemoriesForPlayer(player);
                 if (player.getInventory().contains(papers)) {
@@ -219,34 +190,34 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 entity.getRelationships().endRelationShip(RelationshipState.SINGLE);
                 PlayerSaveData playerData = PlayerSaveData.get(player);
                 playerData.endRelationShip(RelationshipState.SINGLE);
-                return true;
+                return DialogueCommandResult.accepted(true);
             }
             case "execute" -> {
                 entity.setProfession(ProfessionsMCA.OUTLAW);
-                return true;
+                return DialogueCommandResult.accepted(true);
             }
             case "pardon" -> {
                 entity.setProfession(VillagerProfession.NONE);
-                return true;
+                return DialogueCommandResult.accepted(true);
             }
             case "stay_in_village" -> {
                 entity.setProfession(VillagerProfession.NONE);
                 entity.setDespawnDelay(0);
-                return true;
+                return DialogueCommandResult.accepted(true);
             }
             case "hire_short" -> {
-                return handleHire(player, 5, 3).closeScreen();
+                return handleHire(player, 5, 3);
             }
             case "hire_long" -> {
-                return handleHire(player, 10, 7).closeScreen();
+                return handleHire(player, 10, 7);
             }
             case "infected" -> {
                 entity.setInfected(!entity.isInfected());
-                return true;
+                return DialogueCommandResult.accepted(true);
             }
             case "stopworking" -> {
                 entity.getVillagerBrain().abandonJob();
-                return true;
+                return DialogueCommandResult.accepted(true);
             }
             case "armor" -> {
                 entity.getVillagerBrain().setArmorWear(!entity.getVillagerBrain().getArmorWear());
@@ -255,7 +226,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 } else {
                     entity.sendChatMessage(player, "armor.disabled");
                 }
-                return true;
+                return DialogueCommandResult.accepted(true);
             }
             case "profession" -> {
                 switch (arg) {
@@ -273,7 +244,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                         entity.sendChatMessage(player, "profession.set.archer");
                     }
                 }
-                return true;
+                return DialogueCommandResult.accepted(true);
             }
             case "apologize" -> {
                 Vec3 pos = entity.position();
@@ -282,6 +253,7 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                         v.pardonPlayers(99);
                     }
                 });
+                return DialogueCommandResult.accepted(false);
             }
             case "location" -> {
                 if (!Config.getInstance().structuresInRumors.isEmpty()) {
@@ -316,10 +288,11 @@ public class VillagerCommandHandler extends EntityCommandHandler<VillagerEntityM
                 } else {
                     entity.sendChatMessage(player, "dialogue.location.forgot");
                 }
+                return DialogueCommandResult.accepted(false);
             }
         }
 
-        return super.handle(player, command);
+        return DialogueCommandResult.rejected(false);
     }
 
     /** Swing an empty hand when possible and apply villager-attributed damage. */

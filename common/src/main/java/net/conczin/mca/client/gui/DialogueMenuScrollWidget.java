@@ -33,6 +33,10 @@ final class DialogueMenuScrollWidget extends AbstractScrollWidget {
         return (int) Math.round(scrollAmount());
     }
 
+    int maxOffset() {
+        return getMaxScrollAmount();
+    }
+
     void scrollToSection(int top) {
         setScrollAmount(Math.clamp(top, 0, Math.max(0, contentHeight - settledViewportHeight)));
     }
@@ -78,7 +82,13 @@ final class DialogueMenuScrollWidget extends AbstractScrollWidget {
     protected void renderDecorations(GuiGraphics graphics) {
         // Preserve the vanilla thumb and gestures with a warmer colour for this panel.
         graphics.setColor(1.0f, 0.77f, 0.50f, 1.0f);
+        int scrollbarX = getX() + getWidth();
+        graphics.pose().pushPose();
+        graphics.pose().translate(scrollbarX + 1, 0, 0);
+        graphics.pose().scale(5.0f / 8.0f, 1.0f, 1.0f);
+        graphics.pose().translate(-scrollbarX, 0, 0);
         super.renderDecorations(graphics);
+        graphics.pose().popPose();
         graphics.setColor(1.0f, 1.0f, 1.0f, 1.0f);
     }
 

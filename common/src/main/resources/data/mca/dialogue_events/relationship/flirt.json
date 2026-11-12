@@ -61,6 +61,7 @@
           "requirements": [{ "type": "mca:hearts", "min": 60 }],
           "priority": 20,
           "weight": 3,
+          "fatigue": 1.0,
           "actions": [{ "type": "mca:hearts", "amount": -3 }],
           "next": "fail"
         },
@@ -78,6 +79,7 @@
           "requirements": [{ "type": "mca:hearts", "min": 60 }],
           "priority": 20,
           "weight": 1,
+          "fatigue": 1.0,
           "actions": [
             { "type": "mca:hearts", "amount": -5 },
             { "type": "mca:slap", "amount": 1.0 }
@@ -118,6 +120,7 @@
           "requirements": [{ "type": "mca:hearts", "min": 30 }],
           "priority": 10,
           "weight": 3,
+          "fatigue": 1.0,
           "actions": [{ "type": "mca:hearts", "amount": -3 }],
           "next": "fail"
         },
@@ -135,6 +138,7 @@
           "requirements": [{ "type": "mca:hearts", "min": 30 }],
           "priority": 10,
           "weight": 1,
+          "fatigue": 1.0,
           "actions": [
             { "type": "mca:hearts", "amount": -5 },
             { "type": "mca:slap", "amount": 1.0 }
@@ -173,6 +177,7 @@
         },
         {
           "weight": 3,
+          "fatigue": 1.0,
           "actions": [
             { "type": "mca:hearts", "amount": -3 }
           ],
@@ -190,6 +195,7 @@
         },
         {
           "weight": 1,
+          "fatigue": 1.0,
           "actions": [
             { "type": "mca:hearts", "amount": -5 },
             { "type": "mca:slap", "amount": 1.0 }

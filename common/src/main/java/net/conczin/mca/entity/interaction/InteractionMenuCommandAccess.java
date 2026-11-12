@@ -28,8 +28,11 @@ public final class InteractionMenuCommandAccess {
             case "pardon" -> Constraint.OUTLAWED.test(villager, player) && Constraint.MAYOR.test(villager, player);
             case "profession.none", "profession.guard", "profession.archer" ->
                     Constraint.ADULT.test(villager, player) && Constraint.MONARCH.test(villager, player);
-            case "ridehorse", "armor", "fishing", "harvesting", "hunting", "chopping",
-                 "stopworking", "sethome", "setworkplace", "gohome" -> true;
+            case "fishing", "harvesting", "hunting", "chopping", "stopworking" ->
+                    (Constraint.FAMILY.test(villager, player) && Constraint.NOT_BABY.test(villager, player))
+                            || (Constraint.NOT_FAMILY.test(villager, player)
+                            && Constraint.MERCENARY.test(villager, player));
+            case "ridehorse", "armor", "sethome", "setworkplace", "gohome" -> true;
             default -> false;
         };
     }

@@ -78,6 +78,7 @@
         },
         {
           "weight": 3,
+          "fatigue": 1.0,
           "actions": [
             { "type": "mca:hearts", "amount": -3 }
           ],

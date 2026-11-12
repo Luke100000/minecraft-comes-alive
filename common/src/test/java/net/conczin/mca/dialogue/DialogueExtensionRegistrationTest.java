@@ -88,4 +88,43 @@ class DialogueExtensionRegistrationTest {
                 JsonParser.parseString("{\"type\":\"dialogue_test:unknown\"}"))
                 .error().isPresent());
     }
+
+    @Test
+    void customAsyncResolverRoundTripsAndRejectsDuplicateRegistration() {
+        ResourceLocation id = ResourceLocation.parse("dialogue_test:lookup_result");
+        DialogueAsyncResolver.register(id, Codec.INT.fieldOf("radius").codec(),
+                (radius, context, operationId) -> java.util.concurrent.CompletableFuture.completedFuture(
+                        DialogueAsyncResolver.Result.found(String.valueOf(radius))));
+        var resolver = DialogueAsyncResolver.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString("""
+                {"type":"dialogue_test:lookup_result","radius":7,"failure_line":"lookup.failed"}
+                """)).getOrThrow();
+        var encoded = DialogueAsyncResolver.CODEC.encodeStart(JsonOps.INSTANCE, resolver).getOrThrow();
+        assertEquals(resolver, DialogueAsyncResolver.CODEC.parse(JsonOps.INSTANCE, encoded).getOrThrow());
+        assertThrows(IllegalArgumentException.class, () -> DialogueAsyncResolver.register(id, Codec.INT,
+                (value, context, operationId) -> java.util.concurrent.CompletableFuture.completedFuture(
+                        DialogueAsyncResolver.Result.missing())));
+        assertThrows(IllegalArgumentException.class, () -> DialogueAsyncResolver.register(
+                DialogueAsyncResolver.STRUCTURE_LOCATION, Codec.INT,
+                (value, context, operationId) -> java.util.concurrent.CompletableFuture.completedFuture(
+                        DialogueAsyncResolver.Result.missing())));
+        assertTrue(DialogueAsyncResolver.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString("""
+                {"type":"dialogue_test:lookup_result","radius":7,"extra":true,"failure_line":"lookup.failed"}
+                """)).error().isPresent());
+    }
+
+    @Test
+    void customAsyncResolverAcceptsExplicitDefaultWithoutAllowingUnknownParameters() {
+        ResourceLocation id = ResourceLocation.parse("dialogue_test:defaulted_radius");
+        DialogueAsyncResolver.register(id, Codec.INT.optionalFieldOf("radius", 7).codec(),
+                (radius, context, operationId) -> java.util.concurrent.CompletableFuture.completedFuture(
+                        DialogueAsyncResolver.Result.found(String.valueOf(radius))));
+
+        var resolver = DialogueAsyncResolver.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString("""
+                {"type":"dialogue_test:defaulted_radius","radius":7,"failure_line":"lookup.failed"}
+                """)).getOrThrow();
+        assertEquals(id, resolver.type());
+        assertTrue(DialogueAsyncResolver.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString("""
+                {"type":"dialogue_test:defaulted_radius","radius":7,"extra":true,"failure_line":"lookup.failed"}
+                """)).error().isPresent());
+    }
 }

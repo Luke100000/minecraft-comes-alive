@@ -1,0 +1,24 @@
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ambient",
+    "resume_prompt": "dialogue_event.mca.ambient.root.generic.resume",
+    "topic": "small_talk"
+  },
+  "priority": 0,
+  "weight": -5,
+  "fatigue": 1,
+  "repeat": {
+    "type": "cooldown",
+    "seconds": 0
+  },
+  "history": "scheduling",
+  "start": "refusal",
+  "nodes": {
+    "refusal": {
+      "line": "dialogue.goaway",
+      "complete": true,
+      "close_interaction": true
+    }
+  }
+}

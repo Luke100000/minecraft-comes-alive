@@ -46,13 +46,19 @@ public abstract class EntityCommandHandler<T extends Entity & VillagerLike<?>> {
     }
 
     public void stopInteracting() {
+        stopInteracting(true);
+    }
+
+    private void stopInteracting(boolean closeContainer) {
         if (!entity.level().isClientSide) {
             if (interactingPlayer instanceof ServerPlayer serverPlayer) {
                 if (entity instanceof VillagerEntityMCA villager) {
                     MCA.getDialogueEngine().ifPresent(engine ->
                             engine.onInteractionReleased(serverPlayer, villager.getUUID()));
                 }
-                serverPlayer.closeContainer();
+                if (closeContainer) {
+                    serverPlayer.closeContainer();
+                }
             }
         }
         interactingPlayer = null;
@@ -71,6 +77,14 @@ public abstract class EntityCommandHandler<T extends Entity & VillagerLike<?>> {
     public void stopInteracting(Player player, UUID id) {
         if (matchesInteraction(player, id)) {
             stopInteracting();
+        }
+    }
+
+    /** Closes only the MCA interaction screen, preserving a container opened by a command. */
+    public void closeInteractionScreen(ServerPlayer player, UUID id) {
+        if (matchesInteraction(player, id)) {
+            stopInteracting(false);
+            Network.sendToPlayer(new OpenGuiRequest(OpenGuiRequest.Type.CLOSE, entity, id), player);
         }
     }
 

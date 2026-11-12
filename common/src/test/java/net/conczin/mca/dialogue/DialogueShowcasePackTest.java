@@ -2,7 +2,12 @@ package net.conczin.mca.dialogue;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import net.conczin.mca.client.gui.DialogueRichText;
 import net.minecraft.SharedConstants;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.TextColor;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.Bootstrap;
 import org.junit.jupiter.api.Test;
@@ -24,6 +29,37 @@ class DialogueShowcasePackTest {
     static {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
+    }
+
+    @Test
+    void showcaseCanColourGenericTextAndCopyAnArbitraryPhrase() throws IOException {
+        Path resource = findRepoRoot().resolve("testpacks/dialogue-showcase/resourcepack/assets/showcase/lang/en_us.json");
+        JsonObject translations = JsonParser.parseString(Files.readString(resource)).getAsJsonObject();
+        Component coloured = DialogueRichText.parse(Component.literal(
+                translations.get("showcase.bridge.opening").getAsString()));
+        assertTrue(coloured.getString().contains("ruined bridge"));
+        assertTrue(coloured.getString().contains("Most people only see rotten planks."));
+        assertEquals(TextColor.fromRgb(0x56C8C2), styleFor(coloured, "ruined bridge").getColor());
+
+        Component copy = DialogueRichText.parse(Component.literal(translations.get("showcase.bridge.prompt").getAsString()));
+        assertEquals("Ask about the old bridge", copy.getString());
+        assertEquals(ClickEvent.Action.COPY_TO_CLIPBOARD, styleFor(copy, "the old bridge").getClickEvent().getAction());
+        assertEquals("the old bridge", styleFor(copy, "the old bridge").getClickEvent().getValue());
+        assertEquals("Copy phrase", translations.get("showcase.copy_hint").getAsString());
+        Component plain = DialogueRichText.parse(Component.literal(translations.get("showcase.welcome.hello").getAsString()));
+        assertEquals(translations.get("showcase.welcome.hello").getAsString(), plain.getString());
+    }
+
+    private static Style styleFor(Component component, String phrase) {
+        java.util.List<Style> matches = new java.util.ArrayList<>();
+        component.visit((style, text) -> {
+            if (text.contains(phrase)) {
+                matches.add(style);
+            }
+            return java.util.Optional.empty();
+        }, Style.EMPTY);
+        assertEquals(1, matches.size(), phrase);
+        return matches.getFirst();
     }
 
     @Test

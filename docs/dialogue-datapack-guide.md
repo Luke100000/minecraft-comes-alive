@@ -223,9 +223,150 @@ Use these requirements in a **separate new event file** with its own `presentati
 
 For throwaway small talk with a cooldown, `history: "scheduling"` is an option, but those events cannot be referenced by `event_completed` or `event_choice`.
 
+An installed Java addon may also expose a namespaced interaction command. You can invoke it in a choice or outcome using the **existing** action format, for example:
+
+```json
+"actions": [{ "type": "mca:command", "command": "myaddon:inspect" }]
+```
+
+The addon must register `myaddon:inspect` through the server's Java `InteractionCommands` API. Otherwise that choice cannot successfully commit. You cannot define executable commands, scripts or `.mcfunction` behavior in a dialogue datapack. Authors can use the same command in an existing resource-pack menu layout via an optional button `"command": "myaddon:inspect"`, but the server still decides whether it is permitted. See the [developer guide](dialogue-system-guide.md#register-a-server-side-interaction-command) for Java registration and a complete button example.
+
 **Rewards and story history are saved only when the player selects Finish conversation on a `complete: true` ending.** Walking away, closing the menu or reaching an `end: true` node does not count as successful completion.
 
-## 9. Why isn't my dialogue showing up?
+## 9. Resolve a dialogue line with an addon or a structure search
+
+An optional `resolve` object lets a **registered server-side resolver** supply a line while the Talk screen stays open. MCA shows one disabled grey three-square reply row while it waits. A genuine server-confirmed async lookup also displays a localized pending sentence and an indeterminate bar **inside the parchment**. When the result arrives, the bar disappears and the result reveals character by character. **Finish conversation** or the actual reply choices appear together only after the line is revealed. Ordinary text reveal uses the grey row without the async bar.
+
+Version 1 requires a single `line` on a resolved node and exactly one continuation (`choices`, `next`, `complete`, or `end`). Do not use `lines` or automatic `outcomes` on that node. The `resolve` object needs a registered namespaced `type` and a `failure_line`; `pending_line` is optional and defaults to `gui.dialogue.searching`. Any extra fields belong to the registered resolver's codec. Unrecognized resolver IDs, invalid fields or conflicting node shapes cause the event to be rejected on `/reload`.
+
+### Addon example with a registered resolver
+
+Create `data/villager_stories/dialogue_events/old_well.json` in the datapack. This is a **complete event**, but `landmarkaddon:landmark_note` is an **illustrative addon resolver ID**, not an MCA built-in. It works only when an installed Java addon registers that exact ID and accepts its `clue` parameter before the datapack reloads.
+
+```json
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue_event.villager_stories.well.prompt",
+    "resume_prompt": "dialogue_event.villager_stories.well.resume",
+    "topic": "location"
+  },
+  "repeat": { "type": "cooldown", "seconds": 5 },
+  "history": "story",
+  "start": "lookup",
+  "nodes": {
+    "lookup": {
+      "line": "dialogue_event.villager_stories.well.found",
+      "resolve": {
+        "type": "landmarkaddon:landmark_note",
+        "clue": "old_well",
+        "pending_line": "dialogue_event.villager_stories.well.searching",
+        "failure_line": "dialogue_event.villager_stories.well.missing"
+      },
+      "complete": true
+    }
+  }
+}
+```
+
+For a minimal addon implementation, the following registration can be placed in the addon's **common initialization**, before dialogue resources load. It uses a completed future to demonstrate the codec and result contract. A real asynchronous provider would return its read-only lookup's `CompletionStage` instead. This code is an **example for a separate addon mod**, not a class or resolver already shipped by MCA.
+
+```java
+DialogueAsyncResolver.register(
+    ResourceLocation.fromNamespaceAndPath("landmarkaddon", "landmark_note"),
+    Codec.STRING.fieldOf("clue").codec(),
+    (clue, context, operationId) -> CompletableFuture.completedFuture(
+        "old_well".equals(clue)
+            ? DialogueAsyncResolver.Result.found("348,70,-126")
+            : DialogueAsyncResolver.Result.missing()
+    )
+);
+```
+
+The snippet needs imports for `DialogueAsyncResolver`, `ResourceLocation`, `Codec` and `CompletableFuture`. Its immediate result may reach the client before the loading animation becomes visible. To test the fallback, set `clue` to an unrecognized value and run `/reload`. The server will use the authored `failure_line`.
+
+### Built-in structure search
+
+The `mca:structure_location` resolver comes from MCA itself. To look up one of the entries in the server's `Config.structuresInRumors` pool, create `data/villager_stories/dialogue_events/find_ruin.json` with this complete event.
+
+```json
+{
+  "trigger": "talk",
+  "presentation": {
+    "mode": "ask",
+    "prompt": "dialogue_event.villager_stories.ruin.prompt",
+    "resume_prompt": "dialogue_event.villager_stories.ruin.resume",
+    "topic": "location"
+  },
+  "repeat": { "type": "cooldown", "seconds": 5 },
+  "history": "story",
+  "start": "search",
+  "nodes": {
+    "search": {
+      "line": "dialogue_event.villager_stories.ruin.authored",
+      "resolve": {
+        "type": "mca:structure_location",
+        "pool": "configured_rumors",
+        "pending_line": "dialogue_event.villager_stories.ruin.searching",
+        "failure_line": "dialogue.location.forgot"
+      },
+      "complete": true
+    }
+  }
+}
+```
+
+You can replace `"pool": "configured_rumors"` with `"structure": "minecraft:igloo"` to request one registered structure. Supply **exactly one** of those selectors. The configured pool uses MCA's server settings and structure registry, with the existing random search origin and lookup radius. A missing structure, empty pool, unsuccessful search, exception or timeout uses the fallback. The required authored `line` is a schema field; a successful built-in lookup **overrides** it with MCA's existing `dialogue.location.<structurePath>` translations and the exact `x,y,z` result. It does not emit a separate vanilla chat message.
+
+### Resource-pack translations for both events
+
+Add the following keys to `assets/villager_stories/lang/en_us.json` in the **client resource pack**. If you used the earlier starter example, merge these entries into its existing JSON object instead of replacing its keys.
+
+```json
+{
+  "dialogue_event.villager_stories.well.prompt": "Where is the old well?",
+  "dialogue_event.villager_stories.well.resume": "About the old well...",
+  "dialogue_event.villager_stories.well.found": "%1$s, the old well is at %2$s.",
+  "dialogue_event.villager_stories.well.searching": "Checking my landmark notes...",
+  "dialogue_event.villager_stories.well.missing": "Sorry, I don't know where that is.",
+  "dialogue_event.villager_stories.ruin.prompt": "Know of any ruins nearby?",
+  "dialogue_event.villager_stories.ruin.resume": "About those ruins...",
+  "dialogue_event.villager_stories.ruin.authored": "I might know a place worth exploring.",
+  "dialogue_event.villager_stories.ruin.searching": "Looking for an interesting place..."
+}
+```
+
+MCA's villager translator supplies the player's name as **`%1$s`**. The first argument returned by an addon provider becomes **`%2$s`** here, so the example coordinates display in that slot. The built-in resolver likewise calls the villager's localized translation path with the found coordinates as the first explicit argument. Existing MCA English location variants, such as `dialogue.location.igloo/1` and `/2`, use `%2$s`, and `dialogue.location.forgot/1` through `/3` cover a miss. MCA can choose numbered variants and dialogue-type, personality, profession and gender variants where translations are present. Keep those existing MCA language assets in place. Add equivalent keys in other client locale files, such as `de_de.json`, to localize your own events; do not assume an unsuffixed MCA location key is present.
+
+### Install, reload and test
+
+Install MCA and the addon providing `landmarkaddon:landmark_note` on the **server** (and on clients if that addon itself requires a client installation). MCA's resolver codec/registry is shared by Fabric and NeoForge, but install the addon build for the loader you run. Enable the datapack on the world or server, enable the matching client resource pack, then run `/datapack list` and `/reload`. Use **F3+T** on each client after editing `en_us.json`. Enter Talk with an available MCA villager and select the new Ask entries under **Conversations** (the `location` topic). Select a resolver entry, check the pending text and bar when work is genuinely asynchronous, then the inline result and Finish after reveal.
+
+A pending operation has a hard deadline of **600 server ticks (30 seconds)**. Closing or leaving Talk, switching villagers, disconnecting or reloading invalidates that request. A paused lookup may restart only on explicit Resume with a fresh identity; an old callback cannot update the new conversation. The result cannot commit rewards or history until the normal Finish acknowledgment. Datapacks can **configure registered resolvers** but cannot define executable Java providers, scripts or arbitrary commands.
+
+## Optional colour, formatting and copyable phrases
+
+The datapack's existing `line`, `choices.text` and `presentation.prompt` translation keys stay unchanged. Add optional formatting tags to their **client resource-pack** language values:
+
+```json
+{
+  "dialogue_event.villager_stories.well.found": "<gold><bold>Found it!</bold></gold> The well is at <copy_coords>234,70,-980</copy_coords>.",
+  "dialogue_event.villager_stories.ruin.authored": "Look for <color:#56C8C2><italic>the old bridge</italic></color>.",
+  "dialogue_event.villager_stories.ruin.prompt": "Ask about <copy><hover:villager_stories.copy_hint>the old bridge</hover></copy>",
+  "villager_stories.copy_hint": "Copy this phrase"
+}
+```
+
+Use any vanilla named colour such as `<gold>...</gold>`, a six-digit `<color:#RRGGBB>...</color>`, and optional `<bold>`, `<italic>` or `<underlined>`. Tags must close in reverse nesting order. `<copy>any phrase</copy>` copies the enclosed **displayed text**, while `<copy_coords>x,y,z</copy_coords>` validates three integers and copies them as `x y z`. A `<hover:translation.key>...</hover>` shows a localized tooltip. Copy, hover and colour are independent; no other click actions or commands are supported. Escape a literal `<` as `\\<`. Unknown or malformed tags remain literal.
+
+During animated speech, a copyable phrase becomes hoverable and clickable **as soon as that phrase is fully visible**, even while later words are still appearing. A partially shown phrase retains its colour/formatting but cannot copy or display its copy tooltip yet. Clicking ordinary speech continues to reveal the rest of the line. Choices are already visible and can be copied immediately; clicking a copyable phrase does not select its choice.
+
+Each `<copy>` tag activates independently, even when adjacent tags copy identical text. Nested copy tags activate at their own closing boundaries; the innermost tag supplies the copy action on text it encloses.
+
+Built-in Rumours locations automatically show teal underlined coordinates with a **Copy coordinates** tooltip. They use the existing localized `%2$s` argument, so no changes to the 41+ location translations or the Rumours event JSON are needed. Custom dialogue text can use the general `<copy>` tag for any text.
+
+## 10. Why isn't my dialogue showing up?
 
 Check these common problems in order:
 
@@ -236,6 +377,9 @@ Check these common problems in order:
 5. **Text displays as a key:** Enable the separate client resource pack and check the exact spelling of the translation key in `en_us.json`. Try F3+T.
 6. **The story is unavailable again:** Check `repeat`, a previous completion, or whether you have a paused run with that villager.
 7. **The reward doesn't happen:** Finish at `complete: true` and click **Finish conversation**. Verify the action is on the selected choice or outcome.
+8. **An async event is rejected:** Verify its addon is installed and registered before `/reload`; check the log for an unknown `resolve.type`, invalid codec parameter, missing `failure_line`, unsupported `lines`/`outcomes`, or an extra field. `landmarkaddon:landmark_note` exists only if your addon registers it.
+9. **A lookup shows the fallback:** For `mca:structure_location`, check the configured structure pool or explicit registry ID. A missing/empty pool, unsuccessful lookup, provider error or 600-tick timeout returns the localized failure line. For an addon, confirm its provider returns `Result.found(...)` for the input.
+10. **A result is missing or appears as a key:** Keep the resource pack enabled on each client and reload assets with F3+T. Remember that the built-in structure success uses MCA's dynamic `dialogue.location.<structurePath>` **numbered variants**, and the failure uses `dialogue.location.forgot` variants. The async bar appears only for a genuine server pending state; the three dots during regular typing are expected.
 
 For examples shipped with MCA, inspect `common/src/main/resources/data/mca/dialogue_events/` in the source repository. Good starting points are `social/joke.json` (choices and reactions), `ambient/crabby_night.json` (context-sensitive small talk), and `personal/cured_zombies_followup.json` (a story that checks an earlier reply).
 

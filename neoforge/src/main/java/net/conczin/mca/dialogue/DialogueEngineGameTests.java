@@ -1,9 +1,11 @@
 package net.conczin.mca.dialogue;
 
 import com.google.gson.JsonParser;
+import com.mojang.serialization.Codec;
 import io.netty.buffer.Unpooled;
 import com.mojang.authlib.GameProfile;
 import net.conczin.mca.MCA;
+import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ZombieVillagerEntityMCA;
 import net.conczin.mca.entity.interaction.InteractionMenuCommandAccess;
@@ -21,11 +23,16 @@ import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.GetInteractDataResponse;
 import net.conczin.mca.registry.EntitiesMCA;
 import net.conczin.mca.registry.ItemsMCA;
+import net.conczin.mca.registry.ProfessionsMCA;
 import net.conczin.mca.resources.DialogueEvents;
+import net.conczin.mca.server.world.data.FamilyTree;
 import net.conczin.mca.server.world.data.DialogueEventHistory;
 import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.contents.TranslatableContents;
 import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -61,6 +68,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
@@ -426,6 +434,244 @@ public final class DialogueEngineGameTests {
     }
 
     @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void fatigueConfigControlsRealHeartChangeAccumulation(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        var brain = fixture.villager().getVillagerBrain();
+        var memories = brain.getMemoriesForPlayer(fixture.player());
+        Config config = Config.getInstance();
+        boolean enabled = config.interactionFatigueEnabled;
+        float multiplier = config.interactionChanceFatigue;
+        try {
+            memories.setHearts(0);
+            memories.setInteractionFatigue(0);
+            config.interactionFatigueEnabled = false;
+            brain.rewardHearts(fixture.player(), 3);
+            memories = brain.getMemoriesForPlayer(fixture.player());
+            helper.assertTrue(memories.getHearts() == 3 && memories.getInteractionFatigue() == 0,
+                    "disabled fatigue must not suppress ordinary heart changes or add fatigue");
+
+            memories.setInteractionFatigue(6);
+            brain.rewardHearts(fixture.player(), -1);
+            memories = brain.getMemoriesForPlayer(fixture.player());
+            helper.assertTrue(memories.getInteractionFatigue() == 6,
+                    "disabling fatigue must leave existing saved fatigue intact");
+
+            config.interactionFatigueEnabled = true;
+            config.interactionChanceFatigue = 0.0f;
+            brain.rewardHearts(fixture.player(), 1);
+            memories = brain.getMemoriesForPlayer(fixture.player());
+            helper.assertTrue(memories.getInteractionFatigue() == 7,
+                    "zero weighting multiplier must still permit fatigue accumulation");
+            config.interactionChanceFatigue = 1.0f;
+            brain.rewardHearts(fixture.player(), 1);
+            memories = brain.getMemoriesForPlayer(fixture.player());
+            helper.assertTrue(memories.getInteractionFatigue() == 8,
+                    "re-enabling fatigue must resume accumulation from the saved value");
+        } finally {
+            config.interactionFatigueEnabled = enabled;
+            config.interactionChanceFatigue = multiplier;
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_fatigue_isolated", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void disabledFatigueStillDecaysAndReenablesWithRemainingPairWeight(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        ServerPlayer other = new FakePlayer(helper.getLevel(),
+                new GameProfile(UUID.randomUUID(), "dialogue-fatigue-other"));
+        other.setPos(fixture.player().position());
+        VillagerEntityMCA otherVillager = villagerNear(helper, other, -1.0D);
+        var brain = fixture.villager().getVillagerBrain();
+        brain.getMemoriesForPlayer(fixture.player()).setInteractionFatigue(6);
+        otherVillager.getVillagerBrain().getMemoriesForPlayer(other).setInteractionFatigue(6);
+
+        DialogueEvent goaway = DialogueEvent.decode(ResourceLocation.parse("mca:test/fatigue_decay_goaway"),
+                JsonParser.parseString("""
+                        {
+                          "trigger":"talk",
+                          "presentation":{"mode":"ambient","resume_prompt":"dialogue.test.resume"},
+                          "weight":-5,"fatigue":1,
+                          "history":"scheduling",
+                          "repeat":{"type":"cooldown","seconds":0},
+                          "start":"main",
+                          "nodes":{"main":{"line":"dialogue.goaway","complete":true}}
+                        }
+                        """).getAsJsonObject());
+        DialogueEvent.Outcome tired = new DialogueEvent.Outcome(
+                List.of(), -5.0, List.of(), "done", 0, 1.0);
+        Config config = Config.getInstance();
+        boolean originallyEnabled = config.interactionFatigueEnabled;
+        float originalMultiplier = config.interactionChanceFatigue;
+        int originalCooldown = config.interactionFatigueCooldown;
+        try {
+            config.interactionFatigueEnabled = true;
+            config.interactionChanceFatigue = 1.0f;
+            config.interactionFatigueCooldown = 20;
+            helper.assertTrue(DialogueEngine.pickPreview(List.of(goaway), null, RandomSource.create(1L),
+                    6, config.interactionChanceFatigue, config.interactionFatigueEnabled).isPresent(),
+                    "fatigue six must permit the go-away opening");
+            helper.assertTrue(DialogueEngine.pickOutcome(List.of(tired), RandomSource.create(1L),
+                    6, config.interactionChanceFatigue, config.interactionFatigueEnabled).isPresent(),
+                    "fatigue six must permit the marked outcome");
+            config.interactionFatigueEnabled = false;
+            helper.assertTrue(DialogueEngine.pickPreview(List.of(goaway), null, RandomSource.create(1L),
+                    6, config.interactionChanceFatigue, config.interactionFatigueEnabled).isEmpty()
+                    && DialogueEngine.pickOutcome(List.of(tired), RandomSource.create(1L),
+                    6, config.interactionChanceFatigue, config.interactionFatigueEnabled).isEmpty(),
+                    "disabling fatigue must suppress both weight paths despite saved fatigue");
+
+            // Cross a single cooldown boundary through the real villager tick pipeline.
+            fixture.villager().tickCount = 19;
+            otherVillager.tickCount = 5;
+            helper.runAfterDelay(3, () -> {
+                try {
+                    int remaining = brain.getMemoriesForPlayer(fixture.player()).getInteractionFatigue();
+                    int otherFatigue = otherVillager.getVillagerBrain()
+                            .getMemoriesForPlayer(other).getInteractionFatigue();
+                    helper.assertTrue(remaining == 5 && otherFatigue == 6,
+                            "disabled fatigue must decay once without changing the independent pair");
+                    config.interactionFatigueEnabled = true;
+                    helper.assertTrue(DialogueEngine.pickPreview(List.of(goaway), null, RandomSource.create(1L),
+                            remaining, config.interactionChanceFatigue, config.interactionFatigueEnabled).isEmpty()
+                            && DialogueEngine.pickOutcome(List.of(tired), RandomSource.create(1L),
+                            remaining, config.interactionChanceFatigue, config.interactionFatigueEnabled).isEmpty(),
+                            "re-enabling must use the reduced fatigue for both weight paths");
+                    helper.assertTrue(DialogueEngine.pickPreview(List.of(goaway), null, RandomSource.create(1L),
+                            otherFatigue, config.interactionChanceFatigue, config.interactionFatigueEnabled).isPresent()
+                            && DialogueEngine.pickOutcome(List.of(tired), RandomSource.create(1L),
+                            otherFatigue, config.interactionChanceFatigue, config.interactionFatigueEnabled).isPresent(),
+                            "the independent pair must retain its own higher-fatigue options");
+                    helper.succeed();
+                } finally {
+                    config.interactionFatigueEnabled = originallyEnabled;
+                    config.interactionChanceFatigue = originalMultiplier;
+                    config.interactionFatigueCooldown = originalCooldown;
+                }
+            });
+        } catch (RuntimeException | Error e) {
+            config.interactionFatigueEnabled = originallyEnabled;
+            config.interactionChanceFatigue = originalMultiplier;
+            config.interactionFatigueCooldown = originalCooldown;
+            throw e;
+        }
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void fatiguedRefusalCannotBeBypassedAndClosesOnlyItsInteraction(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        var interactions = fixture.villager().getInteractions();
+        interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        UUID originalInteraction = interactions.interactionId();
+        var memories = fixture.villager().getVillagerBrain().getMemoriesForPlayer(fixture.player());
+        memories.setInteractionFatigue(6);
+        int heartsBefore = memories.getHearts();
+        DialogueEvent refusal = DialogueEvent.decode(ResourceLocation.parse("mca:test/refusal"),
+                JsonParser.parseString("""
+                        {
+                          "trigger":"talk",
+                          "presentation":{"mode":"ambient","resume_prompt":"dialogue.test.resume"},
+                          "weight":-3,"fatigue":1,
+                          "history":"scheduling",
+                          "repeat":{"type":"cooldown","seconds":0},
+                          "start":"main",
+                          "nodes":{"main":{"line":"dialogue.busy","complete":true,"close_interaction":true}}
+                        }
+                        """).getAsJsonObject());
+        DialogueEvent topic = simpleEvent(ResourceLocation.parse("mca:test/another_topic"));
+        DialogueEngine engine = engine(refusal, topic);
+        DialogueEventHistory history = DialogueEventHistory.get(fixture.player().serverLevel());
+
+        DialogueEngine.DialogueOptions offer = engine.begin(fixture.player(), fixture.villager());
+        helper.assertTrue(offer.preview().map(p -> p.eventId().equals(refusal.id())
+                        && p.advanceKind() == DialogueEngine.AdvanceKind.BACK_TO_TOPICS).orElse(false),
+                "fatigue should expose the complete refusal with a Finish acknowledgement");
+        helper.assertTrue(offer.ask().isEmpty() && !offer.ambientAvailable()
+                        && offer.continuationSessionId().isEmpty(),
+                "refusal must not offer a topic or continuation bypass");
+        helper.assertTrue(engine.select(fixture.player(), offer.token(),
+                DialogueEngine.DialogueSelection.EVENT, topic.id()).isEmpty(),
+                "forged topic selection must be rejected while refusing");
+        helper.assertTrue(engine.select(fixture.player(), offer.token(),
+                DialogueEngine.DialogueSelection.AMBIENT, null).isEmpty(),
+                "forged ambient selection must be rejected while refusing");
+        helper.assertTrue(interactions.matchesInteraction(fixture.player(), originalInteraction),
+                "refusal must be readable before it releases the interaction");
+        helper.assertTrue(!history.completed(fixture.player().getUUID(), fixture.villager().getUUID(), refusal.id()),
+                "preview must not record a completion before acknowledgement");
+
+        DialogueEngine.DialogueOptions refreshed = engine.begin(fixture.player(), fixture.villager(), false);
+        helper.assertTrue(refreshed.token() != offer.token()
+                        && refreshed.preview().map(p -> p.eventId().equals(refusal.id())
+                            && p.advanceKind() == DialogueEngine.AdvanceKind.BACK_TO_TOPICS).orElse(false)
+                        && refreshed.ask().isEmpty() && !refreshed.ambientAvailable()
+                        && refreshed.continuationSessionId().isEmpty(),
+                "reopening Topics must preserve the refusal without exposing another route");
+        helper.assertTrue(engine.advance(fixture.player(), offer.token()).status()
+                        == DialogueEngine.TransitionStatus.REJECTED,
+                "the replaced preview's acknowledgement must be invalidated");
+        helper.assertTrue(engine.advance(fixture.player(), refreshed.token()).completed(),
+                "acknowledging refusal must complete its terminal node");
+        helper.assertTrue(!interactions.matchesInteraction(fixture.player(), originalInteraction),
+                "acknowledgement must release the original owner-scoped interaction");
+        helper.assertTrue(!sessions(engine).containsKey(fixture.player().getUUID())
+                        && !offers(engine).containsKey(fixture.player().getUUID()),
+                "acknowledgement must clear session and offer state");
+        helper.assertTrue(memories.getInteractionFatigue() == 6 && memories.getHearts() == heartsBefore,
+                "pure refusal speech must not change saved relationship fatigue or hearts");
+
+        interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        UUID replacement = interactions.interactionId();
+        helper.assertTrue(!replacement.equals(originalInteraction),
+                "reopened interaction must have a distinct owner ID");
+        helper.assertTrue(engine.advance(fixture.player(), offer.token()).status()
+                        == DialogueEngine.TransitionStatus.REJECTED
+                        && interactions.matchesInteraction(fixture.player(), replacement),
+                "replayed acknowledgement must not release the newer interaction");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void resumedTerminalCloseReleasesReopenedInteraction(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        var interactions = fixture.villager().getInteractions();
+        DialogueEvent closing = DialogueEvent.decode(ResourceLocation.parse("mca:test/resumed_terminal_close"),
+                JsonParser.parseString("""
+                        {
+                          "trigger":"talk",
+                          "presentation":{"mode":"ask","prompt":"dialogue.test.prompt",
+                                          "resume_prompt":"dialogue.test.resume"},
+                          "repeat":{"type":"always"},
+                          "start":"end",
+                          "nodes":{"end":{"line":"dialogue.test.line",
+                                          "complete":true,"close_interaction":true}}
+                        }
+                        """).getAsJsonObject());
+        DialogueEngine engine = engine(closing);
+        interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        UUID originalId = interactions.interactionId();
+        var offer = engine.begin(fixture.player(), fixture.villager(), false);
+        var first = engine.select(fixture.player(), offer.token(),
+                DialogueEngine.DialogueSelection.EVENT, closing.id()).orElseThrow();
+        engine.pause(fixture.player());
+        interactions.stopInteracting(fixture.player(), originalId);
+
+        interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        UUID reopenedId = interactions.interactionId();
+        helper.assertTrue(!originalId.equals(reopenedId),
+                "resuming should use a fresh interaction owner");
+        var continuation = engine.begin(fixture.player(), fixture.villager(), false);
+        helper.assertTrue(continuation.continuationSessionId().filter(first.sessionId()::equals).isPresent(),
+                "the unfinished terminal must remain resumable");
+        var resumed = engine.select(fixture.player(), continuation.token(),
+                DialogueEngine.DialogueSelection.RESUME, null).orElseThrow();
+        helper.assertTrue(engine.advance(fixture.player(), resumed.offerToken()).completed(),
+                "Finish should complete the resumed terminal node");
+        helper.assertTrue(!interactions.matchesInteraction(fixture.player(), reopenedId),
+                "Finish must release the reopened interaction owner");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void ambientOpeningReplyDoesNotCommitStoryUntilFinalAcknowledgement(GameTestHelper helper) {
         Fixture fixture = fixture(helper);
         fixture.villager().getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
@@ -747,7 +993,7 @@ public final class DialogueEngineGameTests {
     }
 
     @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
-    public static void completedDialogueCommandDoesNotCloseAnotherPlayersInteraction(GameTestHelper helper) {
+    public static void staleDialogueCommandCannotRunDuringAnotherPlayersInteraction(GameTestHelper helper) {
         Fixture fixture = fixture(helper);
         ServerPlayer other = new FakePlayer(helper.getLevel(),
                 new GameProfile(UUID.randomUUID(), "dialogue-other-interactee"));
@@ -763,10 +1009,10 @@ public final class DialogueEngineGameTests {
                 fixture.player().getUUID(), fixture.villager().getUUID(), UUID.randomUUID(),
                 1L, token, event
         ).withPendingEffects(List.of(new DialogueAction.Command("divorcePapers"))));
-        helper.assertTrue(engine.advance(fixture.player(), token).status() == DialogueEngine.TransitionStatus.COMPLETED,
-                "the command must execute for the completing player");
-        helper.assertTrue(fixture.player().getInventory().countItem(ItemsMCA.DIVORCE_PAPERS) == 1,
-                "the completing player must receive the command's reward");
+        helper.assertTrue(engine.advance(fixture.player(), token).status() == DialogueEngine.TransitionStatus.PAUSED,
+                "a stale dialogue must pause when another player owns the villager interaction");
+        helper.assertTrue(fixture.player().getInventory().countItem(ItemsMCA.DIVORCE_PAPERS) == 0,
+                "the stale dialogue must not run commands for its former player");
         helper.assertTrue(interactions.matchesInteraction(other, otherInteractionId),
                 "another player's currently owned interaction must survive dialogue command completion");
         helper.succeed();
@@ -946,12 +1192,61 @@ public final class DialogueEngineGameTests {
         helper.assertTrue(fixture.villager().getVillagerBrain().getArmorWear() != armor,
                 "a nearby legitimate owner can still use the built-in armor control");
 
+        // Work requires an eligible family member or a non-family mercenary.
+        fixture.villager().setProfession(ProfessionsMCA.MERCENARY);
         interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
         new InteractionVillagerMessage("harvesting", fixture.villager().getUUID(),
                 interactions.interactionId()).handleServer(fixture.player());
         helper.assertTrue(fixture.villager().getVillagerBrain().getCurrentJob()
                         == net.conczin.mca.entity.ai.Chore.HARVEST,
                 "a nearby legitimate owner can still assign a built-in work command");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void workPacketRequiresWorkMenuEligibility(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        var player = fixture.player();
+        var villager = fixture.villager();
+        var interactions = villager.getInteractions();
+        var brain = villager.getVillagerBrain();
+        interactions.interactAt(player, Vec3.ZERO, InteractionHand.MAIN_HAND);
+        UUID id = interactions.interactionId();
+
+        helper.assertTrue(!net.conczin.mca.entity.interaction.Constraint.FAMILY.test(villager, player)
+                        && !net.conczin.mca.entity.interaction.Constraint.MERCENARY.test(villager, player),
+                "the initial work-denial fixture must be neither family nor mercenary");
+        new InteractionVillagerMessage("harvesting", villager.getUUID(), id).handleServer(player);
+        helper.assertTrue(brain.getCurrentJob() == Chore.NONE && interactions.matchesInteraction(player, id),
+                "a non-family, non-mercenary owner cannot assign Work via a packet");
+
+        brain.assignJob(Chore.HARVEST, player);
+        new InteractionVillagerMessage("stopworking", villager.getUUID(), id).handleServer(player);
+        helper.assertTrue(brain.getCurrentJob() == Chore.HARVEST && interactions.matchesInteraction(player, id),
+                "a forbidden stopworking packet must preserve the villager's job and interaction");
+
+        var parent = FamilyTree.get(helper.getLevel()).getOrCreate(player);
+        villager.getRelationships().getFamilyEntry().replaceParents(parent, Optional.empty());
+        helper.assertTrue(net.conczin.mca.entity.interaction.Constraint.FAMILY.test(villager, player),
+                "adoptive parent must satisfy the Work family constraint");
+        villager.setAgeState(AgeState.BABY);
+        new InteractionVillagerMessage("stopworking", villager.getUUID(), id).handleServer(player);
+        helper.assertTrue(brain.getCurrentJob() == Chore.HARVEST && interactions.matchesInteraction(player, id),
+                "a family baby cannot stop a chore through a forged Work command");
+
+        villager.setAgeState(AgeState.ADULT);
+        new InteractionVillagerMessage("stopworking", villager.getUUID(), id).handleServer(player);
+        helper.assertTrue(brain.getCurrentJob() == Chore.NONE,
+                "an adult family member must still be able to stop Work");
+
+        var mercenary = villagerNear(helper, player, 1.5D);
+        mercenary.setProfession(ProfessionsMCA.MERCENARY);
+        var mercenaryInteractions = mercenary.getInteractions();
+        mercenaryInteractions.interactAt(player, Vec3.ZERO, InteractionHand.MAIN_HAND);
+        UUID mercenaryId = mercenaryInteractions.interactionId();
+        new InteractionVillagerMessage("harvesting", mercenary.getUUID(), mercenaryId).handleServer(player);
+        helper.assertTrue(mercenary.getVillagerBrain().getCurrentJob() == Chore.HARVEST,
+                "a non-family mercenary must still be able to start Work");
         helper.succeed();
     }
 
@@ -1210,15 +1505,10 @@ public final class DialogueEngineGameTests {
         DialogueEventHistory history = DialogueEventHistory.get(fixture.player().serverLevel());
 
         DialogueEngine.DialogueOptions firstMenu = engine.begin(fixture.player(), fixture.villager());
-        DialogueEngine.DialogueOptions secondMenu = engine.begin(second, fixture.villager());
-        helper.assertTrue(firstMenu.containsEvent(event.id()) && secondMenu.containsEvent(event.id()),
-                "each player must independently see a fresh topic on the same villager");
+        helper.assertTrue(firstMenu.containsEvent(event.id()),
+                "the first player must see a fresh topic on the villager");
         DialogueEngine.DialogueNodeView first = engine.select(fixture.player(), firstMenu.token(),
                 DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow();
-        DialogueEngine.DialogueNodeView other = engine.select(second, secondMenu.token(),
-                DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow();
-        helper.assertTrue(!first.sessionId().equals(other.sessionId()),
-                "simultaneous players must never share a dialogue session");
 
         DialogueEngine.DialogueNodeView firstDone = engine.choose(fixture.player(), first.offerToken(), "agree")
                 .view().orElseThrow();
@@ -1226,8 +1516,15 @@ public final class DialogueEngineGameTests {
                 "first player must complete only their own run");
         helper.assertTrue(!engine.begin(fixture.player(), fixture.villager()).containsEvent(event.id()),
                 "first player's completed story must be cooling down");
-        helper.assertTrue(sessions(engine).get(second.getUUID()).id().equals(other.sessionId()),
-                "first player's completion must not invalidate the second player's active run");
+
+        fixture.villager().getInteractions().interactAt(second, Vec3.ZERO, InteractionHand.MAIN_HAND);
+        DialogueEngine.DialogueOptions secondMenu = engine.begin(second, fixture.villager());
+        helper.assertTrue(secondMenu.containsEvent(event.id()),
+                "the second player must still have an independent fresh topic");
+        DialogueEngine.DialogueNodeView other = engine.select(second, secondMenu.token(),
+                DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow();
+        helper.assertTrue(!first.sessionId().equals(other.sessionId()),
+                "sequential players must have distinct dialogue sessions");
 
         DialogueEngine.DialogueNodeView secondDone = engine.choose(second, other.offerToken(), "disagree")
                 .view().orElseThrow();
@@ -1655,6 +1952,7 @@ public final class DialogueEngineGameTests {
                 "fixture should retain a temporary accepted choice before replacement"
         );
 
+        bob.getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
         DialogueEngine.DialogueOptions bobBrowse = engine.begin(fixture.player(), bob);
         helper.assertTrue(bobBrowse.continuationPrompt().isEmpty(), "Alice's run must not appear as Bob's continuation");
         helper.assertTrue(sessions(engine).get(fixture.player().getUUID()).id().equals(pausedId),
@@ -1680,8 +1978,10 @@ public final class DialogueEngineGameTests {
         helper.assertTrue(sessions(engine).get(fixture.player().getUUID()).id().equals(pausedId),
                 "failed selection must leave Alice resumable");
 
+        fixture.villager().getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
         DialogueEngine.DialogueOptions aliceBrowse = engine.begin(fixture.player(), fixture.villager());
         helper.assertTrue(aliceBrowse.continuationPrompt().isPresent(), "Alice should still be resumable after Bob browsing");
+        bob.getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
         DialogueEngine.DialogueOptions bobSelect = engine.begin(fixture.player(), bob);
         DialogueEngine.DialogueNodeView replacement = engine.select(
                 fixture.player(), bobSelect.token(), DialogueEngine.DialogueSelection.EVENT, otherEvent.id()).orElseThrow();
@@ -1695,6 +1995,7 @@ public final class DialogueEngineGameTests {
         helper.assertTrue(offers(engine).isEmpty(), "accepted selection must consume the one current menu offer");
 
         engine.pause(fixture.player());
+        fixture.villager().getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
         DialogueEngine.DialogueOptions aliceAfterReplacement = engine.begin(fixture.player(), fixture.villager());
         helper.assertTrue(aliceAfterReplacement.continuationPrompt().isEmpty(),
                 "discarded Alice run must not reappear after Bob replacement");
@@ -1778,7 +2079,10 @@ public final class DialogueEngineGameTests {
         seedEvents(events(pausedEngine), 2L, event);
         pausedEngine.tick(helper.getLevel().getServer());
         helper.assertTrue(sessions(pausedEngine).isEmpty(), "reload tick must discard paused transient state");
-        helper.assertTrue(offers(pausedEngine).isEmpty(), "reload tick must discard its continuation menu offer");
+        DialogueEngine.DialogueOptions reissued = offers(pausedEngine).get(fixture.player().getUUID());
+        helper.assertTrue(reissued != null && reissued.generation() == 2L
+                        && reissued.token() != continuation.token() && reissued.continuationSessionId().isEmpty(),
+                "reload tick must replace the stale continuation with a fresh menu");
         helper.succeed();
     }
 
@@ -1789,6 +2093,8 @@ public final class DialogueEngineGameTests {
         ServerPlayer other = new FakePlayer(helper.getLevel(),
                 new GameProfile(UUID.randomUUID(), "dialogue-reload"));
         other.setPos(fixture.player().position());
+        VillagerEntityMCA otherVillager = villagerNear(helper, other, -1.0D);
+        otherVillager.getInteractions().interactAt(other, Vec3.ZERO, InteractionHand.MAIN_HAND);
         helper.assertTrue(DialogueEvents.INSTANCE.get(MCA.locate("ambient/baseline")).isPresent(),
                 "the shipped baseline must be loaded before a real reload");
 
@@ -1803,7 +2109,7 @@ public final class DialogueEngineGameTests {
         int heartsBefore = fixture.villager().getVillagerBrain()
                 .getMemoriesForPlayer(fixture.player()).getHearts();
 
-        DialogueEngine.DialogueOptions otherMenu = pausedEngine.begin(other, fixture.villager());
+        DialogueEngine.DialogueOptions otherMenu = pausedEngine.begin(other, otherVillager);
         DialogueEngine.DialogueNodeView paused = pausedEngine.select(other, otherMenu.token(),
                 DialogueEngine.DialogueSelection.AMBIENT, null).orElseThrow();
         sessions(pausedEngine).put(other.getUUID(),
@@ -1828,7 +2134,7 @@ public final class DialogueEngineGameTests {
                     "a pre-reload active offer must be rejected, never committed");
             helper.assertTrue(sessions(activeEngine).isEmpty(),
                     "a real reload must clear the active transient session");
-            helper.assertTrue(pausedEngine.begin(other, fixture.villager()).continuationPrompt().isEmpty(),
+            helper.assertTrue(pausedEngine.begin(other, otherVillager).continuationPrompt().isEmpty(),
                     "a real reload must not offer the previously paused continuation");
             helper.assertTrue(sessions(pausedEngine).isEmpty(),
                     "a real reload must clear the paused transient session");
@@ -1886,6 +2192,8 @@ public final class DialogueEngineGameTests {
         String packId = repository.getAvailableIds().stream()
                 .filter(id -> id.endsWith("dialogue-mca-live-reload-test"))
                 .findFirst().orElseThrow(() -> new AssertionError("Test datapack was not discovered"));
+        // The GameTest world survives failed runs, which can leave this temporary pack selected.
+        originalPacks.remove(packId);
         Set<String> enabledPacks = new LinkedHashSet<>(originalPacks);
         enabledPacks.add(packId);
         long generationBefore = DialogueEvents.INSTANCE.generation();
@@ -1900,6 +2208,8 @@ public final class DialogueEngineGameTests {
         ServerPlayer other = new FakePlayer(helper.getLevel(),
                 new GameProfile(UUID.randomUUID(), "dialogue-pack-remove"));
         other.setPos(fixture.player().position());
+        VillagerEntityMCA otherVillager = villagerNear(helper, other, -1.0D);
+        otherVillager.getInteractions().interactAt(other, Vec3.ZERO, InteractionHand.MAIN_HAND);
         server.reloadResources(enabledPacks).whenComplete((ignored, error) -> {
             if (error != null) {
                 reloadFailure.set(error);
@@ -1932,17 +2242,17 @@ public final class DialogueEngineGameTests {
                 initialHearts.set(fixture.villager().getVillagerBrain()
                         .getMemoriesForPlayer(fixture.player()).getHearts());
 
-                DialogueEngine.DialogueOptions otherMenu = paused.begin(other, fixture.villager());
+                DialogueEngine.DialogueOptions otherMenu = paused.begin(other, otherVillager);
                 helper.assertTrue(otherMenu.containsEvent(validId),
                         "second player must independently see the installed addon topic");
                 paused.select(other, otherMenu.token(), DialogueEngine.DialogueSelection.EVENT, validId).orElseThrow();
                 sessions(paused).put(other.getUUID(),
                         sessions(paused).get(other.getUUID())
                                 .withPendingEffects(List.of(new DialogueAction.Hearts(9))));
-                pausedPlayerHearts.set(fixture.villager().getVillagerBrain()
+                pausedPlayerHearts.set(otherVillager.getVillagerBrain()
                         .getMemoriesForPlayer(other).getHearts());
                 paused.pause(other);
-                helper.assertTrue(paused.begin(other, fixture.villager()).continuationPrompt().isPresent(),
+                helper.assertTrue(paused.begin(other, otherVillager).continuationPrompt().isPresent(),
                         "the addon session must offer a paused continuation before removal");
 
                 activeEngine.set(active);
@@ -1970,14 +2280,14 @@ public final class DialogueEngineGameTests {
                     "a removed event's pre-reload token must not complete its queued reward");
             helper.assertTrue(sessions(activeEngine.get()).isEmpty(),
                     "removing the addon must discard its active session");
-            helper.assertTrue(pausedEngine.get().begin(other, fixture.villager()).continuationPrompt().isEmpty(),
+            helper.assertTrue(pausedEngine.get().begin(other, otherVillager).continuationPrompt().isEmpty(),
                     "a paused session from a removed addon must not be resumable");
             helper.assertTrue(sessions(pausedEngine.get()).isEmpty(),
                     "removing the addon must discard the paused pending actions");
             helper.assertTrue(fixture.villager().getVillagerBrain()
                             .getMemoriesForPlayer(fixture.player()).getHearts() == initialHearts.get(),
                     "removing an addon must never execute a queued heart reward");
-            helper.assertTrue(fixture.villager().getVillagerBrain()
+            helper.assertTrue(otherVillager.getVillagerBrain()
                             .getMemoriesForPlayer(other).getHearts() == pausedPlayerHearts.get(),
                     "removing an addon must never execute the paused player's queued reward");
             try {
@@ -2106,6 +2416,7 @@ public final class DialogueEngineGameTests {
         helper.assertTrue(offers(engine).isEmpty(), "conversion-style discard must invalidate menu offers");
 
         VillagerEntityMCA killed = villagerNear(helper, fixture.player(), -1.0D);
+        killed.getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
         DialogueEngine.DialogueOptions killedMenu = engine.begin(fixture.player(), killed);
         engine.select(fixture.player(), killedMenu.token(), DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow();
         killed.remove(Entity.RemovalReason.KILLED);
@@ -2170,6 +2481,388 @@ public final class DialogueEngineGameTests {
     }
 
     @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void pendingLookupRejectsEarlyContinueAndPauseDiscardsOperation(GameTestHelper helper) {
+        ResourceLocation providerId = ResourceLocation.parse("mca:pending_lifecycle_gametest");
+        DialogueAsyncResolver.register(providerId, Codec.STRING.fieldOf("sample").codec(),
+                (sample, context, operationId) -> new CompletableFuture<>());
+        Fixture fixture = presentFixture(helper);
+        fixture.villager().getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        DialogueEvent event = DialogueEvent.decode(ResourceLocation.parse("mca:test/pending_pause"),
+                JsonParser.parseString("""
+                        {
+                          "trigger":"talk",
+                          "presentation":{"mode":"ask","prompt":"dialogue.test.prompt","resume_prompt":"dialogue.test.resume"},
+                          "repeat":{"type":"always"},
+                          "start":"found",
+                          "nodes":{"found":{
+                            "line":"dialogue.test.line",
+                            "resolve":{"type":"mca:pending_lifecycle_gametest","sample":"hold",
+                                       "failure_line":"dialogue.location.forgot"},
+                            "complete":true
+                          }}
+                        }
+                        """).getAsJsonObject());
+        DialogueEngine engine = engine(event);
+        var menu = engine.begin(fixture.player(), fixture.villager());
+        var selected = engine.select(fixture.player(), menu.token(),
+                DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow();
+        engine.sendView(fixture.player(), selected);
+        helper.assertTrue(engine.advance(fixture.player(), selected.offerToken()).status()
+                        == DialogueEngine.TransitionStatus.REJECTED,
+                "an unresolved lookup must reject Continue instead of committing the event");
+        engine.pause(fixture.player());
+        helper.assertTrue(pendingRequests(engine).snapshot().isEmpty(),
+                "leaving Talk must detach and cancel the pending lookup");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void endingOrStoppingServerCancelsPendingLookup(GameTestHelper helper) {
+        ResourceLocation providerId = ResourceLocation.parse("mca:pending_cleanup_gametest");
+        AtomicReference<UUID> cancelled = new AtomicReference<>();
+        DialogueAsyncResolver.register(providerId, Codec.STRING.fieldOf("sample").codec(),
+                new DialogueAsyncResolver.Provider<String>() {
+                    @Override
+                    public CompletableFuture<DialogueAsyncResolver.Result> resolve(
+                            String sample, DialogueContext context, UUID operationId) {
+                        return new CompletableFuture<>();
+                    }
+
+                    @Override
+                    public void cancel(String sample, UUID operationId) {
+                        cancelled.set(operationId);
+                    }
+                });
+        Fixture fixture = presentFixture(helper);
+        fixture.villager().getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        DialogueEvent event = pendingLookupEvent(ResourceLocation.parse("mca:test/pending_cleanup"), providerId);
+        DialogueEngine engine = engine(event);
+        var firstMenu = engine.begin(fixture.player(), fixture.villager());
+        engine.sendView(fixture.player(), engine.select(fixture.player(), firstMenu.token(),
+                DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow());
+        UUID firstOperation = pendingRequests(engine).snapshot().getFirst().operationId();
+
+        engine.end(fixture.player());
+        helper.assertTrue(pendingRequests(engine).snapshot().isEmpty(),
+                "ending Talk must detach the pending lookup");
+        helper.assertTrue(firstOperation.equals(cancelled.get()),
+                "ending Talk must cancel its locator owner");
+
+        var secondMenu = engine.begin(fixture.player(), fixture.villager());
+        engine.sendView(fixture.player(), engine.select(fixture.player(), secondMenu.token(),
+                DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow());
+        UUID secondOperation = pendingRequests(engine).snapshot().getFirst().operationId();
+        engine.clear(helper.getLevel().getServer());
+        helper.assertTrue(pendingRequests(engine).snapshot().isEmpty(),
+                "server shutdown must detach pending lookups");
+        helper.assertTrue(secondOperation.equals(cancelled.get()),
+                "server shutdown must cancel its locator owner");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void villagerLeaveCancelsPendingLookup(GameTestHelper helper) {
+        ResourceLocation providerId = ResourceLocation.parse("mca:pending_leave_gametest");
+        AtomicReference<UUID> cancelled = new AtomicReference<>();
+        DialogueAsyncResolver.register(providerId, Codec.STRING.fieldOf("sample").codec(),
+                new DialogueAsyncResolver.Provider<String>() {
+                    @Override
+                    public CompletableFuture<DialogueAsyncResolver.Result> resolve(
+                            String sample, DialogueContext context, UUID operationId) {
+                        return new CompletableFuture<>();
+                    }
+
+                    @Override
+                    public void cancel(String sample, UUID operationId) {
+                        cancelled.set(operationId);
+                    }
+                });
+        Fixture fixture = presentFixture(helper);
+        fixture.villager().getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        DialogueEvent event = pendingLookupEvent(ResourceLocation.parse("mca:test/pending_leave"), providerId);
+        DialogueEngine engine = engine(event);
+        var menu = engine.begin(fixture.player(), fixture.villager());
+        engine.sendView(fixture.player(), engine.select(fixture.player(), menu.token(),
+                DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow());
+        UUID operationId = pendingRequests(engine).snapshot().getFirst().operationId();
+
+        engine.onVillagerLeave(fixture.villager());
+        helper.assertTrue(pendingRequests(engine).snapshot().isEmpty(),
+                "villager leaving must detach the pending lookup");
+        helper.assertTrue(operationId.equals(cancelled.get()),
+                "villager leaving must cancel the lookup owner");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void pendingLookupDeadlineResolvesFailureAndCancelsLocator(GameTestHelper helper) {
+        ResourceLocation providerId = ResourceLocation.parse("mca:pending_deadline_gametest");
+        AtomicReference<UUID> cancelled = new AtomicReference<>();
+        DialogueAsyncResolver.register(providerId, Codec.STRING.fieldOf("sample").codec(),
+                new DialogueAsyncResolver.Provider<String>() {
+                    @Override
+                    public CompletableFuture<DialogueAsyncResolver.Result> resolve(
+                            String sample, DialogueContext context, UUID operationId) {
+                        return new CompletableFuture<>();
+                    }
+
+                    @Override
+                    public void cancel(String sample, UUID operationId) {
+                        cancelled.set(operationId);
+                    }
+                });
+        Fixture fixture = presentFixture(helper);
+        fixture.villager().getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        DialogueEvent event = pendingLookupEvent(ResourceLocation.parse("mca:test/pending_deadline"), providerId);
+        DialogueEngine engine = engine(event);
+        var menu = engine.begin(fixture.player(), fixture.villager());
+        engine.sendView(fixture.player(), engine.select(fixture.player(), menu.token(),
+                DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow());
+        DialoguePendingRequests.Ticket ticket = pendingRequests(engine).snapshot().getFirst();
+        long now = helper.getLevel().getServer().overworld().getGameTime();
+        helper.assertTrue(ticket.deadline() > now, "a new lookup must receive a future deadline");
+        DialoguePendingRequests.Ticket expired = new DialoguePendingRequests.Ticket(
+                ticket.key(), ticket.interactionId(), ticket.operationId(), ticket.resolver(), now);
+        pendingRequests(engine).install(expired);
+
+        engine.tick(helper.getLevel().getServer());
+        helper.assertTrue(pendingRequests(engine).snapshot().isEmpty(),
+                "an expired lookup must stop blocking dialogue progress");
+        helper.assertTrue(pendingRequests(engine).lineFor(expired.key()).isPresent(),
+                "an expired lookup must deliver the localized failure line");
+        helper.assertTrue(ticket.operationId().equals(cancelled.get()),
+                "an expired lookup must cancel its locator owner");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void completedLookupShowsLocationCoordinatesInline(GameTestHelper helper) {
+        ResourceLocation providerId = ResourceLocation.parse("mca:resolved_location_gametest");
+        CompletableFuture<DialogueAsyncResolver.Result> completion = new CompletableFuture<>();
+        DialogueAsyncResolver.register(providerId, Codec.STRING.fieldOf("sample").codec(),
+                (sample, context, operationId) -> completion);
+        Fixture fixture = presentFixture(helper);
+        fixture.villager().getInteractions().interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        DialogueEvent event = pendingLookupEvent(ResourceLocation.parse("mca:test/resolved_location"), providerId);
+        DialogueEngine engine = engine(event);
+        var menu = engine.begin(fixture.player(), fixture.villager());
+        engine.sendView(fixture.player(), engine.select(fixture.player(), menu.token(),
+                DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow());
+        DialoguePendingRequests.Ticket ticket = pendingRequests(engine).snapshot().getFirst();
+
+        completion.complete(DialogueAsyncResolver.Result.withKey("dialogue.location.igloo", "9,70,12"));
+        helper.runAfterDelay(2, () -> {
+            helper.assertTrue(pendingRequests(engine).snapshot().isEmpty(),
+                    "the completed lookup must leave the pending state");
+            var line = pendingRequests(engine).lineFor(ticket.key()).orElseThrow();
+            helper.assertTrue(line.getContents() instanceof TranslatableContents,
+                    "the result must retain the translated villager dialogue line");
+            TranslatableContents contents = (TranslatableContents) line.getContents();
+            helper.assertTrue(contents.getKey().endsWith("dialogue.location.igloo"),
+                    "successful lookups must replace the authored placeholder with the location line");
+            helper.assertTrue(contents.getArgs().length >= 2 && "9,70,12".equals(contents.getArgs()[1]),
+                    "the location translation must receive coordinates as its second argument");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void resolvedLookupEscapeReopenResumesLocationWithoutSearchingAgain(GameTestHelper helper) {
+        ResourceLocation providerId = ResourceLocation.parse("mca:escape_resume_location_gametest");
+        CompletableFuture<DialogueAsyncResolver.Result> completion = new CompletableFuture<>();
+        AtomicInteger searches = new AtomicInteger();
+        DialogueAsyncResolver.register(providerId, Codec.STRING.fieldOf("sample").codec(),
+                (sample, context, operationId) -> {
+                    searches.incrementAndGet();
+                    return completion;
+                });
+        Fixture fixture = presentFixture(helper);
+        var interactions = fixture.villager().getInteractions();
+        interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        DialogueEngine engine = MCA.getDialogueEngine().orElseThrow();
+        DialogueEvent event = pendingLookupEvent(ResourceLocation.parse("mca:test/escape_resolved_location"), providerId);
+        DialogueSession session = DialogueSession.start(fixture.player().getUUID(), fixture.villager().getUUID(),
+                UUID.randomUUID(), DialogueEvents.INSTANCE.generation(), 912_348L, event);
+        sessions(engine).put(fixture.player().getUUID(), session);
+        engine.sendView(fixture.player(), new DialogueEngine.DialogueNodeView(session.id(), event.id(),
+                session.offerToken(), Component.translatable("dialogue.test.line"), false, List.of(),
+                DialogueEngine.AdvanceKind.BACK_TO_TOPICS));
+        helper.assertTrue(searches.get() == 1, "the original Rumours line must start one lookup");
+
+        completion.complete(DialogueAsyncResolver.Result.withKey("dialogue.location.igloo", "9,70,12"));
+        helper.runAfterDelay(2, () -> {
+            try {
+                helper.assertTrue(pendingRequests(engine).lineFor(DialoguePendingRequests.Key.from(session)).isPresent(),
+                        "the first lookup must finish before Escape");
+                UUID interactionId = interactions.interactionId();
+                new InteractionCloseRequest(fixture.villager().getUUID(), interactionId,
+                        session.id(), session.offerToken()).handleServer(fixture.player());
+                helper.assertTrue(sessions(engine).get(fixture.player().getUUID()).status()
+                                == DialogueSession.Status.PAUSED,
+                        "Escape must pause the same dialogue session");
+                helper.assertTrue(interactions.getInteractingPlayer().isEmpty(),
+                        "Escape must close the bound villager interaction");
+
+                interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+                DialogueEngine.DialogueOptions menu = engine.begin(fixture.player(), fixture.villager(), false);
+                helper.assertTrue(menu.continuationSessionId().filter(session.id()::equals).isPresent(),
+                        "reopening must offer an explicit Resume for the paused run");
+                DialogueEngine.DialogueNodeView resumed = engine.select(fixture.player(), menu.token(),
+                        DialogueEngine.DialogueSelection.RESUME, null).orElseThrow();
+                engine.sendView(fixture.player(), resumed);
+                helper.assertTrue(searches.get() == 1,
+                        "resuming a resolved location must not launch another lookup; searches=" + searches.get());
+                helper.assertTrue(resumed.line().getContents() instanceof TranslatableContents contents
+                                && contents.getKey().endsWith("dialogue.location.igloo")
+                                && contents.getArgs().length >= 2 && "9,70,12".equals(contents.getArgs()[1]),
+                        "Resume must restore the resolved inline location and its coordinates");
+                helper.assertTrue(resumed.offerToken() != session.offerToken()
+                                && resumed.advanceKind() == DialogueEngine.AdvanceKind.BACK_TO_TOPICS,
+                        "Resume must retain Finish conversation with a fresh authenticated token");
+                helper.assertTrue(pendingRequests(engine).snapshot().isEmpty(),
+                        "a resolved conversation must not have an outstanding locator");
+                DialoguePendingRequests.Key resumedKey = DialoguePendingRequests.Key.from(
+                        sessions(engine).get(fixture.player().getUUID()));
+                helper.assertTrue(engine.advance(fixture.player(), resumed.offerToken()).status()
+                                == DialogueEngine.TransitionStatus.COMPLETED,
+                        "Finish conversation must complete the resolved Rumours event");
+                helper.assertTrue(searches.get() == 1 && !sessions(engine).containsKey(fixture.player().getUUID()),
+                        "finishing the restored location must end the run without another search");
+                helper.assertTrue(pendingRequests(engine).lineFor(resumedKey).isEmpty(),
+                        "Finish must discard the completed lookup's retained line");
+                helper.succeed();
+            } finally {
+                engine.end(fixture.player());
+                interactions.stopInteracting();
+                fixture.villager().discard();
+                removePresentPlayer(fixture.player());
+            }
+        });
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void offlineTickDiscardsResolvedLookupAlongWithSession(GameTestHelper helper) {
+        ResourceLocation providerId = ResourceLocation.parse("mca:resolved_logout_cleanup_gametest");
+        CompletableFuture<DialogueAsyncResolver.Result> completion = new CompletableFuture<>();
+        DialogueAsyncResolver.register(providerId, Codec.STRING.fieldOf("sample").codec(),
+                (sample, context, operationId) -> completion);
+        Fixture fixture = presentFixture(helper);
+        var interactions = fixture.villager().getInteractions();
+        interactions.interactAt(fixture.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        DialogueEvent event = pendingLookupEvent(ResourceLocation.parse("mca:test/resolved_logout_cleanup"), providerId);
+        DialogueEngine engine = engine(event);
+        var menu = engine.begin(fixture.player(), fixture.villager());
+        var selected = engine.select(fixture.player(), menu.token(),
+                DialogueEngine.DialogueSelection.EVENT, event.id()).orElseThrow();
+        engine.sendView(fixture.player(), selected);
+        DialoguePendingRequests.Key key = pendingRequests(engine).snapshot().getFirst().key();
+
+        completion.complete(DialogueAsyncResolver.Result.withKey("dialogue.location.igloo", "9,70,12"));
+        helper.runAfterDelay(2, () -> {
+            try {
+                helper.assertTrue(pendingRequests(engine).lineFor(key).isPresent(),
+                        "logout test requires a completed cached location");
+                engine.pause(fixture.player());
+                helper.assertTrue(pendingRequests(engine).lineFor(key).isPresent(),
+                        "closing the conversation must preserve the resolved line until Resume");
+                removePresentPlayer(fixture.player());
+                engine.tick(helper.getLevel().getServer());
+                helper.assertTrue(!sessions(engine).containsKey(fixture.player().getUUID()),
+                        "offline tick must discard the paused dialogue session");
+                helper.assertTrue(pendingRequests(engine).lineFor(key).isEmpty(),
+                        "offline tick must discard the resolved line with its owner session");
+                helper.succeed();
+            } finally {
+                engine.end(fixture.player());
+                interactions.stopInteracting();
+                fixture.villager().discard();
+                removePresentPlayer(fixture.player());
+            }
+        });
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void escapeCancelsOnlyClosingPlayersUnresolvedLookup(GameTestHelper helper) {
+        ResourceLocation providerId = ResourceLocation.parse("mca:escape_cancel_isolated_gametest");
+        Fixture closing = presentFixture(helper);
+        Fixture other = presentFixture(helper);
+        CompletableFuture<DialogueAsyncResolver.Result> closingResult = new CompletableFuture<>();
+        CompletableFuture<DialogueAsyncResolver.Result> otherResult = new CompletableFuture<>();
+        AtomicReference<UUID> cancelled = new AtomicReference<>();
+        AtomicInteger cancellations = new AtomicInteger();
+        DialogueAsyncResolver.register(providerId, Codec.STRING.fieldOf("sample").codec(),
+                new DialogueAsyncResolver.Provider<String>() {
+                    @Override
+                    public CompletableFuture<DialogueAsyncResolver.Result> resolve(
+                            String sample, DialogueContext context, UUID operationId) {
+                        return context.player().getUUID().equals(closing.player().getUUID())
+                                ? closingResult : otherResult;
+                    }
+
+                    @Override
+                    public void cancel(String sample, UUID operationId) {
+                        cancelled.set(operationId);
+                        cancellations.incrementAndGet();
+                    }
+                });
+        DialogueEngine engine = MCA.getDialogueEngine().orElseThrow();
+        DialogueEvent event = pendingLookupEvent(ResourceLocation.parse("mca:test/escape_cancel_isolated"), providerId);
+        closing.villager().getInteractions().interactAt(closing.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        other.villager().getInteractions().interactAt(other.player(), Vec3.ZERO, InteractionHand.MAIN_HAND);
+        DialogueSession closingSession = DialogueSession.start(closing.player().getUUID(), closing.villager().getUUID(),
+                UUID.randomUUID(), DialogueEvents.INSTANCE.generation(), 982_301L, event);
+        DialogueSession otherSession = DialogueSession.start(other.player().getUUID(), other.villager().getUUID(),
+                UUID.randomUUID(), DialogueEvents.INSTANCE.generation(), 982_302L, event);
+        sessions(engine).put(closing.player().getUUID(), closingSession);
+        sessions(engine).put(other.player().getUUID(), otherSession);
+        try {
+            engine.sendView(closing.player(), new DialogueEngine.DialogueNodeView(closingSession.id(), event.id(),
+                    closingSession.offerToken(), Component.translatable("dialogue.test.line"), false, List.of(),
+                    DialogueEngine.AdvanceKind.BACK_TO_TOPICS));
+            engine.sendView(other.player(), new DialogueEngine.DialogueNodeView(otherSession.id(), event.id(),
+                    otherSession.offerToken(), Component.translatable("dialogue.test.line"), false, List.of(),
+                    DialogueEngine.AdvanceKind.BACK_TO_TOPICS));
+            helper.assertTrue(pendingRequests(engine).snapshot().size() == 2,
+                    "two distinct players must own distinct pending lookups");
+            UUID closingOperation = pendingRequests(engine).snapshot().stream()
+                    .filter(ticket -> ticket.key().playerId().equals(closing.player().getUUID()))
+                    .findFirst().orElseThrow().operationId();
+
+            new InteractionCloseRequest(closing.villager().getUUID(),
+                    closing.villager().getInteractions().interactionId(),
+                    closingSession.id(), closingSession.offerToken()).handleServer(closing.player());
+            helper.assertTrue(cancellations.get() == 1 && closingOperation.equals(cancelled.get()),
+                    "Escape must cancel exactly the closing player's operation");
+            helper.assertTrue(pendingRequests(engine).snapshot().size() == 1
+                            && pendingRequests(engine).snapshot().getFirst().key().playerId().equals(other.player().getUUID()),
+                    "the other player's concurrent lookup must stay pending");
+            helper.assertTrue(sessions(engine).get(other.player().getUUID()).status() == DialogueSession.Status.ACTIVE,
+                    "closing the first player's screen must leave the other session active");
+            helper.succeed();
+        } finally {
+            engine.end(closing.player());
+            engine.end(other.player());
+            closing.villager().getInteractions().stopInteracting();
+            other.villager().getInteractions().stopInteracting();
+            closing.villager().discard();
+            other.villager().discard();
+            removePresentPlayer(closing.player());
+            removePresentPlayer(other.player());
+        }
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void defaultRumorPoolOnlyOffersRegisteredStructures(GameTestHelper helper) {
+        var structures = helper.getLevel().registryAccess().registryOrThrow(Registries.STRUCTURE);
+        for (String configured : new Config().structuresInRumors) {
+            ResourceLocation id = ResourceLocation.tryParse(configured);
+            helper.assertTrue(id != null && structures.getHolder(id).isPresent(),
+                    "default Rumours location " + configured + " must exist in the server structure registry");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void serverStartReplacesTransientDialogueEngineState(GameTestHelper helper) {
         Fixture fixture = fixture(helper);
         DialogueEngine first = MCA.getDialogueEngine().orElseThrow();
@@ -2205,6 +2898,22 @@ public final class DialogueEngineGameTests {
         helper.assertTrue(sessions(second).isEmpty(), "new server engine must not inherit prior sessions");
         helper.assertTrue(offers(second).isEmpty(), "new server engine must not inherit prior menu offers");
         helper.succeed();
+    }
+
+    private static DialogueEvent pendingLookupEvent(ResourceLocation eventId, ResourceLocation providerId) {
+        return DialogueEvent.decode(eventId, JsonParser.parseString("""
+                {
+                  "trigger":"talk",
+                  "presentation":{"mode":"ask","prompt":"dialogue.test.prompt","resume_prompt":"dialogue.test.resume"},
+                  "repeat":{"type":"always"},
+                  "start":"lookup",
+                  "nodes":{"lookup":{
+                    "line":"dialogue.test.line",
+                    "resolve":{"type":"%s","sample":"hold","failure_line":"dialogue.location.forgot"},
+                    "complete":true
+                  }}
+                }
+                """.formatted(providerId)).getAsJsonObject());
     }
 
     private static DialogueEngine engine(DialogueEvent... definitions) {
@@ -2263,6 +2972,7 @@ public final class DialogueEngineGameTests {
         villager.setAgeState(AgeState.ADULT);
         villager.setPos(player.getX() + 1.0D, player.getY(), player.getZ());
         helper.getLevel().addFreshEntity(villager);
+        villager.getInteractions().interactAt(player, Vec3.ZERO, InteractionHand.MAIN_HAND);
         return new Fixture(player, villager);
     }
 
@@ -2290,6 +3000,18 @@ public final class DialogueEngineGameTests {
     }
 
     @SuppressWarnings("unchecked")
+    private static void removePresentPlayer(ServerPlayer player) {
+        try {
+            Object playerList = player.getServer().getPlayerList();
+            Field playersByUuid = playerList.getClass().getSuperclass().getDeclaredField("playersByUUID");
+            playersByUuid.setAccessible(true);
+            ((Map<UUID, ServerPlayer>) playersByUuid.get(playerList)).remove(player.getUUID(), player);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("Could not remove the GameTest fake player", exception);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
     private static Map<UUID, DialogueSession> sessions(DialogueEngine engine) {
         try {
             Field sessionsField = DialogueEngine.class.getDeclaredField("sessions");
@@ -2297,6 +3019,16 @@ public final class DialogueEngineGameTests {
             return (Map<UUID, DialogueSession>) sessionsField.get(engine);
         } catch (ReflectiveOperationException exception) {
             throw new AssertionError("Could not inspect dialogue sessions for GameTest", exception);
+        }
+    }
+
+    private static DialoguePendingRequests pendingRequests(DialogueEngine engine) {
+        try {
+            Field field = DialogueEngine.class.getDeclaredField("pendingRequests");
+            field.setAccessible(true);
+            return (DialoguePendingRequests) field.get(engine);
+        } catch (ReflectiveOperationException exception) {
+            throw new AssertionError("Could not inspect async dialogue ticket ownership", exception);
         }
     }
 

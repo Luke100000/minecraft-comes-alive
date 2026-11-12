@@ -634,6 +634,7 @@
   "gui.button.random": "Random",
   "gui.button.talk": "Talk",
   "gui.dialogue.ask": "Choose a topic...",
+  "gui.dialogue.searching": "Searching for a location...",
   "gui.dialogue.ambient": "Hear what's on their mind",
   "gui.dialogue.ambient_other": "Hear a different thought",
   "gui.dialogue.topics": "Topics",

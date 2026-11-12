@@ -13,6 +13,7 @@ This guide covers the Java implementation of MCA's DialogueEvent system on Minec
 | `DialogueSession` | Transient node/line position, accepted choices, resolved outcomes, effects, status and offer tokens |
 | `DialogueEventHistory` | Saved per-player/villager/event completion history, latest choices and cooldown deadlines |
 | `DialogueAction` | Built-in hearts, mood, memory and command effects |
+| `DialogueAsyncResolver` | Typed async node lookups, the built-in structure locator and registered Java addon providers |
 | `RecentVillagerEvents` | Villager-owned gameplay timestamps used in recent-life-event conditions |
 | `InteractScreen` and `ClientHandlerImpl.DialoguePresentation` | Menu rendering and client-only timed text reveal |
 
@@ -22,7 +23,7 @@ The owners live in `common/src/main/java/net/conczin/mca/`. `MCA.startServer` cr
 
 `DialogueEvents` reloads resources from `data/<namespace>/dialogue_events/<path>.json`. The namespace and path form the event ID; the file contains no separate `id` field. The client gets text from `assets/<namespace>/lang/<locale>.json` in an enabled resource pack or mod. Fabric and NeoForge register the same server datapack reload listener. NeoForge's separate top-level `neoforge:conditions` field is not part of this schema; MCA event-level `requirements` must be used instead. Normal datapack priority resolves duplicate resource paths.
 
-The `DialogueEvent` decoder rejects unknown fields, invalid conditions, bad graph links and malformed weights. The loader validates cross-event story references. Each successful `/reload` replaces the registry snapshot and invalidates stale sessions. For a complete event, translations and field defaults, see the [beginner example](dialogue-datapack-guide.md#2-write-your-first-conversation) and [authoring reference](dialogue-authoring.md#minimal-event).
+The `DialogueEvent` decoder rejects unknown fields, invalid conditions, bad graph links and malformed weights. The optional node `resolve` also rejects unknown resolver types, unsupported node shapes and invalid provider codec fields. The loader validates cross-event story references. Each successful `/reload` replaces the registry snapshot and invalidates stale sessions, offers and pending lookups. For complete event JSON and translations, see the [beginner example](dialogue-datapack-guide.md#2-write-your-first-conversation), [async examples](dialogue-datapack-guide.md#9-resolve-a-dialogue-line-with-an-addon-or-a-structure-search) and [authoring reference](dialogue-authoring.md#minimal-event).
 
 ## 2. Presentation and selection
 
@@ -69,6 +70,8 @@ Outcome selection runs in order: (1) remove outcomes with unmet requirements, (2
 
 For routing before any text, define a node with `outcomes` and no `line`/`lines`. An automatic routing node must include at least one unconditional outcome so a destination remains possible. A reachable `end: true` node in a `once` or `cooldown` event must explicitly set `retryable: true`. Use `complete: true` for successful endings.
 
+An async visible node may add `resolve` to obtain a result before revealing its line. Version 1 requires **one authored `line`**, never `lines` or automatic `outcomes`, and still requires one normal continuation (`next`, `choices`, `complete` or `end`). `resolve` contains a registered namespaced `type`, a required nonblank `failure_line`, an optional `pending_line` defaulting to `gui.dialogue.searching` and provider-specific fields validated by that provider's codec. Success uses the node's authored `line` unless the resolver supplies a validated translation-key override. A missing result, exception or timeout uses `failure_line` without arguments. Both paths resolve via `villager.getTranslatable(player, key, args...)`, preserving the implicit player name at `%1$s` and the first explicit result argument at `%2$s`. The usual dialogue-type, gender, personality, profession and numbered language variants still apply, provided the corresponding client resource pack has those translations.
+
 ## 4. Supported conditions
 
 Event, choice and outcome requirements are typed `DialogueCondition` codecs evaluated against the server state. An array is logical AND. See the [authoring condition reference](dialogue-authoring.md#requirements) for available types and fields.
@@ -99,7 +102,7 @@ Examples:
 { "type": "mca:slap", "amount": 2.0 }
 ```
 
-The current `mca:command` allowlist in `DialogueEngine` is `adopt`, `apologize`, `divorcePapers`, `divorceConfirm`, `hire_short`, `hire_long`, `procreate`, `stay_in_village`, and `location`. The engine allows at most **one** command action in a run and requires the owner to report it accepted before committing. It does not execute arbitrary Minecraft command strings.
+The built-in dialogue commands are `adopt`, `apologize`, `divorcePapers`, `divorceConfirm`, `hire_short`, `hire_long`, `procreate`, `stay_in_village`, and `location`. Additional namespaced commands can be registered by installed Java addons through `InteractionCommands`. Menu packets and authenticated dialogue completion share one server-side dispatcher, but pass different trusted `Source` values. The engine allows at most **one** command action in a run and requires the executor to return an accepted result before committing other actions or history. The separate `closeScreen` result is **not** evidence that a command succeeded. MCA does not run arbitrary Minecraft command strings or datapack-defined functions.
 
 Effects accumulate in the server-side session. Normally they are applied when the player acknowledges a `complete: true` terminal with **Finish conversation**. The engine checks history writability, validates any command, applies authorized actions and records completion. For a reply whose only terminal reaction is a completed one-line typed `mca:slap`, the server commits history and other authorized effects once on choice acceptance, sends the interaction-ID-qualified screen close, and schedules the physical slap three server ticks later. It then sends the existing localized terminal reaction through the villager's chat pipeline once. A stale or repeated choice cannot schedule another hit, and the hit and chat are discarded if either actor becomes unavailable. The old `mca:command` with `slap` fails the command validation and cannot complete. An `end: true` terminal, discarded session or failed commit does not record completion. `mca:hearts` may affect mood too; avoid duplicating that effect.
 
@@ -141,13 +144,16 @@ Interact with MCA villager -> normal interaction screen
     <- InteractionDialogueOptionsResponse
   Select event / ambient / resume -> InteractionDialogueSelectMessage
     DialogueEngine.select(...): validate offer and villager; start/resume session
-    <- InteractionDialogueNodeResponse (current complete line Component)
+    <- InteractionDialoguePendingResponse (session UUID, offer token, pending Component)
+       for a resolved node, followed by InteractionDialogueNodeResponse.active when ready
+    <- InteractionDialogueNodeResponse.active immediately for an ordinary node
   Choose reply -> InteractionDialogueChoiceMessage
     DialogueEngine.choose(...): validate choice, resolve outcome, advance
+    <- pending then active node response when the destination has a resolver
     slap-ending reply: commit once, close interaction, defer hit three ticks, then localized chat
   Next / Finish conversation -> InteractionDialogueAdvanceMessage
     DialogueEngine.advance(...): next passage/node, or commit/end
-    <- InteractionDialogueNodeResponse (active / paused / ended)
+    <- pending response for a resolved destination, or NodeResponse (active / paused / ended)
   Leave Talk / close screen -> InteractionDialogueLeaveMessage / InteractionCloseRequest
     DialogueEngine.pause(...)
 ```
@@ -156,7 +162,17 @@ Interact with MCA villager -> normal interaction screen
 
 Closing the screen or moving out of range pauses an unfinished run for **2,400 overworld game ticks**. The player can reopen Talk with the same villager and explicitly select the topic-specific continuation. Browsing the menu does not resume or extend the pause. Starting a different valid event abandons it. Paused sessions do not survive logout, server stop, resource reload, permanent villager removal, or the pause deadline. A datapack reload increments `DialogueEvents.generation()` and invalidates stale sessions/offers.
 
-The server sends complete text Components for each passage. `ClientHandlerImpl.DialoguePresentation` reveals one Unicode grapheme every **40 ms**, without per-character packets. Replies, `Next` and ordinary **Finish conversation** appear after the passage is fully revealed. Early clicks cannot skip or queue progress. `InteractScreen` renders the five expandable sections and their entries. Presentation timing never grants completion or rewards; the slap-ending exception is a server-owned choice transition.
+The server sends complete text Components for each passage. `ClientHandlerImpl.DialoguePresentation` reveals one Unicode grapheme every **40 ms**, without per-character packets. While a regular passage reveals, the reply panel shows one disabled grey row with three subtly bouncing square dots. A **genuinely server-confirmed pending resolver** shows that same row plus a localized pending sentence and indeterminate bar in the parchment. Once ready, the bar disappears and the result reveals normally. Actual choices, `Next` or ordinary **Finish conversation** become available together after reveal. There is no artificial minimum wait, percentage, or async bar for ordinary typing. Currently, setting Minecraft's **Panorama Speed** to zero disables these animations and leaves a static strip; there is no separate MCA reduced-motion toggle. History browsing must not re-enable live replies, and scrolling, parchment placement, footer and HUD clearance remain as before. Early clicks cannot skip or queue progress. Presentation timing never grants completion or rewards; the slap-ending exception is a server-owned choice transition.
+
+### Pending tickets, completion and cancellation
+
+On entry to a resolved visible node, including automatic routing and choice/advance transitions, `DialogueEngine` installs **at most one pending request per player session**. Its ticket binds the player UUID, villager UUID, session UUID, resource generation, offer token, node ID, passage index, resolver and a newly generated **operation UUID**. The server sends `InteractionDialoguePendingResponse(UUID sessionId, long offerToken, Component pendingLine)` before any ready node response, including when a future is already complete. Pending and ready responses are correlated by session and token. The client ignores out-of-order or duplicate responses for an old session/token.
+
+While pending, no choices, advancement or completion are accepted. Duplicate inbound selections cannot launch a second search or apply effects. A hard **600-server-tick (30-second)** deadline turns unfinished valid work into the localized failure line. Closing or leaving Talk, pausing, logout, death, changing player/villager or world, losing interaction ownership, token replacement, datapack reload and server stop invalidate the ticket. The engine detaches the ticket **before** calling `resolver.cancel(operationId)` on the server thread, so even synchronous cancellation callbacks cannot revive it. A paused, unresolved read-only lookup can restart only when the player explicitly chooses Resume, using a fresh ticket, token and operation UUID.
+
+All provider completions, including already-completed and exceptional futures, must return through the Minecraft server executor before touching game state. The completion path then checks that the ticket is still current and matches player, villager, session, token, generation, node, passage, live world and interaction owner. Invalid or late results are discarded even when the underlying provider could not be cancelled. Exceptions, cancelled jobs and executor failures resolve to controlled fallback behavior while the session is valid. Futures and live entity references stay out of persisted sessions/history. Only a subsequent ordinary final acknowledgment can commit rewards, commands and history once.
+
+The built-in `mca:structure_location` passes this **operation UUID**, distinct for every player, request and Resume, as the owner to `AsyncStructureLocator.locate`, then calls `AsyncStructureLocator.cancel` with that exact owner. It preserves the locator's temporary chunk-ticket cleanup. It never uses the villager UUID, which also owns the unrelated legacy `location` command's search, so cancelling a dialogue lookup cannot cancel that legacy request. Exactly one selector is required, either `pool: "configured_rumors"` from `Config.structuresInRumors` or `structure: "namespace:path"` from the registered world structures. The existing random origin offset uses horizontal range `1024`, vertical `0`, and radius `64`. A successful lookup overrides the authored line with `dialogue.location.<structurePath>` and passes the exact `x,y,z` string as the first explicit translator argument, filling **`%2$s`**. Missing structures, empty pools, misses, exceptions or timeouts use `dialogue.location.forgot`, with its existing numbered locale variants. The outcome appears **inside the parchment**, without sending a vanilla chat message. The unrelated `VillagerCommandHandler` gameplay `location` command keeps its chat behavior. Other `mca:command` effects still follow normal deferred commit and command-authorization rules.
 
 ## 8. Extending functionality in Java
 
@@ -179,6 +195,59 @@ DialogueAction.register(
 These types can be used as `{"type":"myaddon:min_experience","levels":5}` in event/choice/outcome requirements and `{"type":"myaddon:add_experience","levels":1}` in choice/outcome actions. Codecs parse the object **without `type`**, and must serialize an object without that field. Invalid or unknown types reject the containing resource. Registered action executors run on the logical server when the dialogue completes, ordinarily upon final acknowledgement and immediately on the supported slap-ending choice transition; they should not throw after applying partial effects. Condition evaluations must preserve `UNAVAILABLE` when a referenced dependency is missing, including under `mca:not`.
 
 The registry is process-wide, and IDs cannot be duplicated or override built-in types. There is **no legacy `Actions.register`/`GiftPredicate.register` compatibility adapter**. See the [datapack guide](dialogue-datapack-guide.md) for a complete matching JSON example.
+
+### Register a server-side interaction command
+
+Call `InteractionCommands.register` from the addon's **common initialization**, before players use the dialogue or menu. For example (illustrative Java addon code):
+
+```java
+InteractionCommands.register(
+    ResourceLocation.fromNamespaceAndPath("myaddon", "inspect"),
+    context -> context.villager() instanceof VillagerEntityMCA,
+    context -> {
+        VillagerEntityMCA villager = (VillagerEntityMCA) context.villager();
+        villager.sendChatMessage(context.player(), "myaddon.inspect.done");
+        return VillagerCommandHandler.DialogueCommandResult.accepted(false);
+    }
+);
+```
+
+The same registered command can be invoked from a choice/outcome action, without any new effect codec:
+
+```json
+{ "type": "mca:command", "command": "myaddon:inspect" }
+```
+
+Or from an existing client resource-pack GUI layout button (with the corresponding translation key):
+
+```json
+{ "identifier": "gui.myaddon.inspect", "notifyServer": true,
+  "targetServer": false, "command": "myaddon:inspect" }
+```
+
+The optional button `command` is independent of its display identifier. Existing buttons without it keep their original identifier-derived command. An explicitly blank command sends nothing. The server must have the Java addon installed and loaded; a datapack or resource pack cannot register a callback. `Context.source()` is `MENU` or `DIALOGUE`, chosen by the server; an addon's read-only eligibility predicate can accept one or both. The dispatcher checks live player/villager, range, current interaction UUID and source eligibility on the server thread immediately before execution. A denial or missing command rejects without closing the screen. Callback exceptions are logged and rejected, but arbitrary mutations made *before* an exception cannot be rolled back. Do not perform slow/blocking work in a synchronous command callback, and never assume client UI resources confer authority.
+
+### Register a generic async node resolver
+
+`DialogueAsyncResolver.register(ResourceLocation id, Codec<T> codec, DialogueAsyncResolver.Provider<T> provider)` registers a namespaced type during **common mod initialization before the dialogue datapack reload**. The registry and decoder live in shared MCA code for Fabric and NeoForge. An addon must supply and install its Java implementation on the server for the configured type to exist. The following is **illustrative addon code** for `landmarkaddon:landmark_note`, not an existing MCA provider. It matches the [complete addon event and resource-pack example](dialogue-datapack-guide.md#9-resolve-a-dialogue-line-with-an-addon-or-a-structure-search).
+
+```java
+DialogueAsyncResolver.register(
+    ResourceLocation.fromNamespaceAndPath("landmarkaddon", "landmark_note"),
+    Codec.STRING.fieldOf("clue").codec(),
+    (clue, context, operationId) -> CompletableFuture.completedFuture(
+        "old_well".equals(clue)
+            ? DialogueAsyncResolver.Result.found("348,70,-126")
+            : DialogueAsyncResolver.Result.missing()
+    )
+);
+```
+
+The snippet requires imports for `DialogueAsyncResolver`, `ResourceLocation`, `Codec` and `CompletableFuture`. It uses an already-completed future to illustrate the schema, so its pending animation may be imperceptible. A real provider implements `Provider<T>.resolve(T parameters, DialogueContext context, UUID operationId)` and returns `CompletionStage<DialogueAsyncResolver.Result>`. It can override `Provider<T>.cancel(T parameters, UUID operationId)` to stop owned work. The default cancel is a no-op, and the engine still guards against late callbacks. The engine calls the resolved node instance's `DialogueAsyncResolver.resolve(context, operationId)` and `cancel(operationId)` with the same identity.
+
+The codec reads and writes only provider-specific parameters, such as `clue`, as an object without the reserved `type`, `pending_line` or `failure_line` fields. Unknown IDs, extra fields, malformed parameters, blank keys and duplicate registrations are rejected. A provider returns `Result.found(args...)` to use the authored success `line`, `Result.withKey(key, args...)` to select a validated nonblank alternate translation key, or `Result.missing()` for the authored failure line. String arguments have bounded size and count. The server resolves the selected key with `villager.getTranslatable(player, key, args...)`, preserving `%1$s` for the player and `%2$s` for the first explicit argument, including coordinates. Language variants are selected by the normal MCA translation pipeline, and each client requires matching localized assets. The server validates key syntax but cannot detect a missing client translation.
+
+Providers must be **idempotent and read-only**. Capture safe immutable inputs before background work, marshal completions to the server executor, and leave mutable entity, world, registry and session access on the server thread. A resolver does not apply commands, rewards or completion history. Datapacks only configure built-in or installed addon Java providers with validated codec fields. They cannot register executable Java, scripts or arbitrary commands. For `mca:structure_location`, the built-in resolver performs the registered-structure search and preserves the legacy location translations and cancellation ownership described above.
 
 If new behavior is necessary, add it at its existing owner:
 
@@ -218,5 +287,9 @@ Also inspect the client in game for reveal pacing, click targets and menu layout
 When an event does not appear, inspect the resource ID/path, active pack, reload log, schema validation, conditions and repeat policy. `DialogueEvents` logs and skips invalid resources, validates history references, and warns about prerequisite cycles. A missing addon event reference remains unavailable at runtime. For displayed translation keys, check the client resource and exact `prompt`, `resume_prompt`, `line` and `text` keys. A missing translation does not change server eligibility.
 
 For a conversation that ends unexpectedly, distinguish a deliberate `end` terminal from an unsuccessful command commit, expired or invalidated pause, stale offer token, or invalid interaction. A revealed line alone never commits effects.
+
+For async content, verify the addon has registered its resolver before `/reload`, the `resolve` object matches its codec, and the player has enabled the corresponding client resource pack. Unknown resolver IDs, malformed `failure_line`, unsupported `lines`/`outcomes`, conflicting `pool`/`structure` and extra fields are reload errors. For a valid but unsuccessful `mca:structure_location` search, check `Config.structuresInRumors`, registered structure IDs and the 600-tick deadline. A missing or failed lookup resolves to the localized failure line. If a translation key is visible, inspect the precise client locale and MCA's numbered `dialogue.location.<structurePath>/N` or `dialogue.location.forgot/N` variants, then refresh client resources with F3+T. A typing-only three-dot row is expected without an async bar.
+
+The async integration smoke matrix should cover immediate and delayed successful results, misses and timeouts, provider exception/cancellation, repeated clicks, pause and explicit Resume, player logout/death, switch to another villager, `/reload` during search, server shutdown, stale token/session or cross-villager callbacks, and simultaneous players. Verify the parchment result contains coordinates when found, **no dialogue lookup result is sent to vanilla chat**, and rewards/history commit once only at the supported completion point. Exercise normal and reduced-motion reveal, empty choice sets, Finish, both parchment placements and small GUI scales. Test both **Fabric and NeoForge**, including dedicated-server class loading and a real client screen. This is a verification checklist for the P4/P2 implementation owners, not evidence that those tests have run.
 
 For content examples, see [DialogueEvent authoring](dialogue-authoring.md). The [design specification](superpowers/specs/2026-10-06-dialogue-event-conversation-system-design.md) records earlier decisions; the rules here reflect the implemented 1.21.1 code. Real-client and multiplayer testing on both loaders is still required for release confidence; automated server tests alone cannot verify UI and network behavior.

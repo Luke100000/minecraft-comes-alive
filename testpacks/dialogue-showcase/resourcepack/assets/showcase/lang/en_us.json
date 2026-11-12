@@ -10,9 +10,10 @@
   "showcase.welcome.honest": "That's fair. It took me a long time to settle in, too.",
   "showcase.welcome.honest_end": "If you ever want a story about this place, ask me.",
 
-  "showcase.bridge.prompt": "Ask about the old bridge",
+  "showcase.bridge.prompt": "Ask about <copy><hover:showcase.copy_hint>the old bridge</hover></copy>",
+  "showcase.copy_hint": "Copy phrase",
   "showcase.bridge.resume": "We hadn't finished talking about the old bridge...",
-  "showcase.bridge.opening": "There's a ruined bridge beyond the fields. Most people only see rotten planks.",
+  "showcase.bridge.opening": "There's a <color:#56C8C2><italic>ruined bridge</italic></color> beyond the fields. Most people only see rotten planks.",
   "showcase.bridge.explanation": "My family used to cross it every market day. I still remember the sound of the boards under their feet.",
   "showcase.bridge.question": "Sometimes I think I'm the only person who remembers it that way. Does that sound foolish?",
   "showcase.bridge.listen": "No. Tell me what those days were like.",

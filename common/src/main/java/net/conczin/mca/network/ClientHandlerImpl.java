@@ -351,7 +351,7 @@ public class ClientHandlerImpl implements ClientHandler {
         private boolean hasLatestToken;
         private InteractionDialogueNodeResponse.Node node;
         private Component resolvedLine = Component.empty();
-        private final List<Component> speechHistory = new ArrayList<>();
+        private final List<HistoryEntry> speechHistory = new ArrayList<>();
         private int reviewIndex = -1;
         private List<Integer> revealCuts = List.of();
         private int revealedCharacters;
@@ -363,6 +363,7 @@ public class ClientHandlerImpl implements ClientHandler {
         private boolean nodeVisible;
         private boolean menuMode;
         private DialogueEngine.DialogueSelection pendingSelection;
+        private ChoiceRequest pendingChoice;
         private boolean pendingAsync;
         private Component pendingLine = Component.empty();
 
@@ -397,16 +398,21 @@ public class ClientHandlerImpl implements ClientHandler {
             }
             menuMode = true;
             pendingSelection = null;
+            pendingChoice = null;
             rememberToken(response.offerToken());
             return true;
         }
 
         public boolean acceptSelectionRejection(long rejectedToken) {
-            return (nodeVisible && offerToken == rejectedToken)
+            boolean accepted = (nodeVisible && offerToken == rejectedToken)
                     || (pendingSelection != null
                     && options != null
                     && !nodeVisible
                     && options.offerToken() == rejectedToken);
+            if (accepted) {
+                pendingChoice = null;
+            }
+            return accepted;
         }
 
         public boolean acceptNode(InteractionDialogueNodeResponse response, long nowMillis, Locale locale) {
@@ -435,6 +441,8 @@ public class ClientHandlerImpl implements ClientHandler {
                 speechHistory.clear();
                 reviewIndex = -1;
             }
+            acknowledgeChoice(response.sessionId(), response.offerToken());
+            pendingChoice = null;
             sessionId = response.sessionId();
             offerToken = response.offerToken();
             node = null;
@@ -493,9 +501,12 @@ public class ClientHandlerImpl implements ClientHandler {
                 reviewIndex = -1;
                 if (pendingSelection == DialogueEngine.DialogueSelection.AMBIENT
                         && hasPreview() && !previewLine.getString().isEmpty()) {
-                    rememberSpeech(previewLine);
+                    rememberSpeech(previewLine, List.of(), DialogueEngine.AdvanceKind.NONE);
                 }
             }
+
+            acknowledgeChoice(response.sessionId(), response.offerToken());
+            pendingChoice = null;
 
             sessionId = response.sessionId();
             offerToken = response.offerToken();
@@ -514,7 +525,15 @@ public class ClientHandlerImpl implements ClientHandler {
                 revealCuts = revealCuts(resolved.text(), locale);
                 revealedCharacters = 0;
                 nextRevealAt = saturatingAdd(nowMillis, CHARACTER_REVEAL_MILLIS);
-                rememberSpeech(resolvedLine);
+                rememberSpeech(resolvedLine, incoming.choices(), incoming.advanceKind());
+            }
+            if ((preserveResume || preserveCurrentLine) && !speechHistory.isEmpty()
+                    && !resolvedLine.getString().isEmpty()) {
+                // Resume and same-offer refreshes can change choices without adding a speech line.
+                int index = speechHistory.size() - 1;
+                HistoryEntry previous = speechHistory.get(index);
+                speechHistory.set(index, new HistoryEntry(previous.line(), incoming.choices(),
+                        incoming.advanceKind(), previous.selectedChoiceId()));
             }
 
             pendingSelection = null;
@@ -531,6 +550,7 @@ public class ClientHandlerImpl implements ClientHandler {
             options = null;
             nodeVisible = false;
             pendingSelection = null;
+            pendingChoice = null;
             clearPending();
             if (response.state() == InteractionDialogueNodeResponse.State.ENDED) {
                 terminatedSessionId = sessionId;
@@ -565,6 +585,7 @@ public class ClientHandlerImpl implements ClientHandler {
             nodeVisible = false;
             menuMode = false;
             pendingSelection = null;
+            pendingChoice = null;
             clearPending();
         }
 
@@ -573,6 +594,7 @@ public class ClientHandlerImpl implements ClientHandler {
             nodeVisible = false;
             menuMode = true;
             pendingSelection = null;
+            pendingChoice = null;
             clearPending();
         }
 
@@ -580,11 +602,25 @@ public class ClientHandlerImpl implements ClientHandler {
             options = null;
             menuMode = false;
             pendingSelection = null;
+            pendingChoice = null;
         }
 
         public void markSelectionRequested(DialogueEngine.DialogueSelection selection) {
             pendingSelection = Objects.requireNonNull(selection, "selection");
+            pendingChoice = null;
             menuMode = false;
+        }
+
+        /** Remember the offered answer until the server accepts a newer state for this session. */
+        public void markChoiceRequested(long requestedToken, String choiceId) {
+            Objects.requireNonNull(choiceId, "choiceId");
+            if (!nodeVisible || reviewingHistory() || node == null || sessionId == null
+                    || offerToken != requestedToken || speechHistory.isEmpty()
+                    || resolvedLine.getString().isEmpty()
+                    || node.choices().stream().noneMatch(choice -> choice.id().equals(choiceId))) {
+                return;
+            }
+            pendingChoice = new ChoiceRequest(sessionId, requestedToken, choiceId, speechHistory.size() - 1);
         }
 
         public Optional<InteractionDialogueOptionsResponse> options() {
@@ -641,7 +677,7 @@ public class ClientHandlerImpl implements ClientHandler {
 
         public Component fullLine() {
             if (reviewingHistory()) {
-                return speechHistory.get(reviewIndex);
+                return speechHistory.get(reviewIndex).line();
             }
             return hasPreview() && !nodeVisible ? previewLine : resolvedLine;
         }
@@ -661,7 +697,7 @@ public class ClientHandlerImpl implements ClientHandler {
 
         public Component visibleLine() {
             if (reviewingHistory()) {
-                return speechHistory.get(reviewIndex);
+                return speechHistory.get(reviewIndex).line();
             }
             if (hasPreview() && !nodeVisible) {
                 if (previewRevealed == 0 || previewLine.getString().isEmpty()) {
@@ -744,11 +780,16 @@ public class ClientHandlerImpl implements ClientHandler {
             latestToken = 0L;
             menuMode = false;
             pendingSelection = null;
+            pendingChoice = null;
             dropSnapshot();
         }
 
         public boolean reviewingHistory() {
             return nodeVisible && reviewIndex >= 0;
+        }
+
+        public Optional<HistoryEntry> reviewedEntry() {
+            return reviewingHistory() ? Optional.of(speechHistory.get(reviewIndex)) : Optional.empty();
         }
 
         public boolean canReviewPrevious() {
@@ -783,19 +824,45 @@ public class ClientHandlerImpl implements ClientHandler {
             return true;
         }
 
-        private void rememberSpeech(Component line) {
+        private void rememberSpeech(Component line, List<InteractionDialogueNodeResponse.Choice> choices,
+                                    DialogueEngine.AdvanceKind advanceKind) {
             if (line.getString().isEmpty()) {
                 return;
             }
-            speechHistory.add(line);
+            speechHistory.add(new HistoryEntry(line, choices, advanceKind, Optional.empty()));
             if (speechHistory.size() > MAX_REVIEW_LINES) {
                 speechHistory.removeFirst();
             }
             reviewIndex = -1;
         }
 
+        private void acknowledgeChoice(UUID acceptedSession, long acceptedToken) {
+            if (pendingChoice == null || !pendingChoice.sessionId().equals(acceptedSession)
+                    || !isNewerToken(acceptedToken, pendingChoice.offerToken())
+                    || pendingChoice.historyIndex() >= speechHistory.size()) {
+                return;
+            }
+            int index = pendingChoice.historyIndex();
+            HistoryEntry entry = speechHistory.get(index);
+            speechHistory.set(index, new HistoryEntry(entry.line(), entry.choices(), entry.advanceKind(),
+                    Optional.of(pendingChoice.choiceId())));
+        }
+
+        public record HistoryEntry(Component line, List<InteractionDialogueNodeResponse.Choice> choices,
+                                   DialogueEngine.AdvanceKind advanceKind, Optional<String> selectedChoiceId) {
+            public HistoryEntry {
+                Objects.requireNonNull(line, "line");
+                choices = List.copyOf(choices);
+                Objects.requireNonNull(advanceKind, "advanceKind");
+                Objects.requireNonNull(selectedChoiceId, "selectedChoiceId");
+            }
+        }
+
+        private record ChoiceRequest(UUID sessionId, long offerToken, String choiceId, int historyIndex) { }
+
         private void dropSnapshot() {
             clearPending();
+            pendingChoice = null;
             speechHistory.clear();
             reviewIndex = -1;
             sessionId = null;

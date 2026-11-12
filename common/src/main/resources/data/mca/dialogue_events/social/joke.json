@@ -71,6 +71,7 @@
             },
             {
               "weight": 2,
+                "fatigue": 1.0,
               "actions": [
                 { "type": "mca:hearts", "amount": -2 }
               ],
@@ -131,6 +132,7 @@
             },
             {
               "weight": 2,
+                "fatigue": 1.0,
               "actions": [
                 { "type": "mca:hearts", "amount": -2 }
               ],
@@ -199,6 +201,7 @@
             },
             {
               "weight": 2,
+                "fatigue": 1.0,
               "actions": [
                 { "type": "mca:hearts", "amount": -2 }
               ],
@@ -226,7 +229,7 @@
     },
     "success": {
       "line": "dialogue_event.mca.social.joke.creative.success",
-      "complete": true
+      "next": "creative_followup"
     },
     "fail": {
       "line": "dialogue_event.mca.social.joke.creative.fail",
@@ -234,18 +237,78 @@
     },
     "animal_success": {
       "line": "dialogue_event.mca.social.joke.animal.success",
-      "complete": true
+      "next": "animal_followup"
     },
     "animal_fail": {
       "line": "dialogue_event.mca.social.joke.animal.fail",
-      "complete": true
+      "next": "animal_fail_followup"
     },
     "monster_success": {
       "line": "dialogue_event.mca.social.joke.monster.success",
-      "complete": true
+      "next": "monster_followup"
     },
     "monster_fail": {
       "line": "dialogue_event.mca.social.joke.monster.fail",
+      "complete": true
+    },
+    "creative_followup": {
+      "line": "dialogue_event.mca.social.joke.followup.creative",
+      "choices": [
+        { "id": "creative_own", "text": "dialogue_event.mca.social.joke.choice.creative_own", "next": "creative_own_reply" },
+        { "id": "creative_heard", "text": "dialogue_event.mca.social.joke.choice.creative_heard", "next": "creative_heard_reply" }
+      ]
+    },
+    "animal_followup": {
+      "line": "dialogue_event.mca.social.joke.followup.animal",
+      "choices": [
+        { "id": "animal_brave", "text": "dialogue_event.mca.social.joke.choice.animal_brave", "next": "animal_brave_reply" },
+        { "id": "animal_careful", "text": "dialogue_event.mca.social.joke.choice.animal_careful", "next": "animal_careful_reply" }
+      ]
+    },
+    "animal_fail_followup": {
+      "line": "dialogue_event.mca.social.joke.followup.animal_fail",
+      "choices": [
+        { "id": "animal_made_up", "text": "dialogue_event.mca.social.joke.choice.animal_made_up", "next": "animal_made_up_reply" },
+        { "id": "animal_borrowed", "text": "dialogue_event.mca.social.joke.choice.animal_borrowed", "next": "animal_borrowed_reply" }
+      ]
+    },
+    "monster_followup": {
+      "line": "dialogue_event.mca.social.joke.followup.monster",
+      "choices": [
+        { "id": "monster_safe", "text": "dialogue_event.mca.social.joke.choice.monster_safe", "next": "monster_safe_reply" },
+        { "id": "monster_puns", "text": "dialogue_event.mca.social.joke.choice.monster_puns", "next": "monster_puns_reply" }
+      ]
+    },
+    "creative_own_reply": {
+      "line": "dialogue_event.mca.social.joke.reply.creative_own",
+      "complete": true
+    },
+    "creative_heard_reply": {
+      "line": "dialogue_event.mca.social.joke.reply.creative_heard",
+      "complete": true
+    },
+    "animal_brave_reply": {
+      "line": "dialogue_event.mca.social.joke.reply.animal_brave",
+      "complete": true
+    },
+    "animal_careful_reply": {
+      "line": "dialogue_event.mca.social.joke.reply.animal_careful",
+      "complete": true
+    },
+    "animal_made_up_reply": {
+      "line": "dialogue_event.mca.social.joke.reply.animal_made_up",
+      "complete": true
+    },
+    "animal_borrowed_reply": {
+      "line": "dialogue_event.mca.social.joke.reply.animal_borrowed",
+      "complete": true
+    },
+    "monster_safe_reply": {
+      "line": "dialogue_event.mca.social.joke.reply.monster_safe",
+      "complete": true
+    },
+    "monster_puns_reply": {
+      "line": "dialogue_event.mca.social.joke.reply.monster_puns",
       "complete": true
     }
   }

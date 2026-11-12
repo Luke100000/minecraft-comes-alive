@@ -20,6 +20,160 @@ class DialogueEventParsingTest {
     private static final ResourceLocation EVENT_ID = ResourceLocation.fromNamespaceAndPath("mca", "personal/test");
 
     @Test
+    void ambientFatigueAndTerminalCloseDecodeWithoutChangingOldDefaults() {
+        DialogueEvent refusal = decode("""
+                {
+                  "trigger":"talk",
+                  "presentation":{"mode":"ambient","resume_prompt":"r"},
+                  "weight":-3,"fatigue":1,
+                  "repeat":{"type":"cooldown","seconds":0},
+                  "history":"scheduling",
+                  "start":"end",
+                  "nodes":{"end":{"line":"dialogue.busy","complete":true,"close_interaction":true}}
+                }
+                """);
+        assertEquals(1.0, refusal.fatigue());
+        assertTrue(refusal.nodes().get("end").closeInteraction());
+
+        DialogueEvent old = decode(simpleEvent("intro", "{\"line\":\"old\",\"complete\":true}"));
+        assertEquals(0.0, old.fatigue());
+        assertTrue(!old.nodes().get("intro").closeInteraction());
+
+        assertDecodeFails(simpleEvent("intro", "{\"line\":\"bad\",\"end\":true,\"close_interaction\":true}"));
+        assertDecodeFails(simpleEvent("intro", "{\"line\":\"bad\",\"complete\":true,\"close_interaction\":\"yes\"}"));
+        assertDecodeFails(simpleEvent("intro", "{\"line\":\"bad\",\"complete\":true,\"close_interaction\":true,\"next\":\"intro\"}"));
+    }
+
+    @Test
+    void eventFatigueMustBeFiniteNonnegativeAndAmbientOnly() {
+        String base = """
+                {"trigger":"talk","presentation":{"mode":"ambient","resume_prompt":"r"},
+                 "repeat":{"type":"cooldown","seconds":0},"start":"end",
+                 "nodes":{"end":{"line":"line","complete":true}},
+                 "weight":%s,"fatigue":%s}
+                """;
+        for (String fatigue : List.of("-1", "1e999", "\"bad\"")) {
+            assertDecodeFails(base.formatted("1", fatigue));
+        }
+        assertDecodeFails(base.formatted("0", "0"));
+        assertDecodeFails(base.formatted("0", "-1"));
+        assertDecodeFails(base.formatted("1e999", "1"));
+        assertDecodeFails(base.formatted("1", "1").replace("\"ambient\",\"resume_prompt\"",
+                "\"ask\",\"prompt\":\"p\",\"resume_prompt\""));
+    }
+
+    @Test
+    void fatigueIsOptionalAndAvailableToChoiceAndAutomaticOutcomes() {
+        DialogueEvent event = decode(fatigueEvent("1.0"));
+        assertEquals(1.0, event.nodes().get("intro").choices().orElseThrow()
+                .getFirst().outcomes().orElseThrow().getFirst().fatigue());
+        assertEquals(0.5, event.nodes().get("routed").outcomes().orElseThrow().getFirst().fatigue());
+        assertEquals(0.0, new DialogueEvent.Outcome(List.of(), 1.0, List.of(), "done", 0).fatigue());
+        assertEquals(0.0, decode(fatigueEvent("0.0")).nodes().get("intro")
+                .choices().orElseThrow().getFirst().outcomes().orElseThrow().getFirst().fatigue());
+    }
+
+    @Test
+    void fatigueRejectsInvalidDatapackValues() {
+        for (String value : List.of("-1", "\"bad\"", "{}", "1e999")) {
+            assertDecodeFails(fatigueEvent(value));
+        }
+    }
+
+    private static String fatigueEvent(String value) {
+        return """
+                {
+                  "trigger":"talk",
+                  "presentation":{"mode":"ask","prompt":"p","resume_prompt":"r"},
+                  "repeat":{"type":"always"},
+                  "start":"intro",
+                  "nodes":{
+                    "intro":{"line":"intro","choices":[{
+                      "id":"tell","text":"tell",
+                      "outcomes":[{"weight":2,"fatigue":%s,"next":"routed"}]
+                    }]},
+                    "routed":{"outcomes":[{"weight":2,"fatigue":0.5,"next":"done"}]},
+                    "done":{"line":"done","complete":true}
+                  }
+                }
+                """.formatted(value);
+    }
+
+
+
+    @Test
+    void structureLocationResolverLoadsAsOptionalDatapackNode() {
+        DialogueEvent event = decode(simpleEvent(
+                "intro",
+                """
+                {
+                  "line":"dialogue_event.mca.social.rumors.location",
+                  "resolve":{
+                    "type":"mca:structure_location",
+                    "pool":"configured_rumors",
+                    "pending_line":"gui.dialogue.searching",
+                    "failure_line":"dialogue.location.forgot"
+                  },
+                  "complete":true
+                }
+                """,
+                "{\"type\":\"always\"}"
+        ));
+        DialogueEvent.Node node = event.nodes().get("intro");
+        assertEquals("dialogue_event.mca.social.rumors.location", node.lines().getFirst());
+        DialogueAsyncResolver.StructureLocation resolver = assertInstanceOf(
+                DialogueAsyncResolver.StructureLocation.class, node.resolve().orElseThrow());
+        assertEquals("configured_rumors", resolver.pool().orElseThrow());
+    }
+
+    @Test
+    void asyncNodeRoundTripsWithoutChangingLegacyEvents() {
+        DialogueEvent event = decode(simpleEvent("intro", """
+                {"line":"rumor.found","resolve":{"type":"mca:structure_location",
+                 "structure":"minecraft:village_plains","failure_line":"rumor.failed"},"complete":true}
+                """));
+        DialogueAsyncResolver resolver = event.nodes().get("intro").resolve().orElseThrow();
+        var encoded = DialogueAsyncResolver.CODEC.encodeStart(JsonOps.INSTANCE, resolver).getOrThrow();
+        assertEquals(resolver, DialogueAsyncResolver.CODEC.parse(JsonOps.INSTANCE, encoded).getOrThrow());
+        assertEquals("gui.dialogue.searching", resolver.pendingLine());
+        assertTrue(decode(simpleEvent("intro", "{\"line\":\"ordinary\",\"complete\":true}"))
+                .nodes().get("intro").resolve().isEmpty());
+    }
+
+    @Test
+    void invalidResolveConfigIsRejected() {
+        for (String resolver : List.of(
+                "{\"type\":\"mca:structure_location\",\"pool\":\"configured_rumors\"}",
+                "{\"type\":\"mca:structure_location\",\"pool\":\"configured_rumors\",\"failure_line\":\" \"}",
+                "{\"type\":\"mca:structure_location\",\"pool\":\"configured_rumors\",\"failure_line\":\"missing\",\"typo\":true}",
+                "{\"type\":\"mca:structure_location\",\"structure\":\"invalid id!\",\"failure_line\":\"missing\"}",
+                "{\"type\":\"mca:structure_location\",\"pool\":\"configured_rumors\",\"structure\":\"minecraft:village_plains\",\"failure_line\":\"missing\"}"
+        )) {
+            assertDecodeFails(simpleEvent("intro", "{\"line\":\"location\",\"resolve\":"
+                    + resolver + ",\"complete\":true}"));
+        }
+        String resolver = "{\"type\":\"mca:structure_location\",\"pool\":\"configured_rumors\",\"failure_line\":\"missing\"}";
+        assertDecodeFails(simpleEvent("intro", "{\"lines\":[\"a\"],\"resolve\":"
+                + resolver + ",\"complete\":true}"));
+        assertDecodeFails(simpleEvent("intro", "{\"line\":\"a\",\"resolve\":"
+                + resolver + ",\"outcomes\":[{\"next\":\"intro\"}]}"));
+    }
+
+    @Test
+    void unknownResolveTypeIsRejected() {
+        assertDecodeFails(simpleEvent("intro", """
+                {"line":"location","resolve":{"type":"addon:missing",
+                 "failure_line":"missing"},"complete":true}
+                """));
+    }
+
+    @Test
+    void asyncResultRequiresNonblankLineOverride() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new DialogueAsyncResolver.Result(true, java.util.Optional.of(" "), List.of("coordinates")));
+    }
+
+    @Test
     void biomeUsesOnlyValuesArrayAndSupportsTagsAndScope() {
         for (String selector : List.of(
                 "{\"type\":\"mca:biome\",\"values\":[\"minecraft:plains\"]}",

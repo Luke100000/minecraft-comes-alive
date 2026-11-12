@@ -39,6 +39,7 @@
             },
             {
               "weight": 2,
+              "fatigue": 1.0,
               "actions": [
                 { "type": "mca:hearts", "amount": -2 }
               ],
@@ -53,7 +54,8 @@
             {
               "weight": 1,
               "actions": [
-                { "type": "mca:hearts", "amount": 8 }
+                { "type": "mca:hearts", "amount": 8 },
+                { "type": "mca:remember", "id": "story.exploring", "var": "player", "time": 24000 }
               ],
               "next": "exploring_success"
             },
@@ -61,7 +63,8 @@
               "requirements": [{ "type": "mca:personality", "value": "friendly" }],
               "weight": 1,
               "actions": [
-                { "type": "mca:hearts", "amount": 8 }
+                { "type": "mca:hearts", "amount": 8 },
+                { "type": "mca:remember", "id": "story.exploring", "var": "player", "time": 24000 }
               ],
               "next": "exploring_success"
             },
@@ -69,7 +72,8 @@
               "requirements": [{ "type": "mca:advancement", "value": "minecraft:adventure/shoot_arrow" }],
               "weight": 5,
               "actions": [
-                { "type": "mca:hearts", "amount": 8 }
+                { "type": "mca:hearts", "amount": 8 },
+                { "type": "mca:remember", "id": "story.exploring", "var": "player", "time": 24000 }
               ],
               "next": "exploring_success"
             },
@@ -77,7 +81,8 @@
               "requirements": [{ "type": "mca:advancement", "value": "minecraft:adventure/kill_all_mobs" }],
               "weight": 5,
               "actions": [
-                { "type": "mca:hearts", "amount": 8 }
+                { "type": "mca:hearts", "amount": 8 },
+                { "type": "mca:remember", "id": "story.exploring", "var": "player", "time": 24000 }
               ],
               "next": "exploring_success"
             },
@@ -85,7 +90,8 @@
               "requirements": [{ "type": "mca:advancement", "value": "minecraft:adventure/fall_from_world_height" }],
               "weight": 5,
               "actions": [
-                { "type": "mca:hearts", "amount": 8 }
+                { "type": "mca:hearts", "amount": 8 },
+                { "type": "mca:remember", "id": "story.exploring", "var": "player", "time": 24000 }
               ],
               "next": "exploring_success"
             },
@@ -93,7 +99,8 @@
               "requirements": [{ "type": "mca:advancement", "value": "minecraft:adventure/spyglass_at_parrot" }],
               "weight": 5,
               "actions": [
-                { "type": "mca:hearts", "amount": 8 }
+                { "type": "mca:hearts", "amount": 8 },
+                { "type": "mca:remember", "id": "story.exploring", "var": "player", "time": 24000 }
               ],
               "next": "exploring_success"
             },
@@ -101,7 +108,8 @@
               "requirements": [{ "type": "mca:advancement", "value": "minecraft:adventure/voluntary_exile" }],
               "weight": 5,
               "actions": [
-                { "type": "mca:hearts", "amount": 8 }
+                { "type": "mca:hearts", "amount": 8 },
+                { "type": "mca:remember", "id": "story.exploring", "var": "player", "time": 24000 }
               ],
               "next": "exploring_success"
             },
@@ -109,14 +117,26 @@
               "requirements": [{ "type": "mca:advancement", "value": "minecraft:adventure/adventuring_time" }],
               "weight": 5,
               "actions": [
-                { "type": "mca:hearts", "amount": 8 }
+                { "type": "mca:hearts", "amount": 8 },
+                { "type": "mca:remember", "id": "story.exploring", "var": "player", "time": 24000 }
               ],
               "next": "exploring_success"
             },
             {
               "weight": 3,
+              "fatigue": 1.0,
               "actions": [
-                { "type": "mca:hearts", "amount": -4 }
+                { "type": "mca:hearts", "amount": -4 },
+                { "type": "mca:remember", "id": "story.exploring", "var": "player", "time": 24000 }
+              ],
+              "next": "exploring_fail"
+            },
+            {
+              "requirements": [{ "type": "mca:memory", "id": "story.exploring", "var": "player", "present": true }],
+              "weight": 3,
+              "actions": [
+                { "type": "mca:hearts", "amount": -4 },
+                { "type": "mca:remember", "id": "story.exploring", "var": "player", "time": 24000 }
               ],
               "next": "exploring_fail"
             }
@@ -129,7 +149,8 @@
             {
               "weight": 1,
               "actions": [
-                { "type": "mca:hearts", "amount": 8 }
+                { "type": "mca:hearts", "amount": 8 },
+                { "type": "mca:remember", "id": "story.nether", "var": "player", "time": 2400000 }
               ],
               "next": "nether_success"
             },
@@ -137,7 +158,8 @@
               "requirements": [{ "type": "mca:personality", "value": "friendly" }],
               "weight": 1,
               "actions": [
-                { "type": "mca:hearts", "amount": 8 }
+                { "type": "mca:hearts", "amount": 8 },
+                { "type": "mca:remember", "id": "story.nether", "var": "player", "time": 2400000 }
               ],
               "next": "nether_success"
             },
@@ -145,7 +167,8 @@
               "requirements": [{ "type": "mca:advancement", "value": "minecraft:nether/root" }],
               "weight": 8,
               "actions": [
-                { "type": "mca:hearts", "amount": 8 }
+                { "type": "mca:hearts", "amount": 8 },
+                { "type": "mca:remember", "id": "story.nether", "var": "player", "time": 2400000 }
               ],
               "next": "nether_success"
             },
@@ -153,7 +176,8 @@
               "requirements": [{ "type": "mca:advancement", "value": "minecraft:nether/find_fortress" }],
               "weight": 8,
               "actions": [
-                { "type": "mca:hearts", "amount": 8 }
+                { "type": "mca:hearts", "amount": 8 },
+                { "type": "mca:remember", "id": "story.nether", "var": "player", "time": 2400000 }
               ],
               "next": "nether_success"
             },
@@ -161,14 +185,26 @@
               "requirements": [{ "type": "mca:advancement", "value": "minecraft:nether/explore_nether" }],
               "weight": 15,
               "actions": [
-                { "type": "mca:hearts", "amount": 8 }
+                { "type": "mca:hearts", "amount": 8 },
+                { "type": "mca:remember", "id": "story.nether", "var": "player", "time": 2400000 }
               ],
               "next": "nether_success"
             },
             {
               "weight": 5,
+              "fatigue": 1.0,
               "actions": [
-                { "type": "mca:hearts", "amount": -4 }
+                { "type": "mca:hearts", "amount": -4 },
+                { "type": "mca:remember", "id": "story.nether", "var": "player", "time": 2400000 }
+              ],
+              "next": "nether_fail"
+            },
+            {
+              "requirements": [{ "type": "mca:memory", "id": "story.nether", "var": "player", "present": true }],
+              "weight": 10,
+              "actions": [
+                { "type": "mca:hearts", "amount": -4 },
+                { "type": "mca:remember", "id": "story.nether", "var": "player", "time": 2400000 }
               ],
               "next": "nether_fail"
             }
@@ -181,7 +217,8 @@
             {
               "weight": 1,
               "actions": [
-                { "type": "mca:hearts", "amount": 10 }
+                { "type": "mca:hearts", "amount": 10 },
+                { "type": "mca:remember", "id": "story.enderdragon", "var": "player", "time": 2400000 }
               ],
               "next": "enderdragon_success"
             },
@@ -189,7 +226,8 @@
               "requirements": [{ "type": "mca:personality", "value": "friendly" }],
               "weight": 1,
               "actions": [
-                { "type": "mca:hearts", "amount": 10 }
+                { "type": "mca:hearts", "amount": 10 },
+                { "type": "mca:remember", "id": "story.enderdragon", "var": "player", "time": 2400000 }
               ],
               "next": "enderdragon_success"
             },
@@ -197,14 +235,26 @@
               "requirements": [{ "type": "mca:advancement", "value": "minecraft:end/kill_dragon" }],
               "weight": 100,
               "actions": [
-                { "type": "mca:hearts", "amount": 10 }
+                { "type": "mca:hearts", "amount": 10 },
+                { "type": "mca:remember", "id": "story.enderdragon", "var": "player", "time": 2400000 }
               ],
               "next": "enderdragon_success"
             },
             {
               "weight": 6,
+              "fatigue": 1.0,
               "actions": [
-                { "type": "mca:hearts", "amount": -5 }
+                { "type": "mca:hearts", "amount": -5 },
+                { "type": "mca:remember", "id": "story.enderdragon", "var": "player", "time": 2400000 }
+              ],
+              "next": "enderdragon_fail"
+            },
+            {
+              "requirements": [{ "type": "mca:memory", "id": "story.enderdragon", "var": "player", "present": true }],
+              "weight": 10,
+              "actions": [
+                { "type": "mca:hearts", "amount": -5 },
+                { "type": "mca:remember", "id": "story.enderdragon", "var": "player", "time": 2400000 }
               ],
               "next": "enderdragon_fail"
             }
@@ -217,7 +267,8 @@
             {
               "weight": 1,
               "actions": [
-                { "type": "mca:hearts", "amount": 12 }
+                { "type": "mca:hearts", "amount": 12 },
+                { "type": "mca:remember", "id": "story.wither", "var": "player", "time": 2400000 }
               ],
               "next": "wither_success"
             },
@@ -225,7 +276,8 @@
               "requirements": [{ "type": "mca:personality", "value": "friendly" }],
               "weight": 1,
               "actions": [
-                { "type": "mca:hearts", "amount": 12 }
+                { "type": "mca:hearts", "amount": 12 },
+                { "type": "mca:remember", "id": "story.wither", "var": "player", "time": 2400000 }
               ],
               "next": "wither_success"
             },
@@ -233,14 +285,26 @@
               "requirements": [{ "type": "mca:advancement", "value": "minecraft:nether/summon_wither" }],
               "weight": 100,
               "actions": [
-                { "type": "mca:hearts", "amount": 12 }
+                { "type": "mca:hearts", "amount": 12 },
+                { "type": "mca:remember", "id": "story.wither", "var": "player", "time": 2400000 }
               ],
               "next": "wither_success"
             },
             {
               "weight": 3,
+              "fatigue": 1.0,
               "actions": [
-                { "type": "mca:hearts", "amount": -6 }
+                { "type": "mca:hearts", "amount": -6 },
+                { "type": "mca:remember", "id": "story.wither", "var": "player", "time": 2400000 }
+              ],
+              "next": "wither_fail"
+            },
+            {
+              "requirements": [{ "type": "mca:memory", "id": "story.wither", "var": "player", "present": true }],
+              "weight": 10,
+              "actions": [
+                { "type": "mca:hearts", "amount": -6 },
+                { "type": "mca:remember", "id": "story.wither", "var": "player", "time": 2400000 }
               ],
               "next": "wither_fail"
             }
@@ -250,7 +314,7 @@
     },
     "generic_success": {
       "line": "dialogue_event.mca.social.story.generic.success",
-      "complete": true
+      "next": "generic_followup"
     },
     "generic_fail": {
       "line": "dialogue_event.mca.social.story.generic.fail",
@@ -258,15 +322,15 @@
     },
     "exploring_success": {
       "line": "dialogue_event.mca.social.story.exploring.success",
-      "complete": true
+      "next": "exploring_followup"
     },
     "exploring_fail": {
       "line": "dialogue_event.mca.social.story.exploring.fail",
-      "complete": true
+      "next": "exploring_doubt_followup"
     },
     "nether_success": {
       "line": "dialogue_event.mca.social.story.nether.success",
-      "complete": true
+      "next": "nether_followup"
     },
     "nether_fail": {
       "line": "dialogue_event.mca.social.story.nether.fail",
@@ -274,7 +338,7 @@
     },
     "enderdragon_success": {
       "line": "dialogue_event.mca.social.story.enderdragon.success",
-      "complete": true
+      "next": "dragon_followup"
     },
     "enderdragon_fail": {
       "line": "dialogue_event.mca.social.story.enderdragon.fail",
@@ -282,10 +346,100 @@
     },
     "wither_success": {
       "line": "dialogue_event.mca.social.story.wither.success",
-      "complete": true
+      "next": "wither_followup"
     },
     "wither_fail": {
       "line": "dialogue_event.mca.social.story.wither.fail",
+      "complete": true
+    },
+    "generic_followup": {
+      "line": "dialogue_event.mca.social.story.followup.generic",
+      "choices": [
+        { "id": "generic_waited", "text": "dialogue_event.mca.social.story.choice.generic_waited", "next": "generic_waited_reply" },
+        { "id": "generic_fled", "text": "dialogue_event.mca.social.story.choice.generic_fled", "next": "generic_fled_reply" }
+      ]
+    },
+    "exploring_followup": {
+      "line": "dialogue_event.mca.social.story.followup.exploring",
+      "choices": [
+        { "id": "exploring_stayed", "text": "dialogue_event.mca.social.story.choice.exploring_stayed", "next": "exploring_stayed_reply" },
+        { "id": "exploring_returned", "text": "dialogue_event.mca.social.story.choice.exploring_returned", "next": "exploring_returned_reply" }
+      ]
+    },
+    "exploring_doubt_followup": {
+      "line": "dialogue_event.mca.social.story.followup.exploring_doubt",
+      "choices": [
+        { "id": "exploring_cave", "text": "dialogue_event.mca.social.story.choice.exploring_cave", "next": "exploring_cave_reply" },
+        { "id": "exploring_view", "text": "dialogue_event.mca.social.story.choice.exploring_view", "next": "exploring_view_reply" }
+      ]
+    },
+    "nether_followup": {
+      "line": "dialogue_event.mca.social.story.followup.nether",
+      "choices": [
+        { "id": "nether_riding", "text": "dialogue_event.mca.social.story.choice.nether_riding", "next": "nether_riding_reply" },
+        { "id": "nether_shelter", "text": "dialogue_event.mca.social.story.choice.nether_shelter", "next": "nether_shelter_reply" }
+      ]
+    },
+    "dragon_followup": {
+      "line": "dialogue_event.mca.social.story.followup.dragon",
+      "choices": [
+        { "id": "dragon_pillar", "text": "dialogue_event.mca.social.story.choice.dragon_pillar", "next": "dragon_pillar_reply" },
+        { "id": "dragon_running", "text": "dialogue_event.mca.social.story.choice.dragon_running", "next": "dragon_running_reply" }
+      ]
+    },
+    "wither_followup": {
+      "line": "dialogue_event.mca.social.story.followup.wither",
+      "choices": [
+        { "id": "wither_confident", "text": "dialogue_event.mca.social.story.choice.wither_confident", "next": "wither_confident_reply" },
+        { "id": "wither_mistake", "text": "dialogue_event.mca.social.story.choice.wither_mistake", "next": "wither_mistake_reply" }
+      ]
+    },
+    "generic_waited_reply": {
+      "line": "dialogue_event.mca.social.story.reply.generic_waited",
+      "complete": true
+    },
+    "generic_fled_reply": {
+      "line": "dialogue_event.mca.social.story.reply.generic_fled",
+      "complete": true
+    },
+    "exploring_stayed_reply": {
+      "line": "dialogue_event.mca.social.story.reply.exploring_stayed",
+      "complete": true
+    },
+    "exploring_returned_reply": {
+      "line": "dialogue_event.mca.social.story.reply.exploring_returned",
+      "complete": true
+    },
+    "exploring_cave_reply": {
+      "line": "dialogue_event.mca.social.story.reply.exploring_cave",
+      "complete": true
+    },
+    "exploring_view_reply": {
+      "line": "dialogue_event.mca.social.story.reply.exploring_view",
+      "complete": true
+    },
+    "nether_riding_reply": {
+      "line": "dialogue_event.mca.social.story.reply.nether_riding",
+      "complete": true
+    },
+    "nether_shelter_reply": {
+      "line": "dialogue_event.mca.social.story.reply.nether_shelter",
+      "complete": true
+    },
+    "dragon_pillar_reply": {
+      "line": "dialogue_event.mca.social.story.reply.dragon_pillar",
+      "complete": true
+    },
+    "dragon_running_reply": {
+      "line": "dialogue_event.mca.social.story.reply.dragon_running",
+      "complete": true
+    },
+    "wither_confident_reply": {
+      "line": "dialogue_event.mca.social.story.reply.wither_confident",
+      "complete": true
+    },
+    "wither_mistake_reply": {
+      "line": "dialogue_event.mca.social.story.reply.wither_mistake",
       "complete": true
     }
   }

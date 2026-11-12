@@ -89,6 +89,7 @@
         },
         {
           "weight": 5,
+          "fatigue": 1.0,
           "actions": [
             { "type": "mca:hearts", "amount": -4 }
           ],
@@ -116,6 +117,7 @@
         },
         {
           "weight": 1,
+          "fatigue": 1.0,
           "actions": [
             { "type": "mca:hearts", "amount": -5 },
             { "type": "mca:slap", "amount": 1.0 }

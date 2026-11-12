@@ -82,18 +82,82 @@
     },
     "exploring_reply": {
       "line": "dialogue.first.exploring",
-      "complete": true
+      "next": "exploring_followup"
     },
     "settling_reply": {
       "line": "dialogue.first.settling",
-      "complete": true
+      "next": "settling_followup"
     },
     "spent_night_success": {
       "line": "dialogue.first.spent_night.success",
-      "complete": true
+      "next": "inn_followup"
     },
     "spent_night_failed": {
       "line": "dialogue.first.spent_night.failed",
+      "choices": [
+        { "id": "no_inn_travel", "text": "dialogue_event.mca.social.first.choice.no_inn_travel", "next": "no_inn_travel_reply" },
+        { "id": "no_inn_stay", "text": "dialogue_event.mca.social.first.choice.no_inn_stay", "next": "no_inn_stay_reply" }
+      ]
+    },
+    "exploring_followup": {
+      "line": "dialogue_event.mca.social.first.followup.exploring",
+      "choices": [
+        { "id": "explore_stay", "text": "dialogue_event.mca.social.first.choice.explore_stay", "next": "explore_stay_reply" },
+        { "id": "explore_move_on", "text": "dialogue_event.mca.social.first.choice.explore_move_on", "next": "explore_move_on_reply" },
+        {
+          "id": "explore_ask_bed",
+          "text": "dialogue_event.mca.social.first.choice.explore_ask_bed",
+          "outcomes": [
+            { "requirements": [{ "type": "mca:village_has_building", "value": "inn" }], "weight": 1, "next": "spent_night_success" },
+            { "requirements": [{ "type": "mca:not", "condition": { "type": "mca:village_has_building", "value": "inn" } }], "weight": 1, "next": "spent_night_failed" }
+          ]
+        }
+      ]
+    },
+    "settling_followup": {
+      "line": "dialogue_event.mca.social.first.followup.settling",
+      "choices": [
+        { "id": "settle_looking", "text": "dialogue_event.mca.social.first.choice.settle_looking", "next": "settle_looking_reply" },
+        { "id": "settle_ready", "text": "dialogue_event.mca.social.first.choice.settle_ready", "next": "settle_ready_reply" }
+      ]
+    },
+    "inn_followup": {
+      "line": "dialogue_event.mca.social.first.followup.inn",
+      "choices": [
+        { "id": "inn_thanks", "text": "dialogue_event.mca.social.first.choice.inn_thanks", "next": "inn_thanks_reply" },
+        { "id": "inn_later", "text": "dialogue_event.mca.social.first.choice.inn_later", "next": "inn_later_reply" }
+      ]
+    },
+    "explore_stay_reply": {
+      "line": "dialogue_event.mca.social.first.reply.explore_stay",
+      "complete": true
+    },
+    "explore_move_on_reply": {
+      "line": "dialogue_event.mca.social.first.reply.explore_move_on",
+      "complete": true
+    },
+    "settle_looking_reply": {
+      "line": "dialogue_event.mca.social.first.reply.settle_looking",
+      "complete": true
+    },
+    "settle_ready_reply": {
+      "line": "dialogue_event.mca.social.first.reply.settle_ready",
+      "complete": true
+    },
+    "inn_thanks_reply": {
+      "line": "dialogue_event.mca.social.first.reply.inn_thanks",
+      "complete": true
+    },
+    "inn_later_reply": {
+      "line": "dialogue_event.mca.social.first.reply.inn_later",
+      "complete": true
+    },
+    "no_inn_travel_reply": {
+      "line": "dialogue_event.mca.social.first.reply.no_inn_travel",
+      "complete": true
+    },
+    "no_inn_stay_reply": {
+      "line": "dialogue_event.mca.social.first.reply.no_inn_stay",
       "complete": true
     }
   }

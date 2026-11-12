@@ -19,9 +19,6 @@
       "outcomes": [
         {
           "weight": 10,
-          "actions": [
-            { "type": "mca:command", "command": "location" }
-          ],
           "next": "location"
         },
         {
@@ -29,9 +26,6 @@
             { "type": "mca:hearts", "min": 20 }
           ],
           "weight": 5,
-          "actions": [
-            { "type": "mca:command", "command": "location" }
-          ],
           "next": "location"
         },
         {
@@ -60,6 +54,11 @@
     },
     "location": {
       "line": "dialogue_event.mca.social.rumors.location",
+      "resolve": {
+        "type": "mca:structure_location",
+        "pool": "configured_rumors",
+        "failure_line": "dialogue.location.forgot"
+      },
       "complete": true
     },
     "lore": {

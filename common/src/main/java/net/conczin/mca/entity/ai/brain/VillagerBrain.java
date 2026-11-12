@@ -286,7 +286,9 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
             }
         }
 
-        memory.modInteractionFatigue(1);
+        if (Config.getInstance().interactionFatigueEnabled) {
+            memory.modInteractionFatigue(1);
+        }
         memory.modHearts(hearts);
         CriterionMCA.HEARTS.trigger(player, memory.getHearts(), hearts, "interaction");
         entity.getVillagerBrain().modifyMoodValue(hearts);

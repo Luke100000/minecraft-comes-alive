@@ -6,6 +6,31 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class DialogueMenuScrollWidgetTest {
     @Test
+    void speechAndChoicesHaveIndependentOffsetsWhileSpeechContentGrows() {
+        DialogueMenuScrollWidget choices = new DialogueMenuScrollWidget();
+        DialogueMenuScrollWidget speech = new DialogueMenuScrollWidget();
+        choices.layout(50, 30, 100, 100, 260);
+        speech.layout(300, 30, 1, 60, 180);
+        assertEquals(160, choices.maxOffset());
+        assertEquals(120, speech.maxOffset());
+
+        speech.scrollToSection(speech.maxOffset());
+        assertEquals(120, speech.offset());
+        assertEquals(0, choices.offset());
+
+        speech.mouseScrolled(300, 40, 0, 1);
+        int manualOffset = speech.offset();
+        speech.layout(300, 30, 1, 60, 260);
+        assertEquals(manualOffset, speech.offset(), "manual reading position must remain stable during reveal");
+        speech.scrollToSection(speech.maxOffset());
+        assertEquals(200, speech.offset());
+        assertEquals(0, choices.offset());
+
+        speech.reset();
+        assertEquals(0, speech.offset());
+    }
+
+    @Test
     void expandedCategoryAnchorsItsHeaderAtTheViewportTop() {
         DialogueMenuScrollWidget scroller = new DialogueMenuScrollWidget();
         scroller.layout(50, 30, 100, 40, 500, 100);
@@ -88,5 +113,19 @@ class DialogueMenuScrollWidgetTest {
         int releasedOffset = scroller.offset();
         assertFalse(scroller.mouseDragged(155, 95, 0, 0, 15));
         assertEquals(releasedOffset, scroller.offset());
+    }
+
+    @Test
+    void thumbRemainsDraggableAcrossEntireEightPixelNativeStrip() {
+        for (int edge : new int[]{0, 7}) {
+            DialogueMenuScrollWidget scroller = new DialogueMenuScrollWidget();
+            scroller.layout(50, 30, 100, 100, 300);
+            int pointerX = scroller.getX() + scroller.getWidth() + edge;
+            assertTrue(scroller.mouseClicked(pointerX, 40, 0));
+            scroller.setFocused(true);
+            assertTrue(scroller.mouseDragged(pointerX, 80, 0, 0, 40));
+            assertTrue(scroller.offset() > 0, "drag edge " + edge + " must remain active");
+            scroller.mouseReleased(pointerX, 80, 0);
+        }
     }
 }

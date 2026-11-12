@@ -82,6 +82,57 @@ class McaDialogueEventResourcesTest {
     }
 
     @Test
+    void migratedReactionGroupsEachApplyFatigueOnce() throws Exception {
+        Map<ResourceLocation, DialogueEvent> events = new HashMap<>();
+        loadShippedEvents().forEach(event -> events.put(event.id(), event));
+
+        for (String node : List.of("day_reaction", "news_reaction", "reaction")) {
+            String destination = node.equals("reaction") ? "fail" : node.replace("reaction", "fail");
+            assertFatigueGroup(events.get(id("social/chat")).nodes().get(node).outcomes().orElseThrow(),
+                    destination, 0);
+        }
+
+        DialogueEvent joke = events.get(id("social/joke"));
+        for (String choiceId : List.of("creative", "animal", "monster")) {
+            DialogueEvent.Choice choice = joke.nodes().get("prompt").choices().orElseThrow().stream()
+                    .filter(candidate -> candidate.id().equals(choiceId)).findFirst().orElseThrow();
+            String destination = choiceId.equals("creative") ? "fail" : choiceId + "_fail";
+            assertFatigueGroup(choice.outcomes().orElseThrow(), destination, 0);
+        }
+
+        DialogueEvent greet = events.get(id("ambient/greet"));
+        List<DialogueEvent.Choice> greeting = greet.nodes().get("greeting").choices().orElseThrow();
+        assertFatigueGroup(greeting.stream().filter(choice -> choice.id().equals("kind"))
+                .findFirst().orElseThrow().outcomes().orElseThrow(), "fail", 0);
+        assertFatigueGroup(greeting.stream().filter(choice -> choice.id().equals("shake_hand"))
+                .findFirst().orElseThrow().outcomes().orElseThrow(), "shake_fail", 0);
+        assertTrue(greeting.stream().filter(choice -> choice.id().equals("short"))
+                .findFirst().orElseThrow().outcomes().orElseThrow().stream()
+                .allMatch(outcome -> outcome.fatigue() == 0.0));
+
+        for (String eventId : List.of("relationship/flirt", "relationship/hug", "relationship/kiss")) {
+            List<DialogueEvent.Outcome> outcomes = events.get(id(eventId)).nodes().get("prompt")
+                    .choices().orElseThrow().getFirst().outcomes().orElseThrow();
+            for (int priority : (eventId.endsWith("flirt") ? List.of(20, 10, 0) : List.of(0))) {
+                assertFatigueGroup(outcomes, "fail", priority);
+                if (!eventId.endsWith("hug")) {
+                    assertFatigueGroup(outcomes, "slap", priority);
+                }
+            }
+            assertTrue(outcomes.stream().filter(outcome -> outcome.priority() == 100)
+                    .allMatch(outcome -> outcome.fatigue() == 0.0));
+        }
+    }
+
+    private static void assertFatigueGroup(List<DialogueEvent.Outcome> outcomes, String destination, int priority) {
+        List<DialogueEvent.Outcome> eligible = outcomes.stream()
+                .filter(outcome -> outcome.priority() == priority && outcome.next().equals(destination)).toList();
+        assertEquals(1, eligible.stream().filter(outcome -> outcome.fatigue() == 1.0).count(),
+                () -> "expected one baseline fatigue contribution for " + destination + " priority " + priority);
+        assertTrue(eligible.stream().allMatch(outcome -> outcome.fatigue() == 0.0 || outcome.fatigue() == 1.0));
+    }
+
+    @Test
     void everyShippedDialogueEventDecodesAndBaselineAlwaysProvidesAmbientTalk() throws Exception {
         List<DialogueEvent> events = loadShippedEvents();
         JsonObject translations = englishTranslations();
@@ -263,6 +314,82 @@ class McaDialogueEventResourcesTest {
                 question.choices().orElseThrow().stream()
                         .map(DialogueEvent.Choice::id).collect(java.util.stream.Collectors.toSet()));
 
+    }
+
+    @Test
+    void rumourLocationUsesResolveNotDeferredCommand() throws Exception {
+        DialogueEvent rumors = loadShippedEvents().stream()
+                .filter(event -> event.id().equals(id("social/rumors")))
+                .findFirst().orElseThrow();
+        List<DialogueEvent.Outcome> routes = rumors.nodes().get(rumors.start()).outcomes().orElseThrow();
+
+        assertEquals(6, routes.size());
+        assertEquals(List.of(10.0D, 5.0D), routes.subList(0, 2).stream()
+                .map(DialogueEvent.Outcome::weight).toList());
+        for (DialogueEvent.Outcome route : routes.subList(0, 2)) {
+            assertEquals("location", route.next());
+            assertTrue(route.actions().isEmpty(), "location search must start on node entry, not on Finish");
+        }
+        assertTrue(routes.get(0).requirements().isEmpty());
+        assertEquals(1, routes.get(1).requirements().size());
+        DialogueCondition.Defined hearts = assertInstanceOf(DialogueCondition.Defined.class,
+                routes.get(1).requirements().getFirst());
+        assertEquals(DialogueCondition.HEARTS, hearts.type());
+        assertEquals(20, hearts.definition().get("min").getAsInt());
+
+        DialogueEvent.Node location = rumors.nodes().get("location");
+        assertEquals(List.of("dialogue_event.mca.social.rumors.location"), location.lines());
+        assertTrue(location.complete());
+        DialogueAsyncResolver.StructureLocation resolver = assertInstanceOf(
+                DialogueAsyncResolver.StructureLocation.class, location.resolve().orElseThrow());
+        assertEquals(id("structure_location"), resolver.type());
+        assertEquals("configured_rumors", resolver.pool().orElseThrow());
+        assertTrue(resolver.structure().isEmpty());
+        assertEquals("gui.dialogue.searching", resolver.pendingLine());
+        assertEquals("dialogue.location.forgot", resolver.failureLine());
+
+        JsonObject translations = englishTranslations();
+        assertTrue(translations.has("gui.dialogue.searching"), "pending search needs a bundled default label");
+        assertEquals("Copy coordinates", translations.get("gui.dialogue.copy_coordinates").getAsString(),
+                "Rumours copy hover must have a readable default translation");
+        assertTrue(hasLineTranslation(translations, resolver.failureLine()));
+    }
+
+    @Test
+    void nonlocationRumourBranchesAndRepeatRulesStayIntact() throws Exception {
+        DialogueEvent rumors = loadShippedEvents().stream()
+                .filter(event -> event.id().equals(id("social/rumors")))
+                .findFirst().orElseThrow();
+        List<DialogueEvent.Outcome> routes = rumors.nodes().get(rumors.start()).outcomes().orElseThrow();
+
+        assertEquals(DialogueEvent.HistoryPolicy.SCHEDULING, rumors.history());
+        assertEquals(DialogueEvent.RepeatType.COOLDOWN, rumors.repeat().type());
+        assertEquals(100L, rumors.repeat().minTicks());
+        assertEquals(100L, rumors.repeat().maxTicks());
+        assertEquals(List.of("lore", "lore", "failed", "failed"), routes.subList(2, 6).stream()
+                .map(DialogueEvent.Outcome::next).toList());
+        assertEquals(List.of(1.0D, 5.0D, 5.0D, 5.0D), routes.subList(2, 6).stream()
+                .map(DialogueEvent.Outcome::weight).toList());
+        assertTrue(routes.subList(2, 6).stream().allMatch(route -> route.actions().isEmpty()));
+        assertTrue(routes.get(2).requirements().isEmpty());
+        assertEquals(1, routes.get(3).requirements().size());
+        DialogueCondition.Defined trait = assertInstanceOf(DialogueCondition.Defined.class,
+                routes.get(3).requirements().getFirst());
+        assertEquals(id("trait"), trait.type());
+        assertEquals("sirben", trait.definition().get("value").getAsString());
+        assertTrue(routes.get(4).requirements().isEmpty());
+        assertEquals(1, routes.get(5).requirements().size());
+        DialogueCondition.Defined unhappy = assertInstanceOf(DialogueCondition.Defined.class,
+                routes.get(5).requirements().getFirst());
+        assertEquals(DialogueCondition.HEARTS, unhappy.type());
+        assertEquals(-5, unhappy.definition().get("max").getAsInt());
+
+        for (String nodeId : List.of("lore", "failed")) {
+            DialogueEvent.Node node = rumors.nodes().get(nodeId);
+            assertEquals(List.of("dialogue.rumors." + nodeId), node.lines());
+            assertTrue(node.complete());
+            assertTrue(node.resolve().isEmpty(), "ordinary rumour results must remain immediate");
+        }
     }
 
     @Test

@@ -29,7 +29,6 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
-import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 import org.lwjgl.glfw.GLFW;
 
@@ -58,7 +57,9 @@ public class InteractScreen extends AbstractDynamicScreen {
     private final List<DialogueHit> dialogueHits = new ArrayList<>();
     private final List<DialogueTextTarget> dialogueTextTargets = new ArrayList<>();
     private final DialogueMenuScrollWidget dialogueScroller = new DialogueMenuScrollWidget();
-    private int dialoguePassageScroll;
+    private final DialogueMenuScrollWidget dialogueSpeechScroller = new DialogueMenuScrollWidget();
+    private boolean dialogueSpeechAutoFollow = true;
+    private int dialogueSpeechTextHeight = -1;
     private DialogueViewport dialogueListViewport;
     private DialogueViewport dialoguePassageViewport;
     private long dialogueDisplayedToken;
@@ -172,9 +173,8 @@ public class InteractScreen extends AbstractDynamicScreen {
                 dialogueHeight.hold(System.nanoTime() / 1_000_000L);
                 dialogueScroller.mouseScrolled(x, y, dx, dy);
             } else if (dialoguePassageViewport != null && dialoguePassageViewport.contains(x, y)) {
-                int delta = (int) Math.signum(dy) * 20;
-                dialoguePassageScroll = Math.max(0, Math.min(dialoguePassageViewport.limit(),
-                        dialoguePassageScroll - delta));
+                dialogueSpeechScroller.mouseScrolled(x, y, dx, dy);
+                dialogueSpeechAutoFollow = dialogueSpeechScroller.offset() >= dialogueSpeechScroller.maxOffset();
             }
             return true;
         }
@@ -192,6 +192,19 @@ public class InteractScreen extends AbstractDynamicScreen {
         super.mouseClicked(posX, posY, button);
 
         if (button == 0 && dialogueMode) {
+            if (dialogueSpeechScroller.hasScrollbar()
+                    && posX >= dialogueSpeechScroller.getX() + dialogueSpeechScroller.getWidth()
+                    && posX <= dialogueSpeechScroller.getX() + dialogueSpeechScroller.getWidth()
+                    + dialogueSpeechScroller.scrollbarWidth()
+                    && dialoguePassageViewport != null && dialoguePassageViewport.contains(posX, posY)
+                    && dialogueSpeechScroller.mouseClicked(posX, posY, button)) {
+                dialogueSpeechScroller.setFocused(true);
+                dialogueSpeechAutoFollow = false;
+                dialogueScroller.setFocused(false);
+                dialogueTextTargets.clear();
+                return true;
+            }
+            dialogueSpeechScroller.setFocused(false);
             if (dialogueScroller.hasScrollbar()
                     && posX >= dialogueScroller.getX() + dialogueScroller.getWidth()
                     && posX <= dialogueScroller.getX() + dialogueScroller.getWidth() + dialogueScroller.scrollbarWidth()
@@ -235,6 +248,12 @@ public class InteractScreen extends AbstractDynamicScreen {
 
     @Override
     public boolean mouseDragged(double x, double y, int button, double dx, double dy) {
+        if (dialogueMode && dialogueSpeechScroller.isFocused()
+                && dialogueSpeechScroller.mouseDragged(x, y, button, dx, dy)) {
+            dialogueSpeechAutoFollow = dialogueSpeechScroller.offset() >= dialogueSpeechScroller.maxOffset();
+            dialogueTextTargets.clear();
+            return true;
+        }
         if (dialogueMode && dialogueScroller.isFocused()
                 && dialogueScroller.mouseDragged(x, y, button, dx, dy)) {
             dialogueHits.clear();
@@ -247,6 +266,12 @@ public class InteractScreen extends AbstractDynamicScreen {
     @Override
     public boolean mouseReleased(double x, double y, int button) {
         if (dialogueMode && button == 0) {
+            dialogueSpeechScroller.mouseReleased(x, y, button);
+            if (dialogueSpeechScroller.isFocused()
+                    && dialogueSpeechScroller.offset() >= dialogueSpeechScroller.maxOffset()) {
+                dialogueSpeechAutoFollow = true;
+            }
+            dialogueSpeechScroller.setFocused(false);
             dialogueScroller.mouseReleased(x, y, button);
             dialogueScroller.setFocused(false);
         }
@@ -501,7 +526,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         dialogueHits.clear();
         dialogueTextTargets.clear();
         dialogueScroller.reset();
-        dialoguePassageScroll = 0;
+        resetDialogueSpeechScroll();
         dialogueKeyboardIndex = -1;
         dialogueHeight.reset();
         dialogueDisplayedNode = null;
@@ -524,7 +549,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         dialogueHits.clear();
         dialogueTextTargets.clear();
         dialogueScroller.reset();
-        dialoguePassageScroll = 0;
+        resetDialogueSpeechScroll();
         dialogueTokenTracked = false;
         dialogueKeyboardIndex = -1;
         dialogueHeight.reset();
@@ -571,8 +596,8 @@ public class InteractScreen extends AbstractDynamicScreen {
             /* Anything that should notify the server is handled here */
 
             if (!button.targetServer()) {
-                Network.sendToServer(new InteractionVillagerMessage(id.replace("gui.button.", ""),
-                        villager.asEntity().getUUID(), interactionId));
+                button.serverCommand().ifPresent(command -> Network.sendToServer(new InteractionVillagerMessage(
+                        command, villager.asEntity().getUUID(), interactionId)));
             }
         } else if (id.equals("gui.button.gift")) {
             this.inGiftMode = true;
@@ -632,7 +657,7 @@ public class InteractScreen extends AbstractDynamicScreen {
             rows.addAll(replyRows(presentation, indicators));
         }
         return rows.stream().map(row -> new DialogueRow(DialogueRichText.parse(row.text()),
-                row.click(), row.featured(), row.iconIndex(), row.placeholder(), row.nested())).toList();
+                row.click(), row.featured(), row.iconIndex(), row.placeholder(), row.nested(), row.selected())).toList();
     }
 
     static ReplyIndicators replyIndicators(boolean awaitingReply, boolean revealingLine,
@@ -647,6 +672,22 @@ public class InteractScreen extends AbstractDynamicScreen {
             return List.of(DialogueRow.loading());
         }
         List<DialogueRow> rows = new ArrayList<>();
+        if (presentation.reviewingHistory()) {
+            presentation.reviewedEntry().ifPresent(entry -> {
+                for (InteractionDialogueNodeResponse.Choice choice : entry.choices()) {
+                    boolean selected = entry.selectedChoiceId().filter(choice.id()::equals).isPresent();
+                    Component text = selected
+                            ? Component.literal("✓ ").withStyle(ChatFormatting.GOLD).append(choice.text())
+                            : choice.text();
+                    rows.add(DialogueRow.history(text, selected));
+                }
+                if (entry.advanceKind() != DialogueEngine.AdvanceKind.NONE) {
+                    rows.add(DialogueRow.history(Component.translatable(entry.advanceKind() == DialogueEngine.AdvanceKind.NEXT
+                            ? "gui.dialogue.continue" : "gui.dialogue.finish"), false));
+                }
+            });
+            return rows;
+        }
         for (InteractionDialogueNodeResponse.Choice choice : presentation.visibleChoices()) {
             rows.add(new DialogueRow(choice.text(),
                     new DialogueClick(DialogueClickKind.CHOICE, null, null, choice.id())));
@@ -658,17 +699,6 @@ public class InteractScreen extends AbstractDynamicScreen {
                 case NONE -> throw new IllegalStateException("Non-advancing dialogue cannot render an advance action");
             };
             rows.add(new DialogueRow(label, new DialogueClick(DialogueClickKind.ADVANCE, null, null, null)));
-        } else if (presentation.reviewingHistory()) {
-            // Keep the current replies as read-only context while the player reviews earlier speech.
-            presentation.node().ifPresent(node -> {
-                for (InteractionDialogueNodeResponse.Choice choice : node.choices()) {
-                    rows.add(new DialogueRow(choice.text(), null));
-                }
-                if (node.advanceKind() != DialogueEngine.AdvanceKind.NONE) {
-                    rows.add(new DialogueRow(Component.translatable(node.advanceKind() == DialogueEngine.AdvanceKind.NEXT
-                            ? "gui.dialogue.continue" : "gui.dialogue.finish"), null));
-                }
-            });
         }
         return rows;
     }
@@ -682,10 +712,14 @@ public class InteractScreen extends AbstractDynamicScreen {
         int bubbleWidth = dialoguePaperWidth(presentation);
         Component speech = indicators.progress() ? presentation.pendingLine() : presentation.paperFullLine();
         int lines = dialogueLines(speech, bubbleWidth - dialoguePixels(32)).size();
-        int extra = indicators.progress() ? 12 : 0;
-        int padding = (Config.getInstance().dialogueSpeechAboveChoices ? 40 : 48) + extra;
-        int minimumHeight = (Config.getInstance().dialogueSpeechAboveChoices ? 58 : 62) + extra;
-        return dialoguePixels(Math.max(minimumHeight, lines * 10 + padding)) + dialogueHistoryHeight(presentation);
+        return DialogueOverlayLayout.minimumSpeechHeight(lines, dialogueHistoryHeight(presentation),
+                indicators.progress(), dialogueTextScale());
+    }
+
+    private void resetDialogueSpeechScroll() {
+        dialogueSpeechScroller.reset();
+        dialogueSpeechAutoFollow = true;
+        dialogueSpeechTextHeight = -1;
     }
 
     private int dialoguePaperWidth(ClientHandlerImpl.DialoguePresentation presentation) {
@@ -719,7 +753,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         dialogueRenderedToken = token.orElse(Long.MIN_VALUE);
         if (token.isPresent() && (!dialogueTokenTracked || dialogueDisplayedToken != token.getAsLong())) {
             dialogueScroller.reset();
-            dialoguePassageScroll = 0;
+            resetDialogueSpeechScroll();
             dialogueKeyboardIndex = -1;
             dialogueAwaitingReply = false;
             dialogueDisplayedToken = token.getAsLong();
@@ -729,7 +763,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         InteractionDialogueNodeResponse.Node visibleNode = presentation.node().orElse(null);
         if (visibleNode != dialogueDisplayedNode) {
             dialogueScroller.reset();
-            dialoguePassageScroll = 0;
+            resetDialogueSpeechScroll();
             dialogueKeyboardIndex = -1;
             dialogueDisplayedNode = visibleNode;
             dialogueAwaitingReply = false;
@@ -743,10 +777,17 @@ public class InteractScreen extends AbstractDynamicScreen {
         int target = dialogueTargetHeight(rows);
         long nowMillis = System.nanoTime() / 1_000_000L;
         int paperDesired = dialoguePaperHeight(presentation, indicators);
+        int paperMinimum = DialogueOverlayLayout.minimumSpeechHeight(2, dialogueHistoryHeight(presentation),
+                indicators.progress(), dialogueTextScale());
+        int minimumMenuHeight = dialogueFooterHeight() + 20;
+        target = DialogueOverlayLayout.menuHeightWithSpeechMinimum(height, target,
+                minimumMenuHeight, paperMinimum);
         DialogueOverlayLayout.Geometry settledLayout = DialogueOverlayLayout.calculate(width, height, target,
                 paperDesired, dialoguePaperWidth(presentation));
         int settledViewportHeight = Math.max(1, settledLayout.menu().height() - dialogueFooterHeight() - 10);
         int panelHeight = dialogueHeight.update(settledLayout.menu().height(), nowMillis, dialogueScroller.isFocused());
+        panelHeight = DialogueOverlayLayout.menuHeightWithSpeechMinimum(height, panelHeight,
+                minimumMenuHeight, paperMinimum);
         DialogueOverlayLayout.Geometry layout = DialogueOverlayLayout.calculate(width, height, panelHeight,
                 paperDesired, dialoguePaperWidth(presentation));
         if (Config.getInstance().dialogueSpeechAboveChoices) {
@@ -768,50 +809,61 @@ public class InteractScreen extends AbstractDynamicScreen {
                 DialogueOverlayLayout.Rect pointer = DialogueOverlayLayout.tailBounds(bubble);
                 DialogueSkin.drawTail(context, pointer.x(), pointer.y());
             }
-            int dividerY = bubble.y() + dialoguePixels(23);
-            DialogueOverlayLayout.Rect speaker = DialogueOverlayLayout.speakerHeader(bubble, dialogueTextScale());
-            if (speaker.width() > 0 && speaker.height() > 0) {
-                context.fill(speaker.x(), speaker.y(), speaker.right(), speaker.bottom(), 0x336B482F);
-                context.enableScissor(speaker.x(), speaker.y(), speaker.right(), speaker.bottom());
-                drawDialogueText(context, villager.asEntity().getName().copy().withStyle(style -> style.withBold(true)),
-                        speaker.x() + dialoguePixels(3), speaker.y() + dialoguePixels(3), 0xFF58331E, false);
-                context.disableScissor();
+            int historyHeight = dialogueHistoryHeight(presentation);
+            DialogueOverlayLayout.SpeechViewport speechViewport = DialogueOverlayLayout.speechViewport(
+                    bubble, historyHeight, indicators.progress(), dialogueTextScale());
+            if (bubble.height() >= dialoguePixels(24)) {
+                int dividerY = bubble.y() + dialoguePixels(23);
+                DialogueOverlayLayout.Rect speaker = DialogueOverlayLayout.speakerHeader(bubble, dialogueTextScale());
+                if (speaker.width() > 0 && speaker.height() > 0) {
+                    context.fill(speaker.x(), speaker.y(), speaker.right(), speaker.bottom(), 0x336B482F);
+                    context.enableScissor(speaker.x(), speaker.y(), speaker.right(), speaker.bottom());
+                    drawDialogueText(context, villager.asEntity().getName().copy().withStyle(style -> style.withBold(true)),
+                            speaker.x() + dialoguePixels(3), speaker.y() + dialoguePixels(3), 0xFF58331E, false);
+                    context.disableScissor();
+                }
+                context.fill(bubble.x() + 11, dividerY, bubble.right() - 11, dividerY + 1, 0xFFC49765);
             }
-            context.fill(bubble.x() + 11, dividerY, bubble.right() - 11, dividerY + 1, 0xFFC49765);
 
-            int textTop = dividerY + dialoguePixels(8);
-            int textBottom = bubble.bottom() - dialoguePixels(12) - dialogueHistoryHeight(presentation);
+            int textTop = speechViewport.top();
+            int textBottom = speechViewport.bottom();
             DialogueOverlayLayout.Rect progress = indicators.progress()
-                    ? DialogueOverlayLayout.progressStrip(bubble, dialogueHistoryHeight(presentation), dialogueTextScale())
+                    ? DialogueOverlayLayout.progressStrip(bubble, historyHeight, dialogueTextScale())
                     : new DialogueOverlayLayout.Rect(0, 0, 0, 0);
-            if (progress.height() > 0) {
-                textBottom = Math.min(textBottom, progress.y() - dialoguePixels(4));
-            }
             if (textBottom > textTop) {
                 Component speech = indicators.progress() ? presentation.pendingLine()
                         : DialogueTextHitTest.readyCopySpans(presentation.paperFullLine(), presentation.paperVisibleLine());
-                List<FormattedCharSequence> lines = dialogueLines(speech, bubble.width() - dialoguePixels(32));
+                int speechWidth = bubble.width() - dialoguePixels(32);
+                List<FormattedCharSequence> lines = dialogueLines(speech, speechWidth);
                 int totalTextHeight = lines.size() * dialoguePixels(10);
-                int scrollLimit = Math.max(0, totalTextHeight - (textBottom - textTop));
-                dialoguePassageScroll = Mth.clamp(dialoguePassageScroll, 0, scrollLimit);
+                int speechTextRight = bubble.right() - 16;
+                dialogueSpeechScroller.layout(speechTextRight - 8, textTop, 8,
+                        textBottom - textTop, totalTextHeight);
+                if (dialogueSpeechAutoFollow && dialogueSpeechTextHeight >= 0
+                        && totalTextHeight > dialogueSpeechTextHeight) {
+                    dialogueSpeechScroller.scrollToSection(dialogueSpeechScroller.maxOffset());
+                }
+                dialogueSpeechTextHeight = totalTextHeight;
+                int passageOffset = dialogueSpeechScroller.offset();
+                int scrollLimit = dialogueSpeechScroller.maxOffset();
+                boolean scrollable = dialogueSpeechScroller.hasScrollbar();
+                int clipRight = scrollable ? speechTextRight : bubble.right() - 8;
                 dialoguePassageViewport = new DialogueViewport(bubble.x(), bubble.y(),
                         bubble.right(), bubble.bottom(), scrollLimit);
                 dialogueTextTargets.add(new DialogueTextTarget(lines, bubble.x() + dialoguePixels(16),
-                        textTop, dialoguePixels(10), dialoguePassageScroll,
+                        textTop, dialoguePixels(10), passageOffset,
                         new DialogueOverlayLayout.Rect(bubble.x() + 11, textTop,
-                                bubble.right() - 8 - (bubble.x() + 11), textBottom - textTop)));
-                context.enableScissor(bubble.x() + 11, textTop, bubble.right() - 8, textBottom);
-                int y = textTop - dialoguePassageScroll;
+                                clipRight - (bubble.x() + 11), textBottom - textTop)));
+                context.enableScissor(bubble.x() + 11, textTop, clipRight, textBottom);
+                int y = textTop - passageOffset;
                 for (FormattedCharSequence line : lines) {
                     drawDialogueText(context, line, bubble.x() + dialoguePixels(16), y, INK, false);
                     y += dialoguePixels(10);
                 }
                 context.disableScissor();
-                if (dialoguePassageScroll > 0) {
-                    context.drawString(font, "▲", bubble.right() - 17, textTop, INK);
-                }
-                if (dialoguePassageScroll < scrollLimit) {
-                    context.drawString(font, "▼", bubble.right() - 17, textBottom - 10, INK);
+                if (scrollable) {
+                    context.fill(speechTextRight + 1, textTop, speechTextRight + 6, textBottom, 0x33292018);
+                    dialogueSpeechScroller.render(context, mouseX, mouseY, tickDelta);
                 }
             }
             if (progress.height() > 0) {
@@ -828,8 +880,12 @@ public class InteractScreen extends AbstractDynamicScreen {
         if (!rows.isEmpty() && clipBottom > clipTop) {
             int rowsHeight = rows.stream().mapToInt(row -> dialogueRowHeight(row, panelWidth)).sum();
             int viewportHeight = clipBottom - clipTop;
+            boolean loadingOnly = rows.size() == 1 && rows.getFirst().placeholder();
+            if (loadingOnly) {
+                rowsHeight = DialogueOverlayLayout.loadingRowHeight(menu, dialogueFooterHeight(), rowsHeight);
+            }
             // Keep the vanilla scrollbar inside the frame, outside both row hitboxes and text.
-            boolean needsScrollbar = rowsHeight > settledViewportHeight;
+            boolean needsScrollbar = !loadingOnly && rowsHeight > settledViewportHeight;
             int rowPanelWidth = panelWidth - (needsScrollbar ? 8 : 0);
             if (needsScrollbar) {
                 rowsHeight = rows.stream().mapToInt(row -> dialogueRowHeight(row, rowPanelWidth)).sum();
@@ -858,7 +914,7 @@ public class InteractScreen extends AbstractDynamicScreen {
             if (needsScrollbar) {
                 // The textured thumb is still vanilla; the shallow track is
                 // part of the dark menu so it remains visible on touchpads.
-                context.fill(contentRight, clipTop, contentRight + 8, clipBottom, 0xFF251916);
+                context.fill(contentRight + 1, clipTop, contentRight + 6, clipBottom, 0xFF251916);
             }
             context.enableScissor(left + 8, clipTop, contentRight, clipBottom);
             int y = clipTop - dialogueScroll;
@@ -1028,11 +1084,13 @@ public class InteractScreen extends AbstractDynamicScreen {
                                 int left, int panelWidth, int y, int clipTop, int clipBottom, long nowMillis) {
         int rowHeight = dialogueRowHeight(row, panelWidth);
         if (row.placeholder()) {
-            int surfaceLeft = left + 8;
-            int surfaceRight = left + panelWidth - 8;
-            context.fill(surfaceLeft, y + 1, surfaceRight, y + rowHeight - 2, 0xFF393633);
-            context.fill(surfaceLeft, y + 1, surfaceRight, y + 2, 0xFF615B54);
-            context.fill(surfaceLeft, y + rowHeight - 3, surfaceRight, y + rowHeight - 2, 0xFF615B54);
+            rowHeight = Math.min(rowHeight, clipBottom - clipTop);
+            DialogueOverlayLayout.Rect loadingSurface = DialogueRowLayout.loadingSurface(
+                    left, panelWidth, y, rowHeight, dialogueTextScale());
+            context.fill(loadingSurface.x(), loadingSurface.y(), loadingSurface.right(),
+                    loadingSurface.bottom(), 0xFF393633);
+            context.renderOutline(loadingSurface.x(), loadingSurface.y(), loadingSurface.width(),
+                    loadingSurface.height(), 0xFF81776C);
             int squareSize = dialoguePixels(3);
             int gap = dialoguePixels(6);
             int squareGroupWidth = 3 * squareSize + 2 * gap;
@@ -1057,11 +1115,12 @@ public class InteractScreen extends AbstractDynamicScreen {
         boolean hover = clickable && hoveringOver(left + 8, hitTop, panelWidth - 16, hitBottom - hitTop);
         boolean focused = clickable && dialogueKeyboardIndex == dialogueHits.size();
         if (row.featured()) {
-            DialogueSkin.drawFrame(context, DialogueSkin.FEATURED, left + 8, y + 1,
-                    panelWidth - 16, rowHeight - 2);
-            if ((hover || focused) && hitBottom - hitTop > 4) {
-                context.renderOutline(left + 9, hitTop + 1, panelWidth - 18,
-                        hitBottom - hitTop - 2, 0xFFFFD88B);
+            DialogueOverlayLayout.Rect surface = DialogueRowLayout.surface(left, panelWidth, y, rowHeight);
+            DialogueSkin.drawFrame(context, DialogueSkin.FEATURED,
+                    surface.x(), surface.y(), surface.width(), surface.height());
+            if (hover || focused) {
+                DialogueOverlayLayout.Rect tint = DialogueRowLayout.featuredHoverFill(surface);
+                context.fill(tint.x(), tint.y(), tint.right(), tint.bottom(), 0x55D7A34D);
             }
         } else if (clickable) {
             int surfaceLeft = left + 8;
@@ -1076,6 +1135,8 @@ public class InteractScreen extends AbstractDynamicScreen {
                 context.renderOutline(surfaceLeft, surfaceTop, surfaceRight - surfaceLeft,
                         surfaceBottom - surfaceTop, border);
             }
+        } else if (row.selected()) {
+            context.fill(left + 8, y + 1, left + panelWidth - 8, y + rowHeight - 2, 0x556D4D27);
         }
         int iconSize = dialoguePixels(12);
         int glyphHeight = dialoguePixels(font.lineHeight - 1);
@@ -1108,7 +1169,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         }
         for (FormattedCharSequence line : lines) {
             drawDialogueText(context, line, left + insets.textX(), lineY,
-                    !clickable ? 0xFFAA937A : hover || focused ? GOLD : CREAM, true);
+                    row.selected() ? GOLD : !clickable ? 0xFFAA937A : hover || focused ? GOLD : CREAM, true);
             lineY += lineStep;
         }
         if (row.featured() || row.iconIndex() >= 0) {
@@ -1192,27 +1253,28 @@ public class InteractScreen extends AbstractDynamicScreen {
             config.save();
             dialogueHeight.reset();
             dialogueScroller.reset();
+            resetDialogueSpeechScroll();
             dialogueHits.clear();
             dialogueKeyboardIndex = -1;
             return true;
         }
         if (click.kind() == DialogueClickKind.PREVIOUS) {
             if (presentation.reviewPrevious()) {
-                dialoguePassageScroll = 0;
+                resetDialogueSpeechScroll();
                 return true;
             }
             return false;
         }
         if (click.kind() == DialogueClickKind.REVIEW_LATEST) {
             if (presentation.reviewLatest()) {
-                dialoguePassageScroll = 0;
+                resetDialogueSpeechScroll();
                 return true;
             }
             return false;
         }
         if (click.kind() == DialogueClickKind.REVIEW_NEXT) {
             if (presentation.reviewNext()) {
-                dialoguePassageScroll = 0;
+                resetDialogueSpeechScroll();
                 return true;
             }
             return false;
@@ -1248,6 +1310,7 @@ public class InteractScreen extends AbstractDynamicScreen {
                 presentation.markSelectionRequested(DialogueEngine.DialogueSelection.AMBIENT);
             }
             long token = presentation.offerToken().orElseThrow();
+            presentation.markChoiceRequested(token, click.choiceId());
             markDialogueReplyRequested();
             Network.sendToServer(new InteractionDialogueChoiceMessage(token, click.choiceId()));
             return true;
@@ -1305,7 +1368,12 @@ public class InteractScreen extends AbstractDynamicScreen {
     }
 
     record DialogueRow(Component text, DialogueClick click, boolean featured, int iconIndex,
-                       boolean placeholder, boolean nested) {
+                       boolean placeholder, boolean nested, boolean selected) {
+        DialogueRow(Component text, DialogueClick click, boolean featured, int iconIndex,
+                    boolean placeholder, boolean nested) {
+            this(text, click, featured, iconIndex, placeholder, nested, false);
+        }
+
         DialogueRow(Component text, DialogueClick click) {
             this(text, click, false, -1, false, false);
         }
@@ -1326,6 +1394,10 @@ public class InteractScreen extends AbstractDynamicScreen {
 
         static DialogueRow loading() {
             return new DialogueRow(Component.empty(), null, false, -1, true, false);
+        }
+
+        static DialogueRow history(Component text, boolean selected) {
+            return new DialogueRow(text, null, false, -1, false, false, selected);
         }
     }
 

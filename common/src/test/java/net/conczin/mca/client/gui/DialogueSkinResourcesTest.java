@@ -10,6 +10,20 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class DialogueSkinResourcesTest {
     @Test
+    void featuredButtonInteriorReachesTheLowerGoldStrokeAtRest() throws Exception {
+        try (InputStream in = getClass().getResourceAsStream("/assets/mca/textures/gui/dialogue/featured_frame.png")) {
+            assertNotNull(in);
+            BufferedImage frame = ImageIO.read(in);
+            for (int x = 7; x <= 16; x++) {
+                assertEquals(frame.getRGB(x, 19), frame.getRGB(x, 20),
+                        "Resting button must not leave a dark strip above its lower gold stroke at x=" + x);
+                assertEquals(0xFFD4A36B, frame.getRGB(x, 21),
+                        "Lower gold stroke must remain intact");
+            }
+        }
+    }
+
+    @Test
     void footerHighlightsMeetVisibleBottomStrokeWithoutCoveringIt() throws Exception {
         try (InputStream in = getClass().getResourceAsStream("/assets/mca/textures/gui/dialogue/menu_frame.png")) {
             assertNotNull(in);
@@ -48,7 +62,7 @@ class DialogueSkinResourcesTest {
     @Test
     void dialogueTexturesHaveExpectedPixelDimensionsAndAlpha() throws Exception {
         verify("paper_frame", 24, 24);
-        verify("paper_tail", 16, 20);
+        verify("paper_tail", 20, 20);
         verify("menu_frame", 24, 24);
         verify("featured_frame", 24, 24);
         verify("icons", 96, 16);
@@ -99,7 +113,21 @@ class DialogueSkinResourcesTest {
             assertNotNull(in);
             BufferedImage tail = ImageIO.read(in);
             assertEquals(0, tail.getRGB(0, 0) >>> 24);
-            assertEquals(0xFFFAE8C9, tail.getRGB(15, 10));
+            assertEquals(0, tail.getRGB(19, 10) >>> 24, "The connector blends into the existing paper");
+            assertTrue(((tail.getRGB(15, 10) >> 8) & 0xFF) < 220,
+                    "Pointer fill should use the warm lower-parchment tone");
+            for (int y = 2; y <= 18; y++) {
+                int firstOpaque = -1;
+                for (int x = 0; x < 19; x++) {
+                    if ((tail.getRGB(x, y) >>> 24) != 0) {
+                        firstOpaque = x;
+                        break;
+                    }
+                }
+                assertTrue(firstOpaque >= 0, "Each triangle row must connect to the panel");
+                assertEquals(0xFF291910, tail.getRGB(firstOpaque, y),
+                        "The angled edge must have a continuous dark outline");
+            }
         }
     }
 

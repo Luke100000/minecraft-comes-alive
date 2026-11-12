@@ -11,6 +11,7 @@ import net.conczin.mca.network.c2s.InteractionDialogueLeaveMessage;
 import net.conczin.mca.network.c2s.InteractionDialogueSelectMessage;
 import net.conczin.mca.network.s2c.InteractionDialogueNodeResponse;
 import net.conczin.mca.network.s2c.InteractionDialogueOptionsResponse;
+import net.conczin.mca.network.s2c.InteractionDialoguePendingResponse;
 import net.conczin.mca.network.s2c.InteractionDialogueSelectionRejectedResponse;
 import net.conczin.mca.network.s2c.OpenGuiRequest;
 import net.minecraft.ChatFormatting;
@@ -32,6 +33,18 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class DialogueEventCodecTest {
+    @Test
+    void pendingPacketCodecRoundTripsNonAsciiLocalizedLine() {
+        InteractionDialoguePendingResponse pending = new InteractionDialoguePendingResponse(
+                UUID.fromString("ffab18b9-d4c6-40a2-a3fe-6ef5aab099d3"), 1008L,
+                Component.translatable("gui.dialogue.searching", Component.literal("Łąka 🌳")));
+        InteractionDialoguePendingResponse restored = roundTrip(
+                InteractionDialoguePendingResponse.STREAM_CODEC, pending);
+        assertEquals(pending.sessionId(), restored.sessionId());
+        assertEquals(pending.offerToken(), restored.offerToken());
+        assertComponentEquivalent(pending.pendingLine(), restored.pendingLine());
+    }
+
     @Test
     void optionsRoundTripRetainsServerSelectedAmbientPreview() {
         InteractionDialogueNodeResponse.Node preview = new InteractionDialogueNodeResponse.Node(

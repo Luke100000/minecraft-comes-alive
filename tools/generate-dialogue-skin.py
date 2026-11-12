@@ -10,6 +10,13 @@ from PIL import Image, ImageDraw
 
 
 OUT = Path(__file__).resolve().parents[1] / "common/src/main/resources/assets/mca/textures/gui/dialogue"
+PAPER_TOP = (255, 243, 206)
+PAPER_BOTTOM = (246, 197, 128)
+
+
+def paper_colour(source_row: float) -> tuple[int, int, int, int]:
+    strength = max(0.0, min(1.0, (source_row - 4) / 15))
+    return tuple(round(a + (b - a) * strength) for a, b in zip(PAPER_TOP, PAPER_BOTTOM)) + (255,)
 
 
 def save(image: Image.Image, name: str) -> None:
@@ -29,16 +36,13 @@ def frame(name: str, interior: str, outside: str, border: str, shine: str) -> No
     draw.rounded_rectangle((4, 4, 19, 19), radius=3, fill=interior)
     draw.line((5, 3, 18, 3), fill=shine, width=1)
     draw.line((3, 5, 3, 18), fill=shine, width=1)
-    draw.line((5, 20, 18, 20), fill=outside, width=1)
+    draw.line((5, 20, 18, 20), fill=interior if name == "featured_frame" else outside, width=1)
     draw.line((20, 5, 20, 18), fill=outside, width=1)
     # Bake the warm paper gradient into the nine-slice's interior pixels.
     # The source rows then stretch together without a rectangular overlay seam.
     if name == "paper_frame":
-        top = (255, 243, 206)
-        bottom = (246, 197, 128)
         for y in range(4, 20):
-            strength = (y - 4) / 15
-            colour = tuple(round(a + (b - a) * strength) for a, b in zip(top, bottom)) + (255,)
+            colour = paper_colour(y)
             for x in range(4, 20):
                 if image.getpixel((x, y)) == (250, 232, 201, 255):
                     image.putpixel((x, y), colour)
@@ -52,14 +56,20 @@ def frame(name: str, interior: str, outside: str, border: str, shine: str) -> No
 
 
 def tail() -> None:
-    image = Image.new("RGBA", (16, 20), (0, 0, 0, 0))
-    d = ImageDraw.Draw(image)
-    # The left-facing pointer joins the straight part of the frame. Its right
-    # side stays open so the renderer can connect the parchment interiors.
-    d.polygon(((15, 0), (15, 19), (0, 16), (9, 8)), fill="#291910")
-    d.polygon(((14, 2), (14, 17), (4, 15), (11, 8)), fill="#FAE8C9")
-    d.rectangle((14, 4, 15, 16), fill="#FAE8C9")
-    d.line((5, 15, 13, 17), fill="#E9C99A", width=1)
+    image = Image.new("RGBA", (20, 20), (0, 0, 0, 0))
+    # One joined silhouette: two stepped diagonal borders converge on the
+    # left-facing tip. The warm interior extends past the panel's outer stroke
+    # into its fill, without the old rectangular renderer-side patch.
+    for y in range(2, 19):
+        distance = abs(y - 10)
+        left = 1 + round(distance * 14 / 8)
+        image.putpixel((left, y), (41, 25, 16, 255))
+        if left + 1 < 19:
+            image.putpixel((left + 1, y), (181, 128, 81, 255))
+        # These source rows approximate the lower centre of the nine-slice.
+        colour = paper_colour(14 + (y - 2) * 3 / 16)
+        for x in range(left + 2, 19):
+            image.putpixel((x, y), colour)
     save(image, "paper_tail")
 
 

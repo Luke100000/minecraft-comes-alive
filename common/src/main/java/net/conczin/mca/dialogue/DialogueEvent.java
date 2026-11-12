@@ -25,6 +25,7 @@ public record DialogueEvent(
         Presentation presentation,
         int priority,
         double weight,
+        double fatigue,
         List<DialogueCondition> requirements,
         Repeat repeat,
         HistoryPolicy history,
@@ -39,13 +40,20 @@ public record DialogueEvent(
             Presentation.CODEC.fieldOf("presentation").forGetter(DialogueEvent::presentation),
             Codec.INT.optionalFieldOf("priority", 0).forGetter(DialogueEvent::priority),
             Codec.DOUBLE.optionalFieldOf("weight", 1.0).forGetter(DialogueEvent::weight),
+            Codec.DOUBLE.optionalFieldOf("fatigue", 0.0).forGetter(DialogueEvent::fatigue),
             DialogueCondition.CODEC.listOf().optionalFieldOf("requirements", List.of()).forGetter(DialogueEvent::requirements),
             Repeat.CODEC.fieldOf("repeat").forGetter(DialogueEvent::repeat),
             HistoryPolicy.CODEC.optionalFieldOf("history", HistoryPolicy.STORY).forGetter(DialogueEvent::history),
             DialogueCodecs.nonblankStringCodec("start").fieldOf("start").forGetter(DialogueEvent::start),
             Codec.unboundedMap(Codec.STRING, Node.CODEC).fieldOf("nodes").forGetter(DialogueEvent::nodes)
-    ).apply(instance, (trigger, presentation, priority, weight, requirements, repeat, history, start, nodes) ->
-            new DialogueEvent(null, trigger, presentation, priority, weight, requirements, repeat, history, start, nodes)));
+    ).apply(instance, (trigger, presentation, priority, weight, fatigue, requirements, repeat, history, start, nodes) ->
+            new DialogueEvent(null, trigger, presentation, priority, weight, fatigue, requirements, repeat, history, start, nodes)));
+
+    public DialogueEvent(ResourceLocation id, Trigger trigger, Presentation presentation, int priority,
+                         double weight, List<DialogueCondition> requirements, Repeat repeat,
+                         HistoryPolicy history, String start, Map<String, Node> nodes) {
+        this(id, trigger, presentation, priority, weight, 0.0, requirements, repeat, history, start, nodes);
+    }
 
     public DialogueEvent {
         requirements = List.copyOf(requirements);
@@ -64,6 +72,7 @@ public record DialogueEvent(
                     decoded.presentation,
                     decoded.priority,
                     decoded.weight,
+                    decoded.fatigue,
                     decoded.requirements,
                     decoded.repeat,
                     decoded.history,
@@ -85,8 +94,14 @@ public record DialogueEvent(
         if (id == null) {
             throw invalid("missing external resource ID");
         }
-        if (!Double.isFinite(weight) || weight <= 0.0) {
-            throw invalid("weight must be finite and positive");
+        if (!Double.isFinite(fatigue) || fatigue < 0.0) {
+            throw invalid("event fatigue must be finite and nonnegative");
+        }
+        if (!Double.isFinite(weight) || (weight <= 0.0 && fatigue <= 0.0)) {
+            throw invalid("weight must be finite and positive unless a positive fatigue rate is provided");
+        }
+        if (fatigue > 0.0 && presentation.mode() != PresentationMode.AMBIENT) {
+            throw invalid("event fatigue is only supported for ambient presentations");
         }
         presentation.validate();
         repeat.validate();
@@ -201,7 +216,7 @@ public record DialogueEvent(
     }
 
     private static void validateKnownFields(JsonObject json) {
-        requireOnly(json, Set.of("trigger", "presentation", "priority", "weight", "requirements", "repeat", "history", "start", "nodes"), "event");
+        requireOnly(json, Set.of("trigger", "presentation", "priority", "weight", "fatigue", "requirements", "repeat", "history", "start", "nodes"), "event");
         if (json.has("presentation") && json.get("presentation").isJsonObject()) {
             requireOnly(json.getAsJsonObject("presentation"), Set.of("mode", "prompt", "resume_prompt", "topic"), "presentation");
         }
@@ -214,11 +229,11 @@ public record DialogueEvent(
                     continue;
                 }
                 JsonObject node = nodeEntry.getValue().getAsJsonObject();
-                requireOnly(node, Set.of("line", "lines", "resolve", "choices", "outcomes", "next", "complete", "end", "retryable", "silent"), "node '" + nodeEntry.getKey() + "'");
+                requireOnly(node, Set.of("line", "lines", "resolve", "choices", "outcomes", "next", "complete", "end", "retryable", "silent", "close_interaction"), "node '" + nodeEntry.getKey() + "'");
                 if (node.has("outcomes") && node.get("outcomes").isJsonArray()) {
                     for (JsonElement outcomeElement : node.getAsJsonArray("outcomes")) {
                         if (outcomeElement.isJsonObject()) {
-                            requireOnly(outcomeElement.getAsJsonObject(), Set.of("requirements", "weight", "actions", "next", "priority"), "outcome");
+                            requireOnly(outcomeElement.getAsJsonObject(), Set.of("requirements", "weight", "actions", "next", "priority", "fatigue"), "outcome");
                         }
                     }
                 }
@@ -232,7 +247,7 @@ public record DialogueEvent(
                         if (choice.has("outcomes") && choice.get("outcomes").isJsonArray()) {
                             for (JsonElement outcomeElement : choice.getAsJsonArray("outcomes")) {
                                 if (outcomeElement.isJsonObject()) {
-                                    requireOnly(outcomeElement.getAsJsonObject(), Set.of("requirements", "weight", "actions", "next", "priority"), "outcome");
+                                    requireOnly(outcomeElement.getAsJsonObject(), Set.of("requirements", "weight", "actions", "next", "priority", "fatigue"), "outcome");
                                 }
                             }
                         }
@@ -377,6 +392,7 @@ public record DialogueEvent(
             boolean end,
             boolean retryable,
             boolean silent,
+            boolean closeInteraction,
             Optional<DialogueAsyncResolver> resolve
     ) {
         private static final Codec<Node> CODEC = RecordCodecBuilder.create(instance -> instance.group(
@@ -389,6 +405,7 @@ public record DialogueEvent(
                 Codec.BOOL.optionalFieldOf("end", false).forGetter(Node::end),
                 Codec.BOOL.optionalFieldOf("retryable", false).forGetter(Node::retryable),
                 Codec.BOOL.optionalFieldOf("silent", false).forGetter(Node::silent),
+                Codec.BOOL.optionalFieldOf("close_interaction", false).forGetter(Node::closeInteraction),
                 DialogueAsyncResolver.CODEC.optionalFieldOf("resolve").forGetter(Node::resolve)
         ).apply(instance, Node::fromFields));
 
@@ -400,7 +417,13 @@ public record DialogueEvent(
 
         public Node(List<String> lines, Optional<List<Choice>> choices, Optional<List<Outcome>> outcomes,
                     Optional<String> next, boolean complete, boolean end, boolean retryable, boolean silent) {
-            this(lines, choices, outcomes, next, complete, end, retryable, silent, Optional.empty());
+            this(lines, choices, outcomes, next, complete, end, retryable, silent, false, Optional.empty());
+        }
+
+        public Node(List<String> lines, Optional<List<Choice>> choices, Optional<List<Outcome>> outcomes,
+                    Optional<String> next, boolean complete, boolean end, boolean retryable, boolean silent,
+                    Optional<DialogueAsyncResolver> resolve) {
+            this(lines, choices, outcomes, next, complete, end, retryable, silent, false, resolve);
         }
 
         public Node(
@@ -412,7 +435,7 @@ public record DialogueEvent(
                 boolean retryable,
                 boolean silent
         ) {
-            this(lines, choices, Optional.empty(), next, complete, end, retryable, silent, Optional.empty());
+            this(lines, choices, Optional.empty(), next, complete, end, retryable, silent, false, Optional.empty());
         }
 
         private static Node fromFields(
@@ -425,6 +448,7 @@ public record DialogueEvent(
                 boolean end,
                 boolean retryable,
                 boolean silent,
+                boolean closeInteraction,
                 Optional<DialogueAsyncResolver> resolve
         ) {
             if (line.isPresent() && lines.isPresent()) {
@@ -444,7 +468,8 @@ public record DialogueEvent(
             if (resolve.isPresent() && (line.isEmpty() || lines.isPresent() || outcomes.isPresent())) {
                 throw new IllegalArgumentException("resolved node requires a single line and cannot route outcomes");
             }
-            return new Node(normalized, choices, outcomes, next, complete, end, retryable, silent, resolve);
+            return new Node(normalized, choices, outcomes, next, complete, end, retryable, silent,
+                    closeInteraction, resolve);
         }
 
         private void validate(String nodeId) {
@@ -455,6 +480,10 @@ public record DialogueEvent(
                     + (end ? 1 : 0);
             if (continuations != 1) {
                 throw new IllegalArgumentException("node '" + nodeId + "' requires exactly one continuation shape");
+            }
+            if (closeInteraction && !complete) {
+                throw new IllegalArgumentException("node '" + nodeId
+                        + "' can close the interaction only when it completes");
             }
             if (choices.isPresent() && choices.orElseThrow().isEmpty()) {
                 throw new IllegalArgumentException("node '" + nodeId + "' choices must not be empty");
@@ -522,15 +551,21 @@ public record DialogueEvent(
             double weight,
             List<DialogueAction> actions,
             String next,
-            int priority
+            int priority,
+            double fatigue
     ) {
         private static final Codec<Outcome> CODEC = RecordCodecBuilder.create(instance -> instance.group(
                 DialogueCondition.CODEC.listOf().optionalFieldOf("requirements", List.of()).forGetter(Outcome::requirements),
                 Codec.DOUBLE.optionalFieldOf("weight", 1.0).forGetter(Outcome::weight),
                 DialogueAction.CODEC.listOf().optionalFieldOf("actions", List.of()).forGetter(Outcome::actions),
                 DialogueCodecs.nonblankStringCodec("next").fieldOf("next").forGetter(Outcome::next),
-                Codec.INT.optionalFieldOf("priority", 0).forGetter(Outcome::priority)
+                Codec.INT.optionalFieldOf("priority", 0).forGetter(Outcome::priority),
+                Codec.DOUBLE.optionalFieldOf("fatigue", 0.0).forGetter(Outcome::fatigue)
         ).apply(instance, Outcome::new));
+
+        public Outcome(List<DialogueCondition> requirements, double weight, List<DialogueAction> actions, String next, int priority) {
+            this(requirements, weight, actions, next, priority, 0.0);
+        }
 
         public Outcome {
             requirements = List.copyOf(requirements);
@@ -538,8 +573,12 @@ public record DialogueEvent(
         }
 
         private void validate(String choiceId) {
-            if (!Double.isFinite(weight) || weight <= 0.0) {
-                throw new IllegalArgumentException("outcome weight for choice '" + choiceId + "' must be finite and positive");
+            if (!Double.isFinite(weight) || (weight <= 0.0 && fatigue <= 0.0)) {
+                throw new IllegalArgumentException("outcome weight for choice '" + choiceId
+                        + "' must be positive unless a positive fatigue rate is provided");
+            }
+            if (!Double.isFinite(fatigue) || fatigue < 0.0) {
+                throw new IllegalArgumentException("outcome fatigue for choice '" + choiceId + "' must be finite and nonnegative");
             }
         }
     }
