@@ -850,7 +850,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             Path path = this.createPath(candidate, 0);
             if (path != null && path.getNodeCount() > 1 && path.getEndNode() != null
                     && (path.canReach() || isUsefulPartialPath(path, candidate))
-                    && avoidsUnrecoverableDetourDrop(path, origin, physicalTarget)) {
+                    && avoidsUnrecoverableDetourDrop(path)) {
                 double progress = horizontalDistance(origin, path.getEndNode().asBlockPos());
                 if (progress < 1.0D) {
                     continue;
@@ -914,7 +914,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 || path.getNodeCount() < 2
                 || (!path.canReach() && !isUsefulPartialPath(path, candidate))
                 || path.getEndNode() == null
-                || !avoidsUnrecoverableDetourDrop(path, this.detour.origin, this.detour.physicalTarget)) {
+                || !avoidsUnrecoverableDetourDrop(path)) {
             return null;
         }
 
@@ -926,13 +926,11 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         return path;
     }
 
-    private static boolean avoidsUnrecoverableDetourDrop(Path path, BlockPos origin, BlockPos destination) {
-        // A speculative flank must preserve a route back to the goal's elevation.
-        // A one-block descent can be climbed again, while a larger drop may strand
-        // the mob below a raised destination before the original route reopens.
-        int minimumY = Math.min(origin.getY(), destination.getY()) - 1;
-        for (int i = 0; i < path.getNodeCount(); i++) {
-            if (path.getNode(i).y < minimumY) {
+    static boolean avoidsUnrecoverableDetourDrop(Path path) {
+        // A gradual valley can be climbed out of; an abrupt drop may strand a
+        // flanking mob even when the pathfinder allows the descent.
+        for (int i = 1; i < path.getNodeCount(); i++) {
+            if (path.getNode(i - 1).y - path.getNode(i).y > 1) {
                 return false;
             }
         }
