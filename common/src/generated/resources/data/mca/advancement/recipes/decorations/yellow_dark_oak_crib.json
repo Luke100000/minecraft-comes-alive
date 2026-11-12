@@ -28,6 +28,5 @@
     "recipes": [
       "mca:yellow_dark_oak_crib"
     ]
-  },
-  "sends_telemetry_event": false
+  }
 }

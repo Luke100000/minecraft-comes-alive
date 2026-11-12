@@ -1,12 +1,12 @@
 package net.conczin.mca.client.gui.immersive_library;
 
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import net.conczin.mca.Config;
 import net.conczin.mca.MCA;
 import net.conczin.mca.client.gui.immersive_library.responses.ErrorResponse;
 import net.conczin.mca.client.gui.immersive_library.responses.Response;
+import net.minecraft.SharedConstants;
 import org.apache.commons.io.IOUtils;
 
 import java.io.IOException;
@@ -19,9 +19,8 @@ import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 
 public class Api {
-    private static final Gson gson = new GsonBuilder()
-            .registerTypeAdapterFactory(new RecordTypeAdapterFactory())
-            .create();
+    private static final Gson gson = new Gson();
+    private static final int TIMEOUT_MS = 10_000;
 
     public static Response request(HttpMethod httpMethod, Class<? extends Response> expectedAnswer, String url) {
         return request(httpMethod, expectedAnswer, url, null, null);
@@ -31,10 +30,9 @@ public class Api {
         return request(httpMethod, expectedAnswer, url, queryParams, null);
     }
 
-    public static Response request(HttpMethod httpMethod, Class<? extends Response> expectedAnswer, String url, Map<String, String> queryParams, Map<String, String> body) {
+    public static Response request(HttpMethod httpMethod, Class<? extends Response> expectedAnswer, String url, Map<String, String> queryParams, Map<String, ?> body) {
         try {
-            boolean versionedPath = url.startsWith("v2/");
-            String fullUrl = Config.getInstance().immersiveLibraryUrl + (versionedPath ? "/" : "/v1/") + url;
+            String fullUrl = Config.getInstance().immersiveLibraryUrl + "/" + url;
 
             // Append query params
             if (queryParams != null) {
@@ -44,6 +42,8 @@ public class Api {
             }
 
             HttpURLConnection con = (HttpURLConnection) (URI.create(fullUrl)).toURL().openConnection();
+            con.setConnectTimeout(TIMEOUT_MS);
+            con.setReadTimeout(TIMEOUT_MS);
 
             // Set request method
             con.setRequestMethod(httpMethod.name());
@@ -52,6 +52,7 @@ public class Api {
             con.setRequestProperty("Content-Type", "application/json");
             con.setRequestProperty("Accept-Encoding", "gzip");
             con.setRequestProperty("Accept", "application/json");
+            con.setRequestProperty("User-Agent", userAgent());
 
             // Authenticate
             if (Auth.hasToken()) {
@@ -61,17 +62,17 @@ public class Api {
             // Set request body
             if (body != null && !body.isEmpty()) {
                 con.setDoOutput(true);
-                Gson gson = new Gson();
                 String jsonBody = gson.toJson(body);
                 con.getOutputStream().write(jsonBody.getBytes(StandardCharsets.UTF_8));
             }
 
             // Send the request and read response
-            if (con.getErrorStream() != null) {
-                int responseCode = con.getResponseCode();
-                String error = IOUtils.toString(con.getErrorStream(), StandardCharsets.UTF_8);
+            int responseCode = con.getResponseCode();
+            if (responseCode >= 400) {
+                String error = con.getErrorStream() == null ? "" : IOUtils.toString(con.getErrorStream(), StandardCharsets.UTF_8);
                 JsonObject object = gson.fromJson(error, JsonObject.class);
-                return new ErrorResponse(responseCode, object.get("message").getAsString());
+                boolean hasMessage = object != null && object.has("message");
+                return new ErrorResponse(responseCode, hasMessage ? object.get("message").getAsString() : error);
             }
 
             // Parse answer
@@ -90,6 +91,13 @@ public class Api {
             MCA.LOGGER.error(e);
             return new ErrorResponse(-1, e.toString());
         }
+    }
+
+    private static String userAgent() {
+        return "MCA/%s Minecraft/%s Java/%s".formatted(
+                MCA.platformHelper.getModVersion(),
+                SharedConstants.getCurrentVersion().getName(),
+                System.getProperty("java.version"));
     }
 
     public enum HttpMethod {

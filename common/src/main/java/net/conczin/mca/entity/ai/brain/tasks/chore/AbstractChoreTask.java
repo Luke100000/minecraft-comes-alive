@@ -2,6 +2,9 @@ package net.conczin.mca.entity.ai.brain.tasks.chore;
 
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
+import net.conczin.mca.entity.ai.Chore;
+import net.conczin.mca.util.InventoryUtils;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -9,6 +12,7 @@ import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.ai.util.LandRandomPos;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Map;
@@ -21,6 +25,7 @@ public abstract class AbstractChoreTask extends Behavior<VillagerEntityMCA> {
     protected VillagerEntityMCA villager;
     protected int failedTicks, walkingTicks;
     protected int lastAge;
+    private ItemStack choreHand = ItemStack.EMPTY;
 
     public AbstractChoreTask(Map<MemoryModuleType<?>, MemoryStatus> requirements) {
         super(requirements, 400);
@@ -31,21 +36,35 @@ public abstract class AbstractChoreTask extends Behavior<VillagerEntityMCA> {
         int diff = Math.max(0, entity.tickCount - lastAge);
         lastAge = entity.tickCount;
 
+        // Combat and panic take precedence over work and cooldown wandering.
+        if (entity.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)
+                || entity.getVillagerBrain().isPanicking()) {
+            return false;
+        }
+
         // wander around
         if (failedTicks > 0) {
             failedTicks -= diff;
             walkingTicks += diff;
 
             if (walkingTicks > WALKING_THRESHOLD) {
-                Optional<Vec3> optional = Optional.ofNullable(LandRandomPos.getPos(entity, 10, 5));
-                entity.getBrain().setMemory(MemoryModuleType.WALK_TARGET, optional.map(vec3d -> new WalkTarget(vec3d, 0.4f, 0)));
+                entity.getBrain().setMemory(
+                        MemoryModuleType.WALK_TARGET,
+                        createStableWalkTarget(entity, LandRandomPos.getPos(entity, 10, 5))
+                );
                 walkingTicks = 0;
             }
 
             return false;
         }
 
-        return villager == null || !villager.getVillagerBrain().isPanicking();
+        return true;
+    }
+
+    static Optional<WalkTarget> createStableWalkTarget(VillagerEntityMCA entity, Vec3 candidate) {
+        return Optional.ofNullable(candidate)
+                .filter(position -> entity.getNavigation().isStableDestination(BlockPos.containing(position)))
+                .map(position -> new WalkTarget(position, 0.4f, 0));
     }
 
     @Override
@@ -59,6 +78,40 @@ public abstract class AbstractChoreTask extends Behavior<VillagerEntityMCA> {
     @Override
     protected void start(ServerLevel world, VillagerEntityMCA entity, long time) {
         this.villager = entity;
+        choreHand = ItemStack.EMPTY;
+    }
+
+    protected final void rememberChoreHand(ItemStack stack) {
+        choreHand = stack;
+    }
+
+    /** Borrows a matching tool without copying it or discarding the displaced hand item. */
+    protected final boolean equipChoreTool(VillagerEntityMCA entity, Chore chore, String missingMessage) {
+        ItemStack held = entity.getItemInHand(entity.getDominantHand());
+        if (chore.matchesTool(held)) {
+            rememberChoreHand(held);
+            return true;
+        }
+
+        int slot = InventoryUtils.getFirstSlotContainingItem(entity.getInventory(), chore::matchesTool);
+        if (slot < 0) {
+            abandonJobWithMessage(missingMessage);
+            return false;
+        }
+        ItemStack tool = entity.getInventory().getItem(slot);
+        entity.setItemInHand(entity.getDominantHand(), tool);
+        rememberChoreHand(tool);
+        return true;
+    }
+
+    /** Only release the stack this task last equipped, never another behaviour's replacement. */
+    protected final void releaseChoreHand(VillagerEntityMCA entity, Chore chore) {
+        ItemStack held = entity.getItemInHand(entity.getDominantHand());
+        if (!choreHand.isEmpty() && held == choreHand
+                && !(chore == Chore.HUNT && entity.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET))) {
+            entity.setItemInHand(entity.getDominantHand(), ItemStack.EMPTY);
+        }
+        choreHand = ItemStack.EMPTY;
     }
 
     Optional<Player> getAssigningPlayer() {

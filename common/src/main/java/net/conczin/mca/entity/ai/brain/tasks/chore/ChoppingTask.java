@@ -18,16 +18,18 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
-import net.minecraft.world.item.AxeItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 public class ChoppingTask extends AbstractChoreTask {
+    private static final double MAX_WORK_DISTANCE_SQUARED = 6.0;
+
     private int chopTicks, targetTreeTicks;
     private BlockPos targetTree;
 
@@ -47,37 +49,21 @@ public class ChoppingTask extends AbstractChoreTask {
 
     @Override
     protected void stop(ServerLevel world, VillagerEntityMCA villager, long time) {
-        ItemStack stack = villager.getItemInHand(villager.getDominantHand());
-        if (!stack.isEmpty()) {
-            villager.setItemInHand(villager.getDominantHand(), ItemStack.EMPTY);
-        }
+        releaseChoreHand(villager, Chore.CHOP);
     }
 
     @Override
     protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.start(world, villager, time);
 
-        if (!villager.hasItemInSlot(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), stack -> stack.getItem() instanceof AxeItem);
-            if (i == -1) {
-                abandonJobWithMessage("chore.chopping.noaxe");
-            } else {
-                villager.setItemInHand(villager.getDominantHand(), villager.getInventory().getItem(i));
-            }
-        }
+        equipChoreTool(villager, Chore.CHOP, "chore.chopping.noaxe");
     }
 
     @Override
     protected void tick(ServerLevel world, VillagerEntityMCA villager, long time) {
         if (this.villager == null) this.villager = villager;
 
-        if (!InventoryUtils.contains(villager.getInventory(), AxeItem.class) && !villager.hasItemInSlot(villager.getDominantSlot())) {
-            abandonJobWithMessage("chore.chopping.noaxe");
-        } else if (!villager.hasItemInSlot(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), stack -> stack.getItem() instanceof AxeItem);
-            ItemStack stack = villager.getInventory().getItem(i);
-            villager.setItemInHand(villager.getDominantHand(), stack);
-        }
+        if (!equipChoreTool(villager, Chore.CHOP, "chore.chopping.noaxe")) return;
 
         if (targetTree == null) {
             List<BlockPos> nearbyLogs = TaskUtils.getNearbyBlocks(villager.blockPosition(), world, (blockState -> blockState.is(BlockTags.LOGS)), 15, 5);
@@ -103,18 +89,20 @@ public class ChoppingTask extends AbstractChoreTask {
             return;
         }
 
-        villager.moveTowards(targetTree);
+        villager.moveTowardsPersistent(targetTree, 0.5F, 1);
 
         BlockState state = world.getBlockState(targetTree);
         if (state.is(BlockTags.LOGS)) {
-            villager.swing(villager.getDominantHand());
-            chopTicks++;
+            if (villager.distanceToSqr(Vec3.atBottomCenterOf(targetTree)) <= MAX_WORK_DISTANCE_SQUARED) {
+                villager.swing(villager.getDominantHand());
+                chopTicks++;
 
-            // cut down a tree every few seconds, dependent on config + the mining speed multiplier
-            if (chopTicks >= targetTreeTicks) {
-                chopTicks = 0;
+                // cut down a tree every few seconds, dependent on config + the mining speed multiplier
+                if (chopTicks >= targetTreeTicks) {
+                    chopTicks = 0;
 
-                destroyTree(world, targetTree);
+                    destroyTree(world, targetTree);
+                }
             }
         } else {
             targetTree = null;

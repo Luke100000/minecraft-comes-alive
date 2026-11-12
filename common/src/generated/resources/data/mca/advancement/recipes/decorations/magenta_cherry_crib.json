@@ -28,6 +28,5 @@
     "recipes": [
       "mca:magenta_cherry_crib"
     ]
-  },
-  "sends_telemetry_event": false
+  }
 }

@@ -1,6 +1,10 @@
 package net.conczin.mca.mixin;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.server.SpawnQueue;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.resources.ResourceKey;
@@ -9,6 +13,8 @@ import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.WorldGenLevel;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.storage.WritableLevelData;
 import org.spongepowered.asm.mixin.Mixin;
@@ -32,5 +38,16 @@ abstract class MixinServerWorld extends Level implements WorldGenLevel {
         if (SpawnQueue.getInstance().addVillager(entity)) {
             info.setReturnValue(false);
         }
+    }
+
+    @WrapMethod(method = "sendBlockUpdated")
+    private void mca$checkPathAfterBlockChange(BlockPos changed, BlockState before, BlockState after,
+                                               int flags, Operation<Void> original) {
+        if (!before.hasProperty(BlockStateProperties.OPEN) || !after.hasProperty(BlockStateProperties.OPEN)) {
+            original.call(changed, before, after, flags);
+            return;
+        }
+        MCAGroundPathNavigation.duringBlockUpdate(changed, before, after,
+                () -> original.call(changed, before, after, flags));
     }
 }

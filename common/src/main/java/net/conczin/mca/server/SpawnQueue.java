@@ -6,6 +6,7 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ZombieVillagerEntityMCA;
 import net.conczin.mca.entity.ZombieVillagerFactory;
+import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.server.world.data.Nationality;
 import net.minecraft.core.Holder;
@@ -14,6 +15,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.monster.ZombieVillager;
 import net.minecraft.world.entity.npc.Villager;
@@ -48,6 +50,11 @@ public class SpawnQueue {
         // The chunk loaded check apparently does not function properly in this context, this is shown by villagers spawning fine without it, but NEVER spawn with it if far away and JUST generated.
         Villager ve = villagerSpawnQueue.poll();
         if (ve != null) {
+            // The fresh MCA resident acquires its own HOME; discard alone leaves the old bed occupied and claimed.
+            if (ve.isSleeping()) {
+                ve.stopSleeping();
+            }
+            ve.releasePoi(MemoryModuleType.HOME);
             ve.discard();
             VillagerEntityMCA villager = VillagerFactory.newVillager(ve.level())
                     .withName(ve.hasCustomName() ? ve.getName().getString() : null)
@@ -91,6 +98,11 @@ public class SpawnQueue {
     }
 
     private void copyPastaIntensifies(PathfinderMob villager, PathfinderMob entity) {
+        if (villager instanceof ZombieVillagerEntityMCA zombieVillager && entity instanceof Zombie zombie && zombie.isBaby()) {
+            zombieVillager.setBaby(true);
+            zombieVillager.setAgeState(AgeState.TODDLER);
+        }
+
         if (entity.isPersistenceRequired()) {
             villager.setPersistenceRequired();
         }
@@ -116,6 +128,7 @@ public class SpawnQueue {
         if (Config.getInstance().overwriteOriginalVillagers
             && (entity.getClass().equals(Villager.class) ||
                 Config.getInstance().moddedVillagerWhitelist.contains(BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).toString()) && entity instanceof Villager)
+            && Config.getInstance().villagerTagBlacklist.stream().noneMatch(entity.getTags()::contains)
             && shouldGetConverted(entity)
             && !villagerSpawnQueue.contains(entity)) {
             return villagerSpawnQueue.add((Villager) entity);

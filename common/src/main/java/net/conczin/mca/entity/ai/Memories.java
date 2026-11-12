@@ -3,6 +3,7 @@ package net.conczin.mca.entity.ai;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.world.entity.Mob;
 import org.jetbrains.annotations.Nullable;
 
@@ -29,7 +30,10 @@ public class Memories {
             return null;
         }
 
-        Memories memories = new Memories(villager.getVillagerBrain(), villager.level().getDayTime(), tag.getUUID("playerUUID"));
+        UUID playerUUID = tag.contains("playerUUID", Tag.TAG_STRING)
+                ? UUID.fromString(tag.getString("playerUUID"))
+                : tag.getUUID("playerUUID");
+        Memories memories = new Memories(villager.getVillagerBrain(), villager.level().getDayTime(), playerUUID);
 
         memories.hearts = tag.getInt("hearts");
         memories.interactionFatigue = tag.getInt("interactionFatigue");

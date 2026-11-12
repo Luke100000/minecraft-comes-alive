@@ -100,7 +100,7 @@ public class CDataManager<E extends Entity> {
         }
 
         public void register(SynchedEntityData.Builder builder) {
-            builder.define(data, parameter.getDefault());
+            builder.define(data, data.serializer().copy(parameter.getDefault()));
         }
     }
 }
