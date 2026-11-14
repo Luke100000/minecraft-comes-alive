@@ -76,19 +76,30 @@ public class OnlineSpeechManager {
             long request = SpeechManager.INSTANCE.beginVoiceRequest(entity.getUUID());
 
             CompletableFuture.runAsync(() -> {
-                String hash = language + "-" + voice + "/" + AudioCache.getHash(text) + ".ogg";
-                if (AudioCache.cachedRetrieve(hash, output -> {
-                    downloadAudio(output, language, voice, text);
-                })) {
-                    ResourceLocation soundLocation = MCA.locate("tts_cache/" + hash);
-                    SpeechManager.INSTANCE.playSound(pitch, entity, soundLocation, request);
-                } else if (!warningIssued) {
-                    // Server queued the request but the audio is not ready yet
-                    warningIssued = true;
-                    Minecraft.getInstance().getChatListener().handleSystemMessage(
-                            Component.translatable("command.tts_busy").withStyle(ChatFormatting.ITALIC, ChatFormatting.GRAY),
-                            false
-                    );
+                boolean playbackQueued = false;
+                try {
+                    String hash = language + "-" + voice + "/" + AudioCache.getHash(text) + ".ogg";
+                    if (AudioCache.cachedRetrieve(hash, output -> {
+                        downloadAudio(output, language, voice, text);
+                    })) {
+                        ResourceLocation soundLocation = MCA.locate("tts_cache/" + hash);
+                        SpeechManager.INSTANCE.playSound(pitch, entity, soundLocation, request);
+                        playbackQueued = true;
+                    } else if (!warningIssued) {
+                        // Server queued the request but the audio is not ready yet.
+                        warningIssued = true;
+                        Minecraft.getInstance().getChatListener().handleSystemMessage(
+                                Component.translatable("command.tts_busy").withStyle(ChatFormatting.ITALIC, ChatFormatting.GRAY),
+                                false
+                        );
+                    }
+                } catch (RuntimeException e) {
+                    MCA.LOGGER.warn("Failed to prepare online villager voice", e);
+                } finally {
+                    // Successful playback retires on the client executor after the freshness check.
+                    if (!playbackQueued) {
+                        SpeechManager.INSTANCE.finishVoiceRequest(entity.getUUID(), request);
+                    }
                 }
             });
         }

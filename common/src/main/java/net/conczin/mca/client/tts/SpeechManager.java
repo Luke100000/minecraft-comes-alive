@@ -37,6 +37,7 @@ public class SpeechManager {
     private final Map<UUID, EntityBoundSoundInstance> currentlyPlaying = new ConcurrentHashMap<>();
     private final Map<UUID, Long> latestVoiceRequest = new ConcurrentHashMap<>();
     private final AtomicLong voiceRequestCounter = new AtomicLong();
+    private Object lastClientLevel;
 
     private final RealtimeSpeechManager realtimeSpeechManager = new RealtimeSpeechManager(Config.getInstance().onlineTTSServer);
     private final Player2SpeechManager player2SpeechManager = new Player2SpeechManager(Config.getInstance().player2Url);
@@ -50,6 +51,7 @@ public class SpeechManager {
 
     public SpeechManager() {
         client = Minecraft.getInstance();
+        lastClientLevel = client == null ? null : client.level;
     }
 
     public EntityBoundSoundInstance getSound(float pitch, Entity entity, ResourceLocation soundLocation) {
@@ -61,13 +63,24 @@ public class SpeechManager {
     public void playSound(float pitch, Entity entity, ResourceLocation soundLocation, long request) {
         client.execute(() -> {
             UUID uuid = entity.getUUID();
-            if (!isLatestVoiceRequest(uuid, request)) return;
-            EntityBoundSoundInstance sound = SpeechManager.INSTANCE.getSound(pitch, entity, soundLocation);
-            playAndTrack(uuid, sound);
+            try {
+                // The world can change before a downloaded voice reaches the client executor.
+                if (client.level != entity.level() || !isLatestVoiceRequest(uuid, request)) {
+                    return;
+                }
+                EntityBoundSoundInstance sound = getSound(pitch, entity, soundLocation);
+                playAndTrack(uuid, sound);
+            } finally {
+                finishVoiceRequest(uuid, request);
+            }
         });
     }
 
     long beginVoiceRequest(UUID sender) {
+        // Network messages may arrive in a newly joined level before the next client tick.
+        if (client != null) {
+            updateClientLevel(client);
+        }
         long request = voiceRequestCounter.incrementAndGet();
         latestVoiceRequest.put(sender, request);
         return request;
@@ -75,6 +88,10 @@ public class SpeechManager {
 
     private boolean isLatestVoiceRequest(UUID sender, long request) {
         return Long.valueOf(request).equals(latestVoiceRequest.get(sender));
+    }
+
+    void finishVoiceRequest(UUID sender, long request) {
+        latestVoiceRequest.remove(sender, request);
     }
 
     /**
@@ -201,9 +218,13 @@ public class SpeechManager {
             return false;
         }
 
-        beginVoiceRequest(sender);
-        EntityBoundSoundInstance instance = new EntityBoundSoundInstance(SoundEvent.createVariableRangeEvent(sound), SoundSource.NEUTRAL, 1.0f, pitch, villager, threadSafeRandom.nextLong());
-        playAndTrack(sender, instance);
+        long request = beginVoiceRequest(sender);
+        try {
+            EntityBoundSoundInstance instance = new EntityBoundSoundInstance(SoundEvent.createVariableRangeEvent(sound), SoundSource.NEUTRAL, 1.0f, pitch, villager, threadSafeRandom.nextLong());
+            playAndTrack(sender, instance);
+        } finally {
+            finishVoiceRequest(sender, request);
+        }
         return true;
     }
 
@@ -212,7 +233,19 @@ public class SpeechManager {
                 .anyMatch(sound -> sound.getNamespace().equals("mca_voices"));
     }
 
+    private void updateClientLevel(Minecraft client) {
+        if (client.level == null || client.level != lastClientLevel) {
+            latestVoiceRequest.clear();
+            if (client.level != lastClientLevel && !currentlyPlaying.isEmpty()) {
+                currentlyPlaying.values().forEach(client.getSoundManager()::stop);
+                currentlyPlaying.clear();
+            }
+            lastClientLevel = client.level;
+        }
+    }
+
     public void tick(Minecraft client) {
+        updateClientLevel(client);
         if (client.level != null) {
             currentlyPlaying.entrySet().removeIf(entry -> !client.getSoundManager().isActive(entry.getValue()));
             long time = client.level.getGameTime();

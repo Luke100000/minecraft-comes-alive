@@ -81,13 +81,23 @@ public class RealtimeSpeechManager {
     public void play(String phrase, float pitch, Entity entity, boolean cacheable, String voice) {
         long request = SpeechManager.INSTANCE.beginVoiceRequest(entity.getUUID());
         CompletableFuture.runAsync(() -> {
-            String text = cacheable ? OnlineSpeechManager.cleanPhrase(phrase) : phrase;
-            String hash = cacheable ? AudioCache.getHash(voice) + "/" + AudioCache.getHash(text) : "realtime";
-            if (AudioCache.get(hash, output -> {
-                downloadAudio(output, voice, text);
-            }, cacheable)) {
-                ResourceLocation soundLocation = MCA.locate("tts_cache/" + hash);
-                SpeechManager.INSTANCE.playSound(pitch, entity, soundLocation, request);
+            boolean playbackQueued = false;
+            try {
+                String text = cacheable ? OnlineSpeechManager.cleanPhrase(phrase) : phrase;
+                String hash = cacheable ? AudioCache.getHash(voice) + "/" + AudioCache.getHash(text) : "realtime";
+                if (AudioCache.get(hash, output -> {
+                    downloadAudio(output, voice, text);
+                }, cacheable)) {
+                    ResourceLocation soundLocation = MCA.locate("tts_cache/" + hash);
+                    SpeechManager.INSTANCE.playSound(pitch, entity, soundLocation, request);
+                    playbackQueued = true;
+                }
+            } catch (RuntimeException e) {
+                MCA.LOGGER.warn("Failed to prepare realtime villager voice", e);
+            } finally {
+                if (!playbackQueued) {
+                    SpeechManager.INSTANCE.finishVoiceRequest(entity.getUUID(), request);
+                }
             }
         });
     }
