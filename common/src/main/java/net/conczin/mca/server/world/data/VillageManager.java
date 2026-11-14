@@ -20,6 +20,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+
 import net.minecraft.util.Mth;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.Entity;
@@ -30,14 +31,21 @@ import net.minecraft.world.entity.monster.AbstractIllager;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.levelgen.Heightmap;
+import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.storage.DimensionDataStorage;
+import net.minecraft.world.level.storage.LevelResource;
 
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 public class VillageManager extends SavedData implements Iterable<Village> {
+    private static final String DATA_ID = "mca_villages";
     static final long ORIGIN_GEOMETRY_REFRESH_INITIAL_DELAY = 20L;
     static final long ORIGIN_GEOMETRY_REFRESH_MAX_DELAY = 20L * 60L;
     private static final int ORIGIN_GEOMETRY_REFRESH_MAX_FAILURES = 6;
@@ -54,6 +62,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     private int lastBuildingId;
     private int lastVillageId;
     private int buildingCooldown = 21;
+    private boolean unreadableSavedData;
 
     VillageManager(ServerLevel world) {
         this.world = world;
@@ -69,28 +78,65 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         reapers = nbt.contains("reapers", Tag.TAG_COMPOUND)
                 ? new ReaperSpawner(this, nbt.getCompound("reapers")) : new ReaperSpawner(this);
         ListTag villageList = nbt.getList("villages", Tag.TAG_COMPOUND);
-        for (int i = 0; i < villageList.size(); i++) {
-            Village village = new Village(villageList.getCompound(i), world);
-            if (village.repairDuplicateResidentHomes()) {
-                setDirty();
+        try {
+            for (int i = 0; i < villageList.size(); i++) {
+                Village village = new Village(villageList.getCompound(i), world);
+                if (village.repairDuplicateResidentHomes()) {
+                    setDirty();
+                }
+                if (village.getBuildings().isEmpty() && village.getStructures().isEmpty()
+                        && village.getExternalBuildingMap().isEmpty()) {
+                    MCA.LOGGER.warn("Empty village detected ({}), removing...", village.getName());
+                    setDirty();
+                } else {
+                    villages.put(village.getId(), village);
+                }
             }
-            if (village.getBuildings().isEmpty() && village.getStructures().isEmpty()
-                    && village.getExternalBuildingMap().isEmpty()) {
-                MCA.LOGGER.warn("Empty village detected ({}), removing...", village.getName());
-                setDirty();
-            } else {
-                villages.put(village.getId(), village);
-            }
+        } catch (RuntimeException exception) {
+            villages.clear();
+            setDirty(false);
+            unreadableSavedData = true;
+            MCA.LOGGER.error("MCA village data could not be loaded. Village changes will NOT be saved to protect mca_villages.dat. Restore or migrate the data before continuing.", exception);
+            return;
         }
         scheduleOriginGeometryRefreshes(world.getGameTime());
     }
 
     public static VillageManager get(ServerLevel world) {
-        return WorldUtils.loadData(world, (nbt, provider) -> new VillageManager(world, nbt),
-                VillageManager::new, "mca_villages");
+        Path dataFolder = DimensionType.getStorageFolder(world.dimension(),
+                world.getServer().getWorldPath(LevelResource.ROOT)).resolve("data");
+        return loadSafely(world, world.getDataStorage(), dataFolder);
+    }
+
+    static VillageManager loadSafely(ServerLevel world, DimensionDataStorage storage, Path dataFolder) {
+        SavedData.Factory<VillageManager> factory = new SavedData.Factory<>(
+                () -> new VillageManager(world),
+                (nbt, provider) -> new VillageManager(world, nbt), null);
+        VillageManager manager = storage.get(factory, DATA_ID);
+        if (manager != null) {
+            return manager;
+        }
+
+        manager = new VillageManager(world);
+        Path savedFile = dataFolder.resolve(DATA_ID + ".dat");
+        if (Files.exists(savedFile)) {
+            // Vanilla catches disk/DFU failures before invoking our deserializer. Preserve that file too.
+            manager.unreadableSavedData = true;
+            MCA.LOGGER.error("Unable to load MCA village data from {}. Refusing to overwrite the original save.", savedFile);
+        }
+        storage.set(DATA_ID, manager);
+        return manager;
+    }
+
+    public static String getRelativeSavePath(ServerLevel world) {
+        Path worldFolder = world.getServer().getWorldPath(LevelResource.ROOT);
+        Path file = DimensionType.getStorageFolder(world.dimension(), worldFolder)
+                .resolve("data").resolve(DATA_ID + ".dat");
+        return worldFolder.relativize(file).toString().replace('\\', '/');
     }
 
     public ReaperSpawner getReaperSpawner() { return reapers; }
+    public boolean hasUnreadableSavedData() { return unreadableSavedData; }
     public IndoorRoomCache getIndoorRooms() { return indoorRooms; }
     public void trackVillager(Villager villager) {
         loadedVillagers.put(villager.getUUID(), villager);
@@ -116,6 +162,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         if (villages.remove(id) != null) {
             originGeometryRefreshRetries.keySet().removeIf(key -> key.villageId() == id);
             cache.clear();
+            setDirty();
             return true;
         }
         return false;
@@ -149,7 +196,17 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         return nbt;
     }
 
+    @Override
+    public void save(File file, HolderLookup.Provider provider) {
+        if (unreadableSavedData) {
+            MCA.LOGGER.error("Refusing to overwrite unreadable MCA village data at {}", file);
+            return;
+        }
+        super.save(file, provider);
+    }
+
     public void tick() {
+        if (unreadableSavedData) return;
         if (world.getDayTime() % 100 == 0) {
             world.players().forEach(player -> PlayerSaveData.get(player).updateLastSeenVillage(this, player));
         }
@@ -290,10 +347,12 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     public void reportBuilding(BlockPos pos) {
+        if (unreadableSavedData) return;
         if (cache.add(pos)) buildingQueue.add(pos);
     }
 
     public Building.validationResult processBuilding(BlockPos pos) {
+        if (unreadableSavedData) return Building.validationResult.TARGET_CHANGED;
         BuildingType externalType = getGroupedBuildingType(pos);
         if (externalType != null) {
             Building.validationResult result = processExternalBuilding(pos, externalType);
@@ -353,6 +412,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
     }
 
     public Building.validationResult commitRoomAddition(BuildingScanResult scan, String forcedType) {
+        if (unreadableSavedData) return Building.validationResult.TARGET_CHANGED;
         if (scan == null || scan.result() != Building.validationResult.SUCCESS) return scan == null
                 ? Building.validationResult.TOO_SMALL : scan.result();
         if (forcedType != null && !scan.matchesType(forcedType)) return Building.validationResult.INVALID_TYPE;
@@ -463,6 +523,7 @@ public class VillageManager extends SavedData implements Iterable<Village> {
 
     public Building.validationResult commitRegisteredRoomUpdate(RegisteredRoomUpdate update,
                                                                  String forcedType) {
+        if (unreadableSavedData) return Building.validationResult.TARGET_CHANGED;
         Building.validationResult result = applyRegisteredRoomUpdate(update, forcedType, true);
         if (result == Building.validationResult.SUCCESS) {
             finalizeVillageMutation(update.village());
@@ -770,7 +831,12 @@ public class VillageManager extends SavedData implements Iterable<Village> {
         INVALID_TYPE
     }
 
-    public void setBuildingCooldown(int buildingCooldown) { this.buildingCooldown = buildingCooldown; }
+    public void setBuildingCooldown(int buildingCooldown) {
+        if (buildingCooldown <= 0) {
+            throw new IllegalArgumentException("Building cooldown must be positive");
+        }
+        this.buildingCooldown = buildingCooldown;
+    }
     public void merge(Village into, Village from) {
         into.merge(from);
         if (into.getId() == from.getId()) return;

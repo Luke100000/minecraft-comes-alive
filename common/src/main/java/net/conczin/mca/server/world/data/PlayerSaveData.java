@@ -38,10 +38,17 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.storage.DimensionDataStorage;
+import net.minecraft.world.level.storage.LevelResource;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 public class PlayerSaveData extends SavedData implements EntityRelationship {
     private final ServerLevel world;
@@ -53,6 +60,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     private String chatAIPrompt = "";
     private CompoundTag entityData;
     private PlayerDimensions.Scale dimensionsScale;
+    private boolean unreadableSavedData;
 
     PlayerSaveData(ServerLevel world, UUID uuid) {
         this.world = world;
@@ -89,12 +97,38 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public static PlayerSaveData get(ServerLevel world, UUID uuid) {
-        return WorldUtils.loadData(world.getServer().overworld(), (nbt, provider) -> new PlayerSaveData(world, uuid, nbt), w -> new PlayerSaveData(world, uuid), "mca_player_" + uuid);
+        return loadSafely(world, uuid, world.getServer().overworld().getDataStorage(),
+                world.getServer().getWorldPath(LevelResource.ROOT).resolve("data"));
+    }
+
+    static PlayerSaveData loadSafely(ServerLevel world, UUID uuid, DimensionDataStorage storage, Path dataFolder) {
+        String dataId = "mca_player_" + uuid;
+        SavedData.Factory<PlayerSaveData> factory = new SavedData.Factory<>(
+                () -> new PlayerSaveData(world, uuid),
+                (nbt, provider) -> new PlayerSaveData(world, uuid, nbt), null);
+        PlayerSaveData data = storage.get(factory, dataId);
+        if (data != null) return data;
+
+        data = new PlayerSaveData(world, uuid);
+        if (Files.exists(dataFolder.resolve(dataId + ".dat"))) {
+            data.unreadableSavedData = true;
+            MCA.LOGGER.error("MCA player data {} could not be loaded. Original save will not be overwritten.", uuid);
+        }
+        storage.set(dataId, data);
+        return data;
+    }
+
+    public Set<UUID> getCallableFamilyIds() {
+        FamilyTreeNode entry = getFamilyEntry();
+        return Stream.concat(
+                entry.getAllRelatives(4).filter(entry::isRelative),
+                getPartnerUUID().stream()
+        ).collect(Collectors.toUnmodifiableSet());
     }
 
     @SuppressWarnings("DataFlowIssue")
     public static Optional<PlayerSaveData> getIfPresent(ServerLevel world, UUID uuid) {
-        return Optional.ofNullable(world.getDataStorage().get(new SavedData.Factory<>(
+        return Optional.ofNullable(world.getServer().overworld().getDataStorage().get(new SavedData.Factory<>(
                 () -> null,
                 (nbt, provider) -> new PlayerSaveData(world, uuid, nbt),
                 null
@@ -283,6 +317,14 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         setDirty();
     }
 
+    @Override
+    public void save(File file, HolderLookup.Provider provider) {
+        if (unreadableSavedData) {
+            MCA.LOGGER.error("Refusing to overwrite unreadable MCA player data at {}", file);
+            return;
+        }
+        super.save(file, provider);
+    }
     @Override
     public CompoundTag save(CompoundTag nbt, HolderLookup.Provider provider) {
         lastSeenVillage.ifPresent(id -> nbt.putInt("lastSeenVillage", id));

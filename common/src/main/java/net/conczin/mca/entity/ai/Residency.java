@@ -167,6 +167,7 @@ public class Residency {
     private void reconcileVillageMembership(boolean authoritativeHomeClaim) {
         if (entity.requiresHome()) {
             VillageManager manager = VillageManager.get((ServerLevel) entity.level());
+            if (manager.hasUnreadableSavedData()) return;
             Optional<Village> current = getHomeVillage();
             Optional<Village> target = getHome()
                     .filter(home -> home.dimension() == entity.level().dimension())
@@ -213,11 +214,13 @@ public class Residency {
      * Removes MCA village membership without changing HOME or its POI ticket.
      */
     public void leaveVillage() {
+        if (VillageManager.get((ServerLevel) entity.level()).hasUnreadableSavedData()) return;
         getHomeVillage().ifPresent(village -> village.removeResident(entity));
         entity.setTrackedValue(VILLAGE, -1);
     }
 
     public void tick() {
+        if (VillageManager.get((ServerLevel) entity.level()).hasUnreadableSavedData()) return;
         bedDebugLog.tick(entity);
         //report buildings close by
         if (entity.requiresHome() && (entity.tickCount == 1 || entity.tickCount % 600 == 0)) {
@@ -270,6 +273,7 @@ public class Residency {
     }
 
     public void setHome(ServerPlayer player) {
+        if (VillageManager.get((ServerLevel) entity.level()).hasUnreadableSavedData()) return;
         if (!entity.requiresHome()) {
             entity.sendChatMessage(player, "interaction.sethome.temporary");
             return;

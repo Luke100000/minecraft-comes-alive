@@ -11,6 +11,7 @@ import net.conczin.mca.network.s2c.OpenDestinyGuiRequest;
 import net.conczin.mca.network.s2c.PlayerDataMessage;
 import net.conczin.mca.network.s2c.ShowToastRequest;
 import net.conczin.mca.server.world.data.PlayerSaveData;
+import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -56,6 +57,17 @@ public class ServerInteractionManager {
     }
 
     public void onPlayerJoin(ServerPlayer player) {
+        if (VillageManager.get(player.serverLevel()).hasUnreadableSavedData()) {
+            player.sendSystemMessage(Component.translatableWithFallback("mca.error.village_data_unreadable",
+                    "MCA could not load village data in this dimension. Village changes cannot be saved. Stop playing and restore a backup or check the server log.")
+                    .withStyle(ChatFormatting.RED));
+            if (player.getServer().getPlayerList().isOp(player.getGameProfile())) {
+                player.sendSystemMessage(Component.literal(
+                        "MCA village save file (relative to the server world save folder): "
+                                + VillageManager.getRelativeSavePath(player.serverLevel()))
+                        .withStyle(ChatFormatting.RED));
+            }
+        }
         PlayerSaveData playerData = PlayerSaveData.get(player);
         if (!playerData.isEntityDataSet()) {
             if (Config.getInstance().launchIntoDestiny) {
