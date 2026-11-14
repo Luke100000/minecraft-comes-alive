@@ -4,6 +4,10 @@
 * Backup your world before using.
 * Some addons may not work/crash, if so either use 7.6.28-beta or 7.7.0-beta.2
 
+# 7.7.1-beta.6
+
+* Fixed Chat AI not being recognised by some chat mods such as Proximity Text Chat.
+
 # 7.7.1-beta.5
 
 * Fixed cured vanilla villagers losing their curing-related trade discounts when converted into MCA villagers.
