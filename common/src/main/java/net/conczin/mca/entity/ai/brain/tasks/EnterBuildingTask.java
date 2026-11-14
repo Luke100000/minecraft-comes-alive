@@ -16,6 +16,8 @@ import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.level.Level;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -26,9 +28,9 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
     private static final double FAILED_BUILDING_RETRY_MOVE_DISTANCE_SQR = 16.0D;
     private final String building;
     private final float speed;
-    private BlockPos lastIssuedDestination;
-    private BlockPos lastIssuedOrigin;
-    private String lastIssuedBuildingType;
+    private BlockPos lastBuildingSearchOrigin;
+    private String lastBuildingSearchType;
+    private String selectedBuildingType;
     private long nextFailedBuildingRetryTick;
 
     public EnterBuildingTask(String building, float speed) {
@@ -39,19 +41,20 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel level, VillagerEntityMCA villager) {
-        return lastIssuedDestination == null
-                || !Objects.equals(getBuilding(villager), lastIssuedBuildingType)
-                || villager.blockPosition().distSqr(lastIssuedOrigin) >= FAILED_BUILDING_RETRY_MOVE_DISTANCE_SQR
+        return lastBuildingSearchOrigin == null
+                || !Objects.equals(getBuilding(villager), lastBuildingSearchType)
+                || villager.blockPosition().distSqr(lastBuildingSearchOrigin) >= FAILED_BUILDING_RETRY_MOVE_DISTANCE_SQR
                 || level.getGameTime() >= nextFailedBuildingRetryTick;
     }
 
     protected void start(ServerLevel serverWorld, VillagerEntityMCA villager, long l) {
+        selectedBuildingType = null;
         getNextPosition(villager)
                 .ifPresent(pos -> {
-                    lastIssuedDestination = pos.immutable();
-                    lastIssuedOrigin = villager.blockPosition().immutable();
-                    lastIssuedBuildingType = getBuilding(villager);
-                    nextFailedBuildingRetryTick = l + FAILED_BUILDING_RETRY_TICKS;
+                    // Fixed-target subclasses bypass building selection but still need
+                    // the normal search retry interval after pathfinding failure.
+                    rememberBuildingSearch(villager,
+                            selectedBuildingType == null ? getBuilding(villager) : selectedBuildingType, l);
                     BehaviorUtils.setWalkAndLookTargetMemories(villager,
                             new PersistentPathTarget(pos, villager.getBrain().getActiveNonCoreActivity().orElse(null)),
                             this.speed, getCompletionRange());
@@ -59,26 +62,35 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
     }
 
     protected Optional<Building> getNearestBuilding(VillagerEntityMCA villager) {
+        return getNearestBuilding(villager, getCandidateBuildings(villager));
+    }
+
+    protected Iterable<Building> getCandidateBuildings(VillagerEntityMCA villager) {
         return villager.getResidency().getHomeVillage()
-                .flatMap(village -> getNearestBuilding(villager, village.getBuildings().values()));
+                .<Iterable<Building>>map(village -> village.getBuildings().values())
+                .orElse(List.of());
     }
 
     protected Optional<Building> getNearestBuilding(VillagerEntityMCA villager, Iterable<Building> candidates) {
-        String buildingType = getBuilding(villager);
+        return getMatchingBuildings(villager, candidates, getBuilding(villager)).stream().findFirst();
+    }
+
+    protected List<Building> getMatchingBuildings(VillagerEntityMCA villager, String buildingType) {
+        return getMatchingBuildings(villager, getCandidateBuildings(villager), buildingType);
+    }
+
+    private List<Building> getMatchingBuildings(VillagerEntityMCA villager, Iterable<Building> candidates,
+                                                 String buildingType) {
         BlockPos origin = villager.blockPosition();
-        Building nearest = null;
-        int nearestDistance = Integer.MAX_VALUE;
+        List<Building> matching = new ArrayList<>();
         for (Building candidate : candidates) {
-            if (!candidate.getType().equals(buildingType)) {
-                continue;
-            }
-            int distance = candidate.getCenter().distManhattan(origin);
-            if (nearest == null || distance < nearestDistance) {
-                nearest = candidate;
-                nearestDistance = distance;
+            if (candidate.getType().equals(buildingType)) {
+                matching.add(candidate);
             }
         }
-        return Optional.ofNullable(nearest);
+        // List.sort preserves the candidate iteration order for equal distances.
+        matching.sort(Comparator.comparingInt(candidate -> candidate.getCenter().distManhattan(origin)));
+        return matching;
     }
 
     protected Optional<BlockPos> getRandomPositionIn(Building b, Level world, VillagerEntityMCA villager) {
@@ -154,11 +166,32 @@ public class EnterBuildingTask extends Behavior<VillagerEntityMCA> {
     }
 
     protected Optional<BlockPos> getNextPosition(VillagerEntityMCA villager) {
-        Optional<Building> b = getNearestBuilding(villager);
-        if (b.isPresent() && !isInsideBuilding(b.get(), villager)) {
-            return getRandomPositionIn(b.get(), villager.level(), villager);
+        String buildingType = getBuilding(villager);
+        return getPositionInAvailableBuilding(villager, getMatchingBuildings(villager, buildingType), buildingType);
+    }
+
+    protected Optional<BlockPos> getPositionInAvailableBuilding(VillagerEntityMCA villager, List<Building> matching,
+                                                                  String buildingType) {
+        selectedBuildingType = buildingType;
+        for (Building candidate : matching) {
+            Optional<BlockPos> position = getRandomPositionIn(candidate, villager.level(), villager);
+            if (position.isPresent()) {
+                if (isInsideBuilding(candidate, villager)) {
+                    return Optional.empty();
+                }
+                return position;
+            }
+        }
+        if (!matching.isEmpty()) {
+            rememberBuildingSearch(villager, buildingType, villager.level().getGameTime());
         }
         return Optional.empty();
+    }
+
+    private void rememberBuildingSearch(VillagerEntityMCA villager, String buildingType, long gameTime) {
+        lastBuildingSearchOrigin = villager.blockPosition().immutable();
+        lastBuildingSearchType = buildingType;
+        nextFailedBuildingRetryTick = gameTime + FAILED_BUILDING_RETRY_TICKS;
     }
 
     protected boolean isInsideBuilding(Building target, VillagerEntityMCA villager) {

@@ -6,6 +6,7 @@ import net.conczin.mca.server.world.data.Building;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -39,20 +40,21 @@ public class EnterFavoredBuildingTask extends EnterBuildingTask {
 
     @Override
     protected Optional<BlockPos> getNextPosition(VillagerEntityMCA villager) {
-        Optional<Building> b = getNearestBuilding(villager);
-        if (b.isEmpty()) {
-            lastMissingBuildingType = getBuilding(villager);
+        String buildingType = getBuilding(villager);
+        List<Building> matching = getMatchingBuildings(villager, buildingType);
+        if (matching.isEmpty()) {
+            lastMissingBuildingType = buildingType;
             nextMissingBuildingRetryTick = villager.level().getGameTime() + MISSING_BUILDING_RETRY_TICKS;
             return Optional.empty();
         }
-        if (isInsideBuilding(b.get(), villager)) {
+        if (isInsideBuilding(matching.getFirst(), villager)
+                && getRandomPositionIn(matching.getFirst(), villager.level(), villager).isPresent()) {
             if (villager.tickCount > lastMoodIncrease + TICKS_PER_MOOD && villager.getVillagerBrain().getMoodValue() < 0) {
                 lastMoodIncrease = villager.tickCount;
                 villager.getVillagerBrain().modifyMoodValue(1);
             }
-        } else {
-            return getRandomPositionIn(b.get(), villager.level(), villager);
+            return Optional.empty();
         }
-        return Optional.empty();
+        return getPositionInAvailableBuilding(villager, matching, buildingType);
     }
 }

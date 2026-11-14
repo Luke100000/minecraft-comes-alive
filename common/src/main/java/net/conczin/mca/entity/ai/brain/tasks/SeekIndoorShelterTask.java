@@ -114,15 +114,19 @@ public final class SeekIndoorShelterTask extends EnterBuildingTask {
             backOffFailedSearch(level);
             return Optional.empty();
         }
-        List<Villager> loaded = manager.getLoadedVillagers();
         boolean danger = hasDetectedDanger(villager);
-        Map<UUID, BlockPos> homes = new HashMap<>();
-        for (var village : manager) village.forEachResidentHome(homes::put);
-        for (Villager resident : loaded) {
-            var home = resident.getBrain().getMemory(MemoryModuleType.HOME)
-                    .filter(pos -> pos.dimension().equals(level.dimension()));
-            if (home.isPresent()) homes.put(resident.getUUID(), home.orElseThrow().pos());
-            else homes.remove(resident.getUUID());
+        // In danger, occupancy only affects the optional diagnostics.
+        boolean countOccupancy = !danger || debug;
+        List<Villager> loaded = countOccupancy ? manager.getLoadedVillagers() : List.of();
+        Map<UUID, BlockPos> homes = countOccupancy ? new HashMap<>() : Map.of();
+        if (countOccupancy) {
+            for (var village : manager) village.forEachResidentHome(homes::put);
+            for (Villager resident : loaded) {
+                var home = resident.getBrain().getMemory(MemoryModuleType.HOME)
+                        .filter(pos -> pos.dimension().equals(level.dimension()));
+                if (home.isPresent()) homes.put(resident.getUUID(), home.orElseThrow().pos());
+                else homes.remove(resident.getUUID());
+            }
         }
 
         List<ReachableHouse> reachable = new ArrayList<>();
@@ -138,7 +142,7 @@ public final class SeekIndoorShelterTask extends EnterBuildingTask {
                 if (isUsableFloor(level, villager, pos)) candidates.add(pos);
             }
             Occupancy occupancy;
-            if (house.membershipKnown()) {
+            if (countOccupancy && house.membershipKnown()) {
                 occupancy = occupancy(level, villager, house, loaded, homes, usableFloorCells, debug);
             } else {
                 occupancy = null;
@@ -184,7 +188,7 @@ public final class SeekIndoorShelterTask extends EnterBuildingTask {
                 chosen = overflow;
                 reason = "DENSITY_OVERFLOW";
             }
-        } else if (danger && !nearest.hasCapacity()) {
+        } else if (debug && !nearest.hasCapacity()) {
             reason = "DANGER_OVERFLOW";
         }
         if (debug) logSelection(villager, reason, chosen, nearest, admitted);
