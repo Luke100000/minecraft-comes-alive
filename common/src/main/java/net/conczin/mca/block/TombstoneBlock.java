@@ -327,6 +327,15 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
             super(BlockEntityTypesMCA.TOMBSTONE, pos, state);
         }
 
+        @Override
+        public void setLevel(Level level) {
+            super.setLevel(level);
+            if (level instanceof ServerLevel serverLevel) {
+                getEntityUuid().ifPresent(uuid -> GraveyardManager.getGlobal(serverLevel)
+                        .registerMissingGrave(uuid, GlobalPos.of(serverLevel.dimension(), worldPosition)));
+            }
+        }
+
         public static Optional<Data> of(@Nullable BlockEntity be) {
             return Optional.ofNullable(be).filter(p -> p instanceof Data).map(Data.class::cast);
         }
