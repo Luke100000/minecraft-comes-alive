@@ -42,6 +42,9 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     private static final CDataParameter<Boolean> WEAR_ARMOR = CParameter.create("WearArmor", false);
 
     private final E entity;
+    private WalkTarget choreCooldownWalkTarget;
+    private int activeChoreTicks;
+    private int lastChoreClockTick = Integer.MIN_VALUE;
 
     public VillagerBrain(E entity) {
         this.entity = entity;
@@ -63,15 +66,16 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
     public void think() {
         // When you relog, it should continue doing the chores.
         // Chore saves but Activity doesn't, so this checks if the activity is not on there and puts it on there.
+        selectAssignedChoreActivity();
 
-        if (entity.getTrackedValue(ACTIVE_CHORE) != Chore.NONE && !entity.getBrain().isActive(Activity.PANIC)) {
-            // find something to do
-            //todo here switch between rest and chore
-            entity.getBrain().getActiveNonCoreActivity().ifPresent(activity -> {
-                if (!activity.equals(ActivitiesMCA.CHORE)) {
-                    entity.getBrain().setActiveActivityIfPossible(ActivitiesMCA.CHORE);
-                }
-            });
+        // Cooldown time belongs to CHORE, not the wall-clock ticks spent sleeping or fighting.
+        if (entity.tickCount != lastChoreClockTick) {
+            lastChoreClockTick = entity.tickCount;
+            if (entity.getBrain().isActive(ActivitiesMCA.CHORE)
+                    && !entity.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)
+                    && !isPanicking()) {
+                activeChoreTicks++;
+            }
         }
 
         boolean panicking = entity.getBrain().isActive(Activity.PANIC);
@@ -102,6 +106,10 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         return entity.getTrackedValue(ACTIVE_CHORE);
     }
 
+    public int getActiveChoreTicks() {
+        return activeChoreTicks;
+    }
+
     public Optional<Player> getJobAssigner() {
         return entity.getTrackedValue(CHORE_ASSIGNING_PLAYER).map(id -> entity.level().getPlayerByUUID(id));
     }
@@ -110,6 +118,7 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
      * Tells the villager to stop doing whatever it's doing.
      */
     public void abandonJob() {
+        releaseChoreCooldownMovement();
         entity.getBrain().setActiveActivityIfPossible(Activity.IDLE);
         entity.setTrackedValue(ACTIVE_CHORE, Chore.NONE);
         entity.setTrackedValue(CHORE_ASSIGNING_PLAYER, Optional.empty());
@@ -127,7 +136,39 @@ public class VillagerBrain<E extends Mob & VillagerLike<E>> {
         entity.getBrain().eraseMemory(MemoryModuleTypeMCA.STAYING);
 
         resetsBrain();
-        entity.getBrain().setActiveActivityIfPossible(ActivitiesMCA.CHORE);
+        selectAssignedChoreActivity();
+    }
+
+    private void selectAssignedChoreActivity() {
+        if (getCurrentJob() == Chore.NONE || entity.getBrain().isActive(Activity.PANIC)
+                || entity.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)) {
+            return;
+        }
+
+        long dayTime = entity.level().getDayTime();
+        Activity scheduled = entity.getBrain().getSchedule().getActivityAt((int) (dayTime % 24000L));
+        Activity desired = scheduled == Activity.REST ? Activity.REST : ActivitiesMCA.CHORE;
+        if (desired == Activity.REST) {
+            releaseChoreCooldownMovement();
+        }
+        entity.getBrain().getActiveNonCoreActivity().ifPresent(activity -> {
+            if (activity != desired) {
+                entity.getBrain().setActiveActivityIfPossible(desired);
+            }
+        });
+    }
+
+    public void rememberChoreCooldownMovement(WalkTarget issued) {
+        choreCooldownWalkTarget = issued;
+    }
+
+    private void releaseChoreCooldownMovement() {
+        if (choreCooldownWalkTarget != null
+                && entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null)
+                == choreCooldownWalkTarget) {
+            entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        }
+        choreCooldownWalkTarget = null;
     }
 
     public void randomize() {

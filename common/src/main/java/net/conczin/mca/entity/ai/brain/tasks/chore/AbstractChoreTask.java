@@ -3,10 +3,13 @@ package net.conczin.mca.entity.ai.brain.tasks.chore;
 import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Chore;
+import net.conczin.mca.entity.ai.ActivitiesMCA;
+import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.conczin.mca.util.InventoryUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.ai.behavior.Behavior;
+import net.minecraft.world.entity.ai.behavior.BehaviorUtils;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
@@ -26,6 +29,7 @@ public abstract class AbstractChoreTask extends Behavior<VillagerEntityMCA> {
     protected int failedTicks, walkingTicks;
     protected int lastAge;
     private ItemStack choreHand = ItemStack.EMPTY;
+    private WalkTarget ownedPlainWalkTarget;
 
     public AbstractChoreTask(Map<MemoryModuleType<?>, MemoryStatus> requirements) {
         super(requirements, 400);
@@ -33,8 +37,12 @@ public abstract class AbstractChoreTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA entity) {
-        int diff = Math.max(0, entity.tickCount - lastAge);
-        lastAge = entity.tickCount;
+        if (!entity.getBrain().isActive(ActivitiesMCA.CHORE)) {
+            return false;
+        }
+        int activeTicks = entity.getVillagerBrain().getActiveChoreTicks();
+        int diff = Math.max(0, activeTicks - lastAge);
+        lastAge = activeTicks;
 
         // Combat and panic take precedence over work and cooldown wandering.
         if (entity.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_TARGET)
@@ -48,10 +56,9 @@ public abstract class AbstractChoreTask extends Behavior<VillagerEntityMCA> {
             walkingTicks += diff;
 
             if (walkingTicks > WALKING_THRESHOLD) {
-                entity.getBrain().setMemory(
-                        MemoryModuleType.WALK_TARGET,
-                        createStableWalkTarget(entity, LandRandomPos.getPos(entity, 10, 5))
-                );
+                Optional<WalkTarget> walk = createStableWalkTarget(entity, LandRandomPos.getPos(entity, 10, 5));
+                entity.getBrain().setMemory(MemoryModuleType.WALK_TARGET, walk);
+                walk.ifPresent(entity.getVillagerBrain()::rememberChoreCooldownMovement);
                 walkingTicks = 0;
             }
 
@@ -79,6 +86,38 @@ public abstract class AbstractChoreTask extends Behavior<VillagerEntityMCA> {
     protected void start(ServerLevel world, VillagerEntityMCA entity, long time) {
         this.villager = entity;
         choreHand = ItemStack.EMPTY;
+        ownedPlainWalkTarget = null;
+    }
+
+    /** Keep persistent chore journeys attached to CHORE so the CORE movement sink retires them for REST. */
+    protected final void moveTowardsChorePosition(BlockPos pos, float speed, int closeEnoughDist) {
+        WalkTarget current = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+        if (current != null && current.getTarget() instanceof PersistentPathTarget persistent
+                && persistent.isRequiredFor(ActivitiesMCA.CHORE)
+                && persistent.currentBlockPosition().equals(pos)
+                && current.getSpeedModifier() == speed
+                && current.getCloseEnoughDist() == closeEnoughDist) {
+            if (villager.getBrain().getMemoryInternal(MemoryModuleType.LOOK_TARGET).orElse(null) != persistent) {
+                villager.getBrain().setMemory(MemoryModuleType.LOOK_TARGET, persistent);
+            }
+            return;
+        }
+        BehaviorUtils.setWalkAndLookTargetMemories(villager,
+                new PersistentPathTarget(pos, ActivitiesMCA.CHORE), speed, closeEnoughDist);
+    }
+
+    /** A moving prey uses a disposable walk request; only release the one hunting last issued. */
+    protected final void moveTowardsChorePrey(BlockPos pos, float speed, int closeEnoughDist) {
+        villager.moveTowards(pos, speed, closeEnoughDist);
+        ownedPlainWalkTarget = villager.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null);
+    }
+
+    protected final void releaseChorePreyMovement(VillagerEntityMCA entity) {
+        if (ownedPlainWalkTarget != null
+                && entity.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).orElse(null) == ownedPlainWalkTarget) {
+            entity.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+        }
+        ownedPlainWalkTarget = null;
     }
 
     protected final void rememberChoreHand(ItemStack stack) {

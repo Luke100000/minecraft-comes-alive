@@ -62,6 +62,8 @@ public class ChoppingTask extends AbstractChoreTask {
     @Override
     protected void tick(ServerLevel world, VillagerEntityMCA villager, long time) {
         if (this.villager == null) this.villager = villager;
+        super.tick(world, villager, time);
+        if (villager.getVillagerBrain().getCurrentJob() != Chore.CHOP) return;
 
         if (!equipChoreTool(villager, Chore.CHOP, "chore.chopping.noaxe")) return;
 
@@ -89,7 +91,7 @@ public class ChoppingTask extends AbstractChoreTask {
             return;
         }
 
-        villager.moveTowardsPersistent(targetTree, 0.5F, 1);
+        moveTowardsChorePosition(targetTree, 0.5F, 1);
 
         BlockState state = world.getBlockState(targetTree);
         if (state.is(BlockTags.LOGS)) {
@@ -109,7 +111,6 @@ public class ChoppingTask extends AbstractChoreTask {
             targetTreeTicks = 0;
         }
 
-        super.tick(world, villager, time);
     }
 
     /**
@@ -143,8 +144,8 @@ public class ChoppingTask extends AbstractChoreTask {
 
         while ((state = world.getBlockState(pos)).is(BlockTags.LOGS)) {
             if (world.destroyBlock(pos, false, villager)) {
+                InventoryUtils.insertOrDropAt(villager.getInventory(), new ItemStack(state.getBlock(), 1), world, pos);
                 pos = pos.offset(0, 1, 0);
-                villager.getInventory().addItem(new ItemStack(state.getBlock(), 1));
                 stack.hurtAndBreak(1, villager, EquipmentSlot.MAINHAND);
             } else {
                 break;

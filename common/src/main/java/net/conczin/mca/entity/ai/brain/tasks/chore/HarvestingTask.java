@@ -112,8 +112,7 @@ public class HarvestingTask extends AbstractChoreTask {
 
     private boolean isValidMature(BlockPos pos) {
         BlockState state = villager.level().getBlockState(pos);
-        return (state.getBlock() instanceof CropBlock crop && crop.isMaxAge(state))
-               || state.getBlock() instanceof StemBlock;
+        return state.getBlock() instanceof CropBlock crop && crop.isMaxAge(state);
     }
 
     private boolean isValidImmature(BlockPos pos) {
@@ -123,7 +122,7 @@ public class HarvestingTask extends AbstractChoreTask {
 
     private void searchCrop(int rangeX, int rangeY) {
         List<BlockPos> nearbyCrops = TaskUtils.getNearbyBlocks(villager.blockPosition(), villager.level(),
-                blockState -> blockState.getBlock() instanceof CropBlock || blockState.getBlock() instanceof StemBlock, rangeX, rangeY);
+                blockState -> blockState.getBlock() instanceof CropBlock, rangeX, rangeY);
 
         harvestable.addAll(nearbyCrops.stream().filter(this::isValidMature).toList());
 
@@ -158,7 +157,12 @@ public class HarvestingTask extends AbstractChoreTask {
 
     @Override
     protected void tick(ServerLevel world, VillagerEntityMCA villager, long time) {
-        villager.moveTowardsPersistent(currentPos, 0.5F, 1);
+        super.tick(world, villager, time);
+        if (villager.getVillagerBrain().getCurrentJob() != Chore.HARVEST) {
+            return;
+        }
+
+        moveTowardsChorePosition(currentPos, 0.5F, 1);
 
         // work
         if (villager.distanceToSqr(Vec3.atBottomCenterOf(currentPos)) <= 6) {
@@ -175,12 +179,8 @@ public class HarvestingTask extends AbstractChoreTask {
                     plantSeeds(world, villager, currentPos.above(), null);
                 } else if (isValidMature(currentPos)) {
                     BlockState state = world.getBlockState(currentPos);
-                    if (state.getBlock() instanceof StemBlock) {
-                        harvestCrops(world, currentPos);
-                    } else {
-                        harvestCrops(world, currentPos);
-                        plantSeeds(world, villager, currentPos, state.getBlock());
-                    }
+                    harvestCrops(world, currentPos);
+                    plantSeeds(world, villager, currentPos, state.getBlock());
                 } else if (isValidImmature(currentPos)) {
                     bonemealCrop(world, villager, currentPos);
 
@@ -264,7 +264,7 @@ public class HarvestingTask extends AbstractChoreTask {
 
             List<ItemStack> drops = world.getServer().reloadableRegistries().getLootTable(state.getBlock().getLootTable()).getRandomItems(builder.create(LootContextParamSets.BLOCK));
             for (ItemStack stack : drops) {
-                villager.getInventory().addItem(stack);
+                InventoryUtils.insertOrDropAt(villager.getInventory(), stack, world, pos);
             }
         }
     }

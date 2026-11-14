@@ -176,7 +176,7 @@ public class FishingTask extends AbstractChoreTask {
                 failedTicks = FAILED_COOLDOWN;
                 return;
             }
-            villager.moveTowardsPersistent(currentSite.standingPos(), 0.5F, 0);
+            moveTowardsChorePosition(currentSite.standingPos(), 0.5F, 0);
             fishingWalkTarget = villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElse(null);
             return;
         }
