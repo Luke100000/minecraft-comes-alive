@@ -274,6 +274,46 @@ class FamilyTreeViewBuilderTest {
     }
 
     @Test
+    void siblingWithOmittedChildOffersContinuationWithoutLoadingNiece() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode father = node(tree, FATHER, Gender.MALE);
+        FamilyTreeNode sibling = node(tree, SIBLING, Gender.FEMALE);
+        FamilyTreeNode childlessSibling = node(tree, DESCENDANT_2, Gender.MALE);
+        FamilyTreeNode niece = node(tree, GRANDCHILD, Gender.FEMALE);
+        root.setFather(father);
+        sibling.setFather(father);
+        childlessSibling.setFather(father);
+        niece.setMother(sibling);
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, 1, 1).orElseThrow();
+
+        assertTrue(view.nodes().containsKey(SIBLING));
+        assertFalse(view.nodes().containsKey(GRANDCHILD));
+        assertTrue(view.continuations().contains(new FamilyTreeView.Continuation(SIBLING, DESCENDANTS)));
+        assertEquals(Set.of(GRANDCHILD), view.nodes().get(SIBLING).streamChildren().collect(Collectors.toSet()));
+        assertFalse(view.continuations().contains(new FamilyTreeView.Continuation(DESCENDANT_2, DESCENDANTS)));
+    }
+
+    @Test
+    void siblingWithMissingChildIsUnavailableAndNotExpandable() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode father = node(tree, FATHER, Gender.MALE);
+        FamilyTreeNode sibling = node(tree, SIBLING, Gender.FEMALE);
+        FamilyTreeNode missingChild = node(tree, GRANDCHILD, Gender.FEMALE);
+        root.setFather(father);
+        sibling.setFather(father);
+        missingChild.setMother(sibling);
+        tree.remove(GRANDCHILD);
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, 1, 1).orElseThrow();
+
+        assertTrue(view.unavailable().contains(GRANDCHILD));
+        assertFalse(view.continuations().contains(new FamilyTreeView.Continuation(SIBLING, DESCENDANTS)));
+    }
+
+    @Test
     void validDanglingReferenceIsUnavailableNotContinuation() {
         FamilyTree tree = tree();
         FamilyTreeNode root = node(tree, ROOT, Gender.MALE);

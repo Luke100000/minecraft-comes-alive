@@ -150,6 +150,21 @@ public final class FamilyTreeViewBuilder {
                 } else if (!nodes.containsKey(childId) && !tryAddNode(nodes, childId, siblingNode.orElseThrow())) {
                     addContinuation(continuations, parentId, FamilyTreeView.Direction.DESCENDANTS);
                     break;
+                } else {
+                    // A sibling is visible in the initial bounded view, but their children
+                    // are only loaded when the existing descendant control is expanded.
+                    Iterator<UUID> children = siblingNode.orElseThrow().streamChildren().iterator();
+                    while (children.hasNext()) {
+                        UUID grandchildId = children.next();
+                        if (nodes.containsKey(grandchildId)) {
+                            continue;
+                        }
+                        if (tree.getOrEmpty(grandchildId).isPresent()) {
+                            addContinuation(continuations, childId, FamilyTreeView.Direction.DESCENDANTS);
+                        } else {
+                            addUnavailable(unavailable, grandchildId);
+                        }
+                    }
                 }
             }
         }

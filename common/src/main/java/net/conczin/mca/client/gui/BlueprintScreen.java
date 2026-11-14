@@ -122,7 +122,6 @@ public class BlueprintScreen extends ExtendedScreen {
     private static double mapCenterX;
     private static double mapCenterZ;
     private BuildingType selectedBuilding;
-    private UUID selectedVillager;
     private BlockPos lastRoomScanPosition;
     private RoomScanPlan cachedRoomScanPlan;
 
@@ -1266,23 +1265,32 @@ public class BlueprintScreen extends ExtendedScreen {
         int maxPages = (int) Math.ceil(village.getPopulation() / 9.0);
         buttonPage.setMessage(Component.literal((pageNumber + 1) + "/" + maxPages));
 
-        List<Map.Entry<UUID, String>> villager = village.getResidentNames().entrySet().stream()
-                .sorted(Map.Entry.comparingByValue()).toList();
+        List<Map.Entry<UUID, String>> residents = sortedResidents();
 
-        selectedVillager = null;
         for (int i = 0; i < 9; i++) {
             int index = i + pageNumber * 9;
-            if (index < villager.size()) {
-                int y = layoutBaseY() - 51 + i * 11;
-                boolean hover = isMouseWithin(width / 2 - 50, y - 1, 100, 11);
-                context.drawCenteredString(font, Component.literal(villager.get(index).getValue()), width / 2, y, hover ? 0xFFD7D784 : 0xFFFFFFFF);
-                if (hover) {
-                    selectedVillager = villager.get(index).getKey();
-                }
+            if (index < residents.size()) {
+                int y = residentRowY(i);
+                boolean hover = isOverResidentRow(mouseX, mouseY, i);
+                context.drawCenteredString(font, Component.literal(residents.get(index).getValue()), width / 2, y, hover ? 0xFFD7D784 : 0xFFFFFFFF);
             } else {
                 break;
             }
         }
+    }
+
+    private List<Map.Entry<UUID, String>> sortedResidents() {
+        return village.getResidentNames().entrySet().stream().sorted(Map.Entry.comparingByValue()).toList();
+    }
+
+    private int residentRowY(int row) {
+        return layoutBaseY() - 51 + row * 11;
+    }
+
+    private boolean isOverResidentRow(double x, double y, int row) {
+        int left = width / 2 - 50;
+        int top = residentRowY(row) - 1;
+        return x >= left && x < left + 100 && y >= top && y < top + 11;
     }
 
     private void renderRules(GuiGraphics context) {
@@ -1350,9 +1358,23 @@ public class BlueprintScreen extends ExtendedScreen {
             return true;
         }
 
-        if (page.equals("villagers") && selectedVillager != null) {
-            assert minecraft != null;
-            minecraft.setScreen(new FamilyTreeScreen(selectedVillager));
+        if (button == 0 && "villagers".equals(page) && village != null) {
+            if (super.mouseClicked(mouseX, mouseY, button)) {
+                return true;
+            }
+            List<Map.Entry<UUID, String>> residents = sortedResidents();
+            for (int row = 0; row < 9; row++) {
+                int index = row + pageNumber * 9;
+                if (index >= residents.size()) {
+                    break;
+                }
+                if (isOverResidentRow(mouseX, mouseY, row)) {
+                    assert minecraft != null;
+                    minecraft.setScreen(new FamilyTreeScreen(residents.get(index).getKey()));
+                    return true;
+                }
+            }
+            return false;
         }
 
         return super.mouseClicked(mouseX, mouseY, button);

@@ -287,6 +287,43 @@ class FamilyTreeViewModelTest {
     }
 
     @Test
+    void expandingSiblingDescendantsKeepsFocusAndPlacesNieceBelowSibling() {
+        FamilyTreeNode root = node(ROOT);
+        FamilyTreeNode father = node(PARENT);
+        FamilyTreeNode sibling = node(OTHER);
+        FamilyTreeNode niece = node(CHILD);
+        root.setFather(father);
+        sibling.setFather(father);
+        niece.setFather(sibling);
+        FamilyTreeView.Continuation omitted = new FamilyTreeView.Continuation(OTHER, DESCENDANTS);
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        long initial = model.beginFocus(ROOT, viewport(20, 30, 1.25f));
+        model.accept(response(initial, ROOT, view(Map.of(ROOT, root, PARENT, father, OTHER, sibling),
+                Set.of(omitted), Set.of())));
+
+        assertTrue(model.snapshot().continuations().contains(omitted));
+        assertEquals(ROOT, model.focusId());
+        assertTrue(FamilyTreeLayout.layout(model.snapshot()).cards().stream()
+                .noneMatch(card -> card.uuid().equals(CHILD)));
+
+        long expansion = model.beginExpansion(OTHER, DESCENDANTS);
+        assertEquals(FamilyTreeViewModel.MergeResult.APPLIED,
+                model.accept(response(expansion, OTHER, view(Map.of(OTHER, sibling, CHILD, niece), Set.of(), Set.of()))));
+
+        assertEquals(ROOT, model.focusId());
+        assertEquals(ROOT, model.layoutRootId());
+        assertFalse(model.snapshot().continuations().contains(omitted));
+        FamilyTreeLayout.Result layout = FamilyTreeLayout.layout(model.snapshot());
+        FamilyTreeLayout.Card siblingCard = layout.cards().stream()
+                .filter(card -> card.uuid().equals(OTHER)).findFirst().orElseThrow();
+        FamilyTreeLayout.Card nieceCard = layout.cards().stream()
+                .filter(card -> card.uuid().equals(CHILD)).findFirst().orElseThrow();
+        assertTrue(nieceCard.bounds().centerY() > siblingCard.bounds().centerY());
+        assertTrue(layout.edges().stream().anyMatch(edge -> edge.type() == FamilyTreeLayout.EdgeType.PARENT_CHILD
+                && edge.from().equals(OTHER) && edge.to().equals(CHILD)));
+    }
+
+    @Test
     void expansionPrunesReverseContinuationWhenReferencedRelativeIsAlreadyLoaded() {
         FamilyTreeNode root = node(ROOT);
         FamilyTreeNode parent = node(PARENT);

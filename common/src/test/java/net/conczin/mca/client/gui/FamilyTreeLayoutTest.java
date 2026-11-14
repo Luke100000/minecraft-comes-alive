@@ -204,7 +204,9 @@ class FamilyTreeLayoutTest {
         siblingB.setFather(father);
         siblingChild.setFather(siblingA);
 
-        FamilyTreeLayout.Result result = layout(nodes(root, father, siblingA, siblingB, siblingChild), Set.of());
+        // The bounded initial response contains the sibling but not its descendants.
+        // A subsequent expansion response adds the child node (covered below).
+        FamilyTreeLayout.Result result = layout(nodes(root, father, siblingA, siblingB), Set.of());
 
         assertEquals(card(result, ROOT).bounds().centerY(), card(result, SIBLING_A).bounds().centerY());
         assertEquals(card(result, ROOT).bounds().centerY(), card(result, SIBLING_B).bounds().centerY());
@@ -214,6 +216,34 @@ class FamilyTreeLayoutTest {
         int maxSiblingX = Math.max(card(result, SIBLING_A).bounds().centerX(), card(result, SIBLING_B).bounds().centerX());
         assertTrue(minSiblingX < anchorX);
         assertTrue(maxSiblingX > anchorX);
+    }
+
+    @Test
+    void expandedSiblingDescendantsAppearBelowSiblingWithParentEdgeAndNoCardOverlap() {
+        FamilyTreeNode root = node(ROOT);
+        FamilyTreeNode father = node(FATHER);
+        FamilyTreeNode siblingA = node(SIBLING_A);
+        FamilyTreeNode siblingB = node(SIBLING_B);
+        FamilyTreeNode niece = node(SIBLING_CHILD);
+        FamilyTreeNode child = node(CHILD_A);
+        root.setFather(father);
+        siblingA.setFather(father);
+        siblingB.setFather(father);
+        niece.setFather(siblingA);
+        child.setFather(root);
+
+        FamilyTreeLayout.Result result = layout(nodes(root, father, siblingA, siblingB, niece, child), Set.of());
+
+        assertTrue(card(result, SIBLING_CHILD).bounds().centerY() > card(result, SIBLING_A).bounds().centerY());
+        assertTrue(result.edges().stream().anyMatch(edge -> edge.type() == FamilyTreeLayout.EdgeType.PARENT_CHILD
+                && edge.from().equals(SIBLING_A) && edge.to().equals(SIBLING_CHILD)));
+        assertEquals(0, card(result, ROOT).bounds().centerX());
+        for (int i = 0; i < result.cards().size(); i++) {
+            for (int j = i + 1; j < result.cards().size(); j++) {
+                assertFalse(result.cards().get(i).bounds().intersects(result.cards().get(j).bounds()),
+                        result.cards().get(i).uuid() + " overlaps " + result.cards().get(j).uuid());
+            }
+        }
     }
 
     @Test

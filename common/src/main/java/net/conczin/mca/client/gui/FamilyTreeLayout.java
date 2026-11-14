@@ -77,6 +77,12 @@ final class FamilyTreeLayout {
         walkLineage(rootNode, 0, nodes, placements, Role.ANCESTOR);
         walkLineage(rootNode, 0, nodes, placements, Role.DESCENDANT);
         addSiblings(rootNode, nodes, placements);
+        for (Map.Entry<UUID, Placement> entry : List.copyOf(placements.entrySet())) {
+            if (entry.getValue().role() == Role.SIBLING) {
+                walkLineage(nodes.get(entry.getKey()), entry.getValue().generation(),
+                        nodes, placements, Role.DESCENDANT);
+            }
+        }
         addPartnerBranches(nodes, placements, displayPartners);
         return placements;
     }

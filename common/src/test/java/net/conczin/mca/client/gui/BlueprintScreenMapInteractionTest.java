@@ -29,6 +29,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -42,6 +43,24 @@ class BlueprintScreenMapInteractionTest {
     @BeforeEach
     void resetBlueprintSessionState() {
         BlueprintScreen.onClientLevelChanged(new Object());
+    }
+
+    @Test
+    void blankOrRightClickDoesNotOpenResidentTree() throws Exception {
+        Village village = new Village(1, null);
+        UUID resident = UUID.randomUUID();
+        village.getResidentNames().put(resident, "Alice");
+
+        BlueprintScreen screen = new BlueprintScreen();
+        screen.width = 640;
+        screen.height = 480;
+        setField(screen, "village", village);
+        setField(screen, "page", "villagers");
+
+        assertDoesNotThrow(() -> assertFalse(screen.mouseClicked(10, 10, 0),
+                "Blank space must not open stale resident"));
+        assertDoesNotThrow(() -> assertFalse(screen.mouseClicked(320, 240, 1),
+                "Right click must not open any resident"));
     }
 
     @Test
