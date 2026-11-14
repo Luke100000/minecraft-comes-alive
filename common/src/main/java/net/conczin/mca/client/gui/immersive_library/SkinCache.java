@@ -67,7 +67,7 @@ public class SkinCache {
      * @param contentid The content id
      *                  Enforces re downloading the assets, mostly when local files appear to be corrupted
      */
-    public static void enforceSync(int contentid) {
+    public static synchronized void enforceSync(int contentid) {
         try {
             Files.delete(getFile(contentid + ".version").toPath());
             cachedVersions.remove(contentid);
@@ -115,7 +115,6 @@ public class SkinCache {
             if ((currentVersion > version || !textureIdentifiers.containsKey(contentid)) && requested.putIfAbsent(contentid, true) == null) {
                 CompletableFuture.runAsync(() -> {
                     try {
-                        logger("Requested asset " + contentid + " with version " + version + " and current version " + currentVersion);
                         Response response = request(Api.HttpMethod.GET, ContentResponse.class, "v3/content/mca/" + contentid, Map.of("version", String.valueOf(version)));
                         if (response instanceof ContentResponse(Content content)) {
                             store(content);
@@ -130,9 +129,16 @@ public class SkinCache {
         }
     }
 
-    public static void store(Content content) {
+    public static synchronized void store(Content content) {
         int contentid = content.content_id();
-        if (cachedVersions.getOrDefault(contentid, -1) == content.version()) {
+        int cachedVersion = cachedVersions.computeIfAbsent(contentid, id -> {
+            try {
+                return Integer.parseInt(read(id + ".version"));
+            } catch (IOException | NumberFormatException e) {
+                return -1;
+            }
+        });
+        if (content.version() <= cachedVersion) {
             return;
         }
         write(contentid + ".png", Base64.getDecoder().decode(content.data()));
@@ -140,7 +146,6 @@ public class SkinCache {
         write(contentid + ".version", Integer.toString(content.version()));
         cachedVersions.put(contentid, content.version());
         textureIdentifiers.remove(contentid);
-        logger("Received " + contentid);
     }
 
     /**
@@ -148,7 +153,6 @@ public class SkinCache {
      *                  Loads the resources from the disk and creates the texture identifier
      */
     private static void loadResources(int contentid) {
-        logger("Loaded asset " + contentid);
 
         // Load meta
         try {
@@ -179,12 +183,6 @@ public class SkinCache {
         }
     }
 
-    private static void logger(String s) {
-        //noinspection ConstantConditions
-        if (false) {
-            MCA.LOGGER.info(s);
-        }
-    }
 
     public static Optional<SkinMeta> getMeta(LiteContent content) {
         sync(content);
