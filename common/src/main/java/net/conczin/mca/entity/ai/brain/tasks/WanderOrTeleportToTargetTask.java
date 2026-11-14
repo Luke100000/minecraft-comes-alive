@@ -1,6 +1,7 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.navigation.*;
@@ -63,6 +64,18 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         }
 
         Path path = entity.getNavigation().getPath();
+        if (Boolean.getBoolean("mca.stairSpinDebug") && walkTarget != null
+                && !MultiTargetPositionTracker.isReached(entity, walkTarget.getTarget(),
+                walkTarget.getCloseEnoughDist())) {
+            MCA.LOGGER.info("[MCA-STAIR-SPIN] event=walk-sink-stop uuid={} tick={} pos={} "
+                            + "target={} pathTarget={} next={} done={} stuck={} onGround={} collision={}",
+                    entity.getUUID(), gameTime, entity.position(),
+                    walkTarget.getTarget().currentBlockPosition(),
+                    path == null ? null : path.getTarget(),
+                    path == null || path.isDone() ? null : path.getNextNodePos(),
+                    entity.getNavigation().isDone(), entity.getNavigation().isStuck(),
+                    entity.onGround(), entity.horizontalCollision);
+        }
         if (walkTarget != null
                 && path != null
                 && entity.getNavigation().isDone()

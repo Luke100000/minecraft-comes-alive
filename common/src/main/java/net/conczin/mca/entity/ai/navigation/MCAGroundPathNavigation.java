@@ -1,6 +1,7 @@
 package net.conczin.mca.entity.ai.navigation;
 
 import net.conczin.mca.Config;
+import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.PathingBlockInteraction;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
@@ -56,6 +57,9 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
     private BlockPos pendingProducerRetryInvalidation;
     private boolean recomputingPath;
     private Detour detour;
+    @Nullable
+    private final StairSpinDiagnostics stairSpinDiagnostics = StairSpinDiagnostics.ENABLED
+            ? new StairSpinDiagnostics() : null;
 
     private enum DetourPhase { FLANKING, CROSSING }
 
@@ -681,6 +685,9 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         recoverCompletedPersistentWalkTarget();
         chainCompletedPersistentWalkTarget();
         this.climbTraversal.tick(this.path, this.speedModifier, this.tick);
+        if (this.stairSpinDiagnostics != null) {
+            this.stairSpinDiagnostics.tick(this.mob, this.path);
+        }
     }
 
     @Override
@@ -1175,6 +1182,13 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             }
         }
 
+        if (stairSpinDiagnostics != null) {
+            MCA.LOGGER.info("[MCA-STAIR-SPIN] event=fall-resync-stop uuid={} pos={} next={} "
+                            + "onGround={} collision={} target={} pathEnd={}",
+                    this.mob.getUUID(), this.mob.position(), path.getNextNodePos(),
+                    this.mob.onGround(), this.mob.horizontalCollision,
+                    path.getTarget(), path.getEndNode() == null ? null : path.getEndNode().asBlockPos());
+        }
         this.stop();
     }
 
