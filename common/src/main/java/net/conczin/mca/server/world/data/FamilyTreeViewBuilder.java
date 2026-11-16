@@ -8,8 +8,69 @@ import java.util.function.Function;
 
 public final class FamilyTreeViewBuilder {
     public static final int MAX_DEPTH = 8;
+    private static final int GENERATION_PAGE_SIZE = FamilyTreeView.MAX_NODES / 2 - 2;
 
     private FamilyTreeViewBuilder() {
+    }
+
+    public record GenerationPage(FamilyTreeView view, Optional<UUID> nextCursor) {
+    }
+
+    public static Optional<GenerationPage> buildGenerationPage(
+            FamilyTree tree,
+            UUID anchor,
+            FamilyTreeView.Direction direction,
+            Optional<UUID> after,
+            Function<UUID, Optional<GlobalPos>> graveLookup
+    ) {
+        Optional<FamilyTreeNode> source = tree.getOrEmpty(anchor);
+        if (source.isEmpty()) {
+            return Optional.empty();
+        }
+
+        FamilyTreeNode root = source.orElseThrow();
+        List<UUID> relativeIds = (direction == FamilyTreeView.Direction.ANCESTORS
+                ? root.streamParents() : root.streamChildren()).sorted().distinct().toList();
+        // An exclusive UUID cursor remains stable when earlier relatives are inserted or removed.
+        // An arbitrary client-supplied UUID is safe: it only selects a position in this sorted list.
+        int from = 0;
+        while (from < relativeIds.size() && after.isPresent()
+                && relativeIds.get(from).compareTo(after.orElseThrow()) <= 0) {
+            from++;
+        }
+        int to = Math.min(from + GENERATION_PAGE_SIZE, relativeIds.size());
+
+        Map<UUID, FamilyTreeNode> nodes = new LinkedHashMap<>();
+        Set<FamilyTreeView.Continuation> continuations = new LinkedHashSet<>();
+        Set<UUID> unavailable = new LinkedHashSet<>();
+        nodes.put(root.id(), root);
+        for (int index = from; index < to; index++) {
+            UUID relativeId = relativeIds.get(index);
+            Optional<FamilyTreeNode> relative = tree.getOrEmpty(relativeId);
+            if (relative.isPresent()) {
+                nodes.putIfAbsent(relativeId, relative.orElseThrow());
+            } else {
+                addUnavailable(unavailable, relativeId);
+            }
+        }
+
+        // Partners are display context at the same generation, never another ancestry walk.
+        // The conservative page size reserves space for one partner per direct relative.
+        includePartners(tree, nodes, unavailable, continuations);
+        for (FamilyTreeNode node : nodes.values()) {
+            if (node.streamChildren().anyMatch(child -> !nodes.containsKey(child)
+                    && tree.getOrEmpty(child).isPresent())) {
+                addContinuation(continuations, node.id(), FamilyTreeView.Direction.DESCENDANTS);
+            }
+        }
+        unavailable.removeAll(nodes.keySet());
+        Map<UUID, FamilyTreeNode> snapshots = snapshotNodes(tree, nodes, continuations, unavailable);
+        Map<UUID, GlobalPos> graves = new LinkedHashMap<>();
+        snapshots.keySet().forEach(id -> graveLookup.apply(id).ifPresent(grave -> graves.put(id, grave)));
+        FamilyTreeView view = new FamilyTreeView(snapshots, continuations, unavailable,
+                collectOrphans(tree, snapshots.values()), graves);
+        return Optional.of(new GenerationPage(view, to == relativeIds.size()
+                ? Optional.empty() : Optional.of(relativeIds.get(to - 1))));
     }
 
     public static Optional<FamilyTreeView> build(FamilyTree tree, UUID root, int ancestorDepth, int descendantDepth) {
@@ -304,10 +365,11 @@ public final class FamilyTreeViewBuilder {
             }
             Set<UUID> children = new LinkedHashSet<>();
             node.streamChildren().filter(nodes::containsKey).forEach(children::add);
-            boolean hasMoreDescendants = continuations.contains(new FamilyTreeView.Continuation(
-                    node.id(),
-                    FamilyTreeView.Direction.DESCENDANTS
-            ));
+            boolean hasMoreDescendants = node.streamChildren()
+                    .anyMatch(childId -> !nodes.containsKey(childId) && tree.getOrEmpty(childId).isPresent());
+            if (hasMoreDescendants) {
+                addContinuation(continuations, node.id(), FamilyTreeView.Direction.DESCENDANTS);
+            }
             if (hasMoreDescendants) {
                 node.streamChildren()
                         .filter(childId -> !nodes.containsKey(childId))

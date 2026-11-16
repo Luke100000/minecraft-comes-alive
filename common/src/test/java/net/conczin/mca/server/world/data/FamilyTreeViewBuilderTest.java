@@ -87,6 +87,26 @@ class FamilyTreeViewBuilderTest {
     }
 
     @Test
+    void oneGenerationViewLeavesBothGrandparentsAndGrandchildrenForExplicitExpansion() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode father = node(tree, FATHER, Gender.MALE);
+        FamilyTreeNode grandfather = node(tree, PATERNAL_GRANDFATHER, Gender.MALE);
+        FamilyTreeNode child = node(tree, CHILD, Gender.FEMALE);
+        FamilyTreeNode grandchild = node(tree, GRANDCHILD, Gender.MALE);
+        root.setFather(father);
+        father.setFather(grandfather);
+        child.setFather(root);
+        grandchild.setFather(child);
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, 1, 1).orElseThrow();
+
+        assertEquals(Set.of(ROOT, FATHER, CHILD), view.nodes().keySet());
+        assertTrue(view.continuations().contains(new FamilyTreeView.Continuation(FATHER, ANCESTORS)));
+        assertTrue(view.continuations().contains(new FamilyTreeView.Continuation(CHILD, DESCENDANTS)));
+    }
+
+    @Test
     void generatedParentsAreLoadedTogetherFromEitherParent() {
         FamilyTree tree = tree();
         FamilyTreeNode father = node(tree, ROOT, Gender.MALE);
@@ -206,6 +226,28 @@ class FamilyTreeViewBuilderTest {
         assertEquals(Set.of(ROOT, CHILD, PARTNER), view.nodes().keySet());
         assertEquals(Set.of(), view.continuations());
         assertEquals(Set.of(DANGLING), view.unavailable());
+    }
+
+    @Test
+    void partnerShownOnlyAsContextMarksOmittedChildrenAsIncomplete() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode father = node(tree, FATHER, Gender.MALE);
+        FamilyTreeNode sibling = node(tree, SIBLING, Gender.FEMALE);
+        FamilyTreeNode partner = node(tree, PARTNER, Gender.MALE);
+        FamilyTreeNode child = node(tree, CHILD, Gender.FEMALE);
+        root.setFather(father);
+        sibling.setFather(father);
+        sibling.updatePartner(partner);
+        partner.updatePartner(sibling);
+        child.setFather(partner);
+
+        FamilyTreeView view = FamilyTreeViewBuilder.build(tree, ROOT, 0, 0).orElseThrow();
+
+        assertTrue(view.nodes().containsKey(PARTNER));
+        assertFalse(view.nodes().containsKey(CHILD));
+        assertTrue(view.continuations().contains(new FamilyTreeView.Continuation(PARTNER, DESCENDANTS)),
+                "A displayed node with omitted children cannot claim to be complete");
     }
 
     @Test
@@ -433,6 +475,129 @@ class FamilyTreeViewBuilderTest {
 
         assertEquals(256, view.nodes().size());
         assertTrue(view.continuations().contains(new FamilyTreeView.Continuation(ROOT, DESCENDANTS)));
+    }
+
+    @Test
+    void generationPageIncludesDirectChildrenButNotGrandchildrenOrSiblings() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode parent = node(tree, FATHER, Gender.MALE);
+        FamilyTreeNode sibling = node(tree, SIBLING, Gender.FEMALE);
+        FamilyTreeNode child = node(tree, CHILD, Gender.MALE);
+        FamilyTreeNode grandchild = node(tree, GRANDCHILD, Gender.MALE);
+        root.setFather(parent);
+        sibling.setFather(parent);
+        child.setFather(root);
+        grandchild.setFather(child);
+
+        FamilyTreeViewBuilder.GenerationPage page = FamilyTreeViewBuilder.buildGenerationPage(
+                tree, ROOT, DESCENDANTS, Optional.empty(), id -> Optional.empty()).orElseThrow();
+
+        assertEquals(Set.of(ROOT, CHILD), page.view().nodes().keySet());
+        assertTrue(page.nextCursor().isEmpty());
+        assertTrue(page.view().continuations().contains(new FamilyTreeView.Continuation(CHILD, DESCENDANTS)));
+        assertFalse(page.view().nodes().containsKey(GRANDCHILD));
+        assertFalse(page.view().nodes().containsKey(SIBLING));
+    }
+
+    @Test
+    void ancestorGenerationPageIncludesOnlyParentsWithoutGrandparentsOrSiblings() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        FamilyTreeNode father = node(tree, FATHER, Gender.MALE);
+        FamilyTreeNode mother = node(tree, MOTHER, Gender.FEMALE);
+        FamilyTreeNode grandfather = node(tree, PATERNAL_GRANDFATHER, Gender.MALE);
+        FamilyTreeNode sibling = node(tree, SIBLING, Gender.FEMALE);
+        root.setFather(father);
+        root.setMother(mother);
+        father.setFather(grandfather);
+        sibling.setFather(father);
+
+        FamilyTreeViewBuilder.GenerationPage page = FamilyTreeViewBuilder.buildGenerationPage(
+                tree, ROOT, ANCESTORS, Optional.empty(), id -> Optional.empty()).orElseThrow();
+
+        assertEquals(Set.of(ROOT, FATHER, MOTHER), page.view().nodes().keySet());
+        assertTrue(page.nextCursor().isEmpty());
+        assertTrue(page.view().continuations().contains(new FamilyTreeView.Continuation(FATHER, ANCESTORS)));
+        assertFalse(page.view().nodes().containsKey(PATERNAL_GRANDFATHER));
+        assertFalse(page.view().nodes().containsKey(SIBLING));
+    }
+
+    @Test
+    void generationPagesAdvanceAcrossMoreThanOneResponseBudgetWithoutRepeatingChildren() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        for (int index = 0; index < 300; index++) {
+            node(tree, uuid(1_000 + index), Gender.MALE).setFather(root);
+        }
+
+        Set<UUID> collected = new HashSet<>();
+        Optional<UUID> after = Optional.empty();
+        int pages = 0;
+        do {
+            FamilyTreeViewBuilder.GenerationPage page = FamilyTreeViewBuilder.buildGenerationPage(
+                    tree, ROOT, DESCENDANTS, after, id -> Optional.empty()).orElseThrow();
+            assertTrue(page.view().nodes().size() <= FamilyTreeView.MAX_NODES);
+            for (UUID id : page.view().nodes().keySet()) {
+                if (!id.equals(ROOT)) {
+                    assertTrue(collected.add(id), "Page returned duplicate child " + id);
+                }
+            }
+            pages++;
+            assertTrue(pages <= 5, "Pagination must terminate");
+            if (page.nextCursor().isEmpty()) {
+                break;
+            }
+            if (after.isPresent()) {
+                assertTrue(page.nextCursor().orElseThrow().compareTo(after.orElseThrow()) > 0,
+                        "Cursor must progress");
+            }
+            after = page.nextCursor();
+        } while (true);
+
+        assertEquals(300, collected.size());
+        assertTrue(pages > 1);
+    }
+
+    @Test
+    void removingAnEarlierChildBetweenPagesMustNotSkipTheNextChild() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        for (int index = 0; index < 300; index++) {
+            node(tree, uuid(1_000 + index), Gender.MALE).setFather(root);
+        }
+
+        FamilyTreeViewBuilder.GenerationPage first = FamilyTreeViewBuilder.buildGenerationPage(
+                tree, ROOT, DESCENDANTS, Optional.empty(), id -> Optional.empty()).orElseThrow();
+        assertEquals(Optional.of(uuid(1_125)), first.nextCursor());
+        root.children().remove(uuid(1_000));
+
+        FamilyTreeViewBuilder.GenerationPage second = FamilyTreeViewBuilder.buildGenerationPage(
+                tree, ROOT, DESCENDANTS, first.nextCursor(), id -> Optional.empty()).orElseThrow();
+        assertTrue(second.view().nodes().containsKey(uuid(1_126)),
+                "Removing a child before the page boundary must not skip the next child");
+    }
+
+    @Test
+    void insertingAnEarlierChildBetweenPagesMustNotRepeatTheLastChild() {
+        FamilyTree tree = tree();
+        FamilyTreeNode root = node(tree, ROOT, Gender.MALE);
+        for (int index = 0; index < 300; index++) {
+            node(tree, uuid(1_000 + index), Gender.MALE).setFather(root);
+        }
+
+        FamilyTreeViewBuilder.GenerationPage first = FamilyTreeViewBuilder.buildGenerationPage(
+                tree, ROOT, DESCENDANTS, Optional.empty(), id -> Optional.empty()).orElseThrow();
+        node(tree, uuid(999), Gender.MALE).setFather(root);
+
+        FamilyTreeViewBuilder.GenerationPage second = FamilyTreeViewBuilder.buildGenerationPage(
+                tree, ROOT, DESCENDANTS, first.nextCursor(), id -> Optional.empty()).orElseThrow();
+        Set<UUID> firstChildren = new HashSet<>(first.view().nodes().keySet());
+        firstChildren.remove(ROOT);
+        Set<UUID> secondChildren = new HashSet<>(second.view().nodes().keySet());
+        secondChildren.remove(ROOT);
+        assertTrue(Collections.disjoint(firstChildren, secondChildren),
+                "An insertion before the boundary must not repeat a previously delivered child");
     }
 
     @Test

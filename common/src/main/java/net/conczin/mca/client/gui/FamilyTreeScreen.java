@@ -35,6 +35,7 @@ public class FamilyTreeScreen extends Screen {
     private static final int HEADER_MARGIN = 5;
     private static final int HEADER_GAP = 4;
     private static final int DONE_WIDTH = 72;
+    private static final int BACK_WIDTH = 54;
     private static final int ZOOM_BUTTON_WIDTH = 20;
     private static final int ZOOM_LABEL_WIDTH = 48;
     private static final int FIT_WIDTH = 44;
@@ -45,9 +46,20 @@ public class FamilyTreeScreen extends Screen {
     private static final int SEARCH_ROW_HEIGHT = 22;
     private static final int SEARCH_RESULT_LIMIT = 6;
     private static final long SEARCH_DEBOUNCE_MS = 150L;
-    private static final float MIN_ZOOM = 0.25F;
+    private static final float MIN_ZOOM = 0.01F;
     private static final float MAX_ZOOM = 2.0F;
     private static final long COPY_FEEDBACK_MS = 1_500L;
+    private static final long GENERATION_TRANSITION_MS = 420L;
+    private static final long CAMERA_PAN_MS = 350L;
+    private static final int GENERATION_BUTTON_SIZE = 24;
+    private static final int MAX_BRANCH_TAB_HEIGHT = 6;
+    private static final int MIN_BRANCH_TAB_HEIGHT = 4;
+    private static final int CARD_BACKGROUND = 0xFF252D35;
+    private static final int CARD_HOVER_BACKGROUND = 0xFF43586C;
+    private static final int CARD_BORDER = 0xFF9AA7B2;
+    private static final int[] FAMILY_CONNECTOR_COLORS = {
+            0xFFB8B8B8, 0xFF94B8D0, 0xFFD0BE99, 0xFFBBA9CE
+    };
     private static final String GRAVE_ICON = "grave";
     static final String DECEASED_MARKER = "☠";
     static final int DECEASED_MARKER_COLOR = 0xFFA94A3A;
@@ -62,10 +74,24 @@ public class FamilyTreeScreen extends Screen {
     private FamilyTreeLayout.Result layout = new FamilyTreeLayout.Result(
             List.of(),
             List.of(),
-            List.of(),
             new FamilyTreeLayout.Bounds(0, 0, 0, 0)
     );
     private Map<UUID, FamilyTreeLayout.Card> cardsById = Map.of();
+    @Nullable
+    private GenerationAvailability cachedGenerationAvailability;
+    @Nullable
+    private FamilyTreeTransition transition;
+    private long transitionStartedMs;
+    @Nullable
+    private FamilyTreeViewModel.ViewportState cameraFrom;
+    @Nullable
+    private FamilyTreeViewModel.ViewportState cameraTo;
+    private long cameraStartedMs;
+    @Nullable
+    private UUID queuedCameraFocusId;
+    private final Deque<RootLayoutHistory> rootLayoutHistory = new ArrayDeque<>();
+    private long pendingRootRequestId = -1L;
+    private boolean pendingRootLayoutSaved;
     private Map<UUID, CardPresentation> cardPresentations = Map.of();
     private FamilyTreeViewModel.ViewportState viewport =
             new FamilyTreeViewModel.ViewportState(0, 0, 1.0F);
@@ -73,6 +99,8 @@ public class FamilyTreeScreen extends Screen {
     private HitTarget hovered;
     @Nullable
     private ButtonWidget zoomLabel;
+    @Nullable
+    private ButtonWidget backButton;
     @Nullable
     private EditBox searchField;
     private int searchX;
@@ -101,6 +129,8 @@ public class FamilyTreeScreen extends Screen {
 
     @Override
     protected void init() {
+        finishTransition();
+        stopCameraMotion();
         HeaderLayout header = headerLayout(width);
         searchX = header.searchX();
         searchWidth = header.searchWidth();
@@ -114,6 +144,11 @@ public class FamilyTreeScreen extends Screen {
                 Component.translatable("gui.done"),
                 button -> onClose()
         ));
+        backButton = addRenderableWidget(new ButtonWidget(
+                HEADER_MARGIN, topY, BACK_WIDTH, 20, Component.translatable("gui.back"),
+                button -> goBack()
+        ));
+        updateBackButton();
 
         searchField = addRenderableWidget(new EditBox(
                 font,
@@ -126,7 +161,7 @@ public class FamilyTreeScreen extends Screen {
         searchField.setMaxLength(32);
         searchField.setResponder(this::searchFamily);
 
-        addRenderableWidget(new ButtonWidget(header.zoomOutX(), controlsY, ZOOM_BUTTON_WIDTH, 20, Component.literal("-"), button -> setZoom(viewport.zoom() - 0.1F)));
+        addRenderableWidget(new ButtonWidget(header.zoomOutX(), controlsY, ZOOM_BUTTON_WIDTH, 20, Component.literal("-"), button -> setZoom(viewport.zoom() / 1.2F)));
         zoomLabel = addRenderableWidget(new ButtonWidget(
                 header.zoomLabelX(),
                 controlsY,
@@ -135,12 +170,16 @@ public class FamilyTreeScreen extends Screen {
                 zoomLabel(),
                 button -> setZoom(1.0F)
         ));
-        addRenderableWidget(new ButtonWidget(header.zoomInX(), controlsY, ZOOM_BUTTON_WIDTH, 20, Component.literal("+"), button -> setZoom(viewport.zoom() + 0.1F)));
+        addRenderableWidget(new ButtonWidget(header.zoomInX(), controlsY, ZOOM_BUTTON_WIDTH, 20, Component.literal("+"), button -> setZoom(viewport.zoom() * 1.2F)));
         addRenderableWidget(new ButtonWidget(header.fitX(), controlsY, FIT_WIDTH, 20, Component.translatable("gui.family_tree.fit"), button -> {
+            stopCameraMotion();
+            finishTransition();
             viewport = fitView(layout, width, canvasHeight(), FIT_PADDING);
             updateZoomLabel();
         }));
         addRenderableWidget(new ButtonWidget(header.centerX(), controlsY, CENTER_WIDTH, 20, Component.translatable("gui.family_tree.center"), button -> {
+            stopCameraMotion();
+            finishTransition();
             viewport = centerView(layout, viewport);
         }));
 
@@ -157,16 +196,60 @@ public class FamilyTreeScreen extends Screen {
     }
 
     public void acceptFamilyData(GetFamilyTreeResponse response) {
-        FamilyTreeViewModel.MergeResult result = viewModel.accept(response);
-        if (result == FamilyTreeViewModel.MergeResult.STALE) {
+        FamilyTreeViewModel.GenerationResult generation = viewModel.acceptGeneration(response);
+        if (generation.handled()) {
+            invalidateGenerationAvailability();
+            generation.nextRequest().ifPresent(this::sendGenerationRequest);
+            if (generation.layoutChanged()) {
+                stopCameraMotion();
+                FamilyTreeLayout.Result previous = displayedLayout();
+                rebuildLayout();
+                transition = new FamilyTreeTransition(previous, layout, viewModel.focusId(), viewport.zoom());
+                transitionStartedMs = Util.getMillis();
+            }
+            if (generation.incomplete()) {
+                actionFeedback = Component.translatable("gui.family_tree.expansion_incomplete");
+                actionFeedbackUntilMs = Util.getMillis() + 4_000;
+            }
             return;
         }
+        FamilyTreeViewModel.MergeResult result = viewModel.accept(response);
+        if (result != FamilyTreeViewModel.MergeResult.STALE) {
+            invalidateGenerationAvailability();
+        }
+        boolean pendingRootResponse = response.requestId() == pendingRootRequestId;
+        if (result == FamilyTreeViewModel.MergeResult.STALE) {
+            if (pendingRootResponse) {
+                discardPendingRootLayout();
+            }
+            return;
+        }
+        updateBackButton();
+        if (result == FamilyTreeViewModel.MergeResult.NOT_FOUND) {
+            if (pendingRootResponse) {
+                discardPendingRootLayout();
+            }
+            if (response.requestId() == pendingRecenterRequestId) {
+                pendingRecenterRequestId = -1L;
+            }
+            return;
+        }
+        if (pendingRootResponse) {
+            pendingRootRequestId = -1L;
+            pendingRootLayoutSaved = false;
+        }
+        stopCameraMotion();
+        FamilyTreeLayout.Result previous = displayedLayout();
         rebuildLayout();
-        if (response.requestId() == pendingRecenterRequestId) {
+        boolean recenter = response.requestId() == pendingRecenterRequestId;
+        if (recenter) {
             if (result == FamilyTreeViewModel.MergeResult.APPLIED && response.found()) {
                 viewport = focusViewportAfterResponse(layout, viewport, response.uuid());
             }
             pendingRecenterRequestId = -1L;
+        } else if (result == FamilyTreeViewModel.MergeResult.APPLIED && !previous.cards().isEmpty()) {
+            transition = new FamilyTreeTransition(previous, layout, viewModel.focusId(), viewport.zoom());
+            transitionStartedMs = Util.getMillis();
         }
     }
 
@@ -185,19 +268,124 @@ public class FamilyTreeScreen extends Screen {
 
     private void rebuildLayout() {
         FamilyTreeViewModel.Snapshot snapshot = viewModel.snapshot();
-        layout = FamilyTreeLayout.layout(snapshot);
+        layout = FamilyTreeLayout.layout(snapshot, layout);
+        refreshLayoutIndex();
+    }
+
+    private void refreshLayoutIndex() {
         Map<UUID, FamilyTreeLayout.Card> index = new LinkedHashMap<>();
         for (FamilyTreeLayout.Card card : layout.cards()) {
             index.put(card.uuid(), card);
         }
         cardsById = Map.copyOf(index);
-        cardPresentations = cardPresentations(viewModel.focusId(), snapshot.nodes(), viewModel.orphans());
+        invalidateGenerationAvailability();
+        cardPresentations = cardPresentations(viewModel.focusId(), viewModel.nodes(), viewModel.orphans());
+    }
+
+    private FamilyTreeLayout.Result displayedLayout() {
+        if (transition == null) {
+            return layout;
+        }
+        long elapsed = Math.max(0, Util.getMillis() - transitionStartedMs);
+        if (elapsed >= GENERATION_TRANSITION_MS) {
+            finishTransition();
+            UUID queued = queuedCameraFocusId;
+            queuedCameraFocusId = null;
+            if (queued != null) {
+                startCameraPanIfOffscreen(queued);
+            }
+            return layout;
+        }
+        return transition.at(elapsed / (double) GENERATION_TRANSITION_MS);
+    }
+
+    private void finishTransition() {
+        if (transition != null) {
+            viewport = transition.settledViewport(viewport);
+            transition = null;
+        }
     }
 
     private void requestFocus(UUID id, boolean recenter) {
         long requestId = viewModel.beginFocus(id, viewport);
+        invalidateGenerationAvailability();
         pendingRecenterRequestId = recenter ? requestId : -1L;
         sendFocusRequest(id, requestId);
+        updateBackButton();
+    }
+
+    boolean selectPerson(UUID id) {
+        if (!cardsById.containsKey(id) || !viewModel.selectVisible(id, viewport)) {
+            return false;
+        }
+        if (pendingRootRequestId > 0) {
+            discardPendingRootLayout();
+        }
+        pendingRecenterRequestId = -1L;
+        invalidateGenerationAvailability();
+        cardPresentations = cardPresentations(viewModel.focusId(), viewModel.nodes(), viewModel.orphans());
+        updateBackButton();
+        return true;
+    }
+
+    boolean goBack() {
+        stopCameraMotion();
+        finishTransition();
+        UUID currentRoot = viewModel.layoutRootId();
+        Optional<FamilyTreeViewModel.HistoryEntry> previous = viewModel.back();
+        if (previous.isEmpty()) {
+            return false;
+        }
+        invalidateGenerationAvailability();
+        if (pendingRootRequestId > 0) {
+            discardPendingRootLayout();
+        }
+        viewport = previous.orElseThrow().viewport();
+        pendingRecenterRequestId = -1L;
+        if (!viewModel.layoutRootId().equals(currentRoot)) {
+            RootLayoutHistory saved = rootLayoutHistory.peek();
+            if (saved != null && saved.layoutRootId().equals(viewModel.layoutRootId())) {
+                layout = rootLayoutHistory.pop().layout();
+                refreshLayoutIndex();
+            } else {
+                rebuildLayout();
+            }
+        } else {
+            // A selection-only Back does not need a new graph layout.
+            refreshLayoutIndex();
+        }
+        updateZoomLabel();
+        updateBackButton();
+        return true;
+    }
+
+    long startRootFocus(UUID id) {
+        if (pendingRootRequestId <= 0 && viewModel.pendingFocusId().isEmpty()
+                && !viewModel.nodes().isEmpty() && !id.equals(viewModel.layoutRootId())) {
+            rootLayoutHistory.push(new RootLayoutHistory(viewModel.layoutRootId(), layout));
+            pendingRootLayoutSaved = true;
+        }
+        pendingRootRequestId = viewModel.beginRootFocus(id, viewport);
+        invalidateGenerationAvailability();
+        updateBackButton();
+        return pendingRootRequestId;
+    }
+
+    private void discardPendingRootLayout() {
+        if (pendingRootLayoutSaved && !rootLayoutHistory.isEmpty()) {
+            rootLayoutHistory.pop();
+        }
+        pendingRootLayoutSaved = false;
+        pendingRootRequestId = -1L;
+    }
+
+    private void updateBackButton() {
+        if (backButton != null) {
+            backButton.active = viewModel.canGoBack();
+        }
+    }
+
+    private record RootLayoutHistory(UUID layoutRootId, FamilyTreeLayout.Result layout) {
     }
 
     private void sendFocusRequest(UUID id, long requestId) {
@@ -209,11 +397,100 @@ public class FamilyTreeScreen extends Screen {
         ));
     }
 
-    private void requestExpansion(ContinuationTarget target) {
-        long requestId = viewModel.beginExpansion(target.anchor(), target.direction());
-        int ancestors = target.direction() == FamilyTreeView.Direction.ANCESTORS ? 2 : 0;
-        int descendants = target.direction() == FamilyTreeView.Direction.DESCENDANTS ? 2 : 0;
-        Network.sendToServer(new GetFamilyTreeRequest(target.anchor(), ancestors, descendants, requestId));
+    private void requestGeneration(FamilyTreeView.Direction direction) {
+        requestGeneration(direction, generationCandidates(direction));
+    }
+
+    private void requestGeneration(FamilyTreeView.Direction direction, Set<UUID> candidates) {
+        stopCameraMotion();
+        viewModel.beginGeneration(direction, candidates).ifPresent(this::sendGenerationRequest);
+    }
+
+    private void requestBranch(BranchTarget target) {
+        requestGeneration(target.direction(), Set.of(target.uuid()));
+    }
+
+    Optional<FamilyTreeLayout.Bounds> branchControlBounds(UUID anchor, FamilyTreeView.Direction direction) {
+        return branchControls(generationAvailability(), displayedLayout(), minecraft.getWindow().getGuiScale()).stream()
+                .filter(control -> control.target().equals(new BranchTarget(anchor, direction)))
+                .map(BranchControl::bounds).findFirst();
+    }
+
+    private List<BranchControl> branchControls(GenerationAvailability availability,
+                                               FamilyTreeLayout.Result displayed, double guiScale) {
+        float zoom = viewport.zoom();
+        double rowGap = FamilyTreeLayout.GENERATION_GAP * (double) zoom;
+        // An up tab and a down tab can share the same gap. Leave a pixel between them.
+        int tabHeight = Math.min(MAX_BRANCH_TAB_HEIGHT, ((int) Math.floor(rowGap) - 1) / 2);
+        int tabHeightPixels = (int) Math.round(tabHeight * guiScale);
+        if (tabHeight < MIN_BRANCH_TAB_HEIGHT) {
+            // Below the usual size, fit both controls to the actual framebuffer gap.
+            int gapPixels = (int) Math.floor(rowGap * guiScale);
+            tabHeightPixels = Math.min((int) Math.round(MIN_BRANCH_TAB_HEIGHT * guiScale),
+                    (gapPixels - 1) / 2);
+        }
+        if (tabHeightPixels < Math.max(3, (int) Math.ceil(2 * guiScale)) || availability.branches().isEmpty()) {
+            return List.of();
+        }
+        int tabWidth = tabHeightPixels + (int) Math.round(2 * guiScale);
+        double originX = width / 2.0 + viewport.panX();
+        double originY = canvasCenterY() + viewport.panY();
+        List<BranchControl> controls = new ArrayList<>();
+        for (FamilyTreeLayout.Card card : displayed.cards()) {
+            Set<FamilyTreeView.Direction> directions = availability.branches().get(card.uuid());
+            if (directions == null) {
+                continue;
+            }
+            FamilyTreeLayout.Bounds bounds = card.bounds();
+            int left = physicalCoordinate(bounds.centerX(), originX, zoom, guiScale) - tabWidth / 2;
+            FamilyTreeLayout.Bounds cardPixels = physicalBounds(bounds, originX, originY, zoom, guiScale);
+            for (FamilyTreeView.Direction direction : directions) {
+                boolean upwards = direction == FamilyTreeView.Direction.ANCESTORS;
+                int top = upwards ? cardPixels.top() - tabHeightPixels : cardPixels.bottom();
+                controls.add(new BranchControl(new BranchTarget(card.uuid(), direction),
+                        new FamilyTreeLayout.Bounds(left, left + tabWidth, top, top + tabHeightPixels)));
+            }
+        }
+        return controls;
+    }
+
+    Optional<BranchTarget> branchControlAt(double mouseX, double mouseY) {
+        FamilyTreeLayout.Result displayed = displayedLayout();
+        double guiScale = minecraft.getWindow().getGuiScale();
+        return branchControlAt(mouseX, mouseY, branchControls(generationAvailability(), displayed, guiScale),
+                displayed, guiScale);
+    }
+
+    private Optional<BranchTarget> branchControlAt(double mouseX, double mouseY,
+                                                   List<BranchControl> controls,
+                                                   FamilyTreeLayout.Result displayed, double guiScale) {
+        if (!insideCanvas(mouseX, mouseY)) {
+            return Optional.empty();
+        }
+        int x = (int) Math.floor(mouseX * guiScale);
+        int y = (int) Math.floor(mouseY * guiScale);
+        for (int i = controls.size() - 1; i >= 0; i--) {
+            BranchControl control = controls.get(i);
+            if (control.bounds().contains(x, y)) {
+                // Cards are painted over tabs. During an animation a moving card can cover one.
+                double originX = width / 2.0 + viewport.panX();
+                double originY = canvasCenterY() + viewport.panY();
+                for (FamilyTreeLayout.Card card : displayed.cards()) {
+                    if (physicalBounds(card.bounds(), originX, originY, viewport.zoom(), guiScale).contains(x, y)) {
+                        return Optional.empty();
+                    }
+                }
+                return Optional.of(control.target());
+            }
+        }
+        return Optional.empty();
+    }
+
+    private void sendGenerationRequest(FamilyTreeViewModel.GenerationRequest request) {
+        int ancestors = request.direction() == FamilyTreeView.Direction.ANCESTORS ? 1 : 0;
+        int descendants = request.direction() == FamilyTreeView.Direction.DESCENDANTS ? 1 : 0;
+        Network.sendToServer(new GetFamilyTreeRequest(request.anchor(), ancestors, descendants,
+                request.requestId(), true, request.after()));
     }
 
     private void searchFamily(String value) {
@@ -242,19 +519,88 @@ public class FamilyTreeScreen extends Screen {
                 )));
     }
 
-    private void selectSearchResult(FamilyTreeSearchEntry entry) {
-        long requestId = viewModel.beginRootFocus(entry.uuid(), viewport);
-        pendingRecenterRequestId = requestId;
+    void selectSearchResult(FamilyTreeSearchEntry entry) {
+        boolean alreadyVisible = cardsById.containsKey(entry.uuid());
+        if (alreadyVisible) {
+            stopCameraMotion();
+            selectPerson(entry.uuid());
+            displayedLayout(); // Settle elapsed transitions before choosing the camera destination.
+            if (transition != null) {
+                // The card is still moving. Pan once its final position is established.
+                queuedCameraFocusId = entry.uuid();
+            } else {
+                startCameraPanIfOffscreen(entry.uuid());
+            }
+        } else {
+            stopCameraMotion();
+            finishTransition();
+            long requestId = startRootFocus(entry.uuid());
+            pendingRecenterRequestId = requestId;
+            sendFocusRequest(entry.uuid(), requestId);
+        }
         searchOpen = false;
         searchPending = false;
         searchResults = List.of();
         if (searchField != null) {
             searchField.setValue("");
         }
-        sendFocusRequest(entry.uuid(), requestId);
+    }
+
+    private void startCameraPanIfOffscreen(UUID id) {
+        layout.cards().stream()
+                .filter(card -> card.uuid().equals(id))
+                .findFirst()
+                .filter(card -> !worldBoundsOnCanvas(card.bounds()))
+                .ifPresent(card -> {
+                    cameraFrom = viewport;
+                    cameraTo = focusViewportAfterResponse(layout, viewport, id);
+                    cameraStartedMs = Util.getMillis();
+                });
+    }
+
+    private boolean worldBoundsOnCanvas(FamilyTreeLayout.Bounds bounds) {
+        double originX = width / 2.0 + viewport.panX();
+        double originY = canvasCenterY() + viewport.panY();
+        double zoom = viewport.zoom();
+        return overlapsCanvas(originX + bounds.left() * zoom, originY + bounds.top() * zoom,
+                originX + bounds.right() * zoom, originY + bounds.bottom() * zoom, 1);
+    }
+
+    private boolean physicalBoundsOnCanvas(FamilyTreeLayout.Bounds bounds, double guiScale) {
+        return overlapsCanvas(bounds.left(), bounds.top(), bounds.right(), bounds.bottom(), guiScale);
+    }
+
+    private boolean overlapsCanvas(double left, double top, double right, double bottom, double scale) {
+        return right > 0 && left < width * scale
+                && bottom > HEADER_HEIGHT * scale && top < (height - FOOTER_HEIGHT) * scale;
+    }
+
+    void updateCameraMotion(long nowMillis) {
+        if (cameraFrom == null || cameraTo == null) {
+            return;
+        }
+        double progress = Math.max(0.0, Math.min(1.0, (nowMillis - cameraStartedMs) / (double) CAMERA_PAN_MS));
+        double eased = progress * progress * (3.0 - 2.0 * progress);
+        viewport = new FamilyTreeViewModel.ViewportState(
+                cameraFrom.panX() + (cameraTo.panX() - cameraFrom.panX()) * eased,
+                cameraFrom.panY() + (cameraTo.panY() - cameraFrom.panY()) * eased,
+                cameraFrom.zoom()
+        );
+        if (progress >= 1.0) {
+            cameraFrom = null;
+            cameraTo = null;
+        }
+    }
+
+    private void stopCameraMotion() {
+        updateCameraMotion(Util.getMillis());
+        cameraFrom = null;
+        cameraTo = null;
+        queuedCameraFocusId = null;
     }
 
     private void setZoom(float targetZoom) {
+        stopCameraMotion();
         viewport = zoomAround(
                 viewport,
                 width / 2.0,
@@ -269,6 +615,7 @@ public class FamilyTreeScreen extends Screen {
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
         if (canvasDragging && button == 0) {
+            stopCameraMotion();
             viewport = new FamilyTreeViewModel.ViewportState(
                     viewport.panX() + deltaX,
                     viewport.panY() + deltaY,
@@ -281,6 +628,7 @@ public class FamilyTreeScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        updateCameraMotion(Util.getMillis());
         canvasDragging = false;
         if (button == 0) {
             FamilyTreeSearchEntry searchResult = searchResultAt(mouseX, mouseY);
@@ -301,13 +649,31 @@ public class FamilyTreeScreen extends Screen {
             }
         }
         if (button == 0 && insideCanvas(mouseX, mouseY)) {
+            GenerationAvailability availability = generationAvailability();
+            Optional<FamilyTreeView.Direction> generation = generationControlAt(
+                    mouseX, mouseY, width, height, availability.global());
+            if (generation.isPresent()) {
+                if (!viewModel.loading()) {
+                    requestGeneration(generation.orElseThrow());
+                }
+                return true;
+            }
+            FamilyTreeLayout.Result displayed = displayedLayout();
+            double guiScale = minecraft.getWindow().getGuiScale();
+            Optional<BranchTarget> branch = branchControlAt(
+                    mouseX, mouseY, branchControls(availability, displayed, guiScale), displayed, guiScale);
+            if (branch.isPresent()) {
+                if (!viewModel.loading()) {
+                    requestBranch(branch.orElseThrow());
+                }
+                return true;
+            }
             Optional<HitTarget> target = hitTargetAt(
-                    layout,
+                    displayed,
                     viewModel.nodes(),
                     viewModel.graves(),
                     worldX(mouseX),
-                    worldY(mouseY),
-                    viewport.zoom()
+                    worldY(mouseY)
             );
             if (target.isPresent()) {
                 Minecraft.getInstance().getSoundManager()
@@ -317,11 +683,8 @@ public class FamilyTreeScreen extends Screen {
                     actionFeedback = Component.translatable("gui.family_tree.grave.copied");
                     actionFeedbackUntilMs = Util.getMillis() + COPY_FEEDBACK_MS;
                 } else if (target.get() instanceof PersonTarget person) {
-                    if (!person.uuid().equals(viewModel.focusId())) {
-                        requestFocus(person.uuid(), true);
-                    }
-                } else if (target.get() instanceof ContinuationTarget continuation) {
-                    requestExpansion(continuation);
+                    // Selection is local; only the generation controls fetch more relatives.
+                    selectPerson(person.uuid());
                 }
                 return true;
             }
@@ -393,13 +756,14 @@ public class FamilyTreeScreen extends Screen {
         if (!insideCanvas(mouseX, mouseY) || scrollY == 0.0) {
             return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
         }
+        stopCameraMotion();
         viewport = zoomAround(
                 viewport,
                 mouseX,
                 mouseY,
                 width / 2.0,
                 canvasCenterY(),
-                viewport.zoom() + (float) scrollY * 0.1F
+                viewport.zoom() * (float) Math.pow(1.2, scrollY)
         );
         updateZoomLabel();
         return true;
@@ -407,155 +771,319 @@ public class FamilyTreeScreen extends Screen {
 
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
+        updateCameraMotion(Util.getMillis());
         super.render(context, mouseX, mouseY, delta);
         context.fill(0, HEADER_HEIGHT, width, height - FOOTER_HEIGHT, 0x66000000);
 
-        hovered = insideCanvas(mouseX, mouseY)
-                ? hitTargetAt(
-                        layout,
+        FamilyTreeLayout.Result displayed = displayedLayout();
+        GenerationAvailability availability = generationAvailability();
+        double guiScale = minecraft.getWindow().getGuiScale();
+        List<BranchControl> branches = branchControls(availability, displayed, guiScale);
+
+        Optional<FamilyTreeView.Direction> generationHover = generationControlAt(
+                mouseX, mouseY, width, height, availability.global());
+        Optional<BranchTarget> branchHover = branchControlAt(mouseX, mouseY, branches, displayed, guiScale);
+        hovered = generationHover.isPresent() ? new GenerationTarget(generationHover.orElseThrow())
+                : branchHover.isPresent() ? branchHover.orElseThrow()
+                : insideCanvas(mouseX, mouseY) ? hitTargetAt(
+                        displayed,
                         viewModel.nodes(),
                         viewModel.graves(),
                         worldX(mouseX),
-                        worldY(mouseY),
-                        viewport.zoom()
+                        worldY(mouseY)
                 ).orElse(null)
                 : null;
 
         context.enableScissor(0, HEADER_HEIGHT, width, height - FOOTER_HEIGHT);
         PoseStack pose = context.pose();
+        Map<UUID, FamilyTreeNode> nodes = viewModel.nodes();
+        Map<UUID, FamilyTreeLayout.Card> displayedCards = cardsById;
+        if (displayed != layout) {
+            displayedCards = new HashMap<>();
+            for (FamilyTreeLayout.Card card : displayed.cards()) {
+                displayedCards.put(card.uuid(), card);
+            }
+        }
+        // Connectors, card outlines and branch tab borders share the framebuffer pixel grid.
+        pose.pushPose();
+        pose.scale((float) (1.0 / guiScale), (float) (1.0 / guiScale), 1.0F);
+        renderEdgeStrokes(context, nodes, displayed, displayedCards, guiScale);
+        renderBranchControls(context, branches, guiScale);
+        pose.popPose();
+
         pose.pushPose();
         pose.translate(width / 2.0 + viewport.panX(), canvasCenterY() + viewport.panY(), 0);
         pose.scale(viewport.zoom(), viewport.zoom(), 1.0F);
+        renderPartnerIcons(context, nodes, displayed, displayedCards);
+        renderCards(context, nodes, displayed);
+        pose.popPose();
 
-        Map<UUID, FamilyTreeNode> nodes = viewModel.nodes();
-        renderEdges(context, nodes);
-        renderContinuations(context);
-        renderCards(context, nodes);
-
+        pose.pushPose();
+        pose.scale((float) (1.0 / guiScale), (float) (1.0 / guiScale), 1.0F);
+        renderCardOutlines(context, displayed, guiScale);
         pose.popPose();
         context.disableScissor();
 
+        renderGenerationControls(context, availability.global());
         renderFixedChrome(context, mouseX, mouseY, nodes);
         renderSearchOverlay(context, mouseX, mouseY);
     }
 
-    private void renderEdges(GuiGraphics context, Map<UUID, FamilyTreeNode> nodes) {
-        // Draw child stems underneath relationship icons, including their transparent padding.
-        renderEdges(context, nodes, FamilyTreeLayout.EdgeType.PARENT_CHILD);
-        renderEdges(context, nodes, FamilyTreeLayout.EdgeType.PARTNER);
-    }
-
-    private void renderEdges(GuiGraphics context, Map<UUID, FamilyTreeNode> nodes, FamilyTreeLayout.EdgeType type) {
-        for (FamilyTreeLayout.Edge edge : layout.edges()) {
-            if (edge.type() != type) {
-                continue;
-            }
-            FamilyTreeLayout.Card from = card(edge.from());
-            FamilyTreeLayout.Card to = card(edge.to());
+    private void renderEdgeStrokes(GuiGraphics context, Map<UUID, FamilyTreeNode> nodes,
+                                   FamilyTreeLayout.Result displayed, Map<UUID, FamilyTreeLayout.Card> displayedCards,
+                                   double guiScale) {
+        for (FamilyTreeLayout.Edge edge : displayed.edges()) {
+            FamilyTreeLayout.Card from = displayedCards.get(edge.from());
+            FamilyTreeLayout.Card to = displayedCards.get(edge.to());
             if (from == null || to == null) {
                 continue;
             }
-            FamilyTreeLayout.Bounds fromBounds = displayCardBounds(from.bounds(), viewport.zoom());
-            FamilyTreeLayout.Bounds toBounds = displayCardBounds(to.bounds(), viewport.zoom());
+            FamilyTreeLayout.Bounds fromBounds = from.bounds();
+            FamilyTreeLayout.Bounds toBounds = to.bounds();
             int x1 = fromBounds.centerX();
             int y1 = fromBounds.centerY();
             int x2 = toBounds.centerX();
-            int y2 = toBounds.centerY();
             if (edge.type() == FamilyTreeLayout.EdgeType.PARTNER) {
-                FamilyTreeNode fromNode = nodes.get(edge.from());
-                FamilyTreeNode toNode = nodes.get(edge.to());
-                boolean inferredMarriage = fromNode != null
-                        && toNode != null
-                        && !fromNode.partner().equals(toNode.id())
-                        && !toNode.partner().equals(fromNode.id());
-                Optional<RelationshipState> relationshipState = inferredMarriage
-                        ? Optional.of(RelationshipState.MARRIED_TO_VILLAGER)
-                        : fromNode == null || toNode == null
-                        ? Optional.empty()
-                        : partnerRelationshipState(
-                                fromNode.getRelationshipState(),
-                                toNode.getRelationshipState()
-                        );
-                if (relationshipState.isPresent()) {
+                if (edgeRelationshipState(edge, nodes).isPresent()) {
                     FamilyTreeLayout.Bounds iconBounds = partnerIconBounds(from.bounds(), to.bounds());
                     int left = Math.min(x1, x2);
                     int right = Math.max(x1, x2);
-                    context.hLine(left, iconBounds.left() + PARTNER_ICON_VISIBLE_EDGE_INSET, y1, 0xFFE0E0E0);
-                    context.hLine(iconBounds.right() - PARTNER_ICON_VISIBLE_EDGE_INSET, right, y1, 0xFFE0E0E0);
-                    Icon icon = MCAScreens.getInstance().getIcon(relationshipState.orElseThrow().getIcon());
-                    context.blit(
-                            InteractScreen.ICON_TEXTURES,
-                            iconBounds.left(),
-                            iconBounds.top(),
-                            0,
-                            icon.u(),
-                            icon.v(),
-                            16,
-                            16,
-                            256,
-                            256
-                    );
+                    drawPhysicalHorizontal(context, left, iconBounds.left() + PARTNER_ICON_VISIBLE_EDGE_INSET,
+                            y1, 0xFFE0E0E0, guiScale);
+                    drawPhysicalHorizontal(context, iconBounds.right() - PARTNER_ICON_VISIBLE_EDGE_INSET,
+                            right, y1, 0xFFE0E0E0, guiScale);
                 } else {
-                    context.hLine(Math.min(x1, x2), Math.max(x1, x2), y1, 0xFFE0E0E0);
+                    drawPhysicalHorizontal(context, x1, x2, y1, 0xFFE0E0E0, guiScale);
                 }
-            } else {
-                if (edge.secondParent() != null) {
-                    FamilyTreeLayout.Card secondParent = card(edge.secondParent());
-                    x1 = (x1 + secondParent.bounds().centerX()) / 2;
-                } else {
-                    y1 = fromBounds.bottom();
-                }
-                y2 = toBounds.top();
-                int midY = (fromBounds.bottom() + y2) / 2;
-                context.vLine(x1, Math.min(y1, midY), Math.max(y1, midY), 0xFFB8B8B8);
-                context.hLine(Math.min(x1, x2), Math.max(x1, x2), midY, 0xFFB8B8B8);
-                context.vLine(x2, Math.min(midY, y2), Math.max(midY, y2), 0xFFB8B8B8);
             }
         }
-    }
-
-    private void renderContinuations(GuiGraphics context) {
-        for (FamilyTreeLayout.ContinuationControl control : layout.continuations()) {
-            FamilyTreeLayout.Bounds bounds = control.bounds();
-            boolean isHovered = hovered instanceof ContinuationTarget target
-                    && target.anchor().equals(control.anchor())
-                    && target.direction() == control.direction();
-            context.fill(bounds.left(), bounds.top(), bounds.right(), bounds.bottom(), isHovered ? 0xFF6D8FB3 : 0xFF3F566D);
-            String marker = control.direction() == FamilyTreeView.Direction.ANCESTORS ? "↑" : "↓";
-            context.drawCenteredString(font, marker, bounds.centerX(), bounds.centerY() - font.lineHeight / 2, 0xFFFFFFFF);
+        for (FamilyTreeLayout.FamilyConnector connector : displayed.connectors()) {
+            int color = FAMILY_CONNECTOR_COLORS[connector.track() % FAMILY_CONNECTOR_COLORS.length];
+            FamilyTreeLayout.Bounds parent = displayedCards.get(connector.parent()).bounds();
+            FamilyTreeLayout.Card secondParent = connector.secondParent() == null
+                    ? null : displayedCards.get(connector.secondParent());
+            int x = secondParent == null ? parent.centerX()
+                    : (parent.centerX() + secondParent.bounds().centerX()) / 2;
+            int y = secondParent == null ? parent.bottom() : parent.centerY();
+            FamilyTreeLayout.Bounds firstChild = displayedCards.get(connector.children().getFirst()).bounds();
+            int railY = connector.railY(parent, firstChild);
+            int left = x;
+            int right = x;
+            drawPhysicalVertical(context, x, y, railY, color, guiScale);
+            for (UUID child : connector.children()) {
+                FamilyTreeLayout.Bounds childBounds = displayedCards.get(child).bounds();
+                left = Math.min(left, childBounds.centerX());
+                right = Math.max(right, childBounds.centerX());
+                drawPhysicalVertical(context, childBounds.centerX(), railY, childBounds.top(), color, guiScale);
+            }
+            drawPhysicalHorizontal(context, left, right, railY, color, guiScale);
         }
     }
 
-    private void renderCards(GuiGraphics context, Map<UUID, FamilyTreeNode> nodes) {
+    private void renderPartnerIcons(GuiGraphics context, Map<UUID, FamilyTreeNode> nodes,
+                                    FamilyTreeLayout.Result displayed,
+                                    Map<UUID, FamilyTreeLayout.Card> displayedCards) {
+        for (FamilyTreeLayout.Edge edge : displayed.edges()) {
+            if (edge.type() != FamilyTreeLayout.EdgeType.PARTNER) {
+                continue;
+            }
+            FamilyTreeLayout.Card from = displayedCards.get(edge.from());
+            FamilyTreeLayout.Card to = displayedCards.get(edge.to());
+            if (from == null || to == null) {
+                continue;
+            }
+            FamilyTreeLayout.Bounds iconBounds = partnerIconBounds(from.bounds(), to.bounds());
+            if (!worldBoundsOnCanvas(iconBounds)) {
+                continue;
+            }
+            Optional<RelationshipState> state = edgeRelationshipState(edge, nodes);
+            if (state.isEmpty()) {
+                continue;
+            }
+            Icon icon = MCAScreens.getInstance().getIcon(state.orElseThrow().getIcon());
+            context.blit(InteractScreen.ICON_TEXTURES, iconBounds.left(), iconBounds.top(), 0,
+                    icon.u(), icon.v(), 16, 16, 256, 256);
+        }
+    }
+
+    private static Optional<RelationshipState> edgeRelationshipState(
+            FamilyTreeLayout.Edge edge, Map<UUID, FamilyTreeNode> nodes) {
+        FamilyTreeNode first = nodes.get(edge.from());
+        FamilyTreeNode second = nodes.get(edge.to());
+        if (first == null || second == null) {
+            return Optional.empty();
+        }
+        if (!first.partner().equals(second.id()) && !second.partner().equals(first.id())) {
+            return Optional.of(RelationshipState.MARRIED_TO_VILLAGER);
+        }
+        return partnerRelationshipState(first.getRelationshipState(), second.getRelationshipState());
+    }
+
+    private void drawPhysicalHorizontal(GuiGraphics context, int x1, int x2, int y, int color, double guiScale) {
+        FamilyTreeLayout.Bounds stroke = physicalHorizontalStroke(x1, x2, y,
+                width / 2.0 + viewport.panX(), canvasCenterY() + viewport.panY(), viewport.zoom(), guiScale);
+        if (physicalBoundsOnCanvas(stroke, guiScale)) {
+            drawPhysicalFill(context, stroke, color);
+        }
+    }
+
+    private void drawPhysicalVertical(GuiGraphics context, int x, int y1, int y2, int color, double guiScale) {
+        FamilyTreeLayout.Bounds stroke = physicalVerticalStroke(x, y1, y2,
+                width / 2.0 + viewport.panX(), canvasCenterY() + viewport.panY(), viewport.zoom(), guiScale);
+        if (physicalBoundsOnCanvas(stroke, guiScale)) {
+            drawPhysicalFill(context, stroke, color);
+        }
+    }
+
+    private void renderCardOutlines(GuiGraphics context, FamilyTreeLayout.Result displayed, double guiScale) {
+        double originX = width / 2.0 + viewport.panX();
+        double originY = canvasCenterY() + viewport.panY();
+        for (FamilyTreeLayout.Card card : displayed.cards()) {
+            FamilyTreeLayout.Bounds bounds = physicalBounds(card.bounds(), originX, originY, viewport.zoom(), guiScale);
+            if (!physicalBoundsOnCanvas(bounds, guiScale)) {
+                continue;
+            }
+            int color = card.uuid().equals(viewModel.focusId()) ? 0xFFFFFFFF : CARD_BORDER;
+            context.fill(bounds.left(), bounds.top(), bounds.right(), bounds.top() + 1, color);
+            context.fill(bounds.left(), bounds.bottom() - 1, bounds.right(), bounds.bottom(), color);
+            context.fill(bounds.left(), bounds.top(), bounds.left() + 1, bounds.bottom(), color);
+            context.fill(bounds.right() - 1, bounds.top(), bounds.right(), bounds.bottom(), color);
+        }
+    }
+
+    private static void drawPhysicalFill(GuiGraphics context, FamilyTreeLayout.Bounds bounds, int color) {
+        context.fill(bounds.left(), bounds.top(), bounds.right(), bounds.bottom(), color);
+    }
+
+    private void renderGenerationControls(GuiGraphics context, Set<FamilyTreeView.Direction> available) {
+        for (FamilyTreeView.Direction direction : available) {
+            FamilyTreeLayout.Bounds bounds = generationControlBounds(direction, width, height);
+            boolean hovered = this.hovered instanceof GenerationTarget target && target.direction() == direction;
+            int color = viewModel.loading() ? 0xFF35434F : hovered ? 0xFF6D8FB3 : 0xFF3F566D;
+            context.fill(bounds.left(), bounds.top(), bounds.right(), bounds.bottom(), color);
+            context.renderOutline(bounds.left(), bounds.top(), GENERATION_BUTTON_SIZE,
+                    GENERATION_BUTTON_SIZE, 0xFF9AA7B2);
+            context.drawCenteredString(font, direction == FamilyTreeView.Direction.ANCESTORS ? "↑" : "↓",
+                    bounds.centerX(), bounds.centerY() - font.lineHeight / 2, 0xFFFFFFFF);
+        }
+    }
+
+    private void renderBranchControls(GuiGraphics context, List<BranchControl> controls, double guiScale) {
+        boolean active = !viewModel.loading();
+        for (BranchControl control : controls) {
+            FamilyTreeLayout.Bounds tab = control.bounds();
+            if (!physicalBoundsOnCanvas(tab, guiScale)) {
+                continue;
+            }
+            boolean upwards = control.target().direction() == FamilyTreeView.Direction.ANCESTORS;
+            boolean highlighted = active && control.target().equals(hovered);
+            drawPhysicalFill(context, tab, highlighted ? CARD_HOVER_BACKGROUND : CARD_BACKGROUND);
+            context.fill(tab.left(), tab.top(), tab.left() + 1, tab.bottom(), CARD_BORDER);
+            context.fill(tab.right() - 1, tab.top(), tab.right(), tab.bottom(), CARD_BORDER);
+            int outerY = upwards ? tab.top() : tab.bottom() - 1;
+            context.fill(tab.left(), outerY, tab.right(), outerY + 1, CARD_BORDER);
+
+            int unit = Math.max(1, (tab.bottom() - tab.top()) / 7);
+            int x = tab.centerX() - unit / 2;
+            int y = Math.max(tab.top() + (upwards ? 1 : 0), tab.centerY() - unit);
+            int wingsY = upwards ? y + unit : y;
+            int tipY = upwards ? y : y + unit;
+            int arrowColor = highlighted ? 0xFFFFFFFF : active ? 0xFFD9E4EE : CARD_BORDER;
+            context.fill(x - unit, wingsY, x, wingsY + unit, arrowColor);
+            context.fill(x + unit, wingsY, x + 2 * unit, wingsY + unit, arrowColor);
+            context.fill(x, tipY, x + unit, tipY + unit, arrowColor);
+        }
+    }
+
+    private Set<FamilyTreeView.Direction> availableGenerationDirections() {
+        return generationAvailability().global();
+    }
+
+    private record GenerationAvailability(Set<FamilyTreeView.Direction> global,
+                                          Map<UUID, Set<FamilyTreeView.Direction>> branches) {
+    }
+
+    private record BranchControl(BranchTarget target, FamilyTreeLayout.Bounds bounds) {
+    }
+
+    private void invalidateGenerationAvailability() {
+        cachedGenerationAvailability = null;
+    }
+
+    private GenerationAvailability generationAvailability() {
+        if (cachedGenerationAvailability != null) {
+            return cachedGenerationAvailability;
+        }
+        EnumSet<FamilyTreeView.Direction> global = EnumSet.noneOf(FamilyTreeView.Direction.class);
+        Map<UUID, Set<FamilyTreeView.Direction>> branches = new HashMap<>();
+        Set<FamilyTreeView.Continuation> continuations = viewModel.snapshot().continuations();
+        for (FamilyTreeView.Direction direction : FamilyTreeView.Direction.values()) {
+            Set<UUID> candidates = generationCandidates(direction);
+            if (viewModel.hasGenerationFrontier(direction, candidates)) {
+                global.add(direction);
+            }
+            for (FamilyTreeView.Continuation continuation : continuations) {
+                UUID anchor = continuation.anchor();
+                if (continuation.direction() == direction && cardsById.containsKey(anchor)
+                        && !candidates.contains(anchor)) {
+                    branches.computeIfAbsent(anchor, ignored -> EnumSet.noneOf(FamilyTreeView.Direction.class))
+                            .add(direction);
+                }
+            }
+        }
+        cachedGenerationAvailability = new GenerationAvailability(global, Map.copyOf(branches));
+        return cachedGenerationAvailability;
+    }
+
+    private Set<UUID> generationCandidates(FamilyTreeView.Direction direction) {
+        FamilyTreeLayout.Card root = cardsById.get(viewModel.layoutRootId());
+        if (root == null) {
+            return Set.of();
+        }
+        Set<UUID> eligible = new HashSet<>();
+        Deque<UUID> pending = new ArrayDeque<>();
+        pending.add(root.uuid());
+        while (!pending.isEmpty()) {
+            UUID id = pending.removeFirst();
+            if (!cardsById.containsKey(id) || !eligible.add(id)) {
+                continue;
+            }
+            FamilyTreeNode node = viewModel.nodes().get(id);
+            if (node != null) {
+                if (direction == FamilyTreeView.Direction.ANCESTORS) {
+                    node.streamParents().filter(cardsById::containsKey).forEach(pending::addLast);
+                } else {
+                    node.streamChildren().filter(cardsById::containsKey).forEach(pending::addLast);
+                }
+            }
+        }
+        return eligible;
+    }
+
+    private void renderCards(GuiGraphics context, Map<UUID, FamilyTreeNode> nodes,
+                             FamilyTreeLayout.Result displayed) {
         UUID focusId = viewModel.focusId();
         Map<UUID, GlobalPos> graves = viewModel.graves();
-        // Keep sharp glyphs separated at distant zoom without dropping any labels.
-        float fontScale = textZoom() / viewport.zoom();
-        int textInset = Math.max(5, 1 + (int) Math.ceil(3 * fontScale));
-        int lineStep = Math.max(12, (int) Math.ceil((font.lineHeight + 1) * fontScale));
-        for (FamilyTreeLayout.Card card : layout.cards()) {
+        int textInset = 5;
+        for (FamilyTreeLayout.Card card : displayed.cards()) {
+            FamilyTreeLayout.Bounds bounds = card.bounds();
+            if (!worldBoundsOnCanvas(bounds)) {
+                continue;
+            }
             FamilyTreeNode node = nodes.get(card.uuid());
             if (node == null) {
                 continue;
             }
-            FamilyTreeLayout.Bounds bounds = displayCardBounds(card.bounds(), viewport.zoom());
             boolean isHovered = hovered instanceof PersonTarget target && target.uuid().equals(card.uuid());
             boolean focused = card.uuid().equals(focusId);
             int background = focused
                     ? 0xFF334B63
-                    : node.isDeceased() ? 0xFF3D3D3D : 0xFF252D35;
+                    : node.isDeceased() ? 0xFF3D3D3D : CARD_BACKGROUND;
             if (isHovered) {
-                background = 0xFF43586C;
+                background = CARD_HOVER_BACKGROUND;
             }
 
             context.fill(bounds.left(), bounds.top(), bounds.right(), bounds.bottom(), background);
-            context.renderOutline(
-                    bounds.left(),
-                    bounds.top(),
-                    bounds.right() - bounds.left(),
-                    bounds.bottom() - bounds.top(),
-                    focused ? 0xFFFFFFFF : 0xFF9AA7B2
-            );
 
             CardPresentation presentation = cardPresentations.get(card.uuid());
             if (presentation == null) {
@@ -566,9 +1094,14 @@ public class FamilyTreeScreen extends Screen {
                     ? textWidth - (graves.containsKey(card.uuid()) ? DECEASED_WITH_GRAVE_TEXT_INSET : DECEASED_MARKER_TEXT_INSET)
                     : textWidth;
 
+            List<String> nameLines = wrapName(presentation.name(), nameTextWidth);
+            int lineStep = font.lineHeight;
             int textY = bounds.top() + textInset;
-            drawCenteredEllipsized(context, presentation.name(), bounds.centerX(), textY, nameTextWidth, presentation.nameColor());
-            textY += lineStep;
+            for (String nameLine : nameLines) {
+                drawPixelAlignedText(context, nameLine, bounds.centerX() - font.width(nameLine) / 2.0,
+                        textY, presentation.nameColor());
+                textY += lineStep;
+            }
             drawCenteredEllipsized(context, presentation.identity(), bounds.centerX(), textY, textWidth, 0xFFBFC7CE);
             textY += lineStep;
             drawCenteredEllipsized(context, presentation.relationship(), bounds.centerX(), textY, textWidth, 0xFFD9E4EE);
@@ -616,11 +1149,10 @@ public class FamilyTreeScreen extends Screen {
             int y,
             int maxWidth
     ) {
-        float fontScale = textZoom() / viewport.zoom();
-        int iconSize = Math.round(8 * fontScale);
+        int iconSize = 8;
         int iconGap = 3;
-        String label = ellipsizedText(text, Math.max(0, (int) ((maxWidth - iconSize - iconGap) / fontScale)));
-        double left = centerX - (iconSize + iconGap + font.width(label) * fontScale) / 2.0;
+        String label = ellipsizedText(text, Math.max(0, maxWidth - iconSize - iconGap));
+        double left = centerX - (iconSize + iconGap + font.width(label)) / 2.0;
         Icon icon = MCAScreens.getInstance().getIcon(state.getIcon());
         context.pose().pushPose();
         context.pose().translate(left, y, 0);
@@ -638,25 +1170,13 @@ public class FamilyTreeScreen extends Screen {
             int maxWidth,
             int color
     ) {
-        int fontWidth = (int) (maxWidth * viewport.zoom() / textZoom());
-        String label = ellipsizedText(text, fontWidth);
-        double fontScale = textZoom() / (double) viewport.zoom();
-        drawPixelAlignedText(context, label, centerX - font.width(label) * fontScale / 2.0, y, color);
-    }
-
-    private float textZoom() {
-        float zoom = viewport.zoom();
-        if (zoom >= 1.0F) {
-            return zoom;
-        }
-        double guiScale = minecraft.getWindow().getGuiScale();
-        return (float) (Math.max(1L, Math.round(zoom * guiScale)) / guiScale);
+        String label = ellipsizedText(text, maxWidth);
+        drawPixelAlignedText(context, label, centerX - font.width(label) / 2.0, y, color);
     }
 
     private void drawPixelAlignedText(GuiGraphics context, String text, double x, double y, int color) {
         double guiScale = minecraft.getWindow().getGuiScale();
         double zoom = viewport.zoom();
-        double fontScale = textZoom() / zoom;
         double screenX = width / 2.0 + viewport.panX() + x * zoom;
         double screenY = canvasCenterY() + viewport.panY() + y * zoom;
 
@@ -667,7 +1187,6 @@ public class FamilyTreeScreen extends Screen {
                 y + (Math.round(screenY * guiScale) / guiScale - screenY) / zoom,
                 0.0
         );
-        pose.scale((float) fontScale, (float) fontScale, 1.0F);
         context.drawString(font, text, 0, 0, color);
         pose.popPose();
     }
@@ -679,6 +1198,27 @@ public class FamilyTreeScreen extends Screen {
             value = font.plainSubstrByWidth(value, Math.max(0, maxWidth - font.width(ellipsis))) + ellipsis;
         }
         return value;
+    }
+
+    private List<String> wrapName(Component text, int maxWidth) {
+        String name = text.getString();
+        if (font.width(name) <= maxWidth) {
+            return List.of(name);
+        }
+        String firstFit = font.plainSubstrByWidth(name, maxWidth);
+        if (firstFit.isEmpty()) {
+            return List.of(ellipsizedText(text, maxWidth));
+        }
+        int breakAt = firstFit.lastIndexOf(' ');
+        if (breakAt <= 0) {
+            breakAt = firstFit.length();
+        }
+        String firstLine = name.substring(0, breakAt).stripTrailing();
+        String remainder = name.substring(breakAt).stripLeading();
+        if (remainder.isEmpty()) {
+            return List.of(firstLine);
+        }
+        return List.of(firstLine, ellipsizedText(Component.literal(remainder), maxWidth));
     }
 
     private void renderFixedChrome(
@@ -738,10 +1278,19 @@ public class FamilyTreeScreen extends Screen {
                     mouseX,
                     mouseY
             );
-        } else if (hovered instanceof ContinuationTarget continuation) {
-            Component label = continuation.direction() == FamilyTreeView.Direction.ANCESTORS
-                    ? Component.translatable("gui.family_tree.more_ancestors")
-                    : Component.translatable("gui.family_tree.more_descendants");
+        } else if (hovered instanceof BranchTarget branch) {
+            context.renderTooltip(font, viewModel.loading()
+                            ? Component.translatable("gui.family_tree.loading_family")
+                            : Component.translatable(branch.direction() == FamilyTreeView.Direction.ANCESTORS
+                                    ? "gui.family_tree.explore_ancestors" : "gui.family_tree.explore_descendants",
+                                    nodeDisplayName(nodes.get(branch.uuid()))),
+                    mouseX, mouseY);
+        } else if (hovered instanceof GenerationTarget generation) {
+            Component label = generation.direction() == FamilyTreeView.Direction.ANCESTORS
+                    ? Component.translatable("gui.family_tree.more_ancestors",
+                            nodeDisplayName(nodes.get(viewModel.layoutRootId())))
+                    : Component.translatable("gui.family_tree.more_descendants",
+                            nodeDisplayName(nodes.get(viewModel.layoutRootId())));
             context.renderTooltip(font, label, mouseX, mouseY);
         }
     }
@@ -806,11 +1355,6 @@ public class FamilyTreeScreen extends Screen {
                 .orElse(name);
     }
 
-    @Nullable
-    private FamilyTreeLayout.Card card(UUID uuid) {
-        return cardsById.get(uuid);
-    }
-
     private int worldX(double mouseX) {
         return (int) Math.floor((mouseX - width / 2.0 - viewport.panX()) / viewport.zoom());
     }
@@ -821,6 +1365,61 @@ public class FamilyTreeScreen extends Screen {
 
     private boolean insideCanvas(double mouseX, double mouseY) {
         return mouseX >= 0 && mouseX < width && mouseY >= HEADER_HEIGHT && mouseY < height - FOOTER_HEIGHT;
+    }
+
+    static FamilyTreeLayout.Bounds physicalBounds(FamilyTreeLayout.Bounds bounds,
+            double originX, double originY, float zoom, double guiScale) {
+        int left = physicalCoordinate(bounds.left(), originX, zoom, guiScale);
+        int top = physicalCoordinate(bounds.top(), originY, zoom, guiScale);
+        return new FamilyTreeLayout.Bounds(
+                left,
+                Math.max(left + 1, physicalCoordinate(bounds.right(), originX, zoom, guiScale)),
+                top,
+                Math.max(top + 1, physicalCoordinate(bounds.bottom(), originY, zoom, guiScale))
+        );
+    }
+
+    static FamilyTreeLayout.Bounds physicalHorizontalStroke(int x1, int x2, int y,
+            double originX, double originY, float zoom, double guiScale) {
+        int start = physicalCoordinate(x1, originX, zoom, guiScale);
+        int end = physicalCoordinate(x2, originX, zoom, guiScale);
+        int row = physicalCoordinate(y, originY, zoom, guiScale);
+        return new FamilyTreeLayout.Bounds(Math.min(start, end), Math.max(start, end) + 1, row, row + 1);
+    }
+
+    static FamilyTreeLayout.Bounds physicalVerticalStroke(int x, int y1, int y2,
+            double originX, double originY, float zoom, double guiScale) {
+        int column = physicalCoordinate(x, originX, zoom, guiScale);
+        int start = physicalCoordinate(y1, originY, zoom, guiScale);
+        int end = physicalCoordinate(y2, originY, zoom, guiScale);
+        return new FamilyTreeLayout.Bounds(column, column + 1, Math.min(start, end), Math.max(start, end) + 1);
+    }
+
+    private static int physicalCoordinate(double world, double origin, float zoom, double guiScale) {
+        return (int) Math.round((origin + world * zoom) * guiScale);
+    }
+
+    static Optional<FamilyTreeView.Direction> generationControlAt(
+            double mouseX, double mouseY, int screenWidth, int screenHeight,
+            Set<FamilyTreeView.Direction> available
+    ) {
+        for (FamilyTreeView.Direction direction : available) {
+            FamilyTreeLayout.Bounds bounds = generationControlBounds(direction, screenWidth, screenHeight);
+            if (mouseX >= bounds.left() && mouseX < bounds.right()
+                    && mouseY >= bounds.top() && mouseY < bounds.bottom()) {
+                return Optional.of(direction);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static FamilyTreeLayout.Bounds generationControlBounds(
+            FamilyTreeView.Direction direction, int screenWidth, int screenHeight
+    ) {
+        int x = screenWidth - GENERATION_BUTTON_SIZE - 8;
+        int y = direction == FamilyTreeView.Direction.ANCESTORS
+                ? HEADER_HEIGHT + 12 : screenHeight - FOOTER_HEIGHT - GENERATION_BUTTON_SIZE - 8;
+        return new FamilyTreeLayout.Bounds(x, x + GENERATION_BUTTON_SIZE, y, y + GENERATION_BUTTON_SIZE);
     }
 
     private int canvasHeight() {
@@ -904,16 +1503,6 @@ public class FamilyTreeScreen extends Screen {
         return Optional.empty();
     }
 
-    static FamilyTreeLayout.Bounds displayCardBounds(FamilyTreeLayout.Bounds bounds, float zoom) {
-        // Expanding five units per side leaves the 26-unit partner gap with
-        // enough room for its 16-unit icon.
-        int extra = Math.round(5.0F * Math.max(0.0F, 1.0F - zoom) / (1.0F - MIN_ZOOM));
-        return new FamilyTreeLayout.Bounds(
-                bounds.left() - extra, bounds.right() + extra,
-                bounds.top() - extra, bounds.bottom() + extra
-        );
-    }
-
     static FamilyTreeLayout.Bounds graveIconBounds(FamilyTreeLayout.Bounds cardBounds) {
         int left = cardBounds.left() + 14;
         int top = cardBounds.top() + 1;
@@ -984,6 +1573,9 @@ public class FamilyTreeScreen extends Screen {
     ) {
         if (model.unavailableFocusId().isPresent()) {
             return Optional.of(Component.translatable("gui.family_tree.family_record_unavailable"));
+        }
+        if (model.loading()) {
+            return Optional.of(Component.translatable("gui.family_tree.loading_family"));
         }
         if (searchOpen && searchResults.isEmpty()) {
             return Optional.of(Component.translatable("gui.family_tree.no_records"));
@@ -1108,41 +1700,25 @@ public class FamilyTreeScreen extends Screen {
             int worldX,
             int worldY
     ) {
-        return hitTargetAt(result, nodes, graves, worldX, worldY, 1.0F);
-    }
-
-    static Optional<HitTarget> hitTargetAt(
-            FamilyTreeLayout.Result result,
-            Map<UUID, FamilyTreeNode> nodes,
-            Map<UUID, GlobalPos> graves,
-            int worldX,
-            int worldY,
-            float zoom
-    ) {
         for (FamilyTreeLayout.Card card : result.cards()) {
             FamilyTreeNode node = nodes.get(card.uuid());
             GlobalPos grave = graves.get(card.uuid());
             if (node != null
                     && node.isDeceased()
                     && grave != null
-                    && graveIconBounds(displayCardBounds(card.bounds(), zoom)).contains(worldX, worldY)) {
+                    && graveIconBounds(card.bounds()).contains(worldX, worldY)) {
                 return Optional.of(new GraveTarget(card.uuid(), grave));
             }
         }
-        for (FamilyTreeLayout.ContinuationControl continuation : result.continuations()) {
-            if (continuation.bounds().contains(worldX, worldY)) {
-                return Optional.of(new ContinuationTarget(continuation.anchor(), continuation.direction()));
-            }
-        }
         for (FamilyTreeLayout.Card card : result.cards()) {
-            if (displayCardBounds(card.bounds(), zoom).contains(worldX, worldY)) {
+            if (card.bounds().contains(worldX, worldY)) {
                 return Optional.of(new PersonTarget(card.uuid()));
             }
         }
         return Optional.empty();
     }
 
-    sealed interface HitTarget permits PersonTarget, GraveTarget, ContinuationTarget {
+    sealed interface HitTarget permits PersonTarget, GraveTarget, GenerationTarget, BranchTarget {
     }
 
     record PersonTarget(UUID uuid) implements HitTarget {
@@ -1164,7 +1740,10 @@ public class FamilyTreeScreen extends Screen {
     ) {
     }
 
-    record ContinuationTarget(UUID anchor, FamilyTreeView.Direction direction) implements HitTarget {
+    record GenerationTarget(FamilyTreeView.Direction direction) implements HitTarget {
+    }
+
+    record BranchTarget(UUID uuid, FamilyTreeView.Direction direction) implements HitTarget {
     }
 
     record HeaderLayout(

@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -99,9 +100,29 @@ class FamilyTreeViewCodecTest {
     }
 
     @Test
-    void defaultRequestLoadsFourGenerationsPerDirection() {
-        assertEquals(4, GetFamilyTreeRequest.DEFAULT_ANCESTOR_DEPTH);
-        assertEquals(4, GetFamilyTreeRequest.DEFAULT_DESCENDANT_DEPTH);
+    void pagedGenerationRequestAndResponseRoundTrip() {
+        GetFamilyTreeRequest request = new GetFamilyTreeRequest(ROOT, 0, 1, 71L, true, Optional.of(UNAVAILABLE));
+        GetFamilyTreeResponse response = new GetFamilyTreeResponse(71L, ROOT, true, FamilyTreeView.empty(), Optional.of(UNAVAILABLE));
+
+        assertEquals(request, roundTrip(GetFamilyTreeRequest.STREAM_CODEC, request));
+        assertEquals(response, roundTrip(GetFamilyTreeResponse.STREAM_CODEC, response));
+    }
+
+    @Test
+    void invalidGenerationCursorsAreRejectedBeforeServerTraversal() {
+        assertThrows(IllegalArgumentException.class, () -> new GetFamilyTreeRequest(
+                ROOT, 0, 1, 72L, true, Optional.of(Util.NIL_UUID)));
+        assertThrows(IllegalArgumentException.class, () -> new GetFamilyTreeRequest(
+                ROOT, 1, 1, 73L, false, Optional.of(UNAVAILABLE)));
+        // The last page's anchor can be deleted between requests. Its cursor must stay valid.
+        assertEquals(Optional.of(UNAVAILABLE), new GetFamilyTreeRequest(
+                ROOT, 0, 1, 74L, true, Optional.of(UNAVAILABLE)).after());
+    }
+
+    @Test
+    void defaultRequestLoadsOnlyOneGenerationPerDirection() {
+        assertEquals(1, GetFamilyTreeRequest.DEFAULT_ANCESTOR_DEPTH);
+        assertEquals(1, GetFamilyTreeRequest.DEFAULT_DESCENDANT_DEPTH);
         assertEquals(8, GetFamilyTreeRequest.MAX_DEPTH);
     }
 
@@ -113,6 +134,8 @@ class FamilyTreeViewCodecTest {
             ByteBufCodecs.VAR_INT.encode(buffer, 99);
             ByteBufCodecs.VAR_INT.encode(buffer, -7);
             ByteBufCodecs.VAR_LONG.encode(buffer, 44L);
+            ByteBufCodecs.BOOL.encode(buffer, false);
+            ByteBufCodecs.optional(UUIDUtil.STREAM_CODEC).encode(buffer, Optional.empty());
 
             GetFamilyTreeRequest decoded = GetFamilyTreeRequest.STREAM_CODEC.decode(buffer);
 
