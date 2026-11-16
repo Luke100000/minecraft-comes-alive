@@ -5,14 +5,22 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
-/** Optional server-side diagnostics for villagers turning repeatedly at a staircase. */
+import java.util.ArrayDeque;
+
+/** Optional server-side diagnostics for villagers turning repeatedly in place. */
 final class StairSpinDiagnostics {
-    static final boolean ENABLED = Boolean.parseBoolean(System.getProperty("mca.stairSpinDebug", "false"));
+    private static final boolean STAIRS = Boolean.getBoolean("mca.stairSpinDebug");
+    private static final boolean GRASS = Boolean.getBoolean("mca.grassSpinDebug");
+    private static final boolean ALL_TERRAIN = Boolean.getBoolean("mca.movementSpinDebug");
+    static final boolean ENABLED = STAIRS || GRASS || ALL_TERRAIN;
 
     private static final double MAX_LOCAL_TRAVEL_SQR = 0.49D;
     private static final long WINDOW_TICKS = 60L;
@@ -20,6 +28,7 @@ final class StairSpinDiagnostics {
     private static final double SPIN_DEGREES = 270.0D;
     private static final long REPORT_COOLDOWN_TICKS = 100L;
     private static final long STAIR_CONTACT_GRACE_TICKS = 10L;
+    private static final int TRACE_LIMIT = 16;
 
     private boolean observing;
     private boolean onStair;
@@ -33,6 +42,8 @@ final class StairSpinDiagnostics {
     private long lastReportedAt = -REPORT_COOLDOWN_TICKS;
     private long lastStairContact = -STAIR_CONTACT_GRACE_TICKS - 1L;
     private int onStairTicks;
+    @Nullable
+    private ArrayDeque<MovementSample> movementTrace;
 
     record SpinEvent(String source, double rotationDegrees, long ticks, double anchorX, double anchorZ) {
     }
@@ -42,18 +53,35 @@ final class StairSpinDiagnostics {
 
         BlockPos feet = mob.blockPosition();
         BlockPos support = BlockPos.containing(mob.getX(), mob.getY() - 0.1D, mob.getZ());
-        boolean touchingStair = isStair(mob.level().getBlockState(feet))
-                || isStair(mob.level().getBlockState(support));
-        SpinEvent spin = sample(mob.level().getGameTime(), touchingStair,
+        BlockState feetState = mob.level().getBlockState(feet);
+        BlockState supportState = mob.level().getBlockState(support);
+        boolean touchingStair = STAIRS && (isStair(feetState) || isStair(supportState));
+        boolean inGrass = GRASS && (feetState.is(Blocks.SHORT_GRASS) || feetState.is(Blocks.TALL_GRASS));
+        long tick = mob.level().getGameTime();
+        SpinEvent spin = sample(tick, ALL_TERRAIN || touchingStair || inGrass,
                 mob.getX(), mob.getZ(), mob.getYRot(), mob.yBodyRot);
         boolean nearStair = observing;
+
+        if (GRASS || ALL_TERRAIN) {
+            if (ALL_TERRAIN || inGrass || movementTrace != null && observing && !touchingStair) {
+                int pathId = System.identityHashCode(path);
+                if (tick % 4L == 0L || spin != null || movementTrace == null
+                        || movementTrace.getLast().pathId() != pathId) {
+                    recordMovementSample(mob, path, tick, pathId);
+                }
+                if (spin != null) logMovementSpin(mob, path, spin, feetState, supportState);
+            } else {
+                movementTrace = null;
+            }
+        }
+        if (!STAIRS) return;
 
         if (nearStair != onStair) {
             MCA.LOGGER.info("[MCA-STAIR-SPIN] event={} uuid={} dimension={} tick={} pos={} yaw={} bodyYaw={} headYaw={} support={} path={}",
                     nearStair ? "enter" : "leave", mob.getUUID(), mob.level().dimension().location(),
                     mob.level().getGameTime(), mob.position(),
                     mob.getYRot(), mob.yBodyRot, mob.yHeadRot,
-                    mob.level().getBlockState(support).getBlock(), describePath(path));
+                    supportState.getBlock(), describePath(path));
             onStair = nearStair;
             onStairTicks = 0;
         }
@@ -66,7 +94,7 @@ final class StairSpinDiagnostics {
                     spin.anchorX(), spin.anchorZ(),
                     spin.rotationDegrees(), spin.ticks(), mob.getYRot(), mob.yBodyRot, mob.yHeadRot,
                     mob.onGround(), mob.horizontalCollision,
-                    mob.getDeltaMovement(), mob.level().getBlockState(support).getBlock(), describePath(path),
+                    mob.getDeltaMovement(), supportState.getBlock(), describePath(path),
                     mob.getMoveControl().getWantedX(), mob.getMoveControl().getWantedY(),
                     mob.getMoveControl().getWantedZ());
         }
@@ -80,9 +108,50 @@ final class StairSpinDiagnostics {
         }
     }
 
+    private void recordMovementSample(Mob mob, @Nullable Path path, long tick, int pathId) {
+        if (movementTrace == null) movementTrace = new ArrayDeque<>(TRACE_LIMIT);
+        if (movementTrace.size() == TRACE_LIMIT) movementTrace.removeFirst();
+        BlockPos target = mob.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                .map(walk -> walk.getTarget().currentBlockPosition()).orElse(null);
+        int nextIndex = path == null ? -1 : path.getNextNodeIndex();
+        movementTrace.addLast(new MovementSample(tick, mob.position(), target, pathId, nextIndex,
+                pathNode(path, nextIndex - 1), pathNode(path, nextIndex), pathNode(path, nextIndex + 1),
+                mob.getYRot(), mob.yBodyRot, mob.onGround(), mob.horizontalCollision));
+    }
+
     @Nullable
-    SpinEvent sample(long tick, boolean touchingStair, double x, double z, float yaw, float bodyYaw) {
-        if (touchingStair) {
+    private static BlockPos pathNode(@Nullable Path path, int index) {
+        return path != null && index >= 0 && index < path.getNodeCount() ? path.getNodePos(index) : null;
+    }
+
+    private record MovementSample(long tick, Vec3 pos, @Nullable BlockPos target, int pathId, int waypointIndex,
+                                  @Nullable BlockPos previousWaypoint, @Nullable BlockPos waypoint,
+                                  @Nullable BlockPos followingWaypoint, float yaw, float bodyYaw,
+                                  boolean grounded, boolean collision) {
+    }
+
+    private void logMovementSpin(Mob mob, @Nullable Path path, SpinEvent spin,
+                                 BlockState feet, BlockState support) {
+        MCA.LOGGER.warn("{} uuid={} dimension={} tick={} pos={} feet={} support={} "
+                        + "rotation={} source={} window={} yaw={} bodyYaw={} headYaw={} onGround={} "
+                        + "blockCollision={} velocity={} activity={} walkTarget={} path={} wanted=({}, {}, {}) "
+                        + "health={} damage={} nearbyPushables={} recentSamples={}",
+                ALL_TERRAIN ? "[MCA-MOVEMENT-SPIN]" : "[MCA-GRASS-SPIN]",
+                mob.getUUID(), mob.level().dimension().location(), mob.level().getGameTime(), mob.position(),
+                feet, support, spin.rotationDegrees(), spin.source(), spin.ticks(), mob.getYRot(), mob.yBodyRot,
+                mob.yHeadRot, mob.onGround(), mob.horizontalCollision, mob.getDeltaMovement(),
+                mob.getBrain().getActiveNonCoreActivity().orElse(null),
+                mob.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET)
+                        .map(target -> target.getTarget().currentBlockPosition()).orElse(null),
+                describePath(path), mob.getMoveControl().getWantedX(), mob.getMoveControl().getWantedY(),
+                mob.getMoveControl().getWantedZ(), mob.getHealth(), mob.getLastDamageSource(),
+                mob.level().getEntities(mob, mob.getBoundingBox().inflate(0.5D), entity -> entity.isPushable()).size(),
+                movementTrace);
+    }
+
+    @Nullable
+    SpinEvent sample(long tick, boolean inObservedTerrain, double x, double z, float yaw, float bodyYaw) {
+        if (inObservedTerrain) {
             lastStairContact = tick;
         } else if (tick < lastStairContact || tick - lastStairContact > STAIR_CONTACT_GRACE_TICKS) {
             // A stair's partial surface briefly puts the feet in air between steps.

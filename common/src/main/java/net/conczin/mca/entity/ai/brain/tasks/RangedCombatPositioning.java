@@ -4,6 +4,7 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.entity.ai.RangedWeaponHelper;
 import net.conczin.mca.entity.ai.StrafeTerrain;
 import net.conczin.mca.entity.ai.navigation.CombatEscapePositionTracker;
+import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.entity.ai.navigation.MultiTargetPositionTracker;
 import net.conczin.mca.entity.ai.navigation.PathNodeGeometry;
 import net.minecraft.core.BlockPos;
@@ -590,7 +591,7 @@ final class RangedCombatPositioning {
         // Straight-line range can be short while the route around cover is long.
         // Let the native pathfinder find that detour; do not widen the local graph
         // repeatedly or publish blind pursuit toward an unreachable enemy.
-        Path route = entity.getNavigation().createPath(target.blockPosition(), 0);
+        Path route = MCAGroundPathNavigation.probePath(entity.getNavigation(), target.blockPosition(), 0);
         if (route == null || !route.canReach()) return Optional.empty();
         double minimumDistanceSquared = Math.min(entity.distanceToSqr(target),
                 ArcherMovementTask.KITE_ENTER_DISTANCE_SQUARED);

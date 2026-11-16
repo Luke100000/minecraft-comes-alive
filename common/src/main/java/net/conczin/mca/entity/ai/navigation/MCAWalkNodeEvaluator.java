@@ -15,6 +15,7 @@ import net.minecraft.world.level.CollisionGetter;
 import net.minecraft.world.level.PathNavigationRegion;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -121,6 +122,11 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         }
 
         BlockPos mobPos = this.mob.blockPosition();
+        if (this.mob.isInWater() && selectedStart.y < mobPos.getY()
+                && this.currentContext.getBlockState(mobPos).getFluidState().isEmpty()) {
+            // Water brushing the body must not put a grounded start inside its solid support.
+            return this.getStartNode(mobPos);
+        }
         AABB startBox = this.mob.getBoundingBox();
         if (selectedStart.asBlockPos().equals(mobPos)
                 && startBox.minY > mobPos.getY() + RAISED_START_EPSILON
@@ -305,6 +311,9 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             if (candidate == null) {
                 continue;
             }
+            if (requiresGroundJumpFromFlowingWater(origin, candidate)) {
+                continue;
+            }
 
             AABB destinationBox = null;
             if (raisedSurface) {
@@ -361,6 +370,25 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             nodes[index] = null;
         }
         return writeIndex;
+    }
+
+    private boolean requiresGroundJumpFromFlowingWater(Node origin, Node candidate) {
+        if (candidate.y <= origin.y) {
+            return false;
+        }
+        BlockPos departurePos = this.collisionPos.set(origin.x, origin.y, origin.z);
+        BlockState departure = this.currentContext.getBlockState(departurePos);
+        if (!(departure.getBlock() instanceof LiquidBlock)
+                || !departure.getFluidState().is(FluidTags.WATER)
+                || departure.getFluidState().isSource()
+                || this.currentContext.getBlockState(this.collisionPos.set(candidate.x, candidate.y, candidate.z))
+                        .is(BlockTags.CLIMBABLE)) {
+            return false;
+        }
+        // The floating evaluator's extra water floor height is not solid support for a jump.
+        double departureFloor = WalkNodeEvaluator.getFloorLevel(this.currentContext.level(),
+                this.collisionPos.set(origin.x, origin.y, origin.z));
+        return getMobBoxAt(candidate).minY - departureFloor > this.mob.maxUpStep();
     }
 
     private boolean canApproachDiagonalJump(Node origin, Node candidate, AABB originBox) {

@@ -5,6 +5,7 @@ import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTask;
 import net.conczin.mca.entity.ai.navigation.BedApproachTarget;
+import net.conczin.mca.entity.ai.navigation.MCAGroundPathNavigation;
 import net.conczin.mca.server.world.data.GraveyardManager;
 import net.conczin.mca.server.world.data.Village;
 import net.conczin.mca.server.world.data.VillageManager;
@@ -394,7 +395,7 @@ public class Residency {
                     if (target.isReached(entity, 0)) {
                         return true;
                     }
-                    Path path = entity.getNavigation().createPath(target.getPathTargets(entity), 0);
+                    Path path = MCAGroundPathNavigation.probePath(entity.getNavigation(), target.getPathTargets(entity), 0);
                     return path != null && path.canReach();
                 })
                 .orElse(false);
