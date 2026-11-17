@@ -110,89 +110,13 @@ class FamilyTreeLayoutTest {
         assertTrue(result.edges().stream().anyMatch(edge -> edge.type() == FamilyTreeLayout.EdgeType.PARTNER));
     }
 
-    @Test
-    void immediateParentalFamiliesGiveCouplesBoundedBreathingRoom() {
-        FamilyTreeNode root = node(ROOT);
-        FamilyTreeNode partner = node(PARTNER);
-        root.updatePartner(partner);
-        FamilyTreeLayout.Result sparse = layout(nodes(root, partner), Set.of());
-        assertEquals(44, partnerGap(sparse, ROOT, PARTNER));
-
-        FamilyTreeNode father = node(FATHER);
-        FamilyTreeNode mother = node(MOTHER);
-        root.setFather(father);
-        root.setMother(mother);
-        FamilyTreeLayout.Result crowded = layout(nodes(root, partner, father, mother), Set.of());
-        FamilyTreeLayout.Bounds parents = card(crowded, FATHER).bounds().union(card(crowded, MOTHER).bounds());
-        assertTrue(parents.right() - parents.left() > 128,
-                "The displayed parental footprint is wider than its child's card");
-        assertTrue(partnerGap(crowded, ROOT, PARTNER) > partnerGap(sparse, ROOT, PARTNER));
-        assertTrue(partnerGap(crowded, ROOT, PARTNER) <= 72);
-    }
-
-    @Test
-    void immediateChildrenWidenSiblingGuttersWithoutReservingGrandchildrenRecursively() {
-        FamilyTreeNode root = node(ROOT);
-        FamilyTreeNode father = node(FATHER);
-        FamilyTreeNode sibling = node(SIBLING_A);
-        root.setFather(father);
-        sibling.setFather(father);
-        Map<UUID, FamilyTreeNode> family = nodes(root, father, sibling);
-        FamilyTreeLayout.Result sparse = layout(family, Set.of());
-        assertEquals(64, partnerGap(sparse, ROOT, SIBLING_A));
-
-        for (int i = 0; i < 4; i++) {
-            FamilyTreeNode child = node(uuid(200 + i));
-            child.setFather(i < 2 ? root : sibling);
-            family.put(child.id(), child);
-        }
-        FamilyTreeLayout.Result crowded = layout(family, Set.of());
-        assertTrue(partnerGap(crowded, ROOT, SIBLING_A) > 64);
-        assertTrue(partnerGap(crowded, ROOT, SIBLING_A) <= 84);
-        assertDistinctBranchSpacing(crowded, Set.of(uuid(200), uuid(201)), Set.of(uuid(202), uuid(203)));
-
-        for (int i = 0; i < 4; i++) {
-            FamilyTreeNode grandchild = node(uuid(210 + i));
-            grandchild.setFather(family.get(uuid(200)));
-            family.put(grandchild.id(), grandchild);
-        }
-        FamilyTreeLayout.Result deeper = layout(family, Set.of());
-        assertEquals(partnerGap(crowded, ROOT, SIBLING_A), partnerGap(deeper, ROOT, SIBLING_A),
-                "A deeper row must not reserve width recursively in the root generation");
-        assertTrue(partnerGap(deeper, uuid(200), uuid(201)) > 64);
-        assertTrue(partnerGap(deeper, uuid(200), uuid(201)) <= 84);
-    }
-
-    @Test
-    void distinctFamiliesUseAdaptiveGuttersEvenWithoutSharedTargetCoordinates() {
-        FamilyTreeNode root = node(ROOT);
-        FamilyTreeNode sibling = node(SIBLING_A);
-        FamilyTreeNode father = node(FATHER);
-        root.setFather(father);
-        sibling.setFather(father);
-        FamilyTreeNode child = node(CHILD_A);
-        FamilyTreeNode cousin = node(CHILD_B);
-        child.setFather(root);
-        cousin.setFather(sibling);
-        Map<UUID, FamilyTreeNode> family = nodes(root, sibling, father, child, cousin);
-        assertEquals(112, partnerGap(layout(family, Set.of()), CHILD_A, CHILD_B));
-        for (int i = 0; i < 4; i++) {
-            FamilyTreeNode grandchild = node(uuid(220 + i));
-            grandchild.setFather(i < 2 ? child : cousin);
-            family.put(grandchild.id(), grandchild);
-        }
-        FamilyTreeLayout.Result crowded = layout(family, Set.of());
-        assertTrue(partnerGap(crowded, CHILD_A, CHILD_B) > 112);
-        assertTrue(partnerGap(crowded, CHILD_A, CHILD_B) <= 160);
-        assertSeparatedFamilyCards(crowded);
-    }
-
     private static int partnerGap(FamilyTreeLayout.Result result, UUID first, UUID second) {
-        return Math.abs(card(result, first).bounds().centerX() - card(result, second).bounds().centerX()) - 128;
+        return Math.abs(card(result, first).bounds().centerX() - card(result, second).bounds().centerX())
+                - FamilyTreeLayout.CARD_WIDTH;
     }
 
     @Test
-    void revealingBothSpousesParentsUpdatesExistingCoupleAndDoesNotDrift() {
+    void revealingBothSpousesParentsKeepsTheCoupleAtFixedSpacing() {
         FamilyTreeNode root = node(ROOT);
         FamilyTreeNode partner = node(PARTNER);
         root.updatePartner(partner);
@@ -209,7 +133,8 @@ class FamilyTreeLayoutTest {
         family.putAll(nodes(father, mother, partnerFather, partnerMother));
         FamilyTreeViewModel.Snapshot snapshot = new FamilyTreeViewModel.Snapshot(ROOT, family, Set.of());
         FamilyTreeLayout.Result after = FamilyTreeLayout.layout(snapshot, before);
-        assertTrue(partnerGap(after, ROOT, PARTNER) > partnerGap(before, ROOT, PARTNER));
+        assertEquals(44, partnerGap(before, ROOT, PARTNER));
+        assertEquals(44, partnerGap(after, ROOT, PARTNER));
         assertCouplesAreAdjacent(after);
         assertEquals(card(before, ROOT).bounds(), card(after, ROOT).bounds());
         assertSeparatedFamilyCards(after);
@@ -227,7 +152,7 @@ class FamilyTreeLayoutTest {
     }
 
     @Test
-    void neighboringFamiliesCanExpandInEitherOrderWithStableAdaptiveSpacing() {
+    void neighboringFamiliesCanExpandInEitherOrderWithoutOverlapping() {
         for (boolean reverse : new boolean[]{false, true}) {
             FamilyTreeNode root = node(ROOT);
             FamilyTreeNode sibling = node(SIBLING_A);
@@ -248,8 +173,7 @@ class FamilyTreeLayoutTest {
                 FamilyTreeViewModel.Snapshot snapshot = new FamilyTreeViewModel.Snapshot(ROOT, family, Set.of());
                 result = FamilyTreeLayout.layout(snapshot, result);
                 assertEquals(fixedRoot, card(result, ROOT).bounds());
-                assertTrue(partnerGap(result, ROOT, SIBLING_A) > 64);
-                assertTrue(partnerGap(result, ROOT, SIBLING_A) <= 84);
+                assertEquals(FamilyTreeLayout.HORIZONTAL_GAP, partnerGap(result, ROOT, SIBLING_A));
                 assertSeparatedFamilyCards(result);
                 assertCouplesAreAdjacent(result);
                 assertEquals(result, FamilyTreeLayout.layout(snapshot, result));
@@ -258,7 +182,7 @@ class FamilyTreeLayoutTest {
     }
 
     @Test
-    void newlyDiscoveredSpouseStaysBesideTheirExistingCardWithBoundedGap() {
+    void newlyDiscoveredSpouseStaysBesideTheirExistingCard() {
         FamilyTreeNode root = node(ROOT);
         FamilyTreeNode sibling = node(SIBLING_A);
         FamilyTreeNode father = node(FATHER);
@@ -318,11 +242,11 @@ class FamilyTreeLayoutTest {
 
         FamilyTreeLayout.Result result = layout(family, Set.of());
 
-        assertBoundedPartnerGap(result, ROOT, PARTNER);
+        assertFixedPartnerGap(result, ROOT, PARTNER);
         for (int generation = 0; generation < 8; generation++) {
             UUID fatherId = uuid(100 + generation * 2);
             UUID motherId = uuid(101 + generation * 2);
-            assertBoundedPartnerGap(result, fatherId, motherId);
+            assertFixedPartnerGap(result, fatherId, motherId);
         }
         assertTrue(result.contentBounds().right() - result.contentBounds().left() < 2_000,
                 "A single ancestral line must not reserve exponentially wide empty lanes");
@@ -393,14 +317,14 @@ class FamilyTreeLayoutTest {
     private static void assertCouplesAreAdjacent(FamilyTreeLayout.Result result) {
         for (FamilyTreeLayout.Edge edge : result.edges()) {
             if (edge.type() == FamilyTreeLayout.EdgeType.PARTNER) {
-                assertBoundedPartnerGap(result, edge.from(), edge.to());
+                assertFixedPartnerGap(result, edge.from(), edge.to());
             }
         }
     }
 
-    private static void assertBoundedPartnerGap(FamilyTreeLayout.Result result, UUID first, UUID second) {
-        int gap = partnerGap(result, first, second);
-        assertTrue(gap >= 44 && gap <= 72, "Couples must remain adjacent with a 44–72 unit gap, got " + gap);
+    private static void assertFixedPartnerGap(FamilyTreeLayout.Result result, UUID first, UUID second) {
+        assertEquals(FamilyTreeLayout.PARTNER_GAP, partnerGap(result, first, second),
+                "Couples must remain adjacent at the fixed partner gap");
         int midpoint = (card(result, first).bounds().centerX() + card(result, second).bounds().centerX()) / 2;
         int row = card(result, first).bounds().centerY();
         assertTrue(result.cards().stream().filter(card -> !card.uuid().equals(first) && !card.uuid().equals(second))
@@ -637,10 +561,7 @@ class FamilyTreeLayoutTest {
         }
         FamilyTreeViewModel.Snapshot snapshot = new FamilyTreeViewModel.Snapshot(ROOT, family, Set.of());
         FamilyTreeLayout.Result firstExpansion = FamilyTreeLayout.layout(snapshot, before);
-        assertEquals(initial.get(ROOT), card(firstExpansion, ROOT).bounds());
-        assertEquals(initial.get(SIBLING_B), card(firstExpansion, SIBLING_B).bounds(),
-                "The branch on the opposite side of the root has no new clearance demand");
-        assertTrue(partnerGap(firstExpansion, SIBLING_A, ROOT) <= 84);
+        assertGenerationStable(initial, firstExpansion, 0);
         assertBoundedReflow(initial, firstExpansion, 6 * 200);
         assertSeparatedFamilyCards(firstExpansion);
 
@@ -651,10 +572,7 @@ class FamilyTreeLayoutTest {
         }
         FamilyTreeLayout.Result secondExpansion = FamilyTreeLayout.layout(
                 new FamilyTreeViewModel.Snapshot(ROOT, family, Set.of()), firstExpansion);
-        assertEquals(initial.get(ROOT), card(secondExpansion, ROOT).bounds());
-        assertEquals(card(firstExpansion, SIBLING_A).bounds(), card(secondExpansion, SIBLING_A).bounds(),
-                "Expanding the other branch must not shift the branch that already made room");
-        assertTrue(partnerGap(secondExpansion, ROOT, SIBLING_B) <= 84);
+        assertGenerationStable(cardBoundsById(firstExpansion), secondExpansion, 0);
         assertBoundedReflow(cardBoundsById(firstExpansion), secondExpansion, 5 * 200);
         assertSeparatedFamilyCards(secondExpansion);
         assertEquals(family.size(), secondExpansion.cards().size());
@@ -846,6 +764,16 @@ class FamilyTreeLayoutTest {
         assertTrue(between >= 112, "Separate descendant branches should have a clear visual gutter. "
                 + "First: [" + firstLeft + ", " + firstRight + "], second: ["
                 + secondLeft + ", " + secondRight + "], actual gap: " + between);
+    }
+
+    private static void assertGenerationStable(Map<UUID, FamilyTreeLayout.Bounds> before,
+                                               FamilyTreeLayout.Result after, int generationY) {
+        for (FamilyTreeLayout.Card card : after.cards()) {
+            FamilyTreeLayout.Bounds old = before.get(card.uuid());
+            if (old != null && old.centerY() == generationY) {
+                assertEquals(old, card.bounds(), "Selected generation moved unexpectedly: " + card.uuid());
+            }
+        }
     }
 
     private static void assertBoundedReflow(Map<UUID, FamilyTreeLayout.Bounds> before,

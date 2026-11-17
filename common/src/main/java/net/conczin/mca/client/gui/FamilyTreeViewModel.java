@@ -27,9 +27,10 @@ final class FamilyTreeViewModel {
                                    Optional<GenerationRequest> nextRequest) {
     }
 
-    public record HistoryEntry(UUID layoutRootId, UUID focusId, ViewportState viewport, ViewState previousView) {
+    public record HistoryEntry(UUID layoutRootId, UUID focusId, ViewportState viewport,
+                               ViewState previousView, FamilyTreeLayout.Result layout) {
         public HistoryEntry(UUID layoutRootId, UUID focusId, ViewportState viewport) {
-            this(layoutRootId, focusId, viewport, null);
+            this(layoutRootId, focusId, viewport, null, null);
         }
     }
 
@@ -80,19 +81,24 @@ final class FamilyTreeViewModel {
     }
 
     public long beginFocus(UUID id, ViewportState viewport) {
-        return beginFocus(id, viewport, false);
+        return beginFocus(id, viewport, false, null);
     }
 
     public long beginRootFocus(UUID id, ViewportState viewport) {
-        return beginFocus(id, viewport, true);
+        return beginRootFocus(id, viewport, null);
     }
 
-    private long beginFocus(UUID id, ViewportState viewport, boolean changeLayoutRoot) {
+    long beginRootFocus(UUID id, ViewportState viewport, FamilyTreeLayout.Result layout) {
+        return beginFocus(id, viewport, true, layout);
+    }
+
+    private long beginFocus(UUID id, ViewportState viewport, boolean changeLayoutRoot,
+                            FamilyTreeLayout.Result layout) {
         generationBatch = null;
         if (pendingFocusId == null
                 && (!id.equals(focusId) || changeLayoutRoot && !id.equals(layoutRootId))) {
             history.push(new HistoryEntry(layoutRootId, focusId, viewport,
-                    changeLayoutRoot && !id.equals(layoutRootId) ? saveView() : null));
+                    changeLayoutRoot && !id.equals(layoutRootId) ? saveView() : null, layout));
         }
         pendingFocusId = id;
         pendingLayoutRootId = changeLayoutRoot ? id : null;

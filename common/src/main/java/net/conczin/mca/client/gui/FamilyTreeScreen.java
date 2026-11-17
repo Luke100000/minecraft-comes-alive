@@ -50,7 +50,6 @@ public class FamilyTreeScreen extends Screen {
     private static final float MAX_ZOOM = 2.0F;
     private static final long COPY_FEEDBACK_MS = 1_500L;
     private static final long GENERATION_TRANSITION_MS = 420L;
-    private static final long CAMERA_PAN_MS = 350L;
     private static final int GENERATION_BUTTON_SIZE = 24;
     private static final int MAX_BRANCH_TAB_HEIGHT = 6;
     private static final int MIN_BRANCH_TAB_HEIGHT = 4;
@@ -83,15 +82,7 @@ public class FamilyTreeScreen extends Screen {
     private FamilyTreeTransition transition;
     private long transitionStartedMs;
     @Nullable
-    private FamilyTreeViewModel.ViewportState cameraFrom;
-    @Nullable
-    private FamilyTreeViewModel.ViewportState cameraTo;
-    private long cameraStartedMs;
-    @Nullable
     private UUID queuedCameraFocusId;
-    private final Deque<RootLayoutHistory> rootLayoutHistory = new ArrayDeque<>();
-    private long pendingRootRequestId = -1L;
-    private boolean pendingRootLayoutSaved;
     private Map<UUID, CardPresentation> cardPresentations = Map.of();
     private FamilyTreeViewModel.ViewportState viewport =
             new FamilyTreeViewModel.ViewportState(0, 0, 1.0F);
@@ -130,7 +121,7 @@ public class FamilyTreeScreen extends Screen {
     @Override
     protected void init() {
         finishTransition();
-        stopCameraMotion();
+        queuedCameraFocusId = null;
         HeaderLayout header = headerLayout(width);
         searchX = header.searchX();
         searchWidth = header.searchWidth();
@@ -172,13 +163,13 @@ public class FamilyTreeScreen extends Screen {
         ));
         addRenderableWidget(new ButtonWidget(header.zoomInX(), controlsY, ZOOM_BUTTON_WIDTH, 20, Component.literal("+"), button -> setZoom(viewport.zoom() * 1.2F)));
         addRenderableWidget(new ButtonWidget(header.fitX(), controlsY, FIT_WIDTH, 20, Component.translatable("gui.family_tree.fit"), button -> {
-            stopCameraMotion();
+            queuedCameraFocusId = null;
             finishTransition();
             viewport = fitView(layout, width, canvasHeight(), FIT_PADDING);
             updateZoomLabel();
         }));
         addRenderableWidget(new ButtonWidget(header.centerX(), controlsY, CENTER_WIDTH, 20, Component.translatable("gui.family_tree.center"), button -> {
-            stopCameraMotion();
+            queuedCameraFocusId = null;
             finishTransition();
             viewport = centerView(layout, viewport);
         }));
@@ -201,7 +192,7 @@ public class FamilyTreeScreen extends Screen {
             invalidateGenerationAvailability();
             generation.nextRequest().ifPresent(this::sendGenerationRequest);
             if (generation.layoutChanged()) {
-                stopCameraMotion();
+                queuedCameraFocusId = null;
                 FamilyTreeLayout.Result previous = displayedLayout();
                 rebuildLayout();
                 transition = new FamilyTreeTransition(previous, layout, viewModel.focusId(), viewport.zoom());
@@ -217,28 +208,17 @@ public class FamilyTreeScreen extends Screen {
         if (result != FamilyTreeViewModel.MergeResult.STALE) {
             invalidateGenerationAvailability();
         }
-        boolean pendingRootResponse = response.requestId() == pendingRootRequestId;
         if (result == FamilyTreeViewModel.MergeResult.STALE) {
-            if (pendingRootResponse) {
-                discardPendingRootLayout();
-            }
             return;
         }
         updateBackButton();
         if (result == FamilyTreeViewModel.MergeResult.NOT_FOUND) {
-            if (pendingRootResponse) {
-                discardPendingRootLayout();
-            }
             if (response.requestId() == pendingRecenterRequestId) {
                 pendingRecenterRequestId = -1L;
             }
             return;
         }
-        if (pendingRootResponse) {
-            pendingRootRequestId = -1L;
-            pendingRootLayoutSaved = false;
-        }
-        stopCameraMotion();
+        queuedCameraFocusId = null;
         FamilyTreeLayout.Result previous = displayedLayout();
         rebuildLayout();
         boolean recenter = response.requestId() == pendingRecenterRequestId;
@@ -292,7 +272,7 @@ public class FamilyTreeScreen extends Screen {
             UUID queued = queuedCameraFocusId;
             queuedCameraFocusId = null;
             if (queued != null) {
-                startCameraPanIfOffscreen(queued);
+                centerIfOffscreen(queued);
             }
             return layout;
         }
@@ -318,9 +298,6 @@ public class FamilyTreeScreen extends Screen {
         if (!cardsById.containsKey(id) || !viewModel.selectVisible(id, viewport)) {
             return false;
         }
-        if (pendingRootRequestId > 0) {
-            discardPendingRootLayout();
-        }
         pendingRecenterRequestId = -1L;
         invalidateGenerationAvailability();
         cardPresentations = cardPresentations(viewModel.focusId(), viewModel.nodes(), viewModel.orphans());
@@ -329,7 +306,7 @@ public class FamilyTreeScreen extends Screen {
     }
 
     boolean goBack() {
-        stopCameraMotion();
+        queuedCameraFocusId = null;
         finishTransition();
         UUID currentRoot = viewModel.layoutRootId();
         Optional<FamilyTreeViewModel.HistoryEntry> previous = viewModel.back();
@@ -337,15 +314,12 @@ public class FamilyTreeScreen extends Screen {
             return false;
         }
         invalidateGenerationAvailability();
-        if (pendingRootRequestId > 0) {
-            discardPendingRootLayout();
-        }
         viewport = previous.orElseThrow().viewport();
         pendingRecenterRequestId = -1L;
         if (!viewModel.layoutRootId().equals(currentRoot)) {
-            RootLayoutHistory saved = rootLayoutHistory.peek();
-            if (saved != null && saved.layoutRootId().equals(viewModel.layoutRootId())) {
-                layout = rootLayoutHistory.pop().layout();
+            FamilyTreeLayout.Result saved = previous.orElseThrow().layout();
+            if (saved != null) {
+                layout = saved;
                 refreshLayoutIndex();
             } else {
                 rebuildLayout();
@@ -360,32 +334,16 @@ public class FamilyTreeScreen extends Screen {
     }
 
     long startRootFocus(UUID id) {
-        if (pendingRootRequestId <= 0 && viewModel.pendingFocusId().isEmpty()
-                && !viewModel.nodes().isEmpty() && !id.equals(viewModel.layoutRootId())) {
-            rootLayoutHistory.push(new RootLayoutHistory(viewModel.layoutRootId(), layout));
-            pendingRootLayoutSaved = true;
-        }
-        pendingRootRequestId = viewModel.beginRootFocus(id, viewport);
+        long requestId = viewModel.beginRootFocus(id, viewport, layout);
         invalidateGenerationAvailability();
         updateBackButton();
-        return pendingRootRequestId;
-    }
-
-    private void discardPendingRootLayout() {
-        if (pendingRootLayoutSaved && !rootLayoutHistory.isEmpty()) {
-            rootLayoutHistory.pop();
-        }
-        pendingRootLayoutSaved = false;
-        pendingRootRequestId = -1L;
+        return requestId;
     }
 
     private void updateBackButton() {
         if (backButton != null) {
             backButton.active = viewModel.canGoBack();
         }
-    }
-
-    private record RootLayoutHistory(UUID layoutRootId, FamilyTreeLayout.Result layout) {
     }
 
     private void sendFocusRequest(UUID id, long requestId) {
@@ -402,7 +360,7 @@ public class FamilyTreeScreen extends Screen {
     }
 
     private void requestGeneration(FamilyTreeView.Direction direction, Set<UUID> candidates) {
-        stopCameraMotion();
+        queuedCameraFocusId = null;
         viewModel.beginGeneration(direction, candidates).ifPresent(this::sendGenerationRequest);
     }
 
@@ -522,17 +480,17 @@ public class FamilyTreeScreen extends Screen {
     void selectSearchResult(FamilyTreeSearchEntry entry) {
         boolean alreadyVisible = cardsById.containsKey(entry.uuid());
         if (alreadyVisible) {
-            stopCameraMotion();
+            queuedCameraFocusId = null;
             selectPerson(entry.uuid());
             displayedLayout(); // Settle elapsed transitions before choosing the camera destination.
             if (transition != null) {
-                // The card is still moving. Pan once its final position is established.
+                // Center once the expanding branch reaches its final position.
                 queuedCameraFocusId = entry.uuid();
             } else {
-                startCameraPanIfOffscreen(entry.uuid());
+                centerIfOffscreen(entry.uuid());
             }
         } else {
-            stopCameraMotion();
+            queuedCameraFocusId = null;
             finishTransition();
             long requestId = startRootFocus(entry.uuid());
             pendingRecenterRequestId = requestId;
@@ -546,16 +504,12 @@ public class FamilyTreeScreen extends Screen {
         }
     }
 
-    private void startCameraPanIfOffscreen(UUID id) {
+    private void centerIfOffscreen(UUID id) {
         layout.cards().stream()
                 .filter(card -> card.uuid().equals(id))
                 .findFirst()
                 .filter(card -> !worldBoundsOnCanvas(card.bounds()))
-                .ifPresent(card -> {
-                    cameraFrom = viewport;
-                    cameraTo = focusViewportAfterResponse(layout, viewport, id);
-                    cameraStartedMs = Util.getMillis();
-                });
+                .ifPresent(card -> viewport = focusViewportAfterResponse(layout, viewport, id));
     }
 
     private boolean worldBoundsOnCanvas(FamilyTreeLayout.Bounds bounds) {
@@ -575,32 +529,8 @@ public class FamilyTreeScreen extends Screen {
                 && bottom > HEADER_HEIGHT * scale && top < (height - FOOTER_HEIGHT) * scale;
     }
 
-    void updateCameraMotion(long nowMillis) {
-        if (cameraFrom == null || cameraTo == null) {
-            return;
-        }
-        double progress = Math.max(0.0, Math.min(1.0, (nowMillis - cameraStartedMs) / (double) CAMERA_PAN_MS));
-        double eased = progress * progress * (3.0 - 2.0 * progress);
-        viewport = new FamilyTreeViewModel.ViewportState(
-                cameraFrom.panX() + (cameraTo.panX() - cameraFrom.panX()) * eased,
-                cameraFrom.panY() + (cameraTo.panY() - cameraFrom.panY()) * eased,
-                cameraFrom.zoom()
-        );
-        if (progress >= 1.0) {
-            cameraFrom = null;
-            cameraTo = null;
-        }
-    }
-
-    private void stopCameraMotion() {
-        updateCameraMotion(Util.getMillis());
-        cameraFrom = null;
-        cameraTo = null;
-        queuedCameraFocusId = null;
-    }
-
     private void setZoom(float targetZoom) {
-        stopCameraMotion();
+        queuedCameraFocusId = null;
         viewport = zoomAround(
                 viewport,
                 width / 2.0,
@@ -615,7 +545,7 @@ public class FamilyTreeScreen extends Screen {
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
         if (canvasDragging && button == 0) {
-            stopCameraMotion();
+            queuedCameraFocusId = null;
             viewport = new FamilyTreeViewModel.ViewportState(
                     viewport.panX() + deltaX,
                     viewport.panY() + deltaY,
@@ -628,7 +558,6 @@ public class FamilyTreeScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        updateCameraMotion(Util.getMillis());
         canvasDragging = false;
         if (button == 0) {
             FamilyTreeSearchEntry searchResult = searchResultAt(mouseX, mouseY);
@@ -642,7 +571,7 @@ public class FamilyTreeScreen extends Screen {
                     searchOpen,
                     searchPending,
                     searchX,
-                    searchOverlayRowWidth(mouseY),
+                    searchOverlayWidth(),
                     searchResults.size()
             )) {
                 return true;
@@ -704,7 +633,7 @@ public class FamilyTreeScreen extends Screen {
 
     @Nullable
     private FamilyTreeSearchEntry searchResultAt(double mouseX, double mouseY) {
-        if (!searchOpen || searchPending || mouseX < searchX || mouseX >= searchX + searchOverlayRowWidth(mouseY)) {
+        if (!searchOpen || searchPending || mouseX < searchX || mouseX >= searchX + searchOverlayWidth()) {
             return null;
         }
         int top = HEADER_HEIGHT + 2;
@@ -715,21 +644,16 @@ public class FamilyTreeScreen extends Screen {
         return searchResults.get(index);
     }
 
-    private int searchOverlayRowWidth(double mouseY) {
+    private int searchOverlayWidth() {
         if (searchPending || searchResults.isEmpty()) {
             return searchWidth;
         }
-        int top = HEADER_HEIGHT + 2;
-        int index = (int) Math.floor((mouseY - top) / SEARCH_ROW_HEIGHT);
-        if (index < 0 || index >= Math.min(searchResults.size(), SEARCH_RESULT_LIMIT)) {
-            return 0;
+        int widest = 0;
+        int count = Math.min(searchResults.size(), SEARCH_RESULT_LIMIT);
+        for (int index = 0; index < count; index++) {
+            widest = Math.max(widest, font.width(searchResultLabel(searchResults.get(index))));
         }
-        return searchResultRowWidth(searchResults.get(index));
-    }
-
-    private int searchResultRowWidth(FamilyTreeSearchEntry entry) {
-        return Math.min(width - searchX - HEADER_MARGIN,
-                font.width(searchResultLabel(entry)) + SEARCH_ROW_HORIZONTAL_PADDING);
+        return Math.min(width - searchX - HEADER_MARGIN, widest + SEARCH_ROW_HORIZONTAL_PADDING);
     }
 
     static boolean searchOverlayContains(
@@ -756,7 +680,7 @@ public class FamilyTreeScreen extends Screen {
         if (!insideCanvas(mouseX, mouseY) || scrollY == 0.0) {
             return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
         }
-        stopCameraMotion();
+        queuedCameraFocusId = null;
         viewport = zoomAround(
                 viewport,
                 mouseX,
@@ -771,7 +695,6 @@ public class FamilyTreeScreen extends Screen {
 
     @Override
     public void render(GuiGraphics context, int mouseX, int mouseY, float delta) {
-        updateCameraMotion(Util.getMillis());
         super.render(context, mouseX, mouseY, delta);
         context.fill(0, HEADER_HEIGHT, width, height - FOOTER_HEIGHT, 0x66000000);
 
@@ -793,6 +716,10 @@ public class FamilyTreeScreen extends Screen {
                         worldY(mouseY)
                 ).orElse(null)
                 : null;
+        if (searchOpen && searchOverlayContains(mouseX, mouseY, searchOpen, searchPending,
+                searchX, searchOverlayWidth(), searchResults.size())) {
+            hovered = null;
+        }
 
         context.enableScissor(0, HEADER_HEIGHT, width, height - FOOTER_HEIGHT);
         PoseStack pose = context.pose();
@@ -1300,51 +1227,45 @@ public class FamilyTreeScreen extends Screen {
             return;
         }
 
-        int top = HEADER_HEIGHT + 2;
-        if (searchPending) {
-            context.fill(searchX, top, searchX + searchWidth, top + SEARCH_ROW_HEIGHT, 0xEE20262C);
-            context.drawString(
-                    font,
-                    Component.translatable("gui.family_tree.loading_family"),
-                    searchX + 6,
-                    top + 7,
-                    0xFFFFFFFF
-            );
-            return;
-        }
-
-        if (searchResults.isEmpty()) {
-            context.fill(searchX, top, searchX + searchWidth, top + SEARCH_ROW_HEIGHT, 0xEE20262C);
-            context.drawString(
-                    font,
-                    Component.translatable("gui.family_tree.no_records"),
-                    searchX + 6,
-                    top + 7,
-                    0xFFFFFFFF
-            );
-            return;
-        }
-
-        int count = Math.min(searchResults.size(), SEARCH_RESULT_LIMIT);
-        for (int index = 0; index < count; index++) {
-            int rowTop = top + index * SEARCH_ROW_HEIGHT;
-            FamilyTreeSearchEntry entry = searchResults.get(index);
-            int rowWidth = searchResultRowWidth(entry);
-            context.fill(searchX, rowTop, searchX + rowWidth, rowTop + SEARCH_ROW_HEIGHT, 0xEE20262C);
-            boolean rowHovered = mouseX >= searchX
-                    && mouseX < searchX + rowWidth
-                    && mouseY >= rowTop
-                    && mouseY < rowTop + SEARCH_ROW_HEIGHT;
-            if (rowHovered) {
-                context.fill(searchX, rowTop, searchX + rowWidth, rowTop + SEARCH_ROW_HEIGHT, 0xFF43586C);
+        PoseStack pose = context.pose();
+        pose.pushPose();
+        // The search popup sits above tree text, icons and their tooltips.
+        pose.translate(0, 0, 500);
+        try {
+            int top = HEADER_HEIGHT + 2;
+            if (searchPending || searchResults.isEmpty()) {
+                context.fill(searchX, top, searchX + searchWidth, top + SEARCH_ROW_HEIGHT, 0xFF20262C);
+                context.drawString(
+                        font,
+                        Component.translatable(searchPending ? "gui.family_tree.loading_family" : "gui.family_tree.no_records"),
+                        searchX + 6,
+                        top + 7,
+                        0xFFFFFFFF
+                );
+                return;
             }
-            context.drawString(
-                    font,
-                    ellipsizedText(searchResultLabel(entry), rowWidth - SEARCH_ROW_HORIZONTAL_PADDING),
-                    searchX + 6,
-                    rowTop + 7,
-                    0xFFFFFFFF
-            );
+
+            int count = Math.min(searchResults.size(), SEARCH_RESULT_LIMIT);
+            int rowWidth = searchOverlayWidth();
+            for (int index = 0; index < count; index++) {
+                int rowTop = top + index * SEARCH_ROW_HEIGHT;
+                FamilyTreeSearchEntry entry = searchResults.get(index);
+                boolean rowHovered = mouseX >= searchX
+                        && mouseX < searchX + rowWidth
+                        && mouseY >= rowTop
+                        && mouseY < rowTop + SEARCH_ROW_HEIGHT;
+                context.fill(searchX, rowTop, searchX + rowWidth, rowTop + SEARCH_ROW_HEIGHT,
+                        rowHovered ? 0xFF43586C : 0xFF20262C);
+                context.drawString(
+                        font,
+                        ellipsizedText(searchResultLabel(entry), rowWidth - SEARCH_ROW_HORIZONTAL_PADDING),
+                        searchX + 6,
+                        rowTop + 7,
+                        0xFFFFFFFF
+                );
+            }
+        } finally {
+            pose.popPose();
         }
     }
 

@@ -82,7 +82,7 @@ class FamilyTreeScreenInteractionTest {
     }
 
     @Test
-    void searchingOffscreenVisiblePersonPansSmoothlyWithoutLoading() throws Exception {
+    void searchingOffscreenLoadedPersonCentersImmediatelyWithoutLoading() throws Exception {
         FamilyTreeNode parent = node(ROOT, "Parent");
         FamilyTreeNode child = node(OTHER, "Child");
         parent.addChild(OTHER);
@@ -108,15 +108,8 @@ class FamilyTreeScreenInteractionTest {
         assertEquals(OTHER, model.focusId());
         assertFalse(model.loading());
         assertSame(positions, field(screen, "layout"));
-        assertNotNull(field(screen, "cameraTo"));
-        long started = (long) field(screen, "cameraStartedMs");
-        screen.updateCameraMotion(started + 125);
-        FamilyTreeViewModel.ViewportState halfway =
-                (FamilyTreeViewModel.ViewportState) field(screen, "viewport");
-        assertTrue(halfway.panX() > viewport.panX(), "Camera should travel towards the offscreen result");
-        assertEquals(viewport.zoom(), halfway.zoom());
-        screen.updateCameraMotion(started + 750);
-        assertNull(field(screen, "cameraTo"));
+        assertEquals(FamilyTreeScreen.focusViewportAfterResponse(positions, viewport, OTHER),
+                field(screen, "viewport"));
     }
 
     @Test
@@ -145,7 +138,6 @@ class FamilyTreeScreenInteractionTest {
         screen.selectSearchResult(new FamilyTreeSearchEntry(OTHER, "Child", false, "", false, ""));
         assertEquals(OTHER, model.focusId());
         assertEquals(viewport, field(screen, "viewport"));
-        assertNull(field(screen, "cameraTo"));
     }
 
     @Test
@@ -778,10 +770,16 @@ class FamilyTreeScreenInteractionTest {
         setField(FamilyTreeScreen.class, screen, "layout", anchoredExpandedView);
         setField(FamilyTreeScreen.class, screen, "viewport", camera);
         setField(FamilyTreeScreen.class, screen, "pendingRecenterRequestId", -1L);
-        setField(FamilyTreeScreen.class, screen, "rootLayoutHistory", new ArrayDeque<>());
 
         UUID unrelated = uuid(999);
+        UUID superseded = uuid(998);
+        long earlierSearch = screen.startRootFocus(superseded);
         long search = screen.startRootFocus(unrelated);
+        screen.acceptFamilyData(new GetFamilyTreeResponse(earlierSearch, superseded, true,
+                new FamilyTreeView(Map.of(superseded, node(superseded, "Superseded family")),
+                        Set.of(), Set.of(), Set.of(), Map.of())));
+        assertSame(anchoredExpandedView, field(screen, "layout"));
+        assertEquals(ROOT, model.layoutRootId());
         screen.acceptFamilyData(new GetFamilyTreeResponse(search, unrelated, true,
                 new FamilyTreeView(Map.of(unrelated, node(unrelated, "Other family")),
                         Set.of(), Set.of(), Set.of(), Map.of())));
@@ -794,6 +792,7 @@ class FamilyTreeScreenInteractionTest {
         assertEquals(camera, field(screen, "viewport"));
         assertEquals(anchoredExpandedView.cards(),
                 ((FamilyTreeLayout.Result) field(screen, "layout")).cards());
+        assertFalse(model.canGoBack(), "Replacing a pending search should save the original view once");
     }
 
     @Test
@@ -817,7 +816,6 @@ class FamilyTreeScreenInteractionTest {
         setField(FamilyTreeScreen.class, screen, "layout", original);
         setField(FamilyTreeScreen.class, screen, "viewport", camera);
         setField(FamilyTreeScreen.class, screen, "pendingRecenterRequestId", -1L);
-        setField(FamilyTreeScreen.class, screen, "rootLayoutHistory", new ArrayDeque<>());
         setField(FamilyTreeScreen.class, screen, "cardsById", original.cards().stream()
                 .collect(java.util.stream.Collectors.toMap(FamilyTreeLayout.Card::uuid, card -> card)));
 
@@ -828,7 +826,6 @@ class FamilyTreeScreenInteractionTest {
         assertEquals(camera, field(screen, "viewport"));
         assertEquals(ROOT, model.layoutRootId());
         assertFalse(model.canGoBack());
-        assertTrue(((Deque<?>) field(screen, "rootLayoutHistory")).isEmpty());
 
         long cancelled = screen.startRootFocus(uuid(302));
         assertTrue(screen.selectPerson(OTHER));
@@ -838,14 +835,24 @@ class FamilyTreeScreenInteractionTest {
         assertEquals(ROOT, model.layoutRootId());
         assertEquals(OTHER, model.focusId());
         assertSame(original, field(screen, "layout"));
-        assertTrue(((Deque<?>) field(screen, "rootLayoutHistory")).isEmpty());
         assertTrue(screen.goBack());
         assertEquals(ROOT, model.focusId());
         assertEquals(camera, field(screen, "viewport"));
+        assertFalse(model.canGoBack());
+
+        UUID unrelated = uuid(303);
+        long search = screen.startRootFocus(unrelated);
+        screen.acceptFamilyData(new GetFamilyTreeResponse(search, unrelated, true,
+                new FamilyTreeView(Map.of(unrelated, node(unrelated, "Another family")),
+                        Set.of(), Set.of(), Set.of(), Map.of())));
+        assertTrue(screen.goBack());
+        assertSame(original, field(screen, "layout"));
+        assertEquals(camera, field(screen, "viewport"));
+        assertFalse(model.canGoBack());
     }
 
     @Test
-    void offscreenSearchWaitsForGenerationToSettleBeforePanningToFinalPosition() throws Exception {
+    void offscreenSearchCentersAsSoonAsGenerationSettles() throws Exception {
         FamilyTreeNode root = node(ROOT, "Parent");
         FamilyTreeNode child = node(OTHER, "Child");
         root.addChild(OTHER);
@@ -884,7 +891,6 @@ class FamilyTreeScreenInteractionTest {
         screen.selectSearchResult(new FamilyTreeSearchEntry(OTHER, "Child", false, "", false, ""));
         assertEquals(OTHER, model.focusId());
         assertSame(generation, field(screen, "transition"), "Selecting a search hit must not end generation motion");
-        assertNull(field(screen, "cameraTo"), "Camera cannot target an intermediate moving card");
         assertEquals(offscreenCamera, field(screen, "viewport"));
 
         setField(FamilyTreeScreen.class, screen, "transitionStartedMs", Util.getMillis() - 750);
@@ -892,14 +898,8 @@ class FamilyTreeScreenInteractionTest {
         shown.setAccessible(true);
         shown.invoke(screen);
         assertNull(field(screen, "transition"));
-        assertNotNull(field(screen, "cameraTo"), "Camera should begin panning once the final card has settled");
-        long cameraStarted = (long) field(screen, "cameraStartedMs");
-        screen.updateCameraMotion(cameraStarted + 125);
-        assertNotEquals(offscreenCamera.panX(), ((FamilyTreeViewModel.ViewportState) field(screen, "viewport")).panX());
-        screen.updateCameraMotion(cameraStarted + 750);
-        assertNull(field(screen, "cameraTo"));
         assertEquals(FamilyTreeScreen.focusViewportAfterResponse(target, offscreenCamera, OTHER),
-                field(screen, "viewport"), "Final camera must center the settled card without snapping");
+                field(screen, "viewport"), "The settled card should be centered immediately");
     }
 
     private static Object field(FamilyTreeScreen screen, String name) throws Exception {
@@ -1270,6 +1270,8 @@ class FamilyTreeScreenInteractionTest {
         final List<TextDraw> text = new ArrayList<>();
         final List<FamilyTreeLayout.Bounds> fills = new ArrayList<>();
         final List<Integer> fillColors = new ArrayList<>();
+        final List<Float> fillDepths = new ArrayList<>();
+        final List<Float> textDepths = new ArrayList<>();
         float cardTop;
         float cardBottom;
         float graveLeft;
@@ -1282,6 +1284,7 @@ class FamilyTreeScreenInteractionTest {
         public void fill(int left, int top, int right, int bottom, int color) {
             fills.add(new FamilyTreeLayout.Bounds(left, right, top, bottom));
             fillColors.add(color);
+            fillDepths.add(pose().last().pose().m32());
             cardTop = pose().last().pose().transformPosition(new Vector3f(left, top, 0)).y;
             cardBottom = pose().last().pose().transformPosition(new Vector3f(right, bottom, 0)).y;
         }
@@ -1293,8 +1296,14 @@ class FamilyTreeScreenInteractionTest {
         @Override
         public int drawString(Font font, String value, int x, int y, int color, boolean shadow) {
             Vector3f position = pose().last().pose().transformPosition(new Vector3f(x, y, 0));
+            textDepths.add(position.z);
             text.add(new TextDraw(value, position.x, position.y, pose().last().pose().m00()));
             return 0;
+        }
+
+        @Override
+        public int drawString(Font font, Component value, int x, int y, int color) {
+            return drawString(font, value.getString(), x, y, color, true);
         }
 
         @Override
@@ -1368,6 +1377,70 @@ class FamilyTreeScreenInteractionTest {
         assertEquals(60, header.zoomOutX());
         assertEquals(206, header.centerX());
         assertTrue(header.searchX() + header.searchWidth() < header.zoomOutX());
+    }
+
+    @Test
+    void searchResultsShareTheWidestVisibleRowAndItsClickArea() throws Exception {
+        FamilyTreeScreen screen = allocatedScreen(new FamilyTreeViewModel(ROOT));
+        java.lang.reflect.Field unsafeField = Unsafe.class.getDeclaredField("theUnsafe");
+        unsafeField.setAccessible(true);
+        Minecraft client = (Minecraft) ((Unsafe) unsafeField.get(null)).allocateInstance(Minecraft.class);
+        Font font = new Font(ignored -> null, false) {
+            @Override
+            public int width(String text) {
+                return text.length() * 6;
+            }
+
+            @Override
+            public int width(net.minecraft.network.chat.FormattedText text) {
+                return width(text.getString());
+            }
+
+            @Override
+            public String plainSubstrByWidth(String text, int width) {
+                return text.substring(0, Math.min(text.length(), Math.max(0, width / 6)));
+            }
+        };
+        setField(Screen.class, screen, "font", font);
+        setField(FamilyTreeScreen.class, screen, "searchX", 5);
+        setField(FamilyTreeScreen.class, screen, "searchOpen", true);
+        FamilyTreeSearchEntry shortName = new FamilyTreeSearchEntry(ROOT, "Al", true, "", true, "");
+        FamilyTreeSearchEntry longName = new FamilyTreeSearchEntry(OTHER, "Alexandra", true, "", true, "");
+        setField(FamilyTreeScreen.class, screen, "searchResults", List.of(shortName, longName));
+        java.lang.reflect.Method render = FamilyTreeScreen.class.getDeclaredMethod(
+                "renderSearchOverlay", GuiGraphics.class, int.class, int.class);
+        java.lang.reflect.Method hit = FamilyTreeScreen.class.getDeclaredMethod("searchResultAt", double.class, double.class);
+        render.setAccessible(true);
+        hit.setAccessible(true);
+        for (int screenWidth : new int[]{800, 60}) {
+            screen.width = screenWidth;
+            int expectedWidth = Math.min(screenWidth - 10, font.width("Alexandra") + 12);
+            RecordingGraphics graphics = new RecordingGraphics(client);
+            graphics.pose().translate(0, 0, 17);
+            render.invoke(screen, graphics, 0, 0);
+            assertEquals(2, graphics.fills.size());
+            for (FamilyTreeLayout.Bounds row : graphics.fills) {
+                assertEquals(expectedWidth, row.right() - row.left());
+            }
+            assertSame(shortName, hit.invoke(screen, 5 + expectedWidth - 1.0D, 60.0D));
+            assertSame(longName, hit.invoke(screen, 5 + expectedWidth - 1.0D, 82.0D));
+            assertNull(hit.invoke(screen, 5 + expectedWidth, 60.0D));
+            assertTrue(graphics.fillDepths.stream().allMatch(depth -> depth > 417),
+                    "The dropdown background must be above the tree and its tooltips");
+            assertTrue(graphics.textDepths.stream().allMatch(depth -> depth.equals(graphics.fillDepths.getFirst())),
+                    "Dropdown text must share its background's layer");
+            assertEquals(17.0F, graphics.pose().last().pose().m32(), "Dropdown depth must not leak to other controls");
+        }
+        setField(FamilyTreeScreen.class, screen, "searchResults", List.of());
+        setField(FamilyTreeScreen.class, screen, "searchWidth", 40);
+        for (boolean pending : new boolean[]{false, true}) {
+            setField(FamilyTreeScreen.class, screen, "searchPending", pending);
+            RecordingGraphics graphics = new RecordingGraphics(client);
+            render.invoke(screen, graphics, 0, 0);
+            assertEquals(List.of(500.0F), graphics.fillDepths);
+            assertEquals(List.of(500.0F), graphics.textDepths);
+            assertEquals(0.0F, graphics.pose().last().pose().m32());
+        }
     }
 
     @Test
