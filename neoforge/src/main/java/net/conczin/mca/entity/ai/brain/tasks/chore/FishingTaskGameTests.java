@@ -24,6 +24,9 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.ai.behavior.LookAtTargetSink;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.schedule.Activity;
+import net.minecraft.world.entity.schedule.Schedule;
+import net.minecraft.world.entity.schedule.ScheduleBuilder;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.FishingRodItem;
@@ -382,6 +385,11 @@ public final class FishingTaskGameTests {
         assigner.absMoveTo(feet.getX() + 1.5, feet.getY(), feet.getZ() + 6.5);
         helper.getLevel().addNewPlayer(assigner);
         villager.getVillagerBrain().assignJob(Chore.FISH, assigner);
+        // The natural-fishing scenario is about fishing across multiple bites,
+        // so control the villager's own schedule independently of suite world time.
+        villager.getBrain().setSchedule(new ScheduleBuilder(new Schedule())
+                .changeActivityAt(0, Activity.IDLE).build());
+        villager.getVillagerBrain().think();
         helper.assertTrue(villager.getVillagerBrain().getJobAssigner().isPresent(),
                 "natural AI fishing fixture has no online job assigner");
         helper.assertTrue(villager.getBrain().isActive(ActivitiesMCA.CHORE),

@@ -7,6 +7,7 @@ import com.mojang.authlib.GameProfile;
 import net.conczin.mca.entity.MCAFishingBobberEntity;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
+import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.Chore;
 import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
 import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
@@ -820,11 +821,19 @@ public final class FishingSiteGameTests {
     public static void noWaterNeverEquipsRodAcrossRetries(GameTestHelper helper) {
         BlockPos start = prepare(helper);
         VillagerEntityMCA villager = spawn(helper, start);
+        // The fixture manually ticks the task with AI off; its scheduled REST
+        // activity must not prevent this tool-ownership scenario from starting.
+        villager.getBrain().setActiveActivityIfPossible(ActivitiesMCA.CHORE);
         Session task = new Session(helper.makeMockPlayer(GameType.SURVIVAL));
         int starts = 0;
         try {
             for (int tick = 0; tick < 900; tick++) {
                 villager.tickCount++;
+                // A waterless search can remain RUNNING indefinitely; simulate an
+                // interruption to exercise another real task start and cleanup.
+                if (tick == 450 && task.getStatus() == Behavior.Status.RUNNING) {
+                    task.stop(helper.getLevel(), villager, tick);
+                }
                 if (task.getStatus() == Behavior.Status.STOPPED && task.tryStart(helper.getLevel(), villager, tick)) starts++;
                 if (task.getStatus() == Behavior.Status.RUNNING) task.tickOrStop(helper.getLevel(), villager, tick);
                 helper.assertTrue(villager.getItemInHand(villager.getDominantHand()).isEmpty(), "no-water attempt flashed a rod at tick " + tick);

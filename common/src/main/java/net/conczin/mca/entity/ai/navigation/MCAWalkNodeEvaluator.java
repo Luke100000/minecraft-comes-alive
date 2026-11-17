@@ -256,7 +256,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
                         origin.getZ() + direction.getStepZ());
                 long key = candidate.asLong();
                 if (this.climbableCache.get(key)) {
-                    nodeCount = addClimbableNode(nodes, nodeCount, candidate);
+                    nodeCount = addDescendingClimbableNode(nodes, nodeCount, origin, candidate);
                     break;
                 }
 
@@ -268,7 +268,7 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
                     boolean climbable = state.is(BlockTags.CLIMBABLE);
                     this.climbableCache.put(key, climbable);
                     if (climbable) {
-                        nodeCount = addClimbableNode(nodes, nodeCount, candidate);
+                        nodeCount = addDescendingClimbableNode(nodes, nodeCount, origin, candidate);
                         break;
                     }
                     probe = PathingBlockInteraction.isHandOpenableTrapDoor(state)
@@ -282,6 +282,22 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
             }
         }
         return nodeCount;
+    }
+
+    private int addDescendingClimbableNode(Node[] nodes, int nodeCount, BlockPos origin, BlockPos target) {
+        Node departure = this.getNode(origin);
+        Node destination = getClimbableNode(target);
+        AABB from = getDepartureBox(departure);
+        AABB to = PathNodeGeometry.bodyAt(this.mob, PathNodeGeometry.climbingPosition(target))
+                .move(0.0D, FLOOR_EPSILON, 0.0D);
+        CollisionGetter collisions = new PathingCollisionView(
+                this.currentContext.level(), departure, destination, this.mob);
+        if (!canSweepTo(from, to, collisions)
+                || !hasScaffoldingClimbClearance(destination,
+                        to.expandTowards(0.0D, Math.max(0.0D, from.minY - to.minY), 0.0D), collisions)) {
+            return nodeCount;
+        }
+        return addClimbableNode(nodes, nodeCount, target);
     }
 
     private boolean requiresRaisedSurfaceSweep(Node origin) {
@@ -388,6 +404,13 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
         // The floating evaluator's extra water floor height is not solid support for a jump.
         double departureFloor = WalkNodeEvaluator.getFloorLevel(this.currentContext.level(),
                 this.collisionPos.set(origin.x, origin.y, origin.z));
+        double immersion = origin.y + departure.getFluidState().getHeight(this.currentContext.level(),
+                this.collisionPos) - departureFloor;
+        if (departureFloor > origin.y - 1.0D
+                && immersion <= this.mob.getFluidJumpThreshold()) {
+            // Shallow water over real support still uses LivingEntity's grounded jump.
+            return false;
+        }
         return getMobBoxAt(candidate).minY - departureFloor > this.mob.maxUpStep();
     }
 
@@ -590,25 +613,25 @@ public class MCAWalkNodeEvaluator extends WalkNodeEvaluator {
                 .move(0.0D, FLOOR_EPSILON, 0.0D);
         if (this.currentContext.getBlockState(this.collisionPos.set(node.x, node.y, node.z))
                 .is(Blocks.SCAFFOLDING)) {
-            return hasScaffoldingClimbClearance(node, box);
+            return hasScaffoldingClimbClearance(node, box, this.currentContext.level());
         }
         return hasExactBlockClearance(box);
     }
 
-    private boolean hasScaffoldingClimbClearance(Node node, AABB box) {
+    private boolean hasScaffoldingClimbClearance(Node node, AABB box, CollisionGetter collisions) {
         // Scaffold platforms and frames may be passed while climbing/descending.
         // Ignore only this column's scaffolding, not a roof or another obstacle.
         for (int x = floorMin(box.minX); x <= floorMax(box.maxX); x++) {
             for (int y = floorMin(box.minY); y <= floorMax(box.maxY); y++) {
                 for (int z = floorMin(box.minZ); z <= floorMax(box.maxZ); z++) {
                     BlockPos pos = this.collisionPos.set(x, y, z);
-                    BlockState state = this.currentContext.getBlockState(pos);
+                    BlockState state = collisions.getBlockState(pos);
                     if (state.isAir() || state.is(Blocks.SCAFFOLDING)
                             && x == node.x && z == node.z) {
                         continue;
                     }
                     VoxelShape shape = state.getCollisionShape(
-                            this.currentContext.level(), pos, CollisionContext.of(this.mob));
+                            collisions, pos, CollisionContext.of(this.mob));
                     if (!shape.isEmpty() && Shapes.joinIsNotEmpty(
                             Shapes.create(box.move(-x, -y, -z)), shape, BooleanOp.AND)) {
                         return false;

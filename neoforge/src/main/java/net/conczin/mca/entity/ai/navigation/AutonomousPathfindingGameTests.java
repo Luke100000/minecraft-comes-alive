@@ -72,6 +72,7 @@ public final class AutonomousPathfindingGameTests {
     private static final String SLOW_HEAD_GATE_BATCH = "mca_autonomous_slow_head_gate";
     private static final String SEGMENT_BATCH = "mca_autonomous_progressive_segments";
     private static final String BOUNDED_DETOUR_BATCH = "mca_autonomous_bounded_detour";
+    private static final String FLANK_CROSSING_BATCH = "mca_autonomous_flank_crossing";
     private static final String LONG_CORRIDOR_BATCH = "mca_autonomous_long_corridor";
     private static final String BED_CORRIDOR_BATCH = "mca_autonomous_bedside_long_corridor";
     private static final String FLOWING_WATER_BATCH = "mca_autonomous_flowing_water";
@@ -1086,6 +1087,68 @@ public final class AutonomousPathfindingGameTests {
         });
     }
 
+    @GameTest(batch = FLANK_CROSSING_BATCH, templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 1_600)
+    public static void brainCrossesLongWallAfterRejectingReturnToBlockedOrigin(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(65, 1, 65));
+        BlockPos target = start.east(2);
+        ServerLevel level = helper.getLevel();
+        rememberArea(level, start, 61);
+        prepareFlatArea(helper, start, 61, 3);
+        for (int z = -55; z <= 55; z++) {
+            for (int y = 0; y < 3; y++) {
+                level.setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        originalPathDistance = Config.getInstance().villagerPathfindingDistance;
+        originalTeleportConfig = Config.getInstance().allowVillagerTeleporting;
+        Config.getInstance().villagerPathfindingDistance = 32;
+        Config.getInstance().allowVillagerTeleporting = false;
+        VillagerEntityMCA villager = spawnAutonomousVillager(helper, start, target, 0.8F, false);
+        var followRange = villager.getAttribute(Attributes.FOLLOW_RANGE);
+        followRange.removeModifier(ResourceLocation.withDefaultNamespace("random_spawn_bonus"));
+        followRange.setBaseValue(48.0D);
+        villager.getAttribute(Attributes.MOVEMENT_SPEED).setBaseValue(0.5D);
+        MCAGroundPathNavigation navigation = (MCAGroundPathNavigation) villager.getNavigation();
+        long began = level.getGameTime();
+        boolean[] sawReturnPartial = {false};
+        boolean[] sawCrossing = {false};
+        Vec3[] previous = {villager.position()};
+        helper.onEachTick(() -> {
+            Vec3 position = villager.position();
+            helper.assertTrue(position.distanceTo(previous[0]) < 3.0D, "long-wall journey teleported");
+            previous[0] = position;
+            double sideways = Math.abs(position.z - start.getZ() - 0.5D);
+            Path path = navigation.getPath();
+            if (!sawReturnPartial[0] && sideways >= 20.0D && position.x < start.getX() + 1.0D) {
+                Path destinationProbe = navigation.probePath(target, 0);
+                helper.assertTrue(MCAGroundPathNavigation.isUsefulPartialPath(destinationProbe, target)
+                                && !MCAGroundPathNavigation.isUsefulPartialBeyondDetourOrigin(
+                                        destinationProbe, start, target),
+                        "long-wall fixture did not produce a useful partial returning toward its blocked origin");
+                sawReturnPartial[0] = true;
+            }
+            if (path != null && !path.getTarget().equals(target)
+                    && path.getTarget().getX() > start.getX() + 1 && sideways >= 40.0D) {
+                sawCrossing[0] = true;
+            }
+            if (sawReturnPartial[0] && !sawCrossing[0]) {
+                helper.assertTrue(sideways >= 12.0D,
+                        "destination partial returned toward the blocked origin before crossing the wall");
+            }
+            if (villager.blockPosition().equals(target)) {
+                helper.assertTrue(sawReturnPartial[0] && sawCrossing[0],
+                        "journey did not exercise both the rejected partial and the bounded crossing");
+                helper.succeed();
+            }
+            if (level.getGameTime() - began >= 1_500L) {
+                helper.fail("long-wall crossing did not reach HOME; pos=" + position
+                        + ", rejectedReturn=" + sawReturnPartial[0] + ", crossing=" + sawCrossing[0]
+                        + ", path=" + path + ", searches=" + PathRequestDiagnostics.snapshot(villager));
+            }
+        });
+    }
+
     private static VillagerEntityMCA spawnAutonomousVillager(GameTestHelper helper, BlockPos start,
                                                             BlockPos destination, float speed, boolean doors) {
         return spawnAutonomousVillager(helper, start, destination, speed, doors, false);
@@ -1213,6 +1276,11 @@ public final class AutonomousPathfindingGameTests {
 
     @AfterBatch(batch = BOUNDED_DETOUR_BATCH)
     public static void cleanupBoundedDetour(ServerLevel level) {
+        cleanup(level);
+    }
+
+    @AfterBatch(batch = FLANK_CROSSING_BATCH)
+    public static void cleanupFlankCrossing(ServerLevel level) {
         cleanup(level);
     }
 

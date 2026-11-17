@@ -702,6 +702,60 @@ public final class NavigationRecoveryGameTests {
 
     @GameTest(batch = "mca_navigation_owned_detour", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 80)
+    public static void partialFlankKeepsAcceptedTargetAfterOppositeProbe(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(65, 1, 65));
+        BlockPos target = start.east(2);
+        prepareFlatArea(helper, start, 61, 3);
+        for (int z = -55; z <= 55; z++) {
+            for (int y = 0; y < 3; y++) {
+                helper.getLevel().setBlock(start.offset(1, y, z), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        VillagerEntityMCA villager = spawnStationary(helper, start);
+        Config config = Config.getInstance();
+        int previousDistance = config.villagerPathfindingDistance;
+        try {
+            config.villagerPathfindingDistance = 32;
+            villager.getAttribute(net.minecraft.world.entity.ai.attributes.Attributes.FOLLOW_RANGE).setBaseValue(8.0D);
+            int flankDistance = (int) (MCAGroundPathNavigation.getOrdinaryPathLength(villager) * 0.5F);
+            for (int side : new int[]{-1, 1}) {
+                BlockPos flank = start.offset(0, 0, side * flankDistance);
+                for (int x = -1; x <= 1; x++) {
+                    for (int z = -1; z <= 1; z++) {
+                        if (x == 0 && z == 0) continue;
+                        for (int y = 0; y < 3; y++) {
+                            helper.getLevel().setBlock(flank.offset(x, y, z), Blocks.STONE.defaultBlockState(), 3);
+                        }
+                    }
+                }
+            }
+            villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                    new WalkTarget(new PersistentPathTarget(target), 0.5F, 0));
+            var navigation = villager.getNavigation();
+            Path blocked = navigation.createPath(target, 0);
+            helper.assertTrue(blocked != null && !blocked.canReach()
+                            && !MCAGroundPathNavigation.isUsefulPartialPath(blocked, target),
+                    "the long-wall fixture must require detour recovery");
+            WalkTargetFailureMemory.record(villager, target, helper.getLevel().getGameTime());
+            navigation.moveTo(blocked, 0.5D);
+            while (!blocked.isDone()) blocked.advance();
+            navigation.tick();
+            Path selected = navigation.getPath();
+            helper.assertTrue(selected != null && !selected.isDone() && !selected.canReach()
+                            && !selected.getTarget().equals(target)
+                            && MCAGroundPathNavigation.isUsefulPartialPath(selected, selected.getTarget()),
+                    "both enclosed flank candidates must leave a useful partial flank to select");
+            helper.assertTrue(selected.getTarget().equals(navigation.getTargetPos()),
+                    "the opposite rejected probe replaced the accepted flank's replanning target");
+        } finally {
+            config.villagerPathfindingDistance = previousDistance;
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "mca_navigation_owned_detour", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 80)
     public static void completedPersistentPathPrefersReachableExtendedRouteBeforeSidewaysDetour(GameTestHelper helper) {
         BlockPos start = helper.absolutePos(new BlockPos(65, 1, 65));
         BlockPos target = start.east(2);

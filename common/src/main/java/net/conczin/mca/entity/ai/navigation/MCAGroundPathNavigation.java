@@ -846,8 +846,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
             // Keep that same admitted node until native movement satisfies its semantic target.
             this.path.setNextNodeIndex(this.path.getNodeCount() - 1);
         }
-        recoverCompletedPersistentWalkTarget();
-        chainCompletedPersistentWalkTarget();
+        continuePersistentWalkTarget();
         this.climbTraversal.tick(this.path, this.speedModifier, this.tick);
         if (this.stairSpinDiagnostics != null) {
             this.stairSpinDiagnostics.tick(this.mob, this.path);
@@ -860,7 +859,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         super.stop();
     }
 
-    private void recoverCompletedPersistentWalkTarget() {
+    private void continuePersistentWalkTarget() {
         if (this.path == null) {
             clearDetour();
             return;
@@ -889,12 +888,34 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
         if (this.detour != null || (!this.path.canReach()
                 && !isUsefulPartialForWalkTarget(this.path, walkTarget))) {
             if (!continueDetour(walkTarget)) {
-                recordTerminalPartialFailure(destination);
-                // A failed flank must return to the producer's retry clock, rather
-                // than repeat the same searches on every navigation tick.
-                this.stop();
+                failPersistentJourney(destination);
             }
+            return;
         }
+        if (this.path.canReach()) {
+            return;
+        }
+
+        // A closer endpoint is not physical progress. Let Brain own the retry if
+        // this completed useful partial never left its starting block.
+        if (this.mob.blockPosition().equals(this.path.getNodePos(0))) {
+            failPersistentJourney(destination);
+            return;
+        }
+        Path nextPath = createPathForWalkTarget(walkTarget);
+        if (nextPath == null
+                || (!nextPath.canReach() && !isUsefulPartialForWalkTarget(nextPath, walkTarget))) {
+            // A useful short segment may end at an obstacle. Try its flank before
+            // handing terminal failure back to the producer's retry clock.
+            if (!beginDetour(walkTarget, destination)) {
+                failPersistentJourney(destination);
+            }
+            return;
+        }
+        if (nextPath.canReach()) {
+            clearFailure(this.mob);
+        }
+        this.moveTo(nextPath, walkTarget.getSpeedModifier());
     }
 
     private boolean continueDetour(WalkTarget walkTarget) {
@@ -1018,7 +1039,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                     this.mob.getY(),
                     this.mob.getZ() + flankZ * side
             );
-            Path path = this.createPath(candidate, 0);
+            Path path = this.probePath(candidate, 0);
             if (path != null && path.getNodeCount() > 1 && path.getEndNode() != null
                     && (path.canReach() || isUsefulPartialPath(path, candidate))
                     && avoidsUnrecoverableDetourDrop(path)) {
@@ -1080,7 +1101,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 this.mob.getY(),
                 this.mob.getZ() + flankZ
         );
-        Path path = this.createPath(candidate, 0);
+        Path path = this.probePath(candidate, 0);
         if (path == null
                 || path.getNodeCount() < 2
                 || (!path.canReach() && !isUsefulPartialPath(path, candidate))
@@ -1129,7 +1150,7 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 this.mob.getY(),
                 this.mob.getZ() + forwardZ * probeDistance
         );
-        Path path = this.createPath(candidate, 0);
+        Path path = this.probePath(candidate, 0);
         return path != null && path.canReach() && path.getNodeCount() > 1 ? path : null;
     }
 
@@ -1149,56 +1170,6 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
 
     private void clearDetour() {
         this.detour = null;
-    }
-
-    private void chainCompletedPersistentWalkTarget() {
-        Path completedPath = this.path;
-        if (completedPath == null
-                || !completedPath.isDone()
-                || completedPath.canReach()
-                || this.isStuck()) {
-            return;
-        }
-
-        WalkTarget walkTarget = this.mob.getBrain()
-                .getMemoryInternal(MemoryModuleType.WALK_TARGET)
-                .orElse(null);
-        if (!ExtendedWalkTowardsTask.isPersistentJourney(walkTarget)) {
-            return;
-        }
-        BlockPos destination = walkTarget.getTarget().currentBlockPosition();
-        if (MultiTargetPositionTracker.isReached(this.mob, walkTarget.getTarget(),
-                walkTarget.getCloseEnoughDist())
-                || !isUsefulPartialForWalkTarget(completedPath, walkTarget)) {
-            return;
-        }
-        // An endpoint closer to the goal is not proof that the villager moved.
-        // Hand an unproductive continuation back to the destination's Brain
-        // failure clock; its producer owns the next retry and eventual give-up.
-        if (this.mob.blockPosition().equals(completedPath.getNodePos(0))) {
-            recordTerminalPartialFailure(destination);
-            this.stop();
-            return;
-        }
-        Path nextPath = createPathForWalkTarget(walkTarget);
-        if (nextPath == null
-                || (!nextPath.canReach() && !isUsefulPartialForWalkTarget(nextPath, walkTarget))) {
-            // A useful short segment can finish at the edge of an obstacle.
-            // Let the existing navigation recovery try a flank before the
-            // producer receives terminal failure for this destination.
-            if (!beginDetour(walkTarget, destination)) {
-                recordTerminalPartialFailure(destination);
-                // This completed route has no further progress to offer at the
-                // current position. Let Brain own the next attempt, rather than
-                // retrying the same completed path on every navigation tick.
-                this.stop();
-            }
-            return;
-        }
-        if (nextPath.canReach()) {
-            clearFailure(this.mob);
-        }
-        this.moveTo(nextPath, walkTarget.getSpeedModifier());
     }
 
     private Path createPathForWalkTarget(WalkTarget walkTarget) {
@@ -1225,12 +1196,14 @@ public class MCAGroundPathNavigation extends GroundPathNavigation {
                 .orElse(null);
     }
 
-    private void recordTerminalPartialFailure(BlockPos destination) {
+    private void failPersistentJourney(BlockPos destination) {
         if (this.mob instanceof VillagerEntityMCA villager
                 && !WalkTargetFailureMemory.hasFailureFor(villager, destination)) {
             WalkTargetFailureMemory.record(villager, destination, this.level.getGameTime());
         }
         PathRequestDiagnostics.recordDeferredProducerRetry(this.mob);
+        // Release the physical route so the producer controls the next retry.
+        this.stop();
     }
 
     @Override

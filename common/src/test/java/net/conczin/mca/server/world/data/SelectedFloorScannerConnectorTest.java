@@ -225,6 +225,22 @@ class SelectedFloorScannerConnectorTest {
     }
 
     @Test
+    void overlappingConnectorColumnsAvoidRepeatedFloorSupportLookups() {
+        TallRoom world = new TallRoom();
+
+        var scan = SelectedFloorScanner.scan(world, new BlockPos(8, 64, 8), 2048, 64);
+
+        assertEquals(Building.validationResult.SUCCESS, scan.result());
+        assertEquals(256, scan.floor().cells().size());
+        assertTrue(scan.floor().connectorMarkers().isEmpty());
+        // Even with the discovery passes, these 64 interior supports should
+        // never incur four extra connector lookups just for having neighbors.
+        assertTrue(world.interiorSupportReads <= 512,
+                "overlapping connector bands repeated support-layer reads: " + world.interiorSupportReads);
+        System.out.println("Tall room interior support block reads: " + world.interiorSupportReads);
+    }
+
+    @Test
     void roomTopologyDoesNotStoreBothDirectionsOfEveryWalkableEdge() {
         TallRoom world = new TallRoom();
 
@@ -380,6 +396,7 @@ class SelectedFloorScannerConnectorTest {
         private final Map<BlockPos, BlockState> overrides = new HashMap<>();
         private int middleLayerReads;
         private int feetLayerReads;
+        private int interiorSupportReads;
         private int totalBlockReads;
 
         private void put(BlockPos pos, BlockState state) {
@@ -391,6 +408,8 @@ class SelectedFloorScannerConnectorTest {
             totalBlockReads++;
             if (pos.getY() == 80) middleLayerReads++;
             if (pos.getY() == 64) feetLayerReads++;
+            if (pos.getY() == 63 && pos.getX() >= 5 && pos.getX() <= 12
+                    && pos.getZ() >= 5 && pos.getZ() <= 12) interiorSupportReads++;
             BlockState override = overrides.get(pos);
             if (override != null) return override;
             boolean inBounds = pos.getX() >= 0 && pos.getX() <= 17

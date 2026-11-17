@@ -1,6 +1,7 @@
 package net.conczin.mca.server.world.data;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.tags.BlockTags;
@@ -1202,18 +1203,18 @@ final class SelectedFloorScanner {
             BlockGetter world, FloorGeometry floor, Set<BlockPos> connectors) {
         int baseY = floor.minFeetY();
         var heightsByColumn = new Long2ObjectOpenHashMap<BitSet>();
+        var inspectedSupports = new LongOpenHashSet();
         BlockPos.MutableBlockPos probe = new BlockPos.MutableBlockPos();
         for (FloorGeometry.Cell cell : floor.cells()) {
             probe.set(cell.feet().getX(), cell.feet().getY() - 1, cell.feet().getZ());
-            collectVerticalConnectorAt(world, probe, true, connectors);
+            if (inspectedSupports.add(probe.asLong())) collectVerticalConnectorAt(world, probe, true, connectors);
             heightsByColumn.computeIfAbsent(FloorGeometry.columnKey(probe.getX(), probe.getZ()),
                     ignored -> new BitSet()).set(cell.feet().getY() - baseY, cell.ceilingY() - baseY);
             for (Direction direction : HORIZONTAL) {
                 probe.set(cell.feet().getX() + direction.getStepX(), cell.feet().getY() - 1,
                         cell.feet().getZ() + direction.getStepZ());
-                // Each exact floor bottom retains its own short-gap check, including
-                // uneven floors. Only direct upper probes can be safely unioned.
-                collectVerticalConnectorAt(world, probe, true, connectors);
+                // Different support heights can expose different short-gap exits.
+                if (inspectedSupports.add(probe.asLong())) collectVerticalConnectorAt(world, probe, true, connectors);
                 heightsByColumn.computeIfAbsent(FloorGeometry.columnKey(probe.getX(), probe.getZ()),
                         ignored -> new BitSet()).set(cell.feet().getY() - baseY, cell.ceilingY() - baseY);
             }

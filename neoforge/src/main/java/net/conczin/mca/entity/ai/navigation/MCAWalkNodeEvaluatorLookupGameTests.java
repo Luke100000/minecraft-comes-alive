@@ -12,9 +12,11 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.level.PathNavigationRegion;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.TrapDoorBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Node;
+import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.PathfindingContext;
 import net.minecraft.world.level.pathfinder.WalkNodeEvaluator;
@@ -278,6 +280,13 @@ public final class MCAWalkNodeEvaluatorLookupGameTests {
             int repeatedCount = evaluator.addDescendingClimbableEntries(repeated, 0, origin);
             helper.assertTrue(repeatedCount == 1 && repeated[0] == nodes[0],
                     "cached descending probe returned a different climb node");
+            evaluator.done();
+
+            level.setBlock(origin.east(), Blocks.STONE.defaultBlockState(), 3);
+            evaluator.prepare(new PathNavigationRegion(level, origin.offset(-4, -4, -4),
+                    origin.offset(4, 3, 4)), villager);
+            helper.assertTrue(!transitionNeighbors(evaluator, evaluator.getStart()).contains(lower),
+                    "a lower climbable was reachable through a solid departure-height obstruction");
             helper.succeed();
         } finally {
             evaluator.done();
@@ -401,6 +410,61 @@ public final class MCAWalkNodeEvaluatorLookupGameTests {
             evaluator.done();
             villager.discard();
         }
+    }
+
+    @GameTest(batch = "mca_shallow_water_ground_jump", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 160)
+    public static void supportedShallowFlowingWaterAllowsPhysicalBankExit(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos water = helper.absolutePos(new BlockPos(12, 1, 12));
+        BlockPos bank = water.east().above();
+        prepareFlatArea(helper, water, 10, 4);
+        for (int x = -8; x <= 3; x++) {
+            for (int y = 0; y < 3; y++) {
+                level.setBlock(water.offset(x, y, -1), Blocks.STONE.defaultBlockState(), 3);
+                level.setBlock(water.offset(x, y, 1), Blocks.STONE.defaultBlockState(), 3);
+            }
+        }
+        for (int x = 1; x <= 3; x++) {
+            level.setBlock(water.east(x), Blocks.STONE.defaultBlockState(), 3);
+        }
+        // A source seven cells upstream keeps the departure shallow throughout the real traversal.
+        for (int x = -7; x <= 0; x++) {
+            level.setBlock(water.east(x), Blocks.WATER.defaultBlockState()
+                    .setValue(LiquidBlock.LEVEL, x + 7), 3);
+        }
+        VillagerEntityMCA villager = VillagerFactory.newVillager(level).withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(water)).spawn(MobSpawnType.STRUCTURE);
+        villager.getBrain().removeAllBehaviors();
+        villager.setOnGround(true);
+        villager.baseTick();
+        MCAWalkNodeEvaluator evaluator = new MCAWalkNodeEvaluator();
+        try {
+            helper.assertTrue(villager.isInWater() && villager.onGround()
+                            && level.getFluidState(water).getHeight(level, water) <= villager.getFluidJumpThreshold(),
+                    "shallow-water fixture must allow a grounded jump");
+            evaluator.setCanFloat(true);
+            evaluator.prepare(new PathNavigationRegion(level, water.offset(-10, -2, -3),
+                    water.offset(5, 5, 3)), villager);
+            helper.assertTrue(transitionNeighbors(evaluator, evaluator.getStart()).contains(bank),
+                    "supported shallow water lost a physically usable ground-jump exit");
+        } catch (RuntimeException | Error failure) {
+            villager.discard();
+            throw failure;
+        } finally {
+            evaluator.done();
+        }
+        villager.getNavigation().setCanFloat(true);
+        Path path = villager.getNavigation().createPath(bank, 0);
+        helper.assertTrue(path != null && path.canReach() && villager.getNavigation().moveTo(path, 0.8D),
+                "the shallow-water bank must have a usable movement route");
+        helper.onEachTick(() -> {
+            if (villager.onGround() && villager.getY() >= bank.getY() - 0.05D
+                    && villager.distanceToSqr(Vec3.atBottomCenterOf(bank)) < 0.4D) {
+                villager.discard();
+                helper.succeed();
+            }
+        });
     }
 
     private static void prepareTransitionFloor(ServerLevel level, BlockPos origin) {
