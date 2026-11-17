@@ -89,6 +89,10 @@
     "profession": "minecraft:cartographer"
   },
   {
+    "id": "mca:skins/clothing/normal/neutral/cleric/0.png",
+    "profession": "minecraft:cleric"
+  },
+  {
     "id": "mca:skins/clothing/normal/neutral/farmer/0.png",
     "profession": "minecraft:farmer"
   },

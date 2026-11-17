@@ -119,8 +119,8 @@ public abstract class MixinPlayerRenderer extends LivingEntityRenderer<AbstractC
     private void mca$injectScale(AbstractClientPlayer player, PoseStack matrices, float f, CallbackInfo ci) {
         if (MCAClient.useGeneticsRenderer(player.getUUID())) {
             var villager = CommonVillagerModel.getVillager(player);
-            float width = villager.getRawHorizontalScaleFactor();
-            matrices.scale(width, villager.getRawVerticalScaleFactor(), width);
+            float width = villager.getVisualHorizontalScaleFactor();
+            matrices.scale(width, villager.getVisualVerticalScaleFactor(), width);
             if (villager.getAgeState() == AgeState.BABY && !player.isPassenger()) {
                 matrices.translate(0, 0.6F, 0);
             }

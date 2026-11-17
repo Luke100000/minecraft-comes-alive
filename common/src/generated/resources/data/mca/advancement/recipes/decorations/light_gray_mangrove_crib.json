@@ -28,6 +28,5 @@
     "recipes": [
       "mca:light_gray_mangrove_crib"
     ]
-  },
-  "sends_telemetry_event": false
+  }
 }

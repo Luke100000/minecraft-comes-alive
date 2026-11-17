@@ -21,14 +21,16 @@ import java.util.function.Predicate;
 
 public class EquipmentTask extends Behavior<VillagerEntityMCA> {
     private static final int COOLDOWN = 100;
-    private static final int CHECK_INTERVAL = 20;
+    private static final int EQUIPMENT_REFRESH_INTERVAL = 20;
     private final Predicate<VillagerEntityMCA> condition;
     private final Function<VillagerEntityMCA, EquipmentSet> equipmentSet;
     private int lastEquipTime;
     private boolean lastArmorWearState;
-    private int lastCheckTick = -CHECK_INTERVAL;
-    private boolean cachedConditionResult;
+    private int lastEquipmentRefreshTick = -EQUIPMENT_REFRESH_INTERVAL;
     private EquipmentSet cachedEquipmentSet;
+    private boolean conditionEvaluatedDuringCheck;
+    private boolean checkedWear;
+    private boolean equipmentResolvedDuringCheck;
 
     public EquipmentTask(Predicate<VillagerEntityMCA> condition, Function<VillagerEntityMCA, EquipmentSet> set) {
         super(ImmutableMap.of(MemoryModuleTypeMCA.WEARS_ARMOR, MemoryStatus.REGISTERED));
@@ -38,6 +40,8 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
 
     @Override
     protected boolean checkExtraStartConditions(ServerLevel world, VillagerEntityMCA villager) {
+        conditionEvaluatedDuringCheck = false;
+        equipmentResolvedDuringCheck = false;
         if (villager.isUsingRecoveryFood()) {
             return false;
         }
@@ -47,42 +51,42 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
             return true;
         }
 
-        // Check condition with cache to avoid repeated expensive tests
-        if (villager.tickCount - lastCheckTick >= CHECK_INTERVAL) {
-            lastCheckTick = villager.tickCount;
-            cachedConditionResult = condition.test(villager);
-            cachedEquipmentSet = cachedConditionResult ? equipmentSet.apply(villager) : null;
+        boolean wear = condition.test(villager);
+        checkedWear = wear;
+        conditionEvaluatedDuringCheck = true;
+        if (wear && (cachedEquipmentSet == null
+                || villager.tickCount - lastEquipmentRefreshTick >= EQUIPMENT_REFRESH_INTERVAL)) {
+            lastEquipmentRefreshTick = villager.tickCount;
+            cachedEquipmentSet = equipmentSet.apply(villager);
+            equipmentResolvedDuringCheck = true;
         }
 
-        EquipmentSet set = cachedEquipmentSet;
-        if (set != null && isNakedCombatSet(set, villager)) {
-            return false;
-        }
-
-        boolean preserveMourningHands = isPeacefullyGrieving(villager);
         boolean present = villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.WEARS_ARMOR).isPresent();
-        if (cachedConditionResult) {
-            lastEquipTime = villager.tickCount;
-            return !present || set != null && !preserveMourningHands && isMissingRequestedHandItem(villager, set);
-        } else if (villager.tickCount - lastEquipTime > COOLDOWN) {
-            return present;
-        } else {
+        EquipmentSet set = cachedEquipmentSet;
+        if (wear && set != null && isNakedCombatSet(set, villager)) {
             return false;
         }
+
+        if (wear) {
+            lastEquipTime = villager.tickCount;
+            return !present || set != null && !isPeacefullyGrieving(villager)
+                    && isMissingRequestedHandItem(villager, set);
+        }
+        return villager.tickCount - lastEquipTime > COOLDOWN && present;
     }
 
     private void equipBestArmor(VillagerEntityMCA villager, EquipmentSlot slot, Item fallback) {
-        ItemStack stack = InventoryUtils.getBestArmor(villager.getInventory(), slot).orElse(fallback == null ? ItemStack.EMPTY : new ItemStack(fallback));
+        ItemStack stack = InventoryUtils.getBestArmor(villager.getInventory(), slot).orElseGet(() -> fallback == null ? ItemStack.EMPTY : InventoryUtils.temporary(new ItemStack(fallback)));
         villager.setItemSlot(slot, stack);
     }
 
     private void equipBestWeapon(VillagerEntityMCA villager, Item fallback) {
-        ItemStack stack = InventoryUtils.getBestSword(villager.getInventory()).orElse(fallback == null ? ItemStack.EMPTY : new ItemStack(fallback));
+        ItemStack stack = InventoryUtils.getBestSword(villager.getInventory()).orElseGet(() -> fallback == null ? ItemStack.EMPTY : InventoryUtils.temporary(new ItemStack(fallback)));
         villager.setItemSlot(villager.getDominantSlot(), stack);
     }
 
     private void equipBestRanged(VillagerEntityMCA villager, Item fallback) {
-        ItemStack stack = InventoryUtils.getBestRanged(villager.getInventory()).orElse(fallback == null ? ItemStack.EMPTY : new ItemStack(fallback));
+        ItemStack stack = InventoryUtils.getBestRanged(villager.getInventory()).orElseGet(() -> fallback == null ? ItemStack.EMPTY : InventoryUtils.temporary(new ItemStack(fallback)));
         villager.setItemSlot(villager.getDominantSlot(), stack);
     }
 
@@ -90,20 +94,29 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
     protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.start(world, villager, time);
 
+        boolean reuseCheckedCondition = conditionEvaluatedDuringCheck;
+        conditionEvaluatedDuringCheck = false;
+        boolean reuseCheckedEquipment = equipmentResolvedDuringCheck;
+        equipmentResolvedDuringCheck = false;
         if (villager.isUsingRecoveryFood()) {
             return;
         }
 
         lastArmorWearState = villager.getVillagerBrain().getArmorWear();
-        boolean wear = cachedConditionResult;
+        boolean wear = reuseCheckedCondition ? checkedWear : condition.test(villager);
         EquipmentSet set = cachedEquipmentSet;
 
-        if ((wear || villager.getVillagerBrain().getArmorWear()) && set == null) {
-            set = equipmentSet.apply(villager);
-            cachedEquipmentSet = set;
+        if (wear || villager.getVillagerBrain().getArmorWear()) {
+            // Only reuse a selection resolved by this start check. An older cached
+            // set, or an armor-visibility bypass, still needs a fresh lookup.
+            if (!reuseCheckedEquipment || !wear || set == null) {
+                set = equipmentSet.apply(villager);
+                cachedEquipmentSet = set;
+                lastEquipmentRefreshTick = villager.tickCount;
+            }
         }
 
-        if (set != null && isNakedCombatSet(set, villager)) {
+        if (wear && set != null && isNakedCombatSet(set, villager)) {
             return;
         }
 
@@ -118,14 +131,25 @@ public class EquipmentTask extends Behavior<VillagerEntityMCA> {
         // cannot remove or replace the flower. Combat still takes priority.
         if (!isPeacefullyGrieving(villager)) {
             if (wear) {
+                boolean usingRanged = villager.isUsingItem()
+                        && villager.getUseItem().getItem() instanceof ProjectileWeaponItem
+                        && villager.getItemInHand(villager.getUsedItemHand()) == villager.getUseItem();
                 if (isRequestedItem(set.getMainHand()) && set.getMainHand() instanceof ProjectileWeaponItem) {
-                    equipBestRanged(villager, set.getMainHand());
+                    // An armour-only refresh must not replace the stack currently
+                    // being drawn in either hand, or select that borrowed stack
+                    // into a second slot while its original hand still owns it.
+                    if (!usingRanged) {
+                        equipBestRanged(villager, set.getMainHand());
+                    }
                 } else if (isRequestedItem(set.getMainHand())) {
                     equipBestWeapon(villager, set.getMainHand());
                 } else {
                     villager.setItemSlot(villager.getDominantSlot(), ItemStack.EMPTY);
                 }
-                villager.setItemSlot(villager.getOpposingSlot(), new ItemStack(set.getGetOffHand()));
+                ItemStack opposing = villager.getItemBySlot(villager.getOpposingSlot());
+                if (!usingRanged || villager.getUseItem() != opposing) {
+                    villager.setItemSlot(villager.getOpposingSlot(), InventoryUtils.temporary(new ItemStack(set.getGetOffHand())));
+                }
             } else {
                 villager.setItemInHand(villager.getDominantHand(), ItemStack.EMPTY);
                 villager.setItemInHand(villager.getOpposingHand(), ItemStack.EMPTY);

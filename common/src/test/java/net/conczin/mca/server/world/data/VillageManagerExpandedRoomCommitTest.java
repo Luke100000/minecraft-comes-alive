@@ -1,0 +1,347 @@
+package net.conczin.mca.server.world.data;
+
+import net.minecraft.SharedConstants;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.Bootstrap;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class VillageManagerExpandedRoomCommitTest {
+    @Test
+    void attachmentWithoutItsVillageDoesNotConsumeAnId() {
+        BlockPos source = new BlockPos(0, 64, 0);
+        Structure prepared = new Structure(-1, source, List.of(
+                TestStructureFloors.create(0, 64, 68, 1, region(64, 0, 3))));
+        prepared.setLogicalBuildingId(10);
+        var scan = new BuildingScanResult(Building.validationResult.SUCCESS, source,
+                room(-1, -1, 0, region(64, 0, 3)), List.of("building"), null,
+                prepared, RoomScanPlan.attachment(10, 1, source, source));
+        VillageManager manager = new VillageManager(null);
+        var before = manager.save(new net.minecraft.nbt.CompoundTag(), null);
+        assertEquals(Building.validationResult.NOT_IN_BUILDING, manager.commitRoomAddition(scan, "building"));
+        assertEquals(before, manager.save(new net.minecraft.nbt.CompoundTag(), null));
+    }
+
+    @Test
+    void commitRejectsPayloadThatDisagreesWithPlan() {
+        Village village = new Village(1, null);
+        for (int id : new int[]{10, 11}) {
+            int minX = (id - 10) * 4;
+            Structure structure = new Structure(id, BlockPos.ZERO, List.of(
+                    TestStructureFloors.create(0, 64, 68, 0, region(64, minX, minX + 1))));
+            village.registerStructure(structure, room(id + 90, id, 0, region(64, minX, minX + 1)));
+        }
+        Structure prepared = village.getStructure(11).orElseThrow().copy();
+        prepared.replaceFloorGeometry(0, TestStructureFloors.create(0, 64, 68, 0, region(64, 4, 7)).geometry());
+        BlockPos source = new BlockPos(6, 64, 0);
+        BuildingScanResult scan = new BuildingScanResult(Building.validationResult.SUCCESS, source,
+                room(-1, 11, 0, region(64, 6, 7)), List.of("building"), village,
+                prepared, RoomScanPlan.addRoom(10, 0, source));
+        var before = village.save();
+
+        assertEquals(Building.validationResult.NOT_IN_BUILDING,
+                new VillageManager(null).commitRoomAddition(scan, "building"));
+        assertEquals(before, village.save());
+    }
+
+    @Test
+    void successfulAdditionRequiresExplicitPlanAndPreparedStructure() {
+        BlockPos source = new BlockPos(2, 64, 0);
+        Building added = room(-1, 10, 0, region(64, 2, 3));
+        assertThrows(NullPointerException.class, () -> new BuildingScanResult(
+                Building.validationResult.SUCCESS, source, added, List.of(), null, (RoomScanPlan) null));
+        Village village = new Village(1, null);
+        Structure structure = new Structure(10, source, List.of(
+                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 3))));
+        Building existing = room(100, 10, 0, region(64, 0, 1));
+        village.registerStructure(structure, existing);
+        var before = village.save();
+        var unprepared = new BuildingScanResult(Building.validationResult.SUCCESS, source, added,
+                List.of("building"), village, RoomScanPlan.addRoom(10, 0, source));
+        var update = new BuildingScanResult(Building.validationResult.SUCCESS, source, existing,
+                List.of("building"), village, structure.copy(), RoomScanPlan.updateRoom(existing, source));
+        VillageManager manager = new VillageManager(null);
+        assertEquals(Building.validationResult.NOT_IN_BUILDING, manager.commitRoomAddition(unprepared, "building"));
+        assertEquals(Building.validationResult.NOT_IN_BUILDING, manager.commitRoomAddition(update, "building"));
+        assertEquals(before, village.save());
+    }
+
+    @BeforeAll
+    static void bootstrapMinecraft() {
+        SharedConstants.tryDetectVersion();
+        Bootstrap.bootStrap();
+    }
+
+    @Test
+    void existingStructureRefreshCommitsFloorAndNewRoomTogether() {
+        Village village = new Village(1, null);
+        TestFloorFootprint oldRegion = region(64, 0, 1);
+        Structure current = new Structure(10, BlockPos.ZERO, List.of(
+                TestStructureFloors.create(0, 64, 68, 0, oldRegion)));
+        Building main = room(100, 10, 0, oldRegion);
+        village.registerStructure(current, main);
+
+        TestFloorFootprint freshRegion = region(64, 0, 3);
+        Structure refreshed = current.copy();
+        assertTrue(refreshed.replaceFloorGeometry(0,
+                TestStructureFloors.create(0, 64, 68, 0, freshRegion).geometry()));
+
+        TestFloorFootprint newRoomRegion = region(64, 2, 3);
+        Building added = room(-1, 10, 0, newRoomRegion);
+        BuildingScanResult scan = new BuildingScanResult(
+                Building.validationResult.SUCCESS,
+                new BlockPos(2, 64, 0),
+                added,
+                List.of("building"),
+                village, refreshed, RoomScanPlan.addRoom(10, 0, new BlockPos(2, 64, 0)));
+        VillageManager manager = new VillageManager(null);
+
+        assertEquals(Building.validationResult.SUCCESS,
+                manager.commitRoomAddition(scan, "building"));
+        StructureFloor committedFloor = village.getStructure(10).orElseThrow().getFloor(0).orElseThrow();
+        BlockPos newCell = new BlockPos(3, 64, 0);
+        assertTrue(committedFloor.geometry().cellAt(newCell).isPresent());
+        assertEquals(2, village.getRooms().count());
+        assertTrue(village.getRooms().anyMatch(room -> room.getFloorCells().contains(newCell)));
+    }
+
+    @Test
+    void failedRoomAdditionPublicationLeavesScanReusableAndDoesNotConsumeId() {
+        ThrowOnceMarkDirtyVillage village = new ThrowOnceMarkDirtyVillage();
+        Structure structure = new Structure(10, BlockPos.ZERO, List.of(
+                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 3))));
+        Building main = room(100, 10, 0, region(64, 0, 1));
+        village.registerStructure(structure, main);
+
+        Building added = room(-1, 10, 0, region(64, 2, 3));
+        BuildingScanResult scan = new BuildingScanResult(
+                Building.validationResult.SUCCESS,
+                new BlockPos(2, 64, 0),
+                added,
+                List.of("building"),
+                village, structure.copy(), RoomScanPlan.addRoom(10, 0, new BlockPos(2, 64, 0)));
+        VillageManager manager = new VillageManager(null);
+        village.failNextMarkDirty();
+
+        assertThrows(IllegalStateException.class,
+                () -> manager.commitRoomAddition(scan, "building"));
+        assertEquals(-1, added.getId());
+        assertEquals(1, village.getRooms().count());
+
+        assertEquals(Building.validationResult.SUCCESS,
+                manager.commitRoomAddition(scan, "building"));
+        assertEquals(0, village.getRooms()
+                .filter(room -> room.getId() != main.getId())
+                .findFirst().orElseThrow().getId());
+    }
+
+    @Test
+    void failedInitialRoomPublicationLeavesPendingScanReusableAndDoesNotConsumeIds() {
+        ThrowOnceMarkDirtyVillage village = new ThrowOnceMarkDirtyVillage();
+        Structure pending = new Structure(-1, BlockPos.ZERO, List.of(
+                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 1))));
+        Building added = room(-1, -1, 0, region(64, 0, 1));
+        BuildingScanResult scan = new BuildingScanResult(
+                Building.validationResult.SUCCESS,
+                BlockPos.ZERO,
+                added,
+                List.of("building"),
+                village, pending, RoomScanPlan.addBuilding(BlockPos.ZERO));
+        VillageManager manager = new VillageManager(null);
+        village.failNextMarkDirty();
+
+        assertThrows(IllegalStateException.class,
+                () -> manager.commitRoomAddition(scan, "building"));
+        assertEquals(-1, pending.getId());
+        assertEquals(-1, pending.getLogicalBuildingId());
+        assertEquals(-1, added.getId());
+        assertEquals(-1, added.getStructureId());
+        assertEquals(0, village.getStructures().size());
+        assertEquals(0, village.getRooms().count());
+
+        assertEquals(Building.validationResult.SUCCESS,
+                manager.commitRoomAddition(scan, "building"));
+        Structure committedStructure = village.getStructures().values().stream().findFirst().orElseThrow();
+        Building committedRoom = village.getRooms().findFirst().orElseThrow();
+        assertEquals(0, committedStructure.getId());
+        assertEquals(0, committedStructure.getLogicalBuildingId());
+        assertEquals(1, committedRoom.getId());
+        assertEquals(0, committedRoom.getStructureId());
+    }
+
+    @Test
+    void rejectedAtomicFloorRefreshLeavesStructureAndRoomsUntouched() {
+        Village village = new Village(1, null);
+        TestFloorFootprint oldRegion = region(64, 0, 1);
+        Structure current = new Structure(10, BlockPos.ZERO, List.of(
+                TestStructureFloors.create(0, 64, 68, 0, oldRegion)));
+        Building main = room(100, 10, 0, oldRegion);
+        village.registerStructure(current, main);
+
+        Set<FloorGeometry.Cell> oldGeometry = Set.copyOf(
+                current.getFloor(0).orElseThrow().geometry().cells());
+        Set<BlockPos> oldRoomCells = Set.copyOf(main.getFloorCells());
+
+        Structure refreshed = current.copy();
+        assertTrue(refreshed.replaceFloorGeometry(0,
+                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 3)).geometry()));
+        Building invalidReplacement = room(100, 10, 0,
+                TestFloorFootprint.fromFootprint(64, Set.of(
+                        new BlockPos(0, 64, 0), new BlockPos(4, 64, 0))));
+
+        assertFalse(village.publishFloorRefresh(refreshed, 0, List.of(invalidReplacement)));
+        assertEquals(oldGeometry, village.getStructure(10).orElseThrow()
+                .getFloor(0).orElseThrow().geometry().cells());
+        assertEquals(oldRoomCells, village.getBuilding(100).orElseThrow().getFloorCells());
+    }
+
+    @Test
+    void floorRefreshAllowsUnregisteredRoomComponents() {
+        Village village = new Village(1, null);
+        TestFloorFootprint oldRegion = region(64, 0, 1);
+        Structure current = new Structure(10, BlockPos.ZERO, List.of(
+                TestStructureFloors.create(0, 64, 68, 0, oldRegion)));
+        Building main = room(100, 10, 0, oldRegion);
+        village.registerStructure(current, main);
+
+        Structure refreshed = current.copy();
+        assertTrue(refreshed.replaceFloorGeometry(0,
+                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 3)).geometry()));
+
+        assertTrue(village.publishFloorRefresh(refreshed, 0, List.of(main)),
+                "fresh Floor cells may remain unregistered until the player adds those Rooms");
+        assertEquals(region(64, 0, 3).cells(), village.getStructure(10).orElseThrow()
+                .getFloor(0).orElseThrow().geometry().cells().stream()
+                .map(FloorGeometry.Cell::feet)
+                .collect(java.util.stream.Collectors.toSet()));
+        assertEquals(oldRegion.cells(), village.getBuilding(100).orElseThrow().getFloorCells());
+    }
+
+    @Test
+    void stalePendingStructureRefreshFailsWithoutRegisteringANewStructure() {
+        Village village = new Village(1, null);
+        Structure refreshed = new Structure(10, BlockPos.ZERO, List.of(
+                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 3))));
+        Building added = room(-1, 10, 0, region(64, 2, 3));
+        BuildingScanResult scan = new BuildingScanResult(
+                Building.validationResult.SUCCESS,
+                new BlockPos(2, 64, 0),
+                added,
+                List.of("building"),
+                village, refreshed, RoomScanPlan.addRoom(10, 0, new BlockPos(2, 64, 0)));
+        VillageManager manager = new VillageManager(null);
+
+        Building.validationResult result = assertDoesNotThrow(
+                () -> manager.commitRoomAddition(scan, "building"),
+                "stale Floor refresh must fail as validation, not throw");
+
+        assertEquals(Building.validationResult.NOT_IN_BUILDING, result);
+        assertEquals(0, village.getStructures().size());
+        assertEquals(0, village.getRooms().count());
+    }
+
+    @Test
+    void selectedRoomUpdatePreservesForcedTypeAndSibling() {
+        Village village = new Village(1, null);
+        Structure current = new Structure(10, BlockPos.ZERO, List.of(
+                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 3))));
+        Building selected = room(100, 10, 0, region(64, 0, 1));
+        selected.setType("workshop");
+        selected.setTypeForced(true);
+        Building sibling = room(101, 10, 0, region(64, 3, 3));
+        sibling.setType("building");
+        village.registerStructure(current, selected);
+        village.registerRoom(sibling);
+
+        Structure refreshed = current.copy();
+        Building replacement = room(100, 10, 0, region(64, 0, 2));
+        replacement.setType("workshop");
+        replacement.setTypeForced(true);
+        RegisteredRoomUpdate update = new RegisteredRoomUpdate(
+                Building.validationResult.SUCCESS, BlockPos.ZERO, village, refreshed,
+                100, replacement, List.of("music_store", "workshop"));
+        VillageManager manager = new VillageManager(null);
+        Set<BlockPos> siblingCells = Set.copyOf(sibling.getFloorCells());
+
+        assertFalse(update.requiresTypeSelection());
+        assertEquals(Building.validationResult.SUCCESS,
+                manager.commitRegisteredRoomUpdate(update, null));
+        Building committed = village.getBuilding(100).orElseThrow();
+        assertEquals("workshop", committed.getType());
+        assertTrue(committed.isTypeForced());
+        Building untouchedSibling = village.getBuilding(101).orElseThrow();
+        assertEquals("building", untouchedSibling.getType());
+        assertEquals(siblingCells, untouchedSibling.getFloorCells());
+    }
+
+    @Test
+    void selectedNonForcedRoomUsesAutomaticTypeResolution() {
+        Village village = new Village(1, null);
+        Structure current = new Structure(10, BlockPos.ZERO, List.of(
+                TestStructureFloors.create(0, 64, 68, 0, region(64, 0, 1))));
+        Building selected = room(100, 10, 0, region(64, 0, 1));
+        selected.setType("workshop");
+        selected.setTypeForced(false);
+        village.registerStructure(current, selected);
+
+        Building replacement = room(100, 10, 0, region(64, 0, 1));
+        replacement.setType("workshop");
+        replacement.setTypeForced(false);
+        RegisteredRoomUpdate update = new RegisteredRoomUpdate(
+                Building.validationResult.SUCCESS, BlockPos.ZERO, village, current.copy(),
+                100, replacement, List.of());
+        VillageManager manager = new VillageManager(null);
+
+        assertEquals(Building.validationResult.SUCCESS,
+                manager.commitRegisteredRoomUpdate(update, null));
+        Building committed = village.getBuilding(100).orElseThrow();
+        assertEquals("house", committed.getType());
+        assertFalse(committed.isTypeForced());
+    }
+
+    private static TestFloorFootprint region(int y, int minX, int maxX) {
+        Set<BlockPos> cells = java.util.stream.IntStream.rangeClosed(minX, maxX)
+                .mapToObj(x -> new BlockPos(x, y, 0))
+                .collect(java.util.stream.Collectors.toSet());
+        return TestFloorFootprint.fromFootprint(y, cells);
+    }
+
+    private static Building room(int id, int structureId, int floorId, TestFloorFootprint region) {
+        Building room = new Building(region.cells().iterator().next());
+        room.setId(id);
+        room.setStructureId(structureId);
+        room.setFloorId(floorId);
+        int minX = region.cells().stream().mapToInt(BlockPos::getX).min().orElseThrow();
+        int maxX = region.cells().stream().mapToInt(BlockPos::getX).max().orElseThrow();
+        room.setGeometry(new BlockPos(minX, region.anchorY(), 0),
+                new BlockPos(maxX, region.anchorY() + 3, 0), region.cells());
+        return room;
+    }
+
+    private static final class ThrowOnceMarkDirtyVillage extends Village {
+        private boolean failNextMarkDirty;
+
+        private ThrowOnceMarkDirtyVillage() {
+            super(1, null);
+        }
+
+        private void failNextMarkDirty() {
+            failNextMarkDirty = true;
+        }
+
+        @Override
+        public void markDirty() {
+            if (failNextMarkDirty) {
+                failNextMarkDirty = false;
+                throw new IllegalStateException("forced dirty failure");
+            }
+            super.markDirty();
+        }
+    }
+
+}

@@ -1,21 +1,42 @@
 package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
+
 import java.util.List;
+import java.util.Objects;
 
 public record BuildingScanResult(
-    Building.validationResult result,
-    BlockPos source,
-    boolean strictScan,
-    Building building,
-    List<String> matchingTypes,
-    Village village
+        Building.validationResult result,
+        BlockPos source,
+        Building building,
+        List<String> matchingTypes,
+        Village village,
+        Structure pendingStructure,
+        RoomScanPlan plan
 ) {
+    public BuildingScanResult(Building.validationResult result,
+                              BlockPos source,
+                              Building building,
+                              List<String> matchingTypes,
+                              Village village,
+                              RoomScanPlan plan) {
+        this(result, source, building, matchingTypes, village, null, plan);
+    }
+
+    public BuildingScanResult {
+        matchingTypes = matchingTypes == null ? List.of() : List.copyOf(matchingTypes);
+        if (result == Building.validationResult.SUCCESS) Objects.requireNonNull(plan, "plan");
+    }
+
     public boolean isAmbiguous() {
-        return matchingTypes.size() > 1;
+        return RoomTypeResolver.requiresTypeChoice(matchingTypes);
     }
 
     public boolean matchesType(String type) {
-        return matchingTypes.contains(type);
+        return RoomTypeResolver.matchesTypeChoice(matchingTypes, type);
+    }
+
+    public int targetBuildingId() {
+        return plan != null && plan.mode() == Village.RoomScanMode.ADD_ATTACHMENT ? plan.targetBuildingId() : -1;
     }
 }

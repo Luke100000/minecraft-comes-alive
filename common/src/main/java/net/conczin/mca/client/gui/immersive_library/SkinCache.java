@@ -8,12 +8,14 @@ import net.conczin.mca.client.gui.immersive_library.responses.ContentResponse;
 import net.conczin.mca.client.gui.immersive_library.responses.Response;
 import net.conczin.mca.client.gui.immersive_library.types.Content;
 import net.conczin.mca.client.gui.immersive_library.types.LiteContent;
+import net.conczin.mca.client.render.DynamicSkinCache;
 import net.conczin.mca.client.resources.SkinMeta;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.resources.ResourceLocation;
 import org.apache.commons.io.FileUtils;
+
 import java.io.*;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
@@ -65,7 +67,7 @@ public class SkinCache {
      * @param contentid The content id
      *                  Enforces re downloading the assets, mostly when local files appear to be corrupted
      */
-    public static void enforceSync(int contentid) {
+    public static synchronized void enforceSync(int contentid) {
         try {
             Files.delete(getFile(contentid + ".version").toPath());
             cachedVersions.remove(contentid);
@@ -75,7 +77,7 @@ public class SkinCache {
     }
 
     public static void sync(LiteContent content) {
-        sync(content.contentid(), content.version());
+        sync(content.content_id(), content.version());
     }
 
     /**
@@ -113,16 +115,9 @@ public class SkinCache {
             if ((currentVersion > version || !textureIdentifiers.containsKey(contentid)) && requested.putIfAbsent(contentid, true) == null) {
                 CompletableFuture.runAsync(() -> {
                     try {
-                        logger("Requested asset " + contentid + " with version " + version + " and current version " + currentVersion);
-                        Response response = request(Api.HttpMethod.GET, ContentResponse.class, "content/mca/" + contentid, Map.of("version", String.valueOf(version)));
+                        Response response = request(Api.HttpMethod.GET, ContentResponse.class, "v3/content/mca/" + contentid, Map.of("version", String.valueOf(version)));
                         if (response instanceof ContentResponse(Content content)) {
-                            int newVersion = content.version();
-                            write(contentid + ".png", Base64.getDecoder().decode(content.data()));
-                            write(contentid + ".json", content.meta());
-                            write(contentid + ".version", Integer.toString(newVersion));
-                            cachedVersions.put(contentid, newVersion);
-                            textureIdentifiers.remove(contentid);
-                            logger("Received " + contentid);
+                            store(content);
                         }
                     } catch (RuntimeException e) {
                         MCA.LOGGER.warn("Unable to sync immersive library asset {}", contentid, e);
@@ -134,12 +129,30 @@ public class SkinCache {
         }
     }
 
+    public static synchronized void store(Content content) {
+        int contentid = content.content_id();
+        int cachedVersion = cachedVersions.computeIfAbsent(contentid, id -> {
+            try {
+                return Integer.parseInt(read(id + ".version"));
+            } catch (IOException | NumberFormatException e) {
+                return -1;
+            }
+        });
+        if (content.version() <= cachedVersion) {
+            return;
+        }
+        write(contentid + ".png", Base64.getDecoder().decode(content.data()));
+        write(contentid + ".json", content.meta());
+        write(contentid + ".version", Integer.toString(content.version()));
+        cachedVersions.put(contentid, content.version());
+        textureIdentifiers.remove(contentid);
+    }
+
     /**
      * @param contentid The content id
      *                  Loads the resources from the disk and creates the texture identifier
      */
     private static void loadResources(int contentid) {
-        logger("Loaded asset " + contentid);
 
         // Load meta
         try {
@@ -159,6 +172,7 @@ public class SkinCache {
             ResourceLocation identifier = ResourceLocation.fromNamespaceAndPath("immersive_library", String.valueOf(contentid));
 
             TextureManager textureManager = Minecraft.getInstance().getTextureManager();
+            DynamicSkinCache.invalidateSourceTexture(identifier);
             textureManager.register(identifier, new DynamicTexture(image));
 
             textureIdentifiers.put(contentid, identifier);
@@ -169,26 +183,20 @@ public class SkinCache {
         }
     }
 
-    private static void logger(String s) {
-        //noinspection ConstantConditions
-        if (false) {
-            MCA.LOGGER.info(s);
-        }
-    }
 
     public static Optional<SkinMeta> getMeta(LiteContent content) {
         sync(content);
-        return Optional.ofNullable(metas.get(content.contentid()));
+        return Optional.ofNullable(metas.get(content.content_id()));
     }
 
     public static Optional<NativeImage> getImage(LiteContent content) {
         sync(content);
-        return Optional.ofNullable(images.get(content.contentid()));
+        return Optional.ofNullable(images.get(content.content_id()));
     }
 
     public static ResourceLocation getTextureIdentifier(LiteContent content) {
         sync(content);
-        return textureIdentifiers.getOrDefault(content.contentid(), DEFAULT_SKIN);
+        return textureIdentifiers.getOrDefault(content.content_id(), DEFAULT_SKIN);
     }
 
     /**

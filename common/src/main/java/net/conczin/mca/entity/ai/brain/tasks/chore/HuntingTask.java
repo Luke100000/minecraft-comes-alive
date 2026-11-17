@@ -5,18 +5,23 @@ import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Chore;
 import net.conczin.mca.util.InventoryUtils;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.SwordItem;
 
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.List;
 
 public class HuntingTask extends AbstractChoreTask {
+    private static final ThreadLocal<LootCapture> ACTIVE_LOOT_CAPTURE = new ThreadLocal<>();
+
     private int ticks = 0;
     private int nextAction = 0;
     private Animal target = null;
@@ -37,37 +42,32 @@ public class HuntingTask extends AbstractChoreTask {
 
     @Override
     protected void stop(ServerLevel world, VillagerEntityMCA villager, long time) {
-        ItemStack stack = villager.getItemInHand(villager.getDominantHand());
-        if (!stack.isEmpty()) {
-            villager.setItemInHand(villager.getDominantHand(), ItemStack.EMPTY);
-        }
+        target = null;
+        ticks = 0;
+        nextAction = 0;
+        releaseChorePreyMovement(villager);
+        releaseChoreHand(villager, Chore.HUNT);
     }
 
     @Override
     protected void start(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.start(world, villager, time);
 
-        if (!villager.hasItemInSlot(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), stack -> stack.getItem() instanceof SwordItem);
-            if (i == -1) {
-                abandonJobWithMessage("chore.hunting.nosword");
-            } else {
-                ItemStack stack = villager.getInventory().getItem(i);
-                villager.setItemInHand(villager.getDominantHand(), stack);
-            }
-        }
+        equipChoreTool(villager, Chore.HUNT, "chore.hunting.nosword");
     }
 
     @Override
     protected void tick(ServerLevel world, VillagerEntityMCA villager, long time) {
         super.tick(world, villager, time);
+        if (villager.getVillagerBrain().getCurrentJob() != Chore.HUNT) return;
 
-        if (!InventoryUtils.contains(villager.getInventory(), SwordItem.class) && !villager.hasItemInSlot(villager.getDominantSlot())) {
-            abandonJobWithMessage("chore.hunting.nosword");
-        } else if (!villager.hasItemInSlot(villager.getDominantSlot())) {
-            int i = InventoryUtils.getFirstSlotContainingItem(villager.getInventory(), stack -> stack.getItem() instanceof SwordItem);
-            ItemStack stack = villager.getInventory().getItem(i);
-            villager.setItemInHand(villager.getDominantHand(), stack);
+        if (!equipChoreTool(villager, Chore.HUNT, "chore.hunting.nosword")) return;
+
+        // An unloaded, removed or dying prey cannot be pursued after task interruption.
+        if (target != null && (!target.isAlive() || target.isRemoved() || world.getEntity(target.getId()) != target)) {
+            target = null;
+            ticks = 0;
+            nextAction = 0;
         }
 
         if (target == null) {
@@ -78,11 +78,11 @@ public class HuntingTask extends AbstractChoreTask {
                 if (villager.level().random.nextFloat() >= 0.0D) {
                     villager.level().getEntitiesOfClass(Animal.class, villager.getBoundingBox().inflate(15, 3, 15)).stream()
                             .filter(a -> !(a instanceof TamableAnimal))
-                            .filter(a -> !a.isBaby())
+                            .filter(a -> !a.isBaby() && a.isAlive() && !a.isRemoved())
                             .min(Comparator.comparingDouble(villager::distanceToSqr))
                             .ifPresent(animal -> {
                                 target = animal;
-                                villager.moveTowards(target.blockPosition(), 1.0f);
+                                moveTowardsChorePrey(target.blockPosition(), 1.0f, 1);
                             });
                 }
 
@@ -93,21 +93,63 @@ public class HuntingTask extends AbstractChoreTask {
                 }
             }
         } else {
-            villager.moveTowards(target.blockPosition());
+            moveTowardsChorePrey(target.blockPosition(), 0.5F, 1);
 
             if (target.isDeadOrDying()) {
-                // search for EntityItems around the target and grab them
-                villager.level().getEntitiesOfClass(ItemEntity.class, villager.getBoundingBox().inflate(15, 3, 15)).forEach(item -> {
-                    villager.getInventory().addItem(item.getItem());
-                    item.discard();
-                });
                 target = null;
             } else if (villager.distanceToSqr(target) <= 12.25F) {
-                villager.moveTowards(target.blockPosition());
+                moveTowardsChorePrey(target.blockPosition(), 0.5F, 1);
                 villager.swing(villager.getDominantHand());
-                target.hurt(world.damageSources().mobAttack(villager), 6.0F);
+                DamageSource damageSource = world.damageSources().mobAttack(villager);
+                LootCapture previous = ACTIVE_LOOT_CAPTURE.get();
+                LootCapture capture = new LootCapture(target, damageSource);
+                ACTIVE_LOOT_CAPTURE.set(capture);
+                try {
+                    target.hurt(damageSource, 6.0F);
+                    for (ItemEntity drop : capture.drops) {
+                        if (drop.isRemoved() || world.getEntity(drop.getId()) != drop) {
+                            continue;
+                        }
+                        ItemStack original = drop.getItem();
+                        ItemStack remainder = villager.getInventory().addItem(original);
+                        if (remainder.isEmpty()) {
+                            drop.discard();
+                        } else if (remainder.getCount() < original.getCount()) {
+                            drop.setItem(remainder);
+                        }
+                    }
+                } finally {
+                    if (previous == null) {
+                        ACTIVE_LOOT_CAPTURE.remove();
+                    } else {
+                        ACTIVE_LOOT_CAPTURE.set(previous);
+                    }
+                }
                 villager.getMainHandItem().hurtAndBreak(1, villager, EquipmentSlot.MAINHAND);
             }
+        }
+    }
+
+    public static boolean isCapturingLoot(LivingEntity prey, DamageSource source) {
+        LootCapture capture = ACTIVE_LOOT_CAPTURE.get();
+        return capture != null && capture.prey == prey && capture.source == source;
+    }
+
+    public static void recordCapturedLoot(ItemEntity drop) {
+        LootCapture capture = ACTIVE_LOOT_CAPTURE.get();
+        if (capture != null && drop != null) {
+            capture.drops.add(drop);
+        }
+    }
+
+    private static final class LootCapture {
+        private final LivingEntity prey;
+        private final DamageSource source;
+        private final List<ItemEntity> drops = new ArrayList<>();
+
+        private LootCapture(LivingEntity prey, DamageSource source) {
+            this.prey = prey;
+            this.source = source;
         }
     }
 }

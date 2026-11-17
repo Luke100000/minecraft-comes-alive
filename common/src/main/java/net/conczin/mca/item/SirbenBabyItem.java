@@ -3,8 +3,6 @@ package net.conczin.mca.item;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.relationship.Gender;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 
 public class SirbenBabyItem extends BabyItem {
@@ -18,9 +16,7 @@ public class SirbenBabyItem extends BabyItem {
     }
 
     @Override
-    protected VillagerEntityMCA birthChild(ItemStack stack, ServerLevel world, ServerPlayer player) {
-        VillagerEntityMCA child = super.birthChild(stack, world, player);
+    protected void configureChild(VillagerEntityMCA child) {
         child.getTraits().addTrait(Traits.SIRBEN);
-        return child;
     }
 }

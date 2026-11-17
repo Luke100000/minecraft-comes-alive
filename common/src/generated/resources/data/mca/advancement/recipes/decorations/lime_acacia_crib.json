@@ -28,6 +28,5 @@
     "recipes": [
       "mca:lime_acacia_crib"
     ]
-  },
-  "sends_telemetry_event": false
+  }
 }

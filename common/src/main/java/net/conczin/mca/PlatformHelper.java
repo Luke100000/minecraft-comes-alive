@@ -17,4 +17,8 @@ public class PlatformHelper {
     public boolean isDevelopmentEnvironment() {
         return false;
     }
+
+    public String getModVersion() {
+        return "unknown";
+    }
 }

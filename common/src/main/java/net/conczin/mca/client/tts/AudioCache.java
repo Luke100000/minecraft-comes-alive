@@ -6,6 +6,7 @@ import net.conczin.mca.client.tts.sound.PCMAudioStream;
 import java.io.*;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Locale;
@@ -16,16 +17,7 @@ import java.util.function.Consumer;
 public class AudioCache {
     private static final int MIN_SIZE = 128;
     private static final String CACHE_DIR = "tts_cache/";
-    private static final MessageDigest MESSAGEDIGEST;
     public static Map<String, PCMAudioStream> inMemory = new ConcurrentHashMap<>();
-
-    static {
-        try {
-            MESSAGEDIGEST = MessageDigest.getInstance("SHA-256");
-        } catch (NoSuchAlgorithmException e) {
-            throw new RuntimeException(e);
-        }
-    }
 
     private static void setInMemoryAudio(String identifier, ByteBuffer buffer) {
         if (inMemory.containsKey(identifier)) {
@@ -102,8 +94,12 @@ public class AudioCache {
     }
 
     public static String getHash(String text) {
-        MESSAGEDIGEST.update(text.getBytes());
-        return toHex(MESSAGEDIGEST.digest()).toLowerCase(Locale.ROOT);
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            return toHex(digest.digest(text.getBytes(StandardCharsets.UTF_8))).toLowerCase(Locale.ROOT);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
     }
 
     public static String toHex(byte[] bytes) {

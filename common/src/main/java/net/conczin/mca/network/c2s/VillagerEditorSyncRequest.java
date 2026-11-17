@@ -1,6 +1,7 @@
 package net.conczin.mca.network.c2s;
 
 import net.conczin.mca.MCA;
+import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.relationship.Gender;
@@ -10,6 +11,7 @@ import net.conczin.mca.network.s2c.GetVillagerResponse;
 import net.conczin.mca.network.s2c.PlayerDataMessage;
 import net.conczin.mca.resources.SkinVisualIds;
 import net.conczin.mca.resources.data.skin.LayeredHair;
+import net.conczin.mca.registry.ItemsMCA;
 import net.conczin.mca.server.world.data.FamilyTree;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
@@ -26,6 +28,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.npc.VillagerProfession;
 
 import java.util.List;
@@ -121,13 +124,17 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     @Override
     public void handleServer(ServerPlayer player) {
         Entity entity = player.serverLevel().getEntity(uuid);
+        if (!canEdit(player, entity)) {
+            return;
+        }
         switch (command) {
             case "skin", "hair", "layered_hair", "hair_base", "hair_bangs", "hair_back", "hair_front", "hair_extra", "clothing", "gender", "sync" ->
                     saveEntity(player, entity, data.copy());
             case "profession" -> {
                 if (entity instanceof VillagerEntityMCA villager) {
-                    VillagerProfession profession = BuiltInRegistries.VILLAGER_PROFESSION.get(ResourceLocation.parse(data.getString("profession")));
-                    if (profession != null) {
+                    ResourceLocation professionId = ResourceLocation.tryParse(data.getString("profession"));
+                    if (professionId != null && BuiltInRegistries.VILLAGER_PROFESSION.containsKey(professionId)) {
+                        VillagerProfession profession = BuiltInRegistries.VILLAGER_PROFESSION.get(professionId);
                         CompoundTag merged = applyVillagerPatch(player, entity, data.copy());
                         villager.setProfession(profession);
                         if (merged != null) {
@@ -138,6 +145,57 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
                 }
             }
         }
+    }
+
+    private boolean canEdit(ServerPlayer sender, Entity target) {
+        if (!(target instanceof LivingEntity living) || !living.isAlive() || target.level() != sender.serverLevel()) {
+            return false;
+        }
+        boolean isProfession = command.equals("profession");
+        if (!isProfession && !switch (command) {
+            case "skin", "hair", "layered_hair", "hair_base", "hair_bangs", "hair_back", "hair_front", "hair_extra", "clothing", "gender", "sync" -> true;
+            default -> false;
+        }) {
+            return false;
+        }
+        for (String key : data.getAllKeys()) {
+            if (!isAllowedTopLevelKey(key) && !isAllowedMcaKey(key) && !(isProfession && key.equals("profession"))) {
+                return false;
+            }
+        }
+
+        if (target instanceof ServerPlayer targetPlayer) {
+            if (targetPlayer != sender || isProfession) {
+                return false;
+            }
+            if (sender.createCommandSourceStack().hasPermission(2) || Config.getInstance().allowFullPlayerEditor) {
+                return true;
+            }
+            if (!Config.getInstance().allowLimitedPlayerEditor || !command.equals("sync")) {
+                return false;
+            }
+            CompoundTag storedData = PlayerSaveData.get(sender).getEntityData();
+            for (String key : data.getAllKeys()) {
+                if (key.startsWith("FamilyTreeNew") || key.equals("VillagerDataFinalized")) {
+                    return false;
+                }
+                if (!isLimitedPlayerEditorKey(key) && !Objects.equals(storedData.get(key), data.get(key))) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        if (!(target instanceof VillagerLike<?>)) {
+            return false;
+        }
+        return sender.createCommandSourceStack().hasPermission(2)
+                || sender.getMainHandItem().is(ItemsMCA.VILLAGER_EDITOR)
+                || sender.getOffhandItem().is(ItemsMCA.VILLAGER_EDITOR);
+    }
+
+    private static boolean isLimitedPlayerEditorKey(String key) {
+        return key.equals("CustomName") || key.equals("CustomNameVisible") || key.equals("PlayerModel");
     }
 
     private void saveEntity(ServerPlayer player, Entity entity, CompoundTag patch) {

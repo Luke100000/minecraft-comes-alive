@@ -104,9 +104,11 @@ public enum DialogueType {
         //then try personality
         if (flags.containsKey("E") && MCAClient.useExpandedPersonalityTranslations()) {
             String personality = Personality.getDialoguePrefix(flags.get("E"));
-            Optional<String> p = getPrefixedPhrase(type, personality, key);
-            if (p.isPresent()) {
-                return p.get();
+            if (!(type.isPlayerChild() && personality.equals(Personality.FLIRTY.getDialoguePrefix()))) {
+                Optional<String> p = getPrefixedPhrase(type, personality, key);
+                if (p.isPresent()) {
+                    return p.get();
+                }
             }
         }
 
@@ -142,5 +144,9 @@ public enum DialogueType {
             case ADULT -> ADULTP;
             default -> UNASSIGNED;
         };
+    }
+
+    private boolean isPlayerChild() {
+        return this == TODDLERP || this == CHILDP || this == TEENP || this == ADULTP;
     }
 }

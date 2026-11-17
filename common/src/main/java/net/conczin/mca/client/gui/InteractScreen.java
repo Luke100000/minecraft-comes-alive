@@ -137,6 +137,15 @@ public class InteractScreen extends AbstractDynamicScreen {
             }
             return true;
         }
+        // Keyboard path so gifts can be given without a mouse/right mouse button. The
+        // cooldown keeps key auto-repeat from handing over a whole stack.
+        if (inGiftMode && (keyChar == GLFW.GLFW_KEY_ENTER || keyChar == GLFW.GLFW_KEY_KP_ENTER)) {
+            if (timeSinceLastClick > 2) {
+                timeSinceLastClick = 0;
+                Network.sendToServer(new InteractionVillagerMessage("gift", villager.asEntity().getUUID()));
+            }
+            return true;
+        }
         return false;
     }
 

@@ -11,6 +11,7 @@ import net.conczin.mca.network.s2c.OpenDestinyGuiRequest;
 import net.conczin.mca.network.s2c.PlayerDataMessage;
 import net.conczin.mca.network.s2c.ShowToastRequest;
 import net.conczin.mca.server.world.data.PlayerSaveData;
+import net.conczin.mca.server.world.data.VillageManager;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -56,6 +57,17 @@ public class ServerInteractionManager {
     }
 
     public void onPlayerJoin(ServerPlayer player) {
+        if (VillageManager.get(player.serverLevel()).hasUnreadableSavedData()) {
+            player.sendSystemMessage(Component.translatableWithFallback("mca.error.village_data_unreadable",
+                    "MCA could not load village data in this dimension. Village changes cannot be saved. Stop playing and restore a backup or check the server log.")
+                    .withStyle(ChatFormatting.RED));
+            if (player.getServer().getPlayerList().isOp(player.getGameProfile())) {
+                player.sendSystemMessage(Component.literal(
+                        "MCA village save file (relative to the server world save folder): "
+                                + VillageManager.getRelativeSavePath(player.serverLevel()))
+                        .withStyle(ChatFormatting.RED));
+            }
+        }
         PlayerSaveData playerData = PlayerSaveData.get(player);
         if (!playerData.isEntityDataSet()) {
             if (Config.getInstance().launchIntoDestiny) {
@@ -80,15 +92,25 @@ public class ServerInteractionManager {
             PlayerSaveData.showMailNotification(player);
         }
 
-        if (Config.getInstance().scalePlayerHitboxWithSizeAndWidth) {
-            PlayerDimensions.debugRefresh(player, "before server join refresh");
-            player.refreshDimensions();
-            PlayerDimensions.debugRefresh(player, "after server join refresh");
-            if (playerData.isEntityDataSet()) {
-                player.serverLevel().players().forEach(p ->
-                        Network.sendToPlayer(new PlayerDataMessage(player.getUUID(), playerData.getEntityData()), p)
-                );
-            }
+        refreshAndSyncPlayerDimensions(player, playerData, "server join refresh");
+    }
+
+    public void onPlayerRespawn(ServerPlayer player) {
+        refreshAndSyncPlayerDimensions(player, PlayerSaveData.get(player), "server respawn refresh");
+    }
+
+    private void refreshAndSyncPlayerDimensions(ServerPlayer player, PlayerSaveData playerData, String reason) {
+        if (!Config.getServerConfig().scalePlayerHitboxWithSizeAndWidth) {
+            return;
+        }
+
+        PlayerDimensions.debugRefresh(player, "before " + reason);
+        player.refreshDimensions();
+        PlayerDimensions.debugRefresh(player, "after " + reason);
+        if (playerData.isEntityDataSet()) {
+            player.serverLevel().players().forEach(p ->
+                    Network.sendToPlayer(new PlayerDataMessage(player.getUUID(), playerData.getEntityData()), p)
+            );
         }
     }
 

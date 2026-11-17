@@ -18,9 +18,8 @@ final class ResidentHomeAssignments {
     }
 
     static boolean claim(Map<UUID, Long> homes, UUID resident, long home) {
-        homes.remove(resident);
-
-        boolean alreadyClaimed = homes.values().stream().anyMatch(existingHome -> existingHome == home);
+        boolean alreadyClaimed = homes.entrySet().stream()
+                .anyMatch(entry -> !entry.getKey().equals(resident) && entry.getValue() == home);
         if (alreadyClaimed) {
             return false;
         }

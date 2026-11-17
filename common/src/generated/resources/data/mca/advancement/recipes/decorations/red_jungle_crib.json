@@ -28,6 +28,5 @@
     "recipes": [
       "mca:red_jungle_crib"
     ]
-  },
-  "sends_telemetry_event": false
+  }
 }
