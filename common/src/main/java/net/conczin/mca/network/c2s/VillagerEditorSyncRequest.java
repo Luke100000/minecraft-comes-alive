@@ -1,17 +1,20 @@
 package net.conczin.mca.network.c2s;
 
-import net.conczin.mca.MCA;
 import net.conczin.mca.Config;
+import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerLike;
+import net.conczin.mca.entity.ai.Traits;
 import net.conczin.mca.entity.ai.relationship.Gender;
+import net.conczin.mca.entity.ai.relationship.Personality;
 import net.conczin.mca.network.HandleablePayload;
 import net.conczin.mca.network.Network;
 import net.conczin.mca.network.s2c.GetVillagerResponse;
 import net.conczin.mca.network.s2c.PlayerDataMessage;
+import net.conczin.mca.registry.ItemsMCA;
 import net.conczin.mca.resources.SkinVisualIds;
 import net.conczin.mca.resources.data.skin.LayeredHair;
-import net.conczin.mca.registry.ItemsMCA;
+import net.conczin.mca.server.ServerInteractionManager;
 import net.conczin.mca.server.world.data.FamilyTree;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.conczin.mca.server.world.data.PlayerSaveData;
@@ -19,6 +22,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -34,11 +38,23 @@ import net.minecraft.world.entity.npc.VillagerProfession;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag data) implements HandleablePayload {
+    enum EditCapability {
+        FULL_ADMIN,
+        DESTINY_SELF,
+        FULL_PLAYER_SELF,
+        LIMITED_PLAYER_SELF,
+        COMB,
+        NEEDLE
+    }
+
+    private static final double MAX_INTERACTION_DISTANCE_SQR = 64.0D;
+
     private static final String[] MCA_VISUAL_KEYS = {
             "Gender",
             "Clothes",
@@ -58,6 +74,64 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
             "AgeState",
             "PlayerModel"
     };
+
+    private static final Set<String> HAIR_KEYS = Set.of(
+            "Hair",
+            "HairStyle",
+            "HairBase",
+            "HairBangs",
+            "HairBack",
+            "HairFront",
+            "HairExtra",
+            "HairColor",
+            "HairDye"
+    );
+
+    private static final Set<String> CLOTHING_KEYS = Set.of(
+            "Clothes",
+            "ClothingLocked",
+            "SkinDye"
+    );
+
+    private static final Set<String> LIMITED_PLAYER_KEYS = Set.of(
+            "CustomName",
+            "CustomNameVisible",
+            "PlayerModel"
+    );
+
+    private static final Set<String> DYE_KEYS = Set.of(
+            "HairDye",
+            "SkinDye",
+            "EyeDye",
+            "EyeLeftDye"
+    );
+
+    private static final Set<String> ADMIN_ONLY_KEYS = Set.of(
+            "FamilyTreeNewFatherName",
+            "FamilyTreeNewMotherName",
+            "FamilyTreeNewSpouseName",
+            "InfectionProgress",
+            "Memories",
+            "Mood"
+    );
+
+    private static final Set<String> PASSIVE_ECHOED_KEYS = Set.of(
+            "Age",
+            "AgeState",
+            "InfectionProgress",
+            "Memories",
+            "Mood"
+    );
+
+    private static final List<EditCapability> CAPABILITY_PRIORITY = List.of(
+            EditCapability.FULL_ADMIN,
+            EditCapability.FULL_PLAYER_SELF,
+            EditCapability.DESTINY_SELF,
+            EditCapability.COMB,
+            EditCapability.NEEDLE,
+            EditCapability.LIMITED_PLAYER_SELF
+    );
+
     public static final CustomPacketPayload.Type<VillagerEditorSyncRequest> TYPE = new CustomPacketPayload.Type<>(MCA.locate("villager_editor_sync_request"));
     public static final StreamCodec<FriendlyByteBuf, VillagerEditorSyncRequest> STREAM_CODEC = StreamCodec.composite(
             ByteBufCodecs.STRING_UTF8, VillagerEditorSyncRequest::command,
@@ -92,7 +166,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
                 return true;
             }
         }
-        if (key.equals("HairDye") || key.equals("SkinDye") || key.equals("EyeDye") || key.equals("EyeLeftDye")) {
+        if (DYE_KEYS.contains(key)) {
             return true;
         }
         if (key.equals("InfectionProgress") || key.equals("Mood") || key.equals("Memories")) {
@@ -124,18 +198,21 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     @Override
     public void handleServer(ServerPlayer player) {
         Entity entity = player.serverLevel().getEntity(uuid);
-        if (!canEdit(player, entity)) {
+        Optional<EditCapability> capabilityOpt = resolveCapability(player, entity);
+        if (capabilityOpt.isEmpty()) {
             return;
         }
+        EditCapability capability = capabilityOpt.get();
+        CompoundTag effectivePatch = stripRestrictedKeys(data, capability);
         switch (command) {
             case "skin", "hair", "layered_hair", "hair_base", "hair_bangs", "hair_back", "hair_front", "hair_extra", "clothing", "gender", "sync" ->
-                    saveEntity(player, entity, data.copy());
+                    saveEntity(player, entity, effectivePatch, capability);
             case "profession" -> {
-                if (entity instanceof VillagerEntityMCA villager) {
+                if (capability == EditCapability.FULL_ADMIN && entity instanceof VillagerEntityMCA villager) {
                     ResourceLocation professionId = ResourceLocation.tryParse(data.getString("profession"));
                     if (professionId != null && BuiltInRegistries.VILLAGER_PROFESSION.containsKey(professionId)) {
                         VillagerProfession profession = BuiltInRegistries.VILLAGER_PROFESSION.get(professionId);
-                        CompoundTag merged = applyVillagerPatch(player, entity, data.copy());
+                        CompoundTag merged = applyVillagerPatch(player, entity, effectivePatch, capability);
                         villager.setProfession(profession);
                         if (merged != null) {
                             CompoundTag fresh = GetVillagerRequest.getVillagerData(entity);
@@ -147,58 +224,209 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         }
     }
 
-    private boolean canEdit(ServerPlayer sender, Entity target) {
+    Optional<EditCapability> resolveCapability(ServerPlayer sender, Entity target) {
         if (!(target instanceof LivingEntity living) || !living.isAlive() || target.level() != sender.serverLevel()) {
-            return false;
+            return Optional.empty();
+        }
+        if (!(target instanceof ServerPlayer) && !(target instanceof VillagerLike<?>)) {
+            return Optional.empty();
         }
         boolean isProfession = command.equals("profession");
-        if (!isProfession && !switch (command) {
-            case "skin", "hair", "layered_hair", "hair_base", "hair_bangs", "hair_back", "hair_front", "hair_extra", "clothing", "gender", "sync" -> true;
-            default -> false;
-        }) {
-            return false;
+        if (!isProfession && !isStandardEditorCommand(command)) {
+            return Optional.empty();
         }
         for (String key : data.getAllKeys()) {
             if (!isAllowedTopLevelKey(key) && !isAllowedMcaKey(key) && !(isProfession && key.equals("profession"))) {
-                return false;
+                return Optional.empty();
             }
         }
 
-        if (target instanceof ServerPlayer targetPlayer) {
-            if (targetPlayer != sender || isProfession) {
-                return false;
-            }
-            if (sender.createCommandSourceStack().hasPermission(2) || Config.getInstance().allowFullPlayerEditor) {
-                return true;
-            }
-            if (!Config.getInstance().allowLimitedPlayerEditor || !command.equals("sync")) {
-                return false;
-            }
-            CompoundTag storedData = PlayerSaveData.get(sender).getEntityData();
-            for (String key : data.getAllKeys()) {
-                if (key.startsWith("FamilyTreeNew") || key.equals("VillagerDataFinalized")) {
-                    return false;
-                }
-                if (!isLimitedPlayerEditorKey(key) && !Objects.equals(storedData.get(key), data.get(key))) {
-                    return false;
-                }
-            }
-            return true;
+        CompoundTag serverData = target instanceof ServerPlayer targetPlayer
+                ? PlayerSaveData.get(targetPlayer).getEntityData()
+                : GetVillagerRequest.getVillagerData(target);
+        if (serverData == null) {
+            return Optional.empty();
         }
 
-        if (!(target instanceof VillagerLike<?>)) {
+        for (EditCapability candidate : CAPABILITY_PRIORITY) {
+            if (hasCapability(sender, target, candidate) && isPermittedBy(candidate, target, serverData, isProfession)) {
+                return Optional.of(candidate);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static boolean hasCapability(ServerPlayer sender, Entity target, EditCapability capability) {
+        return switch (capability) {
+            case FULL_ADMIN -> sender.hasPermissions(2)
+                    || (target instanceof VillagerLike<?> && sender.isHolding(ItemsMCA.VILLAGER_EDITOR));
+            case DESTINY_SELF -> target == sender && ServerInteractionManager.getInstance().hasActiveDestinySession(sender);
+            case FULL_PLAYER_SELF -> target == sender && Config.getInstance().allowFullPlayerEditor;
+            case COMB -> (target == sender || (target instanceof VillagerLike<?> && sender.distanceToSqr(target) <= MAX_INTERACTION_DISTANCE_SQR))
+                    && sender.isHolding(ItemsMCA.COMB);
+            case NEEDLE -> (target == sender || (target instanceof VillagerLike<?> && sender.distanceToSqr(target) <= MAX_INTERACTION_DISTANCE_SQR))
+                    && sender.isHolding(ItemsMCA.NEEDLE_AND_THREAD);
+            case LIMITED_PLAYER_SELF -> target == sender && Config.getInstance().allowLimitedPlayerEditor;
+        };
+    }
+
+    private boolean isPermittedBy(EditCapability capability, Entity target, CompoundTag serverData, boolean isProfession) {
+        return switch (capability) {
+            case FULL_ADMIN -> !isProfession || target instanceof VillagerEntityMCA;
+            case FULL_PLAYER_SELF -> !isProfession && arePlayerTraitsValid(serverData, data) && isPersonalityValid(serverData, data);
+            case DESTINY_SELF -> !isProfession && isDestinyPatchPermitted(serverData);
+            case COMB -> isCombCommand(command) && allChangedKeysIn(serverData, HAIR_KEYS);
+            case NEEDLE -> isNeedleCommand(command) && allChangedKeysIn(serverData, CLOTHING_KEYS);
+            case LIMITED_PLAYER_SELF -> command.equals("sync") && allChangedKeysIn(serverData, LIMITED_PLAYER_KEYS);
+        };
+    }
+
+    private boolean isDestinyPatchPermitted(CompoundTag serverData) {
+        Config config = Config.getInstance();
+        for (String key : data.getAllKeys()) {
+            if (ADMIN_ONLY_KEYS.contains(key)
+                    || key.equals("Age")
+                    || key.equals("AgeState")
+                    || Objects.equals(serverData.get(key), data.get(key))) {
+                continue;
+            }
+            if (isDestinyIdentityOrVisualKey(key)) {
+                continue;
+            }
+            if (key.equals("Personality")) {
+                if (!isPersonalityValid(serverData, data)) {
+                    return false;
+                }
+                continue;
+            }
+            if (key.startsWith("Gene")) {
+                if (!config.allowBodyCustomizationInDestiny) {
+                    return false;
+                }
+                continue;
+            }
+            if (key.equals("Traits")) {
+                if (!config.allowTraitCustomizationInDestiny || !arePlayerTraitsValid(serverData, data)) {
+                    return false;
+                }
+                continue;
+            }
             return false;
         }
-        return sender.createCommandSourceStack().hasPermission(2)
-                || sender.getMainHandItem().is(ItemsMCA.VILLAGER_EDITOR)
-                || sender.getOffhandItem().is(ItemsMCA.VILLAGER_EDITOR);
+        return true;
     }
 
-    private static boolean isLimitedPlayerEditorKey(String key) {
-        return key.equals("CustomName") || key.equals("CustomNameVisible") || key.equals("PlayerModel");
+    private boolean allChangedKeysIn(CompoundTag serverData, Set<String> allowedChangedKeys) {
+        for (String key : data.getAllKeys()) {
+            if (key.startsWith("FamilyTreeNew")) {
+                return false;
+            }
+            if (PASSIVE_ECHOED_KEYS.contains(key)) {
+                continue;
+            }
+            if (!Objects.equals(serverData.get(key), data.get(key)) && !allowedChangedKeys.contains(key)) {
+                return false;
+            }
+        }
+        return true;
     }
 
-    private void saveEntity(ServerPlayer player, Entity entity, CompoundTag patch) {
+    private static boolean isPersonalityValid(CompoundTag serverData, CompoundTag patch) {
+        if (!patch.contains("Personality") || Objects.equals(serverData.get("Personality"), patch.get("Personality"))) {
+            return true;
+        }
+        return patch.contains("Personality", Tag.TAG_STRING)
+                && Personality.get(patch.getString("Personality")).isPresent();
+    }
+
+    private static boolean arePlayerTraitsValid(CompoundTag serverData, CompoundTag patch) {
+        if (!patch.contains("Traits") || Objects.equals(serverData.get("Traits"), patch.get("Traits"))) {
+            return true;
+        }
+        if (!patch.contains("Traits", Tag.TAG_COMPOUND)) {
+            return false;
+        }
+        CompoundTag previousTraits = serverData.contains("Traits", Tag.TAG_COMPOUND)
+                ? serverData.getCompound("Traits")
+                : new CompoundTag();
+        CompoundTag nextTraits = patch.getCompound("Traits");
+        Config config = Config.getInstance();
+        for (String traitId : nextTraits.getAllKeys()) {
+            if (previousTraits.contains(traitId)) {
+                continue;
+            }
+            Optional<Traits.Trait> resolved = Traits.get(traitId);
+            if (resolved.isEmpty()) {
+                return false;
+            }
+            Traits.Trait trait = resolved.get();
+            boolean enabled = config.enabledTraits.getOrDefault(trait.getId().toString(), true);
+            if (!enabled || (!config.bypassTraitRestrictions && !trait.isUsableOnPlayer())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isStandardEditorCommand(String cmd) {
+        return switch (cmd) {
+            case "skin", "hair", "layered_hair", "hair_base", "hair_bangs", "hair_back", "hair_front", "hair_extra", "clothing", "gender", "sync" -> true;
+            default -> false;
+        };
+    }
+
+    private static boolean isCombCommand(String cmd) {
+        return switch (cmd) {
+            case "hair", "layered_hair", "hair_base", "hair_bangs", "hair_back", "hair_front", "hair_extra", "sync" -> true;
+            default -> false;
+        };
+    }
+
+    private static boolean isNeedleCommand(String cmd) {
+        return cmd.equals("clothing") || cmd.equals("sync");
+    }
+
+    private static boolean isDestinyIdentityOrVisualKey(String key) {
+        if (LIMITED_PLAYER_KEYS.contains(key) || DYE_KEYS.contains(key)) {
+            return true;
+        }
+        for (String visualKey : MCA_VISUAL_KEYS) {
+            if (visualKey.equals(key)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static CompoundTag stripRestrictedKeys(CompoundTag patch, EditCapability capability) {
+        return switch (capability) {
+            case FULL_ADMIN -> patch.copy();
+            case COMB -> retainOnlyKeys(patch, HAIR_KEYS);
+            case NEEDLE -> retainOnlyKeys(patch, CLOTHING_KEYS);
+            case LIMITED_PLAYER_SELF -> retainOnlyKeys(patch, LIMITED_PLAYER_KEYS);
+            case DESTINY_SELF, FULL_PLAYER_SELF -> {
+                CompoundTag sanitized = patch.copy();
+                for (String key : ADMIN_ONLY_KEYS) {
+                    sanitized.remove(key);
+                }
+                sanitized.remove("Age");
+                sanitized.remove("AgeState");
+                yield sanitized;
+            }
+        };
+    }
+
+    private static CompoundTag retainOnlyKeys(CompoundTag patch, Set<String> allowedKeys) {
+        CompoundTag narrowed = new CompoundTag();
+        for (String key : patch.getAllKeys()) {
+            if (allowedKeys.contains(key)) {
+                narrowed.put(key, Objects.requireNonNull(patch.get(key)).copy());
+            }
+        }
+        return narrowed;
+    }
+
+    private void saveEntity(ServerPlayer player, Entity entity, CompoundTag patch, EditCapability capability) {
         if (entity == null) {
             return;
         }
@@ -206,23 +434,24 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         if (entity instanceof ServerPlayer serverPlayer) {
             CompoundTag serverData = PlayerSaveData.get(serverPlayer).getEntityData();
             CompoundTag merged = mergeAllowedEditorPatch(serverData, patch);
+            sanitizeVisualIdentifiers(serverPlayer, merged);
             PlayerSaveData data = PlayerSaveData.get(serverPlayer);
             data.setEntityData(merged);
             data.setEntityDataSet(true);
-            syncFamilyTree(player, entity, merged);
+            syncFamilyTree(player, entity, merged, capability);
             serverPlayer.serverLevel().players().forEach(p -> Network.sendToPlayer(new PlayerDataMessage(serverPlayer.getUUID(), merged), p));
             Network.sendToPlayer(new GetVillagerResponse(merged), player);
             return;
         }
 
-        CompoundTag merged = applyVillagerPatch(player, entity, patch);
+        CompoundTag merged = applyVillagerPatch(player, entity, patch, capability);
         if (merged != null) {
             CompoundTag fresh = GetVillagerRequest.getVillagerData(entity);
             Network.sendToPlayer(new GetVillagerResponse(fresh != null ? fresh : merged), player);
         }
     }
 
-    private CompoundTag applyVillagerPatch(ServerPlayer player, Entity entity, CompoundTag patch) {
+    private CompoundTag applyVillagerPatch(ServerPlayer player, Entity entity, CompoundTag patch, EditCapability capability) {
         if (!(entity instanceof VillagerLike<?> villagerLike)) {
             return null;
         }
@@ -237,7 +466,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
 
         villagerLike.syncFromEditor(merged);
         entity.refreshDimensions();
-        syncFamilyTree(player, entity, merged);
+        syncFamilyTree(player, entity, merged, capability);
 
         if (entity instanceof VillagerEntityMCA villager) {
             villager.getResidency().getHomeVillage().ifPresent(b -> b.updateResident(villager));
@@ -263,7 +492,9 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
     private void migrateLegacyHairStyle(CompoundTag mcaData) {
         String hairStyle = mcaData.getString("HairStyle");
         if (SkinVisualIds.isLegacyHairTexture(hairStyle)) {
-            mcaData.putString("HairBase", hairStyle);
+            if (MCA.isBlankString(mcaData.getString("HairBase"))) {
+                mcaData.putString("HairBase", hairStyle);
+            }
             mcaData.putString("HairStyle", "");
             mcaData.putString("Hair", "");
         }
@@ -315,7 +546,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         }
     }
 
-    private void syncFamilyTree(ServerPlayer player, Entity entity, CompoundTag villagerData) {
+    private void syncFamilyTree(ServerPlayer player, Entity entity, CompoundTag villagerData, EditCapability capability) {
         FamilyTree tree = FamilyTree.get((ServerLevel) entity.level());
         FamilyTreeNode entry = tree.getOrCreate(entity);
         entry.setGender(getGender(villagerData));
@@ -332,6 +563,10 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
                     MCA.LOGGER.warn("Failed to parse custom name for villager: {}", serializedName, exception);
                 }
             }
+        }
+
+        if (capability != EditCapability.FULL_ADMIN) {
+            return;
         }
 
         if (villagerData.contains("FamilyTreeNewFatherName")) {
@@ -355,7 +590,7 @@ public record VillagerEditorSyncRequest(String command, UUID uuid, CompoundTag d
         if (villagerData.contains("FamilyTreeNewSpouseName")) {
             String name = villagerData.getString("FamilyTreeNewSpouseName");
             if (MCA.isBlankString(name)) {
-                Optional.of(entry.partner()).flatMap(tree::getOrEmpty).ifPresent(node -> node.updatePartner(null, null));
+                Optional.ofNullable(entry.partner()).flatMap(tree::getOrEmpty).ifPresent(node -> node.updatePartner(null, null));
                 entry.updatePartner(null, null);
             } else {
                 getFamilyNode(player, tree, name, entry.gender().opposite()).ifPresent(node -> {

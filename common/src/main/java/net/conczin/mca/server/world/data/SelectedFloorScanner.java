@@ -22,6 +22,7 @@ final class SelectedFloorScanner {
     private static final int FLOOR_BAND_RADIUS = 2;
     // Per door-separated region; canonical Floor cells still share the global maxSize.
     private static final int MAX_EXPOSED_SURFACE_CELLS = 64;
+    static final int MAX_EXTERIOR_PROBE_COLUMNS = 16_384;
     private static final int MAX_FRAME_HEIGHT = 4;
     private static final Comparator<BlockPos> CELL_ORDER = Comparator
             .comparingInt((BlockPos pos) -> pos.getX())
@@ -1066,6 +1067,10 @@ final class SelectedFloorScanner {
         visitedFloor.add(start.feet());
 
         while (!floorQueue.isEmpty() || !openQueue.isEmpty()) {
+            if (visitedFloor.size() + visitedOpen.size() > MAX_EXTERIOR_PROBE_COLUMNS) {
+                exterior.put(start.feet(), true);
+                return true;
+            }
             if (!openQueue.isEmpty()) {
                 BlockPos open = openQueue.removeFirst();
                 if (horizontalDistance(open, scanAnchor) >= maxRadius - 1) {
@@ -1231,6 +1236,7 @@ final class SelectedFloorScanner {
 
     private static void collectVerticalConnectorAt(
             BlockGetter world, BlockPos candidate, boolean includeTopExit, Set<BlockPos> connectors) {
+        if (!isLoadedColumn(world, candidate)) return;
         BlockPos connector;
         if (includeTopExit) {
             connector = StructureConnector.verticalInteractionConnector(world, candidate);
@@ -1238,7 +1244,9 @@ final class SelectedFloorScanner {
             FloorConnector.Type type = FloorConnector.Type.fromBlockState(world.getBlockState(candidate));
             connector = type != null && type.vertical() ? candidate : null;
         }
-        if (connector != null && !connectors.contains(connector) && StructureConnector.isVertical(world, connector)) {
+        if (connector != null && !connectors.contains(connector)
+                && isLoadedColumn(world, connector)
+                && StructureConnector.isVertical(world, connector)) {
             connectors.add(connector.immutable());
         }
     }

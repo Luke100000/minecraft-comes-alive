@@ -40,12 +40,8 @@ abstract class MixinAbstractArrow {
             Operation<Boolean> original
     ) {
         VillagerEntityMCA archer = mca$getMcaArcherOwner();
-        if (!(target instanceof LivingEntity livingTarget) || archer == null) {
+        if (target.level().isClientSide() || !(target instanceof LivingEntity livingTarget) || archer == null) {
             return original.call(target, source, damage);
-        }
-
-        if (target.level().isClientSide()) {
-            return true;
         }
 
         livingTarget.invulnerableTime = 0;

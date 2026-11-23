@@ -4,6 +4,7 @@ import net.conczin.mca.network.FamilyTreeView;
 import net.conczin.mca.network.s2c.GetFamilyTreeResponse;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
 import net.minecraft.core.GlobalPos;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
@@ -20,11 +21,14 @@ final class FamilyTreeViewModel {
     public record ViewportState(double panX, double panY, float zoom) {
     }
 
-    public record GenerationRequest(UUID anchor, FamilyTreeView.Direction direction, Optional<UUID> after, long requestId) {
+    public record GenerationRequest(UUID anchor, FamilyTreeView.Direction direction, long requestId,
+                                    Optional<UUID> after) {
     }
 
-    public record GenerationResult(boolean handled, boolean layoutChanged, boolean incomplete,
-                                   Optional<GenerationRequest> nextRequest) {
+    private record GenerationProgress(UUID cursor, Set<UUID> children) {
+    }
+
+    public record GenerationResult(boolean handled, boolean layoutChanged, @Nullable UUID anchor) {
     }
 
     public record HistoryEntry(UUID layoutRootId, UUID focusId, ViewportState viewport,
@@ -36,13 +40,16 @@ final class FamilyTreeViewModel {
 
     record ViewState(Map<UUID, FamilyTreeNode> nodes, Map<UUID, GlobalPos> graves,
                      Set<UUID> orphans, Set<FamilyTreeView.Continuation> continuations,
-                     Set<UUID> unavailable) {
+                     Set<UUID> unavailable, Set<UUID> completeDescendants,
+                     Map<FamilyTreeView.Continuation, GenerationProgress> generationProgress) {
         ViewState {
             nodes = Collections.unmodifiableMap(new LinkedHashMap<>(nodes));
             graves = Map.copyOf(graves);
             orphans = Set.copyOf(orphans);
             continuations = Set.copyOf(continuations);
             unavailable = Set.copyOf(unavailable);
+            completeDescendants = Set.copyOf(completeDescendants);
+            generationProgress = Map.copyOf(generationProgress);
         }
     }
 
@@ -65,8 +72,11 @@ final class FamilyTreeViewModel {
     private final Set<UUID> orphansView = Collections.unmodifiableSet(orphans);
     private final Set<FamilyTreeView.Continuation> continuations = new LinkedHashSet<>();
     private final Set<UUID> unavailable = new LinkedHashSet<>();
+    private final Set<UUID> completeDescendants = new LinkedHashSet<>();
+    private final Map<FamilyTreeView.Continuation, GenerationProgress> generationProgress = new HashMap<>();
     private final Deque<HistoryEntry> history = new ArrayDeque<>();
-    private GenerationBatch generationBatch;
+    @Nullable
+    private GenerationRequest pendingGeneration;
 
     private UUID layoutRootId;
     private UUID focusId;
@@ -94,7 +104,7 @@ final class FamilyTreeViewModel {
 
     private long beginFocus(UUID id, ViewportState viewport, boolean changeLayoutRoot,
                             FamilyTreeLayout.Result layout) {
-        generationBatch = null;
+        pendingGeneration = null;
         if (pendingFocusId == null
                 && (!id.equals(focusId) || changeLayoutRoot && !id.equals(layoutRootId))) {
             history.push(new HistoryEntry(layoutRootId, focusId, viewport,
@@ -131,7 +141,7 @@ final class FamilyTreeViewModel {
     }
 
     private ViewState saveView() {
-        return new ViewState(nodes, graves, orphans, continuations, unavailable);
+        return new ViewState(nodes, graves, orphans, continuations, unavailable, completeDescendants, generationProgress);
     }
 
     private void restoreView(ViewState state) {
@@ -145,6 +155,10 @@ final class FamilyTreeViewModel {
         continuations.addAll(state.continuations());
         unavailable.clear();
         unavailable.addAll(state.unavailable());
+        completeDescendants.clear();
+        completeDescendants.addAll(state.completeDescendants());
+        generationProgress.clear();
+        generationProgress.putAll(state.generationProgress());
     }
 
     private void clearView() {
@@ -153,61 +167,85 @@ final class FamilyTreeViewModel {
         orphans.clear();
         continuations.clear();
         unavailable.clear();
+        completeDescendants.clear();
+        generationProgress.clear();
     }
 
     public Optional<GenerationRequest> beginGeneration(FamilyTreeView.Direction direction, Set<UUID> visibleCards) {
         if (loading()) {
             return Optional.empty();
         }
-        List<FamilyTreeView.Continuation> frontiers = continuations.stream()
+        return continuations.stream()
                 .filter(continuation -> continuation.direction() == direction)
                 .filter(continuation -> nodes.containsKey(continuation.anchor()))
                 .filter(continuation -> visibleCards.contains(continuation.anchor()))
-                .sorted(Comparator.comparing(item -> item.anchor().toString()))
-                .toList();
-        if (frontiers.isEmpty()) {
-            return Optional.empty();
-        }
-        generationBatch = new GenerationBatch(frontiers);
-        return Optional.of(nextGenerationPage(generationBatch, Optional.empty()));
+                .min(Comparator
+                        .comparingInt((FamilyTreeView.Continuation item) -> item.anchor().equals(focusId) ? 0
+                                : item.anchor().equals(layoutRootId) ? 1 : 2)
+                        .thenComparing(item -> item.anchor().toString()))
+                .map(target -> {
+                    pendingGeneration = new GenerationRequest(
+                            target.anchor(),
+                            target.direction(),
+                            NEXT_REQUEST_ID.getAndIncrement(),
+                            Optional.ofNullable(generationProgress.get(target)).map(GenerationProgress::cursor)
+                    );
+                    return pendingGeneration;
+                });
     }
 
     public GenerationResult acceptGeneration(GetFamilyTreeResponse response) {
-        GenerationBatch batch = generationBatch;
-        if (batch == null || batch.pending == null
-                || batch.pending.requestId() != response.requestId()
-                || !batch.pending.anchor().equals(response.uuid())) {
-            return new GenerationResult(false, false, false, Optional.empty());
+        GenerationRequest pending = pendingGeneration;
+        if (pending == null
+                || pending.requestId() != response.requestId()
+                || !pending.anchor().equals(response.uuid())) {
+            return new GenerationResult(false, false, null);
         }
+        pendingGeneration = null;
 
-        if (response.found()) {
-            if (response.nextCursor().isPresent()) {
-                UUID cursor = response.nextCursor().orElseThrow();
-                if (batch.pending.after().map(previous -> cursor.compareTo(previous) > 0).orElse(true)) {
-                    stageGenerationPage(batch, response.view());
-                    GenerationRequest next = nextGenerationPage(batch, Optional.of(cursor));
-                    return new GenerationResult(true, false, false, Optional.of(next));
-                }
-                batch.incomplete = true; // A malformed or stalled cursor must never loop.
-            } else {
-                stageGenerationPage(batch, response.view());
-                batch.completedFrontiers.add(batch.frontiers.get(batch.targetIndex));
+        FamilyTreeView.Continuation frontier = new FamilyTreeView.Continuation(
+                pending.anchor(),
+                pending.direction()
+        );
+        if (!response.found()) {
+            generationProgress.remove(frontier);
+            continuations.remove(frontier);
+            if (pending.direction() == FamilyTreeView.Direction.DESCENDANTS) {
+                completeDescendants.add(pending.anchor());
             }
-        } else {
-            batch.incomplete = true;
-            batch.missingFrontiers.add(batch.frontiers.get(batch.targetIndex));
+            return new GenerationResult(true, false, pending.anchor());
         }
 
-        batch.targetIndex++;
-        if (batch.targetIndex < batch.frontiers.size()) {
-            return new GenerationResult(true, false, false,
-                    Optional.of(nextGenerationPage(batch, Optional.empty())));
+        boolean changed = merge(response.view());
+        GenerationProgress previousPage = generationProgress.remove(frontier);
+        if (response.nextCursor().isPresent() || previousPage != null) {
+            boolean descendants = pending.direction() == FamilyTreeView.Direction.DESCENDANTS;
+            Set<UUID> children = new LinkedHashSet<>();
+            if (descendants) {
+                if (previousPage != null) children.addAll(previousPage.children());
+                FamilyTreeNode pageAnchor = response.view().nodes().get(pending.anchor());
+                if (pageAnchor != null) children.addAll(pageAnchor.children());
+            }
+            if (response.nextCursor().isPresent()) {
+                generationProgress.put(frontier, new GenerationProgress(response.nextCursor().orElseThrow(), Set.copyOf(children)));
+                completeDescendants.remove(pending.anchor());
+                continuations.add(frontier);
+                return new GenerationResult(true, changed, pending.anchor());
+            }
+            if (descendants) {
+                FamilyTreeNode anchor = nodes.get(pending.anchor()).detachedCopy();
+                changed |= !anchor.children().equals(children);
+                anchor.children().clear();
+                anchor.children().addAll(children);
+                nodes.put(anchor.id(), anchor);
+            }
         }
-
-        boolean changed = !batch.stagedNodes.isEmpty();
-        mergeGeneration(batch);
-        generationBatch = null;
-        return new GenerationResult(true, changed, batch.incomplete, Optional.empty());
+        continuations.remove(frontier);
+        if (pending.direction() == FamilyTreeView.Direction.DESCENDANTS) {
+            completeDescendants.add(pending.anchor());
+        }
+        pruneContinuations();
+        return new GenerationResult(true, changed, pending.anchor());
     }
 
     boolean hasGenerationFrontier(FamilyTreeView.Direction direction, Set<UUID> visibleCards) {
@@ -215,71 +253,6 @@ final class FamilyTreeViewModel {
                 .anyMatch(continuation -> continuation.direction() == direction
                         && nodes.containsKey(continuation.anchor())
                         && visibleCards.contains(continuation.anchor()));
-    }
-
-    private static void stageGenerationPage(GenerationBatch batch, FamilyTreeView page) {
-        page.nodes().forEach((id, node) -> {
-            FamilyTreeNode snapshot = node.detachedCopy();
-            FamilyTreeNode previous = batch.stagedNodes.get(id);
-            if (previous != null) {
-                snapshot.children().addAll(previous.children());
-            }
-            batch.stagedNodes.put(id, snapshot);
-        });
-        batch.stagedContinuations.addAll(page.continuations());
-        batch.stagedUnavailable.addAll(page.unavailable());
-        batch.stagedOrphans.addAll(page.orphans());
-        batch.stagedGraves.putAll(page.graves());
-    }
-
-    private GenerationRequest nextGenerationPage(GenerationBatch batch, Optional<UUID> after) {
-        FamilyTreeView.Continuation target = batch.frontiers.get(batch.targetIndex);
-        batch.pending = new GenerationRequest(target.anchor(), target.direction(), after,
-                NEXT_REQUEST_ID.getAndIncrement());
-        return batch.pending;
-    }
-
-    private void mergeGeneration(GenerationBatch batch) {
-        batch.stagedNodes.forEach((id, node) -> {
-            FamilyTreeNode snapshot = node.detachedCopy();
-            FamilyTreeNode previous = nodes.get(id);
-            boolean completeDirectDescendants = batch.completedFrontiers.contains(
-                    new FamilyTreeView.Continuation(id, FamilyTreeView.Direction.DESCENDANTS));
-            if (previous != null && !completeDirectDescendants
-                    && batch.stagedContinuations.contains(new FamilyTreeView.Continuation(
-                    id, FamilyTreeView.Direction.DESCENDANTS))) {
-                snapshot.children().addAll(previous.children());
-            }
-            nodes.put(id, snapshot);
-        });
-        graves.keySet().removeAll(batch.stagedNodes.keySet());
-        graves.putAll(batch.stagedGraves);
-        orphans.removeAll(batch.stagedNodes.keySet());
-        orphans.addAll(batch.stagedOrphans);
-        unavailable.addAll(batch.stagedUnavailable);
-        unavailable.removeAll(nodes.keySet());
-        continuations.addAll(batch.stagedContinuations);
-        continuations.removeAll(batch.completedFrontiers);
-        continuations.removeAll(batch.missingFrontiers);
-        pruneContinuations();
-    }
-
-    private static final class GenerationBatch {
-        private final List<FamilyTreeView.Continuation> frontiers;
-        private final Map<UUID, FamilyTreeNode> stagedNodes = new LinkedHashMap<>();
-        private final Map<UUID, GlobalPos> stagedGraves = new LinkedHashMap<>();
-        private final Set<FamilyTreeView.Continuation> stagedContinuations = new LinkedHashSet<>();
-        private final Set<FamilyTreeView.Continuation> completedFrontiers = new LinkedHashSet<>();
-        private final Set<FamilyTreeView.Continuation> missingFrontiers = new LinkedHashSet<>();
-        private final Set<UUID> stagedUnavailable = new LinkedHashSet<>();
-        private final Set<UUID> stagedOrphans = new LinkedHashSet<>();
-        private int targetIndex;
-        private GenerationRequest pending;
-        private boolean incomplete;
-
-        private GenerationBatch(List<FamilyTreeView.Continuation> frontiers) {
-            this.frontiers = frontiers;
-        }
     }
 
     public MergeResult accept(GetFamilyTreeResponse response) {
@@ -318,24 +291,68 @@ final class FamilyTreeViewModel {
         return MergeResult.STALE;
     }
 
-    private void merge(FamilyTreeView view) {
+    private boolean merge(FamilyTreeView view) {
+        boolean changed = false;
         view.nodes().keySet().forEach(graves::remove);
         graves.putAll(view.graves());
         orphans.removeAll(view.nodes().keySet());
         orphans.addAll(view.orphans());
-        view.nodes().forEach((id, node) -> {
-            FamilyTreeNode snapshot = node.detachedCopy();
+
+        for (Map.Entry<UUID, FamilyTreeNode> entry : view.nodes().entrySet()) {
+            UUID id = entry.getKey();
+            FamilyTreeNode snapshot = entry.getValue().detachedCopy();
             FamilyTreeNode previous = nodes.get(id);
-            if (previous != null && view.continuations().contains(new FamilyTreeView.Continuation(
-                    id, FamilyTreeView.Direction.DESCENDANTS))) {
+            FamilyTreeView.Continuation descendantsContinuation =
+                    new FamilyTreeView.Continuation(id, FamilyTreeView.Direction.DESCENDANTS);
+            boolean partialDescendantsInView = view.continuations().contains(descendantsContinuation);
+            if (!partialDescendantsInView) {
+                completeDescendants.add(id);
+                continuations.remove(descendantsContinuation);
+            } else if (previous != null) {
                 // Omitted children are not deletions; a complete refreshed relation list is authoritative.
                 snapshot.children().addAll(previous.children());
             }
+            if (partialDescendantsInView) {
+                for (FamilyTreeNode existing : nodes.values()) {
+                    if (id.equals(existing.father()) || id.equals(existing.mother())) {
+                        snapshot.addChild(existing.id());
+                    }
+                }
+            }
+            if (previous == null
+                    || !previous.children().equals(snapshot.children())
+                    || !Objects.equals(previous.father(), snapshot.father())
+                    || !Objects.equals(previous.mother(), snapshot.mother())
+                    || !Objects.equals(previous.partner(), snapshot.partner())) {
+                changed = true;
+            }
             nodes.put(id, snapshot);
-        });
-        continuations.addAll(view.continuations());
+        }
+
+        for (FamilyTreeNode snapshot : view.nodes().values()) {
+            for (UUID parentId : snapshot.streamParents().toList()) {
+                if (!view.nodes().containsKey(parentId)) {
+                    FamilyTreeNode loadedParent = nodes.get(parentId);
+                    if (loadedParent != null && continuations.contains(
+                            new FamilyTreeView.Continuation(parentId, FamilyTreeView.Direction.DESCENDANTS))) {
+                        if (loadedParent.children().add(snapshot.id())) {
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        for (FamilyTreeView.Continuation continuation : view.continuations()) {
+            if (continuation.direction() == FamilyTreeView.Direction.DESCENDANTS
+                    && completeDescendants.contains(continuation.anchor())) {
+                continue;
+            }
+            continuations.add(continuation);
+        }
         unavailable.addAll(view.unavailable());
-        unavailable.removeAll(view.nodes().keySet());
+        unavailable.removeAll(nodes.keySet());
+        return changed;
     }
 
     private void pruneContinuations() {
@@ -346,7 +363,7 @@ final class FamilyTreeViewModel {
             }
             return switch (continuation.direction()) {
                 case ANCESTORS -> node.streamParents().noneMatch(this::isUnloaded);
-                case DESCENDANTS -> node.streamChildren().noneMatch(this::isUnloaded);
+                case DESCENDANTS -> false;
             };
         });
     }
@@ -356,7 +373,7 @@ final class FamilyTreeViewModel {
     }
 
     public Optional<HistoryEntry> back() {
-        generationBatch = null;
+        pendingGeneration = null;
         if (history.isEmpty()) {
             return Optional.empty();
         }
@@ -406,7 +423,32 @@ final class FamilyTreeViewModel {
     }
 
     public boolean loading() {
-        return pendingFocusId != null || generationBatch != null;
+        return pendingFocusId != null || pendingGeneration != null;
+    }
+
+    boolean isPendingRequest(long requestId) {
+        return (pendingFocusId != null && pendingFocusRequestId == requestId)
+                || (pendingGeneration != null && pendingGeneration.requestId() == requestId);
+    }
+
+    boolean expirePendingRequests() {
+        boolean expired = false;
+        if (pendingFocusId != null) {
+            if (!history.isEmpty()
+                    && history.peek().focusId().equals(focusId)
+                    && history.peek().layoutRootId().equals(layoutRootId)) {
+                history.pop();
+            }
+            pendingFocusId = null;
+            pendingLayoutRootId = null;
+            pendingFocusRequestId = -1L;
+            expired = true;
+        }
+        if (pendingGeneration != null) {
+            pendingGeneration = null;
+            expired = true;
+        }
+        return expired;
     }
 
     public Snapshot snapshot() {

@@ -1,6 +1,6 @@
 package net.conczin.mca.entity.ai;
 
-import net.conczin.mca.MCAClient;
+import net.conczin.mca.ClientProxy;
 import net.conczin.mca.entity.ai.relationship.AgeState;
 import net.conczin.mca.entity.ai.relationship.Personality;
 import net.minecraft.locale.Language;
@@ -102,7 +102,7 @@ public enum DialogueType {
         }
 
         //then try personality
-        if (flags.containsKey("E") && MCAClient.useExpandedPersonalityTranslations()) {
+        if (flags.containsKey("E") && ClientProxy.useExpandedPersonalityTranslations()) {
             String personality = Personality.getDialoguePrefix(flags.get("E"));
             if (!(type.isPlayerChild() && personality.equals(Personality.FLIRTY.getDialoguePrefix()))) {
                 Optional<String> p = getPrefixedPhrase(type, personality, key);

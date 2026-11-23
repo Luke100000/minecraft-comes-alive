@@ -57,17 +57,20 @@ public final class ExtendedWalkTowardsTask {
     }
 
     private static OneShot<VillagerEntityMCA> createInternal(MemoryModuleType<GlobalPos> destination, float speed, int completionRange, int maxRunTime, Predicate<VillagerEntityMCA> canGiveUp, Consumer<VillagerEntityMCA> onGiveUp, Policy policy) {
-        WalkTargetRetryGate retryGate = new WalkTargetRetryGate(
-                STALLED_DESTINATION_RETRY_TICKS,
-                STALLED_DESTINATION_PROGRESS_SQR,
-                1);
+        Object gateKey = new Object();
         return BehaviorBuilder.create((context) -> {
             return context.group(
-                    context.registered(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE),
                     context.registered(MemoryModuleType.WALK_TARGET),
                     context.registered(destination)).apply(context,
-                    (cantReachWalkTargetSince, walkTarget, destinationResult) -> {
+                    (walkTarget, destinationResult) -> {
                         return (world, entity, time) -> {
+                            WalkTargetRetryGate retryGate = entity.getVillagerBrain().getOrCreateRetryGate(
+                                    gateKey,
+                                    () -> new WalkTargetRetryGate(
+                                            STALLED_DESTINATION_RETRY_TICKS,
+                                            STALLED_DESTINATION_PROGRESS_SQR,
+                                            1,
+                                            destination));
                             Optional<GlobalPos> rememberedDestination = context.tryGet(destinationResult);
                             if (rememberedDestination.isEmpty()) {
                                 retractOwnedWalkTarget(entity, destination)
@@ -78,14 +81,35 @@ public final class ExtendedWalkTowardsTask {
                             GlobalPos globalPos = rememberedDestination.orElseThrow();
                             BlockPos targetPos = globalPos.pos();
                             boolean sameDimension = globalPos.dimension() == world.dimension();
-                            WalkTargetFailureMemory.clearIfTargetChanged(entity, globalPos);
-
                             WalkTarget currentWalkTarget = context.tryGet(walkTarget).orElse(null);
+                            if (currentWalkTarget != null && !(currentWalkTarget instanceof DestinationOwnedWalkTarget owned
+                                    && owned.ownedBy(destination))) {
+                                // The current producer also owns any failure recorded for its movement.
+                                retryGate.observePreemption(time, true);
+                                return true;
+                            }
+                            WalkTargetFailureMemory.resumeTarget(entity, globalPos, retryGate, time);
                             if (sameDimension) {
                                 noteJourneyProgress(entity, retryGate, destination, globalPos, currentWalkTarget, time);
                             }
+                            // BehaviorBuilder captures memory values before this trigger runs.
+                            Optional<Long> failureSince = entity.getBrain()
+                                    .getMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+                            long unreachableTicks = failureSince
+                                    .map(since -> time - since)
+                                    .orElse(0L);
 
-                            if (currentWalkTarget != null) {
+                            boolean expiredOwnedFailure = sameDimension
+                                    && currentWalkTarget instanceof DestinationOwnedWalkTarget ownedTarget
+                                    && ownedTarget.matches(destination, globalPos)
+                                    && failureSince.isPresent()
+                                    && unreachableTicks > maxRunTime
+                                    && WalkTargetFailureMemory.hasFailureFor(entity, targetPos);
+                            if (expiredOwnedFailure) {
+                                // A persistent owned journey may retain WALK_TARGET past its failure deadline.
+                                // Release that command so the ordinary give-up policy can run below.
+                                walkTarget.erase();
+                            } else if (currentWalkTarget != null) {
                                 if (!preserveCurrentWalkTarget(world, entity, retryGate, destination, globalPos, currentWalkTarget, policy)) {
                                     walkTarget.erase();
                                     if (currentWalkTarget instanceof DestinationOwnedWalkTarget ownedTarget
@@ -108,10 +132,6 @@ public final class ExtendedWalkTowardsTask {
                             if (routeInvalidated) {
                                 retryGate.reset(targetPos);
                             }
-                            Optional<Long> failureSince = context.tryGet(cantReachWalkTargetSince);
-                            long unreachableTicks = failureSince
-                                    .map(since -> world.getGameTime() - since)
-                                    .orElse(0L);
                             if (sameDimension && (failureSince.isEmpty() || unreachableTicks <= maxRunTime)) {
                                 if (failureSince.isPresent()
                                         && !routeInvalidated

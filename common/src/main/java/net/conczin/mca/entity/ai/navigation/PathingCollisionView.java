@@ -38,6 +38,16 @@ final class PathingCollisionView implements CollisionGetter {
         this.bodyHeight = Mth.ceil(mob.getBbHeight());
     }
 
+    PathingCollisionView(CollisionGetter level, BlockPos node, Mob mob) {
+        this.level = level;
+        this.first = node;
+        this.second = node;
+        this.bodyHeight = Math.max(
+                Mth.ceil(mob.getBbHeight()),
+                Mth.ceil(mob.getType().getDimensions().height())
+        );
+    }
+
     @Override
     public BlockState getBlockState(BlockPos pos) {
         BlockState state = this.level.getBlockState(pos);

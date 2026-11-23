@@ -50,22 +50,22 @@ import net.minecraft.world.entity.npc.VillagerProfession;
 import net.minecraft.world.item.Items;
 import org.lwjgl.glfw.GLFW;
 
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import static net.conczin.mca.client.gui.immersive_library.Api.request;
 
 public class SkinLibraryScreen extends Screen implements SkinListUpdateListener {
     static final int CLOTHES_H = 7;
@@ -77,6 +77,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private static final float CANVAS_SCALE = 2.35f;
     private static final long SEARCH_DEBOUNCE_MILLIS = 400;
     private static final String LIBRARY_NAMESPACE = "immersive_library:";
+    private static final Pattern WINDOWS_DRIVE_PATH = Pattern.compile("^[A-Za-z]:[\\\\/].*");
 
     private static final int PROFESSION_AREA_WIDTH = 105;
     private static final int PROFESSION_AREA_HEIGHT = 110;
@@ -88,6 +89,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private Thread thread;
     private Component error;
     private int timeSinceLastRebuild;
+    private final RequestEpoch requestEpoch = new RequestEpoch();
 
     // Preview
     protected final VillagerEntityMCA villagerVisualization = Objects.requireNonNull(EntitiesMCA.MALE_VILLAGER.create(Objects.requireNonNull(Minecraft.getInstance().level)));
@@ -99,8 +101,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private boolean isBrowserOpen = false;
     private User currentUser;
     private final Map<Integer, Boolean> likeOverrides = new HashMap<>();
-    private long accountGeneration;
-    private long authenticationPollGeneration;
     private long nextAuthenticationPollAt;
     private Page resumeAfterAuthentication = Page.LIBRARY;
 
@@ -110,7 +110,6 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private final List<LiteContent> contents = new ArrayList<>();
     private ContentQuery loadedQuery;
     private ContentQuery pendingQuery;
-    private long contentRequestGeneration;
     private boolean hasMore;
     private int selectionPage;
     private ButtonWidget pageWidget;
@@ -133,16 +132,13 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     private LiteContent reportConfirmationContent;
     private ButtonWidget deleteConfirmButton;
     private final Set<String> pendingMutations = new HashSet<>();
-    private long pageGeneration;
 
     // Editor
     private Workspace workspace;
     private EditBox professionSearchWidget;
     private final ColorSelector color = new ColorSelector();
     private boolean uploading = false;
-    private long uploadGeneration;
     private boolean skipHairWarning;
-    private long importGeneration;
 
     // Editor viewport and input
     private float x0, x1, y0, y1;
@@ -226,9 +222,98 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
     }
 
+    static final class RequestEpoch {
+        private volatile long account;
+        private long authPoll;
+        private long contentRequest;
+        private long page;
+        private long upload;
+        private long imageImport;
+
+        record Snapshot(long account, long authPoll, long contentRequest, long page, long upload, long imageImport,
+                        String token, Page originPage) {
+        }
+
+        Snapshot capture(String token, Page originPage) {
+            return new Snapshot(account, authPoll, contentRequest, page, upload, imageImport, token, originPage);
+        }
+
+        Snapshot beginAuthPoll(String token, Page originPage) {
+            authPoll++;
+            return capture(token, originPage);
+        }
+
+        Snapshot beginContentRequest(String token, Page originPage) {
+            contentRequest++;
+            return capture(token, originPage);
+        }
+
+        Snapshot beginUpload(String token, Page originPage) {
+            upload++;
+            return capture(token, originPage);
+        }
+
+        Snapshot beginImport(Page originPage) {
+            imageImport++;
+            return capture(null, originPage);
+        }
+
+        void onPageChange() {
+            imageImport++;
+            page++;
+        }
+
+        void invalidateContentRequest() {
+            contentRequest++;
+        }
+
+        void invalidateUpload() {
+            upload++;
+        }
+
+        void invalidateImport() {
+            imageImport++;
+        }
+
+        void invalidateAccount() {
+            account++;
+            authPoll++;
+            upload++;
+            contentRequest++;
+        }
+
+        boolean matchesAccount(long session, String token) {
+            return session == account && Objects.equals(token, Auth.getToken());
+        }
+
+        boolean matchesAccount(Snapshot snapshot) {
+            return matchesAccount(snapshot.account(), snapshot.token());
+        }
+
+        boolean matchesAuthPoll(Snapshot snapshot, Page currentPage) {
+            return authPoll == snapshot.authPoll() && matchesAccount(snapshot) && currentPage == snapshot.originPage();
+        }
+
+        boolean matchesContentRequest(long generation, long session, String token, Page currentPage) {
+            return generation == contentRequest && matchesAccount(session, token) && currentPage == Page.LIBRARY;
+        }
+
+        boolean matchesUpload(Snapshot snapshot) {
+            return upload == snapshot.upload();
+        }
+
+        boolean matchesPage(Snapshot snapshot, Page currentPage) {
+            return page == snapshot.page() && currentPage == snapshot.originPage();
+        }
+
+        boolean matchesImport(Snapshot snapshot, Page currentPage) {
+            return imageImport == snapshot.imageImport() && currentPage == snapshot.originPage();
+        }
+    }
+
     @Override
     public void onClose() {
-        importGeneration++;
+        requestEpoch.invalidateImport();
         invalidateAccountRequests();
         discardWorkspace();
         if (previousScreen == null) {
@@ -280,20 +365,17 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         hasMore = false;
         remoteContents.clear();
         pendingQuery = query;
-        long requestGeneration = ++contentRequestGeneration;
-        long session = accountGeneration;
-        String token = Auth.getToken();
+        RequestEpoch.Snapshot context = requestEpoch.beginContentRequest(Auth.getToken(), page);
 
         CompletableFuture
                 .supplyAsync(() -> Api.requestWithToken(Api.HttpMethod.GET, ContentListResponse.class,
-                        "v3/content/mca", query.parameters(), null, token))
+                        "v3/content/mca", query.parameters(), null, context.token()))
                 .whenComplete((response, failure) -> Minecraft.getInstance().executeIfPossible(
-                        () -> acceptContents(query, requestGeneration, session, token, response, failure)));
+                        () -> acceptContents(query, context.contentRequest(), context.account(), context.token(), response, failure)));
     }
 
     private void acceptContents(ContentQuery query, long generation, long session, String token, Response response, Throwable failure) {
-        if (generation != contentRequestGeneration || !currentAccount(session, token)
-                || page != Page.LIBRARY || !query.equals(pendingQuery)) {
+        if (!requestEpoch.matchesContentRequest(generation, session, token, page) || !query.equals(pendingQuery)) {
             return;
         }
 
@@ -302,11 +384,11 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             return;
         }
 
-        if (failure == null && response instanceof ContentListResponse(Content[] loadedContents, boolean more)) {
+        if (failure == null && response instanceof ContentListResponse(Content[] loadedContents, boolean more) && loadedContents != null) {
             loadedQuery = query;
             hasMore = more;
             remoteContents.clear();
-            Arrays.stream(loadedContents).map(Content::lite).forEach(remoteContents::add);
+            Arrays.stream(loadedContents).filter(Objects::nonNull).map(Content::lite).forEach(remoteContents::add);
             clearError();
             refreshContentList();
         } else {
@@ -1511,8 +1593,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
 
         if (this.page != page) {
-            importGeneration++;
-            pageGeneration++;
+            requestEpoch.onPageChange();
         }
 
         // Authentication temporarily replaces this screen; its editor survives that trip.
@@ -1547,7 +1628,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
         this.page = page;
         if (page != Page.LIBRARY) {
-            contentRequestGeneration++;
+            requestEpoch.invalidateContentRequest();
             pendingQuery = null;
         }
 
@@ -1575,7 +1656,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         if (workspace == null) {
             return;
         }
-        uploadGeneration++;
+        requestEpoch.invalidateUpload();
         uploading = false;
         var textures = Minecraft.getInstance().getTextureManager();
         if (textures.getTexture(CANVAS_IDENTIFIER, null) == workspace.backendTexture) {
@@ -1585,14 +1666,8 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         workspace = null;
     }
 
-    private boolean currentAccount(long session, String token) {
-        return session == accountGeneration && Objects.equals(token, Auth.getToken());
-    }
-
     private void invalidateAccountRequests() {
-        accountGeneration++;
-        authenticationPollGeneration++;
-        uploadGeneration++;
+        requestEpoch.invalidateAccount();
         awaitingAuthentication = false;
         uploading = false;
         pendingMutations.clear();
@@ -1605,11 +1680,10 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             return;
         }
         awaitingAuthentication = true;
-        long poll = ++authenticationPollGeneration;
-        long session = accountGeneration;
-        String token = Auth.getToken();
+        RequestEpoch.Snapshot context = requestEpoch.beginAuthPoll(Auth.getToken(), page);
         CompletableFuture.supplyAsync(() -> {
             try {
+                String token = context.token();
                 Response response = token == null ? null
                         : Api.requestWithToken(Api.HttpMethod.GET, IsAuthResponse.class, "v1/auth", null, null, token);
                 if (response instanceof IsAuthResponse(boolean success)) {
@@ -1623,13 +1697,13 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 return new ErrorResponse(-1, e.toString());
             }
         }).whenComplete((response, failure) -> Minecraft.getInstance().executeIfPossible(() -> {
-            if (poll != authenticationPollGeneration || !currentAccount(session, token) || page != Page.LOGIN) {
+            if (!requestEpoch.matchesAuthPoll(context, page)) {
                 return;
             }
             awaitingAuthentication = false;
             nextAuthenticationPollAt = Util.getMillis() + 2000;
 
-            if (failure == null && response instanceof UserResponse(User user)) {
+            if (failure == null && response instanceof UserResponse(User user) && user != null) {
                 authenticated = true;
                 currentUser = user;
                 likeOverrides.clear();
@@ -1655,7 +1729,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
 
     private void cancelAuthentication() {
         invalidateAccountRequests();
-        importGeneration++;
+        requestEpoch.invalidateImport();
         Auth.clearToken();
         authenticated = false;
         currentUser = null;
@@ -1715,7 +1789,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
     }
 
     private void invalidateRemotePage() {
-        contentRequestGeneration++;
+        requestEpoch.invalidateContentRequest();
         loadedQuery = null;
         pendingQuery = null;
         remoteContents.clear();
@@ -1782,20 +1856,28 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }
     }
 
+    @FunctionalInterface
+    private interface ImageStreamSupplier {
+        InputStream open() throws IOException;
+    }
+
     @Override
     public void onFilesDrop(List<Path> paths) {
         if (paths.isEmpty()) {
             return;
         }
         Path path = paths.getFirst();
-        loadImage(path.toString());
+        loadImageFromSource(() -> Files.newInputStream(path));
     }
 
     private void loadImage(String path) {
-        long generation = ++importGeneration;
-        Page startingPage = page;
+        loadImageFromSource(() -> openImage(path));
+    }
+
+    private void loadImageFromSource(ImageStreamSupplier source) {
+        RequestEpoch.Snapshot context = requestEpoch.beginImport(page);
         CompletableFuture.supplyAsync(() -> {
-            try (InputStream stream = openImage(path)) {
+            try (InputStream stream = source.open()) {
                 NativeImage image = NativeImage.read(stream);
                 if (image.getWidth() == 64 && (image.getHeight() == 64 || image.getHeight() == 32)) {
                     return image;
@@ -1806,7 +1888,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                 throw new CompletionException(e);
             }
         }).whenComplete((image, error) -> Minecraft.getInstance().executeIfPossible(() -> {
-            if (generation != importGeneration || page != startingPage || Minecraft.getInstance().screen != this) {
+            if (!requestEpoch.matchesImport(context, page) || Minecraft.getInstance().screen != this) {
                 if (image != null) image.close();
                 return;
             }
@@ -1842,18 +1924,49 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
         }));
     }
 
+    public static boolean isLocalPathInput(String input) {
+        if (input == null || input.isBlank()) {
+            return false;
+        }
+        String candidate = input.strip();
+        if (WINDOWS_DRIVE_PATH.matcher(candidate).matches() || candidate.startsWith("\\\\")) {
+            return true;
+        }
+        try {
+            if (Files.isRegularFile(Path.of(candidate))) {
+                return true;
+            }
+        } catch (InvalidPathException ignored) {
+            // Fall through to URI classification
+        }
+        try {
+            URI uri = URI.create(candidate);
+            return uri.getScheme() == null;
+        } catch (IllegalArgumentException e) {
+            return true;
+        }
+    }
+
     /**
      * Reads remote images with a bounded response; local file imports are handled separately.
      */
     private static InputStream openImage(String path) throws IOException {
+        if (path == null || path.isBlank()) {
+            throw new IOException("Empty image path");
+        }
+        String candidate = path.strip();
+        if (isLocalPathInput(candidate)) {
+            try {
+                return Files.newInputStream(Path.of(candidate));
+            } catch (InvalidPathException e) {
+                throw new IOException("Invalid local file path: " + candidate, e);
+            }
+        }
         URI uri;
         try {
-            uri = URI.create(path);
+            uri = URI.create(candidate);
         } catch (IllegalArgumentException e) {
-            return new FileInputStream(path);
-        }
-        if (uri.getScheme() == null) {
-            return new FileInputStream(path);
+            throw new IOException("Invalid image URL: " + candidate, e);
         }
         if (!isHttpImageUrl(uri)) {
             throw new IOException("Only HTTP(S) image URLs or local files are supported");
@@ -1943,10 +2056,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             setError(Component.translatable("gui.skin_library.upload_failed"));
             return;
         }
-        long session = accountGeneration;
-        long upload = ++uploadGeneration;
-        long editorPage = pageGeneration;
-        Page originPage = page;
+        RequestEpoch.Snapshot context = requestEpoch.beginUpload(token, page);
         Workspace uploadedWorkspace = workspace;
         uploading = true;
         CompletableFuture.supplyAsync(() -> {
@@ -1960,15 +2070,14 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
                     "v3/content/mca/" + contentId, null, null, token);
             return new UploadResult(sent, fetched);
         }).whenComplete((result, failure) -> Minecraft.getInstance().executeIfPossible(() -> {
-            if (!currentAccount(session, token)) {
+            if (!requestEpoch.matchesAccount(context)) {
                 return;
             }
-            boolean currentUpload = upload == uploadGeneration && workspace == uploadedWorkspace;
+            boolean currentUpload = requestEpoch.matchesUpload(context) && workspace == uploadedWorkspace;
             if (currentUpload) {
                 uploading = false;
             }
-            boolean currentEditor = currentUpload && page == originPage && page == Page.EDITOR
-                    && pageGeneration == editorPage;
+            boolean currentEditor = currentUpload && page == Page.EDITOR && requestEpoch.matchesPage(context, page);
             if (failure != null || result == null) {
                 MCA.LOGGER.warn("Skin library upload failed", failure);
                 if (currentEditor) {
@@ -1978,7 +2087,7 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             }
             if (result.sent() instanceof ContentIdResponse || result.sent() instanceof SuccessResponse) {
                 int contentId = result.sent() instanceof ContentIdResponse(int createdId) ? createdId : snapshot.contentId();
-                if (result.fetched() instanceof ContentResponse(Content content)) {
+                if (result.fetched() instanceof ContentResponse(Content content) && content != null) {
                     SkinCache.store(content);
                     if (currentEditor) {
                         invalidateRemotePage();
@@ -2120,21 +2229,19 @@ public class SkinLibraryScreen extends Screen implements SkinListUpdateListener 
             return;
         }
         updateDeleteConfirmState();
-        long session = accountGeneration;
-        long actionPageGeneration = pageGeneration;
-        Page actionPage = page;
+        RequestEpoch.Snapshot context = requestEpoch.capture(token, page);
         int focusedId = selectedId(focusedContent);
         int deletionId = selectedId(deleteConfirmationContent);
         int reportId = selectedId(reportConfirmationContent);
         CompletableFuture.supplyAsync(() ->
-                currentAccount(session, token) ? Api.requestWithToken(method, SuccessResponse.class, path, null, body, token) : null
+                requestEpoch.matchesAccount(context) ? Api.requestWithToken(method, SuccessResponse.class, path, null, body, token) : null
         ).whenComplete((response, failure) -> Minecraft.getInstance().executeIfPossible(() -> {
-            if (!currentAccount(session, token)) {
+            if (!requestEpoch.matchesAccount(context)) {
                 return;
             }
             pendingMutations.remove(target);
             updateDeleteConfirmState();
-            if (page != actionPage || pageGeneration != actionPageGeneration
+            if (!requestEpoch.matchesPage(context, page)
                     || (page == Page.DETAIL && selectedId(focusedContent) != focusedId)
                     || (page == Page.DELETE && selectedId(deleteConfirmationContent) != deletionId)
                     || (page == Page.REPORT && selectedId(reportConfirmationContent) != reportId)) {

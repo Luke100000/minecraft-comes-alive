@@ -44,7 +44,6 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -97,25 +96,33 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     }
 
     public static PlayerSaveData get(ServerLevel world, UUID uuid) {
-        return loadSafely(world, uuid, world.getServer().overworld().getDataStorage(),
-                world.getServer().getWorldPath(LevelResource.ROOT).resolve("data"));
+        ServerLevel overworld = world.getServer().overworld();
+        return loadSafely(overworld, uuid, overworld.getDataStorage(),
+                overworld.getServer().getWorldPath(LevelResource.ROOT).resolve("data"));
     }
 
     static PlayerSaveData loadSafely(ServerLevel world, UUID uuid, DimensionDataStorage storage, Path dataFolder) {
+        ServerLevel overworld = world.getServer().overworld();
         String dataId = "mca_player_" + uuid;
-        SavedData.Factory<PlayerSaveData> factory = new SavedData.Factory<>(
-                () -> new PlayerSaveData(world, uuid),
-                (nbt, provider) -> new PlayerSaveData(world, uuid, nbt), null);
-        PlayerSaveData data = storage.get(factory, dataId);
-        if (data != null) return data;
+        return WorldUtils.loadDataSafely(
+                storage,
+                dataFolder,
+                dataId,
+                () -> new PlayerSaveData(overworld, uuid),
+                (nbt, provider) -> new PlayerSaveData(overworld, uuid, nbt),
+                data -> {
+                    data.unreadableSavedData = true;
+                    MCA.LOGGER.error("MCA player data {} could not be loaded. Original save will not be overwritten.", uuid);
+                }
+        );
+    }
 
-        data = new PlayerSaveData(world, uuid);
-        if (Files.exists(dataFolder.resolve(dataId + ".dat"))) {
-            data.unreadableSavedData = true;
-            MCA.LOGGER.error("MCA player data {} could not be loaded. Original save will not be overwritten.", uuid);
-        }
-        storage.set(dataId, data);
-        return data;
+    public static String getRelativeSavePath(UUID uuid) {
+        return "data/mca_player_" + uuid + ".dat";
+    }
+
+    public boolean hasUnreadableSavedData() {
+        return unreadableSavedData;
     }
 
     public Set<UUID> getCallableFamilyIds() {
@@ -128,9 +135,10 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
     @SuppressWarnings("DataFlowIssue")
     public static Optional<PlayerSaveData> getIfPresent(ServerLevel world, UUID uuid) {
-        return Optional.ofNullable(world.getServer().overworld().getDataStorage().get(new SavedData.Factory<>(
+        ServerLevel overworld = world.getServer().overworld();
+        return Optional.ofNullable(overworld.getDataStorage().get(new SavedData.Factory<>(
                 () -> null,
-                (nbt, provider) -> new PlayerSaveData(world, uuid, nbt),
+                (nbt, provider) -> new PlayerSaveData(overworld, uuid, nbt),
                 null
         ), "mca_player_" + uuid));
     }
@@ -202,8 +210,23 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         return McaDataFixers.update(entityData.copy());
     }
 
+    @Nullable
+    private ServerPlayer findOnlinePlayer() {
+        ServerPlayer player = world.getServer().getPlayerList().getPlayer(uuid);
+        if (player != null) {
+            return player;
+        }
+        for (ServerLevel level : world.getServer().getAllLevels()) {
+            if (level.getPlayerByUUID(uuid) instanceof ServerPlayer levelPlayer) {
+                return levelPlayer;
+            }
+        }
+        return null;
+    }
+
     private void refreshPlayerDimensions() {
-        if (world.getPlayerByUUID(uuid) instanceof ServerPlayer player) {
+        ServerPlayer player = findOnlinePlayer();
+        if (player != null) {
             PlayerDimensions.debugRefresh(player, "before server player data refresh");
             player.refreshDimensions();
             PlayerDimensions.debugRefresh(player, "after server player data refresh");
@@ -268,7 +291,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
         if (Config.getInstance().enterVillageNotification && village.isVillage()) {
             self.displayClientMessage(Component.translatable("gui.village.welcome", village.getName()).withStyle(ChatFormatting.GOLD), true);
         }
-        village.onEnter(world);
+        village.onEnter((ServerLevel) self.level());
     }
 
     @Override
@@ -307,7 +330,7 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     @Override
     public @NotNull FamilyTreeNode getFamilyEntry() {
         return getFamilyTree().getOrEmpty(uuid).orElseGet(() -> {
-            String name = Optional.ofNullable(world.getPlayerByUUID(uuid)).map(p -> p.getName().getString()).orElse("Unnamed Adventurer");
+            String name = Optional.ofNullable(findOnlinePlayer()).map(p -> p.getName().getString()).orElse("Unnamed Adventurer");
             return getFamilyTree().getOrCreate(uuid, name, getGender(), true);
         });
     }
@@ -320,7 +343,10 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
     @Override
     public void save(File file, HolderLookup.Provider provider) {
         if (unreadableSavedData) {
-            MCA.LOGGER.error("Refusing to overwrite unreadable MCA player data at {}", file);
+            if (isDirty()) {
+                MCA.LOGGER.error("Refusing to overwrite unreadable MCA player data at {}", file);
+                setDirty(false);
+            }
             return;
         }
         super.save(file, provider);
@@ -365,7 +391,10 @@ public class PlayerSaveData extends SavedData implements EntityRelationship {
 
     public void sendLetter(Component... lines) {
         sendMail(new Letter("", Arrays.asList(lines)));
-        Optional.ofNullable(world.getPlayerByUUID(uuid)).ifPresent(p -> showMailNotification((ServerPlayer) p));
+        ServerPlayer player = findOnlinePlayer();
+        if (player != null) {
+            showMailNotification(player);
+        }
     }
 
     public record Letter(String title, List<Component> pages) {

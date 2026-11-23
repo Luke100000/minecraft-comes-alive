@@ -9,6 +9,7 @@ import net.conczin.mca.network.s2c.CustomSkinsChangedMessage;
 import net.conczin.mca.resources.data.skin.Clothing;
 import net.conczin.mca.resources.data.skin.Hair;
 import net.conczin.mca.resources.data.skin.SkinListEntry;
+import net.conczin.mca.util.WorldUtils;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
@@ -18,7 +19,6 @@ import net.minecraft.world.level.storage.DimensionDataStorage;
 import net.minecraft.world.level.storage.LevelResource;
 
 import java.io.File;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
@@ -53,18 +53,17 @@ public class CustomClothingManager {
     static <T extends SkinListEntry> Storage<T> loadSafely(DimensionDataStorage storage, Path dataFolder,
                                                               String dataId,
                                                               BiFunction<String, JsonObject, T> entryFromNbt) {
-        SavedData.Factory<Storage<T>> factory = new SavedData.Factory<>(
-                Storage::new, (nbt, provider) -> new Storage<>(nbt, entryFromNbt), null);
-        Storage<T> data = storage.get(factory, dataId);
-        if (data != null) return data;
-
-        data = new Storage<>();
-        if (Files.exists(dataFolder.resolve(dataId + ".dat"))) {
-            data.unreadableSavedData = true;
-            MCA.LOGGER.error("MCA custom skin data {} could not be loaded. Original save will not be overwritten.", dataId);
-        }
-        storage.set(dataId, data);
-        return data;
+        return WorldUtils.loadDataSafely(
+                storage,
+                dataFolder,
+                dataId,
+                Storage::new,
+                (nbt, provider) -> new Storage<>(nbt, entryFromNbt),
+                data -> {
+                    data.unreadableSavedData = true;
+                    MCA.LOGGER.error("MCA custom skin data {} could not be loaded. Original save will not be overwritten.", dataId);
+                }
+        );
     }
 
     public static class Storage<T extends SkinListEntry> extends SavedData {
@@ -84,7 +83,10 @@ public class CustomClothingManager {
         @Override
         public void save(File file, HolderLookup.Provider provider) {
             if (unreadableSavedData) {
-                MCA.LOGGER.error("Refusing to overwrite unreadable MCA custom skin data at {}", file);
+                if (isDirty()) {
+                    MCA.LOGGER.error("Refusing to overwrite unreadable MCA custom skin data at {}", file);
+                    setDirty(false);
+                }
                 return;
             }
             super.save(file, provider);

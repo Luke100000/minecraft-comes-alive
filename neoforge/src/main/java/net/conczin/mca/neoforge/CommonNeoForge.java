@@ -202,6 +202,13 @@ public final class CommonNeoForge {
     }
 
     @SubscribeEvent
+    public static void onPlayerLoggedOutEvent(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            ServerInteractionManager.getInstance().clearDestinySession(player.getUUID());
+        }
+    }
+
+    @SubscribeEvent
     public static void onPlayerRespawnEvent(PlayerEvent.PlayerRespawnEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             ServerInteractionManager.getInstance().onPlayerRespawn(player);

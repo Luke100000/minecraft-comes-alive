@@ -51,9 +51,6 @@ accessible method net/minecraft/client/renderer/entity/FishingHookRenderer strin
 # Reuse Projectile's lifecycle without inheriting ThrowableProjectile's water bubbles/collision tick.
 accessible method net/minecraft/world/entity/projectile/Projectile <init> (Lnet/minecraft/world/entity/EntityType;Lnet/minecraft/world/level/Level;)V
 
-# Reuse ItemEntity's vanilla infinite-delay sentinel when identifying protected MCA reel items.
-accessible field net/minecraft/world/entity/item/ItemEntity INFINITE_PICKUP_DELAY I
-
 # Widen GroundPathNavigation.getSurfaceY so MCA can make water-tag-aware navigation without replacing getTempMobPos.
 extendable method net/minecraft/world/entity/ai/navigation/GroundPathNavigation getSurfaceY ()I
 

@@ -41,6 +41,9 @@ public class EnterFavoredBuildingTask extends EnterBuildingTask {
     @Override
     protected Optional<BlockPos> getNextPosition(VillagerEntityMCA villager) {
         String buildingType = getBuilding(villager);
+        if (buildingType == null || buildingType.isEmpty()) {
+            return Optional.empty();
+        }
         List<Building> matching = getMatchingBuildings(villager, buildingType);
         if (matching.isEmpty()) {
             lastMissingBuildingType = buildingType;

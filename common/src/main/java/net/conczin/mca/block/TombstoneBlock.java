@@ -330,6 +330,10 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
         @Override
         public void setLevel(Level level) {
             super.setLevel(level);
+            registerGraveIfPresent();
+        }
+
+        private void registerGraveIfPresent() {
             if (level instanceof ServerLevel serverLevel) {
                 getEntityUuid().ifPresent(uuid -> GraveyardManager.getGlobal(serverLevel)
                         .registerMissingGrave(uuid, GlobalPos.of(serverLevel.dimension(), worldPosition)));
@@ -546,10 +550,12 @@ public class TombstoneBlock extends BaseEntityBlock implements SimpleWaterlogged
         }
 
         @Override
-        protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+            super.loadAdditional(tag, registries);
             entityData = tag.contains("EntityData", Tag.TAG_COMPOUND) ? Optional.of(new EntityData(tag)) : Optional.empty();
             resurrectionProgress = tag.getInt("ResurrectionProgress");
             cure = tag.getBoolean("Cure");
+            registerGraveIfPresent();
         }
 
         @Override

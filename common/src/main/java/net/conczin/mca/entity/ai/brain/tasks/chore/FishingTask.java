@@ -300,9 +300,6 @@ public class FishingTask extends AbstractChoreTask {
             }
 
             ItemEntity item = new ItemEntity(world, reelOrigin.x, reelOrigin.y, reelOrigin.z, stack);
-            item.setThrower(villager);
-            item.setTarget(villager.getUUID());
-            item.setNeverPickUp();
             item.setDeltaMovement(
                     dx * 0.1,
                     dy * 0.1 + Math.sqrt(Math.sqrt(distanceSqr)) * 0.08,
@@ -310,10 +307,6 @@ public class FishingTask extends AbstractChoreTask {
             );
             world.addFreshEntity(item);
             reelItems.add(item);
-            MCA.LOGGER.debug(
-                    "[MCA Fishing Debug] reel-start villager={} bobber={} item={} itemEntity={} inventoryRods={}",
-                    villager.getUUID(), bobber.getId(), stack, item.getId(), villager.getInventory().countItem(Items.FISHING_ROD)
-            );
         }
         reelTicks = 0;
 
@@ -335,7 +328,7 @@ public class FishingTask extends AbstractChoreTask {
         );
         for (int i = reelItems.size() - 1; i >= 0; i--) {
             ItemEntity item = reelItems.get(i);
-            if (item.isRemoved()) {
+            if (item.isRemoved() || item.getItem().isEmpty()) {
                 reelItems.remove(i);
                 continue;
             }
@@ -363,51 +356,16 @@ public class FishingTask extends AbstractChoreTask {
     }
 
     private void finishReelItem(VillagerEntityMCA villager, ItemEntity item) {
-        if (item.isRemoved()) {
+        if (item.isRemoved() || item.getItem().isEmpty()) {
             return;
         }
 
         ItemStack remainder = villager.getInventory().addItem(item.getItem());
         if (remainder.isEmpty()) {
-            MCA.LOGGER.debug(
-                    "[MCA Fishing Debug] reel-delivered villager={} itemEntity={} inventoryRods={}",
-                    villager.getUUID(), item.getId(), villager.getInventory().countItem(Items.FISHING_ROD)
-            );
             item.discard();
         } else {
             item.setItem(remainder);
-            releasePickupProtection(item);
-            MCA.LOGGER.debug(
-                    "[MCA Fishing Debug] reel-remainder villager={} itemEntity={} remainder={} inventoryRods={}",
-                    villager.getUUID(), item.getId(), remainder, villager.getInventory().countItem(Items.FISHING_ROD)
-            );
         }
-    }
-
-    private void finishReelItems(VillagerEntityMCA villager) {
-        for (ItemEntity item : reelItems) {
-            finishReelItem(villager, item);
-        }
-        clearReelItems();
-    }
-
-    private void releaseReelItems() {
-        for (ItemEntity item : reelItems) {
-            if (!item.isRemoved()) {
-                releasePickupProtection(item);
-            }
-        }
-        clearReelItems();
-    }
-
-    private static void releasePickupProtection(ItemEntity item) {
-        item.setTarget(null);
-        item.setNoPickUpDelay();
-    }
-
-    private void clearReelItems() {
-        reelItems.clear();
-        reelTicks = 0;
     }
 
     private boolean equipFishingRod(VillagerEntityMCA villager) {
@@ -464,13 +422,13 @@ public class FishingTask extends AbstractChoreTask {
 
     @Override
     protected void stop(ServerLevel world, VillagerEntityMCA villager, long time) {
-        if (!reelItems.isEmpty()) {
-            if (villager.isAlive() && !villager.isRemoved()) {
-                finishReelItems(villager);
-            } else {
-                releaseReelItems();
+        if (villager.isAlive() && !villager.isRemoved()) {
+            for (ItemEntity item : reelItems) {
+                finishReelItem(villager, item);
             }
         }
+        reelItems.clear();
+        reelTicks = 0;
 
         discardBobber(villager);
         clearFishingMovement(villager);

@@ -11,8 +11,8 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.world.entity.player.Player;
 
-import java.util.UUID;
 import java.util.Optional;
+import java.util.UUID;
 
 public record GetFamilyTreeResponse(long requestId, UUID uuid, boolean found, FamilyTreeView view,
                                     Optional<UUID> nextCursor) implements HandleablePayload {

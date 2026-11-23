@@ -2,6 +2,7 @@ package net.conczin.mca;
 
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.network.ClientHandler;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import org.jetbrains.annotations.Nullable;
 
@@ -24,6 +25,14 @@ public class ClientProxy {
         return INSTANCE.getPlayerData(uuid);
     }
 
+    public static Optional<Float> getGeneticsPassengerScale(Entity vehicle) {
+        return INSTANCE.getGeneticsPassengerScale(vehicle);
+    }
+
+    public static boolean useExpandedPersonalityTranslations() {
+        return INSTANCE.useExpandedPersonalityTranslations();
+    }
+
     public static class Impl {
         protected Impl() {
             INSTANCE = this;
@@ -39,6 +48,14 @@ public class ClientProxy {
 
         public Optional<VillagerLike<?>> getPlayerData(UUID uuid) {
             return Optional.empty();
+        }
+
+        public Optional<Float> getGeneticsPassengerScale(Entity vehicle) {
+            return Optional.empty();
+        }
+
+        public boolean useExpandedPersonalityTranslations() {
+            return false;
         }
     }
 }

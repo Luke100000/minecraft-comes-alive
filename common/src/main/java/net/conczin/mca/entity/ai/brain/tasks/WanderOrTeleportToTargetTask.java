@@ -1,7 +1,6 @@
 package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.Config;
-import net.conczin.mca.MCA;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
 import net.conczin.mca.entity.ai.navigation.*;
@@ -64,28 +63,12 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
         }
 
         Path path = entity.getNavigation().getPath();
-        if (Boolean.getBoolean("mca.stairSpinDebug") && walkTarget != null
-                && !MultiTargetPositionTracker.isReached(entity, walkTarget.getTarget(),
-                walkTarget.getCloseEnoughDist())) {
-            MCA.LOGGER.info("[MCA-STAIR-SPIN] event=walk-sink-stop uuid={} tick={} pos={} "
-                            + "target={} pathTarget={} next={} done={} stuck={} onGround={} collision={}",
-                    entity.getUUID(), gameTime, entity.position(),
-                    walkTarget.getTarget().currentBlockPosition(),
-                    path == null ? null : path.getTarget(),
-                    path == null || path.isDone() ? null : path.getNextNodePos(),
-                    entity.getNavigation().isDone(), entity.getNavigation().isStuck(),
-                    entity.onGround(), entity.horizontalCollision);
-        }
         if (walkTarget != null
                 && path != null
                 && entity.getNavigation().isDone()
                 && !MultiTargetPositionTracker.isReached(entity, walkTarget.getTarget(), walkTarget.getCloseEnoughDist())
                 && !entity.getBrain().hasMemoryValue(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)) {
-            if (entity instanceof VillagerEntityMCA villager) {
-                WalkTargetFailureMemory.record(villager, walkTarget.getTarget().currentBlockPosition(), gameTime);
-            } else {
-                entity.getBrain().setMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE, gameTime);
-            }
+            WalkTargetFailureMemory.record(entity, walkTarget.getTarget().currentBlockPosition(), gameTime);
         }
 
         return false;
@@ -104,19 +87,12 @@ public class WanderOrTeleportToTargetTask extends MoveToTargetSink {
                 && MCAGroundPathNavigation.isUsefulPartialPath(
                         path, entity, walkTarget
                 )) {
-            if (entity instanceof VillagerEntityMCA villager) {
-                // A fresh useful segment is optimistic progress and must be able
-                // to chain immediately. A previous failure episode for this same
-                // destination must survive another no-movement partial attempt.
-                BlockPos destination = walkTarget.getTarget().currentBlockPosition();
-                boolean priorFailure = WalkTargetFailureMemory.hasFailureFor(villager, destination)
-                        && villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
-                        .filter(since -> since < gameTime).isPresent();
-                if (!priorFailure) {
-                    WalkTargetFailureMemory.clear(villager);
-                }
-            } else {
-                entity.getBrain().eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+            boolean priorFailure = entity instanceof VillagerEntityMCA villager
+                    && WalkTargetFailureMemory.hasFailureFor(villager, walkTarget.getTarget().currentBlockPosition())
+                    && villager.getBrain().getMemoryInternal(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE)
+                    .filter(since -> since < gameTime).isPresent();
+            if (!priorFailure) {
+                WalkTargetFailureMemory.clear(entity);
             }
         }
         // The CORE sink also consumes PLAY targets, which get vanilla's shorter timeout.

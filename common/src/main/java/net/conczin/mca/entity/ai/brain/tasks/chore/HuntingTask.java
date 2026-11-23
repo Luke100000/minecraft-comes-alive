@@ -3,10 +3,8 @@ package net.conczin.mca.entity.ai.brain.tasks.chore;
 import com.google.common.collect.ImmutableMap;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.Chore;
-import net.conczin.mca.util.InventoryUtils;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.damagesource.DamageSource;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.TamableAnimal;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
@@ -97,15 +95,17 @@ public class HuntingTask extends AbstractChoreTask {
 
             if (target.isDeadOrDying()) {
                 target = null;
-            } else if (villager.distanceToSqr(target) <= 12.25F) {
+            } else if (villager.distanceToSqr(target) <= 12.25F
+                    && !villager.getBrain().hasMemoryValue(MemoryModuleType.ATTACK_COOLING_DOWN)) {
                 moveTowardsChorePrey(target.blockPosition(), 0.5F, 1);
+                villager.getBrain().setMemoryWithExpiry(MemoryModuleType.ATTACK_COOLING_DOWN, true, 20L);
                 villager.swing(villager.getDominantHand());
-                DamageSource damageSource = world.damageSources().mobAttack(villager);
                 LootCapture previous = ACTIVE_LOOT_CAPTURE.get();
-                LootCapture capture = new LootCapture(target, damageSource);
+                LootCapture capture = new LootCapture(target, villager);
                 ACTIVE_LOOT_CAPTURE.set(capture);
+                boolean hit;
                 try {
-                    target.hurt(damageSource, 6.0F);
+                    hit = villager.doHurtTarget(target);
                     for (ItemEntity drop : capture.drops) {
                         if (drop.isRemoved() || world.getEntity(drop.getId()) != drop) {
                             continue;
@@ -125,14 +125,17 @@ public class HuntingTask extends AbstractChoreTask {
                         ACTIVE_LOOT_CAPTURE.set(previous);
                     }
                 }
-                villager.getMainHandItem().hurtAndBreak(1, villager, EquipmentSlot.MAINHAND);
+                if (hit) {
+                    villager.getItemInHand(villager.getDominantHand())
+                            .hurtAndBreak(1, villager, villager.getDominantSlot());
+                }
             }
         }
     }
 
     public static boolean isCapturingLoot(LivingEntity prey, DamageSource source) {
         LootCapture capture = ACTIVE_LOOT_CAPTURE.get();
-        return capture != null && capture.prey == prey && capture.source == source;
+        return capture != null && capture.prey == prey && source != null && source.getEntity() == capture.hunter;
     }
 
     public static void recordCapturedLoot(ItemEntity drop) {
@@ -144,12 +147,12 @@ public class HuntingTask extends AbstractChoreTask {
 
     private static final class LootCapture {
         private final LivingEntity prey;
-        private final DamageSource source;
+        private final VillagerEntityMCA hunter;
         private final List<ItemEntity> drops = new ArrayList<>();
 
-        private LootCapture(LivingEntity prey, DamageSource source) {
+        private LootCapture(LivingEntity prey, VillagerEntityMCA hunter) {
             this.prey = prey;
-            this.source = source;
+            this.hunter = hunter;
         }
     }
 }

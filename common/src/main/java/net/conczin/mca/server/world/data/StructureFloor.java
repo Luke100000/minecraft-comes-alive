@@ -7,8 +7,10 @@ import net.minecraft.nbt.Tag;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Registered Floor identity and storey reference around exact physical geometry.
@@ -85,12 +87,21 @@ public record StructureFloor(int id, int floorNumber, int anchorY, FloorGeometry
         tag.putInt("id", id);
         tag.putInt("floorNumber", floorNumber);
         tag.putInt("anchorY", anchorY);
-        tag.put("cells", NbtHelper.fromList(geometry.cells().stream()
+        List<FloorGeometry.Cell> sortedCells = geometry.cells().stream()
                 .sorted(Comparator
                         .comparingInt((FloorGeometry.Cell cell) -> cell.feet().getX())
                         .thenComparingInt(cell -> cell.feet().getZ())
                         .thenComparingInt(cell -> cell.feet().getY()))
-                .toList(), StructureFloor::saveCell));
+                .toList();
+        long[] cellPositions = new long[sortedCells.size()];
+        int[] ceilingYs = new int[sortedCells.size()];
+        for (int i = 0; i < sortedCells.size(); i++) {
+            FloorGeometry.Cell cell = sortedCells.get(i);
+            cellPositions[i] = cell.feet().asLong();
+            ceilingYs[i] = cell.ceilingY();
+        }
+        tag.putLongArray("cellPositions", cellPositions);
+        tag.putIntArray("ceilingYs", ceilingYs);
         if (!connectors().isEmpty()) {
             tag.put("connectors", NbtHelper.fromList(connectors(), FloorConnector.Marker::save));
         }
@@ -98,16 +109,42 @@ public record StructureFloor(int id, int floorNumber, int anchorY, FloorGeometry
     }
 
     public static StructureFloor load(CompoundTag tag) {
-        if (!tag.contains("cells", Tag.TAG_LIST)) {
+        List<FloorGeometry.Cell> cells;
+        if (tag.contains("cellPositions", Tag.TAG_LONG_ARRAY)) {
+            if (!tag.contains("ceilingYs", Tag.TAG_INT_ARRAY)) {
+                throw new IllegalArgumentException("StructureFloor is missing ceilingYs");
+            }
+            long[] cellPositions = tag.getLongArray("cellPositions");
+            int[] ceilingYs = tag.getIntArray("ceilingYs");
+            if (cellPositions.length == 0 || cellPositions.length != ceilingYs.length) {
+                throw new IllegalArgumentException("StructureFloor has invalid packed geometry");
+            }
+            cells = new ArrayList<>(cellPositions.length);
+            for (int i = 0; i < cellPositions.length; i++) {
+                cells.add(new FloorGeometry.Cell(BlockPos.of(cellPositions[i]), ceilingYs[i]));
+            }
+        } else if (tag.contains("cells", Tag.TAG_LIST)) {
+            cells = NbtHelper.toList(
+                    tag.getList("cells", Tag.TAG_COMPOUND), value -> loadCell((CompoundTag) value));
+        } else {
             throw new IllegalArgumentException("StructureFloor is missing required geometry");
         }
-        List<FloorGeometry.Cell> cells = NbtHelper.toList(
-                tag.getList("cells", Tag.TAG_COMPOUND), value -> loadCell((CompoundTag) value));
+
         int floorNumber = tag.contains("floorNumber", Tag.TAG_INT) ? tag.getInt("floorNumber") : 0;
-        FloorGeometry geometry = new FloorGeometry(cells, loadMarkers(tag).stream()
-                .filter(marker -> cells.stream()
-                        .anyMatch(cell -> cell.feet().equals(marker.floorCell())))
-                .toList());
+        List<FloorConnector.Marker> rawMarkers = loadMarkers(tag);
+        List<FloorConnector.Marker> validMarkers;
+        if (rawMarkers.isEmpty()) {
+            validMarkers = List.of();
+        } else {
+            Set<BlockPos> validFeet = new HashSet<>(cells.size());
+            for (FloorGeometry.Cell cell : cells) {
+                validFeet.add(cell.feet());
+            }
+            validMarkers = rawMarkers.stream()
+                    .filter(marker -> validFeet.contains(marker.floorCell()))
+                    .toList();
+        }
+        FloorGeometry geometry = new FloorGeometry(cells, validMarkers);
         // Older saves derived this height from geometry; preserve that interpretation.
         int anchorY = tag.contains("anchorY", Tag.TAG_INT) ? tag.getInt("anchorY") : geometry.anchorY();
         return new StructureFloor(tag.getInt("id"), floorNumber, anchorY, geometry);
@@ -115,13 +152,6 @@ public record StructureFloor(int id, int floorNumber, int anchorY, FloorGeometry
 
     public StructureFloor withFloorNumber(int newFloorNumber) {
         return new StructureFloor(id, newFloorNumber, anchorY, geometry);
-    }
-
-    private static CompoundTag saveCell(FloorGeometry.Cell cell) {
-        CompoundTag tag = new CompoundTag();
-        tag.put("pos", NbtHelper.encodeBlockPos(cell.feet()));
-        tag.putInt("ceilingY", cell.ceilingY());
-        return tag;
     }
 
     private static FloorGeometry.Cell loadCell(CompoundTag tag) {

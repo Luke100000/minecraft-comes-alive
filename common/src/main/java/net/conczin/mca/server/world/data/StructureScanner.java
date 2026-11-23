@@ -4,6 +4,7 @@ import net.conczin.mca.Config;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.*;
@@ -23,6 +24,22 @@ final class StructureScanner {
                 world, config.maxBuildingSize, config.maxBuildingRadius);
     }
 
+    /** World-aware Room partition entry point so door ownership stays consistent across callers. */
+    static List<RoomPartitioner.Component> components(BlockGetter world, SelectedFloorScanner.Result scan) {
+        if (scan == null) return List.of();
+        FloorGeometry floor = scan.floor();
+        if (floor == null || floor.cells().isEmpty()) return List.of();
+        return RoomPartitioner.partition(
+                floor, scan.transitions(), StructureConnector.doorOwnerSides(world, floor), scan.verticalBoundaryCells());
+    }
+
+    @SuppressWarnings("deprecation")
+    private static boolean isLoaded(BlockGetter world, BlockPos pos) {
+        if (pos == null) return false;
+        if (world instanceof SelectedFloorScanner.LoadedColumns loaded) return loaded.hasColumn(pos);
+        return !(world instanceof LevelReader reader) || reader.hasChunk(pos.getX() >> 4, pos.getZ() >> 4);
+    }
+
     static Result scanNewStructure(BlockGetter world,
                                    BlockPos source,
                                    Collection<Structure> existing) {
@@ -31,6 +48,9 @@ final class StructureScanner {
 
     static Result scanNewStructure(BlockGetter world, BlockPos source, Collection<Structure> existing,
                                    SelectedFloorScanner.Observation observation) {
+        if (!isLoaded(world, source)) {
+            return Result.failure(Building.validationResult.NOT_IN_BUILDING, source);
+        }
         Result exact = resultFromObservedFloor(source, observation.selected(source), existing, -1, -1);
         if (exact.result() == Building.validationResult.SUCCESS) return exact;
 
@@ -55,12 +75,16 @@ final class StructureScanner {
     static Result scanReportedStructure(BlockGetter world,
                                         BlockPos source,
                                         Collection<Structure> existing) {
+        if (!isLoaded(world, source)) {
+            return Result.failure(Building.validationResult.NOT_IN_BUILDING, source);
+        }
         SelectedFloorScanner.Observation observation = newObservation(world);
         Result exact = resultFromObservedFloor(source, observation.selected(source), existing, -1, -1);
         if (exact.result() == Building.validationResult.SUCCESS) return exact;
 
         for (Direction direction : HORIZONTAL) {
             BlockPos candidate = source.relative(direction);
+            if (!isLoaded(world, candidate)) continue;
             Result adjacent = resultFromObservedFloor(
                     candidate, observation.selected(candidate), existing, -1, -1);
             if (adjacent.result() == Building.validationResult.SUCCESS) return adjacent;
@@ -113,6 +137,7 @@ final class StructureScanner {
 
     private static Optional<SelectedFloorScanner.Result> resolveAttachmentSeed(
             BlockGetter world, BlockPos source, SelectedFloorScanner.Observation observation) {
+        if (!isLoaded(world, source)) return Optional.empty();
         SelectedFloorScanner.Result exact = observation.selected(source);
         if (exact.result() == Building.validationResult.SUCCESS && exact.floor() != null) {
             return Optional.of(exact);
@@ -134,9 +159,10 @@ final class StructureScanner {
         if (subFullInteraction || hasInterruptedLandingSupport(world, source)) {
             Optional<SelectedFloorScanner.Result> adjacent = resolveFloorHandoff(
                     source,
-                    java.util.Arrays.stream(HORIZONTAL).map(source::relative)
-                            .filter(candidate -> subFullInteraction || world.getBlockState(candidate)
-                                    .getCollisionShape(world, candidate).isEmpty())
+                    Arrays.stream(HORIZONTAL).map(source::relative)
+                            .filter(candidate -> isLoaded(world, candidate)
+                                    && (subFullInteraction || world.getBlockState(candidate)
+                                            .getCollisionShape(world, candidate).isEmpty()))
                             .toList(),
                     observation);
             if (adjacent.isPresent()) return adjacent;
@@ -145,9 +171,11 @@ final class StructureScanner {
         List<SelectedFloorScanner.Result> candidates = new ArrayList<>();
         for (Direction direction : HORIZONTAL) {
             BlockPos connector = source.relative(direction);
+            if (!isLoaded(world, connector)) continue;
             BlockState state = world.getBlockState(connector);
             if (!StructureConnector.isHorizontalBoundary(state)) continue;
             BlockPos candidate = StructureConnector.normalize(connector, state).relative(direction);
+            if (!isLoaded(world, candidate)) continue;
             SelectedFloorScanner.Result scan = observation.selected(candidate);
             if (scan.result() == Building.validationResult.SUCCESS && scan.floor() != null) {
                 candidates.add(scan);
@@ -199,8 +227,8 @@ final class StructureScanner {
     }
 
     static Optional<FloorObservation> observeFloor(BlockGetter world, BlockPos source,
-                                                  Collection<Structure> existing,
-                                                  SelectedFloorScanner.Observation observation) {
+                                                   Collection<Structure> existing,
+                                                   SelectedFloorScanner.Observation observation) {
         SelectedFloorScanner.Result scan = resolveAttachmentSeed(world, source, observation).orElse(null);
         if (scan == null) return Optional.empty();
         StructureFloor candidate = new StructureFloor(0, 0, scan.anchorY(), scan.floor());
@@ -244,9 +272,9 @@ final class StructureScanner {
     }
 
     static Building.validationResult validateObservation(FloorObservation observation,
-                                                          Collection<Structure> existing,
-                                                          int ignoredStructureId,
-                                                          int attachmentBuildingId) {
+                                                         Collection<Structure> existing,
+                                                         int ignoredStructureId,
+                                                         int attachmentBuildingId) {
         if (observation == null) return Building.validationResult.NOT_IN_BUILDING;
         return resultFromObservedFloor(observation.seed(), observation.scan(),
                 existing, ignoredStructureId, attachmentBuildingId).result();
@@ -258,6 +286,7 @@ final class StructureScanner {
      */
     private static Optional<BlockPos> resolveStandingSurfaceSeed(
             BlockGetter world, BlockPos source, SelectedFloorScanner.Observation observation) {
+        if (!isLoaded(world, source)) return Optional.empty();
         if (observation.surfaceCell(source).isPresent()) return Optional.of(source.immutable());
         if (world.getBlockState(source).getCollisionShape(world, source).isEmpty()) {
             BlockPos below = source.below();
@@ -271,11 +300,11 @@ final class StructureScanner {
     }
 
     private static Building.validationResult validateCandidate(Structure candidate,
-                                                                StructureFloor floor,
-                                                                SelectedFloorScanner.Result selected,
-                                                                Collection<Structure> existing,
-                                                                int ignoredStructureId,
-                                                                int attachmentBuildingId) {
+                                                               StructureFloor floor,
+                                                               SelectedFloorScanner.Result selected,
+                                                               Collection<Structure> existing,
+                                                               int ignoredStructureId,
+                                                               int attachmentBuildingId) {
         for (Structure other : existing) {
             if (other.getId() == ignoredStructureId || !candidate.intersects(other)) continue;
             boolean permittedAttachmentStack = attachmentBuildingId >= 0
@@ -304,8 +333,6 @@ final class StructureScanner {
             StructureFloor floor, BlockPos source, SelectedFloorScanner.Observation observation) {
         if (floor == null || source == null) return Optional.empty();
         FloorGeometry geometry = floor.geometry();
-        // An explicit refresh targets the persisted Floor, even if an old stair cell now
-        // belongs upstairs. Select its ordinary anchor before scanning, rather than rescan.
         List<BlockPos> candidates = geometry.cells().stream()
                 .map(FloorGeometry.Cell::feet)
                 .sorted(Comparator
@@ -315,19 +342,17 @@ final class StructureScanner {
                         .thenComparingInt(BlockPos::getX)
                         .thenComparingInt(BlockPos::getZ))
                 .toList();
-        // Stair rows can extend below the ordinary deck's anchor. Starting a refresh
-        // there changes the seed-relative discovery band even when no blocks changed.
         return candidates.stream()
                 .filter(candidate -> observation.surfaceCell(candidate).isPresent())
                 .filter(candidate -> !observation.explicitStairCell(candidate))
                 .findFirst()
-                // A stair-only room still needs a fresh scan if no ordinary support remains.
                 .or(() -> candidates.stream()
                         .filter(candidate -> observation.surfaceCell(candidate).isPresent())
                         .findFirst());
     }
 
     private static boolean isSubFullInteraction(BlockGetter world, BlockPos source) {
+        if (!isLoaded(world, source)) return false;
         BlockState state = world.getBlockState(source);
         if (!state.getFluidState().isEmpty()) return false;
         var shape = state.getCollisionShape(world, source);
@@ -338,6 +363,7 @@ final class StructureScanner {
 
     /** Nonstandard platforms and a ladder just above a landing can defeat a direct Floor seed. */
     private static boolean hasInterruptedLandingSupport(BlockGetter world, BlockPos source) {
+        if (!isLoaded(world, source)) return false;
         BlockState state = world.getBlockState(source);
         BlockPos above = source.above();
         BlockState aboveState = world.getBlockState(above);
