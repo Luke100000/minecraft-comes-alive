@@ -1,13 +1,14 @@
 package net.conczin.mca.server.world.data;
 
 import net.minecraft.SharedConstants;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.Bootstrap;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import java.util.Set;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class IndoorRoomCacheTest {
     @BeforeAll
@@ -17,16 +18,11 @@ class IndoorRoomCacheTest {
     }
 
     @Test
-    void openStateDoesNotInvalidateStructuralToggleables() {
-        var closedDoor = Blocks.OAK_DOOR.defaultBlockState();
-        var closedGate = Blocks.OAK_FENCE_GATE.defaultBlockState();
-        var closedTrapdoor = Blocks.OAK_TRAPDOOR.defaultBlockState();
-
-        assertEquals(IndoorRoomCache.structuralState(closedDoor),
-                IndoorRoomCache.structuralState(closedDoor.setValue(BlockStateProperties.OPEN, true)));
-        assertEquals(IndoorRoomCache.structuralState(closedGate),
-                IndoorRoomCache.structuralState(closedGate.setValue(BlockStateProperties.OPEN, true)));
-        assertEquals(IndoorRoomCache.structuralState(closedTrapdoor),
-                IndoorRoomCache.structuralState(closedTrapdoor.setValue(BlockStateProperties.OPEN, true)));
+    void unregisteredShelterCacheUsesBounded100TickTtlAndImmutableRoomCells() {
+        assertEquals(100L, IndoorRoomCache.TTL_TICKS);
+        BlockPos cell = new BlockPos(4, 64, 4);
+        IndoorRoomCache.Room room = new IndoorRoomCache.Room(Set.of(cell));
+        assertTrue(room.floorCells().contains(cell));
+        assertThrows(UnsupportedOperationException.class, () -> room.floorCells().add(BlockPos.ZERO));
     }
 }

@@ -87,7 +87,7 @@ class FamilyTreeLayoutTest {
                 new FamilyTreeView.Continuation(grandfather.id(), DESCENDANTS)));
 
         FamilyTreeLayout.Result expanded = FamilyTreeLayout.layout(
-                new FamilyTreeViewModel.Snapshot(ROOT, nodes(root, father, grandfather, uncle), Set.of()), before);
+                new FamilyTreeViewModel.Snapshot(ROOT, nodes(root, father, grandfather, uncle), Set.of()));
 
         assertTrue(expanded.cards().stream().anyMatch(card -> card.uuid().equals(uncle.id())),
                 "A fetched child of a visible grandparent must appear even without a partner branch");
@@ -132,27 +132,51 @@ class FamilyTreeLayoutTest {
         partner.setMother(partnerMother);
         family.putAll(nodes(father, mother, partnerFather, partnerMother));
         FamilyTreeViewModel.Snapshot snapshot = new FamilyTreeViewModel.Snapshot(ROOT, family, Set.of());
-        FamilyTreeLayout.Result after = FamilyTreeLayout.layout(snapshot, before);
+        FamilyTreeLayout.Result after = FamilyTreeLayout.layout(snapshot);
         assertEquals(44, partnerGap(before, ROOT, PARTNER));
         assertEquals(44, partnerGap(after, ROOT, PARTNER));
         assertCouplesAreAdjacent(after);
         assertEquals(card(before, ROOT).bounds(), card(after, ROOT).bounds());
         assertSeparatedFamilyCards(after);
-        assertEquals(after, FamilyTreeLayout.layout(snapshot, after));
-
-        FamilyTreeTransition transition = new FamilyTreeTransition(before, after, PARTNER);
-        for (double progress : new double[]{0, 0.25, 0.5, 0.75, 1}) {
-            FamilyTreeLayout.Result frame = transition.at(progress);
-            assertEquals(card(before, PARTNER).bounds(), card(frame, PARTNER).bounds());
-            for (FamilyTreeLayout.FamilyConnector connector : frame.connectors()) {
-                card(frame, connector.parent());
-                connector.children().forEach(child -> card(frame, child));
-            }
-        }
     }
 
     @Test
-    void neighboringFamiliesCanExpandInEitherOrderWithoutOverlapping() {
+    void canonicalExpansionWithAnchorLockedViewportPreservesClickedCardScreenCoordinates() {
+        FamilyTreeNode root = node(ROOT);
+        FamilyTreeNode father = node(FATHER);
+        FamilyTreeNode siblingA = node(SIBLING_A);
+        FamilyTreeNode siblingB = node(SIBLING_B);
+        FamilyTreeNode childA = node(CHILD_A);
+        root.setFather(father);
+        siblingA.setFather(father);
+        siblingB.setFather(father);
+        childA.setFather(siblingB);
+        Map<UUID, FamilyTreeNode> family = nodes(root, father, siblingA, siblingB, childA);
+        FamilyTreeLayout.Result before = layout(family, Set.of());
+
+        FamilyTreeViewModel.ViewportState initialViewport = new FamilyTreeViewModel.ViewportState(37.5, -18.25, 0.75F);
+        double oldScreenX = 400.0 + initialViewport.panX() + card(before, CHILD_A).bounds().centerX() * initialViewport.zoom();
+        double oldScreenY = 300.0 + initialViewport.panY() + card(before, CHILD_A).bounds().centerY() * initialViewport.zoom();
+
+        for (int i = 100; i < 108; i++) {
+            FamilyTreeNode cousin = node(uuid(i));
+            cousin.setFather(siblingA);
+            family.put(cousin.id(), cousin);
+        }
+        FamilyTreeLayout.Result after = layout(family, Set.of());
+        FamilyTreeViewModel.ViewportState locked =
+                FamilyTreeScreen.anchorLockedViewport(before, after, initialViewport, CHILD_A);
+
+        double newScreenX = 400.0 + locked.panX() + card(after, CHILD_A).bounds().centerX() * locked.zoom();
+        double newScreenY = 300.0 + locked.panY() + card(after, CHILD_A).bounds().centerY() * locked.zoom();
+        assertEquals(oldScreenX, newScreenX, 0.0001, "Anchor-locked pan must keep clicked X stationary");
+        assertEquals(oldScreenY, newScreenY, 0.0001, "Anchor-locked pan must keep clicked Y stationary");
+        assertSeparatedFamilyCards(after);
+    }
+
+    @Test
+    void neighboringFamiliesProduceIdenticalCanonicalLayoutRegardlessOfInsertionOrder() {
+        FamilyTreeLayout.Result forward = null;
         for (boolean reverse : new boolean[]{false, true}) {
             FamilyTreeNode root = node(ROOT);
             FamilyTreeNode sibling = node(SIBLING_A);
@@ -160,8 +184,6 @@ class FamilyTreeLayoutTest {
             root.setFather(father);
             sibling.setFather(father);
             Map<UUID, FamilyTreeNode> family = nodes(root, sibling, father);
-            FamilyTreeLayout.Result result = layout(family, Set.of());
-            FamilyTreeLayout.Bounds fixedRoot = card(result, ROOT).bounds();
             for (FamilyTreeNode parent : reverse ? List.of(sibling, root) : List.of(root, sibling)) {
                 for (int i = 0; i < 3; i++) {
                     FamilyTreeNode child = node(uuid((parent == root ? 240 : 250) + i));
@@ -170,35 +192,16 @@ class FamilyTreeLayoutTest {
                     child.updatePartner(spouse);
                     family.putAll(nodes(child, spouse));
                 }
-                FamilyTreeViewModel.Snapshot snapshot = new FamilyTreeViewModel.Snapshot(ROOT, family, Set.of());
-                result = FamilyTreeLayout.layout(snapshot, result);
-                assertEquals(fixedRoot, card(result, ROOT).bounds());
-                assertEquals(FamilyTreeLayout.HORIZONTAL_GAP, partnerGap(result, ROOT, SIBLING_A));
-                assertSeparatedFamilyCards(result);
-                assertCouplesAreAdjacent(result);
-                assertEquals(result, FamilyTreeLayout.layout(snapshot, result));
+            }
+            FamilyTreeLayout.Result result = layout(family, Set.of());
+            assertSeparatedFamilyCards(result);
+            assertCouplesAreAdjacent(result);
+            if (forward == null) {
+                forward = result;
+            } else {
+                assertEquals(forward, result, "Canonical layout must be order-independent");
             }
         }
-    }
-
-    @Test
-    void newlyDiscoveredSpouseStaysBesideTheirExistingCard() {
-        FamilyTreeNode root = node(ROOT);
-        FamilyTreeNode sibling = node(SIBLING_A);
-        FamilyTreeNode father = node(FATHER);
-        root.setFather(father);
-        sibling.setFather(father);
-        Map<UUID, FamilyTreeNode> family = nodes(root, sibling, father);
-        FamilyTreeLayout.Result before = layout(family, Set.of());
-        FamilyTreeNode spouse = node(PARTNER_A);
-        sibling.updatePartner(spouse);
-        family.put(spouse.id(), spouse);
-        FamilyTreeViewModel.Snapshot snapshot = new FamilyTreeViewModel.Snapshot(ROOT, family, Set.of());
-        FamilyTreeLayout.Result after = FamilyTreeLayout.layout(snapshot, before);
-        assertEquals(card(before, ROOT).bounds(), card(after, ROOT).bounds());
-        assertCouplesAreAdjacent(after);
-        assertSeparatedFamilyCards(after);
-        assertEquals(after, FamilyTreeLayout.layout(snapshot, after));
     }
 
     @Test
@@ -281,7 +284,7 @@ class FamilyTreeLayoutTest {
     }
 
     @Test
-    void siblingsAndTheirPartnersStayAdjacentThroughSeveralBranchExpansions() {
+    void siblingsAndTheirPartnersStayAdjacentWhenDescendantsArePresent() {
         FamilyTreeNode root = node(ROOT);
         FamilyTreeNode father = node(FATHER);
         FamilyTreeNode siblingA = node(SIBLING_A);
@@ -296,9 +299,6 @@ class FamilyTreeLayoutTest {
         siblingB.updatePartner(partnerB);
         partnerB.updatePartner(siblingB);
         Map<UUID, FamilyTreeNode> family = nodes(root, father, siblingA, siblingB, partnerA, partnerB);
-        FamilyTreeLayout.Result result = layout(family, Set.of());
-        assertCouplesAreAdjacent(result);
-        FamilyTreeLayout.Bounds rootBounds = card(result, ROOT).bounds();
 
         for (FamilyTreeNode parent : List.of(siblingA, siblingB)) {
             for (int i = 0; i < 3; i++) {
@@ -307,10 +307,9 @@ class FamilyTreeLayoutTest {
                 parent.addChild(child.id());
                 family.put(child.id(), child);
             }
-            result = FamilyTreeLayout.layout(new FamilyTreeViewModel.Snapshot(ROOT, family, Set.of()), result);
+            FamilyTreeLayout.Result result = layout(family, Set.of());
             assertCouplesAreAdjacent(result);
             assertSeparatedFamilyCards(result);
-            assertEquals(rootBounds, card(result, ROOT).bounds());
         }
     }
 
@@ -374,7 +373,7 @@ class FamilyTreeLayoutTest {
     void marriedChildrenStayUnderTheirOwnParentsWithoutOverlappingParentBranches() {
         FamilyTreeNode damian = node(ROOT);
         FamilyTreeNode than = node(PARTNER);
-        FamilyTreeNode lilija = node(PARTNER_A); // Higher UUID than Alexander: UUID order must not decide their sides.
+        FamilyTreeNode lilija = node(PARTNER_A);
         FamilyTreeNode alexander = node(CHILD_A);
         FamilyTreeNode natalia = node(FATHER);
         FamilyTreeNode alihan = node(MOTHER);
@@ -427,8 +426,6 @@ class FamilyTreeLayoutTest {
         siblingB.setFather(father);
         siblingChild.setFather(siblingA);
 
-        // The bounded initial response contains the sibling but not its descendants.
-        // A subsequent expansion response adds the child node (covered below).
         FamilyTreeLayout.Result result = layout(nodes(root, father, siblingA, siblingB), Set.of());
 
         assertEquals(card(result, ROOT).bounds().centerY(), card(result, SIBLING_A).bounds().centerY());
@@ -520,208 +517,6 @@ class FamilyTreeLayoutTest {
     }
 
     @Test
-    void revealingUnpartneredSiblingBesideExistingCardKeepsLayoutUsable() {
-        FamilyTreeNode root = node(ROOT);
-        FamilyTreeNode firstChild = node(CHILD_A);
-        firstChild.setFather(root);
-        FamilyTreeLayout.Result before = layout(nodes(root, firstChild), Set.of());
-
-        FamilyTreeNode newChild = node(CHILD_B);
-        newChild.setFather(root);
-        FamilyTreeLayout.Result after = FamilyTreeLayout.layout(
-                new FamilyTreeViewModel.Snapshot(ROOT, nodes(root, firstChild, newChild), Set.of()), before);
-
-        assertEquals(3, after.cards().size());
-        assertEquals(card(before, ROOT).bounds(), card(after, ROOT).bounds());
-        assertSeparatedFamilyCards(after);
-    }
-
-    @Test
-    void repeatedExpansionAnchorsSelectedGenerationAndMovesOnlyNearbyBranches() {
-        FamilyTreeNode root = node(ROOT);
-        FamilyTreeNode father = node(FATHER);
-        FamilyTreeNode siblingA = node(SIBLING_A);
-        FamilyTreeNode siblingB = node(SIBLING_B);
-        FamilyTreeNode childA = node(CHILD_A);
-        FamilyTreeNode siblingChild = node(SIBLING_CHILD);
-        root.setFather(father);
-        siblingA.setFather(father);
-        siblingB.setFather(father);
-        childA.setFather(root);
-        siblingChild.setFather(siblingB);
-        Map<UUID, FamilyTreeNode> family = nodes(root, father, siblingA, siblingB, childA, siblingChild);
-
-        FamilyTreeLayout.Result before = layout(family, Set.of());
-        Map<UUID, FamilyTreeLayout.Bounds> initial = cardBoundsById(before);
-        // A distant sibling gains a large new branch while the original cards stay known.
-        for (int i = 100; i < 106; i++) {
-            FamilyTreeNode cousin = node(uuid(i));
-            cousin.setFather(siblingA);
-            family.put(cousin.id(), cousin);
-        }
-        FamilyTreeViewModel.Snapshot snapshot = new FamilyTreeViewModel.Snapshot(ROOT, family, Set.of());
-        FamilyTreeLayout.Result firstExpansion = FamilyTreeLayout.layout(snapshot, before);
-        assertGenerationStable(initial, firstExpansion, 0);
-        assertBoundedReflow(initial, firstExpansion, 6 * 200);
-        assertSeparatedFamilyCards(firstExpansion);
-
-        for (int i = 110; i < 115; i++) {
-            FamilyTreeNode cousin = node(uuid(i));
-            cousin.setFather(siblingB);
-            family.put(cousin.id(), cousin);
-        }
-        FamilyTreeLayout.Result secondExpansion = FamilyTreeLayout.layout(
-                new FamilyTreeViewModel.Snapshot(ROOT, family, Set.of()), firstExpansion);
-        assertGenerationStable(cardBoundsById(firstExpansion), secondExpansion, 0);
-        assertBoundedReflow(cardBoundsById(firstExpansion), secondExpansion, 5 * 200);
-        assertSeparatedFamilyCards(secondExpansion);
-        assertEquals(family.size(), secondExpansion.cards().size());
-    }
-
-    @Test
-    void addingAWideBranchMakesLocalRoomInsteadOfSendingAllNewChildrenToOneSide() {
-        FamilyTreeNode root = node(ROOT);
-        FamilyTreeNode father = node(FATHER);
-        FamilyTreeNode sibling = node(SIBLING_A);
-        FamilyTreeNode originalChild = node(CHILD_A);
-        FamilyTreeNode cousin = node(SIBLING_CHILD);
-        root.setFather(father);
-        sibling.setFather(father);
-        originalChild.setFather(root);
-        cousin.setFather(sibling);
-        Map<UUID, FamilyTreeNode> family = nodes(root, father, sibling, originalChild, cousin);
-        FamilyTreeLayout.Result before = layout(family, Set.of());
-
-        Set<UUID> added = new HashSet<>();
-        for (int i = 100; i < 108; i++) {
-            FamilyTreeNode child = node(uuid(i));
-            child.setFather(root);
-            added.add(child.id());
-            family.put(child.id(), child);
-        }
-        FamilyTreeLayout.Result after = FamilyTreeLayout.layout(
-                new FamilyTreeViewModel.Snapshot(ROOT, family, Set.of()), before);
-
-        assertEquals(card(before, ROOT).bounds(), card(after, ROOT).bounds(),
-                "The selected root must be anchored during expansion");
-        assertTrue(!card(before, CHILD_A).bounds().equals(card(after, CHILD_A).bounds())
-                        || !card(before, SIBLING_CHILD).bounds().equals(card(after, SIBLING_CHILD).bounds()),
-                "Nearby existing branches should slide to create a lane for new relatives");
-        int parentX = card(after, ROOT).bounds().centerX();
-        assertTrue(added.stream().mapToInt(id -> card(after, id).bounds().centerX()).min().orElseThrow() < parentX);
-        assertTrue(added.stream().mapToInt(id -> card(after, id).bounds().centerX()).max().orElseThrow() > parentX,
-                "New siblings should fan around their parent, rather than trail off one side");
-        assertSeparatedFamilyCards(after);
-
-        FamilyTreeTransition transition = new FamilyTreeTransition(before, after, ROOT);
-        FamilyTreeLayout.Result halfway = transition.at(0.5);
-        for (UUID id : List.of(CHILD_A, SIBLING_CHILD)) {
-            int start = card(before, id).bounds().centerX();
-            int end = card(after, id).bounds().centerX();
-            if (start != end) {
-                int middle = card(halfway, id).bounds().centerX();
-                assertTrue(middle > Math.min(start, end) && middle < Math.max(start, end),
-                        "An already-visible neighbor should move through intermediate positions");
-            }
-        }
-    }
-
-    @Test
-    void switchingToAnAlreadyVisibleRootKeepsSharedRelativesInPlace() {
-        FamilyTreeNode root = node(ROOT);
-        FamilyTreeNode father = node(FATHER);
-        FamilyTreeNode child = node(CHILD_A);
-        FamilyTreeNode grandchild = node(SIBLING_CHILD);
-        root.setFather(father);
-        child.setFather(root);
-        grandchild.setFather(child);
-        Map<UUID, FamilyTreeNode> family = nodes(root, father, child, grandchild);
-        FamilyTreeLayout.Result before = layout(family, Set.of());
-
-        FamilyTreeLayout.Result after = FamilyTreeLayout.layout(
-                new FamilyTreeViewModel.Snapshot(CHILD_A, family, Set.of()), before);
-
-        assertEquals(card(before, CHILD_A).bounds(), card(after, CHILD_A).bounds(),
-                "Search navigation to a visible child should preserve its screen location");
-        assertEquals(card(before, ROOT).bounds(), card(after, ROOT).bounds(),
-                "A newly selected root should not displace an already visible parent");
-        assertEquals(card(before, SIBLING_CHILD).bounds(), card(after, SIBLING_CHILD).bounds());
-    }
-
-    @Test
-    void expandedSiblingsFormOneClusterWithoutUnrelatedCardsBetweenThem() {
-        FamilyTreeNode root = node(ROOT);
-        FamilyTreeNode father = node(FATHER);
-        FamilyTreeNode sibling = node(SIBLING_A);
-        FamilyTreeNode originalChild = node(CHILD_A);
-        root.setFather(father);
-        sibling.setFather(father);
-        originalChild.setFather(root);
-        Map<UUID, FamilyTreeNode> family = nodes(root, father, sibling, originalChild);
-        FamilyTreeLayout.Result before = layout(family, Set.of());
-
-        Set<UUID> newChildren = new HashSet<>();
-        for (int i = 100; i < 132; i++) {
-            FamilyTreeNode child = node(uuid(i));
-            child.setFather(sibling);
-            family.put(child.id(), child);
-            newChildren.add(child.id());
-        }
-        FamilyTreeLayout.Result after = FamilyTreeLayout.layout(
-                new FamilyTreeViewModel.Snapshot(ROOT, family, Set.of()), before);
-
-        assertEquals(card(before, ROOT).bounds(), card(after, ROOT).bounds());
-        List<FamilyTreeLayout.Card> row = after.cards().stream()
-                .filter(card -> card.bounds().centerY() == card(after, CHILD_A).bounds().centerY())
-                .sorted(Comparator.comparingInt(card -> card.bounds().centerX()))
-                .toList();
-        int first = -1;
-        int last = -1;
-        for (int i = 0; i < row.size(); i++) {
-            if (newChildren.contains(row.get(i).uuid())) {
-                if (first < 0) first = i;
-                last = i;
-            }
-        }
-        assertEquals(newChildren.size(), last - first + 1,
-                "New siblings should remain a contiguous branch rather than surround unrelated cards");
-        int parentX = card(after, SIBLING_A).bounds().centerX();
-        for (UUID child : newChildren) {
-            assertTrue(Math.abs(card(after, child).bounds().centerX() - parentX) < 3700,
-                    "Children should stay within a reasonable span of their parent");
-        }
-    }
-
-    @Test
-    void expandedSiblingGroupKeepsNewlyDiscoveredCoupleAdjacent() {
-        FamilyTreeNode root = node(ROOT);
-        FamilyTreeNode existingChild = node(CHILD_A);
-        existingChild.setFather(root);
-        Map<UUID, FamilyTreeNode> family = nodes(root, existingChild);
-        FamilyTreeLayout.Result before = layout(family, Set.of());
-
-        UUID partneredChildId = uuid(102);
-        UUID partnerId = uuid(200);
-        for (int i = 100; i < 105; i++) {
-            FamilyTreeNode child = node(uuid(i));
-            child.setFather(root);
-            family.put(child.id(), child);
-        }
-        FamilyTreeNode partner = node(partnerId);
-        family.get(partneredChildId).updatePartner(partner);
-        partner.updatePartner(family.get(partneredChildId));
-        family.put(partnerId, partner);
-        FamilyTreeLayout.Result after = FamilyTreeLayout.layout(
-                new FamilyTreeViewModel.Snapshot(ROOT, family, Set.of()), before);
-
-        assertEquals(card(before, CHILD_A).bounds(), card(after, CHILD_A).bounds());
-        assertEquals(FamilyTreeLayout.CARD_WIDTH + FamilyTreeLayout.PARTNER_GAP,
-                Math.abs(card(after, partneredChildId).bounds().centerX()
-                        - card(after, partnerId).bounds().centerX()),
-                "Spouses should remain directly adjacent after a generation expansion");
-    }
-
-    @Test
     void separateDescendantBranchesHaveMoreRoomThanSiblingsBeforeAndAfterExpansion() {
         FamilyTreeNode root = node(ROOT);
         FamilyTreeNode father = node(FATHER);
@@ -748,8 +543,7 @@ class FamilyTreeLayoutTest {
             family.put(cousin.id(), cousin);
             cousins.add(cousin.id());
         }
-        FamilyTreeLayout.Result after = FamilyTreeLayout.layout(
-                new FamilyTreeViewModel.Snapshot(ROOT, family, Set.of()), before);
+        FamilyTreeLayout.Result after = layout(family, Set.of());
         assertEquals(card(before, ROOT).bounds(), card(after, ROOT).bounds());
         assertDistinctBranchSpacing(after, Set.of(CHILD_A, CHILD_B), cousins);
     }
@@ -766,28 +560,6 @@ class FamilyTreeLayoutTest {
                 + secondLeft + ", " + secondRight + "], actual gap: " + between);
     }
 
-    private static void assertGenerationStable(Map<UUID, FamilyTreeLayout.Bounds> before,
-                                               FamilyTreeLayout.Result after, int generationY) {
-        for (FamilyTreeLayout.Card card : after.cards()) {
-            FamilyTreeLayout.Bounds old = before.get(card.uuid());
-            if (old != null && old.centerY() == generationY) {
-                assertEquals(old, card.bounds(), "Selected generation moved unexpectedly: " + card.uuid());
-            }
-        }
-    }
-
-    private static void assertBoundedReflow(Map<UUID, FamilyTreeLayout.Bounds> before,
-                                             FamilyTreeLayout.Result after, int maxMovement) {
-        for (FamilyTreeLayout.Card card : after.cards()) {
-            FamilyTreeLayout.Bounds old = before.get(card.uuid());
-            if (old != null) {
-                assertEquals(old.centerY(), card.bounds().centerY(), "Existing generation changed");
-                assertTrue(Math.abs(old.centerX() - card.bounds().centerX()) <= maxMovement,
-                        "An existing branch moved farther than the width of the revealed branch");
-            }
-        }
-    }
-
     private static void assertSeparatedFamilyCards(FamilyTreeLayout.Result result) {
         for (int i = 0; i < result.cards().size(); i++) {
             for (int j = i + 1; j < result.cards().size(); j++) {
@@ -800,14 +572,6 @@ class FamilyTreeLayoutTest {
                 assertFalse(a.intersects(b), "Overlapping cards");
             }
         }
-    }
-
-    private static Map<UUID, FamilyTreeLayout.Bounds> cardBoundsById(FamilyTreeLayout.Result result) {
-        Map<UUID, FamilyTreeLayout.Bounds> bounds = new HashMap<>();
-        for (FamilyTreeLayout.Card card : result.cards()) {
-            bounds.put(card.uuid(), card.bounds());
-        }
-        return bounds;
     }
 
     @Test

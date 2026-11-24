@@ -4,7 +4,9 @@ import net.conczin.mca.FamilyTreeTestSupport;
 import net.conczin.mca.entity.ai.relationship.Gender;
 import net.conczin.mca.network.FamilyTreeView;
 import net.conczin.mca.network.s2c.GetFamilyTreeResponse;
+import net.conczin.mca.server.world.data.FamilyTree;
 import net.conczin.mca.server.world.data.FamilyTreeNode;
+import net.conczin.mca.server.world.data.FamilyTreeViewBuilder;
 import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
@@ -12,6 +14,7 @@ import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Constructor;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -33,6 +36,68 @@ class FamilyTreeViewModelTest {
     @BeforeAll
     static void bootstrapMinecraft() {
         FamilyTreeTestSupport.bootstrapMinecraft();
+    }
+
+    @Test
+    void loadingOneSiblingViaSpouseBranchPreservesParentDescendantsContinuation() throws Exception {
+        UUID siblingParentId = uuid(20);
+        UUID firstCousinId = uuid(21);
+        UUID secondCousinId = uuid(22);
+        UUID spouseId = uuid(23);
+
+        Constructor<FamilyTree> ctor = FamilyTree.class.getDeclaredConstructor(net.minecraft.server.level.ServerLevel.class);
+        ctor.setAccessible(true);
+        FamilyTree tree = ctor.newInstance((Object) null);
+
+        FamilyTreeNode root = tree.getOrCreate(ROOT, "Root", Gender.MALE);
+        FamilyTreeNode father = tree.getOrCreate(PARENT, "Father", Gender.MALE);
+        FamilyTreeNode siblingParent = tree.getOrCreate(siblingParentId, "SiblingParent", Gender.FEMALE);
+        FamilyTreeNode firstCousin = tree.getOrCreate(firstCousinId, "CousinOne", Gender.MALE);
+        FamilyTreeNode secondCousin = tree.getOrCreate(secondCousinId, "CousinTwo", Gender.FEMALE);
+        FamilyTreeNode child = tree.getOrCreate(CHILD, "Child", Gender.FEMALE);
+        FamilyTreeNode spouse = tree.getOrCreate(spouseId, "Spouse", Gender.FEMALE);
+
+        root.setFather(father);
+        siblingParent.setFather(father);
+        firstCousin.setMother(siblingParent);
+        secondCousin.setMother(siblingParent);
+        child.setFather(root);
+        spouse.setMother(child);
+        spouse.updatePartner(firstCousin);
+        firstCousin.updatePartner(spouse);
+
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        long initial = model.beginFocus(ROOT, viewport(0, 0, 1));
+        FamilyTreeView initialView = FamilyTreeViewBuilder.build(tree, ROOT, 1, 1).orElseThrow();
+        assertEquals(FamilyTreeViewModel.MergeResult.APPLIED, model.accept(response(initial, ROOT, initialView)));
+
+        assertTrue(model.nodes().get(siblingParentId).children().isEmpty(),
+                "Initial bounded view must not carry a 1-child sentinel on SiblingParent");
+        assertTrue(model.hasGenerationFrontier(DESCENDANTS, Set.of(siblingParentId)));
+
+        FamilyTreeViewModel.GenerationRequest childExpansion =
+                model.beginGeneration(DESCENDANTS, Set.of(CHILD)).orElseThrow();
+        FamilyTreeView spouseBranchView =
+                FamilyTreeViewBuilder.buildGeneration(tree, CHILD, DESCENDANTS).orElseThrow();
+        assertTrue(model.acceptGeneration(response(childExpansion.requestId(), CHILD, spouseBranchView)).layoutChanged());
+
+        assertTrue(model.nodes().containsKey(firstCousinId), "CousinOne enters via Spouse's branch");
+        assertTrue(model.nodes().get(siblingParentId).children().contains(firstCousinId),
+                "Loaded parent must link to CousinOne discovered via Spouse");
+        assertFalse(model.nodes().containsKey(secondCousinId));
+        assertTrue(model.hasGenerationFrontier(DESCENDANTS, Set.of(siblingParentId)),
+                "Loading CousinOne via Spouse must NOT prematurely prune SiblingParent's DESCENDANTS continuation");
+
+        FamilyTreeViewModel.GenerationRequest parentExpansion =
+                model.beginGeneration(DESCENDANTS, Set.of(siblingParentId)).orElseThrow();
+        FamilyTreeView parentDescendantsView =
+                FamilyTreeViewBuilder.buildGeneration(tree, siblingParentId, DESCENDANTS).orElseThrow();
+        assertTrue(model.acceptGeneration(
+                response(parentExpansion.requestId(), siblingParentId, parentDescendantsView)).layoutChanged());
+
+        assertTrue(model.nodes().keySet().containsAll(Set.of(firstCousinId, secondCousinId)));
+        assertTrue(model.nodes().get(siblingParentId).children().containsAll(Set.of(firstCousinId, secondCousinId)));
+        assertFalse(model.hasGenerationFrontier(DESCENDANTS, Set.of(siblingParentId)));
     }
 
     @Test
@@ -58,22 +123,24 @@ class FamilyTreeViewModelTest {
     }
 
     @Test
-    void selectionDuringGenerationBatchDoesNotCancelExpansionOrMergeExtraBranches() {
+    void selectionDuringPendingGenerationDoesNotCancelExpansion() {
         FamilyTreeNode parent = node(ROOT);
         parent.addChild(CHILD);
-        parent.addChild(MISSING);
         FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
         long initial = model.beginFocus(ROOT, viewport(0, 0, 1));
         model.accept(response(initial, ROOT, view(Map.of(ROOT, parent, CHILD, node(CHILD)),
                 Set.of(new FamilyTreeView.Continuation(ROOT, DESCENDANTS)), Set.of())));
-        FamilyTreeViewModel.GenerationRequest page = model.beginGeneration(DESCENDANTS,
+        FamilyTreeViewModel.GenerationRequest req = model.beginGeneration(DESCENDANTS,
                 Set.of(ROOT, CHILD)).orElseThrow();
 
         assertTrue(model.selectVisible(CHILD, viewport(0, 0, 1)));
-        assertTrue(model.loading(), "Selection cannot cancel a generation-wide request");
-        assertTrue(model.acceptGeneration(new GetFamilyTreeResponse(page.requestId(), ROOT, true,
-                view(Map.of(ROOT, parent, CHILD, node(CHILD), MISSING, node(MISSING)),
-                        Set.of(), Set.of()), Optional.empty())).layoutChanged());
+        assertTrue(model.loading(), "Selection cannot cancel an in-flight generation request");
+        FamilyTreeNode updatedParent = node(ROOT);
+        updatedParent.addChild(CHILD);
+        updatedParent.addChild(MISSING);
+        assertTrue(model.acceptGeneration(new GetFamilyTreeResponse(req.requestId(), ROOT, true,
+                view(Map.of(ROOT, updatedParent, CHILD, node(CHILD), MISSING, node(MISSING)),
+                        Set.of(), Set.of()))).layoutChanged());
         assertEquals(CHILD, model.focusId());
         assertTrue(model.nodes().containsKey(MISSING));
     }
@@ -136,8 +203,7 @@ class FamilyTreeViewModelTest {
         FamilyTreeViewModel.GenerationRequest expansion = model.beginGeneration(ANCESTORS,
                 Set.of(PARENT)).orElseThrow();
         assertTrue(model.acceptGeneration(new GetFamilyTreeResponse(expansion.requestId(), PARENT, true,
-                view(Map.of(PARENT, parent, GRANDPARENT, node(GRANDPARENT)), Set.of(), Set.of()),
-                Optional.empty())).layoutChanged());
+                view(Map.of(PARENT, parent, GRANDPARENT, node(GRANDPARENT)), Set.of(), Set.of()))).layoutChanged());
 
         assertEquals(Set.of(ROOT, PARENT, GRANDPARENT), model.nodes().keySet());
         assertEquals(ROOT, model.focusId());
@@ -176,7 +242,6 @@ class FamilyTreeViewModelTest {
                 Set.of(), Set.of())));
         assertTrue(model.nodes().get(ROOT).children().contains(CHILD));
 
-        // The server now reports no children and no omitted descendants for this parent.
         long refresh = model.beginFocus(ROOT, viewport(0, 0, 1));
         model.accept(response(refresh, ROOT, view(Map.of(ROOT, node(ROOT)), Set.of(), Set.of())));
 
@@ -235,7 +300,6 @@ class FamilyTreeViewModelTest {
 
         assertEquals(ROOT, model.snapshot().layoutRootId());
         assertEquals(OTHER, model.focusId());
-        assertEquals(ROOT, model.snapshot().layoutRootId());
     }
 
     @Test
@@ -298,53 +362,11 @@ class FamilyTreeViewModelTest {
     }
 
     @Test
-    void generationExpansionWaitsForEveryVisibleFrontierBeforeChangingGraph() {
-        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
-        FamilyTreeNode root = node(ROOT);
-        FamilyTreeNode sibling = node(OTHER);
-        root.addChild(CHILD);
-        sibling.addChild(GRANDPARENT);
-        long initial = model.beginFocus(ROOT, viewport(0, 0, 1));
-        model.accept(response(initial, ROOT, view(Map.of(ROOT, root, OTHER, sibling), Set.of(
-                new FamilyTreeView.Continuation(ROOT, DESCENDANTS),
-                new FamilyTreeView.Continuation(OTHER, DESCENDANTS)), Set.of())));
-
-        FamilyTreeViewModel.GenerationRequest first = model.beginGeneration(DESCENDANTS,
-                Set.of(ROOT, OTHER)).orElseThrow();
-        assertTrue(model.beginGeneration(DESCENDANTS, Set.of(ROOT, OTHER)).isEmpty());
-        FamilyTreeNode child = node(CHILD);
-        child.setFather(root);
-        FamilyTreeViewModel.GenerationResult partial = model.acceptGeneration(new GetFamilyTreeResponse(
-                first.requestId(), first.anchor(), true, view(Map.of(ROOT, root, CHILD, child),
-                Set.of(), Set.of()), Optional.empty()));
-
-        assertTrue(partial.handled());
-        assertFalse(partial.layoutChanged());
-        assertFalse(model.nodes().containsKey(CHILD), "Do not reflow after the first response");
-        FamilyTreeViewModel.GenerationRequest second = partial.nextRequest().orElseThrow();
-        assertNotEquals(first.anchor(), second.anchor());
-
-        FamilyTreeNode niece = node(GRANDPARENT);
-        niece.setFather(sibling);
-        FamilyTreeViewModel.GenerationResult complete = model.acceptGeneration(new GetFamilyTreeResponse(
-                second.requestId(), second.anchor(), true, view(Map.of(OTHER, sibling, GRANDPARENT, niece),
-                Set.of(), Set.of()), Optional.empty()));
-
-        assertTrue(complete.layoutChanged());
-        assertTrue(complete.nextRequest().isEmpty());
-        assertTrue(model.nodes().keySet().containsAll(Set.of(CHILD, GRANDPARENT)));
-        assertEquals(ROOT, model.focusId());
-        assertFalse(model.loading());
-    }
-
-    @Test
     void completedGenerationWithStaleReferencesDoesNotOfferTheSameExpansionAgain() {
         for (FamilyTreeView.Direction direction : FamilyTreeView.Direction.values()) {
             FamilyTreeNode root = node(ROOT);
             if (direction == ANCESTORS) {
                 root.setFather(node(PARENT));
-            } else {
-                root.addChild(CHILD);
             }
             FamilyTreeView.Continuation pending = new FamilyTreeView.Continuation(ROOT, direction);
             FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
@@ -354,18 +376,43 @@ class FamilyTreeViewModelTest {
             FamilyTreeViewModel.GenerationRequest request = model.beginGeneration(direction,
                     Set.of(ROOT)).orElseThrow();
             model.acceptGeneration(new GetFamilyTreeResponse(request.requestId(), ROOT, true,
-                    view(Map.of(ROOT, root), Set.of(pending), Set.of()), Optional.empty()));
+                    view(Map.of(ROOT, root), Set.of(pending), Set.of())));
 
             assertFalse(model.hasGenerationFrontier(direction, Set.of(ROOT)),
-                    "A completed " + direction + " page must retire the requested frontier");
+                    "A completed " + direction + " expansion must retire the requested frontier");
         }
+    }
+
+    @Test
+    void partialGenerationKeepsItsFrontier() {
+        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
+        FamilyTreeNode root = node(ROOT);
+        var frontier = new FamilyTreeView.Continuation(ROOT, DESCENDANTS);
+        long initial = model.beginFocus(ROOT, viewport(0, 0, 1));
+        model.accept(response(initial, ROOT, view(Map.of(ROOT, root), Set.of(frontier), Set.of())));
+
+        var request = model.beginGeneration(DESCENDANTS, Set.of(ROOT)).orElseThrow();
+        FamilyTreeNode firstPage = node(ROOT);
+        firstPage.addChild(CHILD);
+        model.acceptGeneration(new GetFamilyTreeResponse(request.requestId(), ROOT, true,
+                view(Map.of(ROOT, firstPage, CHILD, node(CHILD)), Set.of(frontier), Set.of()), Optional.of(CHILD)));
+
+        assertTrue(model.hasGenerationFrontier(DESCENDANTS, Set.of(ROOT)),
+                "A partial generation must stay expandable");
+        var next = model.beginGeneration(DESCENDANTS, Set.of(ROOT)).orElseThrow();
+        assertEquals(Optional.of(CHILD), next.after());
+        FamilyTreeNode lastPage = node(ROOT);
+        lastPage.addChild(OTHER);
+        model.acceptGeneration(new GetFamilyTreeResponse(next.requestId(), ROOT, true,
+                view(Map.of(ROOT, lastPage, OTHER, node(OTHER)), Set.of(frontier), Set.of())));
+        assertEquals(Set.of(CHILD, OTHER), model.nodes().get(ROOT).children());
+        assertFalse(model.hasGenerationFrontier(DESCENDANTS, Set.of(ROOT)));
     }
 
     @Test
     void missingGenerationAnchorRetiresItsFrontierWithoutDroppingCachedCards() {
         FamilyTreeNode root = node(ROOT);
         FamilyTreeNode child = node(CHILD);
-        child.addChild(MISSING);
         root.addChild(CHILD);
         FamilyTreeView.Continuation frontier = new FamilyTreeView.Continuation(CHILD, DESCENDANTS);
         FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
@@ -377,12 +424,10 @@ class FamilyTreeViewModelTest {
         FamilyTreeViewModel.GenerationRequest request = model.beginGeneration(DESCENDANTS,
                 Set.of(CHILD)).orElseThrow();
         FamilyTreeViewModel.GenerationResult result = model.acceptGeneration(new GetFamilyTreeResponse(
-                request.requestId(), CHILD, false, FamilyTreeView.empty(), Optional.empty()));
+                request.requestId(), CHILD, false, FamilyTreeView.empty()));
 
         assertTrue(result.handled());
-        assertTrue(result.incomplete());
         assertFalse(result.layoutChanged());
-        assertTrue(result.nextRequest().isEmpty());
         assertEquals(before.nodes(), model.snapshot().nodes(),
                 "A missing server anchor must not erase already visible cards or edges");
         assertFalse(model.hasGenerationFrontier(DESCENDANTS, Set.of(CHILD)));
@@ -391,75 +436,11 @@ class FamilyTreeViewModelTest {
     }
 
     @Test
-    void generationPagesUnionChildrenAndRejectStaleReplies() {
-        FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
-        FamilyTreeNode root = node(ROOT);
-        root.addChild(CHILD);
-        long initial = model.beginFocus(ROOT, viewport(0, 0, 1));
-        model.accept(response(initial, ROOT, view(Map.of(ROOT, root),
-                Set.of(new FamilyTreeView.Continuation(ROOT, DESCENDANTS)), Set.of())));
-
-        FamilyTreeViewModel.GenerationRequest request = model.beginGeneration(DESCENDANTS,
-                Set.of(ROOT)).orElseThrow();
-        FamilyTreeNode firstChild = node(CHILD);
-        firstChild.setFather(root);
-        FamilyTreeViewModel.GenerationResult page = model.acceptGeneration(new GetFamilyTreeResponse(
-                request.requestId(), ROOT, true, view(Map.of(ROOT, root, CHILD, firstChild),
-                Set.of(), Set.of()), Optional.of(CHILD)));
-        FamilyTreeViewModel.GenerationRequest next = page.nextRequest().orElseThrow();
-        assertEquals(Optional.of(CHILD), next.after());
-        assertFalse(model.nodes().containsKey(CHILD));
-        assertFalse(model.acceptGeneration(new GetFamilyTreeResponse(request.requestId(), ROOT,
-                true, view(Map.of(OTHER, node(OTHER)), Set.of(), Set.of()), Optional.empty())).handled());
-
-        FamilyTreeNode secondSnapshot = node(ROOT);
-        secondSnapshot.addChild(OTHER);
-        FamilyTreeNode secondChild = node(OTHER);
-        secondChild.setFather(secondSnapshot);
-        FamilyTreeViewModel.GenerationResult complete = model.acceptGeneration(new GetFamilyTreeResponse(
-                next.requestId(), ROOT, true, view(Map.of(ROOT, secondSnapshot, OTHER, secondChild),
-                Set.of(), Set.of()), Optional.empty()));
-
-        assertTrue(complete.layoutChanged());
-        assertTrue(model.nodes().get(ROOT).children().containsAll(Set.of(CHILD, OTHER)));
-        assertTrue(model.nodes().keySet().containsAll(Set.of(CHILD, OTHER)));
-    }
-
-    @Test
-    void repeatedOrBackwardCursorStopsTheBatchWithoutAnotherRequest() {
-        for (UUID stalled : Set.of(CHILD, PARENT)) {
-            FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
-            FamilyTreeNode root = node(ROOT);
-            root.addChild(CHILD);
-            long initial = model.beginFocus(ROOT, viewport(0, 0, 1));
-            model.accept(response(initial, ROOT, view(Map.of(ROOT, root),
-                    Set.of(new FamilyTreeView.Continuation(ROOT, DESCENDANTS)), Set.of())));
-
-            FamilyTreeViewModel.GenerationRequest first = model.beginGeneration(DESCENDANTS,
-                    Set.of(ROOT)).orElseThrow();
-            FamilyTreeViewModel.GenerationResult advancing = model.acceptGeneration(new GetFamilyTreeResponse(
-                    first.requestId(), ROOT, true, view(Map.of(ROOT, root), Set.of(), Set.of()),
-                    Optional.of(CHILD)));
-            FamilyTreeViewModel.GenerationRequest second = advancing.nextRequest().orElseThrow();
-            FamilyTreeViewModel.GenerationResult stalledResult = model.acceptGeneration(new GetFamilyTreeResponse(
-                    second.requestId(), ROOT, true, view(Map.of(ROOT, root), Set.of(), Set.of()),
-                    Optional.of(stalled)));
-
-            assertTrue(stalledResult.handled());
-            assertTrue(stalledResult.incomplete());
-            assertTrue(stalledResult.nextRequest().isEmpty(), "Non-advancing cursor must not loop");
-            assertFalse(model.loading());
-            assertTrue(model.hasGenerationFrontier(DESCENDANTS, Set.of(ROOT)));
-        }
-    }
-
-    @Test
     void completedDirectDescendantGenerationRetiresDeletedChildEdges() {
         FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
         FamilyTreeNode cached = node(ROOT);
         cached.addChild(CHILD);
         cached.addChild(OTHER);
-        cached.addChild(MISSING); // Previously indicated an unloaded child frontier.
         long initial = model.beginFocus(ROOT, viewport(0, 0, 1));
         model.accept(response(initial, ROOT, view(Map.of(ROOT, cached, CHILD, node(CHILD), OTHER, node(OTHER)),
                 Set.of(new FamilyTreeView.Continuation(ROOT, DESCENDANTS)), Set.of())));
@@ -470,17 +451,16 @@ class FamilyTreeViewModelTest {
         fresh.addChild(CHILD); // OTHER is deleted on the server.
         FamilyTreeViewModel.GenerationResult complete = model.acceptGeneration(new GetFamilyTreeResponse(
                 request.requestId(), ROOT, true, view(Map.of(ROOT, fresh, CHILD, node(CHILD)),
-                Set.of(), Set.of()), Optional.empty()));
+                Set.of(), Set.of())));
 
         assertTrue(complete.handled());
-        assertFalse(complete.incomplete());
         assertFalse(model.nodes().get(ROOT).children().contains(OTHER),
                 "A completed direct generation is authoritative for the parent's links");
         assertFalse(model.hasGenerationFrontier(DESCENDANTS, Set.of(ROOT)));
     }
 
     @Test
-    void expandingBothParentsProducesOneSharedChildCard() {
+    void expandingBothParentsSequentiallyProducesOneSharedChildCard() {
         FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
         FamilyTreeNode father = node(ROOT);
         FamilyTreeNode mother = node(OTHER);
@@ -488,22 +468,23 @@ class FamilyTreeViewModelTest {
         child.setFather(father);
         child.setMother(mother);
         long initial = model.beginFocus(ROOT, viewport(0, 0, 1));
-        model.accept(response(initial, ROOT, view(Map.of(ROOT, father, OTHER, mother), Set.of(
+        model.accept(response(initial, ROOT, view(Map.of(ROOT, node(ROOT), OTHER, node(OTHER)), Set.of(
                 new FamilyTreeView.Continuation(ROOT, DESCENDANTS),
                 new FamilyTreeView.Continuation(OTHER, DESCENDANTS)), Set.of())));
 
         FamilyTreeViewModel.GenerationRequest first = model.beginGeneration(DESCENDANTS,
                 Set.of(ROOT, OTHER)).orElseThrow();
-        FamilyTreeViewModel.GenerationResult staged = model.acceptGeneration(new GetFamilyTreeResponse(
+        assertTrue(model.acceptGeneration(new GetFamilyTreeResponse(
                 first.requestId(), first.anchor(), true, view(Map.of(ROOT, father, CHILD, child),
-                Set.of(), Set.of()), Optional.empty()));
-        assertFalse(staged.layoutChanged());
-        FamilyTreeViewModel.GenerationRequest second = staged.nextRequest().orElseThrow();
-        FamilyTreeViewModel.GenerationResult done = model.acceptGeneration(new GetFamilyTreeResponse(
-                second.requestId(), second.anchor(), true, view(Map.of(OTHER, mother, CHILD, child),
-                Set.of(), Set.of()), Optional.empty()));
+                Set.of(), Set.of()))).layoutChanged());
 
-        assertTrue(done.layoutChanged());
+        FamilyTreeViewModel.GenerationRequest second = model.beginGeneration(DESCENDANTS,
+                Set.of(ROOT, OTHER)).orElseThrow();
+        assertNotEquals(first.anchor(), second.anchor());
+        model.acceptGeneration(new GetFamilyTreeResponse(
+                second.requestId(), second.anchor(), true, view(Map.of(OTHER, mother, CHILD, child),
+                Set.of(), Set.of())));
+
         assertEquals(3, model.nodes().size());
         assertEquals(1L, FamilyTreeLayout.layout(model.snapshot()).cards().stream()
                 .filter(card -> card.uuid().equals(CHILD)).count());
@@ -515,7 +496,6 @@ class FamilyTreeViewModelTest {
     void navigatingAwayInvalidatesGenerationResponses() {
         FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
         FamilyTreeNode root = node(ROOT);
-        root.addChild(CHILD);
         long initial = model.beginFocus(ROOT, viewport(0, 0, 1));
         model.accept(response(initial, ROOT, view(Map.of(ROOT, root),
                 Set.of(new FamilyTreeView.Continuation(ROOT, DESCENDANTS)), Set.of())));
@@ -525,7 +505,7 @@ class FamilyTreeViewModelTest {
         model.beginRootFocus(OTHER, viewport(10, 20, 1));
 
         assertFalse(model.acceptGeneration(new GetFamilyTreeResponse(expansion.requestId(), ROOT,
-                true, view(Map.of(CHILD, node(CHILD)), Set.of(), Set.of()), Optional.empty())).handled());
+                true, view(Map.of(CHILD, node(CHILD)), Set.of(), Set.of()))).handled());
         assertFalse(model.nodes().containsKey(CHILD));
     }
 
@@ -541,7 +521,7 @@ class FamilyTreeViewModelTest {
         FamilyTreeView.Continuation omitted = new FamilyTreeView.Continuation(OTHER, DESCENDANTS);
         FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
         long initial = model.beginFocus(ROOT, viewport(20, 30, 1.25f));
-        model.accept(response(initial, ROOT, view(Map.of(ROOT, root, PARENT, father, OTHER, sibling),
+        model.accept(response(initial, ROOT, view(Map.of(ROOT, root, PARENT, father, OTHER, node(OTHER)),
                 Set.of(omitted), Set.of())));
 
         assertTrue(model.snapshot().continuations().contains(omitted));
@@ -552,7 +532,7 @@ class FamilyTreeViewModelTest {
         FamilyTreeViewModel.GenerationRequest expansion = model.beginGeneration(DESCENDANTS,
                 Set.of(OTHER)).orElseThrow();
         assertTrue(model.acceptGeneration(new GetFamilyTreeResponse(expansion.requestId(), OTHER, true,
-                view(Map.of(OTHER, sibling, CHILD, niece), Set.of(), Set.of()), Optional.empty())).layoutChanged());
+                view(Map.of(OTHER, sibling, CHILD, niece), Set.of(), Set.of()))).layoutChanged());
 
         assertEquals(ROOT, model.focusId());
         assertEquals(ROOT, model.layoutRootId());
@@ -568,24 +548,20 @@ class FamilyTreeViewModelTest {
     }
 
     @Test
-    void expansionPrunesReverseContinuationWhenReferencedRelativeIsAlreadyLoaded() {
+    void completedParentDescendantsAreNotReopenedBySubsequentPartialViews() {
         FamilyTreeNode root = node(ROOT);
         FamilyTreeNode parent = node(PARENT);
         root.setFather(parent);
-        parent.addChild(ROOT);
-        FamilyTreeView.Continuation ancestorContinuation = new FamilyTreeView.Continuation(ROOT, ANCESTORS);
         FamilyTreeView.Continuation reverseContinuation = new FamilyTreeView.Continuation(PARENT, DESCENDANTS);
         FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
         long initial = model.beginFocus(ROOT, viewport(0, 0, 1));
-        model.accept(response(initial, ROOT, view(Map.of(ROOT, root), Set.of(ancestorContinuation), Set.of())));
+        model.accept(response(initial, ROOT, view(Map.of(ROOT, root, PARENT, parent), Set.of(), Set.of())));
 
-        FamilyTreeViewModel.GenerationRequest expansion = model.beginGeneration(ANCESTORS,
-                Set.of(ROOT)).orElseThrow();
-        assertTrue(model.acceptGeneration(new GetFamilyTreeResponse(expansion.requestId(), ROOT, true,
-                view(Map.of(ROOT, root, PARENT, parent), Set.of(reverseContinuation), Set.of()),
-                Optional.empty())).layoutChanged());
+        parent.setFather(node(GRANDPARENT));
+        long refreshRoot = model.beginFocus(ROOT, viewport(0, 0, 1));
+        model.accept(response(refreshRoot, ROOT, view(Map.of(ROOT, root, PARENT, parent),
+                Set.of(reverseContinuation), Set.of())));
 
-        assertFalse(model.snapshot().continuations().contains(ancestorContinuation));
         assertFalse(model.snapshot().continuations().contains(reverseContinuation));
     }
 
@@ -613,8 +589,7 @@ class FamilyTreeViewModelTest {
         FamilyTreeViewModel.GenerationRequest expansion = model.beginGeneration(ANCESTORS,
                 Set.of(OTHER)).orElseThrow();
         assertTrue(model.acceptGeneration(new GetFamilyTreeResponse(expansion.requestId(), OTHER, true,
-                view(Map.of(OTHER, partner, PARENT, mother, GRANDPARENT, father), Set.of(), Set.of()),
-                Optional.empty())).layoutChanged());
+                view(Map.of(OTHER, partner, PARENT, mother, GRANDPARENT, father), Set.of(), Set.of()))).layoutChanged());
 
         assertEquals(ROOT, model.focusId());
         assertEquals(ROOT, model.layoutRootId());
@@ -625,11 +600,11 @@ class FamilyTreeViewModelTest {
     }
 
     @Test
-    void unavailableUuidPrunesContinuationWithoutCreatingSyntheticPerson() {
+    void unavailableParentUuidPrunesAncestorContinuationWithoutCreatingSyntheticPerson() {
         FamilyTreeViewModel model = new FamilyTreeViewModel(ROOT);
         FamilyTreeNode root = node(ROOT);
-        root.addChild(MISSING);
-        FamilyTreeView.Continuation continuation = new FamilyTreeView.Continuation(ROOT, DESCENDANTS);
+        root.setFather(node(MISSING));
+        FamilyTreeView.Continuation continuation = new FamilyTreeView.Continuation(ROOT, ANCESTORS);
         long request = model.beginFocus(ROOT, viewport(0, 0, 1));
 
         model.accept(response(

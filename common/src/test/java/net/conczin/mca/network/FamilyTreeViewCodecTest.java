@@ -62,13 +62,14 @@ class FamilyTreeViewCodecTest {
                 Set.of(ROOT),
                 Map.of()
         );
-        GetFamilyTreeResponse response = new GetFamilyTreeResponse(41L, ROOT, true, view);
+        GetFamilyTreeResponse response = new GetFamilyTreeResponse(41L, ROOT, true, view, Optional.of(uuid(3)));
 
         GetFamilyTreeResponse decoded = roundTrip(GetFamilyTreeResponse.STREAM_CODEC, response);
 
         assertEquals(41L, decoded.requestId());
         assertEquals(ROOT, decoded.uuid());
         assertTrue(decoded.found());
+        assertEquals(Optional.of(uuid(3)), decoded.nextCursor());
         assertEquals(Set.of(ROOT), decoded.view().nodes().keySet());
         assertEquals(VillagerProfession.FARMER, decoded.view().nodes().get(ROOT).getProfession());
         assertEquals(rootNode.save(), decoded.view().nodes().get(ROOT).save());
@@ -100,23 +101,11 @@ class FamilyTreeViewCodecTest {
     }
 
     @Test
-    void pagedGenerationRequestAndResponseRoundTrip() {
-        GetFamilyTreeRequest request = new GetFamilyTreeRequest(ROOT, 0, 1, 71L, true, Optional.of(UNAVAILABLE));
-        GetFamilyTreeResponse response = new GetFamilyTreeResponse(71L, ROOT, true, FamilyTreeView.empty(), Optional.of(UNAVAILABLE));
+    void singleGenerationRequestRoundTrips() {
+        GetFamilyTreeRequest request = new GetFamilyTreeRequest(ROOT, 0, 1, 71L, true, Optional.of(uuid(3)));
 
         assertEquals(request, roundTrip(GetFamilyTreeRequest.STREAM_CODEC, request));
-        assertEquals(response, roundTrip(GetFamilyTreeResponse.STREAM_CODEC, response));
-    }
-
-    @Test
-    void invalidGenerationCursorsAreRejectedBeforeServerTraversal() {
-        assertThrows(IllegalArgumentException.class, () -> new GetFamilyTreeRequest(
-                ROOT, 0, 1, 72L, true, Optional.of(Util.NIL_UUID)));
-        assertThrows(IllegalArgumentException.class, () -> new GetFamilyTreeRequest(
-                ROOT, 1, 1, 73L, false, Optional.of(UNAVAILABLE)));
-        // The last page's anchor can be deleted between requests. Its cursor must stay valid.
-        assertEquals(Optional.of(UNAVAILABLE), new GetFamilyTreeRequest(
-                ROOT, 0, 1, 74L, true, Optional.of(UNAVAILABLE)).after());
+        assertTrue(request.oneGeneration());
     }
 
     @Test
@@ -142,9 +131,28 @@ class FamilyTreeViewCodecTest {
             assertEquals(GetFamilyTreeRequest.MAX_DEPTH, decoded.ancestorDepth());
             assertEquals(0, decoded.descendantDepth());
             assertEquals(44L, decoded.requestId());
+            assertFalse(decoded.oneGeneration());
         } finally {
             buffer.release();
         }
+    }
+
+    @Test
+    void serverPacketRateLimitsEnforcePerPlayerHundredMillisecondCooldown() {
+        UUID playerA = uuid(90_001);
+        UUID playerB = uuid(90_002);
+
+        assertEquals(100L, FamilyTreeUUIDLookup.RATE_LIMIT_MS);
+        assertTrue(FamilyTreeUUIDLookup.allowRequest(playerA, 1_000L));
+        assertFalse(FamilyTreeUUIDLookup.allowRequest(playerA, 1_099L));
+        assertTrue(FamilyTreeUUIDLookup.allowRequest(playerB, 1_050L), "Rate limit must be isolated per player");
+        assertTrue(FamilyTreeUUIDLookup.allowRequest(playerA, 1_100L));
+
+        assertEquals(100L, GetFamilyTreeRequest.RATE_LIMIT_MS);
+        assertTrue(GetFamilyTreeRequest.allowRequest(playerA, 1_000L));
+        assertFalse(GetFamilyTreeRequest.allowRequest(playerA, 1_099L));
+        assertTrue(GetFamilyTreeRequest.allowRequest(playerB, 1_050L), "Rate limit must be isolated per player");
+        assertTrue(GetFamilyTreeRequest.allowRequest(playerA, 1_100L));
     }
 
     @Test

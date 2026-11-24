@@ -89,8 +89,8 @@ class BuildingDiagnosticsTest {
 
     @Test
     void roomPlanProbeReturnsSuccessfulAnalysisUnchanged() {
-        RoomScanPlanner.Analysis expected = new RoomScanPlanner.Analysis(
-                RoomScanPlan.addBuilding(new BlockPos(1, 64, 2)));
+        RoomWorkflow.Analysis expected = new RoomWorkflow.Analysis(
+                RoomWorkflow.Plan.addBuilding(new BlockPos(1, 64, 2)));
 
         BuildingDiagnostics.PlanAttempt attempt = BuildingDiagnostics.planAttempt(() -> expected);
 

@@ -262,6 +262,10 @@ class SkinLibraryEditorInputTest {
     private static <T> T allocate(Class<T> type) throws Exception {
         Field f = Unsafe.class.getDeclaredField("theUnsafe");
         f.setAccessible(true);
-        return type.cast(((Unsafe) f.get(null)).allocateInstance(type));
+        T instance = type.cast(((Unsafe) f.get(null)).allocateInstance(type));
+        if (instance instanceof SkinLibraryScreen screen) {
+            set(screen, "requestEpoch", new SkinLibraryScreen.RequestEpoch());
+        }
+        return instance;
     }
 }
