@@ -72,7 +72,6 @@ public class InteractScreen extends AbstractDynamicScreen {
     private long dialogueRenderedToken;
     private final DialogueMenuAnimation dialogueHeight = new DialogueMenuAnimation();
     private InteractionDialogueNodeResponse.Node dialogueDisplayedNode;
-    private boolean dialogueAwaitingReply;
     private boolean qHeld;
     private int dialogueKeyboardIndex = -1;
     private DialogueTopicSection dialogueSectionToReveal;
@@ -132,7 +131,6 @@ public class InteractScreen extends AbstractDynamicScreen {
         dialogueScroller.reset();
         dialogueHeight.reset();
         dialogueDisplayedNode = null;
-        dialogueAwaitingReply = false;
         Network.sendToServer(new GetInteractDataRequest(villager.asEntity().getId(), interactionId));
     }
 
@@ -548,7 +546,6 @@ public class InteractScreen extends AbstractDynamicScreen {
         dialogueKeyboardIndex = -1;
         dialogueHeight.reset();
         dialogueDisplayedNode = null;
-        dialogueAwaitingReply = false;
         clearWidgets();
         dialoguePresentation().ifPresent(ClientHandlerImpl.DialoguePresentation::beginRequest);
         Network.sendToServer(new InteractionDialogueBeginMessage(villager.asEntity().getUUID(), showOpening));
@@ -572,7 +569,6 @@ public class InteractScreen extends AbstractDynamicScreen {
         dialogueKeyboardIndex = -1;
         dialogueHeight.reset();
         dialogueDisplayedNode = null;
-        dialogueAwaitingReply = false;
         dialoguePresentation().ifPresent(ClientHandlerImpl.DialoguePresentation::dismissOptions);
         if (notifyServer) {
             Network.sendToServer(new InteractionDialogueLeaveMessage(villager.asEntity().getUUID(), sessionId, offerToken));
@@ -759,7 +755,6 @@ public class InteractScreen extends AbstractDynamicScreen {
             dialogueScroller.reset();
             resetDialogueSpeechScroll();
             dialogueKeyboardIndex = -1;
-            dialogueAwaitingReply = false;
             dialogueDisplayedToken = token.getAsLong();
             dialogueTokenTracked = true;
         }
@@ -770,9 +765,8 @@ public class InteractScreen extends AbstractDynamicScreen {
             resetDialogueSpeechScroll();
             dialogueKeyboardIndex = -1;
             dialogueDisplayedNode = visibleNode;
-            dialogueAwaitingReply = false;
         }
-        ReplyIndicators indicators = replyIndicators(dialogueAwaitingReply,
+        ReplyIndicators indicators = replyIndicators(presentation.awaitingReply(),
                 presentation.nodeVisible() && presentation.revealingLine(),
                 presentation.pendingAsync(), presentation.reviewingHistory());
         List<DialogueRow> rows = dialogueRows(presentation, indicators);
@@ -1265,7 +1259,7 @@ public class InteractScreen extends AbstractDynamicScreen {
         if (presentation == null) {
             return false;
         }
-        if ((dialogueAwaitingReply || presentation.pendingAsync()) && (click.kind() == DialogueClickKind.CHOICE
+        if (presentation.awaitingReply() && (click.kind() == DialogueClickKind.CHOICE
                 || click.kind() == DialogueClickKind.ADVANCE || click.kind() == DialogueClickKind.SELECT)) {
             return false;
         }
@@ -1336,7 +1330,8 @@ public class InteractScreen extends AbstractDynamicScreen {
                 presentation.markSelectionRequested(DialogueEngine.DialogueSelection.AMBIENT);
             }
             long token = presentation.offerToken().orElseThrow();
-            markDialogueReplyRequested();
+            presentation.markAdvanceRequested(token);
+            clearDialogueActionTargets();
             Network.sendToServer(new InteractionDialogueAdvanceMessage(token));
             return true;
         }
@@ -1353,7 +1348,7 @@ public class InteractScreen extends AbstractDynamicScreen {
             }
             long token = presentation.offerToken().orElseThrow();
             presentation.markChoiceRequested(token, click.choiceId());
-            markDialogueReplyRequested();
+            clearDialogueActionTargets();
             Network.sendToServer(new InteractionDialogueChoiceMessage(token, click.choiceId()));
             return true;
         }
@@ -1366,13 +1361,12 @@ public class InteractScreen extends AbstractDynamicScreen {
         }
         long token = presentation.offerToken().orElseThrow();
         presentation.markSelectionRequested(click.selection());
-        markDialogueReplyRequested();
+        clearDialogueActionTargets();
         Network.sendToServer(new InteractionDialogueSelectMessage(token, click.selection(), Optional.ofNullable(click.eventId())));
         return true;
     }
 
-    private void markDialogueReplyRequested() {
-        dialogueAwaitingReply = true;
+    private void clearDialogueActionTargets() {
         dialogueHits.clear();
         dialogueKeyboardIndex = -1;
     }

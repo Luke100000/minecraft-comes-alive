@@ -174,6 +174,60 @@ class DialoguePresentationTest {
     }
 
     @Test
+    void choiceRequestSuppressesControlsUntilMatchingReply() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        UUID session = UUID.randomUUID();
+        var choice = new InteractionDialogueNodeResponse.Choice("yes", Component.literal("Yes"));
+        var question = active(session, 30L, Component.literal("Q"), DialogueEngine.AdvanceKind.NONE, List.of(choice));
+        assertTrue(presentation.acceptNode(question, 0L, Locale.ENGLISH));
+        presentation.tick(40L);
+        assertEquals(List.of(choice), presentation.visibleChoices());
+        presentation.markChoiceRequested(30L, "yes");
+        assertTrue(presentation.awaitingReply());
+        assertTrue(presentation.visibleChoices().isEmpty(), "awaiting a choice must disable repeat sends");
+        assertFalse(presentation.acceptSelectionRejection(29L), "stale rejection must not unlock the pending reply");
+        assertTrue(presentation.awaitingReply());
+        assertTrue(presentation.acceptNode(question, 50L, Locale.ENGLISH), "server may reject by refreshing the same offer");
+        assertFalse(presentation.awaitingReply(), "same-offer rejection must allow another choice");
+        assertEquals(List.of(choice), presentation.visibleChoices());
+        presentation.markChoiceRequested(30L, "yes");
+        assertTrue(presentation.acceptNode(active(session, 31L, Component.literal("A"),
+                DialogueEngine.AdvanceKind.NEXT, List.of()), 100L, Locale.ENGLISH));
+        assertFalse(presentation.awaitingReply());
+        assertTrue(presentation.reviewPrevious());
+        assertEquals(Optional.of("yes"), presentation.reviewedEntry().orElseThrow().selectedChoiceId());
+    }
+
+    @Test
+    void advanceRequestUsesCurrentOfferUntilReplyOrRejection() {
+        ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
+        UUID session = UUID.randomUUID();
+        assertTrue(presentation.acceptNode(active(session, 40L, Component.literal("Q"),
+                DialogueEngine.AdvanceKind.NEXT, List.of()), 0L, Locale.ENGLISH));
+        presentation.tick(40L);
+        presentation.markAdvanceRequested(39L);
+        assertFalse(presentation.awaitingReply());
+        presentation.markAdvanceRequested(40L);
+        assertTrue(presentation.awaitingReply());
+        assertFalse(presentation.canAdvance());
+        assertFalse(presentation.acceptSelectionRejection(39L));
+        assertTrue(presentation.awaitingReply());
+        assertTrue(presentation.acceptSelectionRejection(40L));
+        assertFalse(presentation.awaitingReply());
+        assertTrue(presentation.canAdvance());
+        presentation.markAdvanceRequested(40L);
+        assertTrue(presentation.acceptNode(active(session, 41L, Component.literal("A"),
+                DialogueEngine.AdvanceKind.BACK_TO_TOPICS, List.of()), 100L, Locale.ENGLISH));
+        assertFalse(presentation.awaitingReply());
+        presentation.tick(140L);
+        presentation.markAdvanceRequested(41L);
+        assertTrue(presentation.awaitingReply());
+        assertTrue(presentation.acceptNode(new InteractionDialogueNodeResponse(
+                session, 41L, InteractionDialogueNodeResponse.State.ENDED, Optional.empty()), 150L, Locale.ENGLISH));
+        assertFalse(presentation.awaitingReply());
+    }
+
+    @Test
     void pendingAcknowledgesChoiceButRejectionAndPauseDoNot() {
         ClientHandlerImpl.DialoguePresentation presentation = new ClientHandlerImpl.DialoguePresentation();
         UUID session = UUID.randomUUID();
