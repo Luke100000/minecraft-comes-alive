@@ -1,6 +1,5 @@
 package net.conczin.mca.client.gui;
 
-import net.conczin.mca.FamilyTreeTestSupport;
 import net.conczin.mca.network.FamilyTreeSearchEntry;
 import net.minecraft.network.chat.Component;
 import org.junit.jupiter.api.Test;
@@ -9,11 +8,8 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static net.conczin.mca.FamilyTreeTestSupport.uuid;
+import static org.junit.jupiter.api.Assertions.*;
 
 class FamilyTreeSearchPresentationTest {
     private static final UUID ONE = uuid(1);

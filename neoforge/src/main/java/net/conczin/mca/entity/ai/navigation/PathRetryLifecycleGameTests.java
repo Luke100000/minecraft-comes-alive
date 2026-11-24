@@ -2,12 +2,15 @@ package net.conczin.mca.entity.ai.navigation;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.mojang.datafixers.util.Pair;
 import net.conczin.mca.MCA;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.brain.WalkTargetFailureMemory;
+import net.conczin.mca.entity.ai.brain.tasks.ConditionalTask;
 import net.conczin.mca.entity.ai.brain.tasks.ExtendedWalkTowardsTask;
+import net.conczin.mca.entity.ai.brain.tasks.InteractTask;
 import net.conczin.mca.entity.ai.brain.tasks.WanderOrTeleportToTargetTask;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
@@ -15,6 +18,9 @@ import net.minecraft.gametest.framework.AfterBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.Brain;
@@ -22,12 +28,16 @@ import net.minecraft.world.entity.ai.behavior.Behavior;
 import net.minecraft.world.entity.ai.behavior.DoNothing;
 import net.minecraft.world.entity.ai.behavior.MoveToTargetSink;
 import net.minecraft.world.entity.ai.behavior.OneShot;
+import net.minecraft.world.entity.ai.behavior.SetWalkTargetFromBlockMemory;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
+import net.minecraft.world.entity.ai.memory.MemoryStatus;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.schedule.Activity;
 import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.entity.schedule.ScheduleBuilder;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.pathfinder.Path;
@@ -54,6 +64,7 @@ public final class PathRetryLifecycleGameTests {
     private static final String PLAY_BATCH = "mca_path_retry_play_lifecycle";
     private static final Set<ChunkPos> FORCED_CHUNKS = new HashSet<>();
     private static final Set<VillagerEntityMCA> ACTIVE_VILLAGERS = new HashSet<>();
+    private static final Set<Entity> AUX_ENTITIES = new HashSet<>();
     private static final Map<BlockPos, BlockState> ORIGINAL_TERRAIN = new LinkedHashMap<>();
     private static Integer originalPathfindingDistance;
 
@@ -445,6 +456,8 @@ public final class PathRetryLifecycleGameTests {
     private static void releaseLifecycleChunks(ServerLevel level) {
         ACTIVE_VILLAGERS.forEach(VillagerEntityMCA::discard);
         ACTIVE_VILLAGERS.clear();
+        AUX_ENTITIES.forEach(Entity::discard);
+        AUX_ENTITIES.clear();
         ORIGINAL_TERRAIN.forEach((pos, state) -> level.setBlock(pos, state, 3));
         ORIGINAL_TERRAIN.clear();
         FORCED_CHUNKS.forEach(chunk -> level.setChunkForced(chunk.x, chunk.z, false));
@@ -453,5 +466,349 @@ public final class PathRetryLifecycleGameTests {
             Config.getInstance().villagerPathfindingDistance = originalPathfindingDistance;
             originalPathfindingDistance = null;
         }
+    }
+
+    @AfterBatch(batch = "mca_path_retry_preemption_expiry")
+    public static void releasePreemptionExpiry(ServerLevel level) {
+        releaseLifecycleChunks(level);
+    }
+
+    @GameTest(batch = "mca_path_retry_preemption_expiry", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 260)
+    public static void longForeignPreemptionDoesNotEvictHomeOnResumeAndStillExpiresLater(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(10, 1, 10));
+        BlockPos destination = start.east(12);
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0)
+                .withPosition(Vec3.atBottomCenterOf(start))
+                .spawn(MobSpawnType.STRUCTURE);
+        ACTIVE_VILLAGERS.add(villager);
+        villager.refreshBrain(helper.getLevel());
+        villager.getBrain().removeAllBehaviors();
+        villager.setNoAi(true);
+        villager.getBrain().setMemory(MemoryModuleType.HOME,
+                GlobalPos.of(helper.getLevel().dimension(), destination));
+
+        int[] gaveUp = {0};
+        OneShot<VillagerEntityMCA> producer = ExtendedWalkTowardsTask.createWithoutPoiRelease(
+                MemoryModuleType.HOME, 0.5F, 0, 80, ignored -> true, ignored -> gaveUp[0]++);
+        long started = helper.getLevel().getGameTime();
+        producer.trigger(helper.getLevel(), villager, started);
+        WalkTargetFailureMemory.record(villager, destination, started);
+
+        helper.onEachTick(() -> {
+            long now = helper.getLevel().getGameTime();
+            long elapsed = now - started;
+            if (elapsed >= 10L && elapsed <= 120L) {
+                villager.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                        new WalkTarget(start.south(8), 0.5F, 0));
+                producer.trigger(helper.getLevel(), villager, now);
+                return;
+            }
+            if (elapsed == 121L) {
+                villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+                producer.trigger(helper.getLevel(), villager, now);
+                helper.assertTrue(gaveUp[0] == 0
+                                && villager.getBrain().getMemoryInternal(MemoryModuleType.HOME).isPresent(),
+                        "foreign WALK_TARGET preemption aged HOME past maxRunTime and evicted it immediately on resume");
+                villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+                return;
+            }
+            if (elapsed > 121L) {
+                producer.trigger(helper.getLevel(), villager, now);
+                villager.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+                if (gaveUp[0] > 0) {
+                    helper.assertTrue(elapsed >= 190L && elapsed <= 220L,
+                            "resumed HOME expired at unexpected tick after 10 pre-preemption unreachable ticks: " + elapsed);
+                    ACTIVE_VILLAGERS.remove(villager);
+                    villager.discard();
+                    helper.succeed();
+                } else if (elapsed > 230L) {
+                    helper.fail("unreachable HOME never expired after resuming from foreign preemption");
+                }
+            }
+        });
+    }
+
+    @GameTest(batch = "mca_path_retry_shared_oneshot", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 40)
+    public static void sharedOneShotProducerIsolatesRetryGatesAcrossVillagers(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(6, 1, 6));
+        BlockPos destination = start.east(12);
+        VillagerEntityMCA first = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start)).spawn(MobSpawnType.STRUCTURE);
+        VillagerEntityMCA second = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start)).spawn(MobSpawnType.STRUCTURE);
+        try {
+            for (VillagerEntityMCA actor : new VillagerEntityMCA[]{first, second}) {
+                actor.refreshBrain(helper.getLevel());
+                actor.getBrain().removeAllBehaviors();
+                actor.setNoAi(true);
+                actor.getBrain().setMemory(MemoryModuleType.HOME,
+                        GlobalPos.of(helper.getLevel().dimension(), destination));
+            }
+            OneShot<VillagerEntityMCA> sharedProducer = ExtendedWalkTowardsTask.createWithoutPoiRelease(
+                    MemoryModuleType.HOME, 0.5F, 0, 200, ignored -> true, ignored -> { });
+            long started = helper.getLevel().getGameTime();
+            sharedProducer.trigger(helper.getLevel(), first, started);
+            first.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+            sharedProducer.trigger(helper.getLevel(), first, started + 1L);
+            first.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+            sharedProducer.trigger(helper.getLevel(), first, started + 2L);
+            helper.assertTrue(first.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).isEmpty(),
+                    "first villager did not enter retry backoff");
+
+            sharedProducer.trigger(helper.getLevel(), second, started + 2L);
+            helper.assertTrue(second.getBrain().getMemoryInternal(MemoryModuleType.WALK_TARGET).isPresent(),
+                    "sharing a OneShot producer leaked the first villager's retry backoff onto a second villager");
+        } finally {
+            first.discard();
+            second.discard();
+        }
+        helper.succeed();
+    }
+
+    @AfterBatch(batch = "mca_path_retry_real_brain_preemption")
+    public static void releaseRealBrainPreemption(ServerLevel level) {
+        releaseLifecycleChunks(level);
+    }
+
+    @GameTest(batch = "mca_path_retry_real_brain_preemption", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 260)
+    public static void realBrainCombatAndInteractionPreemptionDoNotEvictHomeAndMultiFlashStillExpires(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(16, 1, 16));
+        BlockPos destination = start.east(10);
+        BlockPos jobPos = destination.south(3);
+        rememberForcedChunks(start, 16);
+        rememberOriginalTerrain(helper.getLevel(), start, 16);
+        prepareFlatArea(helper, start, 16, 3);
+        for (BlockPos sealed : new BlockPos[]{destination, jobPos}) {
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    if (dx != 0 || dz != 0) {
+                        for (int y = 0; y < 3; y++) {
+                            helper.getLevel().setBlock(sealed.offset(dx, y, dz), Blocks.STONE.defaultBlockState(), 3);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Actor 1: exercises MixinSetWalkTargetFromBlockMemory early return under foreign WALK_TARGET.
+        VillagerEntityMCA worker = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(start.west(2))).spawn(MobSpawnType.STRUCTURE);
+        ACTIVE_VILLAGERS.add(worker);
+        worker.refreshBrain(helper.getLevel());
+        worker.getBrain().removeAllBehaviors();
+        worker.setNoAi(true);
+        worker.getBrain().setMemory(MemoryModuleType.JOB_SITE,
+                GlobalPos.of(helper.getLevel().dimension(), jobPos));
+        var jobProducer = SetWalkTargetFromBlockMemory.create(MemoryModuleType.JOB_SITE, 0.5F, 1, 100, 60);
+
+        // Actor 2: live-AI villager right outside the sealed HOME wall, exercising Activity.REST suspension (ATTACK_TARGET) and ConditionalTask (!InteractTask.shouldRun).
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(destination.west(2))).spawn(MobSpawnType.STRUCTURE);
+        ACTIVE_VILLAGERS.add(villager);
+        villager.refreshBrain(helper.getLevel());
+        villager.setOnGround(true);
+        int[] gaveUp = {0};
+        @SuppressWarnings("unchecked")
+        Brain<VillagerEntityMCA> brain = (Brain<VillagerEntityMCA>) (Brain<?>) villager.getBrain();
+        brain.stopAll(helper.getLevel(), villager);
+        brain.removeAllBehaviors();
+        brain.addActivity(Activity.CORE, 1, ImmutableList.of(new WanderOrTeleportToTargetTask()));
+        brain.addActivityWithConditions(Activity.REST, ImmutableList.of(
+                Pair.of(2, new ConditionalTask<>(ExtendedWalkTowardsTask.createWithoutPoiRelease(
+                        MemoryModuleType.HOME, 0.5F, 0, 60, ignored -> true, ignored -> gaveUp[0]++),
+                        v -> !InteractTask.shouldRun(v))),
+                Pair.of(20, new DoNothing(20, 40))
+        ), ImmutableSet.of(Pair.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT)));
+        brain.setCoreActivities(ImmutableSet.of(Activity.CORE));
+        brain.setDefaultActivity(Activity.IDLE);
+        brain.setSchedule(new ScheduleBuilder(new Schedule()).changeActivityAt(0, Activity.REST).build());
+        brain.setActiveActivityIfPossible(Activity.REST);
+        brain.eraseMemory(MemoryModuleType.WALK_TARGET);
+        brain.eraseMemory(MemoryModuleType.PATH);
+        brain.eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+        brain.setMemory(MemoryModuleType.HOME, GlobalPos.of(helper.getLevel().dimension(), destination));
+
+        Zombie dummyThreat = new Zombie(EntityType.ZOMBIE, helper.getLevel());
+        dummyThreat.setNoAi(true);
+        dummyThreat.setSilent(true);
+        dummyThreat.setPersistenceRequired();
+        dummyThreat.setPos(start.getX() + 0.5D, start.getY() + 10.0D, start.getZ() + 0.5D);
+        helper.getLevel().addFreshEntity(dummyThreat);
+        AUX_ENTITIES.add(dummyThreat);
+
+        var player = helper.makeMockPlayer(GameType.SURVIVAL);
+        player.setPos(Vec3.atBottomCenterOf(destination.west(3)));
+        AUX_ENTITIES.add(player);
+
+        long started = helper.getLevel().getGameTime();
+        jobProducer.trigger(helper.getLevel(), worker, started);
+        WalkTargetFailureMemory.record(worker, jobPos, started);
+        boolean[] sawInitialFailure = {false};
+        helper.onEachTick(() -> {
+            long now = helper.getLevel().getGameTime();
+            long elapsed = now - started;
+            sawInitialFailure[0] |= WalkTargetFailureMemory.hasFailureFor(villager, destination);
+
+            if (elapsed >= 5L && elapsed <= 75L) {
+                worker.getBrain().setMemory(MemoryModuleType.WALK_TARGET,
+                        new WalkTarget(start.south(4), 0.5F, 0));
+                jobProducer.trigger(helper.getLevel(), worker, now);
+            } else if (elapsed == 76L) {
+                worker.getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
+                jobProducer.trigger(helper.getLevel(), worker, now);
+                helper.assertTrue(worker.getBrain().getMemoryInternal(MemoryModuleType.JOB_SITE).isPresent(),
+                        "SetWalkTargetFromBlockMemory evicted JOB_SITE immediately after foreign WALK_TARGET preemption");
+            }
+
+            // Flash 1 (ticks 15..55): ATTACK_TARGET suspends Activity.REST entirely for 41 ticks.
+            if (elapsed == 15L) {
+                helper.assertTrue(sawInitialFailure[0], "live villager did not record initial sealed HOME failure");
+                brain.setMemory(MemoryModuleType.ATTACK_TARGET, dummyThreat);
+                brain.setActiveActivityIfPossible(Activity.IDLE);
+            }
+            if (elapsed == 56L) {
+                brain.eraseMemory(MemoryModuleType.ATTACK_TARGET);
+                brain.setActiveActivityIfPossible(Activity.REST);
+            }
+            if (elapsed == 68L) {
+                helper.assertTrue(gaveUp[0] == 0 && brain.getMemoryInternal(MemoryModuleType.HOME).isPresent(),
+                        "combat preemption of Activity.REST aged HOME in wall-clock time and evicted it on resume");
+            }
+
+            // Flash 2 (ticks 75..120): live player interaction makes InteractTask.shouldRun(v) true, blocking ConditionalTask.
+            if (elapsed == 75L) {
+                villager.getInteractions().interactAt(player, Vec3.ZERO, InteractionHand.MAIN_HAND);
+                helper.assertTrue(InteractTask.shouldRun(villager), "fixture did not enter InteractTask.shouldRun state");
+            }
+            if (elapsed == 121L) {
+                villager.getInteractions().stopInteracting();
+            }
+            if (elapsed == 128L) {
+                helper.assertTrue(gaveUp[0] == 0 && brain.getMemoryInternal(MemoryModuleType.HOME).isPresent(),
+                        "player-interaction ConditionalTask preemption aged HOME in wall-clock time and evicted it");
+            }
+            if (elapsed > 128L && gaveUp[0] > 0) {
+                helper.assertTrue(elapsed >= 135L && elapsed <= 195L,
+                        "multi-flash owned unreachable ticks expired at unexpected tick: " + elapsed);
+                releaseLifecycleChunks(helper.getLevel());
+                helper.succeed();
+            } else if (elapsed > 215L) {
+                helper.fail("sealed HOME never expired after owned unreachable ticks exceeded maxRunTime across two flashes");
+            }
+        });
+    }
+
+    @AfterBatch(batch = "mca_path_retry_foreign_sink_preemption")
+    public static void releaseForeignSinkPreemption(ServerLevel level) {
+        releaseLifecycleChunks(level);
+    }
+
+    @GameTest(batch = "mca_path_retry_foreign_sink_preemption", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 220)
+    public static void foreignMoveToTargetSinkPathAttemptPreservesPriorHomeFailureAcrossPreemption(GameTestHelper helper) {
+        BlockPos start = helper.absolutePos(new BlockPos(16, 1, 16));
+        BlockPos destination = start.east(10);
+        BlockPos jobPos = destination.south(3);
+        rememberForcedChunks(start, 16);
+        rememberOriginalTerrain(helper.getLevel(), start, 16);
+        prepareFlatArea(helper, start, 16, 3);
+        for (BlockPos sealed : new BlockPos[]{destination, jobPos}) {
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    if (dx != 0 || dz != 0) {
+                        for (int y = 0; y < 3; y++) {
+                            helper.getLevel().setBlock(sealed.offset(dx, y, dz), Blocks.STONE.defaultBlockState(), 3);
+                        }
+                    }
+                }
+            }
+        }
+
+        VillagerEntityMCA villager = VillagerFactory.newVillager(helper.getLevel())
+                .withAge(0).withPosition(Vec3.atBottomCenterOf(destination.west(2))).spawn(MobSpawnType.STRUCTURE);
+        ACTIVE_VILLAGERS.add(villager);
+        villager.refreshBrain(helper.getLevel());
+        villager.setOnGround(true);
+        int[] gaveUp = {0};
+        var jobProducer = SetWalkTargetFromBlockMemory.create(MemoryModuleType.JOB_SITE, 0.5F, 1, 100, 60);
+        @SuppressWarnings("unchecked")
+        Brain<VillagerEntityMCA> brain = (Brain<VillagerEntityMCA>) (Brain<?>) villager.getBrain();
+        brain.stopAll(helper.getLevel(), villager);
+        brain.removeAllBehaviors();
+        brain.addActivity(Activity.CORE, 1, ImmutableList.of(new WanderOrTeleportToTargetTask()));
+        brain.addActivityWithConditions(Activity.REST, ImmutableList.of(
+                Pair.of(2, new ConditionalTask<>(ExtendedWalkTowardsTask.createWithoutPoiRelease(
+                        MemoryModuleType.HOME, 0.5F, 0, 60, ignored -> true, ignored -> gaveUp[0]++),
+                        v -> !InteractTask.shouldRun(v))),
+                Pair.of(20, new DoNothing(20, 40))
+        ), ImmutableSet.of(Pair.of(MemoryModuleType.ATTACK_TARGET, MemoryStatus.VALUE_ABSENT)));
+        brain.setCoreActivities(ImmutableSet.of(Activity.CORE));
+        brain.setDefaultActivity(Activity.IDLE);
+        brain.setSchedule(new ScheduleBuilder(new Schedule()).changeActivityAt(0, Activity.REST).build());
+        brain.setActiveActivityIfPossible(Activity.REST);
+        brain.eraseMemory(MemoryModuleType.WALK_TARGET);
+        brain.eraseMemory(MemoryModuleType.PATH);
+        brain.eraseMemory(MemoryModuleType.CANT_REACH_WALK_TARGET_SINCE);
+        brain.setMemory(MemoryModuleType.HOME, GlobalPos.of(helper.getLevel().dimension(), destination));
+        brain.setMemory(MemoryModuleType.JOB_SITE, GlobalPos.of(helper.getLevel().dimension(), jobPos));
+
+        Zombie dummyThreat = new Zombie(EntityType.ZOMBIE, helper.getLevel());
+        dummyThreat.setNoAi(true);
+        dummyThreat.setSilent(true);
+        dummyThreat.setPersistenceRequired();
+        dummyThreat.setPos(start.getX() + 0.5D, start.getY() + 10.0D, start.getZ() + 0.5D);
+        helper.getLevel().addFreshEntity(dummyThreat);
+        AUX_ENTITIES.add(dummyThreat);
+
+        long started = helper.getLevel().getGameTime();
+        // Prime JOB_SITE's per-producer gate on the same villager before REST takes over.
+        jobProducer.trigger(helper.getLevel(), villager, started);
+        brain.eraseMemory(MemoryModuleType.WALK_TARGET);
+
+        boolean[] clearedByForeignSink = {false};
+        helper.onEachTick(() -> {
+            long now = helper.getLevel().getGameTime();
+            long elapsed = now - started;
+
+            if (elapsed == 25L) {
+                helper.assertTrue(WalkTargetFailureMemory.hasFailureFor(villager, destination),
+                        "villager did not record initial sealed HOME failure before foreign MoveToTargetSink preemption");
+                brain.setMemory(MemoryModuleType.ATTACK_TARGET, dummyThreat);
+                brain.setActiveActivityIfPossible(Activity.IDLE);
+                brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(destination.west(3), 0.5F, 0));
+            }
+            if (elapsed > 25L && elapsed <= 95L) {
+                clearedByForeignSink[0] |= !WalkTargetFailureMemory.hasFailureFor(villager, destination);
+                if (!brain.hasMemoryValue(MemoryModuleType.WALK_TARGET)) {
+                    brain.setMemory(MemoryModuleType.WALK_TARGET, new WalkTarget(destination.west(2), 0.5F, 0));
+                }
+                // Concurrent second POI producer on the same villager during preemption.
+                jobProducer.trigger(helper.getLevel(), villager, now);
+            }
+            if (elapsed == 96L) {
+                helper.assertTrue(clearedByForeignSink[0],
+                        "foreign MoveToTargetSink path attempt did not clear CANT_REACH_WALK_TARGET_SINCE as expected");
+                brain.eraseMemory(MemoryModuleType.ATTACK_TARGET);
+                brain.eraseMemory(MemoryModuleType.WALK_TARGET);
+                villager.getNavigation().stop();
+                brain.setActiveActivityIfPossible(Activity.REST);
+            }
+            if (elapsed == 102L) {
+                helper.assertTrue(gaveUp[0] == 0 && brain.getMemoryInternal(MemoryModuleType.HOME).isPresent(),
+                        "foreign MoveToTargetSink path attempt wiped preemption state and evicted HOME immediately on resume");
+            }
+            if (elapsed > 102L && gaveUp[0] > 0) {
+                helper.assertTrue(elapsed >= 125L && elapsed <= 154L,
+                        "prior HOME failure age did not survive foreign MoveToTargetSink preemption cleanly (expired at " + elapsed + ")");
+                releaseLifecycleChunks(helper.getLevel());
+                helper.succeed();
+            } else if (elapsed > 180L) {
+                helper.fail("sealed HOME never expired after resuming from foreign MoveToTargetSink preemption");
+            }
+        });
     }
 }

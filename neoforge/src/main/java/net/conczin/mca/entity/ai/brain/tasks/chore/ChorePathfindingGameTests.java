@@ -4,6 +4,7 @@ import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.VillagerFactory;
 import net.conczin.mca.entity.ai.Chore;
+import net.conczin.mca.entity.ai.ActivitiesMCA;
 import net.conczin.mca.entity.ai.navigation.PathRequestDiagnostics;
 import net.conczin.mca.entity.ai.navigation.PersistentPathTarget;
 import net.minecraft.core.BlockPos;
@@ -15,6 +16,8 @@ import net.minecraft.world.entity.ai.behavior.LookAtTargetSink;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.memory.MemoryModuleType;
 import net.minecraft.world.entity.ai.memory.WalkTarget;
+import net.minecraft.world.entity.schedule.Activity;
+import net.minecraft.world.entity.schedule.Schedule;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
@@ -23,6 +26,8 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import java.lang.reflect.Field;
+import java.util.Optional;
+import net.minecraft.world.entity.player.Player;
 
 import static net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea;
 @PrefixGameTestTemplate(false)
@@ -151,11 +156,23 @@ public final class ChorePathfindingGameTests {
             case HARVEST -> Items.IRON_HOE;
             default -> Items.FISHING_ROD;
         }));
-        villager.getVillagerBrain().assignJob(chore, helper.makeMockPlayer(GameType.SURVIVAL));
+        Player assigningPlayer = helper.makeMockPlayer(GameType.SURVIVAL);
+        villager.getVillagerBrain().assignJob(chore, assigningPlayer);
+        villager.getBrain().setSchedule(Schedule.EMPTY);
+        villager.getBrain().setActiveActivityIfPossible(ActivitiesMCA.CHORE);
         AbstractChoreTask task = switch (chore) {
-            case CHOP -> new ChoppingTask();
-            case HARVEST -> new HarvestingTask();
-            default -> new FishingTask();
+            case CHOP -> new ChoppingTask() {
+                @Override
+                Optional<Player> getAssigningPlayer() { return Optional.of(assigningPlayer); }
+            };
+            case HARVEST -> new HarvestingTask() {
+                @Override
+                Optional<Player> getAssigningPlayer() { return Optional.of(assigningPlayer); }
+            };
+            default -> new FishingTask() {
+                @Override
+                Optional<Player> getAssigningPlayer() { return Optional.of(assigningPlayer); }
+            };
         };
         Config config = Config.getInstance();
         int previousDistance = config.villagerPathfindingDistance;
@@ -163,25 +180,25 @@ public final class ChorePathfindingGameTests {
             config.villagerPathfindingDistance = 160;
             long time = helper.getLevel().getGameTime();
             task.start(helper.getLevel(), villager, time);
-            setTarget(task, switch (chore) {
-                case CHOP -> "targetTree";
-                case HARVEST -> "currentPos";
-                default -> "targetWater";
-            }, target);
+            if (chore == Chore.FISH) {
+                // Fishing navigation now owns a dry bank endpoint, with a separate cast target.
+                helper.getLevel().setBlock(target, Blocks.AIR.defaultBlockState(), 3);
+                helper.getLevel().setBlock(target.east(5), Blocks.WATER.defaultBlockState(), 3);
+                setTarget(task, "currentSite", new FishingSiteSearch.Site(target, target.east(5), false));
+            } else {
+                setTarget(task, chore == Chore.CHOP ? "targetTree" : "currentPos", target);
+            }
             // Exercise movement toward an already-selected work destination.
             task.tick(helper.getLevel(), villager, time);
             var walkTarget = villager.getBrain().getMemory(MemoryModuleType.WALK_TARGET).orElseThrow();
             helper.assertTrue(walkTarget.getTarget().currentBlockPosition().equals(target),
                     chore + " changed the selected work destination");
+            helper.assertTrue(walkTarget.getTarget() instanceof PersistentPathTarget,
+                    chore + " did not publish a persistent work destination");
             var before = PathRequestDiagnostics.snapshot(villager);
             var path = villager.getNavigation().createPath(target, 0);
             var after = PathRequestDiagnostics.snapshot(villager);
-            // Fishers cast from nearby ground instead of entering expensive WATER
-            // nodes. Verify the task can actually begin work at that endpoint.
-            boolean fishingApproach = chore == Chore.FISH && path != null && path.getEndNode() != null
-                    && Vec3.atBottomCenterOf(path.getEndNode().asBlockPos())
-                    .distanceToSqr(new Vec3(target.getX(), target.getY(), target.getZ())) < 5.0D;
-            helper.assertTrue(path != null && (path.canReach() || fishingApproach)
+            helper.assertTrue(path != null && path.canReach()
                             && after.extendedSearches() > before.extendedSearches(),
                     chore + " lost extended recovery around a long wall: " + path
                             + ", end=" + (path == null ? null : path.getEndNode()) + ", " + after);
@@ -192,6 +209,9 @@ public final class ChorePathfindingGameTests {
                         "recovered fishing approach did not let the task cast at its selected water");
                 villager.getFishingBobber().discard();
             }
+            villager.getBrain().setActiveActivityIfPossible(Activity.REST);
+            helper.assertTrue(((PersistentPathTarget) walkTarget.getTarget()).isInactiveFor(villager),
+                    chore + " work destination did not yield when REST became active");
         } finally {
             config.villagerPathfindingDistance = previousDistance;
             villager.discard();
@@ -199,9 +219,11 @@ public final class ChorePathfindingGameTests {
         helper.succeed();
     }
 
-    private static void setTarget(AbstractChoreTask task, String name, BlockPos target) {
+    private static void setTarget(AbstractChoreTask task, String name, Object target) {
         try {
-            Field field = task.getClass().getDeclaredField(name);
+            Class<?> owner = task instanceof FishingTask ? FishingTask.class
+                    : task instanceof ChoppingTask ? ChoppingTask.class : HarvestingTask.class;
+            Field field = owner.getDeclaredField(name);
             field.setAccessible(true);
             field.set(task, target);
         } catch (ReflectiveOperationException exception) {

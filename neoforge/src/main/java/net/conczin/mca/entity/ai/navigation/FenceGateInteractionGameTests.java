@@ -133,6 +133,44 @@ public final class FenceGateInteractionGameTests {
         }
     }
 
+    @GameTest(batch = "mca_raised_diagonal_headroom", templateNamespace = "minecraft",
+            template = "bastion/blocks/air", timeoutTicks = 40)
+    public static void raisedDiagonalRejectsOverheadCornerBeforeJump(GameTestHelper helper) {
+        BlockPos feet = helper.absolutePos(new BlockPos(5, 2, 5));
+        BlockPos candidate = feet.west().north().above();
+        net.conczin.mca.gametest.GameTestTerrain.prepareFlatArea(helper, feet, 4, 4);
+        helper.getLevel().setBlock(candidate.below(), Blocks.SPRUCE_PLANKS.defaultBlockState(), 3);
+        VillagerEntityMCA villager = spawnSizedVillager(helper, feet);
+        PathNavigationRegion region = new PathNavigationRegion(helper.getLevel(), feet.offset(-4, -2, -4), feet.offset(4, 5, 4));
+        MCAWalkNodeEvaluator evaluator = new MCAWalkNodeEvaluator();
+        try {
+            evaluator.prepare(region, villager);
+            try {
+                helper.assertTrue(hasNeighbor(evaluator, feet, candidate),
+                        "The unobstructed one-block diagonal rise must remain executable");
+            } finally {
+                evaluator.done();
+            }
+            helper.assertTrue(helper.getLevel().noBlockCollision(villager,
+                            villager.getBoundingBox().move(-0.30D, 1.0D, -0.30D)),
+                    "The jump approach must be clear before adding the captured overhead corner");
+            helper.getLevel().setBlock(feet.west().above(2), Blocks.SPRUCE_PLANKS.defaultBlockState(), 3);
+            helper.assertTrue(!helper.getLevel().noBlockCollision(villager,
+                            villager.getBoundingBox().move(-0.30D, 1.0D, -0.30D)),
+                    "The captured overhead corner must obstruct the native jump approach");
+            evaluator.prepare(region, villager);
+            try {
+                helper.assertTrue(!hasNeighbor(evaluator, feet, candidate),
+                        "MCA admitted a raised diagonal whose overhead corner blocks the jump approach");
+            } finally {
+                evaluator.done();
+            }
+        } finally {
+            villager.discard();
+        }
+        helper.succeed();
+    }
+
     @GameTest(batch = "mca_planter_corner", templateNamespace = "minecraft",
             template = "bastion/blocks/air", timeoutTicks = 40)
     public static void raisedPlanterCornerRejectsDiagonalBlockedBeforeJumpRange(GameTestHelper helper) {

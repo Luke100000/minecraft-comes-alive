@@ -1,6 +1,7 @@
 package net.conczin.mca.network.c2s;
 
 import net.conczin.mca.MCA;
+import net.conczin.mca.item.BabyItem;
 import net.conczin.mca.network.HandleablePayload;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.FriendlyByteBuf;
@@ -8,7 +9,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.world.entity.player.Player;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 
 public record BabyNamingVillagerMessage(int slot, String name) implements HandleablePayload {
@@ -20,9 +21,19 @@ public record BabyNamingVillagerMessage(int slot, String name) implements Handle
     );
 
     @Override
-    public void handle(Player player) {
+    public void handleServer(ServerPlayer player) {
+        if (slot < 0 || slot > 8 || slot != player.getInventory().selected) {
+            return;
+        }
         ItemStack stack = player.getInventory().getItem(slot);
-        stack.set(DataComponents.CUSTOM_NAME, Component.literal(name));
+        if (stack.isEmpty() || !(stack.getItem() instanceof BabyItem)) {
+            return;
+        }
+        String trimmedName = name.trim();
+        if (trimmedName.isEmpty() || trimmedName.length() > 32) {
+            return;
+        }
+        stack.set(DataComponents.CUSTOM_NAME, Component.literal(trimmedName));
     }
 
     @Override

@@ -31,7 +31,11 @@ public class ConditionalTask<E extends LivingEntity> extends Behavior<E> {
 
     @Override
     protected void stop(ServerLevel world, E entity, long time) {
-        task.doStop(world, entity, time);
+        // A child may have declined tryStart(). Calling doStop() on such a
+        // child still runs its cleanup, even though it never owned the entity.
+        if (task.getStatus() == Status.RUNNING) {
+            task.doStop(world, entity, time);
+        }
     }
 
     @Override

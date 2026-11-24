@@ -20,6 +20,9 @@ public class VillagerMCABabiesSensor extends Sensor<LivingEntity> {
 
     @Override
     protected void doTick(ServerLevel world, LivingEntity entity) {
+        if (entity.isSleeping()) {
+            return;
+        }
         entity.getBrain().setMemory(MemoryModuleType.VISIBLE_VILLAGER_BABIES, getVisibleVillagerBabies(entity));
     }
 

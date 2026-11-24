@@ -10,6 +10,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Block;
@@ -27,12 +28,10 @@ import java.util.stream.Stream;
  * this class has no Main Room or Ground Floor state.</p>
  */
 public class Building implements VillageBuilding {
-    public static final long SCAN_COOLDOWN = 4800;
-    public static final int PLAYER_POSITION_HORIZONTAL_MARGIN = 1;
-    public static final int PLAYER_POSITION_VERTICAL_MARGIN = 2;
-
     protected final Map<ResourceLocation, List<BlockPos>> blocks = new HashMap<>();
     private Map<ResourceLocation, List<BlockPos>> exposedBlocks;
+    /** Only populated during one Room scan, so datapack reloads cannot leave stale matches. */
+    private transient Map<Block, Boolean> activeScanMatches;
     /** Exact FloorGeometry cell keys owned by this Room. */
     private Set<BlockPos> floorCells = Set.of();
     private String type = "house";
@@ -63,12 +62,23 @@ public class Building implements VillageBuilding {
         posX = tag.getInt("posX");
         posY = tag.getInt("posY");
         posZ = tag.getInt("posZ");
-        ListTag cellsTag = (ListTag) tag.get("floorCells");
-        floorCells = cellsTag.stream()
-                .map(NbtHelper::decodeBlockPos)
-                .filter(Objects::nonNull)
-                .map(BlockPos::immutable)
-                .collect(Collectors.toUnmodifiableSet());
+        if (tag.contains("floorCellPositions", Tag.TAG_LONG_ARRAY)) {
+            long[] packed = tag.getLongArray("floorCellPositions");
+            Set<BlockPos> decoded = new HashSet<>(packed.length);
+            for (long value : packed) {
+                decoded.add(BlockPos.of(value));
+            }
+            floorCells = Set.copyOf(decoded);
+        } else if (tag.contains("floorCells", Tag.TAG_LIST)) {
+            ListTag cellsTag = (ListTag) tag.get("floorCells");
+            floorCells = cellsTag.stream()
+                    .map(NbtHelper::decodeBlockPos)
+                    .filter(Objects::nonNull)
+                    .map(BlockPos::immutable)
+                    .collect(Collectors.toUnmodifiableSet());
+        } else {
+            floorCells = Set.of();
+        }
         structureId = tag.getInt("structureId");
         floorId = tag.getInt("floorId");
         typeForced = tag.getBoolean("isTypeForced");
@@ -82,6 +92,14 @@ public class Building implements VillageBuilding {
     }
 
     public CompoundTag save() {
+        return saveInternal(false);
+    }
+
+    CompoundTag saveForClient(boolean ownsEntireFloor) {
+        return saveInternal(ownsEntireFloor);
+    }
+
+    private CompoundTag saveInternal(boolean ownsEntireFloor) {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
         tag.putInt("pos0X", pos0X);
@@ -98,7 +116,15 @@ public class Building implements VillageBuilding {
         tag.putBoolean("isTypeForced", typeForced);
         tag.putString("type", type);
         tag.putBoolean("contributesToMain", contributesToMain);
-        tag.put("floorCells", NbtHelper.fromList(floorCells, NbtHelper::encodeBlockPos));
+        if (ownsEntireFloor) {
+            tag.putBoolean("ownsFloor", true);
+        } else {
+            long[] packedFloorCells = floorCells.stream()
+                    .mapToLong(BlockPos::asLong)
+                    .sorted()
+                    .toArray();
+            tag.putLongArray("floorCellPositions", packedFloorCells);
+        }
         CompoundTag blockTag = new CompoundTag();
         NbtHelper.fromMap(blockTag, blocks, ResourceLocation::toString,
                 positions -> NbtHelper.fromList(positions, NbtHelper::encodeBlockPos));
@@ -110,24 +136,39 @@ public class Building implements VillageBuilding {
         return NbtHelper.decodeBlockPos(tag);
     }
 
-    Building.validationResult applyRoomScan(Level world,
-                                             BuildingRoomScanner.Result scan) {
-        if (scan.status() != validationResult.SUCCESS) return scan.status();
+    Building.validationResult applyRoomComponent(Level world,
+                                                 BlockPos source,
+                                                 int maxSize,
+                                                 RoomPoiEvidence.Index evidence,
+                                                 RoomPartitioner.Component component) {
+        if (component == null || component.area() < RoomPartitioner.MIN_ROOM_AREA) {
+            return validationResult.TOO_SMALL;
+        }
+        if (component.area() > maxSize) {
+            return validationResult.BLOCK_LIMIT;
+        }
 
         blocks.clear();
         invalidateBlocksView();
-        for (BlockPos pos : scan.poiCells()) {
-            recordBuildingBlock(world, pos);
+        Map<Block, Boolean> previousMatches = activeScanMatches;
+        activeScanMatches = new IdentityHashMap<>();
+        try {
+            if (evidence != null) {
+                evidence.forEachCandidate(component, pos -> recordBuildingBlock(world, pos));
+            }
+        } finally {
+            activeScanMatches = previousMatches;
         }
-        BlockPos seed = scan.seed();
+        BlockPos seed = component.nearestCell(source);
         posX = seed.getX();
         posY = seed.getY();
         posZ = seed.getZ();
-        setGeometry(scan.min(), scan.max(), scan.floorCells());
+        FloorGeometry.Bounds bounds = FloorGeometry.bounds(component.cells(), 0);
+        setGeometry(bounds.min(), bounds.max(), component.floorCells());
         return validationResult.SUCCESS;
     }
 
-    void setGeometry(BlockPos min, BlockPos max, Collection<BlockPos> exactFloorCells) {
+    public void setGeometry(BlockPos min, BlockPos max, Collection<BlockPos> exactFloorCells) {
         pos0X = min.getX();
         pos0Y = min.getY();
         pos0Z = min.getZ();
@@ -151,10 +192,6 @@ public class Building implements VillageBuilding {
         return floorCells.stream().mapToInt(BlockPos::getY).min().orElse(posY);
     }
 
-    public int getFloorDistanceTo(Vec3i pos) {
-        return Math.abs(getFloorY() - pos.getY());
-    }
-
     public boolean containsFloorPosition(Vec3i pos) {
         return pos != null && ownsFloorCell(new BlockPos(pos.getX(), pos.getY(), pos.getZ()));
     }
@@ -167,12 +204,9 @@ public class Building implements VillageBuilding {
         return floorCells.size();
     }
 
-
     public int getStructureId() {
         return structureId;
     }
-
-
 
     public void setStructureId(int structureId) {
         this.structureId = structureId;
@@ -256,18 +290,26 @@ public class Building implements VillageBuilding {
     }
 
     protected void recordBuildingBlock(Level world, BlockPos pos) {
+        if (world instanceof ServerLevel serverLevel && !serverLevel.hasChunk(pos.getX() >> 4, pos.getZ() >> 4)) {
+            return;
+        }
         BlockState state = world.getBlockState(pos);
         Block block = state.getBlock();
-        boolean relevant = false;
+        boolean relevant = activeScanMatches == null
+                ? matchesAnyBuildingType(state)
+                : activeScanMatches.computeIfAbsent(block, ignored -> matchesAnyBuildingType(state));
+        if (relevant && (!(block instanceof BedBlock) || state.getValue(BedBlock.PART) == BedPart.HEAD)) {
+            addBlock(block, pos.immutable());
+        }
+    }
+
+    private static boolean matchesAnyBuildingType(BlockState state) {
         for (BuildingType type : BuildingTypes.getInstance()) {
             if (type.matchesBlock(state)) {
-                relevant = true;
-                break;
+                return true;
             }
         }
-        if (relevant && (!(block instanceof BedBlock) || state.getValue(BedBlock.PART) == BedPart.HEAD)) {
-            addBlock(block, pos);
-        }
+        return false;
     }
 
     public Stream<BlockPos> getBlockPosStream() {
@@ -330,7 +372,8 @@ public class Building implements VillageBuilding {
     }
 
     public BuildingType getBuildingType() {
-        return BuildingTypes.getInstance().getBuildingType(type);
+        BuildingTypes types = BuildingTypes.getInstance();
+        return types.getBuildingType(types.hasBuildingType(type) ? type : "building");
     }
 
     public BlockPos getRawPos0() {
@@ -366,13 +409,6 @@ public class Building implements VillageBuilding {
     public boolean containsPos(Vec3i pos) {
         return pos != null && ownsFloorCell(new BlockPos(pos.getX(), pos.getY(), pos.getZ()));
     }
-
-    public boolean containsPositionWithMargin(Vec3i pos, int horizontalMargin, int verticalMargin) {
-        return pos.getX() >= pos0X - horizontalMargin && pos.getX() <= pos1X + horizontalMargin
-                && pos.getY() >= pos0Y - verticalMargin && pos.getY() <= pos1Y + verticalMargin
-                && pos.getZ() >= pos0Z - horizontalMargin && pos.getZ() <= pos1Z + horizontalMargin;
-    }
-
 
     Building copy() {
         Building copy = new Building(getSourceBlock());
@@ -420,6 +456,7 @@ public class Building implements VillageBuilding {
         SUCCESS,
         INVALID_TYPE,
         NOT_IN_BUILDING,
-        AMBIGUOUS_STRUCTURE
+        AMBIGUOUS_STRUCTURE,
+        TARGET_CHANGED
     }
 }

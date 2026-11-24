@@ -1,9 +1,10 @@
 package net.conczin.mca.client.gui.immersive_library;
 
 import com.google.gson.Gson;
-import com.google.gson.JsonSyntaxException;
+import com.google.gson.JsonParseException;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.conczin.mca.MCA;
+import net.conczin.mca.util.AtomicFileMove;
 import net.conczin.mca.client.gui.immersive_library.responses.ContentResponse;
 import net.conczin.mca.client.gui.immersive_library.responses.Response;
 import net.conczin.mca.client.gui.immersive_library.types.Content;
@@ -11,14 +12,18 @@ import net.conczin.mca.client.gui.immersive_library.types.LiteContent;
 import net.conczin.mca.client.render.DynamicSkinCache;
 import net.conczin.mca.client.resources.SkinMeta;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.resources.ResourceLocation;
-import org.apache.commons.io.FileUtils;
 import org.jetbrains.annotations.Nullable;
-import java.io.*;
-import java.nio.charset.Charset;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Base64;
 import java.util.Map;
 import java.util.Optional;
@@ -30,56 +35,98 @@ import static net.conczin.mca.client.gui.immersive_library.Api.request;
 public class SkinCache {
     private static final String LIBRARY_NAMESPACE = "immersive_library";
     private static final String LIBRARY_PREFIX = LIBRARY_NAMESPACE + ":";
+    static final Path CACHE_DIR = Path.of("immersive_library");
     static final Map<Integer, Boolean> requested = new ConcurrentHashMap<>();
+    static final Map<Integer, Object> loading = new ConcurrentHashMap<>();
     static final Map<Integer, Integer> cachedVersions = new ConcurrentHashMap<>();
     static final Map<Integer, ResourceLocation> textureIdentifiers = new ConcurrentHashMap<>();
-    static final Map<Integer, NativeImage> images = new ConcurrentHashMap<>();
     static final Map<Integer, SkinMeta> metas = new ConcurrentHashMap<>();
     private static final ResourceLocation DEFAULT_SKIN = MCA.locate("skins/empty.png");
     private static final Gson gson = new Gson();
+    private static final Object[] FILE_LOCKS = new Object[64];
 
-    private static File getFile(String key) {
-        //noinspection ResultOfMethodCallIgnored
-        new File("./immersive_library/").mkdirs();
-
-        return new File("./immersive_library/" + key);
-    }
-
-    private static void write(String file, String content) {
-        try {
-            FileUtils.writeStringToFile(getFile(file), content, Charset.defaultCharset(), false);
-        } catch (IOException e) {
-            e.printStackTrace();
+    static {
+        for (int i = 0; i < FILE_LOCKS.length; i++) {
+            FILE_LOCKS[i] = new Object();
         }
     }
 
-    private static void write(String file, byte[] content) {
-        try (OutputStream out = new BufferedOutputStream(new FileOutputStream(getFile(file)))) {
-            out.write(content);
-        } catch (IOException e) {
-            e.printStackTrace();
+    private static Path getPath(String key) {
+        return CACHE_DIR.resolve(key);
+    }
+
+    public static void writeAtomic(Path target, byte[] bytes) throws IOException {
+        Path normalized = target.toAbsolutePath().normalize();
+        synchronized (fileLock(normalized)) {
+            Path parent = normalized.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            Path tempFile = Files.createTempFile(parent, normalized.getFileName().toString() + ".", ".tmp");
+            try {
+                Files.write(tempFile, bytes);
+                AtomicFileMove.replace(tempFile, normalized);
+            } finally {
+                Files.deleteIfExists(tempFile);
+            }
         }
+    }
+
+    static byte[] readBytes(Path path) throws IOException {
+        Path normalized = path.toAbsolutePath().normalize();
+        // A Windows reader can temporarily prevent replacing the target file.
+        synchronized (fileLock(normalized)) {
+            return Files.readAllBytes(normalized);
+        }
+    }
+
+    private static Object fileLock(Path normalized) {
+        return FILE_LOCKS[Math.floorMod(normalized.hashCode(), FILE_LOCKS.length)];
+    }
+
+    static String readUtf8(Path path) throws IOException {
+        return new String(readBytes(path), StandardCharsets.UTF_8);
     }
 
     private static String read(String file) throws IOException {
-        return FileUtils.readFileToString(getFile(file), Charset.defaultCharset());
+        return readUtf8(getPath(file));
+    }
+
+    private static int readDiskVersion(int contentid) {
+        Path file = getPath(contentid + ".version");
+        if (Files.exists(file)) {
+            try {
+                return Integer.parseInt(readUtf8(file).trim());
+            } catch (IOException | NumberFormatException e) {
+                MCA.LOGGER.warn("Invalid cached version for immersive library asset {}", contentid, e);
+            }
+        }
+        return -1;
     }
 
     /**
      * @param contentid The content id
      *                  Enforces re downloading the assets, mostly when local files appear to be corrupted
      */
-    public static void enforceSync(int contentid) {
+    public static synchronized void enforceSync(int contentid) {
         try {
-            Files.delete(getFile(contentid + ".version").toPath());
-            cachedVersions.remove(contentid);
+            Files.deleteIfExists(getPath(contentid + ".version"));
         } catch (IOException e) {
-            MCA.LOGGER.warn(e);
+            MCA.LOGGER.warn("Failed to delete corrupted version file for {}", contentid, e);
+        } finally {
+            cachedVersions.remove(contentid);
+            invalidateLoadedResources(contentid);
         }
     }
 
+    private static void invalidateLoadedResources(int contentid) {
+        loading.remove(contentid);
+        textureIdentifiers.remove(contentid);
+        metas.remove(contentid);
+    }
+
     public static void sync(LiteContent content) {
-        sync(content.contentid(), content.version());
+        sync(content.content_id(), content.version());
     }
 
     /**
@@ -89,111 +136,165 @@ public class SkinCache {
      */
     public static void sync(int contentid, int currentVersion) {
         // Fetch the version identifier which we have on disk, or -1
-        int version = cachedVersions.computeIfAbsent(contentid, id -> {
-            File file = getFile(contentid + ".version");
-            if (file.exists()) {
+        int version = cachedVersions.computeIfAbsent(contentid, SkinCache::readDiskVersion);
+
+        // A committed cached version can render while its replacement downloads.
+        if (version >= 0 && !textureIdentifiers.containsKey(contentid)) {
+            loadResources(contentid, version);
+        }
+
+        if (currentVersion != version && (currentVersion > version || !textureIdentifiers.containsKey(contentid))
+                && requested.putIfAbsent(contentid, true) == null) {
+            CompletableFuture.runAsync(() -> {
                 try {
-                    String s = FileUtils.readFileToString(file, Charset.defaultCharset());
-                    return Integer.parseInt(s);
-                } catch (Exception e) {
-                    MCA.LOGGER.warn(e);
-                }
-            }
-            return -1;
-        });
-
-        if (currentVersion == version) {
-            // Up to date! Only load a resource if it's not loaded yet
-            if (!textureIdentifiers.containsKey(contentid)) {
-                loadResources(contentid);
-            }
-        } else {
-            // Outdated, but we have a cached version, lets use that while we wait for the result
-            if (version >= 0 && !textureIdentifiers.containsKey(contentid)) {
-                loadResources(contentid);
-            }
-
-            // Download assets when versions mismatch
-            if ((currentVersion > version || !textureIdentifiers.containsKey(contentid)) && requested.putIfAbsent(contentid, true) == null) {
-                CompletableFuture.runAsync(() -> {
-                    try {
-                        logger("Requested asset " + contentid + " with version " + version + " and current version " + currentVersion);
-                        Response response = request(Api.HttpMethod.GET, ContentResponse.class, "content/mca/" + contentid, Map.of("version", String.valueOf(version)));
-                        if (response instanceof ContentResponse(Content content)) {
-                            int newVersion = content.version();
-                            write(contentid + ".png", Base64.getDecoder().decode(content.data()));
-                            write(contentid + ".json", content.meta());
-                            write(contentid + ".version", Integer.toString(newVersion));
-                            cachedVersions.put(contentid, newVersion);
-                            textureIdentifiers.remove(contentid);
-                            logger("Received " + contentid);
-                        }
-                    } catch (RuntimeException e) {
-                        MCA.LOGGER.warn("Unable to sync immersive library asset {}", contentid, e);
-                    } finally {
-                        requested.remove(contentid);
+                    Response response = request(Api.HttpMethod.GET, ContentResponse.class, "v3/content/mca/" + contentid, Map.of("version", String.valueOf(version)));
+                    if (response instanceof ContentResponse(Content content) && content != null) {
+                        store(content);
                     }
-                });
-            }
+                } catch (RuntimeException e) {
+                    MCA.LOGGER.warn("Unable to sync immersive library asset {}", contentid, e);
+                } finally {
+                    requested.remove(contentid);
+                }
+            });
         }
     }
 
-    /**
-     * @param contentid The content id
-     *                  Loads the resources from the disk and creates the texture identifier
-     */
-    private static void loadResources(int contentid) {
-        logger("Loaded asset " + contentid);
-
-        // Load meta
-        try {
-            String json = read(contentid + ".json");
-            SkinMeta meta = gson.fromJson(json, SkinMeta.class);
-            metas.put(contentid, meta);
-        } catch (JsonSyntaxException | IOException e) {
-            e.printStackTrace();
-            enforceSync(contentid);
+    public static synchronized void store(Content content) {
+        int contentid = content.content_id();
+        int cachedVersion = cachedVersions.computeIfAbsent(contentid, SkinCache::readDiskVersion);
+        if (content.version() <= cachedVersion) {
             return;
         }
-
-        // Load texture
-        try (FileInputStream stream = new FileInputStream(getFile(contentid + ".png").getPath())) {
-            // Load new
-            NativeImage image = NativeImage.read(stream);
-            ResourceLocation identifier = ResourceLocation.fromNamespaceAndPath(LIBRARY_NAMESPACE, String.valueOf(contentid));
-
-            TextureManager textureManager = Minecraft.getInstance().getTextureManager();
-            DynamicSkinCache.invalidateSourceTexture(identifier);
-            textureManager.register(identifier, new DynamicTexture(image));
-
-            textureIdentifiers.put(contentid, identifier);
-            images.put(contentid, image);
+        byte[] png = Base64.getDecoder().decode(content.data());
+        byte[] json = content.meta().getBytes(StandardCharsets.UTF_8);
+        Path marker = getPath(contentid + ".version");
+        try {
+            // An interrupted replacement can leave assets from different versions.
+            Files.deleteIfExists(marker);
+            cachedVersions.put(contentid, -1);
+            invalidateLoadedResources(contentid);
+            writeAtomic(getPath(contentid + ".png"), png);
+            writeAtomic(getPath(contentid + ".json"), json);
+            writeAtomic(marker, Integer.toString(content.version()).getBytes(StandardCharsets.UTF_8));
+            cachedVersions.put(contentid, content.version());
         } catch (IOException e) {
-            e.printStackTrace();
-            enforceSync(contentid);
+            MCA.LOGGER.warn("Failed to store immersive library asset {}", contentid, e);
         }
     }
 
-    private static void logger(String s) {
-        //noinspection ConstantConditions
-        if (false) {
-            MCA.LOGGER.info(s);
+    private static void loadResources(int contentid, int expectedVersion) {
+        Object load = new Object();
+        if (loading.putIfAbsent(contentid, load) != null) {
+            return;
+        }
+        CompletableFuture.runAsync(() -> decodeResources(contentid, expectedVersion, load));
+    }
+
+    private static boolean isCurrentLoad(int contentid, int expectedVersion, Object load) {
+        return loading.get(contentid) == load && cachedVersions.getOrDefault(contentid, -1) == expectedVersion;
+    }
+
+    private static void decodeResources(int contentid, int expectedVersion, Object load) {
+        NativeImage unscheduledImage = null;
+        boolean scheduled = false;
+        try {
+            if (!isCurrentLoad(contentid, expectedVersion, load)) {
+                return;
+            }
+            SkinMeta meta = gson.fromJson(read(contentid + ".json"), SkinMeta.class);
+            if (meta == null) {
+                throw new JsonParseException("Empty skin metadata for " + contentid);
+            }
+
+            NativeImage image;
+            byte[] pngBytes = readBytes(getPath(contentid + ".png"));
+            try (InputStream stream = new ByteArrayInputStream(pngBytes)) {
+                image = NativeImage.read(stream);
+            }
+            unscheduledImage = image;
+            Minecraft client = Minecraft.getInstance();
+            if (client != null) {
+                client.execute(() -> registerTexture(client, contentid, expectedVersion, load, meta, image));
+                scheduled = true;
+            }
+        } catch (JsonParseException | IOException e) {
+            MCA.LOGGER.warn("Failed to load immersive library asset {}", contentid, e);
+            synchronized (SkinCache.class) {
+                if (isCurrentLoad(contentid, expectedVersion, load)) {
+                    enforceSync(contentid);
+                }
+            }
+        } finally {
+            if (!scheduled) {
+                if (unscheduledImage != null) {
+                    unscheduledImage.close();
+                }
+                loading.remove(contentid, load);
+            }
+        }
+    }
+
+    private static synchronized void registerTexture(Minecraft client, int contentid, int expectedVersion,
+                                                     Object load, SkinMeta meta, NativeImage image) {
+        DynamicTexture texture = null;
+        boolean registered = false;
+        try {
+            if (!isCurrentLoad(contentid, expectedVersion, load)) {
+                return;
+            }
+            TextureManager textureManager = client.getTextureManager();
+            if (textureManager == null) {
+                return;
+            }
+            ResourceLocation identifier = ResourceLocation.fromNamespaceAndPath(LIBRARY_NAMESPACE, String.valueOf(contentid));
+            texture = new DynamicTexture(image);
+            textureManager.register(identifier, texture);
+            registered = true;
+            DynamicSkinCache.invalidateSourceTexture(identifier);
+            metas.put(contentid, meta);
+            textureIdentifiers.put(contentid, identifier);
+        } finally {
+            if (!registered) {
+                if (texture == null) {
+                    image.close();
+                } else {
+                    texture.close();
+                }
+            }
+            loading.remove(contentid, load);
         }
     }
 
     public static Optional<SkinMeta> getMeta(LiteContent content) {
         sync(content);
-        return Optional.ofNullable(metas.get(content.contentid()));
+        return Optional.ofNullable(metas.get(content.content_id()));
     }
 
     public static Optional<NativeImage> getImage(LiteContent content) {
         sync(content);
-        return Optional.ofNullable(images.get(content.contentid()));
+        Minecraft client = Minecraft.getInstance();
+        if (client == null || !client.isSameThread()) {
+            return Optional.empty();
+        }
+        ResourceLocation identifier = textureIdentifiers.get(content.content_id());
+        if (identifier == null) {
+            return Optional.empty();
+        }
+        TextureManager textureManager = client.getTextureManager();
+        if (textureManager == null) {
+            return Optional.empty();
+        }
+        AbstractTexture texture = textureManager.getTexture(identifier, null);
+        if (texture instanceof DynamicTexture dynamicTexture) {
+            return Optional.ofNullable(dynamicTexture.getPixels());
+        }
+        return Optional.empty();
     }
 
     public static ResourceLocation getTextureIdentifier(LiteContent content) {
         sync(content);
-        return textureIdentifiers.getOrDefault(content.contentid(), DEFAULT_SKIN);
+        return textureIdentifiers.getOrDefault(content.content_id(), DEFAULT_SKIN);
     }
 
     /**

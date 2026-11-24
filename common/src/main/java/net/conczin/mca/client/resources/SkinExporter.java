@@ -16,7 +16,6 @@ import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FastColor;
-import net.minecraft.util.Mth;
 import net.minecraft.world.entity.animal.Sheep;
 import net.minecraft.world.item.DyeColor;
 
@@ -84,7 +83,10 @@ public class SkinExporter {
 
     public static ResourceLocation getSkin(VillagerLike<?> villager) {
         if (!MCA.isBlankString(villager.getSkin())) {
-            return ResourceLocation.parse(villager.getSkin());
+            ResourceLocation skin = ResourceLocation.tryParse(villager.getSkin());
+            if (skin != null) {
+                return skin;
+            }
         }
         int skin = (int) Math.min(4, Math.max(0, villager.getGenetics().getGene(Genetics.SKIN) * 5));
         return ResourceLocation.fromNamespaceAndPath("mca", "skins/skin/" + villager.getGenetics().getGender().getDataName() + "/" + skin + ".png");

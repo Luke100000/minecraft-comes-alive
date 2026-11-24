@@ -3,7 +3,6 @@ package net.conczin.mca.server;
 import net.conczin.mca.CommonConfig;
 import net.conczin.mca.MCA;
 import net.conczin.mca.destiny.DestinyDestination;
-import net.conczin.mca.util.WorldUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderSet;
@@ -17,15 +16,7 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.levelgen.structure.Structure;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Optional;
-import java.util.TreeSet;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -103,33 +94,6 @@ public final class DestinyLocationResolver {
 
         locations.removeIf(location -> isBlacklisted(location, blacklistPatterns));
         return List.copyOf(locations);
-    }
-
-    public static Optional<BlockPos> findNearest(
-            ServerLevel level,
-            BlockPos origin,
-            DestinyDestination destination,
-            int radius
-    ) {
-        if (destination.dimension().isEmpty() || !level.dimension().equals(destination.dimension().orElseThrow())) {
-            return Optional.empty();
-        }
-
-        Optional<Selector> selector = parseSelector(destination.location());
-        if (selector.isEmpty()) {
-            return Optional.empty();
-        }
-        Selector parsedSelector = selector.get();
-
-        return switch (parsedSelector.type()) {
-            case STRUCTURE -> WorldUtils.getClosestStructurePosition(level, origin, parsedSelector.id(), radius);
-            case TAG -> WorldUtils.getClosestStructurePosition(
-                    level,
-                    origin,
-                    TagKey.create(Registries.STRUCTURE, parsedSelector.id()),
-                    radius
-            );
-        };
     }
 
     public static CompletableFuture<Optional<BlockPos>> findNearestAsync(UUID playerId, ServerLevel level,

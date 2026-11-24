@@ -1,8 +1,11 @@
 package net.conczin.mca.server.world.data;
 
+import net.minecraft.SharedConstants;
+import com.google.gson.JsonObject;
+import net.conczin.mca.resources.BuildingTypes;
+import net.conczin.mca.resources.data.BuildingType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
-import net.minecraft.SharedConstants;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.BeforeAll;
@@ -13,9 +16,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 class VillageManagerExpectedTargetTest {
     private static final BlockPos SOURCE = new BlockPos(4, 70, -3);
@@ -73,6 +74,16 @@ class VillageManagerExpectedTargetTest {
             assertTrue(village.getStructure(10).orElseThrow().getFloor(1).isEmpty());
             assertTrue(village.getBuilding(22).isPresent());
         }
+    }
+
+    @Test
+    void removeFloorCannotUseAValidFloorNumberDifferentFromThePlayersFloor() {
+        Village village = emptyFloorVillage(1);
+        VillageManager manager = new TargetManager(village);
+
+        assertEquals(VillageManager.BuildingEditResult.TARGET_CHANGED,
+                manager.removeFloor(SOURCE, 1, 10, 10, 1));
+        assertTrue(village.getStructure(10).orElseThrow().getFloor(1).isPresent());
     }
 
     @Test
@@ -159,6 +170,63 @@ class VillageManagerExpectedTargetTest {
 
         assertEquals(VillageManager.BuildingEditResult.TARGET_CHANGED, result);
         assertFalse(village.roomTypeChanged);
+    }
+
+    @Test
+    void forceRoomTypeClearsForcedTypeOnNullOrMatchingTypeAndRejectsInvalidTypes() {
+        BuildingTypes types = BuildingTypes.getInstance();
+        Map<String, BuildingType> previousClient = types.getBuildingTypes();
+        JsonObject blockedJson = new JsonObject();
+        blockedJson.addProperty("visible", false);
+        JsonObject armoryBlocks = new JsonObject();
+        armoryBlocks.addProperty("minecraft:anvil", 1);
+        JsonObject armoryJson = new JsonObject();
+        armoryJson.add("blocks", armoryBlocks);
+        JsonObject groupedJson = new JsonObject();
+        groupedJson.addProperty("grouped", true);
+        types.setBuildingTypes(Map.of(
+                "blocked", new BuildingType("blocked", blockedJson),
+                "armory", new BuildingType("armory", armoryJson),
+                "town_center", new BuildingType("town_center", groupedJson)
+        ));
+        try {
+            Village village = emptyFloorVillage(1);
+            VillageManager manager = new TargetManager(village);
+            Building main = village.getBuilding(22).orElseThrow();
+            assertEquals("house", main.getType());
+            assertFalse(main.isTypeForced());
+
+            assertEquals(VillageManager.BuildingEditResult.INVALID_TYPE,
+                    manager.forceRoomType(SOURCE, "nonexistent", 22));
+            assertEquals(VillageManager.BuildingEditResult.INVALID_TYPE,
+                    manager.forceRoomType(SOURCE, "town_center", 22));
+            assertEquals("house", main.getType());
+            assertFalse(main.isTypeForced());
+
+            assertEquals(VillageManager.BuildingEditResult.SUCCESS,
+                    manager.forceRoomType(SOURCE, "armory", 22));
+            assertEquals("armory", main.getType());
+            assertTrue(main.isTypeForced());
+
+            // Clearing via null must unforce and restore the resolved automatic type ("house"), not force null.
+            assertEquals(VillageManager.BuildingEditResult.SUCCESS,
+                    manager.forceRoomType(SOURCE, null, 22));
+            assertEquals("house", main.getType());
+            assertFalse(main.isTypeForced());
+
+            // Toggling "blocked" on and off also restores the automatic type.
+            assertEquals(VillageManager.BuildingEditResult.SUCCESS,
+                    manager.forceRoomType(SOURCE, "blocked", 22));
+            assertEquals("blocked", main.getType());
+            assertTrue(main.isTypeForced());
+
+            assertEquals(VillageManager.BuildingEditResult.SUCCESS,
+                    manager.forceRoomType(SOURCE, "blocked", 22));
+            assertEquals("house", main.getType());
+            assertFalse(main.isTypeForced());
+        } finally {
+            types.setBuildingTypes(previousClient);
+        }
     }
 
     @Test

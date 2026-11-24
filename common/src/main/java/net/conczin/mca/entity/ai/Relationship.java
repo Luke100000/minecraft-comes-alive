@@ -27,7 +27,6 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.ai.memory.WalkTarget;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
@@ -151,8 +150,9 @@ public class Relationship<T extends Mob & VillagerLike<T>> implements EntityRela
             // fill it and yeet the villager into depression
             nearest.ifPresentOrElse(pos -> {
                 if (entity.level().getBlockState(pos).is(TagsMCA.Blocks.TOMBSTONES) && entity.level().getBlockEntity(pos) instanceof TombstoneBlock.Data tombstone) {
-                    onTragedy(cause, pos);
+                    // Save the tombstone before onTragedy, so it keeps the pre-death mood.
                     tombstone.setEntity(entity);
+                    onTragedy(cause, pos);
                 } else {
                     onTragedy(cause, null);
                 }

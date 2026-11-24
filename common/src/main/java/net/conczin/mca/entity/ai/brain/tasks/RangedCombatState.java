@@ -2,6 +2,8 @@ package net.conczin.mca.entity.ai.brain.tasks;
 
 import net.conczin.mca.entity.ai.MemoryModuleTypeMCA;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.schedule.Activity;
 
 import java.util.Optional;
 
@@ -10,11 +12,26 @@ public enum RangedCombatState {
     STRAFE,
     APPROACH,
     REPOSITION,
+    RECOVER,
     KITE,
     EMERGENCY_FLEE;
 
     public boolean suppressesRangedAttack() {
-        return this == EMERGENCY_FLEE;
+        return !permitsDrawing();
+    }
+
+    public boolean permitsDrawing() {
+        return this != EMERGENCY_FLEE && this != REPOSITION && this != RECOVER;
+    }
+
+    public boolean permitsBowDrawContinuation() {
+        return this != RECOVER;
+    }
+
+    public boolean permitsAiming(Mob entity) {
+        // Navigation owns movement yaw and jumping independently of bow use.
+        // Ordinary steps must not reset a draw or switch combat-facing policy.
+        return this != EMERGENCY_FLEE && permitsBowDrawContinuation() && !entity.getBrain().isActive(Activity.PANIC);
     }
 
     public static Optional<RangedCombatState> current(LivingEntity entity) {

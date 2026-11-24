@@ -8,12 +8,7 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 public record FamilyTreeView(
         Map<UUID, FamilyTreeNode> nodes,
@@ -102,7 +97,7 @@ public record FamilyTreeView(
             throw new IllegalArgumentException("Family tree view contains grave for node outside the bounded view");
         }
         Map<UUID, FamilyTreeNode> ownedNodes = new LinkedHashMap<>(nodes.size());
-        nodes.forEach((id, node) -> ownedNodes.put(id, new FamilyTreeNode(null, node.save())));
+        nodes.forEach((id, node) -> ownedNodes.put(id, node.detachedCopy()));
         nodes = Map.copyOf(ownedNodes);
         continuations = Set.copyOf(continuations);
         unavailable = Set.copyOf(unavailable);

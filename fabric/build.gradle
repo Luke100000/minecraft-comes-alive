@@ -24,6 +24,8 @@ dependencies {
     modLocalRuntime "maven.modrinth:entity-model-features:${emf_version}"
     modLocalRuntime "maven.modrinth:entitytexturefeatures:${etf_version}"
     modLocalRuntime "maven.modrinth:h1E7sQNL:${cpm_fabric_version}"
+    modCompileOnly "net.conczin:immersive_melodies:${immersive_melodies_version}+${minecraft_version}+fabric"
+    modLocalRuntime "net.conczin:immersive_melodies:${immersive_melodies_version}+${minecraft_version}+fabric"
 }
 
 tasks.withType(Test).configureEach {

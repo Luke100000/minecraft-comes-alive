@@ -32,6 +32,13 @@ public class FollowTask extends Behavior<VillagerEntityMCA> {
     }
 
     @Override
+    protected boolean timedOut(long gameTime) {
+        // The command owns this behavior's lifetime. The default 60-tick restart
+        // leaves an uncontrolled travel step while a follower is holding a ladder.
+        return false;
+    }
+
+    @Override
     protected void tick(ServerLevel world, VillagerEntityMCA villager, long time) {
         villager.getBrain().getMemoryInternal(MemoryModuleTypeMCA.PLAYER_FOLLOWING).ifPresent(playerToFollow -> {
             if (villager.getVillagerBrain().isPanicking()
@@ -57,6 +64,12 @@ public class FollowTask extends Behavior<VillagerEntityMCA> {
                     && navigation.hasClimbablePathContext();
             if (climbing) {
                 closeEnoughDistance = 0;
+            }
+
+            if (villager.onClimbable() && playerToFollow.onClimbable()
+                    && villager.blockPosition().equals(followPosition)
+                    && villager.getNavigation() instanceof MCAGroundPathNavigation navigation) {
+                navigation.holdClimbablePosition();
             }
 
             villager.getBrain().setMemory(

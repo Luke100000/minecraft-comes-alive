@@ -2,16 +2,8 @@ package net.conczin.mca.server.world.data;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+
+import java.util.*;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -27,7 +19,7 @@ final class RoomPartitioner {
     private static final Comparator<Component> COMPONENT_ORDER = Comparator.comparing(
             (Component component) -> component.cells().stream()
                     .map(FloorGeometry.Cell::feet).min(CELL_ORDER).orElseThrow(), CELL_ORDER);
-    private static final Comparator<Component> OWNER_ORDER =
+    static final Comparator<Component> OWNER_ORDER =
             Comparator.comparingInt(Component::area).reversed()
                     .thenComparing(COMPONENT_ORDER);
 
@@ -70,9 +62,7 @@ final class RoomPartitioner {
         List<Component> openComponents = new ArrayList<>();
 
         List<FloorGeometry.Cell> seeds = geometry.cells().stream()
-                .sorted(Comparator.comparingInt((FloorGeometry.Cell cell) -> cell.feet().getX())
-                        .thenComparingInt(cell -> cell.feet().getZ())
-                        .thenComparingInt(cell -> cell.feet().getY()))
+                .sorted(Comparator.comparing(FloorGeometry.Cell::feet, CELL_ORDER))
                 .toList();
         for (FloorGeometry.Cell seed : seeds) {
             Set<FloorGeometry.Cell> component = connectedCells(

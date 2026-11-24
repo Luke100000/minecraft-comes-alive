@@ -12,19 +12,13 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.FastColor;
 import net.minecraft.world.level.ColorResolver;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.material.MapColor;
 
-import java.util.ArrayList;
-import java.util.BitSet;
-import java.util.Comparator;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.function.LongSupplier;
 
 /** Owns world-derived Blueprint terrain sampling, texture creation and cache lifecycle. */
@@ -363,16 +357,29 @@ final class BlueprintTerrainRenderer {
 
     private static void releaseTexture(TerrainTile tile) {
         if (tile.terrainTextureLocation != null) {
-            Minecraft.getInstance().getTextureManager().release(tile.terrainTextureLocation);
+            Minecraft mc = Minecraft.getInstance();
+            if (mc != null && mc.getTextureManager() != null) {
+                mc.getTextureManager().release(tile.terrainTextureLocation);
+            } else if (tile.terrainTexture != null) {
+                tile.terrainTexture.close();
+            }
             tile.terrainTextureLocation = null;
+            tile.terrainTexture = null;
+        } else if (tile.terrainTexture != null) {
+            tile.terrainTexture.close();
             tile.terrainTexture = null;
         }
     }
 
-    static void onClientLevelChanged(Object levelIdentity) {
-        if (cacheLevelIdentity == levelIdentity) return;
+    private static void clearCache() {
         tiles.values().forEach(BlueprintTerrainRenderer::releaseTexture);
         tiles.clear();
+        cacheLevelIdentity = null;
+    }
+
+    static void onClientLevelChanged(Object levelIdentity) {
+        if (cacheLevelIdentity == levelIdentity) return;
+        clearCache();
         cacheLevelIdentity = levelIdentity;
     }
 

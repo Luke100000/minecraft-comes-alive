@@ -3,6 +3,7 @@ package net.conczin.mca.entity.ai;
 import net.conczin.mca.entity.VillagerLike;
 import net.conczin.mca.entity.ai.brain.VillagerBrain;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.world.entity.Mob;
 import org.jetbrains.annotations.Nullable;
 
@@ -24,12 +25,28 @@ public class Memories {
         lastSeen = time / 24000L;
     }
 
-    public static <E extends Mob & VillagerLike<E>> Memories fromCNBT(E villager, @Nullable CompoundTag tag) {
+    @Nullable
+    public static <E extends Mob & VillagerLike<E>> Memories fromCNBT(@Nullable E villager, @Nullable CompoundTag tag) {
         if (tag == null || tag.isEmpty()) {
             return null;
         }
 
-        Memories memories = new Memories(villager.getVillagerBrain(), villager.level().getDayTime(), tag.getUUID("playerUUID"));
+        UUID playerUUID;
+        if (tag.contains("playerUUID", Tag.TAG_STRING)) {
+            try {
+                playerUUID = UUID.fromString(tag.getString("playerUUID"));
+            } catch (IllegalArgumentException e) {
+                return null;
+            }
+        } else if (tag.hasUUID("playerUUID")) {
+            playerUUID = tag.getUUID("playerUUID");
+        } else {
+            return null;
+        }
+
+        VillagerBrain<?> brain = villager != null ? villager.getVillagerBrain() : null;
+        long dayTime = villager != null && villager.level() != null ? villager.level().getDayTime() : 0L;
+        Memories memories = new Memories(brain, dayTime, playerUUID);
 
         memories.hearts = tag.getInt("hearts");
         memories.interactionFatigue = tag.getInt("interactionFatigue");
@@ -49,7 +66,9 @@ public class Memories {
 
     public void setHearts(int value) {
         this.hearts = value;
-        brain.updateMemories(this);
+        if (brain != null) {
+            brain.updateMemories(this);
+        }
     }
 
     public void modHearts(int value) {
@@ -62,12 +81,16 @@ public class Memories {
 
     public void setInteractionFatigue(int value) {
         this.interactionFatigue = value;
-        brain.updateMemories(this);
+        if (brain != null) {
+            brain.updateMemories(this);
+        }
     }
 
     public void modInteractionFatigue(int value) {
         this.interactionFatigue += value;
-        brain.updateMemories(this);
+        if (brain != null) {
+            brain.updateMemories(this);
+        }
     }
 
     public DialogueType getDialogueType() {
@@ -76,7 +99,9 @@ public class Memories {
 
     public void setDialogueType(DialogueType dialogueType) {
         this.dialogueType = dialogueType;
-        brain.updateMemories(this);
+        if (brain != null) {
+            brain.updateMemories(this);
+        }
     }
 
     public long getLastSeen() {
@@ -85,7 +110,9 @@ public class Memories {
 
     public void setLastSeen(int lastSeen) {
         this.lastSeen = lastSeen;
-        brain.updateMemories(this);
+        if (brain != null) {
+            brain.updateMemories(this);
+        }
     }
 
     public CompoundTag toCNBT() {

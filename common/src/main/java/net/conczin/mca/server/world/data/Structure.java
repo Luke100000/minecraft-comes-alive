@@ -17,10 +17,10 @@ public final class Structure implements VillageBuilding {
 
     private int id;
     private int logicalBuildingId;
-    private boolean originGeometryApproximate;
     private BlockPos source;
     private BlockPos min;
     private BlockPos max;
+    private boolean originGeometryApproximate;
     private final Map<Integer, StructureFloor> floors = new HashMap<>();
 
     public Structure(int id, BlockPos source, Collection<StructureFloor> floors) {
@@ -37,8 +37,8 @@ public final class Structure implements VillageBuilding {
     public Structure(CompoundTag tag) {
         id = tag.getInt("id");
         logicalBuildingId = tag.getInt("buildingId");
-        originGeometryApproximate = tag.getBoolean("originGeometryApproximate");
         source = NbtHelper.decodeBlockPos(tag.get("source"));
+        originGeometryApproximate = tag.getBoolean("originGeometryApproximate");
         for (StructureFloor floor : NbtHelper.toList(tag.getList("floors", Tag.TAG_COMPOUND),
                 value -> StructureFloor.load((CompoundTag) value))) {
             putFloorUnique(floor);
@@ -61,15 +61,22 @@ public final class Structure implements VillageBuilding {
         }
     }
 
+    int nextFloorId() {
+        return floors.keySet().stream().mapToInt(Integer::intValue).max().orElse(-1) + 1;
+    }
+
+    void putFloor(StructureFloor floor) {
+        putFloorUnique(floor);
+        recomputeBoundsFromFloors();
+    }
+
     public CompoundTag save() {
         CompoundTag tag = new CompoundTag();
         tag.putInt("id", id);
         tag.putInt("buildingId", getLogicalBuildingId());
-        if (originGeometryApproximate) {
-            tag.putBoolean("originGeometryApproximate", true);
-        }
         tag.put("source", NbtHelper.encodeBlockPos(source));
         tag.put("floors", NbtHelper.fromList(getFloors(), StructureFloor::save));
+        if (originGeometryApproximate) tag.putBoolean("originGeometryApproximate", true);
         return tag;
     }
 
@@ -232,10 +239,6 @@ public final class Structure implements VillageBuilding {
         return copy;
     }
 
-    boolean replaceFloorGeometry(int floorId, StructureFloor scannedFloor) {
-        return replaceFloorGeometry(floorId, scannedFloor == null ? null : scannedFloor.geometry());
-    }
-
     boolean replaceFloorGeometry(int floorId, FloorGeometry scannedFloor) {
         StructureFloor existing = floors.get(floorId);
         if (existing == null || scannedFloor == null) return false;
@@ -266,7 +269,6 @@ public final class Structure implements VillageBuilding {
         min = bounds.min();
         max = bounds.max();
     }
-
 
     @Override
     public int getId() {

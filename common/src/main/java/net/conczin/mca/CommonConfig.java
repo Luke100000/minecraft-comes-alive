@@ -7,6 +7,12 @@ import java.util.Map;
 public class CommonConfig {
 
     /**
+     * If true, MCA villagers push each other while crowding. Disable to let MCA villagers
+     * overlap more freely in narrow spaces. Other entities are unaffected.
+     */
+    public boolean enableVillagerCollisions = true;
+
+    /**
      * If true, arrows fired by MCA archers pass through villagers instead of hitting them.
      */
     public boolean archerArrowsIgnoreVillagers = true;

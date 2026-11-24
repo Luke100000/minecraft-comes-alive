@@ -1,33 +1,27 @@
 package net.conczin.mca.server.world.data;
 
+import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectMaps;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /** Exact structural ownership geometry for one semantic Floor; cells need not be traversable. */
-final class FloorGeometry {
+public final class FloorGeometry {
     private final Set<Cell> cells;
     private final Map<BlockPos, FloorConnector.Type> connectorTypesByCell;
     private final Set<FloorConnector.Marker> connectorMarkers;
-    private final Map<Long, List<Cell>> cellsByColumn;
+    private final Long2ObjectMap<List<Cell>> cellsByColumn;
     private final Map<BlockPos, Cell> cellsByPosition;
 
-    FloorGeometry(Collection<Cell> cells,
+    public FloorGeometry(Collection<Cell> cells,
                   Map<BlockPos, FloorConnector.Type> connectorTypesByCell) {
         this(cells, markersFromTypes(connectorTypesByCell));
     }
 
-    FloorGeometry(Collection<Cell> cells,
+    public FloorGeometry(Collection<Cell> cells,
                   Collection<FloorConnector.Marker> connectorMarkers) {
         LinkedHashMap<BlockPos, Cell> positions = new LinkedHashMap<>();
         for (Cell cell : cells) {
@@ -36,7 +30,7 @@ final class FloorGeometry {
                 throw new IllegalArgumentException("Conflicting FloorGeometry cells at " + cell.feet());
             }
         }
-        this.cellsByPosition = Map.copyOf(positions);
+        this.cellsByPosition = Collections.unmodifiableMap(positions);
         this.cells = Set.copyOf(positions.values());
 
         LinkedHashMap<BlockPos, FloorConnector.Type> connectors = new LinkedHashMap<>();
@@ -55,7 +49,7 @@ final class FloorGeometry {
         this.cellsByColumn = indexColumns(this.cells);
     }
 
-    Set<Cell> cells() {
+    public Set<Cell> cells() {
         return cells;
     }
 
@@ -102,11 +96,11 @@ final class FloorGeometry {
     }
 
     int maxPhysicalCeilingY() {
-        return cells.stream().mapToInt(Cell::ceilingY).max().orElse(anchorY() + 2);
+        return cells.stream().mapToInt(Cell::ceilingY).max().orElse(2);
     }
 
     int minFeetY() {
-        return cells.stream().mapToInt(cell -> cell.feet().getY()).min().orElse(anchorY());
+        return cells.stream().mapToInt(cell -> cell.feet().getY()).min().orElse(0);
     }
 
     static Bounds bounds(Collection<Cell> cells, int minYOffset) {
@@ -164,11 +158,11 @@ final class FloorGeometry {
 
     int footprintIntersectionArea(FloorGeometry other) {
         if (other == null || cellsByColumn.isEmpty() || other.cellsByColumn.isEmpty()) return 0;
-        Map<Long, List<Cell>> smaller = cellsByColumn.size() <= other.cellsByColumn.size()
+        Long2ObjectMap<List<Cell>> smaller = cellsByColumn.size() <= other.cellsByColumn.size()
                 ? cellsByColumn : other.cellsByColumn;
-        Map<Long, List<Cell>> larger = smaller == cellsByColumn ? other.cellsByColumn : cellsByColumn;
+        Long2ObjectMap<List<Cell>> larger = smaller == cellsByColumn ? other.cellsByColumn : cellsByColumn;
         int intersection = 0;
-        for (Long column : smaller.keySet()) {
+        for (long column : smaller.keySet()) {
             if (larger.containsKey(column)) intersection++;
         }
         return intersection;
@@ -195,8 +189,8 @@ final class FloorGeometry {
         return ((long) x << 32) ^ (z & 0xffffffffL);
     }
 
-    private static Map<Long, List<Cell>> indexColumns(Collection<Cell> cells) {
-        Map<Long, List<Cell>> indexed = new LinkedHashMap<>();
+    private static Long2ObjectMap<List<Cell>> indexColumns(Collection<Cell> cells) {
+        Long2ObjectMap<List<Cell>> indexed = new Long2ObjectOpenHashMap<>();
         for (Cell cell : cells) {
             indexed.computeIfAbsent(columnKey(cell.feet().getX(), cell.feet().getZ()), ignored -> new ArrayList<>())
                     .add(cell);
@@ -204,11 +198,12 @@ final class FloorGeometry {
         indexed.replaceAll((ignored, column) -> column.stream()
                 .sorted(Comparator.comparingInt(cell -> cell.feet().getY()))
                 .toList());
-        return Map.copyOf(indexed);
+        // Hash the full packed coordinates rather than the collision-prone Long hash.
+        return Long2ObjectMaps.unmodifiable(indexed);
     }
 
-    record Cell(BlockPos feet, int ceilingY) {
-        Cell {
+    public record Cell(BlockPos feet, int ceilingY) {
+        public Cell {
             Objects.requireNonNull(feet, "feet");
             if (ceilingY <= feet.getY()) {
                 throw new IllegalArgumentException("FloorGeometry cell ceiling must be above feet");
@@ -217,5 +212,5 @@ final class FloorGeometry {
         }
     }
 
-    record Bounds(BlockPos min, BlockPos max) {}
+    public record Bounds(BlockPos min, BlockPos max) {}
 }

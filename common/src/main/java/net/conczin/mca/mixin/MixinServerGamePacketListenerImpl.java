@@ -1,5 +1,6 @@
 package net.conczin.mca.mixin;
 
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.conczin.mca.Config;
 import net.conczin.mca.entity.VillagerEntityMCA;
 import net.conczin.mca.entity.ai.chatAI.ChatAI;
@@ -13,8 +14,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.Optional;
 
@@ -23,17 +22,19 @@ public class MixinServerGamePacketListenerImpl {
     @Shadow
     public ServerPlayer player;
 
-    @Inject(method = "broadcastChatMessage", at = @At("HEAD"))
-    private void mca$handleAcceptedChat(PlayerChatMessage message, CallbackInfo ci) {
+    @ModifyReturnValue(method = "getSignedMessage", at = @At("RETURN"))
+    private PlayerChatMessage mca$handleAcceptedChat(PlayerChatMessage message) {
         if (!Config.getInstance().enableVillagerChatAI) {
-            return;
+            return message;
         }
 
         String msg = StringUtils.normalizeSpace(message.signedContent());
         MinecraftServer server = player.getServer();
         if (server != null) {
-            mca$handleChatAI(player, msg, server);
+            server.execute(() -> mca$handleChatAI(player, msg, server));
         }
+
+        return message;
     }
 
     @Unique

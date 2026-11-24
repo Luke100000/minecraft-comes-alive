@@ -18,6 +18,19 @@ class FamilyTreeSearchTest {
     }
 
     @Test
+    void exactNameSearchRemainsCaseInsensitiveAndExcludesPartialMatches() {
+        FamilyTree tree = new FamilyTree(null);
+        tree.getOrCreate(uuid(31), "ALICE", Gender.FEMALE);
+        tree.getOrCreate(uuid(32), "alice", Gender.FEMALE);
+        tree.getOrCreate(uuid(33), "Malice", Gender.MALE);
+
+        assertEquals(
+                java.util.Set.of(uuid(31), uuid(32)),
+                tree.getAllWithName("aLiCe").map(FamilyTreeNode::id).collect(java.util.stream.Collectors.toSet())
+        );
+    }
+
+    @Test
     void boundedNameSearchPrioritizesPrefixesAndHonorsLimit() {
         FamilyTree tree = new FamilyTree(null);
         tree.getOrCreate(uuid(1), "Malex", Gender.MALE);

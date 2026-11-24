@@ -1,11 +1,7 @@
 package net.conczin.mca.server.world.data;
 
-import net.minecraft.core.BlockPos;
-
 import java.util.Collection;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /** Test fixture helpers for intentionally flat synthetic Floors. */
 public final class TestStructureFloors {
