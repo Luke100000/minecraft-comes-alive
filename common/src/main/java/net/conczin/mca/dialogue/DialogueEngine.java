@@ -151,18 +151,17 @@ public final class DialogueEngine {
                 && retained.villagerId().equals(villager.getUUID())
                 ? retained.eventId()
                 : null;
-        SelectionPlan plan = planSelection(
+        List<DialogueEvent> eligible = eligibleCandidates(
                 events.all(),
                 event -> eventEligible(event, context, history, gameTime),
                 pausedEvent
         );
+        SelectionPlan plan = planSelection(eligible);
 
         Optional<EventOption> highlighted = plan.highlighted().map(event -> option(event, villager));
         List<EventOption> ask = plan.ask().stream().map(event -> option(event, villager)).toList();
         List<ResourceLocation> ambient = new ArrayList<>(plan.ambient().stream().map(DialogueEvent::id).toList());
-        List<DialogueEvent> previewCandidates = !showOpening ? List.of() : events.all().stream()
-                .filter(event -> eventEligible(event, context, history, gameTime))
-                .filter(event -> pausedEvent == null || !pausedEvent.equals(event.id()))
+        List<DialogueEvent> previewCandidates = !showOpening ? List.of() : eligible.stream()
                 .filter(DialogueEngine::previewable)
                 .filter(event -> {
                     DialogueEvent.Node first = event.nodes().get(event.start());
@@ -200,10 +199,9 @@ public final class DialogueEngine {
             }
             ambient.remove(picked);
             if (ambient.isEmpty()) {
-                ambient.addAll(planSelection(events.all(),
-                        event -> !event.id().equals(picked) && eventEligible(event, context, history, gameTime),
-                        pausedEvent
-                ).ambient().stream().map(DialogueEvent::id).toList());
+                ambient.addAll(topAmbient(eligible.stream()
+                        .filter(event -> !event.id().equals(picked)).toList())
+                        .stream().map(DialogueEvent::id).toList());
             }
         }
         Optional<Component> continuationPrompt = Optional.empty();
@@ -901,13 +899,21 @@ public final class DialogueEngine {
             Predicate<DialogueEvent> eligible,
             ResourceLocation pausedEventId
     ) {
-        List<DialogueEvent> candidates = source.stream()
+        return planSelection(eligibleCandidates(source, eligible, pausedEventId));
+    }
+
+    private static List<DialogueEvent> eligibleCandidates(
+            Collection<DialogueEvent> source, Predicate<DialogueEvent> eligible, ResourceLocation pausedEventId
+    ) {
+        return source.stream()
                 .filter(event -> event.trigger() == DialogueEvent.Trigger.TALK)
                 .filter(event -> pausedEventId == null || !event.id().equals(pausedEventId))
                 .filter(eligible)
                 .sorted(CANONICAL_ORDER)
                 .toList();
+    }
 
+    private static SelectionPlan planSelection(List<DialogueEvent> candidates) {
         List<DialogueEvent> highlighted = candidates.stream()
                 .filter(event -> event.presentation().mode() == DialogueEvent.PresentationMode.HIGHLIGHTED)
                 .sorted(PRIORITY_ORDER)
@@ -927,6 +933,10 @@ public final class DialogueEngine {
             ask = new ArrayList<>(ask.subList(0, askLimit));
         }
 
+        return new SelectionPlan(direct, ask, topAmbient(candidates));
+    }
+
+    private static List<DialogueEvent> topAmbient(List<DialogueEvent> candidates) {
         List<DialogueEvent> ambient = candidates.stream()
                 .filter(event -> event.presentation().mode() == DialogueEvent.PresentationMode.AMBIENT)
                 .toList();
@@ -937,7 +947,7 @@ public final class DialogueEngine {
                     .sorted(CANONICAL_ORDER)
                     .toList();
         }
-        return new SelectionPlan(direct, ask, ambient);
+        return ambient;
     }
 
     static boolean shouldDiscardSession(

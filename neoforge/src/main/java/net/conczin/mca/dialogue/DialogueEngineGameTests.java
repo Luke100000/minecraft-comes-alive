@@ -1698,6 +1698,64 @@ public final class DialogueEngineGameTests {
     }
 
     @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
+    public static void menuBuildEvaluatesEachCandidateOnceAndKeepsLowerTierFallback(GameTestHelper helper) {
+        Fixture fixture = fixture(helper);
+        Map<String, Integer> counts = new java.util.HashMap<>();
+        DialogueCondition.register(ResourceLocation.parse("mca:menu_count_gametest"),
+                Codec.STRING.fieldOf("candidate").codec(), (candidate, context) -> {
+                    counts.merge(candidate, 1, Integer::sum);
+                    return candidate.equals("blocked") ? DialogueCondition.Evaluation.NO_MATCH
+                            : DialogueCondition.Evaluation.MATCH;
+                });
+        DialogueEvent paused = countedAmbientEvent("paused", 100);
+        DialogueEvent blocked = countedAmbientEvent("blocked", 90);
+        DialogueEvent high = countedAmbientEvent("high", 20);
+        DialogueEvent low = countedAmbientEvent("low", 10);
+        DialogueEngine engine = engine(paused, blocked, high, low);
+        try {
+            var original = engine.begin(fixture.player(), fixture.villager(), false);
+            var session = engine.select(fixture.player(), original.token(),
+                    DialogueEngine.DialogueSelection.AMBIENT, null).orElseThrow();
+            helper.assertTrue(session.eventId().equals(paused.id()), "highest eligible event must start the retained session");
+            counts.clear();
+
+            var menu = engine.begin(fixture.player(), fixture.villager(), true);
+            helper.assertTrue(menu.continuationSessionId().filter(session.sessionId()::equals).isPresent(),
+                    "retained session must still be offered for resume");
+            helper.assertTrue(menu.preview().map(preview -> preview.eventId().equals(high.id())).orElse(false),
+                    "only the highest eligible non-paused event should be previewed");
+            helper.assertTrue(menu.ambientCandidates().equals(List.of(low.id())),
+                    "removing the preview must expose the lower eligible tier");
+            helper.assertTrue(counts.equals(Map.of("high", 1, "low", 1, "blocked", 1)),
+                    "each non-paused candidate must be evaluated exactly once: " + counts);
+            var selected = engine.select(fixture.player(), menu.token(),
+                    DialogueEngine.DialogueSelection.AMBIENT, null).orElseThrow();
+            helper.assertTrue(selected.eventId().equals(low.id()) && counts.get("low") > 1,
+                    "selecting an offered event must still evaluate its eligibility live");
+            helper.succeed();
+        } finally {
+            engine.end(fixture.player());
+            fixture.villager().getInteractions().stopInteracting();
+            fixture.villager().discard();
+        }
+    }
+
+    private static DialogueEvent countedAmbientEvent(String candidate, int priority) {
+        return DialogueEvent.decode(ResourceLocation.parse("mca:test/count_" + candidate),
+                JsonParser.parseString("""
+                        {
+                          "trigger":"talk",
+                          "presentation":{"mode":"ambient","resume_prompt":"dialogue.test.resume"},
+                          "priority":%d,
+                          "requirements":[{"type":"mca:menu_count_gametest","candidate":"%s"}],
+                          "repeat":{"type":"always"},
+                          "start":"start",
+                          "nodes":{"start":{"lines":["dialogue.test.line","dialogue.test.line"],"complete":true}}
+                        }
+                        """.formatted(priority, candidate)).getAsJsonObject());
+    }
+
+    @GameTest(batch = "mca_dialogue_engine", templateNamespace = "minecraft", template = "bastion/blocks/air")
     public static void persistedCooldownExcludesEventFromTalkOptions(GameTestHelper helper) {
         Fixture fixture = fixture(helper);
         DialogueEvent event = cooldownEvent(ResourceLocation.parse("mca:test/cooldown_integration"));
