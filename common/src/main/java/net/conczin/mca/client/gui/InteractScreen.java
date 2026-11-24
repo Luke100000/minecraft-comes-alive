@@ -731,11 +731,6 @@ public class InteractScreen extends AbstractDynamicScreen {
         dialogueSpeechTextHeight = -1;
     }
 
-    private int dialogueTargetHeight(List<DialogueRow> rows, int panelWidth) {
-        int listHeight = rows.isEmpty() ? 0 : rows.stream().mapToInt(row -> dialogueRowHeight(row, panelWidth)).sum() + 10;
-        return dialogueFooterHeight() + Math.max(20, listHeight);
-    }
-
     private void drawDialogueEventState(GuiGraphics context, int mouseX, int mouseY, float tickDelta,
                                         boolean docked, int inspectorRight) {
         dialogueHits.clear();
@@ -771,10 +766,12 @@ public class InteractScreen extends AbstractDynamicScreen {
                 presentation.pendingAsync(), presentation.reviewingHistory());
         List<DialogueRow> rows = dialogueRows(presentation, indicators);
         DialogueOverlayLayout.Column column = DialogueOverlayLayout.menuColumn(width, height, inspectorRight);
+        List<MeasuredDialogueRow> measuredRows = measureDialogueRows(rows, column.width());
+        int rowsHeight = measuredRows.stream().mapToInt(MeasuredDialogueRow::height).sum();
         int paperWidth = docked ? column.width() : DialogueOverlayLayout.cornerBubbleWidth(width);
         // A shorter reply should shrink the menu again instead of retaining
         // the largest height reached anywhere in the ongoing conversation.
-        int target = dialogueTargetHeight(rows, column.width());
+        int target = dialogueFooterHeight() + Math.max(20, rows.isEmpty() ? 0 : rowsHeight + 10);
         long nowMillis = System.nanoTime() / 1_000_000L;
         int paperDesired = dialoguePaperHeight(presentation, indicators, paperWidth);
         int paperMinimum = DialogueOverlayLayout.minimumSpeechHeight(2, dialogueHistoryHeight(presentation),
@@ -877,7 +874,6 @@ public class InteractScreen extends AbstractDynamicScreen {
         int clipTop = top + 7;
         int clipBottom = footerTop - 3;
         if (!rows.isEmpty() && clipBottom > clipTop) {
-            int rowsHeight = rows.stream().mapToInt(row -> dialogueRowHeight(row, panelWidth)).sum();
             int viewportHeight = clipBottom - clipTop;
             boolean loadingOnly = rows.size() == 1 && rows.getFirst().placeholder();
             if (loadingOnly) {
@@ -887,21 +883,21 @@ public class InteractScreen extends AbstractDynamicScreen {
             boolean needsScrollbar = !loadingOnly && rowsHeight > settledViewportHeight;
             int rowPanelWidth = panelWidth - (needsScrollbar ? 8 : 0);
             if (needsScrollbar) {
-                rowsHeight = rows.stream().mapToInt(row -> dialogueRowHeight(row, rowPanelWidth)).sum();
+                measuredRows = measureDialogueRows(rows, rowPanelWidth);
+                rowsHeight = measuredRows.stream().mapToInt(MeasuredDialogueRow::height).sum();
             }
             dialogueScroller.layout(left + 8, clipTop, rowPanelWidth - 16, viewportHeight, rowsHeight,
                     settledViewportHeight);
             if (dialogueSectionToReveal != null) {
                 int rowTop = 0;
-                for (int i = 0; i < rows.size(); i++) {
-                    DialogueRow row = rows.get(i);
-                    int rowHeight = dialogueRowHeight(row, rowPanelWidth);
+                for (MeasuredDialogueRow measured : measuredRows) {
+                    DialogueRow row = measured.row();
                     if (row.click() != null && row.click().kind() == DialogueClickKind.TOGGLE_SECTION
                             && dialogueSectionToReveal.name().equals(row.click().choiceId())) {
                         dialogueScroller.scrollToSection(rowTop);
                         break;
                     }
-                    rowTop += rowHeight;
+                    rowTop += measured.height();
                 }
                 dialogueSectionToReveal = null;
             }
@@ -917,8 +913,8 @@ public class InteractScreen extends AbstractDynamicScreen {
             }
             context.enableScissor(left + 8, clipTop, contentRight, clipBottom);
             int y = clipTop - dialogueScroll;
-            for (DialogueRow row : rows) {
-                y = drawDialogueRow(context, row, left, rowPanelWidth, y, clipTop, clipBottom, nowMillis);
+            for (MeasuredDialogueRow measured : measuredRows) {
+                y = drawDialogueRow(context, measured, left, rowPanelWidth, y, clipTop, clipBottom, nowMillis);
             }
             context.disableScissor();
             dialogueScroller.render(context, mouseX, mouseY, tickDelta);
@@ -1071,16 +1067,15 @@ public class InteractScreen extends AbstractDynamicScreen {
         context.pose().popPose();
     }
 
-    private int dialogueRowTextWidth(DialogueRow row, int panelWidth) {
-        return DialogueRowLayout.insets(panelWidth, dialogueTextScale(), row.kind()).textWidth();
-    }
-
-    private int dialogueRowHeight(DialogueRow row, int panelWidth) {
-        if (row.placeholder()) {
-            return dialoguePixels(26);
-        }
-        int lines = dialogueLines(row.text(), dialogueRowTextWidth(row, panelWidth)).size();
-        return DialogueRowLayout.height(dialogueTextScale(), lines, row.kind());
+    private List<MeasuredDialogueRow> measureDialogueRows(List<DialogueRow> rows, int panelWidth) {
+        float scale = dialogueTextScale();
+        return rows.stream().map(row -> {
+            DialogueRowLayout.Insets insets = DialogueRowLayout.insets(panelWidth, scale, row.kind());
+            List<FormattedCharSequence> lines = row.placeholder() ? List.of() : dialogueLines(row.text(), insets.textWidth());
+            int rowHeight = row.placeholder() ? dialoguePixels(26)
+                    : DialogueRowLayout.height(scale, lines.size(), row.kind());
+            return new MeasuredDialogueRow(row, insets, lines, rowHeight);
+        }).toList();
     }
 
     static float loadingSquareRise(long nowMillis, int index, boolean animate) {
@@ -1105,9 +1100,10 @@ public class InteractScreen extends AbstractDynamicScreen {
         }
     }
 
-    private int drawDialogueRow(GuiGraphics context, DialogueRow row,
+    private int drawDialogueRow(GuiGraphics context, MeasuredDialogueRow measured,
                                 int left, int panelWidth, int y, int clipTop, int clipBottom, long nowMillis) {
-        int rowHeight = dialogueRowHeight(row, panelWidth);
+        DialogueRow row = measured.row();
+        int rowHeight = measured.height();
         if (row.placeholder()) {
             rowHeight = Math.min(rowHeight, clipBottom - clipTop);
             DialogueOverlayLayout.Rect loadingSurface = DialogueRowLayout.loadingSurface(
@@ -1132,8 +1128,8 @@ public class InteractScreen extends AbstractDynamicScreen {
             }
             return y + rowHeight;
         }
-        DialogueRowLayout.Insets insets = DialogueRowLayout.insets(panelWidth, dialogueTextScale(), row.kind());
-        List<FormattedCharSequence> lines = dialogueLines(row.text(), dialogueRowTextWidth(row, panelWidth));
+        DialogueRowLayout.Insets insets = measured.insets();
+        List<FormattedCharSequence> lines = measured.lines();
         int hitTop = Math.max(y, clipTop);
         int hitBottom = Math.min(y + rowHeight - 2, clipBottom);
         boolean clickable = row.click() != null && hitBottom > hitTop;
@@ -1401,6 +1397,10 @@ public class InteractScreen extends AbstractDynamicScreen {
     ) { }
 
     record ReplyIndicators(boolean placeholder, boolean progress) {
+    }
+
+    private record MeasuredDialogueRow(DialogueRow row, DialogueRowLayout.Insets insets,
+                                       List<FormattedCharSequence> lines, int height) {
     }
 
     record DialogueRow(Component text, DialogueClick click, boolean featured, int iconIndex,
